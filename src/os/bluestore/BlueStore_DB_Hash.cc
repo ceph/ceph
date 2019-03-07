@@ -55,8 +55,10 @@ private:
     ceph_assert(it != shards.end());
     return it->second;
   }
+
 #undef dout_context
 #define dout_context db_hash.cct
+
   class HashSharded_TransactionImpl : public RocksDBStore::RocksDBTransactionImpl //KeyValueDB::TransactionImpl
   {
   private:
@@ -77,8 +79,6 @@ private:
       KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
       base::select(cf);
       base::set(prefix, k, bl);
-      dout(30) << "HashSharded_TransactionImpl::" << __func__ <<
-          " prefix=" << prefix << " key=" << k << " cf=" << (void*)cf.priv << " " << dendl;
     }
     void set(
       const string &prefix,
@@ -156,7 +156,6 @@ public:
     int r = db->open(out, options);
     if (r != 0)
       return r;
-#if 1
     vector<std::string> cf_names;
     db->column_family_list(cf_names);
     for (auto& s_it: sharding_schema) {
@@ -164,32 +163,29 @@ public:
         std::string name = s_it.first + "-" + to_string(i);
         auto n_it = std::find(std::begin(cf_names), std::end(cf_names), name);
         if (n_it != cf_names.end()) {
-          dout(0) << "Missing column family: '" << name << "' " << dendl;
+          derr << "Missing column family: '" << name << "' " << dendl;
           ceph_abort();
         }
       }
     }
     r = open_shards();
-#endif
     return r;
   }
   int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) override {
     int r = db->create_and_open(out, new_cfs);
     if (r != 0)
       return r;
-#if 1
     for (auto& s_it: sharding_schema) {
       for (size_t i = 0; i < s_it.second; i++) {
         std::string name = s_it.first + "-" + to_string(i);
         r = db->column_family_create(name, "");
         if (r != 0) {
-          dout(0) << "Unable to create column family: '" << name << "' " << dendl;
+          derr << "Unable to create column family: '" << name << "' " << dendl;
           ceph_abort();
         }
       }
     }
     r = open_shards();
-#endif
     return r;
   }
   void close() override {
@@ -211,16 +207,13 @@ public:
     return db->repair(out);
   }
   Transaction get_transaction() override {
-    dout(25) << __func__ << dendl;
     KeyValueDB::Transaction t = std::make_shared<HashSharded_TransactionImpl>(*this);
     return t;
   }
   int submit_transaction(Transaction t) override {
-    dout(25) << __func__ << dendl;
     return db->submit_transaction(t);
   }
   int submit_transaction_sync(Transaction t) override {
-    dout(25) << __func__ << dendl;
     return db->submit_transaction_sync(t);
   }
 
@@ -276,9 +269,9 @@ public:
   private:
     BlueStore_DB_Hash &db_hash;
     ActiveShards::iterator shards_it;
-    /* for currently processed prefix, contains iterators to shards */
+    /** for currently processed prefix, contains iterators to shards */
     std::vector<KeyValueDB::Iterator> current_shards_iterators;
-    /* for currently processed prefix, marks first iterator that is not exhaused */
+    /** for currently processed prefix, marks first iterator that is not exhaused */
     ssize_t position;
     /*
      * simulation of next/prev work
@@ -310,7 +303,6 @@ public:
           current_shards_iterators.emplace_back(wsi);
       }
       position = 0;
-      //TODO sort current_iterators
       std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
       return true;
     }
@@ -332,7 +324,6 @@ public:
 
   public:
     WholeSpaceIteratorMerged_Impl(BlueStore_DB_Hash &db_hash) : db_hash(db_hash), position(-1) {
-
     }
 
     virtual ~WholeSpaceIteratorMerged_Impl() {
@@ -401,7 +392,7 @@ public:
     }
 
     bool valid() override {
-      if (position < 0)
+      if ((position < 0) || (position >= (ssize_t)current_shards_iterators.size()) )
         return false;
       return current_shards_iterators[position]->valid();
     }
@@ -423,7 +414,6 @@ public:
             break;
           }
           std::swap(current_shards_iterators[p - 1], current_shards_iterators[p]);
-          std::swap(key0, key1);
         }
         return 0;
       }
@@ -432,8 +422,11 @@ public:
       /* this shard is used up */
       position++;
       if (position == (ssize_t)current_shards_iterators.size()) {
-        /* end! */
-        return -1;
+        /* end of current prefix, try next */
+        shards_it++;
+        if (shards_it == db_hash.shards.end())
+          return -1;
+        open_shards();
       }
       return 0;
     }
@@ -450,7 +443,6 @@ public:
       if (!current_shards_iterators[position]->valid()) {
         current_shards_iterators[position]->seek_to_first();
       }
-
 
       current_shards_iterators[position]->prev();
       if (current_shards_iterators[position]->valid()) {
@@ -504,20 +496,8 @@ public:
     int status() override {
       return current_shards_iterators[position]->status();
     }
-
-    #if 0
-    size_t key_size() override {
-      return current_shards_iterators[position]->key_size();
-    }
-    size_t value_size() override {
-      return current_shards_iterators[position]->value_size();
-    }
-#endif
-
   };
 private:
-  //int64_t cache_bytes[PriorityCache::Priority::LAST+1] = { 0 };
-  //double cache_ratio = 0;
 
 #if 1
   // This class filters a WholeSpaceIterator by a prefix.
@@ -573,9 +553,7 @@ private:
 public:
 
   WholeSpaceIterator get_wholespace_iterator() override {
-//    WholeSpaceIteratorMerged_Impl
     return std::make_shared<WholeSpaceIteratorMerged_Impl>(*this);
-      //db->NewIterator(rocksdb::ReadOptions(), default_cf));
   }
   Iterator get_iterator(const std::string &prefix) override {
     return std::make_shared<PrefixIteratorImpl>(
@@ -603,12 +581,10 @@ public:
   // PriCache
   int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const override {
     return db->request_cache_bytes(pri, chunk_bytes);
-    //return -EOPNOTSUPP;
   }
 
   int64_t get_cache_bytes(PriorityCache::Priority pri) const override {
     return db->get_cache_bytes(pri);
-    //return cache_bytes[pri];
   }
 
   int64_t get_cache_bytes() const override {
@@ -651,7 +627,7 @@ public:
 
   /// estimate space utilization for a prefix (in bytes)
   int64_t estimate_prefix_size(const string& prefix,
-                                       ColumnFamilyHandle cfh = ColumnFamilyHandle()) override {
+                               ColumnFamilyHandle cfh = ColumnFamilyHandle()) override {
     return 0;
   }
 
@@ -682,6 +658,7 @@ public:
 
   int set_merge_operator(const std::string& prefix,
                          std::shared_ptr<MergeOperator> mop) override {
+    //TODO!!
     return db->set_merge_operator(prefix, mop);
     return -EOPNOTSUPP;
   }

@@ -106,7 +106,6 @@ public:
   }
 
   void SetUp() override {
-    cout << "SETUP" << std::endl;
     int r = ::mkdir("kv_test_temp_dir", 0777);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
@@ -117,7 +116,6 @@ public:
     init();
   }
   void TearDown() override {
-    cout << "TEARDOWN" << std::endl;
     fini();
     rm_r("kv_test_temp_dir");
   }
@@ -730,30 +728,96 @@ TEST_F(KVSharded, massive_creation) {
   }
 }
 
-TEST_F(KVSharded, iterator) {
+TEST_F(KVSharded, iterator_basic) {
+  std::map<std::string, std::string> k_v;
+  while (k_v.size() < 1000) {
+    std::string k, v;
+    do {
+      k.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 9);
+    do {
+      v.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 15);
+    k_v.emplace(k,v);
+  }
+
   //std::vector<KeyValueDB::ColumnFamily> cfs;
-  std::map<std::string, size_t> shards{{"A", 6}};
+  std::map<std::string, size_t> shards{{"A", 7}};
   db = make_BlueStore_DB_Hash(db, shards);
   ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
   ASSERT_EQ(0, db->create_and_open(cout/*, cfs*/));
 
-  for (int i = 0; i < 1000; i++) {
-    KeyValueDB::Transaction t = db->get_transaction();
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& it: k_v) {
     bufferlist value;
-    value.append(to_string(1000 - i));
-    t->set("A", to_string(i), value);
-    ASSERT_EQ(0, db->submit_transaction_sync(t));
+    value.append(it.second);
+    t->set("A", it.first, value);
   }
+
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
 
   KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
   iter->seek_to_first();
-  for (int i = 0; i < 1000; i++) {
-    ASSERT_EQ(1, iter->valid());
-    std::pair<std::string, std::string> x = iter->raw_key();
-    ASSERT_EQ("A", x.first);
-    ASSERT_EQ(to_string(i), x.second);
-    ASSERT_EQ(to_string(i), iter->key());
-    ASSERT_EQ(to_string(1000 - i), _bl_to_str(iter->value()));
+
+  ASSERT_EQ(1, iter->valid());
+  while (iter->valid()) {
+    std::pair<std::string, std::string> k = iter->raw_key();
+    std::string v = _bl_to_str(iter->value());
+    ASSERT_EQ(k_v[k.second], v);
+    k_v.erase(k.second);
+    iter->next();
+  }
+  ASSERT_EQ(k_v.size(), 0);
+}
+
+TEST_F(KVSharded, iterator_multitable) {
+  std::map<char, std::map<std::string, std::string>> prefix_k_v;
+  char prefix;
+  do {
+    std::string k, v;
+    prefix = "AIOPBb"[rand() % 6];
+    do {
+      k.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 9);
+    do {
+      v.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 15);
+    prefix_k_v[prefix].emplace(k,v);
+    //std::cout << ":" << std::string(1,prefix) << " " << k << " " << v << std::endl;
+  } while (prefix_k_v[prefix].size() < 1000);
+
+  //std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{
+    {"A", 7}, {"I", 5}, {"O", 2}, {"P", 1}, {"B", 3}, {"b", 1} };
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout/*, cfs*/));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& pit: prefix_k_v) {
+    for (auto& it: pit.second) {
+      bufferlist value;
+      value.append(it.second);
+      t->set(std::string(1,pit.first), it.first, value);
+    }
+  }
+
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  iter->seek_to_first();
+
+  ASSERT_EQ(1, iter->valid());
+  while (iter->valid()) {
+    std::pair<std::string, std::string> k = iter->raw_key();
+    std::string v = _bl_to_str(iter->value());
+    //std::cout << k.first << " " << k.second << " " << v << std::endl;
+    ASSERT_EQ(prefix_k_v[k.first[0]][k.second], v);
+    prefix_k_v[k.first[0]].erase(k.second);
+    iter->next();
+  }
+  for (auto& it: prefix_k_v) {
+    ASSERT_EQ(it.second.size(), 0);
   }
 }
 
