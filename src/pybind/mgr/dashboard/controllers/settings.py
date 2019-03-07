@@ -4,7 +4,6 @@ from contextlib import contextmanager
 
 import cherrypy
 
-
 from . import ApiController, RESTController
 from ..settings import Settings as SettingsModule, Options
 from ..security import Scope
