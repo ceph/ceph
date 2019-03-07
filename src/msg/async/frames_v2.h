@@ -312,8 +312,6 @@ protected:
       for (const auto &elem : t) {
         encode(elem, this->get_payload_segment(), features);
       }
-    } else if constexpr (std::is_same<T, ceph_msg_header2 const>()) {
-      this->get_payload_segment().append((char *)&t, sizeof(t));
     } else {
       encode(t, this->get_payload_segment(), features);
     }
@@ -332,10 +330,6 @@ protected:
       for (uint32_t i = 0; i < size; ++i) {
         decode(t[i], ti);
       }
-    } else if constexpr (std::is_same<T, ceph_msg_header2>()) {
-      auto ptr = ti.get_current_ptr();
-      ti.advance(sizeof(T));
-      t = *(T *)ptr.raw_c_str();
     } else {
       decode(t, ti);
     }
