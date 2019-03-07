@@ -301,6 +301,18 @@ public:
   virtual ColumnFamilyHandle column_family_handle(const std::string& cf_name) const
   { ceph_abort_msg("Not implemented"); return ColumnFamilyHandle(); }
 
+  virtual int column_family_compact(const std::string& cf_name,
+                            const string& prefix,
+                            const string& start,
+                            const string& end)
+  { ceph_abort_msg("Not implemented"); return 0; }
+
+  virtual int column_family_compact_async(const std::string& cf_name,
+                                  const string& prefix,
+                                  const string& start,
+                                  const string& end)
+  { ceph_abort_msg("Not implemented"); return 0; }
+
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
   virtual int repair(std::ostream &out) { return 0; }
 
