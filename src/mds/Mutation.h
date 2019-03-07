@@ -67,6 +67,7 @@ public:
       WRLOCK		= 2,
       XLOCK		= 4,
       REMOTE_WRLOCK	= 8,
+      STATE_PIN		= 16, // no RW after locked, just pin lock state
     };
     SimpleLock* lock;
     mutable unsigned flags;
@@ -85,6 +86,7 @@ public:
       flags &= ~REMOTE_WRLOCK;
       wrlock_target = MDS_RANK_NONE;
     }
+    bool is_state_pin() const { return !!(flags & STATE_PIN); }
   };
 
   struct LockOpVec : public vector<LockOp> {
@@ -101,6 +103,9 @@ public:
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
       emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+    }
+    void lock_scatter_gather(SimpleLock *lock) {
+      emplace_back(lock, LockOp::WRLOCK | LockOp::STATE_PIN);
     }
     void sort_and_merge();
 
