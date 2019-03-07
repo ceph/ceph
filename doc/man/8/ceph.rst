@@ -27,7 +27,7 @@ Synopsis
 
 | **ceph** **health** *{detail}*
 
-| **ceph** **heap** [ *dump* \| *start_profiler* \| *stop_profiler* \| *release* \| *stats* ] ...
+| **ceph** **heap** [ *dump* \| *start_profiler* \| *stop_profiler* \| *release* \| *get_release_rate* \| *set_release_rate* \| *stats* ] ...
 
 | **ceph** **injectargs** *<injectedargs>* [ *<injectedargs>*... ]
 
@@ -323,8 +323,22 @@ Show heap usage info (available only if compiled with tcmalloc)
 
 Usage::
 
-	ceph heap dump|start_profiler|stop_profiler|release|stats
+	ceph heap dump|start_profiler|stop_profiler|stats
 
+Subcommand ``release`` to make TCMalloc to releases no-longer-used memory back to the kernel at once. 
+
+Usage::
+
+	ceph heap release
+
+Subcommand ``(get|set)_release_rate`` get or set the TCMalloc memory release rate. TCMalloc releases 
+no-longer-used memory back to the kernel gradually. the rate controls how quickly this happens. 
+Increase this setting to make TCMalloc to return unused memory more frequently. 0 means never return
+memory to system, 1 means wait for 1000 pages after releasing a page to system. It is ``1.0`` by default..
+
+Usage::
+
+	ceph heap get_release_rate|set_release_rate {<val>}
 
 injectargs
 ----------

@@ -3722,6 +3722,9 @@ void Monitor::handle_command(MonOpRequestRef op)
       // XXX 1-element vector, change at callee or make vector here?
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
+      string value;
+      if (cmd_getval(g_ceph_context, cmdmap, "value", value))
+	 heapcmd_vec.push_back(value);
       ceph_heap_profiler_handle_command(heapcmd_vec, ds);
       rdata.append(ds);
       rs = "";
