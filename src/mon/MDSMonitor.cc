@@ -1790,7 +1790,8 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = make_message<MMDSMap>(mon->monmap->fsid, *mds_map);
+    auto msg = make_message<MMDSMap>(mon->monmap->fsid, *mds_map,
+			             mds_map->fs_name);
 
     sub->session->con->send_message(msg.detach());
     if (sub->onetime) {
