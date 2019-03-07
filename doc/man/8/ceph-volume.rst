@@ -280,6 +280,10 @@ directory as well.
 
 Optionally, the JSON blob can be sent to stdout for further inspection.
 
+Usage on all running OSDs::
+
+    ceph-voume simple scan
+
 Usage on data devices::
 
     ceph-volume simple scan <data device>
@@ -295,7 +299,7 @@ Optional arguments:
 * [--stdout]            Send the JSON blob to stdout
 * [--force]             If the JSON file exists at destination, overwrite it
 
-Required Positional arguments:
+Optional Positional arguments:
 
 * <DATA DEVICE or OSD DIR>  Actual data partition or a path to the running OSD
 
