@@ -49,7 +49,7 @@ fi
 
 cd $DASH_DIR/frontend
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
-npm install
+npm ci
 npm run build -- --prod
 
 if [ $DEVICE == "chrome" ]; then

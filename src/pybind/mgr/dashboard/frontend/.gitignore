@@ -43,7 +43,6 @@ Thumbs.db
 
 # Package lock files
 yarn.lock
-package-lock.json
 
 # Ceph
 !core
