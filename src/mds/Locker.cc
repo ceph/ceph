@@ -301,10 +301,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
     } else if (p.is_wrlock()) {
       dout(20) << " must wrlock " << *lock << " " << *object << dendl;
+      client_t _client = p.is_state_pin() ? lock->get_excl_client() : client;
       if (object->is_auth()) {
 	mustpin.insert(object);
       } else if (!object->is_auth() &&
-		 !lock->can_wrlock(client) &&  // we might have to request a scatter
+		 !lock->can_wrlock(_client) &&  // we might have to request a scatter
 		 !mdr->is_slave()) {           // if we are slave (remote_wrlock), the master already authpinned
 	dout(15) << " will also auth_pin " << *object
 		 << " in case we need to request a scatter" << dendl;
@@ -547,7 +548,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
       if (need_wrlock) {
         marker.message = "failed to wrlock, waiting";
-	if (need_remote_wrlock && !p.lock->can_wrlock(mdr->get_client())) {
+	client_t _client = p.is_state_pin() ? p.lock->get_excl_client() : client;
+	if (need_remote_wrlock && !p.lock->can_wrlock(_client)) {
 	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
@@ -1446,8 +1448,9 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
 }
 
-bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
+bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait)
 {
+  SimpleLock *lock = op.lock;
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_start(static_cast<LocalLock*>(lock), mut);
@@ -1455,7 +1458,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   CInode *in = static_cast<CInode *>(lock->get_parent());
-  client_t client = mut->get_client();
+  client_t client = op.is_state_pin() ? lock->get_excl_client() : mut->get_client();
   bool want_scatter = !nowait && lock->get_parent()->is_auth() &&
 		      (in->has_subtree_or_exporting_dirfrag() ||
 		       static_cast<ScatterLock*>(lock)->get_scatter_wanted());
