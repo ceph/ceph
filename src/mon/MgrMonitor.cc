@@ -651,10 +651,12 @@ void MgrMonitor::on_active()
   if (mon->is_leader()) {
     mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
 
-    if (pending_map.always_on_modules != always_on_modules) {
+    if (HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS) &&
+	pending_map.always_on_modules != always_on_modules) {
       pending_map.always_on_modules = always_on_modules;
-      dout(4) << "always on modules changed "
-        << pending_map.get_always_on_modules() << dendl;
+      dout(4) << "always on modules changed, pending "
+	      << pending_map.get_always_on_modules()
+	      << " != wanted " << always_on_modules << dendl;
       propose_pending();
     }
   }
