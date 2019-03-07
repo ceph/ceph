@@ -129,6 +129,7 @@ public:
 
   int get_params() override;
   void send_response() override;
+  void send_versioned_response();
 };
 
 class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
