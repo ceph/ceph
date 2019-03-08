@@ -428,7 +428,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :param default: the default value of the config if it is not found
         :return: str
         """
-        r = self._ceph_get_module_option(key)
+        r = self._ceph_get_module_option(key, "")
         if r is None:
             final_key = key.split('/')[-1]
             return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
@@ -451,13 +451,12 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         return self._ceph_get_active_uri()
 
     def get_localized_module_option(self, key, default=None):
-        r = self.get_module_option(self.get_mgr_id() + '/' + key)
+        r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            r = self.get_module_option(key)
-
-        if r is None:
-            r = default
-        return r
+            final_key = key.split('/')[-1]
+            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+        else:
+            return r
 
 
 class MgrModule(ceph_module.BaseMgrModule):
@@ -905,8 +904,9 @@ class MgrModule(ceph_module.BaseMgrModule):
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
                                format(key, self.__class__.__name__))
 
-    def _get_module_option(self, key, default):
-        r = self._ceph_get_module_option(self.module_name, key)
+    def _get_module_option(self, key, default, localized_prefix=""):
+        r = self._ceph_get_module_option(self.module_name, key,
+                                         localized_prefix)
         if r is None:
             final_key = key.split('/')[-1]
             return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
@@ -938,7 +938,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         if module == self.module_name:
             self._validate_module_option(key)
-        r = self._ceph_get_module_option(module, key)
+        r = self._ceph_get_module_option(module, key, "")
         return default if r is None else r
 
     def get_store_prefix(self, key_prefix):
@@ -962,14 +962,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: str
         """
         self._validate_module_option(key)
-        r = self._ceph_get_module_option(
-            self.module_name, '{}/{}'.format(self.get_mgr_id(), key))
-        if r is None:
-            r = self._ceph_get_module_option(self.module_name, key)
-            if r is None:
-                final_key = key.split('/')[-1]
-                r = self.MODULE_OPTION_DEFAULTS.get(final_key, default)
-        return r
+        return self._get_module_option(key, default, self.get_mgr_id())
 
     def _set_module_option(self, key, val):
         return self._ceph_set_module_option(self.module_name, key, str(val))

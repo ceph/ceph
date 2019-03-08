@@ -527,11 +527,21 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
 PyObject *ActivePyModules::get_typed_config(
   const std::string &module_name,
-  const std::string &key) const
+  const std::string &key,
+  const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   std::string value;
-  bool found = get_config(module_name, key, &value);
+  std::string final_key;
+  bool found = false;
+  if (prefix.size()) {
+    final_key = prefix + "/" + key;
+    found = get_config(module_name, final_key, &value);
+  }
+  if (!found) {
+    final_key = key;
+    found = get_config(module_name, final_key, &value);
+  }
   if (found) {
     PyModuleRef module = py_module_registry.get_module(module_name);
     PyEval_RestoreThread(tstate);
@@ -539,11 +549,16 @@ PyObject *ActivePyModules::get_typed_config(
         derr << "Module '" << module_name << "' is not available" << dendl;
         Py_RETURN_NONE;
     }
-    dout(10) << __func__ << " " << key << " found: " << value << dendl;
+    dout(10) << __func__ << " " << final_key << " found: " << value << dendl;
     return module->get_typed_option_value(key, value);
   }
   PyEval_RestoreThread(tstate);
-  dout(4) << __func__ << " " << key << " not found " << dendl;
+  if (prefix.size()) {
+    dout(4) << __func__ << " [" << prefix << "/]" << key << " not found "
+	    << dendl;
+  } else {
+    dout(4) << __func__ << " " << key << " not found " << dendl;
+  }
   Py_RETURN_NONE;
 }
 
