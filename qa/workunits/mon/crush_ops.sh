@@ -213,4 +213,18 @@ ceph osd crush rm fooo
 ceph osd crush rm barr
 ceph osd crush weight-set rm-compat
 
+# this sequence would crash at one point
+ceph osd crush weight-set create-compat
+ceph osd crush add-bucket r1 rack
+ceph osd crush move r1 root=default
+for f in `seq 1 32`; do
+    ceph osd crush add-bucket h$f host
+    ceph osd crush move h$f rack=r1
+done
+for f in `seq 1 32`; do
+    ceph osd crush rm h$f
+done
+ceph osd crush rm r1
+ceph osd crush weight-set rm-compat
+
 echo OK
