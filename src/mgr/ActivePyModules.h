@@ -115,7 +115,8 @@ public:
       const std::string &key, const boost::optional<std::string> &val);
 
   PyObject *get_typed_config(const std::string &module_name,
-    const std::string &key) const;
+			     const std::string &key,
+			     const std::string &prefix) const;
 
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
