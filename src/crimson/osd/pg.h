@@ -8,6 +8,7 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
 
+#include "crimson/net/Fwd.h"
 #include "osd/osd_types.h"
 #include "recovery_state.h"
 
@@ -109,9 +110,9 @@ public:
   seastar::future<> handle_activate_map();
   seastar::future<> share_pg_info();
   void reply_pg_query(const MQuery& query, recovery::Context* ctx);
-
+  seastar::future<> handle_op(ceph::net::ConnectionRef conn,
+			      Ref<MOSDOp> m);
   void print(ostream& os) const;
-
 private:
   seastar::future<> activate_peer(pg_shard_t peer);
   void reply_pg_query_for_info(const MQuery& query, recovery::Context* ctx);

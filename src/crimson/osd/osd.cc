@@ -11,6 +11,7 @@
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDOp.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
@@ -378,6 +379,8 @@ seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
   switch (m->get_type()) {
   case CEPH_MSG_OSD_MAP:
     return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
+  case CEPH_MSG_OSD_OP:
+    return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
   case MSG_OSD_PG_NOTIFY:
     return handle_pg_notify(conn, boost::static_pointer_cast<MOSDPGNotify>(m));
   case MSG_OSD_PG_INFO:
@@ -646,6 +649,24 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     } else {
       logger().info("osd.{}: now {}", whoami, state);
       // XXX
+      return seastar::now();
+    }
+  });
+}
+
+seastar::future<> OSD::handle_osd_op(ceph::net::ConnectionRef conn,
+                                     Ref<MOSDOp> m)
+{
+  return wait_for_map(m->get_map_epoch()).then([=](epoch_t epoch) {
+    if (auto found = pgs.find(m->get_spg()); found != pgs.end()) {
+      return found->second->handle_op(conn, std::move(m));
+    } else if (osdmap->is_up_acting_osd_shard(m->get_spg(), whoami)) {
+      logger().info("no pg, should exist e{}, will wait", epoch);
+      // todo, wait for peering, etc
+      return seastar::now();
+    } else {
+      logger().info("no pg, shouldn't exist e{}, dropping", epoch);
+      // todo: share map with client
       return seastar::now();
     }
   });
