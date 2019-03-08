@@ -236,6 +236,23 @@ seastar::future<> Heartbeat::ms_dispatch(ceph::net::ConnectionRef conn,
   }
 }
 
+seastar::future<> Heartbeat::ms_handle_reset(ceph::net::ConnectionRef conn)
+{
+  auto found = std::find_if(peers.begin(), peers.end(),
+                            [conn](const peers_map_t::value_type& peer) {
+                              return (peer.second.con_front == conn ||
+                                      peer.second.con_back == conn);
+                            });
+  if (found == peers.end()) {
+    return seastar::now();
+  }
+  const auto peer = found->first;
+  const auto epoch = found->second.epoch;
+  return remove_peer(peer).then([peer, epoch, this] {
+    return add_peer(peer, epoch);
+  });
+}
+
 seastar::future<> Heartbeat::handle_osd_ping(ceph::net::ConnectionRef conn,
                                              Ref<MOSDPing> m)
 {
