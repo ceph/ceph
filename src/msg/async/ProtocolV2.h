@@ -243,6 +243,7 @@ private:
 
   uint32_t get_onwire_size(uint32_t logical_size) const;
   uint32_t get_epilogue_size() const;
+  size_t get_current_msg_size() const;
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
