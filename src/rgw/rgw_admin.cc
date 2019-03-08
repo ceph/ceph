@@ -7843,6 +7843,11 @@ next:
  }
 
  if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_DELETE) {
+   if (!store->svc.zone->can_reshard()) {
+     cerr << "Resharding disabled in a multisite env. Stale instances are not safe to be deleted." << std::endl;
+     return EINVAL;
+   }
+
    ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f);
    if (ret < 0) {
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
