@@ -698,18 +698,18 @@ uint32_t ProtocolV2::get_epilogue_size() const {
   }
 }
 
-CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
+CtPtr ProtocolV2::read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
                        int len, char *buffer) {
   if (!buffer) {
     buffer = temp_buffer;
   }
-  ssize_t r = connection->read(len, buffer,
-                               [&CONTINUATION(next), this](char *buffer, int r) {
-                                 CONTINUATION(next).setParams(buffer, r);
-                                 run_continuation(CONTINUATION(next));
+                               [&next, this](char *buffer, int r) {
+                                 next.setParams(buffer, r);
+                                 run_continuation(next);
                                });
   if (r <= 0) {
-    return CONTINUE(next, buffer, r);
+    next.setParams(buffer, r);
+    return &next;
   }
 
   return nullptr;
@@ -717,24 +717,24 @@ CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
 
 template <class F>
 CtPtr ProtocolV2::write(const std::string &desc,
-                        CONTINUATION_PARAM(next, ProtocolV2),
+                        CONTINUATION_TYPE<ProtocolV2> &next,
                         F &frame) {
   ceph::bufferlist bl = frame.get_buffer(session_stream_handlers);
-  return write(desc, CONTINUATION(next), bl);
+  return write(desc, next, bl);
 }
 
 CtPtr ProtocolV2::write(const std::string &desc,
-                        CONTINUATION_PARAM(next, ProtocolV2),
+                        CONTINUATION_TYPE<ProtocolV2> &next,
                         bufferlist &buffer) {
   ssize_t r =
-      connection->write(buffer, [&CONTINUATION(next), desc, this](int r) {
+      connection->write(buffer, [&next, desc, this](int r) {
         if (r < 0) {
           ldout(cct, 1) << __func__ << " " << desc << " write failed r=" << r
                         << " (" << cpp_strerror(r) << ")" << dendl;
           connection->inject_delay();
           _fault();
         }
-        run_continuation(CONTINUATION(next));
+        run_continuation(next);
       });
 
   if (r <= 0) {
@@ -743,7 +743,8 @@ CtPtr ProtocolV2::write(const std::string &desc,
                     << " (" << cpp_strerror(r) << ")" << dendl;
       return _fault();
     }
-    return CONTINUE(next);
+    next.setParams();
+    return &next;
   }
 
   return nullptr;
