@@ -28,8 +28,8 @@ public:
 template <class C, typename... Args>
 class CtFun : public Ct<C> {
 private:
-  using fn = Ct<C> *(C::*)(Args...);
-  fn _f;
+  using fn_t = Ct<C> *(C::*)(Args...);
+  fn_t _f;
   std::tuple<Args...> _params;
 
   template <std::size_t... Is>
@@ -38,7 +38,7 @@ private:
   }
 
 public:
-  CtFun(fn f) : _f(f) {}
+  CtFun(fn_t f) : _f(f) {}
 
   inline void setParams(Args... args) { _params = std::make_tuple(args...); }
   inline Ct<C> *call(C *foo) const override {
@@ -46,10 +46,13 @@ public:
   }
 };
 
+
+template <class C> using CONTINUATION_TYPE = CtFun<C>;
+template <class C> using CONTINUATION_TX_TYPE = CtFun<C, int>;
+template <class C> using CONTINUATION_RX_TYPE = CtFun<C, char*, int>;
+
 #define CONTINUATION_DECL(C, F, ...)                    \
   CtFun<C, ##__VA_ARGS__> F##_cont { (&C::F) };
-
-#define CONTINUATION_PARAM(V, C, ...) CtFun<C, ##__VA_ARGS__> &V##_cont
 
 #define CONTINUATION(F) F##_cont
 #define CONTINUE(F, ...) (F##_cont.setParams(__VA_ARGS__), &F##_cont)
