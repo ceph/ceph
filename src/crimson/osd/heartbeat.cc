@@ -229,7 +229,7 @@ seastar::future<> Heartbeat::ms_dispatch(ceph::net::ConnectionRef conn,
   logger().info("heartbeat: ms_dispatch {} from {}",
                 *m, m->get_source());
   switch (m->get_type()) {
-  case CEPH_MSG_PING:
+  case MSG_OSD_PING:
     return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
   default:
     return seastar::now();
