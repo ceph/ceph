@@ -96,7 +96,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
   return 0;
 }
 
-int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
@@ -106,7 +106,6 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
 
   rgw_raw_obj obj(pool, oid);
 
-  auto obj_ctx = rgwstore->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
   int ret = sysobj.wop()
                   .set_objv_tracker(objv_tracker)
@@ -114,18 +113,6 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
                   .write(data, null_yield);
-
-  if (ret == -ENOENT) {
-    ret = rgwstore->create_pool(pool);
-    if (ret >= 0) {
-      ret = sysobj.wop()
-                  .set_objv_tracker(objv_tracker)
-                  .set_exclusive(exclusive)
-                  .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
-                  .write(data, null_yield);
-    }
-  }
 
   return ret;
 }

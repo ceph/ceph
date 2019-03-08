@@ -40,11 +40,6 @@ extern int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry
 extern void rgw_bucket_instance_key_to_oid(string& key);
 extern void rgw_bucket_instance_oid_to_key(string& oid);
 
-extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
-                                        const string& tenant_name,
-                                        const string& bucket_name,
-                                        RGWObjVersionTracker& objv_tracker);
-
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
 
