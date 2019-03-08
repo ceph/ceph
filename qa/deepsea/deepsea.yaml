@@ -1,7 +1,7 @@
 tasks:
         - deepsea:
                 allow_python2: false
-                storage_profile: default
+                drive_group: default
         - deepsea.orch:
                 stage: prep
         - deepsea.orch:

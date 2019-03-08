@@ -7,3 +7,4 @@ set -ex
 pvs --all
 vgs --all
 lvs --all
+lsblk --ascii

@@ -1,4 +1,6 @@
-# custom_storage_profile.sh
+# drive_group.sh
+#
+# TODO: completely rewrite for drive groups
 #
 # args: full path to proposals directory,
 #       path to file containing custom storage profile

@@ -76,14 +76,15 @@ class DeepSea(Task):
         rgw_ssl:
             true        use SSL if RGW is deployed
             false       if RGW is deployed, do not use SSL (the default)
-        storage_profile:
+        drive_group:
             default     if a teuthology osd role is present on a node,
-                        DeepSea will make all available disks into OSDs
+                        DeepSea will tell ceph-volume to make all available
+                        disks into standalone OSDs
             teuthology  populate DeepSea storage profile for 1:1 mapping
                         between teuthology osd roles and actual osds
                         deployed (the default, but not yet implemented)
-            (dict)      a dictionary is assumed to be a custom storage
-                        profile (yaml blob) to be passed verbatim to DeepSea
+            (dict)      a dictionary is assumed to be a custom drive group
+                        (yaml blob) to be passed verbatim to ceph-volume
 
     This task also understands the following config keys that affect
     the behavior of just this one task (no effect on subtasks):
@@ -179,7 +180,7 @@ class DeepSea(Task):
         self.role_lookup_table = self.ctx['role_lookup_table']
         self.scripts = Scripts(self.ctx, self.log)
         self.sm = deepsea_ctx['salt_manager_instance']
-        self.storage_profile = deepsea_ctx['storage_profile']
+        self.drive_group = deepsea_ctx['drive_group']
         # self.log.debug("ctx.config {}".format(ctx.config))
         # self.log.debug("deepsea context: {}".format(deepsea_ctx))
 
@@ -393,7 +394,7 @@ class DeepSea(Task):
                 .format(deepsea_ctx['log_anchor'])
                 )
             deepsea_ctx['log_anchor'] = ''
-        deepsea_ctx['storage_profile'] = self.config.get("storage_profile", "teuthology")
+        deepsea_ctx['drive_group'] = self.config.get("drive_group", "teuthology")
         deepsea_ctx['quiet_salt'] = self.config.get('quiet_salt', True)
         deepsea_ctx['salt_manager_instance'] = SaltManager(self.ctx)
         deepsea_ctx['master_remote'] = (
@@ -945,6 +946,12 @@ class Orch(DeepSea):
             'salt_api_test.sh',
             )
 
+    def __dump_drive_groups_yml(self):
+        self.scripts.run(
+            self.master_remote,
+            'dump_drive_groups_yml.sh',
+            )
+
     def __dump_lvm_status(self):
         self.log.info("Dumping LVM status on storage nodes ->{}<-"
                       .format(self.nodes_storage))
@@ -1151,6 +1158,7 @@ class Orch(DeepSea):
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
         self._pillar_items()
+        self.__dump_drive_groups_yml()
 
     def _run_stage_3(self):
         """
@@ -1248,37 +1256,36 @@ class Policy(DeepSea):
         self.name = 'deepsea.policy'
         super(Policy, self).__init__(ctx, config)
         self.policy_cfg = ''
-        self.munge_profile = self.config.get('munge_profile', {})
+        self.munge_policy = self.config.get('munge_policy', {})
 
-    def __build_profile_x(self, profile):
+    def __build_drive_group_x(self, drive_group):
+        # generate our own drive_group.yml (as opposed to letting
+        # DeepSea generate one for us)
         if not self.nodes_storage:
             raise ConfigError(self.err_prefix + "no osd roles configured, "
                               "but at least one of these is required.")
-        self.log.debug("building storage profile ->{}<- for {} storage nodes"
-                       .format(profile, len(self.nodes_storage)))
-        if profile == 'custom':
-            self.__roll_out_custom_profile()
-        self.profile_ymls_to_dump = []
-        for hostname in self.nodes_storage:
-            self.policy_cfg += ("# Storage profile - {node}\n"
-                                "profile-{profile}/cluster/{node}.sls\n"
-                                .format(node=hostname, profile=profile))
-            ypp = ("profile-{}/stack/default/ceph/minions/{}.yml"
-                   .format(profile, hostname))
-            self.policy_cfg += ypp + "\n"
-            self.profile_ymls_to_dump.append(
-                "{}/{}".format(proposals_dir, ypp))
+        self.log.debug("building drive group ->{}<- for {} storage nodes"
+                       .format(drive_group, len(self.nodes_storage)))
+        if drive_group == 'teuthology':
+            raise ConfigError(self.err_prefix + "\"teuthology\" drive group "
+                              "generation not implemented yet")
+        elif drive_group == 'custom':
+            self.__roll_out_drive_group()
+        else:
+            ConfigError(self.err_prefix + "unknown drive group ->{}<-"
+                        .format(self.drive_group))
 
-    def __roll_out_custom_profile(self, fpath="/home/ubuntu/custom_profile"):
+    def __roll_out_drive_group(self, fpath="/home/ubuntu/drive_group"):
+        # FIXME: this is entirely untested and probably doesn't work
         misc.sudo_write_file(
             self.master_remote,
             fpath,
-            yaml.dump(self.storage_profile),
+            yaml.dump(self.drive_group),
             perms="0644",
             )
         self.scripts.run(
             self.master_remote,
-            'custom_storage_profile.sh',
+            'drive_group.sh',
             args=[proposals_dir, fpath]
             )
 
@@ -1298,23 +1305,24 @@ class Policy(DeepSea):
                            "role-admin/cluster/*.sls\n"
                            .format(self.master_remote.hostname))
 
-    def _build_storage_profile(self):
+    def _build_drive_groups_yml(self):
         """
-        Add storage profile to policy.cfg
+        Generate a special-purpose drive_groups.yml
+        (currently fails the test in all cases except when
+        "drive_group: default" is explicitly given)
         """
-        if isinstance(self.storage_profile, str):
-            if self.storage_profile == 'teuthology':
-                raise ConfigError(self.err_prefix + "\"teuthology\" storage "
-                                  "profile not implemented yet")
-            elif self.storage_profile == 'default':
-                self.__build_profile_x('default')
+        if isinstance(self.drive_group, str):
+            if self.drive_group == 'teuthology':
+                self.__build_drive_group_x('teuthology')
+            elif self.drive_group == 'default':
+                pass
             else:
-                ConfigError(self.err_prefix + "unknown storage profile ->{}<-"
-                            .format(self.storage_profile))
-        elif isinstance(self.storage_profile, dict):
-            self.__build_profile_x('custom')
+                ConfigError(self.err_prefix + "unknown drive group ->{}<-"
+                            .format(self.drive_group))
+        elif isinstance(self.drive_group, dict):
+            self.__build_drive_group_x('custom')
         else:
-            raise ConfigError(self.err_prefix + "storage_profile config param "
+            raise ConfigError(self.err_prefix + "drive_group config param "
                               "must be a string or a dict")
 
     def _build_x(self, role_type, required=False):
@@ -1334,6 +1342,8 @@ class Policy(DeepSea):
             if len(role_dict.keys()) < 1:
                 raise ConfigError(self.err_prefix + no_roles_of_type + but_required)
         for role_spec, remote_name in role_dict.items():
+            if role_type == 'osd':
+                role_type = 'storage'
             self.policy_cfg += ('# Role assignment - {}\n'
                                 'role-{}/cluster/{}.sls\n'
                                 .format(role_spec, role_type, remote_name))
@@ -1344,28 +1354,6 @@ class Policy(DeepSea):
         """
         cmd_str = "cat {}/policy.cfg".format(proposals_dir)
         self.master_remote.run(args=cmd_str)
-
-    def _dump_profile_ymls(self):
-        """
-        Dump profile yml files that have been earmarked for dumping.
-        """
-        for yml_file in self.profile_ymls_to_dump:
-            cmd_str = "sudo cat {}".format(yml_file)
-            self.master_remote.run(args=cmd_str)
-
-    def _dump_proposals_dir(self):
-        """
-        Dump the entire proposals directory hierarchy to the teuthology log.
-        """
-        self.master_remote.run(args=[
-            'test',
-            '-d',
-            proposals_dir,
-            run.Raw(';'),
-            'ls',
-            '-lR',
-            proposals_dir + '/',
-            ])
 
     def _write_policy_cfg(self):
         """
@@ -1385,39 +1373,41 @@ class Policy(DeepSea):
         """
         Generate policy.cfg from the results of role introspection
         """
-        if self.munge_profile:
-            for k, v in self.munge_profile.items():
-                if k == 'proposals_remove_storage_only_node':
+        # FIXME: this should be run only once - check for that and
+        # return an error otherwise
+        if self.munge_policy:
+            for k, v in self.munge_policy.items():
+                if k == 'remove_storage_only_node':
                     delete_me = self.first_storage_only_node()
                     if not delete_me:
                         raise ConfigError(
-                            self.err_prefix + "proposals_remove_storage_only_node "
+                            self.err_prefix + "remove_storage_only_node "
                             "requires a storage-only node, but there is no such"
                             )
-                    self.scripts.run(
-                        self.master_remote,
-                        'proposals_remove_storage_only_node.sh',
-                        args=[proposals_dir, delete_me, self.storage_profile],
-                        )
+                    raise ConfigError(self.err_prefix + (
+                        "munge_policy is a kludge - get rid of it! "
+                        "This test needs to be reworked - deepsea.py "
+                        "does not currently have a proper way of "
+                        "changing (\"munging\") the policy.cfg file."
+                        ))
                 else:
                     raise ConfigError(self.err_prefix + "unrecognized "
-                                      "munge_profile directive {}".format(k))
+                                      "munge_policy directive {}".format(k))
         else:
             self.log.info(anchored("generating policy.cfg"))
-            self._dump_proposals_dir()
             self._build_base()
             self._build_x('mon', required=True)
             self._build_x('mgr', required=True)
+            self._build_x('osd', required=True)
+            self._build_drive_groups_yml()
             self._build_x('mds')
             self._build_x('rgw')
             self._build_x('igw')
             self._build_x('ganesha')
             self._build_x('prometheus')
             self._build_x('grafana')
-            self._build_storage_profile()
             self._write_policy_cfg()
             self._cat_policy_cfg()
-            self._dump_profile_ymls()
 
     def end(self):
         pass
