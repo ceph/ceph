@@ -669,6 +669,11 @@ struct entity_addrvec_t {
 	front() == o.legacy_addr()) {
       return true;
     }
+    if (o.v.size() == 1 &&
+	o.front().is_legacy() &&
+	o.front() == legacy_addr()) {
+      return true;
+    }
     return false;
   }
 
