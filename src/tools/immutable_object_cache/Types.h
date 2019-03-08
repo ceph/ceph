@@ -23,7 +23,7 @@ inline uint8_t get_header_size() {
 }
 
 inline uint32_t get_data_len(char* buf) {
-  HeaderHelper* header = (HeaderHelper*)buf;
+  HeaderHelper* header = reinterpret_cast<HeaderHelper*>(buf);
   return header->len;
 }
 }  //  namespace

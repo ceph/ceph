@@ -19,8 +19,8 @@ namespace immutable_obj_cache {
 
 class CacheSession : public std::enable_shared_from_this<CacheSession> {
  public:
-  CacheSession(uint64_t session_id, io_service& io_service,
-               ProcessMsg process_msg, CephContext* ctx);
+  CacheSession(io_service& io_service, ProcessMsg process_msg,
+                CephContext* ctx);
   ~CacheSession();
   stream_protocol::socket& socket();
   void close();
@@ -37,10 +37,9 @@ class CacheSession : public std::enable_shared_from_this<CacheSession> {
   void send(ObjectCacheRequest* msg);
 
  private:
-  uint64_t m_session_id;
   stream_protocol::socket m_dm_socket;
   ProcessMsg m_server_process_msg;
-  CephContext* cct;
+  CephContext* m_cct;
 
   bufferptr m_bp_header;
 };
