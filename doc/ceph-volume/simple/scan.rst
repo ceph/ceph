@@ -9,6 +9,7 @@ PLAIN formats is fully supported.
 
 The command has the ability to inspect a running OSD, by inspecting the
 directory where the OSD data is stored, or by consuming the data partition.
+The command can also scan all running OSDs if no path or device is provided.
 
 Once scanned, information will (by default) persist the metadata as JSON in
 a file in ``/etc/ceph/osd``. This ``JSON`` file will use the naming convention
@@ -30,6 +31,16 @@ the contents to ``stdout`` (no file will be written)::
 
 
 .. _ceph-volume-simple-scan-directory:
+
+Running OSDs scan
+-----------------
+Using this command without providing an OSD directory or device will scan the
+directories of any currently running OSDs. If a running OSD was not created
+by ceph-disk it will be ignored and not scanned.
+
+To scan all running ceph-disk OSDs, the command would look like::
+
+    ceph-volume simple scan
 
 Directory scan
 --------------
