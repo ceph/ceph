@@ -438,19 +438,16 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
       return seastar::now();
     } else if (auto p = m->incremental_maps.find(e);
                p != m->incremental_maps.end()) {
-      OSDMap::Incremental inc;
-      auto i = p->second.cbegin();
-      inc.decode(i);
-      return load_map_bl(e - 1)
-        .then([&t, e, inc=std::move(inc), this](bufferlist bl) {
-          auto o = std::make_unique<OSDMap>();
-          o->decode(bl);
-          o->apply_incremental(inc);
-          bufferlist fbl;
-          o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
-          store_map_bl(t, e, std::move(fbl));
-          osdmaps.insert(e, std::move(o));
-          return seastar::now();
+      return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
+        OSDMap::Incremental inc;
+        auto i = bl.cbegin();
+        inc.decode(i);
+        o->apply_incremental(inc);
+        bufferlist fbl;
+        o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
+        store_map_bl(t, e, std::move(fbl));
+        osdmaps.insert(e, std::move(o));
+        return seastar::now();
       });
     } else {
       logger().error("MOSDMap lied about what maps it had?");
