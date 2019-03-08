@@ -887,7 +887,7 @@ public:
    * @param item id to remove
    * @return 0 on success, negative on error
    */
-  int remove_root(int item);
+  int remove_root(CephContext *cct, int item);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -1313,9 +1313,9 @@ public:
   int get_rules_by_osd(int osd, set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
-  int rebuild_roots_with_classes();
+  int rebuild_roots_with_classes(CephContext *cct);
   /* remove unused roots generated for class devices */
-  int trim_roots_with_class();
+  int trim_roots_with_class(CephContext *cct);
 
   int reclassify(
     CephContext *cct,
