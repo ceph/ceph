@@ -264,7 +264,8 @@ void MgrStandby::handle_signal(int signum)
 {
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+  _exit(128 + signum);
+  //shutdown();
 }
 
 void MgrStandby::shutdown()
