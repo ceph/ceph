@@ -15,12 +15,8 @@ StoreTool::StoreTool(const string& type, const string& path, bool need_open_db)
 {
   if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
-    auto bluestore = new BlueStore(g_ceph_context, path);
-    KeyValueDB *db_ptr;
-    if (int r = bluestore->start_kv_only(&db_ptr, need_open_db); r < 0) {
+    if (load_bluestore(path, need_open_db) != 0)
       exit(1);
-    }
-    db = decltype(db){db_ptr, Deleter(bluestore)};
 #else
     cerr << "bluestore not compiled in" << std::endl;
     exit(1);
@@ -36,6 +32,18 @@ StoreTool::StoreTool(const string& type, const string& path, bool need_open_db)
       db.reset(db_ptr);
     }
   }
+}
+
+int StoreTool::load_bluestore(const string& path, bool need_open_db)
+{
+    auto bluestore = new BlueStore(g_ceph_context, path);
+    KeyValueDB *db_ptr;
+    int r = bluestore->start_kv_only(&db_ptr, need_open_db);
+    if (r < 0) {
+     return -EINVAL;
+    }
+    db = decltype(db){db_ptr, Deleter(bluestore)};
+    return 0;
 }
 
 uint32_t StoreTool::traverse(const string& prefix,
