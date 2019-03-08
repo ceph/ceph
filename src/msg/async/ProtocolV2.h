@@ -115,8 +115,6 @@ private:
   void run_continuation(Ct<ProtocolV2> *pcontinuation);
   void run_continuation(Ct<ProtocolV2> &continuation);
 
-  Ct<ProtocolV2> *read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
-                       int len, char *buffer = nullptr);
   Ct<ProtocolV2> *read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
                        rx_buffer_t&& buffer);
   template <class F>
@@ -142,30 +140,30 @@ private:
   void handle_message_ack(uint64_t seq);
 
   CONTINUATION_DECL(ProtocolV2, _wait_for_peer_banner);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner_payload);
+  READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner);
+  READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner_payload);
 
   Ct<ProtocolV2> *_banner_exchange(Ct<ProtocolV2> &callback);
   Ct<ProtocolV2> *_wait_for_peer_banner();
-  Ct<ProtocolV2> *_handle_peer_banner(char *buffer, int r);
-  Ct<ProtocolV2> *_handle_peer_banner_payload(char *buffer, int r);
+  Ct<ProtocolV2> *_handle_peer_banner(rx_buffer_t &&buffer, int r);
+  Ct<ProtocolV2> *_handle_peer_banner_payload(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *handle_hello(ceph::bufferlist &payload);
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
   CONTINUATION_DECL(ProtocolV2, finish_auth);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
+  READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
   READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_epilogue_main);
+  READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_epilogue_main);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
   CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *finish_auth();
-  Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r);
-  Ct<ProtocolV2> *handle_read_frame_epilogue_main(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *handle_frame_payload();
 

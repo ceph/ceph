@@ -57,7 +57,7 @@ void ProtocolV2::run_continuation(CtRef continuation) {
 
 #define WRITE(B, D, C) write(D, CONTINUATION(C), B)
 
-#define READ(L, C) read(CONTINUATION(C), L)
+#define READ(L, C) read(CONTINUATION(C), buffer::ptr_node::create(buffer::create(L)))
 
 #define READ_RXBUF(B, C) read(CONTINUATION(C), B)
 
@@ -698,23 +698,6 @@ uint32_t ProtocolV2::get_epilogue_size() const {
   }
 }
 
-CtPtr ProtocolV2::read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
-                       int len, char *buffer) {
-  if (!buffer) {
-    buffer = temp_buffer;
-  }
-                               [&next, this](char *buffer, int r) {
-                                 next.setParams(buffer, r);
-                                 run_continuation(next);
-                               });
-  if (r <= 0) {
-    next.setParams(buffer, r);
-    return &next;
-  }
-
-  return nullptr;
-}
-
 CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
                        rx_buffer_t &&buffer) {
   const auto len = buffer->length();
@@ -792,7 +775,7 @@ CtPtr ProtocolV2::_wait_for_peer_banner() {
   return READ(banner_len, _handle_peer_banner);
 }
 
-CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
+CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -803,8 +786,8 @@ CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
 
   unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
 
-  if (memcmp(buffer, CEPH_BANNER_V2_PREFIX, banner_prefix_len)) {
-    if (memcmp(buffer, CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
+  if (memcmp(buffer->c_str(), CEPH_BANNER_V2_PREFIX, banner_prefix_len)) {
+    if (memcmp(buffer->c_str(), CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
       lderr(cct) << __func__ << " peer " << *connection->peer_addrs
                  << " is using msgr V1 protocol" << dendl;
       return _fault();
@@ -815,8 +798,9 @@ CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
 
   uint16_t payload_len;
   bufferlist bl;
-  bl.push_back(
-      buffer::create_static(sizeof(__le16), buffer + banner_prefix_len));
+  buffer->set_offset(banner_prefix_len);
+  buffer->set_length(sizeof(__le16));
+  bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
   try {
     decode(payload_len, ti);
@@ -835,7 +819,7 @@ CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
   return READ(next_payload_len, _handle_peer_banner_payload);
 }
 
-CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
+CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -848,7 +832,7 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
   uint64_t peer_required_features;
 
   bufferlist bl;
-  bl.push_back(buffer::create_static(next_payload_len, buffer));
+  bl.push_back(std::move(buffer));
   auto ti = bl.cbegin();
   try {
     decode(peer_supported_features, ti);
@@ -965,7 +949,7 @@ CtPtr ProtocolV2::read_frame() {
   return READ(FRAME_PREAMBLE_SIZE, handle_read_frame_preamble_main);
 }
 
-CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
+CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -975,7 +959,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
   }
 
   ceph::bufferlist preamble;
-  preamble.push_back(buffer::create_static(FRAME_PREAMBLE_SIZE, buffer));
+  preamble.push_back(std::move(buffer));
 
   ldout(cct, 30) << __func__ << " preamble\n";
   preamble.hexdump(*_dout);
@@ -1238,7 +1222,7 @@ CtPtr ProtocolV2::ready() {
   return CONTINUE(read_frame);
 }
 
-CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
+CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
 {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
@@ -1257,8 +1241,7 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
     // decrypt epilogue and authenticate entire frame.
     ceph::bufferlist epilogue_bl;
     {
-      epilogue_bl.push_back(buffer::create_static(get_epilogue_size(),
-          buffer));
+      epilogue_bl.push_back(std::move(buffer));
       try {
         epilogue_bl =
             session_stream_handlers.rx->authenticated_decrypt_update_final(
@@ -1273,7 +1256,7 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
         reinterpret_cast<epilogue_plain_block_t&>(*epilogue_bl.c_str());
     late_flags = epilogue.late_flags;
   } else {
-    auto& epilogue = reinterpret_cast<epilogue_plain_block_t&>(*buffer);
+    auto& epilogue = reinterpret_cast<epilogue_plain_block_t&>(*buffer->c_str());
 
     for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
       const __u32 expected_crc = epilogue.crc_values[idx];
