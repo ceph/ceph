@@ -450,7 +450,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     }
   }
 
-  cct->_conf.parse_env();
+  cct->_conf.parse_env(cct->get_module_type());
 
   // librados::Rados::conf_parse_env
   std::vector<const char*> args;
@@ -461,7 +461,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     cct->put();
     return r;
   }
-  cct->_conf.parse_env();
+  cct->_conf.parse_env(cct->get_module_type());
 
   if (!m_args.empty()) {
     // librados::Rados::conf_parse_argv

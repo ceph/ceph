@@ -453,7 +453,8 @@ int md_config_t::parse_config_files(ConfigValues& values,
   return 0;
 }
 
-void md_config_t::parse_env(ConfigValues& values,
+void md_config_t::parse_env(unsigned entity_type,
+			    ConfigValues& values,
 			    const ConfigTracker& tracker,
 			    const char *args_var)
 {
