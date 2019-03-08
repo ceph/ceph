@@ -63,8 +63,12 @@ if cherrypy is not None:
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage
-    _cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)))
-    _cov.start()
+    __cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)),
+                              data_suffix=True)
+
+    cherrypy.engine.subscribe('start', __cov.start)
+    cherrypy.engine.subscribe('after_request', __cov.save)
+    cherrypy.engine.subscribe('stop', __cov.stop)
 
 # pylint: disable=wrong-import-position
 from . import logger, mgr
@@ -305,9 +309,6 @@ class Module(MgrModule, CherryPyConfig):
         return os.path.join(current_dir, 'frontend/dist')
 
     def serve(self):
-        if 'COVERAGE_ENABLED' in os.environ:
-            _cov.start()
-
         AuthManager.initialize()
         load_sso_db()
 
@@ -346,9 +347,6 @@ class Module(MgrModule, CherryPyConfig):
         self.shutdown_event.clear()
         NotificationQueue.stop()
         cherrypy.engine.stop()
-        if 'COVERAGE_ENABLED' in os.environ:
-            _cov.stop()
-            _cov.save()
         logger.info('Engine stopped')
 
     def shutdown(self):
