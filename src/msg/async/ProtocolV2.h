@@ -117,6 +117,8 @@ private:
 
   Ct<ProtocolV2> *read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
                        int len, char *buffer = nullptr);
+  Ct<ProtocolV2> *read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
+                       rx_buffer_t&& buffer);
   template <class F>
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,

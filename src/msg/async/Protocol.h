@@ -46,10 +46,38 @@ public:
   }
 };
 
+using rx_buffer_t = ceph::bufferptr;
+// FIXME: std::function in AsyncConnection requires us to be copy-
+// constructible just in the case - even if nobody actually copies
+// the std::functions there. This inhibits usage of unique_ptr of
+// ptr_node inside. Reworking the callback mechanism might help but
+// for now we can go with regular bptr.
+//
+//    std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>;
+
+template <class C>
+class CtRxNode : public Ct<C> {
+  using fn_t = Ct<C> *(C::*)(rx_buffer_t&&, int r);
+  fn_t _f;
+
+  mutable rx_buffer_t node;
+  int r;
+
+public:
+  CtRxNode(fn_t f) : _f(f) {}
+  void setParams(rx_buffer_t &&node, int r) {
+    this->node = std::move(node);
+    this->r = r;
+  }
+  inline Ct<C> *call(C *foo) const override {
+    return (foo->*_f)(std::move(node), r);
+  }
+};
 
 template <class C> using CONTINUATION_TYPE = CtFun<C>;
 template <class C> using CONTINUATION_TX_TYPE = CtFun<C, int>;
 template <class C> using CONTINUATION_RX_TYPE = CtFun<C, char*, int>;
+template <class C> using CONTINUATION_RXBPTR_TYPE = CtRxNode<C>;
 
 #define CONTINUATION_DECL(C, F, ...)                    \
   CtFun<C, ##__VA_ARGS__> F##_cont { (&C::F) };
@@ -67,6 +95,10 @@ template <class C> using CONTINUATION_RX_TYPE = CtFun<C, char*, int>;
 
 #define READ_HANDLER_CONTINUATION_DECL(C, F) \
   CONTINUATION_DECL(C, F, char *, int)
+
+#define READ_BPTR_HANDLER_CONTINUATION_DECL(C, F) \
+  CtRxNode<C> F##_cont { (&C::F) };
+
 #define WRITE_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, int)
 
 //////////////////////////////////////////////////////////////////////
