@@ -46,24 +46,18 @@ public:
   }
 };
 
-using rx_buffer_t = ceph::bufferptr;
-// FIXME: std::function in AsyncConnection requires us to be copy-
-// constructible just in the case - even if nobody actually copies
-// the std::functions there. This inhibits usage of unique_ptr of
-// ptr_node inside. Reworking the callback mechanism might help but
-// for now we can go with regular bptr.
-//
-//    std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>;
+using rx_buffer_t =
+    std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>;
 
 template <class C>
 class CtRxNode : public Ct<C> {
   using fn_t = Ct<C> *(C::*)(rx_buffer_t&&, int r);
   fn_t _f;
 
+public:
   mutable rx_buffer_t node;
   int r;
 
-public:
   CtRxNode(fn_t f) : _f(f) {}
   void setParams(rx_buffer_t &&node, int r) {
     this->node = std::move(node);

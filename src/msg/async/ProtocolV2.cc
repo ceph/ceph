@@ -717,16 +717,17 @@ CtPtr ProtocolV2::read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
 
 CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
                        rx_buffer_t &&buffer) {
-  const auto len = buffer.length();
-  const auto buf = buffer.c_str();
+  const auto len = buffer->length();
+  const auto buf = buffer->c_str();
+  next.node = std::move(buffer);
   ssize_t r = connection->read(len, buf,
-    [&next, this, bufnode = std::move(buffer)](char *buffer, int r) mutable {
-      next.setParams(std::move(bufnode), r);
+    [&next, this](char *buffer, int r) {
+      next.r = r;
       run_continuation(next);
     });
   if (r <= 0) {
     // error or done synchronously
-    next.setParams(rx_buffer_t(), r);
+    next.r = r;
     return &next;
   }
 
@@ -1098,8 +1099,8 @@ CtPtr ProtocolV2::read_frame_segment() {
   const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
   rx_buffer_t rx_buffer;
   try {
-    rx_buffer = buffer::create_aligned(
-      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment);
+    rx_buffer = buffer::ptr_node::create(buffer::create_aligned(
+      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
     ldout(cct, 20) << __func__ << " can't allocate aligned rx_buffer "
