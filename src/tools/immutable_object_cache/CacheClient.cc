@@ -18,7 +18,6 @@ namespace immutable_obj_cache {
       m_io_thread(nullptr), m_session_work(false), m_writing(false),
       m_reading(false), m_sequence_id(0),
       m_lock("ceph::cache::cacheclient::m_lock") {
-    // TODO(dehao) : configure it.
     m_worker_thread_num =
       m_cct->_conf.get_val<uint64_t>(
         "immutable_object_cache_client_dedicated_thread_num");

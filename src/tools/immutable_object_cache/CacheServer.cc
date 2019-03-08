@@ -76,7 +76,7 @@ int CacheServer::start_accept() {
 void CacheServer::accept() {
   CacheSessionPtr new_session = nullptr;
 
-  new_session.reset(new CacheSession(m_session_id, m_io_service,
+  new_session.reset(new CacheSession(m_io_service,
                     m_server_process_msg, cct));
 
   m_acceptor.async_accept(new_session->socket(),
@@ -93,10 +93,8 @@ void CacheServer::handle_accept(CacheSessionPtr new_session,
     return;
   }
 
-  m_session_map.emplace(m_session_id, new_session);
   // TODO(dehao) : session setting
   new_session->start();
-  m_session_id++;
 
   // lanuch next accept
   accept();
