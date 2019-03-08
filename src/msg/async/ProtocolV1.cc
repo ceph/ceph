@@ -408,8 +408,10 @@ bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
 }
 
-void ProtocolV1::run_continuation(CtPtr continuation) {
-  CONTINUATION_RUN(continuation);
+void ProtocolV1::run_continuation(CtPtr pcontinuation) {
+  if (pcontinuation) {
+    CONTINUATION_RUN(*pcontinuation);
+  }
 }
 
 CtPtr ProtocolV1::read(CONTINUATION_PARAM(next, ProtocolV1, char *, int),
@@ -418,8 +420,8 @@ CtPtr ProtocolV1::read(CONTINUATION_PARAM(next, ProtocolV1, char *, int),
     buffer = temp_buffer;
   }
   ssize_t r = connection->read(len, buffer,
-                               [CONTINUATION(next), this](char *buffer, int r) {
-                                 CONTINUATION(next)->setParams(buffer, r);
+                               [&CONTINUATION(next), this](char *buffer, int r) {
+                                 CONTINUATION(next).setParams(buffer, r);
                                  CONTINUATION_RUN(CONTINUATION(next));
                                });
   if (r <= 0) {
@@ -431,8 +433,8 @@ CtPtr ProtocolV1::read(CONTINUATION_PARAM(next, ProtocolV1, char *, int),
 
 CtPtr ProtocolV1::write(CONTINUATION_PARAM(next, ProtocolV1, int),
                         bufferlist &buffer) {
-  ssize_t r = connection->write(buffer, [CONTINUATION(next), this](int r) {
-    CONTINUATION(next)->setParams(r);
+  ssize_t r = connection->write(buffer, [&CONTINUATION(next), this](int r) {
+    CONTINUATION(next).setParams(r);
     CONTINUATION_RUN(CONTINUATION(next));
   });
   if (r <= 0) {

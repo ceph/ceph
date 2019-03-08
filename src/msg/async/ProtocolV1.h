@@ -144,7 +144,7 @@ protected:
 
   State state;
 
-  void run_continuation(CtPtr continuation);
+  void run_continuation(CtPtr pcontinuation);
   CtPtr read(CONTINUATION_PARAM(next, ProtocolV1, char *, int), int len,
              char *buffer = nullptr);
   CtPtr write(CONTINUATION_PARAM(next, ProtocolV1, int), bufferlist &bl);

@@ -32,8 +32,15 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 using namespace ceph::msgr::v2;
 
 using CtPtr = Ct<ProtocolV2> *;
+using CtRef = Ct<ProtocolV2> &;
 
-void ProtocolV2::run_continuation(CtPtr continuation) {
+void ProtocolV2::run_continuation(CtPtr pcontinuation) {
+  if (pcontinuation) {
+    run_continuation(*pcontinuation);
+  }
+}
+
+void ProtocolV2::run_continuation(CtRef continuation) {
   try {
     CONTINUATION_RUN(continuation)
   } catch (const buffer::error &e) {
@@ -697,8 +704,8 @@ CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
     buffer = temp_buffer;
   }
   ssize_t r = connection->read(len, buffer,
-                               [CONTINUATION(next), this](char *buffer, int r) {
-                                 CONTINUATION(next)->setParams(buffer, r);
+                               [&CONTINUATION(next), this](char *buffer, int r) {
+                                 CONTINUATION(next).setParams(buffer, r);
                                  run_continuation(CONTINUATION(next));
                                });
   if (r <= 0) {
@@ -720,7 +727,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
                         bufferlist &buffer) {
   ssize_t r =
-      connection->write(buffer, [CONTINUATION(next), desc, this](int r) {
+      connection->write(buffer, [&CONTINUATION(next), desc, this](int r) {
         if (r < 0) {
           ldout(cct, 1) << __func__ << " " << desc << " write failed r=" << r
                         << " (" << cpp_strerror(r) << ")" << dendl;
@@ -1639,7 +1646,7 @@ CtPtr ProtocolV2::start_client_banner_exchange() {
 
   global_seq = messenger->get_global_seq();
 
-  return _banner_exchange(CONTINUATION(post_client_banner_exchange));
+  return _banner_exchange(&CONTINUATION(post_client_banner_exchange));
 }
 
 CtPtr ProtocolV2::post_client_banner_exchange() {
@@ -2082,7 +2089,7 @@ CtPtr ProtocolV2::start_server_banner_exchange() {
 
   state = BANNER_ACCEPTING;
 
-  return _banner_exchange(CONTINUATION(post_server_banner_exchange));
+  return _banner_exchange(&CONTINUATION(post_server_banner_exchange));
 }
 
 CtPtr ProtocolV2::post_server_banner_exchange() {
