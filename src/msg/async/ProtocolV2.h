@@ -93,8 +93,6 @@ private:
   using ProtFuncPtr = void (ProtocolV2::*)();
   Ct<ProtocolV2> *bannerExchangeCallback;
 
-  uint32_t next_payload_len;
-
 public:
 
   boost::container::static_vector<ceph::msgr::v2::segment_t,

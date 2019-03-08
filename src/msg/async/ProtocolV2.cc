@@ -92,7 +92,6 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       replacing(false),
       can_write(false),
       bannerExchangeCallback(nullptr),
-      next_payload_len(0),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
 }
@@ -806,11 +805,9 @@ CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
     return _fault();
   }
 
-  next_payload_len = payload_len;
-
   INTERCEPT(state == BANNER_CONNECTING ? 5 : 6);
 
-  return READ(next_payload_len, _handle_peer_banner_payload);
+  return READ(payload_len, _handle_peer_banner_payload);
 }
 
 CtPtr ProtocolV2::_handle_peer_banner_payload(rx_buffer_t &&buffer, int r) {
