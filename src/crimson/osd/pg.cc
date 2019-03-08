@@ -56,6 +56,11 @@ seastar::future<> PG::read_state(ceph::os::CyanStore* store)
         update_primary_state(new_up, new_up_primary,
                              new_acting, new_acting_primary);
       }
+      info.stats.up = up;
+      info.stats.up_primary = up_primary.osd;
+      info.stats.acting = acting;
+      info.stats.acting_primary = primary.osd;
+      info.stats.mapping_epoch = info.history.same_interval_since;
       return seastar::now();
     });
 }
