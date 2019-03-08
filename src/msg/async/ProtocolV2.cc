@@ -715,6 +715,24 @@ CtPtr ProtocolV2::read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
   return nullptr;
 }
 
+CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
+                       rx_buffer_t &&buffer) {
+  const auto len = buffer.length();
+  const auto buf = buffer.c_str();
+  ssize_t r = connection->read(len, buf,
+    [&next, this, bufnode = std::move(buffer)](char *buffer, int r) mutable {
+      next.setParams(std::move(bufnode), r);
+      run_continuation(next);
+    });
+  if (r <= 0) {
+    // error or done synchronously
+    next.setParams(rx_buffer_t(), r);
+    return &next;
+  }
+
+  return nullptr;
+}
+
 template <class F>
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
