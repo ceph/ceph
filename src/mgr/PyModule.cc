@@ -624,7 +624,17 @@ PyObject *PyModule::get_typed_option_value(const std::string& name,
 {
   // we don't need to hold a lock here because these MODULE_OPTIONS
   // are set up exactly once during startup.
-  auto p = options.find(name);
+
+  // Trim the name:
+  // - <MGR_ID>/foo => foo
+  // - x/y/bar => y/bar
+  std::string final_name = name;
+  auto pos = name.find_first_of('/');
+  if (std::string::npos != pos) {
+    final_name = name.substr(pos + 1);
+  }
+
+  auto p = options.find(final_name);
   if (p != options.end()) {
     switch (p->second.type) {
     case Option::TYPE_INT:
