@@ -259,6 +259,11 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     }
     fclose(f);
   }
+  uint64_t cgroup_limit;
+  if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
+      cgroup_limit > 0) {
+    (*m)["mem_cgroup_limit"] = boost::lexical_cast<string>(cgroup_limit);
+  }
 
   // processor
   f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
