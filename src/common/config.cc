@@ -475,6 +475,19 @@ void md_config_t::parse_env(unsigned entity_type,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
+  const char *pod_req = getenv("POD_MEMORY_REQUEST");
+  if (pod_req) {
+    uint64_t v = atoll(pod_req);
+    if (v) {
+      switch (entity_type) {
+      case CEPH_ENTITY_TYPE_OSD:
+	_set_val(values, tracker, stringify(v),
+		 *find_option("osd_memory_target"),
+		 CONF_ENV, nullptr);
+	break;
+      }
+    }
+  }
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
