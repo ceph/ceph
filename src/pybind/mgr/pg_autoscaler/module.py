@@ -355,9 +355,6 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
-            if p['subtree_capacity'] == 0:
-                self.log.debug('skipping empty subtree %s', cr_name)
-                continue
             if not p['would_adjust']:
                 continue
             if p['pg_autoscale_mode'] == 'warn':
