@@ -129,7 +129,8 @@ public:
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
-  void parse_env(ConfigValues& values, const ConfigTracker& tracker,
+  void parse_env(unsigned entity_type,
+		 ConfigValues& values, const ConfigTracker& tracker,
 		 const char *env_var = "CEPH_ARGS");
 
   // Absorb config settings from argv
