@@ -37,8 +37,6 @@ class CacheServer {
   ProcessMsg m_server_process_msg;
   stream_protocol::endpoint m_local_path;
   stream_protocol::acceptor m_acceptor;
-  uint64_t m_session_id = 1;
-  std::map<uint64_t, CacheSessionPtr> m_session_map;
 };
 
 }  // namespace immutable_obj_cache

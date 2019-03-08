@@ -71,7 +71,8 @@ void CacheController::run() {
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
-      ([&](CacheSession* p, ObjectCacheRequest* s){handle_request(p, s);}));
+      std::bind(&CacheController::handle_request, this,
+                std::placeholders::_1, std::placeholders::_2));
 
     int ret = m_cache_server->run();
     if (ret != 0) {
@@ -98,7 +99,8 @@ void CacheController::handle_request(CacheSession* session,
     case RBDSC_READ: {
       // lookup object in local cache store
       std::string cache_path;
-      ObjectCacheReadData* req_read_data = (ObjectCacheReadData*)req;
+      ObjectCacheReadData* req_read_data =
+        reinterpret_cast <ObjectCacheReadData*> (req);
       int ret = m_object_cache_store->lookup_object(
         req_read_data->pool_namespace, req_read_data->pool_id,
         req_read_data->snap_id, req_read_data->oid, cache_path);

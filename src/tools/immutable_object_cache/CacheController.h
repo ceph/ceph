@@ -25,7 +25,6 @@ class CacheController {
 
   void run();
 
-  void handle_request(uint64_t sesstion_id, ObjectCacheRequest* msg);
   void handle_request(CacheSession* session, ObjectCacheRequest* msg);
 
  private:
