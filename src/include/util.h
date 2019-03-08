@@ -73,6 +73,9 @@ WRITE_CLASS_ENCODER(ceph_data_stats)
 
 int get_fs_stats(ceph_data_stats_t &stats, const char *path);
 
+/// get memory limit for the current cgroup
+int get_cgroup_memory_limit(uint64_t *limit);
+
 /// collect info from @p uname(2), @p /proc/meminfo and @p /proc/cpuinfo
 void collect_sys_info(map<string, string> *m, CephContext *cct);
 
