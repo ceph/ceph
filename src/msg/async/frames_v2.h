@@ -176,6 +176,18 @@ private:
   };
   ceph::bufferlist::contiguous_filler preamble_filler;
 
+  __u8 calc_num_segments(
+    const std::array<segment_t, MAX_NUM_SEGMENTS>& segments)
+  {
+    for (__u8 num = SegmentsNumV; num > 0; num--) {
+      if (segments[num-1].length) {
+        return num;
+      }
+    }
+    // frame always has at least one segment.
+    return 1;
+  }
+
   // craft the main preamble. It's always present regardless of the number
   // of segments message is composed from.
   void fill_preamble() {
@@ -194,13 +206,17 @@ private:
         segments.front().length() - FRAME_PREAMBLE_SIZE;
     main_preamble.segments.front().alignment = alignments.front();
 
+    // there is no business in issuing frame without at least one segment
+    // filled.
     if constexpr(SegmentsNumV > 1) {
       for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
         main_preamble.segments[idx].length = segments[idx].length();
         main_preamble.segments[idx].alignment = alignments[idx];
       }
     }
-    main_preamble.num_segments = SegmentsNumV;
+    // calculate the number of non-empty segments.
+    // TODO: reorder segments to get DATA first
+    main_preamble.num_segments = calc_num_segments(main_preamble.segments);
 
     main_preamble.crc =
         ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
@@ -649,6 +665,12 @@ struct MessageFrame : public Frame<MessageFrame,
                                    segment_t::DEFAULT_ALIGNMENT,
                                    segment_t::DEFAULT_ALIGNMENT,
                                    segment_t::PAGE_SIZE_ALIGNMENT> {
+  struct {
+    uint32_t front;
+    uint32_t middle;
+    uint32_t data;
+  } len;
+
   static const Tag tag = Tag::MESSAGE;
 
   static MessageFrame Encode(const ceph_msg_header2 &msg_header,
