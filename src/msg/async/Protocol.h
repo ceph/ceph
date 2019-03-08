@@ -47,21 +47,19 @@ public:
 };
 
 #define CONTINUATION_DECL(C, F, ...)                    \
-  std::unique_ptr<CtFun<C, ##__VA_ARGS__>> F##_cont_ =  \
-      std::make_unique<CtFun<C, ##__VA_ARGS__>>(&C::F); \
-  CtFun<C, ##__VA_ARGS__> *F##_cont = F##_cont_.get()
+  CtFun<C, ##__VA_ARGS__> F##_cont { (&C::F) };
 
-#define CONTINUATION_PARAM(V, C, ...) CtFun<C, ##__VA_ARGS__> *V##_cont
+#define CONTINUATION_PARAM(V, C, ...) CtFun<C, ##__VA_ARGS__> &V##_cont
 
 #define CONTINUATION(F) F##_cont
-#define CONTINUE(F, ...) F##_cont->setParams(__VA_ARGS__), F##_cont
+#define CONTINUE(F, ...) (F##_cont.setParams(__VA_ARGS__), &F##_cont)
 
 #define CONTINUATION_RUN(CT)                                      \
   {                                                               \
-    Ct<std::remove_reference<decltype(*this)>::type> *_cont = CT; \
-    while (_cont) {                                               \
+    Ct<std::remove_reference<decltype(*this)>::type> *_cont = &CT;\
+    do {                                                          \
       _cont = _cont->call(this);                                  \
-    }                                                             \
+    } while (_cont);                                              \
   }
 
 #define READ_HANDLER_CONTINUATION_DECL(C, F) \
