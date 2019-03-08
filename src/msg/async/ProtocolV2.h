@@ -148,6 +148,7 @@ private:
   Ct<ProtocolV2> *handle_hello(ceph::bufferlist &payload);
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
+  CONTINUATION_DECL(ProtocolV2, finish_auth);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_epilogue_main);
@@ -156,6 +157,7 @@ private:
   CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
 
   Ct<ProtocolV2> *read_frame();
+  Ct<ProtocolV2> *finish_auth();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(char *buffer, int r);
