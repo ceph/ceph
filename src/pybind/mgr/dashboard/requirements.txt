@@ -4,7 +4,7 @@ bcrypt==3.1.4
 cheroot==6.0.0
 CherryPy==13.1.0
 configparser==3.5.0
-coverage==4.4.2
+coverage==4.5.2
 enum34==1.1.6
 funcsigs==1.0.2
 isort==4.2.15
