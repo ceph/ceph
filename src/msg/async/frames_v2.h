@@ -5,6 +5,7 @@
 #include "common/Clock.h"
 #include "crypto_onwire.h"
 #include <array>
+#include <utility>
 
 /**
  * Protocol V2 Frame Structures
@@ -206,6 +207,14 @@ private:
                             reinterpret_cast<const char *>(&main_preamble));
   }
 
+  template <size_t... Is>
+  void reset_tx_handler(
+    ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+    std::index_sequence<Is...>)
+  {
+    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()... });
+  }
+
 public:
   ceph::bufferlist get_buffer(
     ceph::crypto::onwire::rxtx_t &session_stream_handlers)
@@ -220,20 +229,8 @@ public:
       }
 
       // let's cipher allocate one huge buffer for entire ciphertext.
-      // TODO: apply some template magic to make this general
-      static_assert(SegmentsNumV == 1 || SegmentsNumV == 4);
-      if constexpr (SegmentsNumV == 1) {
-        session_stream_handlers.tx->reset_tx_handler({
-          segments.front().length(),
-        });
-      } else {
-        session_stream_handlers.tx->reset_tx_handler({
-          segments[0].length(),
-          segments[1].length(),
-          segments[2].length(),
-          segments[3].length(),
-        });
-      }
+      reset_tx_handler(
+          session_stream_handlers, std::make_index_sequence<SegmentsNumV>());
 
       for (auto& segment : segments) {
         if (segment.length()) {
