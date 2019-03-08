@@ -4,31 +4,15 @@
   become: yes
   tasks:
 
-    - name: list all OSD directories
-      find:
-        paths: /var/lib/ceph/osd
-        file_type: directory
-      register: osd_paths
-
-    - name: scan all OSD directories
-      command: "ceph-volume --cluster={{ cluster }} simple scan {{ item.path }}"
+    - name: scan all running OSDs
+      command: "ceph-volume --cluster={{ cluster }} simple scan"
       environment:
         CEPH_VOLUME_DEBUG: 1
-      with_items:
-        - "{{ osd_paths.files }}"
-
-    - name: list all OSD JSON files
-      find:
-        paths: /etc/ceph/osd
-        file_type: file
-      register: osd_configs
 
     - name: activate all scanned OSDs
-      command: "ceph-volume --cluster={{ cluster }} simple activate --file {{ item.path }}"
+      command: "ceph-volume --cluster={{ cluster }} simple activate --all"
       environment:
         CEPH_VOLUME_DEBUG: 1
-      with_items:
-        - "{{ osd_configs.files }}"
 
 # zap tests
 
