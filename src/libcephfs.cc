@@ -249,7 +249,7 @@ public:
   int conf_parse_env(const char *name)
   {
     auto& conf = cct->_conf;
-    conf.parse_env(name);
+    conf.parse_env(cct->get_module_type(), name);
     conf.apply_changes(nullptr);
     return 0;
   }
@@ -382,7 +382,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
   }
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf.parse_env(); // environment variables coverride
+  cct->_conf.parse_env(cct->get_module_type()); // environment variables coverride
   cct->_conf.apply_changes(nullptr);
   int ret = ceph_create_with_context(cmount, cct);
   cct->put();

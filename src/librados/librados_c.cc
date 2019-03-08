@@ -92,7 +92,7 @@ static CephContext *rados_create_cct(const char * const clustername,
   CephContext *cct = common_preinit(*iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   if (clustername)
     cct->_conf->cluster = clustername;
-  cct->_conf.parse_env(); // environment variables override
+  cct->_conf.parse_env(cct->get_module_type()); // environment variables override
   cct->_conf.apply_changes(nullptr);
 
   TracepointProvider::initialize<tracepoint_traits>(cct);
@@ -248,7 +248,7 @@ extern "C" int _rados_conf_read_file(rados_t cluster, const char *path_list)
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
-  conf.parse_env(); // environment variables override
+  conf.parse_env(client->cct->get_module_type()); // environment variables override
 
   conf.apply_changes(nullptr);
   client->cct->_conf.complain_about_parse_errors(client->cct);
@@ -322,7 +322,7 @@ extern "C" int _rados_conf_parse_env(rados_t cluster, const char *env)
   tracepoint(librados, rados_conf_parse_env_enter, cluster, env);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
   auto& conf = client->cct->_conf;
-  conf.parse_env(env);
+  conf.parse_env(client->cct->get_module_type(), env);
   conf.apply_changes(nullptr);
   tracepoint(librados, rados_conf_parse_env_exit, 0);
   return 0;

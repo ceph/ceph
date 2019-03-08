@@ -304,9 +304,10 @@ public:
     call_observers(rev_obs);
     return ret;
   }
-  void parse_env(const char *env_var = "CEPH_ARGS") {
+  void parse_env(unsigned entity_type,
+		 const char *env_var = "CEPH_ARGS") {
     std::lock_guard l{lock};
-    config.parse_env(values, obs_mgr, env_var);
+    config.parse_env(entity_type, values, obs_mgr, env_var);
   }
   int parse_argv(std::vector<const char*>& args, int level=CONF_CMDLINE) {
     std::lock_guard l{lock};
