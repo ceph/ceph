@@ -33,6 +33,7 @@ To optimize the performance of your cluster, refer to the following:
 
    Common Settings <common>
    Network Settings <network-config-ref>
+   Messenger v2 protocol <msgr2>
    Auth Settings <auth-config-ref>
    Monitor Settings <mon-config-ref>
    mon-lookup-dns
