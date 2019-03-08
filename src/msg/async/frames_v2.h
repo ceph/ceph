@@ -163,13 +163,17 @@ static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
   return bl;
 }
 
-template <class T, __u8 SegmentsNumV>
+template <class T, uint16_t... SegmentAlignmentVs>
 struct Frame {
+  static constexpr size_t SegmentsNumV = sizeof...(SegmentAlignmentVs);
   static_assert(SegmentsNumV > 0 && SegmentsNumV <= MAX_NUM_SEGMENTS);
 protected:
   std::array<ceph::bufferlist, SegmentsNumV> segments;
 
 private:
+  static constexpr std::array<uint16_t, SegmentsNumV> alignments {
+    SegmentAlignmentVs...
+  };
   ceph::bufferlist::contiguous_filler preamble_filler;
 
   // craft the main preamble. It's always present regardless of the number
@@ -188,16 +192,15 @@ private:
     // just our private detail.
     main_preamble.segments.front().length =
         segments.front().length() - FRAME_PREAMBLE_SIZE;
-    main_preamble.segments.front().alignment = segment_t::DEFAULT_ALIGNMENT;
+    main_preamble.segments.front().alignment = alignments.front();
 
     if constexpr(SegmentsNumV > 1) {
-      for (__u8 idx = 1; idx < std::size(segments); idx++) {
+      for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
         main_preamble.segments[idx].length = segments[idx].length();
-        // TODO: arg pack for Frame carrying alignments
-        main_preamble.segments[idx].alignment = segment_t::DEFAULT_ALIGNMENT;
+        main_preamble.segments[idx].alignment = alignments[idx];
       }
     }
-    main_preamble.num_segments = std::size(segments);
+    main_preamble.num_segments = SegmentsNumV;
 
     main_preamble.crc =
         ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
@@ -260,7 +263,7 @@ public:
       epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
           hdriter.crc32c(hdriter.get_remaining(), -1);
       if constexpr(SegmentsNumV > 1) {
-        for (__u8 idx = 1; idx < std::size(segments); idx++) {
+        for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
           epilogue.crc_values[idx] = segments[idx].crc32c(-1);
         }
       }
@@ -287,7 +290,7 @@ public:
 // marshalling facilities -- derived classes specify frame structure through
 // Args pack while ControlFrame provides common encode/decode machinery.
 template <class C, typename... Args>
-class ControlFrame : public Frame<C, 1 /* single segment */> {
+class ControlFrame : public Frame<C, segment_t::DEFAULT_ALIGNMENT /* single segment */> {
 protected:
   ceph::bufferlist &get_payload_segment() {
     return this->segments[SegmentIndex::Control::PAYLOAD];
@@ -349,7 +352,9 @@ protected:
     return std::get<N>(_values);
   }
 
-  ControlFrame() : Frame<C, 1 /* single segment */>() {}
+  ControlFrame()
+    : Frame<C, segment_t::DEFAULT_ALIGNMENT /* single segment */>() {
+  }
 
   void _encode(const Args &... args) {
     (_encode_payload_each(args), ...);
@@ -656,8 +661,12 @@ protected:
 // This class is used for encoding/decoding header of the message frame.
 // Body is processed almost independently with the sole junction point
 // being the `extra_payload_len` passed to get_buffer().
-struct MessageFrame
-    : public Frame<MessageFrame, 4 /* four segments */> {
+struct MessageFrame : public Frame<MessageFrame,
+                                   /* four segments */
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::PAGE_SIZE_ALIGNMENT> {
   static const Tag tag = Tag::MESSAGE;
 
   static MessageFrame Encode(const ceph_msg_header2 &msg_header,
