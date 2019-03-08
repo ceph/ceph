@@ -749,9 +749,9 @@ CtPtr ProtocolV2::write(const std::string &desc,
   return nullptr;
 }
 
-CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
+CtPtr ProtocolV2::_banner_exchange(CtRef callback) {
   ldout(cct, 20) << __func__ << dendl;
-  bannerExchangeCallback = callback;
+  bannerExchangeCallback = &callback;
 
   bufferlist banner_payload;
   encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
@@ -1646,7 +1646,7 @@ CtPtr ProtocolV2::start_client_banner_exchange() {
 
   global_seq = messenger->get_global_seq();
 
-  return _banner_exchange(&CONTINUATION(post_client_banner_exchange));
+  return _banner_exchange(CONTINUATION(post_client_banner_exchange));
 }
 
 CtPtr ProtocolV2::post_client_banner_exchange() {
@@ -2089,7 +2089,7 @@ CtPtr ProtocolV2::start_server_banner_exchange() {
 
   state = BANNER_ACCEPTING;
 
-  return _banner_exchange(&CONTINUATION(post_server_banner_exchange));
+  return _banner_exchange(CONTINUATION(post_server_banner_exchange));
 }
 
 CtPtr ProtocolV2::post_server_banner_exchange() {

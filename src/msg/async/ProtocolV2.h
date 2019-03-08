@@ -142,7 +142,7 @@ private:
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner_payload);
 
-  Ct<ProtocolV2> *_banner_exchange(Ct<ProtocolV2> *callback);
+  Ct<ProtocolV2> *_banner_exchange(Ct<ProtocolV2> &callback);
   Ct<ProtocolV2> *_wait_for_peer_banner();
   Ct<ProtocolV2> *_handle_peer_banner(char *buffer, int r);
   Ct<ProtocolV2> *_handle_peer_banner_payload(char *buffer, int r);
