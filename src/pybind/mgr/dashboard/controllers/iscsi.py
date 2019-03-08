@@ -23,6 +23,8 @@ from ..tools import TaskManager
 @UiApiController('/iscsi', Scope.ISCSI)
 class IscsiUi(BaseController):
 
+    REQUIRED_CEPH_ISCSI_CONFIG_VERSION = 8
+
     @Endpoint()
     @ReadPermission
     def status(self):
@@ -31,7 +33,12 @@ class IscsiUi(BaseController):
             status['message'] = 'There are no gateways defined'
             return status
         try:
-            IscsiClient.instance().get_config()
+            config = IscsiClient.instance().get_config()
+            if config['version'] != IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_VERSION:
+                status['message'] = 'Unsupported `ceph-iscsi` config version. Expected {} but ' \
+                                    'found {}.'.format(IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_VERSION,
+                                                       config['version'])
+                return status
             status['available'] = True
         except RequestException as e:
             if e.content:
