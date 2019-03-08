@@ -26,7 +26,7 @@ function TEST_reuse_id() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
 
-    ceph osd pool create foo 2 || return 1
+    ceph osd pool create foo 50 || return 1
     wait_for_clean || return 1
 
     kill_daemons $dir TERM osd.0
