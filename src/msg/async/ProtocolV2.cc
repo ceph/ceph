@@ -80,7 +80,6 @@ if(connection->interceptor) { \
 
 ProtocolV2::ProtocolV2(AsyncConnection *connection)
     : Protocol(2, connection),
-      temp_buffer(nullptr),
       state(NONE),
       peer_required_features(0),
       client_cookie(0),
@@ -96,11 +95,9 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       next_payload_len(0),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
-  temp_buffer = new char[4096];
 }
 
 ProtocolV2::~ProtocolV2() {
-  delete[] temp_buffer;
 }
 
 void ProtocolV2::connect() {
@@ -808,9 +805,6 @@ CtPtr ProtocolV2::_handle_peer_banner(rx_buffer_t &&buffer, int r) {
     lderr(cct) << __func__ << " decode banner payload len failed " << dendl;
     return _fault();
   }
-
-  ceph_assert(payload_len <= 4096);  // if we need more then we need to increase
-                                     // temp_buffer size as well
 
   next_payload_len = payload_len;
 
