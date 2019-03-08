@@ -490,11 +490,8 @@ function test_run_mon() {
 
     setup $dir || return 1
 
-    run_mon $dir a --mon-initial-members=a --osd_pool_default_size=1 || return 1
-    run_osd $dir 0 || return 1
-    create_rbd_pool || return 1
-    # rbd has not been deleted / created, hence it has pool id 1
-    ceph osd dump | grep "pool 1 'rbd'" || return 1
+    run_mon $dir a --mon-initial-members=a || return 1
+    ceph mon dump | grep "mon.a" || return 1
     kill_daemons $dir || return 1
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
@@ -502,8 +499,7 @@ function test_run_mon() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
     create_rbd_pool || return 1
-    # rbd has been deleted / created, hence it does not have pool id 0
-    ! ceph osd dump | grep "pool 1 'rbd'" || return 1
+    ceph osd dump | grep "pool 1 'rbd'" || return 1
     local size=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path mon.a) \
         config get osd_pool_default_size)
     test "$size" = '{"osd_pool_default_size":"3"}' || return 1
