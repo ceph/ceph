@@ -84,7 +84,7 @@ void ImageDispatchSpec<I>::fail(int r) {
 
 template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
-  return boost::apply_visitor(IsWriteOpVisitor{}, m_request);
+  return boost::apply_visitor(IsWriteOpVisitor(), m_request);
 }
 
 template <typename I>
