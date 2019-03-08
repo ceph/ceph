@@ -52,6 +52,32 @@ void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
 }
 
 /*
+ * The tenant_name is always returned on purpose. May be empty, of course.
+ */
+static void parse_bucket(const string& bucket,
+                         string *tenant_name,
+                         string *bucket_name,
+                         string *bucket_instance = nullptr /* optional */)
+{
+  int pos = bucket.find('/');
+  if (pos >= 0) {
+    *tenant_name = bucket.substr(0, pos);
+  } else {
+    tenant_name->clear();
+  }
+  string bn = bucket.substr(pos + 1);
+  pos = bn.find (':');
+  if (pos < 0) {
+    *bucket_name = std::move(bn);
+    return;
+  }
+  *bucket_name = bn.substr(0, pos);
+  if (bucket_instance) {
+    *bucket_instance = bn.substr(pos + 1);
+  }
+}
+
+/*
  * Note that this is not a reversal of parse_bucket(). That one deals
  * with the syntax we need in metadata and such. This one deals with
  * the representation in RADOS pools. We chose '/' because it's not
@@ -305,33 +331,6 @@ int rgw_bucket_instance_store_info(RGWRados *store, string& entry, bufferlist& b
 int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry,
                                      RGWObjVersionTracker *objv_tracker) {
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
-}
-
-// 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
-// with the existing instance[:shard] format. once we parse the shard, the / is
-// replaced with a : to match the [tenant:]instance format
-void rgw_bucket_instance_key_to_oid(string& key)
-{
-  // replace tenant/ with tenant:
-  auto c = key.find('/');
-  if (c != string::npos) {
-    key[c] = ':';
-  }
-}
-
-// convert bucket instance oids back to the tenant/ format for metadata keys.
-// it's safe to parse 'tenant:' only for oids, because they won't contain the
-// optional :shard at the end
-void rgw_bucket_instance_oid_to_key(string& oid)
-{
-  // find first : (could be tenant:bucket or bucket:instance)
-  auto c = oid.find(':');
-  if (c != string::npos) {
-    // if we find another :, the first one was for tenant
-    if (oid.find(':', c + 1) != string::npos) {
-      oid[c] = '/';
-    }
-  }
 }
 
 int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id)
@@ -805,17 +804,6 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
   }
 
   return ret;
-}
-
-int rgw_bucket_delete_bucket_obj(RGWRados *store,
-                                 const string& tenant_name,
-                                 const string& bucket_name,
-                                 RGWObjVersionTracker& objv_tracker)
-{
-  string key;
-
-  rgw_make_bucket_entry_name(tenant_name, bucket_name, key);
-  return store->meta_mgr->remove_entry(bucket_meta_handler, key, &objv_tracker);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -2365,10 +2353,83 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
+class RGW_MB_Handler_Module_Bucket : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Zone *zone_svc;
+pubic:
+  RGW_MB_Handler_Module_Bucket(RGWSI_Zone *_zone_svc) : zone_svc {}
+
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
+    oid = key;
+    pool = zone_svc->get_zone_params().domain_root;
+  }
+};
+
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
 public:
   string get_type() override { return "bucket"; }
+
+  RGWSI_MetaBackend::ModuleRef get_backend_module(RGWSI_MetaBackend::Type be_type) override {
+    return RGWSI_MetaBackend::ModuleRef(new RGW_MB_Handler_Module_Bucket(store->svc.zone));
+  }
+
+  int read_bucket_entrypoint_info(RGWSI_MetaBackend *ctx,
+                                  string& entry,
+                                  RGWBucketEntrypointInfo *be,
+                                  RGWObjVersionTracker *objv_tracker,
+                                  ceph::real_time *pmtime,
+                                  map<string, bufferlist> *pattrs) {
+    bufferlist bl;
+    int ret = meta_be->get_entry(ctx, &bl,
+                                 objv_tracker, pmtime, pattrs,
+                                 nullptr, nullopt);
+    if (ret < 0) {
+      return ret;
+    }
+
+    try {
+      auto iter = bl.cbegin();
+      ceph::decode(*be, iter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+    return 0;
+  }
+
+  int store_bucket_entrypoint_info(RGWSI_MetaBackend *ctx,
+                                   string& entry,
+                                   const RGWBucketEntrypointInfo& be,
+                                   RGWObjVersionTracker *objv_tracker,
+                                   const ceph::real_time& mtime,
+                                   map<string, bufferlist> *pattrs) {
+    bufferlist bl;
+    ceph::encode(be, bl);
+    int ret = meta_be->put(ctx, bl,
+                           false, objv_tracker, mtime, pattrs,
+                           APPLY_ALWAYS);
+    if (ret < 0) {
+      return ret;
+    }
+
+    return 0;
+  }
+
+  int remove_bucket_entrypoint_info(RGWSI_MetaBackend *ctx,
+                                    string& entry,
+                                    RGWObjVersionTracker *objv_tracker,
+                                    const ceph::real_time& mtime)
+                                   
+    bufferlist bl;
+    ceph::encode(be, bl);
+    int ret = meta_be->remove(ctx, bl,
+                              objv_tracker, mtime,
+                              APPLY_ALWAYS);
+    if (ret < 0) {
+      return ret;
+    }
+
+    return 0;
+  }
 
   int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker ot;
@@ -2391,7 +2452,7 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+  int put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker,
           real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
     RGWBucketEntryPoint be, old_be;
     try {
@@ -2401,14 +2462,11 @@ public:
     }
 
     real_time orig_mtime;
-    map<string, bufferlist> attrs;
 
     RGWObjVersionTracker old_ot;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-    string tenant_name, bucket_name;
-    parse_bucket(entry, &tenant_name, &bucket_name);
-    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, old_be, &old_ot, &orig_mtime, &attrs);
+    map<string, bufferlist> attrs;
+    int ret = read_bucket_entrypoint_info(ctx, entry, &old_be, &old_ot, &orig_mtime, &attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -2421,7 +2479,7 @@ public:
 
     objv_tracker.read_version = old_ot.read_version; /* maintain the obj version we just read */
 
-    ret = store->put_bucket_entrypoint_info(tenant_name, bucket_name, be, false, objv_tracker, mtime, &attrs);
+    ret = store_bucket_entrypoint_info(entry, be, false, objv_tracker, mtime, &attrs);
     if (ret < 0)
       return ret;
 
@@ -2441,13 +2499,12 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+  int remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketEntryPoint be;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-    string tenant_name, bucket_name;
-    parse_bucket(entry, &tenant_name, &bucket_name);
-    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, NULL, NULL);
+    real_time orig_mtime;
+
+    int ret = read_bucket_entrypoint_info(ctx, entry, be, &objv_tracker, &orig_mtime, nullptr);
     if (ret < 0)
       return ret;
 
@@ -2461,17 +2518,12 @@ public:
       lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    ret = rgw_bucket_delete_bucket_obj(store, tenant_name, bucket_name, objv_tracker);
+    ret = remove_bucket_entrypoint_info(ctx, entry, objv_tracker, orig_mtime);
     if (ret < 0) {
       lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
     }
     /* idempotent */
     return 0;
-  }
-
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
-    oid = key;
-    pool = store->svc.zone->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -2732,6 +2784,58 @@ public:
 
 };
 
+class RGW_MB_Handler_Module_BI : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Zone *zone_svc;
+pubic:
+  RGW_MB_Handler_Module_BI(RGWSI_Zone *_zone_svc) : zone_svc {}
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
+   * point, so that the log entries end up at the same log shard, so that we process them
+   * in order
+   */
+  void get_hash_key(const string& section, const string& key, string& hash_key) override {
+    string k;
+    int pos = key.find(':');
+    if (pos < 0)
+      k = key;
+    else
+      k = key.substr(0, pos);
+    hash_key = "bucket:" + k;
+  }
+
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
+    oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
+    rgw_bucket_instance_key_to_oid(oid);
+    pool = store->svc.zone->get_zone_params().domain_root;
+  }
+
+// 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
+// with the existing instance[:shard] format. once we parse the shard, the / is
+// replaced with a : to match the [tenant:]instance format
+  void key_to_oid(string& key) override {
+    // replace tenant/ with tenant:
+    auto c = key.find('/');
+    if (c != string::npos) {
+      key[c] = ':';
+    }
+  }
+
+  // convert bucket instance oids back to the tenant/ format for metadata keys.
+  // it's safe to parse 'tenant:' only for oids, because they won't contain the
+  // optional :shard at the end
+  void oid_to_key(string& oid) override {
+    // find first : (could be tenant:bucket or bucket:instance)
+    auto c = oid.find(':');
+    if (c != string::npos) {
+      // if we find another :, the first one was for tenant
+      if (oid.find(':', c + 1) != string::npos) {
+        oid[c] = '/';
+      }
+    }
+  }
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
 
 public:
@@ -2867,12 +2971,6 @@ public:
 					    &info.objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
-    oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
-    rgw_bucket_instance_key_to_oid(oid);
-    pool = store->svc.zone->get_zone_params().domain_root;
-  }
-
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
     auto info = std::make_unique<list_keys_info>();
 
@@ -2934,21 +3032,6 @@ public:
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }
-
-  /*
-   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
-   * point, so that the log entries end up at the same log shard, so that we process them
-   * in order
-   */
-  void get_hash_key(const string& section, const string& key, string& hash_key) override {
-    string k;
-    int pos = key.find(':');
-    if (pos < 0)
-      k = key;
-    else
-      k = key.substr(0, pos);
-    hash_key = "bucket:" + k;
-  }
 };
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
@@ -2986,6 +3069,7 @@ void rgw_bucket_init(RGWMetadataManager *mm)
     bucket_meta_handler = RGWBucketMetaHandlerAllocator::alloc();
     bucket_instance_meta_handler = RGWBucketInstanceMetaHandlerAllocator::alloc();
   }
-  mm->register_handler(bucket_meta_handler);
-  mm->register_handler(bucket_instance_meta_handler);
+#warning handle failures
+  bucket_meta_handler->init(mm);
+  bucket_instance_meta_handler->init(mm);
 }

@@ -22,6 +22,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+const std::string RGWMetadataLogHistory::oid = "meta.history";
+
 void LogStatusDump::dump(Formatter *f) const {
   string s;
   switch (status) {
@@ -97,14 +99,14 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 }
 
 
-int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(RGWSI_MetaBackend::Module *module, const string& section, const string& key, bufferlist& bl) {
   if (!store->svc.zone->need_to_log_metadata())
     return 0;
 
   string oid;
 
   string hash_key;
-  handler->get_hash_key(section, key, hash_key);
+  module->get_hash_key(section, key, hash_key);
 
   int shard_id;
   store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
@@ -353,326 +355,22 @@ RGWMetadataManager::~RGWMetadataManager()
   handlers.clear();
 }
 
-const std::string RGWMetadataLogHistory::oid = "meta.history";
-
-namespace {
-
-int read_history(RGWRados *store, RGWMetadataLogHistory *state,
-                 RGWObjVersionTracker *objv_tracker)
+int RGWMetadataHandler::init(RGWMetadataManager *manager)
 {
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  auto& pool = store->svc.zone->get_zone_params().log_pool;
-  const auto& oid = RGWMetadataLogHistory::oid;
-  bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr);
-  if (ret < 0) {
-    return ret;
-  }
-  if (bl.length() == 0) {
-    /* bad history object, remove it */
-    rgw_raw_obj obj(pool, oid);
-    auto sysobj = obj_ctx.get_obj(obj);
-    ret = sysobj.wop().remove();
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
-      return ret;
-    }
-    return -ENOENT;
-  }
-  try {
-    auto p = bl.cbegin();
-    state->decode(p);
-  } catch (buffer::error& e) {
-    ldout(store->ctx(), 1) << "failed to decode the mdlog history: "
-        << e.what() << dendl;
-    return -EIO;
-  }
-  return 0;
+  return register_handler(this, &be_handle);
 }
 
-int write_history(RGWRados *store, const RGWMetadataLogHistory& state,
-                  RGWObjVersionTracker *objv_tracker, bool exclusive = false)
-{
-  bufferlist bl;
-  state.encode(bl);
-
-  auto& pool = store->svc.zone->get_zone_params().log_pool;
-  const auto& oid = RGWMetadataLogHistory::oid;
-  return rgw_put_system_obj(store, pool, oid, bl,
-                            exclusive, objv_tracker, real_time{});
-}
-
-using Cursor = RGWPeriodHistory::Cursor;
-
-/// read the mdlog history and use it to initialize the given cursor
-class ReadHistoryCR : public RGWCoroutine {
-  RGWRados *store;
-  Cursor *cursor;
-  RGWObjVersionTracker *objv_tracker;
-  RGWMetadataLogHistory state;
- public:
-  ReadHistoryCR(RGWRados *store, Cursor *cursor,
-                RGWObjVersionTracker *objv_tracker)
-    : RGWCoroutine(store->ctx()), store(store), cursor(cursor),
-      objv_tracker(objv_tracker)
-  {}
-
-  int operate() {
-    reenter(this) {
-      yield {
-        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
-                        RGWMetadataLogHistory::oid};
-        constexpr bool empty_on_enoent = false;
-
-        using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
-        call(new ReadCR(store->get_async_rados(), store->svc.sysobj, obj,
-                        &state, empty_on_enoent, objv_tracker));
-      }
-      if (retcode < 0) {
-        ldout(cct, 1) << "failed to read mdlog history: "
-            << cpp_strerror(retcode) << dendl;
-        return set_cr_error(retcode);
-      }
-      *cursor = store->period_history->lookup(state.oldest_realm_epoch);
-      if (!*cursor) {
-        return set_cr_error(cursor->get_error());
-      }
-
-      ldout(cct, 10) << "read mdlog history with oldest period id="
-          << state.oldest_period_id << " realm_epoch="
-          << state.oldest_realm_epoch << dendl;
-      return set_cr_done();
-    }
-    return 0;
-  }
-};
-
-/// write the given cursor to the mdlog history
-class WriteHistoryCR : public RGWCoroutine {
-  RGWRados *store;
-  Cursor cursor;
-  RGWObjVersionTracker *objv;
-  RGWMetadataLogHistory state;
- public:
-  WriteHistoryCR(RGWRados *store, const Cursor& cursor,
-                 RGWObjVersionTracker *objv)
-    : RGWCoroutine(store->ctx()), store(store), cursor(cursor), objv(objv)
-  {}
-
-  int operate() {
-    reenter(this) {
-      state.oldest_period_id = cursor.get_period().get_id();
-      state.oldest_realm_epoch = cursor.get_epoch();
-
-      yield {
-        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
-                        RGWMetadataLogHistory::oid};
-
-        using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
-        call(new WriteCR(store->get_async_rados(), store->svc.sysobj, obj, state, objv));
-      }
-      if (retcode < 0) {
-        ldout(cct, 1) << "failed to write mdlog history: "
-            << cpp_strerror(retcode) << dendl;
-        return set_cr_error(retcode);
-      }
-
-      ldout(cct, 10) << "wrote mdlog history with oldest period id="
-          << state.oldest_period_id << " realm_epoch="
-          << state.oldest_realm_epoch << dendl;
-      return set_cr_done();
-    }
-    return 0;
-  }
-};
-
-/// update the mdlog history to reflect trimmed logs
-class TrimHistoryCR : public RGWCoroutine {
-  RGWRados *store;
-  const Cursor cursor; //< cursor to trimmed period
-  RGWObjVersionTracker *objv; //< to prevent racing updates
-  Cursor next; //< target cursor for oldest log period
-  Cursor existing; //< existing cursor read from disk
-
- public:
-  TrimHistoryCR(RGWRados *store, Cursor cursor, RGWObjVersionTracker *objv)
-    : RGWCoroutine(store->ctx()),
-      store(store), cursor(cursor), objv(objv), next(cursor)
-  {
-    next.next(); // advance past cursor
-  }
-
-  int operate() {
-    reenter(this) {
-      // read an existing history, and write the new history if it's newer
-      yield call(new ReadHistoryCR(store, &existing, objv));
-      if (retcode < 0) {
-        return set_cr_error(retcode);
-      }
-      // reject older trims with ECANCELED
-      if (cursor.get_epoch() < existing.get_epoch()) {
-        ldout(cct, 4) << "found oldest log epoch=" << existing.get_epoch()
-            << ", rejecting trim at epoch=" << cursor.get_epoch() << dendl;
-        return set_cr_error(-ECANCELED);
-      }
-      // overwrite with updated history
-      yield call(new WriteHistoryCR(store, next, objv));
-      if (retcode < 0) {
-        return set_cr_error(retcode);
-      }
-      return set_cr_done();
-    }
-    return 0;
-  }
-};
-
-// traverse all the way back to the beginning of the period history, and
-// return a cursor to the first period in a fully attached history
-Cursor find_oldest_period(RGWRados *store)
-{
-  auto cct = store->ctx();
-  auto cursor = store->period_history->get_current();
-
-  while (cursor) {
-    // advance to the period's predecessor
-    if (!cursor.has_prev()) {
-      auto& predecessor = cursor.get_period().get_predecessor();
-      if (predecessor.empty()) {
-        // this is the first period, so our logs must start here
-        ldout(cct, 10) << "find_oldest_period returning first "
-            "period " << cursor.get_period().get_id() << dendl;
-        return cursor;
-      }
-      // pull the predecessor and add it to our history
-      RGWPeriod period;
-      int r = store->period_puller->pull(predecessor, period);
-      if (r < 0) {
-        return Cursor{r};
-      }
-      auto prev = store->period_history->insert(std::move(period));
-      if (!prev) {
-        return prev;
-      }
-      ldout(cct, 20) << "find_oldest_period advancing to "
-          "predecessor period " << predecessor << dendl;
-      ceph_assert(cursor.has_prev());
-    }
-    cursor.prev();
-  }
-  ldout(cct, 10) << "find_oldest_period returning empty cursor" << dendl;
-  return cursor;
-}
-
-} // anonymous namespace
-
-Cursor RGWMetadataManager::init_oldest_log_period()
-{
-  // read the mdlog history
-  RGWMetadataLogHistory state;
-  RGWObjVersionTracker objv;
-  int ret = read_history(store, &state, &objv);
-
-  if (ret == -ENOENT) {
-    // initialize the mdlog history and write it
-    ldout(cct, 10) << "initializing mdlog history" << dendl;
-    auto cursor = find_oldest_period(store);
-    if (!cursor) {
-      return cursor;
-    }
-
-    // write the initial history
-    state.oldest_realm_epoch = cursor.get_epoch();
-    state.oldest_period_id = cursor.get_period().get_id();
-
-    constexpr bool exclusive = true; // don't overwrite
-    int ret = write_history(store, state, &objv, exclusive);
-    if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 1) << "failed to write mdlog history: "
-          << cpp_strerror(ret) << dendl;
-      return Cursor{ret};
-    }
-    return cursor;
-  } else if (ret < 0) {
-    ldout(cct, 1) << "failed to read mdlog history: "
-        << cpp_strerror(ret) << dendl;
-    return Cursor{ret};
-  }
-
-  // if it's already in the history, return it
-  auto cursor = store->period_history->lookup(state.oldest_realm_epoch);
-  if (cursor) {
-    return cursor;
-  }
-  // pull the oldest period by id
-  RGWPeriod period;
-  ret = store->period_puller->pull(state.oldest_period_id, period);
-  if (ret < 0) {
-    ldout(cct, 1) << "failed to read period id=" << state.oldest_period_id
-        << " for mdlog history: " << cpp_strerror(ret) << dendl;
-    return Cursor{ret};
-  }
-  // verify its realm_epoch
-  if (period.get_realm_epoch() != state.oldest_realm_epoch) {
-    ldout(cct, 1) << "inconsistent mdlog history: read period id="
-        << period.get_id() << " with realm_epoch=" << period.get_realm_epoch()
-        << ", expected realm_epoch=" << state.oldest_realm_epoch << dendl;
-    return Cursor{-EINVAL};
-  }
-  // attach the period to our history
-  return store->period_history->attach(std::move(period));
-}
-
-Cursor RGWMetadataManager::read_oldest_log_period() const
-{
-  RGWMetadataLogHistory state;
-  int ret = read_history(store, &state, nullptr);
-  if (ret < 0) {
-    ldout(store->ctx(), 1) << "failed to read mdlog history: "
-        << cpp_strerror(ret) << dendl;
-    return Cursor{ret};
-  }
-
-  ldout(store->ctx(), 10) << "read mdlog history with oldest period id="
-      << state.oldest_period_id << " realm_epoch="
-      << state.oldest_realm_epoch << dendl;
-
-  return store->period_history->lookup(state.oldest_realm_epoch);
-}
-
-RGWCoroutine* RGWMetadataManager::read_oldest_log_period_cr(Cursor *period,
-        RGWObjVersionTracker *objv) const
-{
-  return new ReadHistoryCR(store, period, objv);
-}
-
-RGWCoroutine* RGWMetadataManager::trim_log_period_cr(Cursor period,
-        RGWObjVersionTracker *objv) const
-{
-  return new TrimHistoryCR(store, period, objv);
-}
-
-int RGWMetadataManager::init(const std::string& current_period)
-{
-  // open a log for the current period
-  current_log = get_log(current_period);
-  return 0;
-}
-
-RGWMetadataLog* RGWMetadataManager::get_log(const std::string& period)
-{
-  // construct the period's log in place if it doesn't exist
-  auto insert = md_logs.emplace(std::piecewise_construct,
-                                std::forward_as_tuple(period),
-                                std::forward_as_tuple(cct, store, period));
-  return &insert.first->second;
-}
-
-int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
+int RGWMetadataManager::register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend::Handle *phandle)
 {
   string type = handler->get_type();
 
   if (handlers.find(type) != handlers.end())
     return -EINVAL;
+
+  int ret = store->svc.meta->init_handler(handler, phandle);
+  if (ret < 0) {
+    return ret;
+  }
 
   handlers[type] = handler;
 
@@ -795,38 +493,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
-int RGWMetadataManager::prepare_mutate(RGWRados *store,
-                                       rgw_pool& pool, const string& oid,
-                                       const real_time& mtime,
-                                       RGWObjVersionTracker *objv_tracker,
-                                       RGWMetadataHandler::sync_type_t sync_mode)
-{
-  bufferlist bl;
-  real_time orig_mtime;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid,
-                               bl, objv_tracker, &orig_mtime,
-                               nullptr, nullptr);
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
-  }
-  if (ret != -ENOENT &&
-      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
-                                          objv_tracker->write_version, mtime, sync_mode)) {
-    return STATUS_NO_APPLY;
-  }
-
-  if (objv_tracker->write_version.tag.empty()) {
-    if (objv_tracker->read_version.tag.empty()) {
-      objv_tracker->generate_new_write_ver(store->ctx());
-    } else {
-      objv_tracker->write_version = objv_tracker->read_version;
-      objv_tracker->write_version.ver++;
-    }
-  }
-  return 0;
-}
-
 int RGWMetadataManager::remove(string& metadata_key)
 {
   RGWMetadataHandler *handler;
@@ -847,41 +513,6 @@ int RGWMetadataManager::remove(string& metadata_key)
   delete obj;
 
   return handler->remove(store, entry, objv_tracker);
-}
-
-int RGWMetadataManager::lock_exclusive(string& metadata_key, timespan duration, string& owner_id) {
-  RGWMetadataHandler *handler;
-  string entry;
-  string zone_id;
-
-  int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0) 
-    return ret;
-
-  rgw_pool pool;
-  string oid;
-
-  handler->get_pool_and_oid(store, entry, pool, oid);
-
-  return store->lock_exclusive(pool, oid, duration, zone_id, owner_id);  
-}
-
-int RGWMetadataManager::unlock(string& metadata_key, string& owner_id) {
-  librados::IoCtx io_ctx;
-  RGWMetadataHandler *handler;
-  string entry;
-  string zone_id;
-
-  int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0) 
-    return ret;
-
-  rgw_pool pool;
-  string oid;
-
-  handler->get_pool_and_oid(store, entry, pool, oid);
-
-  return store->unlock(pool, oid, zone_id, owner_id);  
 }
 
 struct list_keys_handle {
@@ -971,190 +602,6 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   for (map<string, RGWMetadataHandler *>::iterator iter = handlers.begin(); iter != handlers.end(); ++iter) {
     sections.push_back(iter->first);
   }
-}
-
-int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
-                                   RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
-                                   RGWMDLogStatus op_type)
-{
-  section = handler->get_type();
-
-  /* if write version has not been set, and there's a read version, set it so that we can
-   * log it
-   */
-  if (objv_tracker) {
-    if (objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
-      objv_tracker->write_version = objv_tracker->read_version;
-      objv_tracker->write_version.ver++;
-    }
-    log_data.read_version = objv_tracker->read_version;
-    log_data.write_version = objv_tracker->write_version;
-  }
-
-  log_data.status = op_type;
-
-  bufferlist logbl;
-  encode(log_data, logbl);
-
-  ceph_assert(current_log); // must have called init()
-  int ret = current_log->add_entry(handler, section, key, logbl);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
-                                    RGWObjVersionTracker *objv_tracker, int ret)
-{
-  if (ret >= 0)
-    log_data.status = MDLOG_STATUS_COMPLETE;
-  else 
-    log_data.status = MDLOG_STATUS_ABORT;
-
-  bufferlist logbl;
-  encode(log_data, logbl);
-
-  ceph_assert(current_log); // must have called init()
-  int r = current_log->add_entry(handler, section, key, logbl);
-  if (ret < 0)
-    return ret;
-
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
-string RGWMetadataManager::heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv)
-{
-  char buf[objv.tag.size() + 32];
-  snprintf(buf, sizeof(buf), "%s:%lld", objv.tag.c_str(), (long long)objv.ver);
-  return string(".meta:") + handler->get_type() + ":" + key + ":" + buf;
-}
-
-int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
-                                      RGWObjVersionTracker *objv_tracker, real_time mtime,
-				      map<string, bufferlist> *pattrs)
-{
-  if (!objv_tracker) {
-    return -EINVAL;
-  }
-
-  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
-
-  if (heap_pool.empty()) {
-    return 0;
-  }
-
-  RGWObjVersionTracker otracker;
-  otracker.write_version = objv_tracker->write_version;
-  string oid = heap_oid(handler, key, objv_tracker->write_version);
-  int ret = rgw_put_system_obj(store, heap_pool, oid,
-                               bl, false, &otracker, mtime, pattrs);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: rgw_put_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker)
-{
-  if (!objv_tracker) {
-    return -EINVAL;
-  }
-
-  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
-
-  if (heap_pool.empty()) {
-    return 0;
-  }
-
-  string oid = heap_oid(handler, key, objv_tracker->write_version);
-  rgw_raw_obj obj(heap_pool, oid);
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop().remove();
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: sysobj.wop().remove() oid=" << oid << " returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
-                                  RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs)
-{
-  string section;
-  RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
-  if (ret < 0)
-    return ret;
-
-  string oid;
-  rgw_pool pool;
-
-  handler->get_pool_and_oid(store, key, pool, oid);
-
-  ret = store_in_heap(handler, key, bl, objv_tracker, mtime, pattrs);
-  if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": store_in_heap() key=" << key << " returned ret=" << ret << dendl;
-    goto done;
-  }
-
-  ret = rgw_put_system_obj(store, pool, oid, bl, exclusive,
-                           objv_tracker, mtime, pattrs);
-
-  if (ret < 0) {
-    int r = remove_from_heap(handler, key, objv_tracker);
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: " << __func__ << ": remove_from_heap() key=" << key << " returned ret=" << r << dendl;
-    }
-  }
-done:
-  /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
-				     const string& key,
-				     RGWObjVersionTracker *objv_tracker)
-{
-  string section;
-  RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_REMOVE);
-  if (ret < 0) {
-      return ret;
-  }
-
-  string oid;
-  rgw_pool pool;
-
-  handler->get_pool_and_oid(store, key, pool, oid);
-
-  rgw_raw_obj obj(pool, oid);
-
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(obj);
-  ret = sysobj.wop()
-              .set_objv_tracker(objv_tracker)
-              .remove();
-  /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0) {
-      return ret;
-  }
-
-  return 0;
 }
 
 int RGWMetadataManager::get_log_shard_id(const string& section,

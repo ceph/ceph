@@ -47,6 +47,9 @@ public:
 class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Cls;
+class RGWSI_MDLog;
+class RGWSI_Meta;
+class RGWSI_MetaBackend_SObj;
 class RGWSI_Notify;
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -65,6 +68,9 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket> bucket;
   std::unique_ptr<RGWSI_Cls> cls;
+  std::unique_ptr<RGWSI_MDLog> mdlog;
+  std::unique_ptr<RGWSI_Meta> meta;
+  std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_RADOS> rados;
   std::unique_ptr<RGWSI_Zone> zone;
@@ -90,6 +96,9 @@ struct RGWServices
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Cls *cls{nullptr};
+  RGWSI_Meta *mdlog{nullptr};
+  RGWSI_Meta *meta{nullptr};
+  RGWSI_MetaBackend_SObj *meta_be_sobj{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_RADOS *rados{nullptr};
   RGWSI_Zone *zone{nullptr};

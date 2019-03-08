@@ -1102,7 +1102,6 @@ void RGWRados::finalize()
 
   svc.shutdown();
 
-  delete meta_mgr;
   delete binfo_cache;
   delete obj_tombstone_cache;
 
@@ -1146,7 +1145,6 @@ int RGWRados::init_rados()
     return ret;
   }
 
-  meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
   cr_registry = crs.release();
 
@@ -1209,10 +1207,6 @@ int RGWRados::init_complete()
     }
     return ret;
   }
-
-  period_puller.reset(new RGWPeriodPuller(this));
-  period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
-                                            svc.zone->get_current_period()));
 
   ret = open_root_pool_ctx();
   if (ret < 0)
@@ -7715,6 +7709,8 @@ int RGWRados::get_bucket_entrypoint_info(RGWSysObjectCtx& obj_ctx,
                                          rgw_cache_entry_info *cache_info,
 					 boost::optional<obj_version> refresh_version)
 {
+#warning FIXME
+#if 0
   bufferlist bl;
   string bucket_entry;
 
@@ -7734,6 +7730,7 @@ int RGWRados::get_bucket_entrypoint_info(RGWSysObjectCtx& obj_ctx,
     return -EIO;
   }
   return 0;
+#endif
 }
 
 int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
@@ -7767,7 +7764,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
     .set_mtime(pmtime)
     .set_attrs(pattrs)
     .set_pinfo(&info)
-    .set_refresh_version(info.objv_tracker.read_version)
+    .set_refresh_version(rv)
     .exec();
   if (r < 0) {
     return r;
@@ -7786,7 +7783,10 @@ int RGWRados::put_bucket_entrypoint_info(const string& tenant_name, const string
   encode(entry_point, epbl);
   string bucket_entry;
   rgw_make_bucket_entry_name(tenant_name, bucket_name, bucket_entry);
+#warning FIXME
+#if 0
   return rgw_bucket_store_info(this, bucket_entry, epbl, exclusive, pattrs, &objv_tracker, mtime);
+#endif
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
