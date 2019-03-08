@@ -64,7 +64,9 @@ class IscsiClient(RestClient):
 
     @RestClient.api_get('/api/config')
     def get_config(self, request=None):
-        return request()
+        return request({
+            'decrypt_passwords': True
+        })
 
     @RestClient.api_put('/api/target/{target_iqn}')
     def create_target(self, target_iqn, target_controls, request=None):
