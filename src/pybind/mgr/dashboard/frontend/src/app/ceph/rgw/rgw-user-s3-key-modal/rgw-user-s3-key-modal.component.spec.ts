@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal.component';
 
@@ -13,8 +14,8 @@ describe('RgwUserS3KeyModalComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserS3KeyModalComponent],
-    imports: [ReactiveFormsModule, SharedModule],
-    providers: [BsModalRef]
+    imports: [ReactiveFormsModule, SharedModule, RouterTestingModule],
+    providers: [BsModalRef, i18nProviders]
   });
 
   beforeEach(() => {
