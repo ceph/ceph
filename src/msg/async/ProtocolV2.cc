@@ -59,7 +59,7 @@ void ProtocolV2::run_continuation(CtRef continuation) {
 
 #define READ(L, C) read(CONTINUATION(C), L)
 
-#define READB(L, B, C) read(CONTINUATION(C), L, B)
+#define READ_RXBUF(B, C) read(CONTINUATION(C), B)
 
 #ifdef UNIT_TESTS_BUILT
 
@@ -1096,10 +1096,10 @@ CtPtr ProtocolV2::read_frame_segment() {
 
   // description of current segment to read
   const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
-  std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> rx_buffer;
+  rx_buffer_t rx_buffer;
   try {
-    rx_buffer = ceph::buffer::ptr_node::create(buffer::create_aligned(
-      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
+    rx_buffer = buffer::create_aligned(
+      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment);
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
     ldout(cct, 20) << __func__ << " can't allocate aligned rx_buffer "
@@ -1109,13 +1109,10 @@ CtPtr ProtocolV2::read_frame_segment() {
     return _fault();
   }
 
-  rx_segments_data.emplace_back();
-  rx_segments_data.back().push_back(std::move(rx_buffer));
-  return READB(rx_segments_data.back().length(), rx_segments_data.back().c_str(),
-    handle_read_frame_segment);
+  return READ_RXBUF(std::move(rx_buffer), handle_read_frame_segment);
 }
 
-CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
+CtPtr ProtocolV2::handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -1123,6 +1120,9 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
                   << cpp_strerror(r) << ")" << dendl;
     return _fault();
   }
+
+  rx_segments_data.emplace_back();
+  rx_segments_data.back().push_back(std::move(rx_buffer));
 
   // decrypt incoming data
   // FIXME: if (auth_meta->is_mode_secure()) {
