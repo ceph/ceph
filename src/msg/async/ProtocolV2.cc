@@ -2156,17 +2156,12 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
   }
   if (r == 1) {
     INTERCEPT(10);
-
-    ceph_assert(auth_meta);
-    session_stream_handlers = \
-      ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
-
     state = SESSION_ACCEPTING;
 
     auto auth_done = AuthDoneFrame::Encode(connection->peer_global_id,
                                            auth_meta->con_mode,
                                            reply);
-    return WRITE(auth_done, "auth done", read_frame);
+    return WRITE(auth_done, "auth done", finish_auth);
   } else if (r == 0) {
     state = AUTH_ACCEPTING_MORE;
 
@@ -2178,6 +2173,14 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
   } else {
     return _auth_bad_method(r);
   }
+}
+
+CtPtr ProtocolV2::finish_auth()
+{
+  ceph_assert(auth_meta);
+  session_stream_handlers = \
+    ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
+  return CONTINUE(read_frame);
 }
 
 CtPtr ProtocolV2::handle_auth_request_more(ceph::bufferlist &payload)
