@@ -4028,6 +4028,11 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_blob_size",
     "bluestore_max_blob_size_ssd",
     "bluestore_max_blob_size_hdd",
+    "osd_memory_target",
+    "osd_memory_base",
+    "osd_memory_cache_min",
+    "bluestore_cache_autotune",
+    "bluestore_cache_autotune_interval",
     NULL
   };
   return KEYS;
