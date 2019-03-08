@@ -4013,6 +4013,13 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory."),
 
+    Option("osd_memory_target_cgroup_limit_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.8)
+    .set_min_max(0.0, 1.0)
+    .add_see_also("osd_memory_target")
+    .set_description("Set the default value for osd_memory_target to the cgroup memory limit (if set) times this value")
+    .set_long_description("A value of 0 disables this feature."),
+
     Option("osd_memory_base", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(768_M)
     .add_see_also("bluestore_cache_autotune")
