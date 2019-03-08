@@ -25,13 +25,13 @@ class Osd(RESTController):
         # Extending by osd node information
         nodes = mgr.get('osd_map_tree')['nodes']
         for node in nodes:
-            if node['type'] == 'osd':
+            if node['type'] == 'osd' and node['id'] in osds:
                 osds[node['id']]['tree'] = node
 
         # Extending by osd parent node information
         for host in [n for n in nodes if n['type'] == 'host']:
             for osd_id in host['children']:
-                if osd_id >= 0:
+                if osd_id >= 0 and osd_id in osds:
                     osds[osd_id]['host'] = host
 
         # Extending by osd histogram data
@@ -39,6 +39,8 @@ class Osd(RESTController):
             osd['stats'] = {}
             osd['stats_history'] = {}
             osd_spec = str(osd_id)
+            if 'osd' not in osd:
+                continue
             for stat in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = stat.split('.')[1]
                 osd['stats'][prop] = CephService.get_rate('osd', osd_spec, stat)
@@ -57,8 +59,7 @@ class Osd(RESTController):
             return osd
         resp = {
             osd['osd']: add_id(osd)
-            for osd in mgr.get('osd_map')['osds']
-            if svc_id is None or (svc_id is not None and osd['osd'] == int(svc_id))
+            for osd in mgr.get('osd_map')['osds'] if svc_id is None or osd['osd'] == int(svc_id)
         }
         return resp if svc_id is None else resp[int(svc_id)]
 
