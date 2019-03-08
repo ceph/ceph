@@ -151,7 +151,7 @@ private:
   waiting_peering_t waiting_peering;
   // wait for an osdmap whose epoch is greater or equal to given epoch
   seastar::future<epoch_t> wait_for_map(epoch_t epoch);
-  void consume_map(epoch_t epoch);
+  seastar::future<> consume_map(epoch_t epoch);
   seastar::future<> do_peering_event(spg_t pgid,
 				     std::unique_ptr<PGPeeringEvent> evt);
   seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
