@@ -414,31 +414,33 @@ void ProtocolV1::run_continuation(CtPtr pcontinuation) {
   }
 }
 
-CtPtr ProtocolV1::read(CONTINUATION_PARAM(next, ProtocolV1, char *, int),
+CtPtr ProtocolV1::read(CONTINUATION_RX_TYPE<ProtocolV1> &next,
                        int len, char *buffer) {
   if (!buffer) {
     buffer = temp_buffer;
   }
   ssize_t r = connection->read(len, buffer,
-                               [&CONTINUATION(next), this](char *buffer, int r) {
-                                 CONTINUATION(next).setParams(buffer, r);
-                                 CONTINUATION_RUN(CONTINUATION(next));
+                               [&next, this](char *buffer, int r) {
+                                 next.setParams(buffer, r);
+                                 CONTINUATION_RUN(next);
                                });
   if (r <= 0) {
-    return CONTINUE(next, buffer, r);
+    next.setParams(buffer, r);
+    return &next;
   }
 
   return nullptr;
 }
 
-CtPtr ProtocolV1::write(CONTINUATION_PARAM(next, ProtocolV1, int),
+CtPtr ProtocolV1::write(CONTINUATION_TX_TYPE<ProtocolV1> &next,
                         bufferlist &buffer) {
-  ssize_t r = connection->write(buffer, [&CONTINUATION(next), this](int r) {
-    CONTINUATION(next).setParams(r);
-    CONTINUATION_RUN(CONTINUATION(next));
+  ssize_t r = connection->write(buffer, [&next, this](int r) {
+    next.setParams(r);
+    CONTINUATION_RUN(next);
   });
   if (r <= 0) {
-    return CONTINUE(next, r);
+    next.setParams(r);
+    return &next;
   }
 
   return nullptr;

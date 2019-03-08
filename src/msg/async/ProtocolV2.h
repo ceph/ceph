@@ -115,13 +115,14 @@ private:
   void run_continuation(Ct<ProtocolV2> *pcontinuation);
   void run_continuation(Ct<ProtocolV2> &continuation);
 
-  Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
+  Ct<ProtocolV2> *read(CONTINUATION_RX_TYPE<ProtocolV2> &next,
                        int len, char *buffer = nullptr);
   template <class F>
   Ct<ProtocolV2> *write(const std::string &desc,
-                        CONTINUATION_PARAM(next, ProtocolV2), F &frame);
+                        CONTINUATION_TYPE<ProtocolV2> &next,
+			F &frame);
   Ct<ProtocolV2> *write(const std::string &desc,
-                        CONTINUATION_PARAM(next, ProtocolV2),
+                        CONTINUATION_TYPE<ProtocolV2> &next,
                         bufferlist &buffer);
 
   void requeue_sent();
