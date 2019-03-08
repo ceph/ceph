@@ -1,3 +1,6 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_RGW_CLIENT_H
 #define CEPH_CLS_RGW_CLIENT_H
 
@@ -230,7 +233,7 @@ public:
 };
 
 /* bucket index */
-void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
+void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
 
 class CLSRGWConcurrentIO {
 protected:
@@ -252,9 +255,15 @@ protected:
   virtual void reset_container(map<int, string>& objs) {}
 
 public:
-  CLSRGWConcurrentIO(librados::IoCtx& ioc, map<int, string>& _objs_container,
-                     uint32_t _max_aio) : io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio) {}
-  virtual ~CLSRGWConcurrentIO() {}
+
+  CLSRGWConcurrentIO(librados::IoCtx& ioc,
+		     map<int, string>& _objs_container,
+		     uint32_t _max_aio) :
+  io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio)
+  {}
+
+  virtual ~CLSRGWConcurrentIO()
+  {}
 
   int operator()() {
     int ret = 0;
@@ -304,6 +313,23 @@ public:
                      uint32_t _max_aio) :
     CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
 };
+
+
+class CLSRGWIssueBucketIndexClean : public CLSRGWConcurrentIO {
+protected:
+  int issue_op(int shard_id, const string& oid) override;
+  int valid_ret_code() override {
+    return -ENOENT;
+  }
+
+public:
+  CLSRGWIssueBucketIndexClean(librados::IoCtx& ioc,
+			      map<int, string>& _bucket_objs,
+			      uint32_t _max_aio) :
+  CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio)
+  {}
+};
+
 
 class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
   uint64_t tag_timeout;

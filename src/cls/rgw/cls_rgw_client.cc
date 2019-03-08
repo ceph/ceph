@@ -92,18 +92,29 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   return true;
 }
 
-void cls_rgw_bucket_init(ObjectWriteOperation& o)
+// note: currently only called by tesing code
+void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
   bufferlist in;
   o.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
 }
 
 static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
-    const string& oid, BucketIndexAioManager *manager) {
+				       const string& oid,
+				       BucketIndexAioManager *manager) {
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.create(true);
   op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX, in);
+  return manager->aio_operate(io_ctx, oid, &op);
+}
+
+static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
+					const string& oid,
+					BucketIndexAioManager *manager) {
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.remove();
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
@@ -126,9 +137,14 @@ int CLSRGWIssueBucketIndexInit::issue_op(int shard_id, const string& oid)
 void CLSRGWIssueBucketIndexInit::cleanup()
 {
   // Do best effort removal
-  for (map<int, string>::iterator citer = objs_container.begin(); citer != iter; ++citer) {
+  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
     io_ctx.remove(citer->second);
   }
+}
+
+int CLSRGWIssueBucketIndexClean::issue_op(int shard_id, const string& oid)
+{
+  return issue_bucket_index_clean_op(io_ctx, oid, &manager);
 }
 
 int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)

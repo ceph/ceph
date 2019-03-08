@@ -136,7 +136,8 @@ public:
     }
     return ret;
   }
-};
+}; // class BucketReshardShard
+
 
 class BucketReshardManager {
   RGWRados *store;
@@ -146,8 +147,12 @@ class BucketReshardManager {
   vector<BucketReshardShard *> target_shards;
 
 public:
-  BucketReshardManager(RGWRados *_store, const RGWBucketInfo& _target_bucket_info, int _num_target_shards) : store(_store), target_bucket_info(_target_bucket_info),
-                                                                                                       num_target_shards(_num_target_shards) {
+  BucketReshardManager(RGWRados *_store,
+		       const RGWBucketInfo& _target_bucket_info,
+		       int _num_target_shards) :
+    store(_store), target_bucket_info(_target_bucket_info),
+    num_target_shards(_num_target_shards)
+  {
     target_shards.resize(num_target_shards);
     for (int i = 0; i < num_target_shards; ++i) {
       target_shards[i] = new BucketReshardShard(store, target_bucket_info, i, completions);
@@ -158,14 +163,12 @@ public:
     for (auto& shard : target_shards) {
       int ret = shard->wait_all_aio();
       if (ret < 0) {
-        ldout(store->ctx(), 20) << __func__ << ": shard->wait_all_aio() returned ret=" << ret << dendl;
+        ldout(store->ctx(), 20) << __func__ <<
+	  ": shard->wait_all_aio() returned ret=" << ret << dendl;
       }
     }
   }
 
-  /*
-   * did_flush is set if not nullptr and a flush occurred; otherwise not altered
-   */
   int add_entry(int shard_index,
                 rgw_cls_bi_entry& entry, bool account, uint8_t category,
                 const rgw_bucket_category_stats& entry_stats) {
@@ -200,7 +203,7 @@ public:
     target_shards.clear();
     return ret;
   }
-};
+}; // class BucketReshardManager
 
 RGWBucketReshard::RGWBucketReshard(RGWRados *_store,
 				   const RGWBucketInfo& _bucket_info,
@@ -314,7 +317,8 @@ static int create_new_bucket_instance(RGWRados *store,
 int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
                                                  RGWBucketInfo& new_bucket_info)
 {
-  return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
+  return ::create_new_bucket_instance(store, new_num_shards,
+				      bucket_info, bucket_attrs, new_bucket_info);
 }
 
 int RGWBucketReshard::cancel()
@@ -362,6 +366,7 @@ public:
 
   ~BucketInfoReshardUpdate() {
     if (in_progress) {
+      // resharding must not have ended correctly, clean up
       int ret =
 	RGWBucketReshard::clear_index_shard_reshard_status(store, bucket_info);
       if (ret < 0) {
@@ -369,7 +374,7 @@ public:
 	  " clear_index_shard_status returned " << ret << dendl;
       }
       bucket_info.new_bucket_instance_id.clear();
-      set_status(CLS_RGW_RESHARD_NONE); // saves new_bucket_instance as well
+      set_status(CLS_RGW_RESHARD_NONE); // clears new_bucket_instance as well
     }
   }
 
@@ -476,19 +481,20 @@ int RGWBucketReshard::do_reshard(int num_shards,
   int ret = 0;
 
   if (out) {
-    (*out) << "*** NOTICE: operation will not remove old bucket index objects ***" << std::endl;
-    (*out) << "***         these will need to be removed manually             ***" << std::endl;
     (*out) << "tenant: " << bucket_info.bucket.tenant << std::endl;
     (*out) << "bucket name: " << bucket_info.bucket.name << std::endl;
-    (*out) << "old bucket instance id: " << bucket_info.bucket.bucket_id << std::endl;
-    (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id << std::endl;
+    (*out) << "old bucket instance id: " << bucket_info.bucket.bucket_id <<
+      std::endl;
+    (*out) << "new bucket instance id: " << new_bucket_info.bucket.bucket_id <<
+      std::endl;
   }
 
-  /* update bucket info  -- in progress*/
+  /* update bucket info -- in progress*/
   list<rgw_cls_bi_entry> entries;
 
   if (max_entries < 0) {
-    ldout(store->ctx(), 0) << __func__ << ": can't reshard, negative max_entries" << dendl;
+    ldout(store->ctx(), 0) << __func__ <<
+      ": can't reshard, negative max_entries" << dendl;
     return -EINVAL;
   }
 
@@ -518,7 +524,8 @@ int RGWBucketReshard::do_reshard(int num_shards,
     cout << "total entries:";
   }
 
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+  const int num_source_shards =
+    (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   string marker;
   for (int i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
@@ -531,8 +538,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 	return ret;
       }
 
-      list<rgw_cls_bi_entry>::iterator iter;
-      for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
 	rgw_cls_bi_entry& entry = *iter;
 	if (verbose) {
 	  formatter->open_object_section("entry");
@@ -623,6 +629,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
   }
 
   return 0;
+  // NB: some error clean-up is done by ~BucketInfoReshardUpdate
 } // RGWBucketReshard::do_reshard
 
 int RGWBucketReshard::get_status(list<cls_rgw_bucket_instance_entry> *status)
@@ -655,6 +662,8 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                               bool verbose, ostream *out, Formatter *formatter,
 			      RGWReshard* reshard_log)
 {
+  Clock::time_point now;
+
   int ret = reshard_lock.lock();
   if (ret < 0) {
     return ret;
@@ -663,18 +672,19 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   RGWBucketInfo new_bucket_info;
   ret = create_new_bucket_instance(num_shards, new_bucket_info);
   if (ret < 0) {
-    reshard_lock.unlock();
-    return ret;
+    // shard state is uncertain, but this will attempt to remove them anyway
+    goto error_out;
   }
 
   if (reshard_log) {
     ret = reshard_log->update(bucket_info, new_bucket_info);
     if (ret < 0) {
-      reshard_lock.unlock();
-      return ret;
+      goto error_out;
     }
   }
 
+  // set resharding status of current bucket_info & shards with
+  // information about planned resharding
   ret = set_resharding_status(new_bucket_info.bucket.bucket_id,
 			      num_shards, CLS_RGW_RESHARD_IN_PROGRESS);
   if (ret < 0) {
@@ -686,28 +696,70 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
 		   new_bucket_info,
 		   max_op_entries,
                    verbose, out, formatter);
-
   if (ret < 0) {
-    reshard_lock.unlock();
-    return ret;
+    goto error_out;
   }
 
-  ret = set_resharding_status(new_bucket_info.bucket.bucket_id, num_shards,
-			      CLS_RGW_RESHARD_DONE);
+  // at this point we've done the main work; we'll make a best-effort
+  // to clean-up but will not indicate any errors encountered
+
+  reshard_lock.unlock();
+
+  // resharding successful, so remove old bucket index shards; use
+  // best effort and don't report out an error; the lock isn't needed
+  // at this point since all we're using a best effor to to remove old
+  // shard objects
+  ret = store->clean_bucket_index(bucket_info, bucket_info.num_shards);
   if (ret < 0) {
-    reshard_lock.unlock();
-    return ret;
+    lderr(store->ctx()) << "Error: " << __func__ <<
+      " failed to clean up old shards; " <<
+      "RGWRados::clean_bucket_index returned " << ret << dendl;
+  }
+
+  ret = rgw_bucket_instance_remove_entry(store,
+					 bucket_info.bucket.get_key(),
+					 nullptr);
+  if (ret < 0) {
+    lderr(store->ctx()) << "Error: " << __func__ <<
+      " failed to clean old bucket info object \"" <<
+      bucket_info.bucket.get_key() <<
+      "\"created after successful resharding with error " << ret << dendl;
   }
 
   ldout(store->ctx(), 1) << __func__ <<
     " INFO: reshard of bucket \"" << bucket_info.bucket.name << "\" from \"" <<
     bucket_info.bucket.get_key() << "\" to \"" <<
     new_bucket_info.bucket.get_key() << "\" completed successfully" << dendl;
-  
-  reshard_lock.unlock();
 
   return 0;
-}
+
+error_out:
+
+  reshard_lock.unlock();
+
+  // since the real problem is the issue that led to this error code
+  // path, we won't touch ret and instead use another variable to
+  // temporarily error codes
+  int ret2 = store->clean_bucket_index(new_bucket_info,
+				       new_bucket_info.num_shards);
+  if (ret2 < 0) {
+    lderr(store->ctx()) << "Error: " << __func__ <<
+      " failed to clean up shards from failed incomplete resharding; " <<
+      "RGWRados::clean_bucket_index returned " << ret2 << dendl;
+  }
+
+  ret2 = rgw_bucket_instance_remove_entry(store,
+					  new_bucket_info.bucket.get_key(),
+					  nullptr);
+  if (ret2 < 0) {
+    lderr(store->ctx()) << "Error: " << __func__ <<
+      " failed to clean bucket info object \"" <<
+      new_bucket_info.bucket.get_key() <<
+      "\"created during incomplete resharding with error " << ret2 << dendl;
+  }
+
+  return ret;
+} // execute
 
 
 RGWReshard::RGWReshard(RGWRados* _store, bool _verbose, ostream *_out,
@@ -718,7 +770,8 @@ RGWReshard::RGWReshard(RGWRados* _store, bool _verbose, ostream *_out,
   num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
 }
 
-string RGWReshard::get_logshard_key(const string& tenant, const string& bucket_name)
+string RGWReshard::get_logshard_key(const string& tenant,
+				    const string& bucket_name)
 {
   return tenant + ":" + bucket_name;
 }
