@@ -19,6 +19,8 @@ export class ConfirmationModalComponent implements OnInit {
   bodyContext: object;
   confirmationForm: FormGroup;
 
+  boundCancel = this.cancel.bind(this);
+
   constructor(public modalRef: BsModalRef) {
     this.confirmationForm = new FormGroup({});
   }
