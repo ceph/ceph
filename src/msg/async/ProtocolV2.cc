@@ -735,12 +735,11 @@ CtPtr ProtocolV2::write(const std::string &desc,
         run_continuation(next);
       });
 
-  if (r <= 0) {
-    if (r < 0) {
-      ldout(cct, 1) << __func__ << " " << desc << " write failed r=" << r
-                    << " (" << cpp_strerror(r) << ")" << dendl;
-      return _fault();
-    }
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " " << desc << " write failed r=" << r
+                  << " (" << cpp_strerror(r) << ")" << dendl;
+    return _fault();
+  } else if (r == 0) {
     next.setParams();
     return &next;
   }
