@@ -688,15 +688,46 @@ struct MessageFrame : public Frame<MessageFrame,
     return f;
   }
 
-  static MessageFrame Decode(ceph::bufferlist &&msg_header) {
+  using rx_segments_t =
+    boost::container::static_vector<ceph::bufferlist,
+                                    ceph::msgr::v2::MAX_NUM_SEGMENTS>;
+  static MessageFrame Decode(rx_segments_t &&recv_segments) {
     MessageFrame f;
-    f.segments[SegmentIndex::Msg::HEADER] = std::move(msg_header);
+    // transfer segments' bufferlists. If a MessageFrame contains less
+    // SegmentsNumV segments, the missing ones will be seen as zeroed.
+    for (__u8 idx = 0; idx < std::size(recv_segments); idx++) {
+      f.segments[idx] = std::move(recv_segments[idx]);
+    }
     return f;
   }
 
   inline const ceph_msg_header2 &header() {
     auto& hdrbl = segments[SegmentIndex::Msg::HEADER];
     return reinterpret_cast<const ceph_msg_header2&>(*hdrbl.c_str());
+  }
+
+  ceph::bufferlist &front() {
+    return segments[SegmentIndex::Msg::FRONT];
+  }
+
+  ceph::bufferlist &middle() {
+    return segments[SegmentIndex::Msg::MIDDLE];
+  }
+
+  ceph::bufferlist &data() {
+    return segments[SegmentIndex::Msg::DATA];
+  }
+
+  uint32_t front_len() const {
+    return segments[SegmentIndex::Msg::FRONT].length();
+  }
+
+  uint32_t middle_len() const {
+    return segments[SegmentIndex::Msg::MIDDLE].length();
+  }
+
+  uint32_t data_len() const {
+    return segments[SegmentIndex::Msg::DATA].length();
   }
 
 protected:
