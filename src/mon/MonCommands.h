@@ -458,6 +458,11 @@ COMMAND("mon set-rank " \
 	"name=rank,type=CephInt",
 	"set the rank for the specified mon",
 	"mon", "rw")
+COMMAND("mon set-addrs " \
+	"name=name,type=CephString " \
+	"name=addrs,type=CephString",
+	"set the addrs (IPs and ports) a specific monitor binds to",
+	"mon", "rw")
 COMMAND("mon enable-msgr2",
 	"enable the msgr2 protocol on port 3300",
 	"mon", "rw")

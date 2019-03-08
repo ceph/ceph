@@ -300,3 +300,33 @@ TEST(entity_addrvec_t, parse)
     }
   }
 }
+
+TEST(entity_addrvec_t, legacy_equals)
+{
+  entity_addr_t a1, a2;
+  ASSERT_TRUE(a1.parse("v1:1.2.3.4:567/890"));
+  ASSERT_TRUE(a2.parse("v2:1.2.3.4:567/890"));
+  entity_addrvec_t av1(a1);
+  entity_addrvec_t av21;
+  av21.v.push_back(a2);
+  av21.v.push_back(a1);
+  ASSERT_TRUE(av1.legacy_equals(av1));
+  ASSERT_TRUE(av21.legacy_equals(av21));
+  ASSERT_TRUE(av1.legacy_equals(av21));
+  ASSERT_TRUE(av21.legacy_equals(av1));
+
+  entity_addr_t b1, b2;
+  ASSERT_TRUE(b1.parse("v1:1.2.3.5:567/8"));
+  ASSERT_TRUE(b2.parse("v2:1.2.3.5:567/8"));
+  entity_addrvec_t bv1(b1);
+  entity_addrvec_t bv21;
+  bv21.v.push_back(b2);
+  bv21.v.push_back(b1);
+  ASSERT_TRUE(bv1.legacy_equals(bv21));
+  ASSERT_TRUE(bv21.legacy_equals(bv1));
+
+  ASSERT_FALSE(av1.legacy_equals(bv1));
+  ASSERT_FALSE(av21.legacy_equals(bv21));
+  ASSERT_FALSE(av21.legacy_equals(bv1));
+  ASSERT_FALSE(av1.legacy_equals(bv21));
+}
