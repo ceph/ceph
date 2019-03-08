@@ -1925,36 +1925,43 @@ int RGWBucketAdminOp::fix_lc_shards(RGWRados *store,
   Formatter *formatter = flusher.get_formatter();
   static constexpr auto default_max_keys = 1000;
 
-  int ret = store->meta_mgr->list_keys_init("bucket", marker, &handle);
-  if (ret < 0) {
-    std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-
   bool truncated;
   if (const std::string& bucket_name = op_state.get_bucket_name();
       ! bucket_name.empty()) {
     const rgw_user user_id = op_state.get_user_id();
     process_single_lc_entry(store, formatter, user_id.tenant, bucket_name);
+    formatter->flush(cout);
   } else {
-    formatter->open_array_section("lc_fix_status");
-    do {
-      list<std::string> keys;
-      ret = store->meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
-      if (ret < 0 && ret != -ENOENT) {
-        std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
-        return ret;
-      } if (ret != -ENOENT) {
-        for (const auto &key:keys) {
-          auto [tenant_name, bucket_name] = split_tenant(key);
-          process_single_lc_entry(store, formatter, tenant_name, bucket_name);
+    int ret = store->meta_mgr->list_keys_init("bucket", marker, &handle);
+    if (ret < 0) {
+      std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    {
+      formatter->open_array_section("lc_fix_status");
+      auto sg = make_scope_guard([&store, &handle, &formatter](){
+                                   store->meta_mgr->list_keys_complete(handle);
+                                   formatter->close_section(); // lc_fix_status
+                                   formatter->flush(cout);
+                                 });
+      do {
+        list<std::string> keys;
+        ret = store->meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+        if (ret < 0 && ret != -ENOENT) {
+          std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+          return ret;
+        } if (ret != -ENOENT) {
+          for (const auto &key:keys) {
+            auto [tenant_name, bucket_name] = split_tenant(key);
+            process_single_lc_entry(store, formatter, tenant_name, bucket_name);
+          }
         }
-      }
-      formatter->flush(cout); // regularly flush every 1k entries
-    } while (truncated);
-    formatter->close_section(); // lc_fix_status
+        formatter->flush(cout); // regularly flush every 1k entries
+      } while (truncated);
+    }
+
   }
-  formatter->flush(cout);
   return 0;
 
 }
