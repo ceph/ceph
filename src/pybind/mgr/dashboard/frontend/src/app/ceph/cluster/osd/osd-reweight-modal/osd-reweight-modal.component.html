@@ -28,10 +28,10 @@
                           [form]="reweightForm"
                           [disabled]="reweightForm.invalid"
                           i18n>Reweight</cd-submit-button>
-
-        <button class="btn btn-link btn-sm"
-                (click)="bsModalRef.hide()"
-                i18n>Cancel</button>
+        <cd-back-button [back]="bsModalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>
