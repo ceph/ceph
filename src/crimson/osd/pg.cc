@@ -943,3 +943,10 @@ seastar::future<> PG::share_pg_info()
       return send_to_osd(peer.osd, m, get_osdmap_epoch());
     });
 }
+
+seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
+                                Ref<MOSDOp> m)
+{
+  // todo
+  return seastar::now();
+}
