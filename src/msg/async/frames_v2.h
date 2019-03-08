@@ -305,9 +305,7 @@ protected:
 
   template <typename T>
   inline void _encode_payload_each(T &t) {
-    if constexpr (std::is_same<T, bufferlist const>()) {
-      this->get_payload_segment().claim_append((bufferlist &)t);
-    } else if constexpr (std::is_same<T, std::vector<uint32_t> const>()) {
+    if constexpr (std::is_same<T, std::vector<uint32_t> const>()) {
       encode((uint32_t)t.size(), this->get_payload_segment(), features);
       for (const auto &elem : t) {
         encode(elem, this->get_payload_segment(), features);
@@ -319,11 +317,7 @@ protected:
 
   template <typename T>
   inline void _decode_payload_each(T &t, bufferlist::const_iterator &ti) const {
-    if constexpr (std::is_same<T, bufferlist>()) {
-      if (ti.get_remaining()) {
-        t.append(ti.get_current_ptr());
-      }
-    } else if constexpr (std::is_same<T, std::vector<uint32_t>>()) {
+    if constexpr (std::is_same<T, std::vector<uint32_t>>()) {
       uint32_t size;
       decode(size, ti);
       t.resize(size);
