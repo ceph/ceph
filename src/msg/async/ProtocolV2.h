@@ -112,7 +112,8 @@ private:
   bool keepalive;
 
   ostream &_conn_prefix(std::ostream *_dout);
-  void run_continuation(Ct<ProtocolV2> *continuation);
+  void run_continuation(Ct<ProtocolV2> *pcontinuation);
+  void run_continuation(Ct<ProtocolV2> &continuation);
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
