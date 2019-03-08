@@ -9231,18 +9231,24 @@ void BlueStore::_kv_sync_thread()
   dout(10) << __func__ << " start" << dendl;
   std::unique_lock<std::mutex> l(kv_lock);
   ceph_assert(!kv_sync_started);
+  bool bluefs_do_check_balance = false;
   kv_sync_started = true;
   kv_cond.notify_all();
   while (true) {
     ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
-	 !deferred_aggressive)) {
+	 !deferred_aggressive) &&
+	(bluefs_do_check_balance == false)) {
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      kv_cond.wait(l);
+      std::cv_status status = kv_cond.wait_for(l,
+        std::chrono::milliseconds(int64_t(cct->_conf->bluestore_bluefs_balance_interval * 1000)));
       dout(20) << __func__ << " wake" << dendl;
+      if (status == std::cv_status::timeout) {
+        bluefs_do_check_balance = true;
+      }
     } else {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
@@ -9382,6 +9388,7 @@ void BlueStore::_kv_sync_thread()
 	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
 	}
       }
+      bluefs_do_check_balance = false;
 
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {
