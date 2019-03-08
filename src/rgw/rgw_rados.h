@@ -543,7 +543,7 @@ public:
                pools_initialized(false),
                quota_handler(NULL),
                cr_registry(NULL),
-               meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
+               data_log(NULL), reshard(NULL) {}
 
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
@@ -598,14 +598,7 @@ public:
    */
   string host_id;
 
-  // pulls missing periods for period_history
-  std::unique_ptr<RGWPeriodPuller> period_puller;
-  // maintains a connected history of periods
-  std::unique_ptr<RGWPeriodHistory> period_history;
-
   RGWAsyncRadosProcessor* get_async_rados() const { return async_rados; };
-
-  RGWMetadataManager *meta_mgr;
 
   RGWDataChangesLog *data_log;
 

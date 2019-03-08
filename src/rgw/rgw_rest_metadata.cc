@@ -215,6 +215,19 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
   return 0;
 }
 
+static bool string_to_sync_type(const string& sync_string,
+                                sync_type_t& type) {
+  if (sync_string.compare("update-by-version") == 0)
+    type = APPLY_UPDATES;
+  else if (sync_string.compare("update-by-timestamp") == 0)
+    type = APPLY_NEWER;
+  else if (sync_string.compare("always") == 0)
+    type = APPLY_ALWAYS;
+  else
+    return false;
+  return true;
+}
+
 void RGWOp_Metadata_Put::execute() {
   bufferlist bl;
   string metadata_key;
