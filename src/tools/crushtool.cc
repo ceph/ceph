@@ -1171,7 +1171,7 @@ int main(int argc, const char **argv)
     modified = true;
   }
   if (rebuild_class_roots) {
-    int r = crush.rebuild_roots_with_classes();
+    int r = crush.rebuild_roots_with_classes(g_ceph_context);
     if (r < 0) {
       cerr << "failed to rebuidl roots with classes" << std::endl;
       return EXIT_FAILURE;

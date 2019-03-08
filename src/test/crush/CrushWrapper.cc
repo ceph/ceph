@@ -1090,7 +1090,7 @@ TEST(CrushWrapper, remove_root) {
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
-  ASSERT_EQ(c.remove_root(c.get_item_id("default")), 0);
+  ASSERT_EQ(c.remove_root(g_ceph_context, c.get_item_id("default")), 0);
   ASSERT_FALSE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("r11"));
   ASSERT_FALSE(c.name_exists("r12"));
@@ -1122,7 +1122,7 @@ TEST(CrushWrapper, trim_roots_with_class) {
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.trim_roots_with_class();
+  c.trim_roots_with_class(g_ceph_context);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }

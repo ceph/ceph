@@ -367,11 +367,11 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
       class_remove_item(item);
     }
   }
-  rebuild_roots_with_classes();
+  rebuild_roots_with_classes(cct);
   return true;
 }
 
-int CrushWrapper::remove_root(int item)
+int CrushWrapper::remove_root(CephContext *cct, int item)
 {
   crush_bucket *b = get_bucket(item);
   if (IS_ERR(b)) {
@@ -387,7 +387,7 @@ int CrushWrapper::remove_root(int item)
   for (unsigned n = 0; n < b->size; n++) {
     if (b->items[n] >= 0)
       continue;
-    int r = remove_root(b->items[n]);
+    int r = remove_root(cct, b->items[n]);
     if (r < 0)
       return r;
   }
@@ -400,7 +400,7 @@ int CrushWrapper::remove_root(int item)
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
   class_remove_item(item);
-  update_choose_args(nullptr);
+  update_choose_args(cct);
   return 0;
 }
 
@@ -1161,7 +1161,7 @@ int CrushWrapper::insert_item(
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
 		    << dendl;
     }
-    r = rebuild_roots_with_classes();
+    r = rebuild_roots_with_classes(cct);
     if (r < 0) {
       ldout(cct, 0) << __func__ << " unable to rebuild roots with classes: "
                     << cpp_strerror(r) << dendl;
@@ -1307,7 +1307,7 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 
   // swap names
   swap_names(src, dst);
-  return rebuild_roots_with_classes();
+  return rebuild_roots_with_classes(cct);
 }
 
 int CrushWrapper::link_bucket(
@@ -1723,14 +1723,14 @@ int CrushWrapper::populate_classes(
   return 0;
 }
 
-int CrushWrapper::trim_roots_with_class()
+int CrushWrapper::trim_roots_with_class(CephContext *cct)
 {
   set<int> roots;
   find_shadow_roots(&roots);
   for (auto &r : roots) {
     if (r >= 0)
       continue;
-    int res = remove_root(r);
+    int res = remove_root(cct, r);
     if (res)
       return res;
   }
@@ -1900,7 +1900,7 @@ int CrushWrapper::reclassify(
       }
     }
 
-    int r = rebuild_roots_with_classes();
+    int r = rebuild_roots_with_classes(cct);
     if (r < 0) {
       out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
 	  << std::endl;
@@ -2075,7 +2075,7 @@ int CrushWrapper::reclassify(
     name_map[i.first] = i.second;
   }
 
-  int r = rebuild_roots_with_classes();
+  int r = rebuild_roots_with_classes(cct);
   if (r < 0) {
     out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
 	<< std::endl;
@@ -2127,7 +2127,7 @@ void CrushWrapper::reweight(CephContext *cct)
       reweight_bucket(b, i.second, &w);
     }
   }
-  int r = rebuild_roots_with_classes();
+  int r = rebuild_roots_with_classes(cct);
   ceph_assert(r == 0);
 }
 
@@ -2369,7 +2369,7 @@ int CrushWrapper::remove_rule(int ruleno)
   crush->rules[ruleno] = NULL;
   rule_name_map.erase(ruleno);
   have_rmaps = false;
-  return rebuild_roots_with_classes();
+  return rebuild_roots_with_classes(nullptr);
 }
 
 int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *bucket, int item, int weight)
@@ -2556,7 +2556,7 @@ int CrushWrapper::update_device_class(int id,
 
   set_item_class(id, class_id);
 
-  int r = rebuild_roots_with_classes();
+  int r = rebuild_roots_with_classes(nullptr);
   if (r < 0)
     return r;
   return 1;
@@ -2578,7 +2578,7 @@ int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
   }
   class_remove_item(id);
 
-  int r = rebuild_roots_with_classes();
+  int r = rebuild_roots_with_classes(cct);
   if (r < 0) {
     *ss << "unable to rebuild roots with class '" << class_name << "' "
         << "of osd." << id << ": " << cpp_strerror(r);
@@ -2824,11 +2824,11 @@ void CrushWrapper::cleanup_dead_classes()
   }
 }
 
-int CrushWrapper::rebuild_roots_with_classes()
+int CrushWrapper::rebuild_roots_with_classes(CephContext *cct)
 {
   std::map<int32_t, map<int32_t, int32_t> > old_class_bucket = class_bucket;
   cleanup_dead_classes();
-  int r = trim_roots_with_class();
+  int r = trim_roots_with_class(cct);
   if (r < 0)
     return r;
   class_bucket.clear();
