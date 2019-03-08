@@ -198,7 +198,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   pending_progress_events.swap(m->progress_events);
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks, "
-	   << progress_events.size() << "progress events" << dendl;
+	   << progress_events.size() << " progress events" << dendl;
   dout(20) << "pending_digest:\n";
   JSONFormatter jf(true);
   jf.open_object_section("pending_digest");
