@@ -2830,11 +2830,9 @@ void CDir::verify_fragstat()
 
 void CDir::_walk_tree(std::function<bool(CDir*)> callback)
 {
-
   deque<CDir*> dfq;
   dfq.push_back(this);
 
-  vector<CDir*> dfv;
   while (!dfq.empty()) {
     CDir *dir = dfq.front();
     dfq.pop_front();
@@ -2847,13 +2845,12 @@ void CDir::_walk_tree(std::function<bool(CDir*)> callback)
       if (!in->is_dir())
 	continue;
 
-      in->get_nested_dirfrags(dfv);
+      auto&& dfv = in->get_nested_dirfrags();
       for (auto& dir : dfv) {
 	auto ret = callback(dir);
 	if (ret)
 	  dfq.push_back(dir);
       }
-      dfv.clear();
     }
   }
 }

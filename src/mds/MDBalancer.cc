@@ -104,8 +104,7 @@ void MDBalancer::handle_export_pins(void)
     mds_rank_t export_pin = in->get_export_pin(false);
 
     bool remove = true;
-    list<CDir*> dfls;
-    in->get_dirfrags(dfls);
+    auto&& dfls = in->get_dirfrags();
     for (auto dir : dfls) {
       if (!dir->is_auth())
 	continue;
@@ -230,8 +229,7 @@ mds_load_t MDBalancer::get_load()
   mds_load_t load{DecayRate()}; /* zero DecayRate! */
 
   if (mds->mdcache->get_root()) {
-    list<CDir*> ls;
-    mds->mdcache->get_root()->get_dirfrags(ls);
+    auto&& ls = mds->mdcache->get_root()->get_dirfrags();
     for (auto &d : ls) {
       load.auth.add(d->pop_auth_subtree_nested);
       load.all.add(d->pop_nested);
@@ -963,19 +961,19 @@ void MDBalancer::try_rebalance(balance_state_t& state)
       continue;
 
     // okay, search for fragments of my workload
-    list<CDir*> exports;
+    std::vector<CDir*> exports;
 
     for (auto p = import_pop_map.rbegin();
 	 p != import_pop_map.rend();
 	 ++p) {
       CDir *dir = p->second;
-      find_exports(dir, amount, exports, have, already_exporting);
+      find_exports(dir, amount, &exports, have, already_exporting);
       if (amount-have < MIN_OFFLOAD)
 	break;
     }
     //fudge = amount - have;
 
-    for (auto dir : exports) {
+    for (const auto& dir : exports) {
       dout(5) << "   - exporting " << dir->pop_auth_subtree
 	      << " " << dir->pop_auth_subtree.meta_load()
 	      << " to mds." << target << " " << *dir << dendl;
@@ -989,7 +987,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
 void MDBalancer::find_exports(CDir *dir,
                               double amount,
-                              list<CDir*>& exports,
+                              std::vector<CDir*>* exports,
                               double& have,
                               set<CDir*>& already_exporting)
 {
@@ -1012,7 +1010,7 @@ void MDBalancer::find_exports(CDir *dir,
   double midchunk = need * g_conf()->mds_bal_midchunk;
   double minchunk = need * g_conf()->mds_bal_minchunk;
 
-  list<CDir*> bigger_rep, bigger_unrep;
+  std::vector<CDir*> bigger_rep, bigger_unrep;
   multimap<double, CDir*> smaller;
 
   double dir_pop = dir->pop_auth_subtree.meta_load();
@@ -1027,8 +1025,7 @@ void MDBalancer::find_exports(CDir *dir,
     ceph_assert(in->is_dir());
     ceph_assert(in->get_parent_dir() == dir);
 
-    list<CDir*> dfls;
-    in->get_nested_dirfrags(dfls);
+    auto&& dfls = in->get_nested_dirfrags();
 
     size_t num_idle_frags = 0;
     for (const auto& subdir : dfls) {
@@ -1053,7 +1050,7 @@ void MDBalancer::find_exports(CDir *dir,
 
       // lucky find?
       if (pop > needmin && pop < needmax) {
-	exports.push_back(subdir);
+	exports->push_back(subdir);
 	already_exporting.insert(subdir);
 	have += pop;
 	return;
@@ -1083,7 +1080,7 @@ void MDBalancer::find_exports(CDir *dir,
 
     dout(7) << "   taking smaller " << *(*it).second << dendl;
 
-    exports.push_back((*it).second);
+    exports->push_back((*it).second);
     already_exporting.insert((*it).second);
     have += (*it).first;
     if (have > needmin)
@@ -1104,7 +1101,7 @@ void MDBalancer::find_exports(CDir *dir,
        ++it) {
     dout(7) << "   taking (much) smaller " << it->first << " " << *(*it).second << dendl;
 
-    exports.push_back((*it).second);
+    exports->push_back((*it).second);
     already_exporting.insert((*it).second);
     have += (*it).first;
     if (have > needmin)
@@ -1334,7 +1331,7 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
 
 int MDBalancer::dump_loads(Formatter *f) const
 {
-  list<CDir*> dfs;
+  std::deque<CDir*> dfs;
   if (mds->mdcache->get_root()) {
     mds->mdcache->get_root()->get_dirfrags(dfs);
   } else {
@@ -1357,9 +1354,8 @@ int MDBalancer::dump_loads(Formatter *f) const
       if (!in || !in->is_dir())
 	continue;
 
-      list<CDir*> ls;
-      in->get_dirfrags(ls);
-      for (auto subdir : ls) {
+      auto&& ls = in->get_dirfrags();
+      for (const auto& subdir : ls) {
 	if (subdir->pop_nested.meta_load() < .001)
 	  continue;
 	dfs.push_back(subdir);
