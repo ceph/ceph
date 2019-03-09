@@ -6230,9 +6230,12 @@ bool OSDMonitor::update_pools_status()
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
-    bool pool_is_full =
-      (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
-      (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
+    bool pool_is_full_objects = pool.quota_max_objects > 0 &&
+      (uint64_t)sum.num_objects >= pool.quota_max_objects;
+    bool pool_is_full = ((pool.quota_max_bytes > 0 &&
+			  (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
+			 pool_is_full_objects);
+    
 
     if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
       if (pool_is_full)
@@ -6243,7 +6246,9 @@ bool OSDMonitor::update_pools_status()
       // below we cancel FLAG_FULL too, we'll set it again in
       // OSDMonitor::encode_pending if it still fails the osd-full checking.
       clear_pool_flags(it->first,
-                       pg_pool_t::FLAG_FULL_QUOTA | pg_pool_t::FLAG_FULL);
+                       pg_pool_t::FLAG_FULL_QUOTA |
+		       pg_pool_t::FLAG_FULL_QUOTA_OBJECTS |
+		       pg_pool_t::FLAG_FULL);
       ret = true;
     } else {
       if (!pool_is_full)
@@ -6269,6 +6274,9 @@ bool OSDMonitor::update_pools_status()
       clear_pool_flags(it->first,
                        pg_pool_t::FLAG_NEARFULL |
                        pg_pool_t::FLAG_BACKFILLFULL);
+      if (pool_is_full_objects) {
+	set_pool_flags(it->first, pg_pool_t::FLAG_FULL_QUOTA_OBJECTS);
+      }
       ret = true;
     }
   }

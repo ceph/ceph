@@ -1122,6 +1122,7 @@ struct pg_pool_t {
     FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
     FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
     FLAG_CREATING = 1<<15,          // initial pool PGs are being created
+    FLAG_FULL_QUOTA_OBJECTS = 1<<16, // pool quota filled up on object count, not raw size. Also sets FULL_QUOTA
   };
 
   static const char *get_flag_name(int f) {
@@ -1137,6 +1138,7 @@ struct pg_pool_t {
     case FLAG_NOSCRUB: return "noscrub";
     case FLAG_NODEEP_SCRUB: return "nodeep-scrub";
     case FLAG_FULL_QUOTA: return "full_quota";
+    case FLAG_FULL_QUOTA_OBJECTS: return "full_quota_objects";
     case FLAG_NEARFULL: return "nearfull";
     case FLAG_BACKFILLFULL: return "backfillfull";
     case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
@@ -1182,6 +1184,8 @@ struct pg_pool_t {
       return FLAG_NODEEP_SCRUB;
     if (name == "full_quota")
       return FLAG_FULL_QUOTA;
+    if (name == "full_quota_objects")
+      return FLAG_FULL_QUOTA_OBJECTS;
     if (name == "nearfull")
       return FLAG_NEARFULL;
     if (name == "backfillfull")

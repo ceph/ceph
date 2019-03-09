@@ -5562,7 +5562,13 @@ void OSDMap::check_health(health_check_map_t *checks) const
         if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
           // may run out of space too,
           // but we want EQUOTA taking precedence
-          ss << "pool '" << pool_name << "' is full (running out of quota)";
+	  if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA_OBJECTS)) {
+	    ss << "pool '" << pool_name << "' is full (reached objects quota "
+	       << pool.quota_max_objects << ")";
+	  } else {
+	    ss << "pool '" << pool_name << "' is full (reached size quota "
+	       << byte_u_t(pool.quota_max_bytes) << ")";
+          }
         } else {
           ss << "pool '" << pool_name << "' is full (no space)";
         }
