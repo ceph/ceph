@@ -143,7 +143,7 @@ public:
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
-  list<CDir*> projected_fnodes;
+  std::vector<CDir*> projected_fnodes;
   list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;

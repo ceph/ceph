@@ -537,7 +537,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
   {
     size_t total_items = 0;
     unsigned used_objs = 1;
-    std::list<unsigned> objs_to_write;
+    std::vector<unsigned> objs_to_write;
     bool journaled = false;
     for (unsigned i = 0; i < omap_num_objs; i++) {
       total_items += omap_num_items[i];
