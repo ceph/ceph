@@ -1562,11 +1562,12 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       set<frag_t> myfrags;
       list<CDir*> dfls;
       get_dirfrags(dfls);
-      for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
-	if ((*p)->is_auth()) {
-	  frag_t fg = (*p)->get_frag();
+      for (const auto& dir : dfls) {
+	if (dir->is_auth()) {
+	  frag_t fg = dir->get_frag();
 	  myfrags.insert(fg);
 	}
+      }
       encode(myfrags, bl);
     }
     break;

@@ -1031,10 +1031,7 @@ void MDBalancer::find_exports(CDir *dir,
     in->get_nested_dirfrags(dfls);
 
     size_t num_idle_frags = 0;
-    for (list<CDir*>::iterator p = dfls.begin();
-	 p != dfls.end();
-	 ++p) {
-      CDir *subdir = *p;
+    for (const auto& subdir : dfls) {
       if (already_exporting.count(subdir))
 	continue;
 
@@ -1094,11 +1091,9 @@ void MDBalancer::find_exports(CDir *dir,
   }
 
   // apprently not enough; drill deeper into the hierarchy (if non-replicated)
-  for (list<CDir*>::iterator it = bigger_unrep.begin();
-       it != bigger_unrep.end();
-       ++it) {
-    dout(15) << "   descending into " << **it << dendl;
-    find_exports(*it, amount, exports, have, already_exporting);
+  for (const auto& dir : bigger_unrep) {
+    dout(15) << "   descending into " << *dir << dendl;
+    find_exports(dir, amount, exports, have, already_exporting);
     if (have > needmin)
       return;
   }
@@ -1117,11 +1112,9 @@ void MDBalancer::find_exports(CDir *dir,
   }
 
   // ok fine, drill into replicated dirs
-  for (list<CDir*>::iterator it = bigger_rep.begin();
-       it != bigger_rep.end();
-       ++it) {
-    dout(7) << "   descending into replicated " << **it << dendl;
-    find_exports(*it, amount, exports, have, already_exporting);
+  for (const auto& dir : bigger_rep) {
+    dout(7) << "   descending into replicated " << *dir << dendl;
+    find_exports(dir, amount, exports, have, already_exporting);
     if (have > needmin)
       return;
   }
