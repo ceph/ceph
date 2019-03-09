@@ -224,6 +224,9 @@ void ProtocolV2::reset_recv_state() {
     auth_meta.reset(new AuthConnectionMeta);
     session_stream_handlers.tx.reset(nullptr);
     session_stream_handlers.rx.reset(nullptr);
+    pre_auth.enabled = true;
+    pre_auth.txbuf.clear();
+    pre_auth.rxbuf.clear();
   }
 
   // clean read and write callbacks
@@ -1052,6 +1055,7 @@ CtPtr ProtocolV2::handle_read_frame_dispatch() {
     case Tag::AUTH_REPLY_MORE:
     case Tag::AUTH_REQUEST_MORE:
     case Tag::AUTH_DONE:
+    case Tag::AUTH_SIGNATURE:
     case Tag::CLIENT_IDENT:
     case Tag::SERVER_IDENT:
     case Tag::IDENT_MISSING_FEATURES:
@@ -1161,6 +1165,8 @@ CtPtr ProtocolV2::handle_frame_payload() {
       return handle_auth_request_more(payload);
     case Tag::AUTH_DONE:
       return handle_auth_done(payload);
+    case Tag::AUTH_SIGNATURE:
+      return handle_auth_signature(payload);
     case Tag::CLIENT_IDENT:
       return handle_client_ident(payload);
     case Tag::SERVER_IDENT:
@@ -1771,6 +1777,16 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
   session_stream_handlers = \
     ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, false);
 
+  state = AUTH_CONNECTING_SIGN;
+
+  // FIXME, WIP: crc32 is just scaffolding
+  auto sig_frame = AuthSignatureFrame::Encode(pre_auth.rxbuf.crc32c(-1));
+  pre_auth.enabled = false;
+  pre_auth.rxbuf.clear();
+  return WRITE(sig_frame, "auth signature", read_frame);
+}
+
+CtPtr ProtocolV2::finish_client_auth() {
   if (!server_cookie) {
     ceph_assert(connect_seq == 0);
     state = SESSION_CONNECTING;
@@ -2145,7 +2161,7 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
   }
   if (r == 1) {
     INTERCEPT(10);
-    state = SESSION_ACCEPTING;
+    state = AUTH_ACCEPTING_SIGN;
 
     auto auth_done = AuthDoneFrame::Encode(connection->peer_global_id,
                                            auth_meta->con_mode,
@@ -2167,9 +2183,16 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
 CtPtr ProtocolV2::finish_auth()
 {
   ceph_assert(auth_meta);
+  // TODO: having a possibility to check whether we're server or client could
+  // allow reusing finish_auth().
   session_stream_handlers = \
     ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
-  return CONTINUE(read_frame);
+
+  // FIXME, WIP: crc32 is just scaffolding
+  auto sig_frame = AuthSignatureFrame::Encode(pre_auth.rxbuf.crc32c(-1));
+  pre_auth.enabled = false;
+  pre_auth.rxbuf.clear();
+  return WRITE(sig_frame, "auth signature", read_frame);
 }
 
 CtPtr ProtocolV2::handle_auth_request_more(ceph::bufferlist &payload)
@@ -2184,6 +2207,47 @@ CtPtr ProtocolV2::handle_auth_request_more(ceph::bufferlist &payload)
 
   auto auth_more = AuthRequestMoreFrame::Decode(payload);
   return _handle_auth_request(auth_more.auth_payload(), true);
+}
+
+CtPtr ProtocolV2::handle_auth_signature(ceph::bufferlist &payload)
+{
+  ldout(cct, 20) << __func__
+		 << " payload.length()=" << payload.length() << dendl;
+
+  if (state != AUTH_ACCEPTING_SIGN && state != AUTH_CONNECTING_SIGN) {
+    lderr(cct) << __func__
+               << " pre-auth verification signature seen in wrong state!"
+               << dendl;
+    return _fault();
+  }
+
+  auto sig_frame = AuthSignatureFrame::Decode(payload);
+
+  const auto actual_tx_sig = pre_auth.txbuf.crc32c(-1);
+  if (sig_frame.signature() != actual_tx_sig) {
+    ldout(cct, 2) << __func__ << " pre-auth signature mismatch"
+                  << " actual_tx_sig=" << actual_tx_sig
+                  << " sig_frame.signature()=" << sig_frame.signature()
+                  << dendl;
+    return _fault();
+  } else {
+    ldout(cct, 20) << __func__ << " pre-auth signature success"
+                   << " sig_frame.signature()=" << sig_frame.signature()
+                   << dendl;
+    pre_auth.txbuf.clear();
+  }
+
+  if (state == AUTH_ACCEPTING_SIGN) {
+    // server had sent AuthDone and client responded with correct pre-auth
+    // signature. we can start accepting new sessions/reconnects.
+    state = SESSION_ACCEPTING;
+    return CONTINUE(read_frame);
+  } else if (state == AUTH_CONNECTING_SIGN) {
+    // this happened at client side
+    return finish_client_auth();
+  } else {
+    ceph_assert_always("state corruption" == nullptr);
+  }
 }
 
 CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
