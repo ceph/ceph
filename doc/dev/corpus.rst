@@ -34,25 +34,26 @@ We can generate an object corpus for a particular version of ceph like so.
 
 #. Start via vstart::
 
-	cd src
-	MON=3 OSD=3 MDS=3 RGW=1 ./vstart.sh -n -x
+	cd build
+	MON=3 OSD=3 MDS=3 RGW=1 ../src/vstart.sh -n -x
 
 #. Use as much functionality of the cluster as you can, to exercise as many object encoder methods as possible::
 
-	./rados -p rbd bench 10 write -b 123
-	./ceph osd out 0
-	./init-ceph stop osd.1
-	for f in ../qa/workunits/cls/*.sh ; do PATH=".:$PATH" $f ; done
-	../qa/workunits/rados/test.sh
-	./ceph_test_librbd
-	./ceph_test_libcephfs
-	./init-ceph restart mds.a
+	bin/ceph osd pool create mypool 8
+	bin/rados -p mypool bench 10 write -b 123
+	bin/ceph osd out 0
+	bin/init-ceph stop osd.1
+	for f in ../qa/workunits/cls/*.sh ; do PATH="bin:$PATH" $f ; done
+	PATH="bin:$PATH" ../qa/workunits/rados/test.sh
+	bin/ceph_test_librbd
+	bin/ceph_test_libcephfs
+	bin/init-ceph restart mds.a
 
 Do some more stuff with rgw if you know how.
 
 #. Stop::
 
-	./stop.sh
+	../src/stop.sh
 
 #. Import the corpus (this will take a few minutes)::
 
