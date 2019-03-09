@@ -36,9 +36,13 @@ int main(int argc, char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster,
                                               &conf_file_list);
+  namespace bpo = boost::program_options;
   seastar::app_template app;
   app.add_options()
-    ("mkfs", "create a [new] data directory");
+    ("mkfs", "create a [new] data directory")
+    ("key", bpo::value<std::string>()->default_value(""), "Authentication key")
+    ("osd-uuid", bpo::value<boost::uuids::uuid>()->default_value(uuid_d().uuid), "uuid label for a new OSD")
+    ;
   seastar::sharded<OSD> osd;
 
   using ceph::common::sharded_conf;
