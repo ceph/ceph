@@ -209,7 +209,7 @@ struct frag_info_t : public scatter_info_t {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<frag_info_t*>& ls);
+  static void generate_test_instances(std::list<frag_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER(frag_info_t)
 
@@ -272,7 +272,7 @@ struct nest_info_t : public scatter_info_t {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<nest_info_t*>& ls);
+  static void generate_test_instances(std::list<nest_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER(nest_info_t)
 
@@ -338,7 +338,7 @@ struct quota_info_t
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<quota_info_t *>& ls);
+  static void generate_test_instances(std::list<quota_info_t *>& ls);
 
   bool is_valid() const {
     return max_bytes >=0 && max_files >=0;
@@ -851,7 +851,7 @@ void inode_t<Allocator>::dump(Formatter *f) const
 }
 
 template<template<typename> class Allocator>
-void inode_t<Allocator>::generate_test_instances(list<inode_t*>& ls)
+void inode_t<Allocator>::generate_test_instances(std::list<inode_t*>& ls)
 {
   ls.push_back(new inode_t<Allocator>);
   ls.push_back(new inode_t<Allocator>);
@@ -1039,7 +1039,7 @@ struct fnode_t {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<fnode_t*>& ls);
+  static void generate_test_instances(std::list<fnode_t*>& ls);
   fnode_t() {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
@@ -1052,7 +1052,7 @@ struct old_rstat_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<old_rstat_t*>& ls);
+  static void generate_test_instances(std::list<old_rstat_t*>& ls);
 };
 WRITE_CLASS_ENCODER(old_rstat_t)
 
@@ -1181,7 +1181,7 @@ struct session_info_t {
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<session_info_t*>& ls);
+  static void generate_test_instances(std::list<session_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 
@@ -1273,7 +1273,7 @@ struct string_snap_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<string_snap_t*>& ls);
+  static void generate_test_instances(std::list<string_snap_t*>& ls);
 };
 WRITE_CLASS_ENCODER(string_snap_t)
 
@@ -1301,7 +1301,7 @@ struct mds_table_pending_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<mds_table_pending_t*>& ls);
+  static void generate_test_instances(std::list<mds_table_pending_t*>& ls);
 };
 WRITE_CLASS_ENCODER(mds_table_pending_t)
 
@@ -1387,7 +1387,7 @@ struct cap_reconnect_t {
   void decode_old(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<cap_reconnect_t*>& ls);
+  static void generate_test_instances(std::list<cap_reconnect_t*>& ls);
 };
 WRITE_CLASS_ENCODER(cap_reconnect_t)
 
@@ -1408,7 +1408,7 @@ struct snaprealm_reconnect_t {
   void decode_old(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<snaprealm_reconnect_t*>& ls);
+  static void generate_test_instances(std::list<snaprealm_reconnect_t*>& ls);
 };
 WRITE_CLASS_ENCODER(snaprealm_reconnect_t)
 
@@ -1541,7 +1541,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<inode_load_vec_t*>& ls);
+  static void generate_test_instances(std::list<inode_load_vec_t*>& ls);
 
 private:
   std::array<DecayCounter, NUM> vec;
@@ -1759,7 +1759,7 @@ public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<MDSCacheObjectInfo*>& ls);
+  static void generate_test_instances(std::list<MDSCacheObjectInfo*>& ls);
 };
 
 inline std::ostream& operator<<(std::ostream& out, const MDSCacheObjectInfo &info) {

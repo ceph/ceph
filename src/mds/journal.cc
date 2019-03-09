@@ -508,7 +508,7 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   }
 }
 
-void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
+void EMetaBlob::fullbit::generate_test_instances(std::list<EMetaBlob::fullbit*>& ls)
 {
   CInode::mempool_inode inode;
   fragtree_t fragtree;
@@ -641,7 +641,7 @@ void EMetaBlob::remotebit::dump(Formatter *f) const
 }
 
 void EMetaBlob::remotebit::
-generate_test_instances(list<EMetaBlob::remotebit*>& ls)
+generate_test_instances(std::list<EMetaBlob::remotebit*>& ls)
 {
   remotebit *remote = new remotebit("/test/dn", 0, 10, 15, 1, IFTODT(S_IFREG), false);
   ls.push_back(remote);
@@ -680,7 +680,7 @@ void EMetaBlob::nullbit::dump(Formatter *f) const
   f->dump_string("dirty", dirty ? "true" : "false");
 }
 
-void EMetaBlob::nullbit::generate_test_instances(list<nullbit*>& ls)
+void EMetaBlob::nullbit::generate_test_instances(std::list<nullbit*>& ls)
 {
   nullbit *sample = new nullbit("/test/dentry", 0, 10, 15, false);
   nullbit *sample2 = new nullbit("/test/dirty", 10, 20, 25, true);
@@ -753,7 +753,7 @@ void EMetaBlob::dirlump::dump(Formatter *f) const
   f->close_section(); // null bits
 }
 
-void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
+void EMetaBlob::dirlump::generate_test_instances(std::list<dirlump*>& ls)
 {
   ls.push_back(new dirlump());
 }
@@ -1084,7 +1084,7 @@ void EMetaBlob::dump(Formatter *f) const
   f->close_section(); // client requests
 }
 
-void EMetaBlob::generate_test_instances(list<EMetaBlob*>& ls)
+void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
 {
   ls.push_back(new EMetaBlob());
 }
@@ -1709,7 +1709,7 @@ void ESession::dump(Formatter *f) const
   f->close_section();  // client_metadata
 }
 
-void ESession::generate_test_instances(list<ESession*>& ls)
+void ESession::generate_test_instances(std::list<ESession*>& ls)
 {
   ls.push_back(new ESession);
 }
@@ -1762,7 +1762,7 @@ void ESessions::dump(Formatter *f) const
   f->close_section(); // client map
 }
 
-void ESessions::generate_test_instances(list<ESessions*>& ls)
+void ESessions::generate_test_instances(std::list<ESessions*>& ls)
 {
   ls.push_back(new ESessions());
 }
@@ -1829,7 +1829,7 @@ void ETableServer::dump(Formatter *f) const
   f->dump_int("version", version);
 }
 
-void ETableServer::generate_test_instances(list<ETableServer*>& ls)
+void ETableServer::generate_test_instances(std::list<ETableServer*>& ls)
 {
   ls.push_back(new ETableServer());
 }
@@ -1921,7 +1921,7 @@ void ETableClient::dump(Formatter *f) const
   f->dump_int("tid", tid);
 }
 
-void ETableClient::generate_test_instances(list<ETableClient*>& ls)
+void ETableClient::generate_test_instances(std::list<ETableClient*>& ls)
 {
   ls.push_back(new ETableClient());
 }
@@ -2019,7 +2019,7 @@ void EUpdate::dump(Formatter *f) const
   f->dump_string("had slaves", had_slaves ? "true" : "false");
 }
 
-void EUpdate::generate_test_instances(list<EUpdate*>& ls)
+void EUpdate::generate_test_instances(std::list<EUpdate*>& ls)
 {
   ls.push_back(new EUpdate());
 }
@@ -2109,7 +2109,7 @@ void EOpen::dump(Formatter *f) const
   f->close_section(); // inos
 }
 
-void EOpen::generate_test_instances(list<EOpen*>& ls)
+void EOpen::generate_test_instances(std::list<EOpen*>& ls)
 {
   ls.push_back(new EOpen());
   ls.push_back(new EOpen());
@@ -2183,7 +2183,7 @@ void ECommitted::dump(Formatter *f) const {
   f->dump_stream("reqid") << reqid;
 }
 
-void ECommitted::generate_test_instances(list<ECommitted*>& ls)
+void ECommitted::generate_test_instances(std::list<ECommitted*>& ls)
 {
   ls.push_back(new ECommitted);
   ls.push_back(new ECommitted);
@@ -2231,7 +2231,7 @@ void link_rollback::dump(Formatter *f) const
   f->dump_stream("old_dir_rctime") << old_dir_rctime;
 }
 
-void link_rollback::generate_test_instances(list<link_rollback*>& ls)
+void link_rollback::generate_test_instances(std::list<link_rollback*>& ls)
 {
   ls.push_back(new link_rollback());
 }
@@ -2270,7 +2270,7 @@ void rmdir_rollback::dump(Formatter *f) const
   f->dump_string("destination dname", dest_dname);
 }
 
-void rmdir_rollback::generate_test_instances(list<rmdir_rollback*>& ls)
+void rmdir_rollback::generate_test_instances(std::list<rmdir_rollback*>& ls)
 {
   ls.push_back(new rmdir_rollback());
 }
@@ -2327,7 +2327,7 @@ void rename_rollback::drec::dump(Formatter *f) const
   f->dump_stream("old ctime") << old_ctime;
 }
 
-void rename_rollback::drec::generate_test_instances(list<drec*>& ls)
+void rename_rollback::drec::generate_test_instances(std::list<drec*>& ls)
 {
   ls.push_back(new drec());
   ls.back()->remote_d_type = IFTODT(S_IFREG);
@@ -2376,7 +2376,7 @@ void rename_rollback::dump(Formatter *f) const
   f->dump_stream("ctime") << ctime;
 }
 
-void rename_rollback::generate_test_instances(list<rename_rollback*>& ls)
+void rename_rollback::generate_test_instances(std::list<rename_rollback*>& ls)
 {
   ls.push_back(new rename_rollback());
   ls.back()->orig_src.remote_d_type = IFTODT(S_IFREG);
@@ -2427,7 +2427,7 @@ void ESlaveUpdate::dump(Formatter *f) const
   f->dump_int("original op", origop);
 }
 
-void ESlaveUpdate::generate_test_instances(list<ESlaveUpdate*>& ls)
+void ESlaveUpdate::generate_test_instances(std::list<ESlaveUpdate*>& ls)
 {
   ls.push_back(new ESlaveUpdate());
 }
@@ -2534,7 +2534,7 @@ void ESubtreeMap::dump(Formatter *f) const
   f->dump_int("expire position", expire_pos);
 }
 
-void ESubtreeMap::generate_test_instances(list<ESubtreeMap*>& ls)
+void ESubtreeMap::generate_test_instances(std::list<ESubtreeMap*>& ls)
 {
   ls.push_back(new ESubtreeMap());
 }
@@ -2762,7 +2762,7 @@ void EFragment::dump(Formatter *f) const
   f->dump_int("bits", bits);
 }
 
-void EFragment::generate_test_instances(list<EFragment*>& ls)
+void EFragment::generate_test_instances(std::list<EFragment*>& ls)
 {
   ls.push_back(new EFragment);
   ls.push_back(new EFragment);
@@ -2855,7 +2855,7 @@ void EExport::dump(Formatter *f) const
   f->close_section(); // bounds dirfrags
 }
 
-void EExport::generate_test_instances(list<EExport*>& ls)
+void EExport::generate_test_instances(std::list<EExport*>& ls)
 {
   EExport *sample = new EExport();
   ls.push_back(sample);
@@ -2962,7 +2962,7 @@ void EImportStart::dump(Formatter *f) const
   f->close_section();
 }
 
-void EImportStart::generate_test_instances(list<EImportStart*>& ls)
+void EImportStart::generate_test_instances(std::list<EImportStart*>& ls)
 {
   ls.push_back(new EImportStart);
 }
@@ -3020,7 +3020,7 @@ void EImportFinish::dump(Formatter *f) const
   f->dump_stream("base dirfrag") << base;
   f->dump_string("success", success ? "true" : "false");
 }
-void EImportFinish::generate_test_instances(list<EImportFinish*>& ls)
+void EImportFinish::generate_test_instances(std::list<EImportFinish*>& ls)
 {
   ls.push_back(new EImportFinish);
   ls.push_back(new EImportFinish);
@@ -3050,7 +3050,7 @@ void EResetJournal::dump(Formatter *f) const
   f->dump_stream("timestamp") << stamp;
 }
 
-void EResetJournal::generate_test_instances(list<EResetJournal*>& ls)
+void EResetJournal::generate_test_instances(std::list<EResetJournal*>& ls)
 {
   ls.push_back(new EResetJournal());
 }

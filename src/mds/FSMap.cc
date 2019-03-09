@@ -69,7 +69,7 @@ void FSMap::dump(Formatter *f) const
   f->close_section();
 }
 
-void FSMap::generate_test_instances(list<FSMap*>& ls)
+void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 {
   FSMap *m = new FSMap();
 

@@ -63,7 +63,7 @@ void Capability::Export::dump(Formatter *f) const
   f->dump_stream("last_issue_stamp") << last_issue_stamp;
 }
 
-void Capability::Export::generate_test_instances(list<Capability::Export*>& ls)
+void Capability::Export::generate_test_instances(std::list<Capability::Export*>& ls)
 {
   ls.push_back(new Export);
   ls.push_back(new Export);
@@ -129,7 +129,7 @@ void Capability::revoke_info::dump(Formatter *f) const
   f->dump_unsigned("last_issue", last_issue);
 }
 
-void Capability::revoke_info::generate_test_instances(list<Capability::revoke_info*>& ls)
+void Capability::revoke_info::generate_test_instances(std::list<Capability::revoke_info*>& ls)
 {
   ls.push_back(new revoke_info);
   ls.push_back(new revoke_info);
@@ -271,7 +271,7 @@ void Capability::dump(Formatter *f) const
   f->close_section();
 }
 
-void Capability::generate_test_instances(list<Capability*>& ls)
+void Capability::generate_test_instances(std::list<Capability*>& ls)
 {
   ls.push_back(new Capability);
   ls.push_back(new Capability);
