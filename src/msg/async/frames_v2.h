@@ -150,7 +150,7 @@ static constexpr uint32_t FRAME_SECURE_EPILOGUE_SIZE =
 
 static uint32_t segment_onwire_size(const uint32_t logical_size)
 {
-  return p2roundup(logical_size, CRYPTO_BLOCK_SIZE);
+  return p2roundup<uint32_t>(logical_size, CRYPTO_BLOCK_SIZE);
 }
 
 static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
