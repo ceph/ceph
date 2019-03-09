@@ -195,6 +195,7 @@ usage=$usage"\t--msgr1: use msgr1 only\n"
 usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
+usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 
 usage_exit() {
 	printf "$usage"
@@ -231,6 +232,10 @@ case $1 in
 	    ;;
     --crimson )
         ceph_osd=crimson-osd
+        ;;
+    --osd-args )
+        extra_osd_args="$2"
+        shift
         ;;
     --msgr1 )
 	msgr="1"
@@ -759,7 +764,7 @@ EOF
 	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
 	    rm $CEPH_DEV_DIR/osd$osd/new.json
-            $SUDO $CEPH_BIN/$ceph_osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
+            $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
 	    cat > $key_fn<<EOF
@@ -770,7 +775,7 @@ EOF
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd.$osd
-        run 'osd' $SUDO $CEPH_BIN/$ceph_osd -i $osd $ARGS $COSD_ARGS
+        run 'osd' $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
     done
 }
 
