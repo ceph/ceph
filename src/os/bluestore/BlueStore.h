@@ -494,12 +494,13 @@ public:
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
 
+  typedef int32_t bid_t;
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
 
     std::atomic_int nref = {0};     ///< reference count
-    int16_t id = -1;                ///< id, for spanning blobs only, >= 0
+    bid_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
 
@@ -664,7 +665,7 @@ public:
 #endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_cache_other::map<int,BlobRef> blob_map_t;
+  typedef SpanningBlobMap<bid_t, BlobRef, 5> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
@@ -820,13 +821,12 @@ public:
     void decode_spanning_blobs(bufferptr::const_iterator& p);
 
     BlobRef get_spanning_blob(int id) {
-      auto p = spanning_blob_map.find(id);
-      ceph_assert(p != spanning_blob_map.end());
-      return p->second;
+      auto& b = spanning_blob_map[id];
+      ceph_assert(b != BlobRef());
+      return b;
     }
 
     void update(KeyValueDB::Transaction t, bool force);
-    decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t);

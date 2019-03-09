@@ -43,8 +43,6 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
-using bid_t = decltype(BlueStore::Blob::id);
-
 // bluestore_cache_onode
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 			      bluestore_cache_onode);
@@ -2215,28 +2213,6 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
   }
 }
 
-bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
-{
-  if (spanning_blob_map.empty())
-    return 0;
-  bid_t bid = spanning_blob_map.rbegin()->first + 1;
-  // bid is valid and available.
-  if (bid >= 0)
-    return bid;
-  // Find next unused bid;
-  bid = rand() % (numeric_limits<bid_t>::max() + 1);
-  const auto begin_bid = bid;
-  do {
-    if (!spanning_blob_map.count(bid))
-      return bid;
-    else {
-      bid++;
-      if (bid < 0) bid = 0;
-    }
-  } while (bid != begin_bid);
-  ceph_abort_msg("no available blob id");
-}
-
 void BlueStore::ExtentMap::reshard(
   KeyValueDB *db,
   KeyValueDB::Transaction t)
@@ -2247,7 +2223,7 @@ void BlueStore::ExtentMap::reshard(
 	   << needs_reshard_end << ")" << std::dec
 	   << " of " << onode->onode.extent_map_shards.size()
 	   << " shards on " << onode->oid << dendl;
-  for (auto& p : spanning_blob_map) {
+  for (auto p : spanning_blob_map) {
     dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
 	     << dendl;
   }
@@ -2405,8 +2381,8 @@ void BlueStore::ExtentMap::reshard(
     // no more shards; unspan all previously spanning blobs
     auto p = spanning_blob_map.begin();
     while (p != spanning_blob_map.end()) {
-      p->second->id = -1;
-      dout(30) << __func__ << " un-spanning " << *p->second << dendl;
+      (*p).second->id = -1;
+      dout(30) << __func__ << " un-spanning " << (*p).second << dendl;
       p = spanning_blob_map.erase(p);
     }
   } else {
@@ -2484,9 +2460,7 @@ void BlueStore::ExtentMap::reshard(
 	    must_span = true;
 	  }
 	  if (must_span) {
-            auto bid = allocate_spanning_blob_id();
-            b->id = bid;
-	    spanning_blob_map[b->id] = b;
+            b->id = spanning_blob_map.allocate_new(b);
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
 	  }
 	}
@@ -2717,7 +2691,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
 
   denc(struct_v, p);
   denc_varint(spanning_blob_map.size(), p);
-  for (auto& i : spanning_blob_map) {
+  for (auto i : spanning_blob_map) {
     denc_varint(i.second->id, p);
     i.second->encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
   }
@@ -2738,7 +2712,7 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   while (n--) {
     BlobRef b(new Blob());
     denc_varint(b->id, p);
-    spanning_blob_map[b->id] = b;
+    spanning_blob_map.set(b->id, b);
     uint64_t sbid = 0;
     b->decode(onode->c, p, struct_v, &sbid, true);
     onode->c->open_shared_blob(sbid, b);
@@ -3449,7 +3423,7 @@ void BlueStore::Collection::split_cache(
       for (auto& e : o->extent_map.extent_map) {
 	sbvec.push_back(e.blob->shared_blob.get());
       }
-      for (auto& b : o->extent_map.spanning_blob_map) {
+      for (auto b : o->extent_map.spanning_blob_map) {
 	sbvec.push_back(b.second->shared_blob.get());
       }
       for (auto sb : sbvec) {

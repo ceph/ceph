@@ -1033,4 +1033,293 @@ struct bluestore_compression_header_t {
 WRITE_CLASS_DENC(bluestore_compression_header_t)
 
 
+template <class IDX, class T, size_t BUCKET_BITS>
+class SpanningBlobMap
+{
+  static const size_t _bucket_size = 1 << BUCKET_BITS;
+  static const size_t _bucket_mask = _bucket_size - 1;
+  struct Bucket : public std::array<T, _bucket_size> {
+    int count = 0;
+    bool modified = false;
+    Bucket() {
+      T v0 = T();
+      std::array<T, _bucket_size>::fill(v0);
+    }
+  };
+
+  mempool::bluestore_cache_other::vector<Bucket> buckets;
+  size_t _size = 0;
+
+  inline bool _maybe_holes() const {
+    return _size < buckets.size() * _bucket_size;
+  }
+
+  int _find_free(const Bucket& b) const {
+    if (b.count == _bucket_size) {
+      return -1;
+    }
+    for (size_t i = 0; i < _bucket_size; i++) {
+      if (b[i] == T()) {
+	return int(i);
+      }
+    }
+    ceph_assert(false);
+  }
+public:
+
+  template <typename MapT>
+  class IteratorImpl
+  {
+    MapT* map;
+    IDX cur;
+    friend class SpanningBlobMap;
+
+  public:
+    IteratorImpl(MapT* m, IDX n) : map(m), cur(n) {}
+    inline IteratorImpl& operator ++() {
+      cur = map->_next(cur);
+      return *this;
+    }
+
+    inline bool operator==(const IteratorImpl& rhs) const {
+      return (map == rhs.map && cur == rhs.cur );
+    }
+    inline bool operator!=(const IteratorImpl& rhs) const {
+      return (map != rhs.map || cur != rhs.cur );
+    }
+    pair<IDX,T> operator*() {
+      return std::make_pair(cur, (*map)[cur]);
+    }
+  };
+  typedef IteratorImpl<SpanningBlobMap> iterator;
+
+private:
+  inline IDX _first() const {
+    if (_size == 0) {
+      return _last();
+    }
+    if ((*this)[0] != T()) {
+      return 0;
+    }
+    return _next(0);
+  }
+  inline IDX _last() const {
+    return IDX(-1);
+  }
+
+  inline IDX _next(IDX idx) const {
+    ++idx;
+    size_t bucket = idx >> BUCKET_BITS;
+    size_t slot = idx & ((1 << BUCKET_BITS) - 1);
+    while (bucket < buckets.size()) {
+      auto& b = buckets[bucket];
+      while (slot < _bucket_size) {
+	if (b[slot] != T()) {
+	  return idx;
+	}
+	++idx;
+	++slot;
+      }
+      slot = 0;
+      ++bucket;
+    }
+    return _last();
+  }
+public:
+  inline const T& operator[] (IDX idx) const {
+    return buckets[idx >> BUCKET_BITS][idx & _bucket_mask];
+  }
+
+  void set(IDX idx, const T& v) {
+    size_t bucket = idx >> BUCKET_BITS;
+    if (bucket >= buckets.size()) {
+      buckets.resize(bucket + 1);
+    }
+    auto& b = buckets[bucket];
+    T& v0 = b[idx & _bucket_mask];
+    if (v != v0) {
+      if (v0 == T()) {
+	++b.count;
+	++_size;
+      }
+      v0 = v;
+      b.modified = true;
+    }
+  }
+  void erase(IDX idx) {
+    size_t bucket = idx >> BUCKET_BITS;
+    if (bucket >= buckets.size()) {
+      return;
+    }
+    auto& b = buckets[bucket];
+    T& v0 = b[idx & _bucket_mask];
+    if (v0 != T()) {
+      v0 = T();
+      --b.count;
+      b.modified = true;
+      --_size;
+    }
+  }
+  iterator erase(const iterator& it) {
+    auto it1 = it;
+    erase(it.cur);
+    return ++it1;
+  }
+
+  IDX allocate_new(const T& v)
+  {
+    IDX bid;
+    ceph_assert(v != T());
+    if (!buckets.empty()) {
+      // attempting to allocate from the last bucket first
+      bid = _find_free(*buckets.rbegin());
+      if (bid >= 0) {
+	bid += (buckets.size() - 1) << BUCKET_BITS;
+	set(bid, v);
+	return bid;
+      }
+      if (_maybe_holes()) {
+	//we can skip the last bucket as we've already checked it
+	IDX bucket_count = buckets.size() - 1;
+	// Find next unused bid starting from random bucket but last one
+	IDX begin_bid = rand() % bucket_count;
+	bid = begin_bid;
+	do {
+	  auto& b = buckets[bid];
+	  auto bid_slot = _find_free(b);
+	  if (bid_slot >= 0 ) {
+	    bid = (bid << BUCKET_BITS) + bid_slot;
+	    set(bid, v);
+	    return bid;
+	  } else if (++bid >= bucket_count) {
+            bid = 0;
+	  }
+	} while (bid != begin_bid);
+      }
+    }
+    bid = buckets.size() << BUCKET_BITS;
+    set(bid, v); // this will resize buckets
+    return bid;
+  }
+
+  inline size_t size() const {
+    return _size;
+  }
+
+  inline size_t bucket_count() const {
+    return buckets.size();
+  }
+
+  inline size_t bucket_size(size_t bucket) const {
+    return buckets[bucket].count;
+  }
+
+  inline bool bucket_modified(size_t bucket, bool reset = false) {
+    bool res = buckets[bucket].modified;
+    if (res && reset) {
+      buckets[bucket].modified = false;
+    }
+    return res;
+  }
+
+  void trim_buckets(size_t new_buckets) {
+    ceph_assert(new_buckets <= buckets.size());
+    // for sure
+    auto bucket = new_buckets;
+    while (bucket < buckets.size()) {
+      _size -= bucket_size(bucket);
+      ++bucket;
+    }
+    buckets.resize(new_buckets);
+  }
+
+  void bound_encode_bucket(
+    size_t bucket,
+    size_t& p,
+    uint64_t struct_v,
+    std::function<void(
+      size_t& p,
+      uint64_t struct_v,
+      const T&)> f) const {
+    auto& b = buckets[bucket];
+    size_t count = b.count;
+    size_t cnt = 0;
+    size_t i = 0;
+    size_t key_size = 0;
+
+    denc_varint((uint32_t)0, p);
+
+    denc_varint((uint32_t)0, key_size);
+    p += count * key_size;
+
+    while (cnt < count) {
+      if (b[i] != T()) {
+	f(p, struct_v, b[i]);
+	++cnt;
+      }
+      ++i;
+    }
+  }
+  void encode_bucket(
+    size_t bucket,
+    bufferlist::contiguous_appender& p,
+    uint64_t struct_v,
+    std::function<void(
+      bufferlist::contiguous_appender& p,
+      uint64_t struct_v,
+      const T&)> f) const {
+
+    auto& b = buckets[bucket];
+    size_t count = b.count;
+    size_t cnt = 0;
+    size_t i = 0;
+
+    denc_varint(count, p);
+    while (cnt < count) {
+      if (b[i] != T()) {
+	denc_varint(i, p);
+	f(p, struct_v, b[i]);
+	++cnt;
+      }
+      ++i;
+    }
+  }
+
+  void decode_bucket(
+    size_t bucket,
+    bufferptr::const_iterator& p,
+    uint64_t struct_v,
+    std::function<T(
+      bufferptr::const_iterator& p,
+      uint64_t struct_v,
+      const IDX& id)> f)
+  {
+    if (bucket >= buckets.size()) {
+      buckets.resize(bucket + 1);
+    }
+    auto& b = buckets[bucket];
+    size_t count;
+    denc_varint(count, p);
+    _size -= b.count;
+    _size += count;
+    b.count = count;
+    b.modified = false;
+    while (count--) {
+      size_t i;
+      denc_varint(i, p);
+      IDX id = (bucket << _bucket_size) + i;
+      T v = f(p, struct_v, id);
+      ceph_assert(v != T());
+      b[i] = v;
+    }
+  }
+
+  iterator begin() {
+    return iterator(this, _first());
+  }
+  iterator end() {
+    return iterator(this, _last());
+  }
+};
+
 #endif

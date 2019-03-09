@@ -1542,6 +1542,236 @@ TEST(BlueStoreRepairer, StoreSpaceTracker)
   ASSERT_TRUE(bmap2.is_used(hoid, 0x3223b19ffff));
 }
 
+TEST(BlueStoreSpanningBlobMap, basic)
+{
+  SpanningBlobMap<int32_t, int, 5> m;
+  ASSERT_EQ(m.size(), 0u);
+  ASSERT_EQ(m.begin(), m.end());
+
+  auto idx = m.allocate_new(124);
+  ASSERT_EQ(m.size(), 1u);
+  ASSERT_NE(m.begin(), m.end());
+  ASSERT_EQ(m[0], 124);
+
+  // maintain value = key + 123 through the test case whenever possible
+  m.set(idx, 123);
+  ASSERT_EQ(m.size(), 1u);
+  ASSERT_NE(m.begin(), m.end());
+  ASSERT_EQ(m[0], 123);
+
+  // returns the same until we set the item
+  idx = m.allocate_new(1 + 123);
+  ASSERT_EQ(idx, 1);
+  ASSERT_EQ(m.size(), 2u);
+  ASSERT_NE(m.begin(), m.end());
+
+  ASSERT_EQ(m[0], 123);
+  ASSERT_EQ(m[1], 123 + 1);
+
+  for (int i = 2; i < 66; i++) {
+    idx = m.allocate_new(i + 123);
+    ASSERT_EQ(idx, int32_t(i));
+  }
+  ASSERT_EQ(m.size(), 66u);
+  ASSERT_NE(m.begin(), m.end());
+  ASSERT_EQ(m[0], 123);
+  ASSERT_EQ(m[1], 123 + 1);
+  ASSERT_EQ(m[2], 123 + 2);
+  ASSERT_EQ(m[33], 123 + 33);
+  ASSERT_EQ(m[63], 123 + 63);
+  ASSERT_EQ(m[65], 123 + 65);
+
+  size_t cnt = 0;
+  for (auto b : m) {
+    ASSERT_EQ(b.first, b.second - 123);
+    cnt++;
+  }
+  ASSERT_EQ(cnt, m.size());
+
+  m.erase(1);
+  ASSERT_EQ(m.size(), 65u);
+  ASSERT_EQ(m[1], 0);
+
+  // we first allocate id from the last bucket
+  idx = m.allocate_new(66 + 123);
+  ASSERT_EQ(idx, 66);
+  ASSERT_EQ(m.size(), 66u);
+
+  m.erase(64);
+  m.erase(65);
+  m.erase(66);
+  ASSERT_EQ(m.size(), 63u);
+  ASSERT_EQ(m[64], 0);
+  ASSERT_EQ(m[65], 0);
+  ASSERT_EQ(m[66], 0);
+
+  for (size_t i = 64; i < 96; i++) {
+    idx = m.allocate_new(i + 123);
+    ASSERT_EQ(idx, int32_t(i));
+    ASSERT_EQ(m[idx], int32_t(i) + 123);
+  }
+  ASSERT_EQ(m.size(), 95u);
+
+  idx = m.allocate_new(124);
+  ASSERT_EQ(idx, 1);
+  ASSERT_EQ(m.size(), 96u);
+
+  for (size_t i = 16; i < 48; i+=2) {
+    m.erase(i);
+  }
+  ASSERT_EQ(m.size(), 80u);
+  for (size_t i = 0; i < 16; i++) {
+    idx = m.allocate_new(1);
+    ASSERT_TRUE(idx>=16 && idx < 48);
+    m.set(idx, idx + 123);
+  }
+  ASSERT_EQ(m.size(), 96u);
+
+  auto it = m.begin();
+  for (size_t i = 0; i < 96; i+=4) {
+    m.erase(it);
+    ++it;
+    ++it;
+    ++it;
+    ++it;
+  }
+  ASSERT_EQ(m.size(), 72u);
+  for (size_t i = 0; i < 24; i++) {
+    idx = m.allocate_new(1);
+    ASSERT_TRUE(idx>=0 && idx < 96);
+    m.set(idx, idx + 123);
+  }
+  ASSERT_EQ(m.size(), 96u);
+
+  cnt = 0;
+  for (auto b : m) {
+    ASSERT_EQ(b.first, b.second - 123);
+    cnt++;
+  }
+  ASSERT_EQ(cnt, m.size());
+
+  idx = m.allocate_new(96 + 123);
+  ASSERT_EQ(idx, 96);
+  ASSERT_EQ(m.size(), 97u);
+
+  // make some holes and then remove all
+  m.erase(1);
+  m.erase(32);
+  m.erase(33);
+  m.erase(96);
+  cnt = 0;
+  it = m.begin();
+  while (it != m.end()) {
+    m.erase(it);
+    ++it;
+    ++cnt;
+  }
+  ASSERT_EQ(m.size(), 0u);
+  ASSERT_EQ(cnt, 93u);
+
+  idx = m.allocate_new(96 + 123);
+  ASSERT_EQ(idx, 96);
+  ASSERT_EQ(m.size(), 1u);
+  for (int32_t i = 97; i<128; i++) {
+    idx = m.allocate_new(i + 123);
+    ASSERT_EQ(idx, i);
+  }
+
+  idx = m.allocate_new(1);
+  ASSERT_TRUE(idx >=0 && idx < 96);
+  m.set(idx, idx + 123);
+}
+
+TEST(BlueStoreSpanningBlobMap, denc)
+{
+  SpanningBlobMap<int32_t, int, 5> m, m2;
+  int32_t idx;
+
+  for (int i = 0; i < 66; i++) {
+    idx = m.allocate_new(i + 123);
+    ASSERT_EQ(idx, int32_t(i));
+  }
+  m.erase(64); // make some hole
+  ASSERT_EQ(m.size(), 65u);
+
+  size_t bucket_count = m.bucket_count();
+  ASSERT_EQ(bucket_count, 3u);
+
+  for (size_t i = 0; i < bucket_count; i++) {
+    ASSERT_EQ(m.bucket_modified(i, false), true);
+  }
+  for (size_t i = 0; i < bucket_count; i++) {
+    ASSERT_EQ(m.bucket_modified(i, true), true);
+  }
+  for (size_t i = 0; i < bucket_count; i++) {
+    ASSERT_EQ(m.bucket_modified(i, false), false);
+  }
+
+  // bound encode
+  size_t bound = 0;
+  for( size_t i = 0; i < bucket_count; i++) {
+    m.bound_encode_bucket(
+      i,
+      bound,
+      1,
+      [&](size_t& p,
+	  uint64_t struct_v,
+	  const uint32_t& v) {
+	size_t sz = 0;
+	denc_varint(0, sz);
+	p += sz;
+      }
+    );
+  }
+  ASSERT_NE(bound, 0u);
+
+  // encode
+  bufferlist bl;
+  {
+    auto p = bl.get_contiguous_appender(bound, true);
+    for (size_t i = 0; i < bucket_count; i++) {
+      m.encode_bucket(
+	i,
+	p,
+	1,
+	[&](bufferlist::contiguous_appender& p,
+	    uint64_t struct_v,
+	    const uint32_t& v) {
+	  denc_varint(v, p);
+	}
+      );
+    }
+    ASSERT_GE(bound, bl.length());
+  }
+
+  // decode
+  {
+    auto p = bl.front().begin_deep();
+    size_t buckets = m.bucket_count();
+    for (size_t i = 0; i < buckets; i++) {
+      m2.decode_bucket(
+	i,
+	p,
+	1,
+	[&] (bufferptr::const_iterator& p,
+	     uint64_t struct_v,
+	     const int32_t& idx) -> int {
+	  int vv;
+	  denc_varint(vv, p);
+	  return vv;
+        }
+      );
+    }
+
+    size_t cnt = 0;
+    for (auto b : m2) {
+      ASSERT_EQ(b.first, b.second - 123);
+      cnt++;
+    }
+    ASSERT_EQ(cnt, m2.size());
+    ASSERT_EQ(m.size(), m2.size());
+  }
+}
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
