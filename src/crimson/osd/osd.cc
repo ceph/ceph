@@ -391,9 +391,7 @@ seastar::future<OSD::cached_map_t> OSD::get_map(epoch_t e)
   if (auto found = osdmaps.find(e); found) {
     return seastar::make_ready_future<cached_map_t>(std::move(found));
   } else {
-    return load_map_bl(e).then([e, this](bufferlist bl) {
-      auto osdmap = std::make_unique<OSDMap>();
-      osdmap->decode(bl);
+    return load_map(e).then([e, this](unique_ptr<OSDMap> osdmap) {
       return seastar::make_ready_future<cached_map_t>(
         osdmaps.insert(e, std::move(osdmap)));
     });
@@ -414,6 +412,15 @@ seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
   } else {
     return meta_coll->load_map(e);
   }
+}
+
+seastar::future<std::unique_ptr<OSDMap>> OSD::load_map(epoch_t e)
+{
+  return load_map_bl(e).then([e, this](bufferlist bl) {
+    auto o = std::make_unique<OSDMap>();
+    o->decode(bl);
+    return seastar::make_ready_future<decltype(o)>(std::move(o));
+  });
 }
 
 seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
