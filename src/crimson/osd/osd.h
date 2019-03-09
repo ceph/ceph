@@ -100,7 +100,7 @@ private:
   // OSDMapService methods
   seastar::future<cached_map_t> get_map(epoch_t e) override;
   cached_map_t get_map() const override;
-
+  seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
