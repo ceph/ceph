@@ -485,7 +485,7 @@ public:
   void print_summary(Formatter *f, ostream *out) const;
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<FSMap*>& ls);
+  static void generate_test_instances(std::list<FSMap*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 

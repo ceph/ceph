@@ -586,7 +586,7 @@ void SessionMapStore::dump(Formatter *f) const
   f->close_section(); // Sessions
 }
 
-void SessionMapStore::generate_test_instances(list<SessionMapStore*>& ls)
+void SessionMapStore::generate_test_instances(std::list<SessionMapStore*>& ls)
 {
   // pretty boring for now
   ls.push_back(new SessionMapStore());
