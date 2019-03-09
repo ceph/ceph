@@ -39,6 +39,7 @@ enum class Tag : __u8 {
   AUTH_REPLY_MORE,
   AUTH_REQUEST_MORE,
   AUTH_DONE,
+  AUTH_SIGNATURE,
   CLIENT_IDENT,
   SERVER_IDENT,
   IDENT_MISSING_FEATURES,
@@ -466,6 +467,20 @@ struct AuthDoneFrame : public ControlFrame<AuthDoneFrame,
   inline uint64_t &global_id() { return get_val<0>(); }
   inline uint32_t &con_mode() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
+
+protected:
+  using ControlFrame::ControlFrame;
+};
+
+struct AuthSignatureFrame
+    : public ControlFrame<AuthSignatureFrame,
+                          // FIXME: using crc32 as scaffolding
+                          uint32_t> {
+  static const Tag tag = Tag::AUTH_SIGNATURE;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
+
+  inline uint32_t &signature() { return get_val<0>(); }
 
 protected:
   using ControlFrame::ControlFrame;
