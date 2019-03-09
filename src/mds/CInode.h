@@ -559,7 +559,7 @@ public:
     } 
     return NULL;
   }
-  bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
+  std::pair<bool, std::vector<CDir*>> get_dirfrags_under(frag_t fg);
   CDir* get_approx_dirfrag(frag_t fg);
 
   template<typename Container>

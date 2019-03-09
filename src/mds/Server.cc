@@ -1045,8 +1045,7 @@ void Server::evict_cap_revoke_non_responders() {
     return;
   }
 
-  std::list<client_t> to_evict;
-  mds->locker->get_late_revoking_clients(&to_evict, cap_revoke_eviction_timeout);
+  auto&& to_evict = mds->locker->get_late_revoking_clients(cap_revoke_eviction_timeout);
 
   for (auto const &client: to_evict) {
     mds->clog->warn() << "client id " << client << " has not responded to"
@@ -1108,7 +1107,7 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
-  std::list<Session*> victims;
+  std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
   for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
@@ -1123,7 +1122,7 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     }
   }
 
-  for (const auto s : victims) {
+  for (const auto& s : victims) {
     kill_session(s, nullptr);
   }
 
