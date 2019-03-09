@@ -4298,7 +4298,7 @@ bool PG::sched_scrub()
   time_for_deep = (time_for_deep || deep_coin_flip);
 
   //NODEEP_SCRUB so ignore time initiated deep-scrub
-  if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+  if (get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
       pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
     time_for_deep = false;
     nodeep_scrub = true;
@@ -4308,7 +4308,7 @@ bool PG::sched_scrub()
     ceph_assert(!scrubber.must_deep_scrub);
 
     //NOSCRUB so skip regular scrubs
-    if ((osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+    if ((get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
 	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep) {
       if (scrubber.reserved) {
         // cancel scrub if it is still in scheduling,
