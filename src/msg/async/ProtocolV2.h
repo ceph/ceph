@@ -102,6 +102,12 @@ private:
   utime_t recv_stamp;
   utime_t throttle_stamp;
 
+  struct {
+    ceph::bufferlist rxbuf;
+    ceph::bufferlist txbuf;
+    bool enabled {true};
+  } pre_auth;
+
   bool keepalive;
 
   ostream &_conn_prefix(std::ostream *_dout);
