@@ -119,6 +119,8 @@ public:
   const bufferptr& get_secret() { return secret; }
   const bufferptr& get_secret() const { return secret; }
 
+  bool empty() const { return ckh.get() == nullptr; }
+
   void encode_base64(string& s) const {
     bufferlist bl;
     encode(bl);
