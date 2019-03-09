@@ -556,8 +556,8 @@ int ImageDiscardRequest<I>::prune_object_extents(
   // is a special case for filestore
   bool prune_required = false;
   auto object_size = this->m_image_ctx.layout.object_size;
-  auto discard_granularity_bytes = std::min<uint64_t>(
-    m_discard_granularity_bytes, object_size);
+  auto discard_granularity_bytes = std::min(m_discard_granularity_bytes,
+                                            object_size);
   auto xform_lambda =
     [discard_granularity_bytes, object_size, &prune_required]
     (ObjectExtent& object_extent) {
@@ -567,9 +567,8 @@ int ImageDiscardRequest<I>::prune_object_extents(
 
       if ((discard_granularity_bytes < object_size) ||
           (next_offset < object_size)) {
-        static_assert(sizeof(offset) == sizeof(discard_granularity_bytes));
-        offset = p2roundup(offset, discard_granularity_bytes);
-        next_offset = p2align(next_offset, discard_granularity_bytes);
+        offset = p2roundup<uint64_t>(offset, discard_granularity_bytes);
+        next_offset = p2align<uint64_t>(next_offset, discard_granularity_bytes);
         if (offset >= next_offset) {
           prune_required = true;
           length = 0;

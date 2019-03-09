@@ -53,8 +53,8 @@ constexpr inline bool isp2(T x) {
  * eg, p2align(0x1234, 0x100) == 0x1200 (0x12*align)
  * eg, p2align(0x5600, 0x100) == 0x5600 (0x56*align)
  */
-template<typename T, typename U>
-constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2align(T x, U align) {
+template<typename T>
+constexpr inline T p2align(T x, T align) {
   return x & -align;
 }
 
@@ -63,8 +63,8 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2align(T x, U a
  * eg, p2phase(0x1234, 0x100) == 0x34 (x-0x12*align)
  * eg, p2phase(0x5600, 0x100) == 0x00 (x-0x56*align)
  */
-template<typename T, typename U>
-constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2phase(T x, U align) {
+template<typename T>
+constexpr inline T p2phase(T x, T align) {
   return x & (align - 1);
 }
 
@@ -74,8 +74,8 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2phase(T x, U a
  * eg, p2nphase(0x1234, 0x100) == 0xcc (0x13*align-x)
  * eg, p2nphase(0x5600, 0x100) == 0x00 (0x56*align-x)
  */
-template<typename T, typename U>
-constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2nphase(T x, U align) {
+template<typename T>
+constexpr inline T p2nphase(T x, T align) {
   return -x & (align - 1);
 }
 
@@ -84,9 +84,9 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2nphase(T x, U 
  * eg, p2roundup(0x1234, 0x100) == 0x1300 (0x13*align)
  * eg, p2roundup(0x5600, 0x100) == 0x5600 (0x56*align)
  */
-template<typename T, typename U>
-constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2roundup(T x, U align) {
-  return (-(-(x) & -(align)));
+template<typename T>
+constexpr inline T p2roundup(T x, T align) {
+  return -(-x & -align);
 }
 
 // count trailing zeros.
