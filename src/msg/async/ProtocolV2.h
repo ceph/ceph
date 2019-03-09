@@ -15,10 +15,17 @@ private:
   enum State {
     NONE,
     START_CONNECT,
-    CONNECTING,     // banner + authentication + ident
+    BANNER_CONNECTING,
+    HELLO_CONNECTING,
+    AUTH_CONNECTING,
+    SESSION_CONNECTING,
+    SESSION_RECONNECTING,
     START_ACCEPT,
-    ACCEPTING,      // banner + authentication + ident
-    ACCEPTING_SESSION,
+    BANNER_ACCEPTING,
+    HELLO_ACCEPTING,
+    AUTH_ACCEPTING,
+    AUTH_ACCEPTING_MORE,
+    SESSION_ACCEPTING,
     READY,
     THROTTLE_MESSAGE,
     THROTTLE_BYTES,
@@ -33,10 +40,17 @@ private:
   static const char *get_state_name(int state) {
     const char *const statenames[] = {"NONE",
                                       "START_CONNECT",
-                                      "CONNECTING",
+                                      "BANNER_CONNECTING",
+                                      "HELLO_CONNECTING",
+                                      "AUTH_CONNECTING",
+                                      "SESSION_CONNECTING",
+                                      "SESSION_RECONNECTING",
                                       "START_ACCEPT",
-                                      "ACCEPTING",
-                                      "ACCEPTING_SESSION",
+                                      "BANNER_ACCEPTING",
+                                      "HELLO_ACCEPTING",
+                                      "AUTH_ACCEPTING",
+                                      "AUTH_ACCEPTING_MORE",
+                                      "SESSION_ACCEPTING",
                                       "READY",
                                       "THROTTLE_MESSAGE",
                                       "THROTTLE_BYTES",
@@ -92,7 +106,6 @@ public:
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
 private:
 
-  ceph::msgr::v2::Tag sent_tag;
   ceph::msgr::v2::Tag next_tag;
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -111,9 +124,6 @@ private:
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
                         bufferlist &buffer);
-
-  uint64_t expected_tags(ceph::msgr::v2::Tag sent_tag,
-                         ceph::msgr::v2::Tag received_tag);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
