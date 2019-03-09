@@ -1021,7 +1021,7 @@ void OpenFileTable::_prefetch_dirfrags()
   ceph_assert(prefetch_state == DIRFRAGS);
 
   MDCache *mdcache = mds->mdcache;
-  list<CDir*> fetch_queue;
+  std::vector<CDir*> fetch_queue;
 
   CInode *last_in = nullptr;
   for (auto df : loaded_dirfrags) {
@@ -1058,7 +1058,7 @@ void OpenFileTable::_prefetch_dirfrags()
 
   MDSGatherBuilder gather(g_ceph_context);
   int num_opening_dirfrags = 0;
-  for (auto dir : fetch_queue) {
+  for (const auto& dir : fetch_queue) {
     if (dir->state_test(CDir::STATE_REJOINUNDEF))
       ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
