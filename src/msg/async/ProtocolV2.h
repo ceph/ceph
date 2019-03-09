@@ -18,6 +18,7 @@ private:
     BANNER_CONNECTING,
     HELLO_CONNECTING,
     AUTH_CONNECTING,
+    AUTH_CONNECTING_SIGN,
     SESSION_CONNECTING,
     SESSION_RECONNECTING,
     START_ACCEPT,
@@ -25,6 +26,7 @@ private:
     HELLO_ACCEPTING,
     AUTH_ACCEPTING,
     AUTH_ACCEPTING_MORE,
+    AUTH_ACCEPTING_SIGN,
     SESSION_ACCEPTING,
     READY,
     THROTTLE_MESSAGE,
@@ -43,6 +45,7 @@ private:
                                       "BANNER_CONNECTING",
                                       "HELLO_CONNECTING",
                                       "AUTH_CONNECTING",
+                                      "AUTH_CONNECTING_SIGN",
                                       "SESSION_CONNECTING",
                                       "SESSION_RECONNECTING",
                                       "START_ACCEPT",
@@ -50,6 +53,7 @@ private:
                                       "HELLO_ACCEPTING",
                                       "AUTH_ACCEPTING",
                                       "AUTH_ACCEPTING_MORE",
+                                      "AUTH_ACCEPTING_SIGN",
                                       "SESSION_ACCEPTING",
                                       "READY",
                                       "THROTTLE_MESSAGE",
@@ -159,6 +163,7 @@ private:
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *finish_auth();
+  Ct<ProtocolV2> *finish_client_auth();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r);
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(rx_buffer_t &&rx_buffer, int r);
@@ -212,6 +217,7 @@ private:
   Ct<ProtocolV2> *handle_auth_bad_method(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_auth_reply_more(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_auth_done(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_auth_signature(ceph::bufferlist &payload);
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *send_reconnect();
   Ct<ProtocolV2> *handle_ident_missing_features(ceph::bufferlist &payload);
