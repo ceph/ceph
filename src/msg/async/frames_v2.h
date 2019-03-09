@@ -474,13 +474,12 @@ protected:
 
 struct AuthSignatureFrame
     : public ControlFrame<AuthSignatureFrame,
-                          // FIXME: using crc32 as scaffolding
-                          uint32_t> {
+                          sha256_digest_t> {
   static const Tag tag = Tag::AUTH_SIGNATURE;
   using ControlFrame::Encode;
   using ControlFrame::Decode;
 
-  inline uint32_t &signature() { return get_val<0>(); }
+  inline sha256_digest_t &signature() { return get_val<0>(); }
 
 protected:
   using ControlFrame::ControlFrame;
