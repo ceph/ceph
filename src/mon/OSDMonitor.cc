@@ -5505,7 +5505,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case PG_AUTOSCALE_MODE:
 	    ss << "pg_autoscale_mode: " << pg_pool_t::get_pg_autoscale_mode_name(
-	      p->pg_autoscale_mode);
+	      p->pg_autoscale_mode) <<"\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
