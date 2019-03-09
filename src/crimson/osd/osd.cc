@@ -416,11 +416,15 @@ seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
 
 seastar::future<std::unique_ptr<OSDMap>> OSD::load_map(epoch_t e)
 {
-  return load_map_bl(e).then([e, this](bufferlist bl) {
-    auto o = std::make_unique<OSDMap>();
-    o->decode(bl);
-    return seastar::make_ready_future<decltype(o)>(std::move(o));
-  });
+  auto o = std::make_unique<OSDMap>();
+  if (e > 0) {
+    return load_map_bl(e).then([e, o=std::move(o), this](bufferlist bl) mutable {
+      o->decode(bl);
+      return seastar::make_ready_future<unique_ptr<OSDMap>>(std::move(o));
+    });
+  } else {
+    return seastar::make_ready_future<unique_ptr<OSDMap>>(std::move(o));
+  }
 }
 
 seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
