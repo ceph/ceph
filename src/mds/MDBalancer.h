@@ -102,7 +102,7 @@ private:
   void handle_heartbeat(const MHeartbeat::const_ref &m);
   void find_exports(CDir *dir,
                     double amount,
-                    std::list<CDir*>& exports,
+                    std::vector<CDir*>* exports,
                     double& have,
                     set<CDir*>& already_exporting);
 

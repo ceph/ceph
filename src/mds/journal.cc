@@ -532,8 +532,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
       in->dirfragtree = dirfragtree;
       in->force_dirfrags();
       if (in->has_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
-	list<CDir*> ls;
-	in->get_nested_dirfrags(ls);
+	auto&& ls = in->get_nested_dirfrags();
 	for (const auto& dir : ls) {
 	  if (dir->get_num_any() == 0 &&
 	      mds->mdcache->can_trim_non_auth_dirfrag(dir)) {
