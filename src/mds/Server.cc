@@ -7223,8 +7223,7 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
+  auto&& ls = in->get_dirfrags();
   for (const auto& dir : ls) {
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
@@ -7248,8 +7247,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
   frag_info_t dirstat;
   version_t dirstat_version = in->get_projected_inode()->dirstat.version;
 
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
+  auto&& ls = in->get_dirfrags();
   for (const auto& dir : ls) {
     const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
@@ -7872,8 +7870,7 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 
 bool Server::_need_force_journal(CInode *diri, bool empty)
 {
-  std::vector<CDir*> dirs;
-  diri->get_dirfrags(dirs);
+  auto&& dirs = diri->get_dirfrags();
 
   bool force_journal = false;
   if (empty) {
@@ -8019,8 +8016,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// note which dirfrags have child subtrees in the journal
 	// event, so that we can open those (as bounds) during replay.
 	if (srci->is_dir()) {
-	  list<CDir*> ls;
-	  srci->get_dirfrags(ls);
+	  auto&& ls = srci->get_dirfrags();
 	  for (const auto& dir : ls) {
 	    if (!dir->is_auth())
 	      metablob->renamed_dir_frags.push_back(dir->get_frag());
@@ -8197,8 +8193,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       metablob->add_primary_dentry(destdn, srci, true);
       if (srcdn->is_auth() && srci->is_dir()) {
 	// journal new subtrees root dirfrags
-	list<CDir*> ls;
-	srci->get_dirfrags(ls);
+	auto&& ls = srci->get_dirfrags();
 	for (const auto& dir : ls) {
 	  if (dir->is_auth())
 	    metablob->add_dir(dir, true);
@@ -8732,7 +8727,7 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   if (srcdn->is_auth() && srcdnl->is_primary()) {
     // set export bounds for CInode::encode_export()
     if (reply) {
-      list<CDir*> bounds;
+      std::vector<CDir*> bounds;
       if (srcdnl->get_inode()->is_dir()) {
 	srcdnl->get_inode()->get_dirfrags(bounds);
 	for (const auto& bound : bounds) {
@@ -9217,8 +9212,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
     le->commit.renamed_dirino = in->ino();
     if (srcdn->authority().first == whoami) {
-      list<CDir*> ls;
-      in->get_dirfrags(ls);
+      auto&& ls = in->get_dirfrags();
       for (const auto& dir : ls) {
 	if (!dir->is_auth())
 	  le->commit.renamed_dir_frags.push_back(dir->get_frag());

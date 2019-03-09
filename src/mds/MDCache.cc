@@ -1342,26 +1342,26 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
       projected_subtree_renames.erase(p);
   }
 
-  vector<CDir*> dfls;
-
   // adjust total auth pin of freezing subtree
   if (olddir != newdir) {
-    diri->get_nested_dirfrags(dfls);
-    for (auto dir : dfls)
+    auto&& dfls = diri->get_nested_dirfrags();
+    for (const auto& dir : dfls)
       olddir->adjust_freeze_after_rename(dir);
-    dfls.clear();
   }
 
   // adjust subtree
-  // make sure subtree dirfrags are at the front of the list
-  diri->get_subtree_dirfrags(dfls);
+  // N.B. make sure subtree dirfrags are at the front of the list
+  auto dfls = diri->get_subtree_dirfrags();
   diri->get_nested_dirfrags(dfls);
-  for (auto dir : dfls) {
+  for (const auto& dir : dfls) {
     dout(10) << "dirfrag " << *dir << dendl;
     CDir *oldparent = get_subtree_root(olddir);
     dout(10) << " old parent " << *oldparent << dendl;
     CDir *newparent = get_subtree_root(newdir);
     dout(10) << " new parent " << *newparent << dendl;
+
+    auto& oldbounds = subtrees[oldparent];
+    auto& newbounds = subtrees[newparent];
 
     if (olddir != newdir)
       mds->balancer->adjust_pop_for_rename(olddir, dir, false);
@@ -1371,21 +1371,19 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
     } else if (dir->is_subtree_root()) {
       // children are fine.  change parent.
       dout(10) << "moving " << *dir << " from " << *oldparent << " to " << *newparent << dendl;
-      ceph_assert(subtrees[oldparent].count(dir));
-      subtrees[oldparent].erase(dir);
-      ceph_assert(subtrees.count(newparent));
-      subtrees[newparent].insert(dir);
+      {
+        auto n = oldbounds.erase(dir);
+        ceph_assert(n == 1);
+      }
+      newbounds.insert(dir);
       // caller is responsible for 'eval diri'
       try_subtree_merge_at(dir, NULL, false);
     } else {
       // mid-subtree.
 
       // see if any old bounds move to the new parent.
-      list<CDir*> tomove;
-      for (set<CDir*>::iterator p = subtrees[oldparent].begin();
-	   p != subtrees[oldparent].end();
-	   ++p) {
-	CDir *bound = *p;
+      std::vector<CDir*> tomove;
+      for (const auto& bound : oldbounds) {
 	CDir *broot = get_subtree_root(bound->get_parent_dir());
 	if (broot != oldparent) {
 	  ceph_assert(broot == newparent);
@@ -1394,8 +1392,8 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
       }
       for (const auto& bound : tomove) {
 	dout(10) << "moving bound " << *bound << " from " << *oldparent << " to " << *newparent << dendl;
-	subtrees[oldparent].erase(bound);
-	subtrees[newparent].insert(bound);
+	oldbounds.erase(bound);
+	newbounds.insert(bound);
       }	   
 
       // did auth change?
@@ -2512,8 +2510,7 @@ ESubtreeMap *MDCache::create_subtree_map()
     for (const auto& [olddir, newdir] : renames) {
       dout(10) << " adjusting for projected rename of " << *diri << " to " << *newdir << dendl;
 
-      list<CDir*> dfls;
-      diri->get_dirfrags(dfls);
+      auto&& dfls = diri->get_dirfrags();
       for (const auto& dir : dfls) {
 	dout(10) << "dirfrag " << dir->dirfrag() << " " << *dir << dendl;
 	CDir *oldparent = get_projected_subtree_root(olddir);
@@ -3060,8 +3057,7 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
 	  dnl->get_inode()->take_waiting(i_mask, waiters);
 	  
 	  // recurse?
-	  list<CDir*> ls;
-	  dnl->get_inode()->get_dirfrags(ls);
+	  auto&& ls = dnl->get_inode()->get_dirfrags();
 	  for (const auto& subdir : ls) {
 	    if (!subdir->is_subtree_root())
 	      q.push_back(subdir);
@@ -3429,8 +3425,7 @@ void MDCache::finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t mast
     it->second--;
     if (it->second == 0) {
       uncommitted_slave_rename_olddir.erase(it);
-      list<CDir*> ls;
-      diri->get_dirfrags(ls);
+      auto&& ls = diri->get_dirfrags();
       for (const auto& dir : ls) {
 	CDir *root = get_subtree_root(dir);
 	if (root->get_dir_auth() == CDIR_AUTH_UNDEF) {
@@ -3623,13 +3618,9 @@ void MDCache::finish_ambiguous_import(dirfrag_t df)
 void MDCache::remove_inode_recursive(CInode *in)
 {
   dout(10) << "remove_inode_recursive " << *in << dendl;
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
-  list<CDir*>::iterator p = ls.begin();
-  while (p != ls.end()) {
-    CDir *subdir = *p++;
-
-    dout(10) << " removing dirfrag " << subdir << dendl;
+  auto&& ls = in->get_dirfrags();
+  for (const auto& subdir : ls) {
+    dout(10) << " removing dirfrag " << *subdir << dendl;
     auto it = subdir->items.begin();
     while (it != subdir->items.end()) {
       CDentry *dn = it->second;
@@ -3657,9 +3648,8 @@ bool MDCache::expire_recursive(CInode *in, expiremap &expiremap)
   dout(10) << __func__ << ":" << *in << dendl;
 
   // Recurse into any dirfrags beneath this inode
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
-  for (auto subdir : ls) {
+  auto&& ls = in->get_dirfrags();
+  for (const auto& subdir : ls) {
     if (!in->is_mdsdir() && subdir->is_subtree_root()) {
       dout(10) << __func__ << ": stray still has subtree " << *in << dendl;
       return true;
@@ -3755,7 +3745,7 @@ void MDCache::recalc_auth_bits(bool replay)
       }
     }
 
-    list<CDir*> dfq;  // dirfrag queue
+    std::deque<CDir*> dfq;  // dirfrag queue
     dfq.push_back(p->first);
 
     bool auth = p->first->authority().first == mds->get_nodeid();
@@ -3818,8 +3808,12 @@ void MDCache::recalc_auth_bits(bool replay)
 	    }
 	  }
 	  // recurse?
-	  if (in->is_dir())
-	    in->get_nested_dirfrags(dfq);
+	  if (in->is_dir()) {
+	    auto&& dfv = in->get_nested_dirfrags();
+            for (const auto& dir : dfv) {
+              dfq.push_back(dir);
+            }
+          }
 	}
       }
     }
@@ -4147,7 +4141,7 @@ void MDCache::rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin)
 {
   dout(10) << "rejoin_walk " << *dir << dendl;
 
-  list<CDir*> nested;  // finish this dir, then do nested items
+  std::vector<CDir*> nested;  // finish this dir, then do nested items
   
   if (mds->is_rejoin()) {
     // WEAK
@@ -4161,7 +4155,10 @@ void MDCache::rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin)
       CInode *in = dnl->get_inode();
       ceph_assert(dnl->get_inode()->is_dir());
       rejoin->add_weak_primary_dentry(dir->ino(), dn->get_name(), dn->first, dn->last, in->ino());
-      in->get_nested_dirfrags(nested);
+      {
+        auto&& dirs = in->get_nested_dirfrags();
+        nested.insert(std::end(nested), std::begin(dirs), std::end(dirs));
+      }
       if (in->is_dirty_scattered()) {
 	dout(10) << " sending scatterlock state on " << *in << dendl;
 	rejoin->add_scatterlock_state(in);
@@ -4223,7 +4220,10 @@ void MDCache::rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin)
 				 in->nestlock.get_state(),
 				 in->dirfragtreelock.get_state());
 	in->state_set(CInode::STATE_REJOINING);
-	in->get_nested_dirfrags(nested);
+        {
+          auto&& dirs = in->get_nested_dirfrags();
+          nested.insert(std::end(nested), std::begin(dirs), std::end(dirs));
+        }
 	if (in->is_dirty_scattered()) {
 	  dout(10) << " sending scatterlock state on " << *in << dendl;
 	  rejoin->add_scatterlock_state(in);
@@ -4525,8 +4525,7 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, const MMDSCacheRej
     if (!in->is_dir())
       return;
     
-    list<CDir*> dfs;
-    in->get_dirfrags(dfs);
+    const auto&& dfs = in->get_dirfrags();
     for (const auto& dir : dfs) {
       if (!dir->is_auth())
 	continue;
@@ -4982,8 +4981,7 @@ void MDCache::handle_cache_rejoin_ack(const MMDSCacheRejoin::const_ref &ack)
   }
 
   for (const auto& in : refragged_inodes) {
-    list<CDir*> ls;
-    in->get_nested_dirfrags(ls);
+    auto&& ls = in->get_nested_dirfrags();
     for (const auto& dir : ls) {
       if (dir->is_auth() || ack->strong_dirfrags.count(dir->dirfrag()))
 	continue;
@@ -5149,8 +5147,7 @@ void MDCache::rejoin_trim_undef_inodes()
     
     // close out dirfrags
     if (in->is_dir()) {
-      list<CDir*> dfls;
-      in->get_dirfrags(dfls);
+      const auto&& dfls = in->get_dirfrags();
       for (const auto& dir : dfls) {
 	dir->clear_replica_map();
 
@@ -5917,8 +5914,7 @@ void MDCache::opened_undef_inode(CInode *in) {
       ceph_assert(dir);
       rejoin_undef_dirfrags.erase(dir);
       in->force_dirfrags();
-      list<CDir*> ls;
-      in->get_dirfrags(ls);
+      auto&& ls = in->get_dirfrags();
       for (const auto& dir : ls) {
 	rejoin_undef_dirfrags.insert(dir);
       }
@@ -6003,7 +5999,7 @@ void MDCache::rejoin_send_acks()
     dout(10) << "subtree " << *dir << dendl;
     
     // auth items in this subtree
-    list<CDir*> dq;
+    std::deque<CDir*> dq;
     dq.push_back(dir);
 
     while (!dq.empty()) {
@@ -6058,7 +6054,12 @@ void MDCache::rejoin_send_acks()
 	}
 	
 	// subdirs in this subtree?
-	in->get_nested_dirfrags(dq);
+	{
+          auto&& dirs = in->get_nested_dirfrags();
+          for (const auto& dir : dirs) {
+            dq.push_back(dir);
+          }
+        }
       }
     }
   }
@@ -6586,8 +6587,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
       if (!diri->is_auth()) {
 	if (dir->get_num_ref() > 1)  // only subtree pin
 	  continue;
-	list<CDir*> ls;
-	diri->get_subtree_dirfrags(ls);
+	auto&& ls = diri->get_subtree_dirfrags();
 	if (diri->get_num_ref() > (int)ls.size()) // only pinned by subtrees
 	  continue;
 
@@ -6604,8 +6604,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 
   // trim root?
   if (mds->is_stopping() && root) {
-    list<CDir*> ls;
-    root->get_dirfrags(ls);
+    auto&& ls = root->get_dirfrags();
     for (const auto& dir : ls) {
       if (dir->get_num_ref() == 1) { // subtree pin
 	trim_dirfrag(dir, 0, expiremap);
@@ -6636,8 +6635,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
     const bool aborted = expire_recursive(mdsdir_in, expiremap);
     if (!aborted) {
       dout(20) << __func__ << ": successfully expired mdsdir" << dendl;
-      list<CDir*> ls;
-      mdsdir_in->get_dirfrags(ls);
+      auto&& ls = mdsdir_in->get_dirfrags();
       for (auto dir : ls) {
 	if (dir->get_num_ref() == 1) {  // subtree pin
 	  trim_dirfrag(dir, dir, expiremap);
@@ -6845,8 +6843,7 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expirema
     }
 
     // DIR
-    list<CDir*> dfls;
-    in->get_dirfrags(dfls);
+    auto&& dfls = in->get_dirfrags();
     for (const auto& dir : dfls) {
       ceph_assert(!dir->is_subtree_root());
       trim_dirfrag(dir, con ? con:dir, expiremap);  // if no container (e.g. root dirfrag), use *p
@@ -6965,8 +6962,7 @@ void MDCache::trim_non_auth()
       else if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
 	dout(10) << " removing " << *in << dendl;
-	list<CDir*> ls;
-	in->get_dirfrags(ls);
+	auto&& ls = in->get_dirfrags();
 	for (const auto& subdir : ls) {
 	  ceph_assert(!subdir->is_subtree_root());
 	  in->close_dirfrag(subdir->dirfrag().frag);
@@ -7012,8 +7008,7 @@ void MDCache::trim_non_auth()
       CInode *in = p->second;
       ++p;
       if (!in->is_auth()) {
-	list<CDir*> ls;
-	in->get_dirfrags(ls);
+	auto&& ls = in->get_dirfrags();
 	for (const auto& dir : ls) {
 	  dout(10) << " removing " << *dir << dendl;
 	  ceph_assert(dir->get_num_ref() == 1);  // SUBTREE
@@ -7055,8 +7050,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       CInode *in = dnl->get_inode();
       bool keep_inode = false;
       if (in->is_dir()) {
-        list<CDir*> subdirs;
-        in->get_dirfrags(subdirs);
+        auto&& subdirs = in->get_dirfrags();
         for (const auto& subdir : subdirs) {
           if (subdir->is_subtree_root()) {
             keep_inode = true;
@@ -7301,8 +7295,7 @@ void MDCache::handle_cache_expire(const MCacheExpire::const_ref &m)
 	  if (mds->is_rejoin() &&
 	      rejoin_ack_gather.count(mds->get_nodeid()) && // haven't sent rejoin ack yet
 	      !diri->is_replica(from)) {
-	    list<CDir*> ls;
-	    diri->get_nested_dirfrags(ls);
+	    auto&& ls = diri->get_nested_dirfrags();
 	    dout(7) << " dir expire on dirfrag " << q.first << " from mds." << from
 		    << " while rejoining, inode isn't replicated" << dendl;
 	    for (const auto& d : ls) {
@@ -7597,7 +7590,7 @@ bool MDCache::shutdown_pass()
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0) {
     dout(7) << "looking for subtrees to export to mds0" << dendl;
-    list<CDir*> ls;
+    std::vector<CDir*> ls;
     for (map<CDir*, set<CDir*> >::iterator it = subtrees.begin();
          it != subtrees.end();
          ++it) {
@@ -9658,7 +9651,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 {
   dout(10) << "scan_stray_dir " << next << dendl;
 
-  list<CDir*> ls;
+  std::vector<CDir*> ls;
   for (int i = 0; i < NUM_STRAY; ++i) {
     if (strays[i]->ino() < next.ino)
       continue;
@@ -11937,7 +11930,7 @@ void MDCache::show_subtrees(int dbl, bool force_print)
   }
 
   // root frags
-  list<CDir*> basefrags;
+  std::vector<CDir*> basefrags;
   for (set<CInode*>::iterator p = base_inodes.begin();
        p != base_inodes.end();
        ++p) 
@@ -12076,8 +12069,7 @@ void MDCache::show_cache()
       dout(7) << " unlinked " << *in << dendl;
 
     // dirfrags?
-    list<CDir*> dfs;
-    in->get_dirfrags(dfs);
+    auto&& dfs = in->get_dirfrags();
     for (const auto& dir : dfs) {
       dout(7) << "  dirfrag " << *dir << dendl;
 
@@ -12114,8 +12106,7 @@ void MDCache::dump_tree(CInode *in, const int cur_depth, const int max_depth, Fo
   if ((max_depth >= 0) && (cur_depth > max_depth)) {
     return;
   }
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
+  auto&& ls = in->get_dirfrags();
   for (const auto &subdir : ls) {
     for (const auto &p : subdir->items) {
       CDentry *dn = p.second;
@@ -12208,8 +12199,7 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
     r = safe_write(fd, s.c_str(), s.length());
     if (r < 0)
       return r;
-    list<CDir*> dfs;
-    in->get_dirfrags(dfs);
+    auto&& dfs = in->get_dirfrags();
     for (auto &dir : dfs) {
       ostringstream tt;
       tt << " " << *dir << std::endl;
@@ -12836,8 +12826,7 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
 void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
   dout(10) << __func__ << " " << *diri << dendl;
   ceph_assert(diri->get_projected_parent_dir()->inode->is_stray());
-  list<CDir*> ls;
-  diri->get_dirfrags(ls);
+  auto&& ls = diri->get_dirfrags();
   for (auto &p : ls) {
     if (p->is_auth() && !(p->is_frozen() || p->is_freezing()))
       p->try_remove_dentries_for_stray();
