@@ -1549,12 +1549,12 @@ function test_wait_for_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
     run_osd $dir 0 || return 1
     run_mgr $dir x || return 1
     create_rbd_pool || return 1
     ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_clean || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
     wait_for_clean || return 1
     teardown $dir || return 1
 }
