@@ -181,7 +181,7 @@ public:
 
   void remove_client_cap(CInode *in, Capability *cap);
 
-  void get_late_revoking_clients(std::list<client_t> *result, double timeout) const;
+  std::vector<client_t> get_late_revoking_clients(double timeout) const;
 
 private:
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
