@@ -703,11 +703,17 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
   next.node = std::move(buffer);
   ssize_t r = connection->read(len, buf,
     [&next, this](char *buffer, int r) {
+      if (unlikely(pre_auth.enabled) && r >= 0) {
+        pre_auth.rxbuf.append(*next.node);
+      }
       next.r = r;
       run_continuation(next);
     });
   if (r <= 0) {
     // error or done synchronously
+    if (unlikely(pre_auth.enabled) && r >= 0) {
+      pre_auth.rxbuf.append(*next.node);
+    }
     next.r = r;
     return &next;
   }
@@ -726,6 +732,10 @@ CtPtr ProtocolV2::write(const std::string &desc,
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         bufferlist &buffer) {
+  if (unlikely(pre_auth.enabled)) {
+    pre_auth.txbuf.append(buffer);
+  }
+
   ssize_t r =
       connection->write(buffer, [&next, desc, this](int r) {
         if (r < 0) {
