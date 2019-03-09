@@ -80,6 +80,8 @@ public:
 			      const out_slice_t& out) const;
   virtual std::size_t decrypt(const in_slice_t& in,
 			      const out_slice_t& out) const;
+
+  sha256_digest_t hmac_sha256(const ceph::bufferlist& in) const;
 };
 
 /*
@@ -167,6 +169,11 @@ public:
 		      const out_slice_t& out) {
     ceph_assert(ckh);
     return ckh->encrypt(in, out);
+  }
+
+  sha256_digest_t hmac_sha256(CephContext*, const ceph::bufferlist& in) {
+    ceph_assert(ckh);
+    return ckh->hmac_sha256(in);
   }
 
   static constexpr std::size_t get_max_outbuf_size(std::size_t want_size) {
