@@ -424,8 +424,9 @@ void SnapServer::generate_test_instances(std::list<SnapServer*>& ls)
   list<SnapInfo*> snapinfo_instances;
   SnapInfo::generate_test_instances(snapinfo_instances);
   SnapInfo populated_snapinfo = *(snapinfo_instances.back());
-  for (list<SnapInfo*>::iterator i = snapinfo_instances.begin(); i != snapinfo_instances.end(); ++i) {
-    delete *i;
+  for (auto& info : snapinfo_instances) {
+    delete info;
+    info = nullptr;
   }
 
   SnapServer *blank = new SnapServer();

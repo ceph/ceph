@@ -1783,8 +1783,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
     // directory?
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
-    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-      CDir *t = *p;
+    for (const auto& t : dfs) {
       if (!t->state_test(CDir::STATE_EXPORTBOUND)) {
 	// include nested dirfrag
 	ceph_assert(t->get_dir_auth().first == CDIR_AUTH_PARENT);
@@ -1846,8 +1845,9 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
   }
 
   // subdirs
-  for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); ++it) 
-    finish_export_dir(*it, peer, peer_imported, finished, num_dentries);
+  for (const auto& dir : subdirs) {
+    finish_export_dir(dir, peer, peer_imported, finished, num_dentries);
+  }
 }
 
 class C_MDS_ExportFinishLogged : public MigratorLogContext {
@@ -2827,9 +2827,10 @@ void Migrator::import_reverse(CDir *dir)
 	// non-bounding dir?
 	list<CDir*> dfs;
 	in->get_dirfrags(dfs);
-	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p)
-	  if (bounds.count(*p) == 0)
-	    q.push_back(*p);
+	for (const auto& dir : dfs) {
+	  if (bounds.count(dir) == 0)
+	    q.push_back(dir);
+        }
       }
 
       cache->touch_dentry_bottom(dn); // move dentry to tail of LRU

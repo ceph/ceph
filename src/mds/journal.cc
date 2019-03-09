@@ -362,9 +362,9 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
   parents.splice(parents.begin(), maybe);
 
   dout(20) << "EMetaBlob::add_dir_context final: " << parents << dendl;
-  for (list<CDentry*>::iterator p = parents.begin(); p != parents.end(); ++p) {
-    ceph_assert((*p)->get_projected_linkage()->is_primary());
-    add_dentry(*p, false);
+  for (const auto& dentry : parents) {
+    ceph_assert(dentry->get_projected_linkage()->is_primary());
+    add_dentry(dentry, false);
   }
 }
 
@@ -534,8 +534,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
       if (in->has_dirfrags() && in->authority() == CDIR_AUTH_UNDEF) {
 	list<CDir*> ls;
 	in->get_nested_dirfrags(ls);
-	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-	  CDir *dir = *p;
+	for (const auto& dir : ls) {
 	  if (dir->get_num_any() == 0 &&
 	      mds->mdcache->can_trim_non_auth_dirfrag(dir)) {
 	    dout(10) << " closing empty non-auth dirfrag " << *dir << dendl;
