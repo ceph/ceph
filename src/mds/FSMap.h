@@ -277,7 +277,7 @@ public:
    * @returns a list of any additional GIDs that were removed from the map
    * as a side effect (like standby replays)
    */
-  std::list<mds_gid_t> stop(mds_gid_t who);
+  std::vector<mds_gid_t> stop(mds_gid_t who);
 
   /**
    * The rank held by 'who', if any, is to be relinquished, and
