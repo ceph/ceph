@@ -1339,7 +1339,7 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   }
 }
 
-int MDBalancer::dump_loads(Formatter *f)
+int MDBalancer::dump_loads(Formatter *f) const
 {
   list<CDir*> dfs;
   if (mds->mdcache->get_root()) {
