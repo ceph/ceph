@@ -914,7 +914,7 @@ void EMetaBlob::get_paths(
 
   // Whenever we see a dentry within a dirlump, we remember it as a child of
   // the dirlump's inode
-  std::map<inodeno_t, std::list<std::string> > children;
+  std::map<inodeno_t, std::vector<std::string> > children;
 
   // Whenever we see a location for an inode, remember it: this allows us to
   // build a path given an inode
@@ -2672,7 +2672,7 @@ void EFragment::replay(MDSRank *mds)
 {
   dout(10) << "EFragment.replay " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << dendl;
 
-  list<CDir*> resultfrags;
+  std::vector<CDir*> resultfrags;
   MDSContext::vec waiters;
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare
@@ -2686,7 +2686,7 @@ void EFragment::replay(MDSRank *mds)
     mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, segment, &rollback);
 
     if (in)
-      mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
+      mds->mdcache->adjust_dir_fragments(in, basefrag, bits, &resultfrags, waiters, true);
     break;
 
   case OP_ROLLBACK: {
@@ -2695,7 +2695,7 @@ void EFragment::replay(MDSRank *mds)
       in->dirfragtree.get_leaves_under(basefrag, old_frags);
       if (orig_frags.empty()) {
 	// old format EFragment
-	mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+	mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, &resultfrags, waiters, true);
       } else {
 	for (const auto& fg : orig_frags)
 	  mds->mdcache->force_dir_fragment(in, fg);

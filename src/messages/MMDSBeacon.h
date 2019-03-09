@@ -157,7 +157,7 @@ WRITE_CLASS_ENCODER(MDSHealthMetric)
  */
 struct MDSHealth
 {
-  std::list<MDSHealthMetric> metrics;
+  std::vector<MDSHealthMetric> metrics;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

@@ -3611,20 +3611,21 @@ bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking,
     }
 }
 
-void Locker::get_late_revoking_clients(std::list<client_t> *result,
-                                       double timeout) const
+std::vector<client_t> Locker::get_late_revoking_clients(double timeout) const
 {
-  if (!any_late_revoking_caps(revoking_caps, timeout)) {
-    // Fast path: no misbehaving clients, execute in O(1)
-    return;
-  }
+  std::vector<client_t> result;
 
-  // Slow path: execute in O(N_clients)
-  for (auto &p : revoking_caps_by_client) {
-    if (any_late_revoking_caps(p.second, timeout)) {
-      result->push_back(p.first);
+  if (any_late_revoking_caps(revoking_caps, timeout)) {
+    // Slow path: execute in O(N_clients)
+    for (auto &p : revoking_caps_by_client) {
+      if (any_late_revoking_caps(p.second, timeout)) {
+        result.push_back(p.first);
+      }
     }
+  } else {
+    // Fast path: no misbehaving clients, execute in O(1)
   }
+  return result;
 }
 
 // Hard-code instead of surfacing a config settings because this is

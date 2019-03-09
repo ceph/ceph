@@ -565,15 +565,13 @@ void MDBalancer::queue_merge(CDir *dir)
     frag_t fg = dir->get_frag();
     while (fg != frag_t()) {
       frag_t sibfg = fg.get_sibling();
-      list<CDir*> sibs;
-      bool complete = diri->get_dirfrags_under(sibfg, sibs);
+      auto&& [complete, sibs] = diri->get_dirfrags_under(sibfg);
       if (!complete) {
         dout(10) << "  not all sibs under " << sibfg << " in cache (have " << sibs << ")" << dendl;
         break;
       }
       bool all = true;
-      for (list<CDir*>::iterator p = sibs.begin(); p != sibs.end(); ++p) {
-        CDir *sib = *p;
+      for (auto& sib : sibs) {
         if (!sib->is_auth() || !sib->should_merge()) {
           all = false;
           break;

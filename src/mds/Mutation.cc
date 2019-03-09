@@ -170,11 +170,10 @@ void MutationImpl::add_projected_fnode(CDir *dir)
 
 void MutationImpl::pop_and_dirty_projected_fnodes()
 {
-  while (!projected_fnodes.empty()) {
-    CDir *dir = projected_fnodes.front();
-    projected_fnodes.pop_front();
+  for (const auto& dir : projected_fnodes) {
     dir->pop_and_dirty_projected_fnode(ls);
   }
+  projected_fnodes.clear();
 }
 
 void MutationImpl::add_updated_lock(ScatterLock *lock)
