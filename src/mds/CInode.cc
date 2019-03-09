@@ -4049,7 +4049,7 @@ void InodeStoreBase::dump(Formatter *f) const
 }
 
 
-void InodeStore::generate_test_instances(list<InodeStore*> &ls)
+void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
 {
   InodeStore *populated = new InodeStore;
   populated->inode.ino = 0xdeadbeef;
@@ -4057,7 +4057,7 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
-void InodeStoreBare::generate_test_instances(list<InodeStoreBare*> &ls)
+void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 {
   InodeStoreBare *populated = new InodeStoreBare;
   populated->inode.ino = 0xdeadbeef;
