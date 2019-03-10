@@ -244,6 +244,12 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
     return r;
   }
 
+  ConfigProxy config{cct->_conf};
+  api::Config<I>::apply_pool_overrides(io_ctx, &config);
+  if (!config.get_val<bool>("rbd_validate_pool")) {
+    return 0;
+  }
+
   ThreadPool *thread_pool;
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
