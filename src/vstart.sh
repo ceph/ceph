@@ -566,7 +566,7 @@ EOF
         bluestore_block_path = spdk:$(get_pci_selector)"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
-        bluestore block db size = 67108864
+        bluestore block db size = 1073741824
         bluestore block db create = true
         bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
