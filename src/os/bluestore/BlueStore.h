@@ -2711,7 +2711,7 @@ private:
     failed_cmode.clear();
   }
 
-  void _set_spillover_alert(const char* s) {
+  void _set_spillover_alert(const string& s) {
     std::lock_guard l(qlock);
     spillover_alert = s;
   }

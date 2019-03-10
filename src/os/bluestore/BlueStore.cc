@@ -5655,9 +5655,12 @@ int BlueStore::_balance_bluefs_freespace()
   if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
     auto& p = bluefs_usage[bluefs_shared_bdev];
     if (p.first != p.second) {
-      string s("spilled over to slow device: ");
-      s += stringify(byte_u_t(p.second - p.first));
-      _set_spillover_alert(s.c_str());
+      auto& db = bluefs_usage[BlueFS::BDEV_DB];
+      ostringstream ss;
+      ss << "spilled over " << byte_u_t(p.second - p.first)
+	 << " metadata from 'db' device (" << byte_u_t(db.second - db.first)
+	 << " used of " << byte_u_t(db.second) << ") to slow device";
+      _set_spillover_alert(ss.str());
       clear_alert = false;
     }
   }
