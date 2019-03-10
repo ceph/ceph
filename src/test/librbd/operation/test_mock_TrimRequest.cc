@@ -183,7 +183,7 @@ public:
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
       .WillOnce(Invoke([&mock_image_ctx, offset, length, update_object_map, r]
                        (io::ObjectDispatchSpec* spec) {
-                  auto discard = boost::apply_visitor(io::DiscardVisitor{}, spec->request);
+                  auto discard = boost::apply_visitor(io::DiscardVisitor(), spec->request);
                   ASSERT_TRUE(discard != nullptr);
                   ASSERT_EQ(offset, discard->object_off);
                   ASSERT_EQ(length, discard->object_len);
