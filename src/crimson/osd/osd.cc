@@ -28,6 +28,7 @@
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
 
 #include "osd/PGPeeringEvent.h"
@@ -357,11 +358,12 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   }).then([pgid, this](pg_pool_t&& pool,
                        string&& name,
                        ec_profile_t&& ec_profile) {
+    auto backend = PGBackend::create(pgid, pool, store.get(), ec_profile);
     Ref<PG> pg{new PG{pgid,
                       pg_shard_t{whoami, pgid.shard},
                       std::move(pool),
                       std::move(name),
-                      std::move(ec_profile),
+                      std::move(backend),
                       osdmap,
                       cluster_msgr}};
     return pg->read_state(store.get()).then([pg] {
