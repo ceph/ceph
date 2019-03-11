@@ -3760,8 +3760,8 @@
           <context context-type="sourcefile">app/ceph/dashboard/health/health.component.html</context>
           <context context-type="linenumber">143</context>
         </context-group>
-      </trans-unit><trans-unit id="5277e7546d03a767761199b70deb8c77a921b390" datatype="html">
-        <source>Client Recovery</source>
+      </trans-unit><trans-unit id="275485415092cbae3a9f3cbb786ebe283cacfdd5" datatype="html">
+        <source>Recovery Throughput</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/dashboard/health/health.component.html</context>
           <context context-type="linenumber">161</context>
