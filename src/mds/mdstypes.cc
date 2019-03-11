@@ -119,6 +119,14 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_unsigned("rbytes", rbytes);
   f->dump_unsigned("rfiles", rfiles);
   f->dump_unsigned("rsubdirs", rsubdirs);
+  for (auto& p : user_rbytes) {
+    f->dump_unsigned("user", p.first);
+    f->dump_unsigned("rbytes", p.second);
+  }
+  for (auto& p : group_rbytes) {
+    f->dump_unsigned("group", p.first);
+    f->dump_unsigned("rbytes", p.second);
+  }
   f->dump_unsigned("rsnaps", rsnaps);
   f->dump_stream("rctime") << rctime;
 }
@@ -144,6 +152,10 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
     out << " rc" << n.rctime;
   if (n.rbytes)
     out << " b" << n.rbytes;
+  for (auto& p : n.user_rbytes)
+    out << " user" << p.first << " b" << p.second;
+  for (auto& p : n.group_rbytes)
+    out << " group" << p.first << " b" << p.second;
   if (n.rsnaps)
     out << " rs" << n.rsnaps;
   if (n.rfiles || n.rsubdirs)
