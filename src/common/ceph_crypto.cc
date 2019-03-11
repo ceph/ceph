@@ -77,7 +77,7 @@ void ceph::crypto::shutdown(bool shared)
   pthread_mutex_unlock(&crypto_init_mutex);
 }
 
-ceph::crypto::HMAC::~HMAC()
+ceph::crypto::nss::HMAC::~HMAC()
 {
   PK11_DestroyContext(ctx, PR_TRUE);
   PK11_FreeSymKey(symkey);
