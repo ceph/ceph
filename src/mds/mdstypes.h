@@ -430,11 +430,49 @@ struct quota_info_t
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<quota_info_t *>& ls);
 
+  bool is_any_enable() const {
+    return max_bytes || max_files ||
+      user_max_bytes.size() > 0 || group_max_bytes.size() > 0;
+  }
   bool is_valid() const {
     return max_bytes >=0 && max_files >=0;
   }
   bool is_enable() const {
     return max_bytes || max_files;
+  }
+  bool is_user_valid() const {
+    for (auto& p : user_max_bytes) {
+      if (p.second < 0)
+        return false;
+    }
+    return true;
+  }
+  bool is_user_valid(uid_t uid)     {
+    return user_max_bytes.count(uid)? user_max_bytes[uid] >= 0 : true;
+  }
+  bool is_user_enable() const {
+    return user_max_bytes.size() > 0;
+  }
+  bool is_user_enable(uid_t uid)      {
+    auto iter = user_max_bytes.find(uid);
+    return (iter != user_max_bytes.end())? iter->second > 0 : false;
+  }
+  bool is_group_valid() const {
+    for (auto& p : group_max_bytes) {
+      if (p.second < 0)
+        return false;
+    }
+    return true;
+  }
+  bool is_group_valid(gid_t gid) {
+    return group_max_bytes.count(gid)? group_max_bytes[gid] >= 0 : true;
+  }
+  bool is_group_enable() const {
+    return group_max_bytes.size() > 0;
+  }
+  bool is_group_enable(gid_t gid)      {
+    auto iter = group_max_bytes.find(gid);
+    return (iter != group_max_bytes.end())? iter->second > 0 : false;
   }
 };
 WRITE_CLASS_ENCODER(quota_info_t)
