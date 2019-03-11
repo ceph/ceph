@@ -223,6 +223,17 @@ public:
   virtual void write_event() override;
   virtual bool is_queued() override;
 
+  void fillin_outcoming(WriteQueue *wqueue,
+			bool (WriteQueue::*fillin_from_mem)(
+			  void *mem,
+			  unsigned int beg,
+			  unsigned int end),
+			bool (WriteQueue::*fillin_from_bufl)(
+			  bufferlist &bufl,
+			  unsigned int beg));
+  virtual void fillin_iovec(WriteQueue *wqueue) override;
+  virtual void fillin_bufferlist(WriteQueue *wqueue) override;
+
   // Client Protocol
 private:
   int global_seq;
@@ -255,6 +266,8 @@ private:
   CtPtr handle_ack_seq(char *buffer, int r);
   CtPtr handle_in_seq_write(int r);
   CtPtr client_ready();
+
+  void prepare_for_write(QueuedMessage *qmsg);
 
   // Server Protocol
 protected:

@@ -438,6 +438,18 @@ void ProtocolV2::send_keepalive() {
   }
 }
 
+void ProtocolV2::fillin_iovec(WriteQueue *wqueue)
+{
+  /* Not yet implemented */
+  ceph_assert(0);
+}
+
+void ProtocolV2::fillin_bufferlist(WriteQueue *wqueue)
+{
+  /* Not yet implemented */
+  ceph_assert(0);
+}
+
 void ProtocolV2::read_event() {
   ldout(cct, 20) << __func__ << dendl;
 

@@ -33,13 +33,15 @@
 #define SEQ_MASK  0x7fffffff
 
 void WriteQueue::fillin_iovec() {
-  /* Forward to protocol */
-  /* XXX TODO */
+  if (!is_outcoming_full())
+    /* Forward to protocol */
+    con->protocol->fillin_iovec(this);
 }
 
 void WriteQueue::fillin_bufferlist() {
-  /* Forward to protocol */
-  /* XXX TODO */
+  if (!is_outcoming_full())
+    /* Forward to protocol */
+    con->protocol->fillin_bufferlist(this);
 }
 
 bufferlist::buffers_t::const_iterator

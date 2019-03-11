@@ -202,6 +202,9 @@ public:
   virtual void write_event() override;
   virtual bool is_queued() override;
 
+  virtual void fillin_iovec(WriteQueue *wqueue) override;
+  virtual void fillin_bufferlist(WriteQueue *wqueue) override;
+
 private:
   // Client Protocol
   CONTINUATION_DECL(ProtocolV2, start_client_banner_exchange);

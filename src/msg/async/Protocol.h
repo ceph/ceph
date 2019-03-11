@@ -128,6 +128,9 @@ public:
   // send keepalive
   virtual void send_keepalive() = 0;
 
+  virtual void fillin_iovec(WriteQueue *wqueue) = 0;
+  virtual void fillin_bufferlist(WriteQueue *wqueue) = 0;
+
   virtual void read_event() = 0;
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;

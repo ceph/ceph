@@ -305,6 +305,155 @@ void ProtocolV1::read_event() {
   }
 }
 
+void ProtocolV1::prepare_for_write(QueuedMessage *qmsg)
+{
+  Message *m = qmsg->msg;
+
+  ceph_assert(m);
+
+  if (!qmsg->encoded) {
+    m->encode(connection->get_features(), messenger->crcflags);
+    qmsg->encoded = true;
+  }
+
+  m->set_seq(++out_seq);
+
+  /* XXX Why not call things below on message enqueue? */
+
+  if (messenger->crcflags & MSG_CRC_HEADER)
+    m->calc_header_crc();
+
+  if (session_security) {
+    if (session_security->sign_message(m)) {
+      ldout(cct, 20) << __func__ << " failed to sign m=" << m
+		     << "): sig = " << m->get_footer().sig
+		     << dendl;
+    }
+  }
+  if (!connection->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+    ceph_msg_footer *new_footer;
+    ceph_msg_footer_old *old_footer;
+
+    new_footer = &qmsg->msg->get_footer();
+    old_footer = &qmsg->static_payload.old_footer;
+
+    if (messenger->crcflags & MSG_CRC_HEADER) {
+      old_footer->front_crc  = new_footer->front_crc;
+      old_footer->middle_crc = new_footer->middle_crc;
+      old_footer->data_crc   = new_footer->data_crc;
+    } else {
+      old_footer->front_crc = old_footer->middle_crc = 0;
+    }
+    old_footer->data_crc = messenger->crcflags & MSG_CRC_DATA ?
+      new_footer->data_crc : 0;
+    old_footer->flags = new_footer->flags;
+  }
+
+  /*
+   * Cache message lengths, bufferlist can be claimed
+   */
+  qmsg->payload_len = m->get_payload().length();
+  qmsg->middle_len  = m->get_middle().length();
+  qmsg->data_len    = m->get_data().length();
+  qmsg->length	    = sizeof(qmsg->tag) + sizeof(m->get_header()) +
+		      qmsg->payload_len + qmsg->middle_len + qmsg->data_len +
+		      (connection->has_feature(CEPH_FEATURE_MSG_AUTH) ?
+		       sizeof(ceph_msg_footer) : sizeof(ceph_msg_footer_old));
+}
+
+void ProtocolV1::fillin_outcoming(WriteQueue *wqueue,
+				  bool (WriteQueue::*fillin_from_mem)(
+				    void *mem,
+				    unsigned int beg,
+				    unsigned int end),
+				  bool (WriteQueue::*fillin_from_bufl)(
+				    bufferlist &bufl,
+				    unsigned int beg)) {
+  bool next;
+
+  for (next = true; wqueue->msgs_end_it != wqueue->msgs.end() && next; ) {
+    unsigned int header_pos, payload_pos, middle_pos;
+    unsigned int data_pos, footer_pos, end_pos;
+    bool filled = false;
+
+    QueuedMessage *qmsg = &*wqueue->msgs_end_it;
+    Message *m = qmsg->msg;
+
+    header_pos = sizeof(qmsg->tag);
+
+    if (wqueue->msg_end_pos < header_pos) {
+      next = (wqueue->*fillin_from_mem)(&qmsg->tag, 0, header_pos);
+    }
+    if (!m) {
+      /* Always ready to be sent */
+      ceph_assert(qmsg->length);
+
+      if (next) {
+	next = (wqueue->*fillin_from_mem)(&qmsg->static_payload,
+					  header_pos, qmsg->length);
+	filled = (wqueue->msg_end_pos == qmsg->length);
+      }
+      /* Done for queued message with static payload only */
+      goto end;
+    }
+
+    if (!qmsg->length)
+      prepare_for_write(qmsg);
+
+    payload_pos = header_pos + sizeof(m->get_header());
+    middle_pos  = payload_pos + qmsg->payload_len;
+    data_pos    = middle_pos + qmsg->middle_len;
+    footer_pos  = data_pos + qmsg->data_len;
+    end_pos     = qmsg->length;
+
+    if (next && wqueue->msg_end_pos < payload_pos) {
+      next = (wqueue->*fillin_from_mem)(&m->get_header(),
+					header_pos, payload_pos);
+    }
+    if (next && wqueue->msg_end_pos < middle_pos) {
+      next = (wqueue->*fillin_from_bufl)(m->get_payload(), payload_pos);
+    }
+    if (next && wqueue->msg_end_pos < data_pos) {
+      next = (wqueue->*fillin_from_bufl)(m->get_middle(), middle_pos);
+    }
+    if (next && wqueue->msg_end_pos < footer_pos) {
+      next = (wqueue->*fillin_from_bufl)(m->get_data(), data_pos);
+    }
+    if (next) {
+      bool new_footer;
+      void *footer;
+
+      ceph_assert(wqueue->msg_end_pos < end_pos);
+      new_footer  = connection->has_feature(CEPH_FEATURE_MSG_AUTH);
+      footer = new_footer ? (void *)&m->get_footer() :
+			    (void *)&qmsg->static_payload.old_footer;
+      next = (wqueue->*fillin_from_mem)(footer, footer_pos, end_pos);
+      filled = (wqueue->msg_end_pos == qmsg->length);
+    }
+end:
+    if (filled) {
+      /*
+       * Message is fully mapped, so zero out the offset and
+       * take the next message
+       */
+      wqueue->msg_end_pos = 0;
+      wqueue->msgs_end_it++;
+    }
+  }
+}
+
+void ProtocolV1::fillin_iovec(WriteQueue *wqueue) {
+  fillin_outcoming(wqueue,
+		   &WriteQueue::fillin_iovec_from_mem,
+		   &WriteQueue::fillin_iovec_from_bufl);
+}
+
+void ProtocolV1::fillin_bufferlist(WriteQueue *wqueue) {
+  fillin_outcoming(wqueue,
+		   &WriteQueue::fillin_bufl_from_mem,
+		   &WriteQueue::fillin_bufl_from_bufl);
+}
+
 void ProtocolV1::write_event() {
   ldout(cct, 10) << __func__ << dendl;
   ssize_t r = 0;
