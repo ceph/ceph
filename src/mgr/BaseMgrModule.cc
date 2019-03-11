@@ -400,11 +400,18 @@ ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
   char *key = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &module, &key)) {
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "sss:ceph_get_module_option", &module, &key,
+			&prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  auto pResult = self->py_modules->get_typed_config(module, key);
+  std::string str_prefix;
+  if (prefix) {
+    str_prefix = prefix;
+  }
+  assert(self->this_module->py_module);
+  auto pResult = self->py_modules->get_typed_config(module, key, str_prefix);
   return pResult;
 }
 
