@@ -11532,15 +11532,41 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
     if (vxattr) {
       if (vxattr->readonly)
 	return -EOPNOTSUPP;
-      if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
-	check_realm = true;
+      if ((vxattr->name.compare(0, 10, "ceph.quota") == 0 ||
+          vxattr->name.compare(0, 15, "ceph.user_quota") == 0 ||
+          vxattr->name.compare(0, 16, "ceph.group_quota") == 0) && value)
+        check_realm = true;
+
+      string sname(name);
+      if(sname.find("@") != sname.npos){
+        char buf[256];
+        string sub_name = sname.substr(0, sname.find("@"));
+        if (sub_name == "ceph.user_quota.max_bytes") {
+          string cp = sname.substr(sname.find("@")+1);
+          struct passwd *pw = getpwnam(cp.c_str());
+          if(!pw)
+            return -EINVAL;
+          uid_t uid = pw->pw_uid;
+          snprintf(buf, sizeof(buf),"%s@%lld", sub_name.c_str(), (long long int)uid);
+        } else if(sub_name == "ceph.group_quota.max_bytes") {
+          string cp = sname.substr(sname.find("@")+1);
+          struct group *data = getgrnam(cp.c_str());
+          if(!data)
+            return -EINVAL;
+          gid_t gid = data->gr_gid;
+          snprintf(buf, sizeof(buf),"%s@%lld", sub_name.c_str(), (long long int)gid);
+        } else {
+          return -EINVAL;
+        }
+        name = buf;
+      }
     }
   }
 
   int ret = _do_setxattr(in, name, value, size, flags, perms);
   if (ret >= 0 && check_realm) {
     // check if snaprealm was created for quota inode
-    if (in->quota.is_enable() &&
+    if (in->quota.is_any_enable() &&
 	!(in->snaprealm && in->snaprealm->ino == in->ino))
       ret = -EOPNOTSUPP;
   }
