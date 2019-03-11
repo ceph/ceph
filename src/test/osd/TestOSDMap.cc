@@ -92,17 +92,17 @@ public:
     osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
-  void get_crush(CrushWrapper& newcrush) {
+  void get_crush(const OSDMap& tmap, CrushWrapper& newcrush) {
     bufferlist bl;
-    osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    tmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
     bufferlist::iterator p = bl.begin();
     newcrush.decode(p);
   }
-  int crush_move(const string &name, const vector<string> &argvec) {
+  int crush_move(OSDMap& tmap, const string &name, const vector<string> &argvec) {
     map<string,string> loc;
     CrushWrapper::parse_loc_map(argvec, &loc);
     CrushWrapper newcrush;
-    get_crush(newcrush);
+    get_crush(tmap, newcrush);
     if (!newcrush.name_exists(name)) {
        return -ENOENT;
     }
@@ -115,10 +115,10 @@ public:
         err = newcrush.move_bucket(g_ceph_context, id, loc);
       }
       if (err >= 0) {
-        OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+        OSDMap::Incremental pending_inc(tmap.get_epoch() + 1);
         pending_inc.crush.clear();
         newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
-        osdmap.apply_incremental(pending_inc);
+        tmap.apply_incremental(pending_inc);
         err = 0;
       }
     } else {
@@ -134,7 +134,7 @@ public:
       return osdmap.crush->get_rule_id(name);
     }
     CrushWrapper newcrush;
-    get_crush(newcrush);
+    get_crush(osdmap, newcrush);
     string device_class;
     stringstream ss;
     int ruleno = newcrush.add_simple_rule(
@@ -559,7 +559,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     move_to.push_back("root=default");
     string host_loc = "host=" + host_name.str();
     move_to.push_back(host_loc);
-    int r = crush_move(osd_name.str(), move_to);
+    int r = crush_move(osdmap, osd_name.str(), move_to);
     ASSERT_EQ(0, r);
   }
   const string upmap_rule = "upmap";
@@ -732,6 +732,132 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       nextmap.maybe_remove_pg_upmaps(g_ceph_context, nextmap, &pending_inc);
       tmpmap.apply_incremental(pending_inc);
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(ec_pgid));
+    }
+  }
+
+  {
+    // http://tracker.ceph.com/issues/37968
+    
+    // build a temporary crush topology of 2 hosts, 3 osds per host
+    OSDMap tmp; // use a tmpmap here, so we do not dirty origin map..
+    tmp.deepish_copy_from(osdmap);
+    const int expected_host_num = 2;
+    int osd_per_host = get_num_osds() / expected_host_num;
+    ASSERT_GE(osd_per_host, 3);
+    int index = 0;
+    for (int i = 0; i < (int)get_num_osds(); i++) {
+      if (i && i % osd_per_host == 0) {
+        ++index;
+      }
+      stringstream osd_name;
+      stringstream host_name;
+      vector<string> move_to;
+      osd_name << "osd." << i;
+      host_name << "host-" << index;
+      move_to.push_back("root=default");
+      string host_loc = "host=" + host_name.str();
+      move_to.push_back(host_loc);
+      auto r = crush_move(tmp, osd_name.str(), move_to);
+      ASSERT_EQ(0, r);
+    }
+      
+    // build crush rule
+    CrushWrapper crush;
+    get_crush(tmp, crush);
+    string rule_name = "rule_37968";
+    int rule_type = pg_pool_t::TYPE_ERASURE;
+    ASSERT_TRUE(!crush.rule_exists(rule_name));
+    int rno;
+    for (rno = 0; rno < crush.get_max_rules(); rno++) {
+      if (!crush.rule_exists(rno) && !crush.ruleset_exists(rno))
+        break;
+    }
+    string root_name = "default";
+    int root = crush.get_item_id(root_name);
+    int min_size = 3;
+    int max_size = 4;
+    int steps = 6;
+    crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_size, max_size);
+    int step = 0;
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_INDEP, 2, 1 /* host*/); 
+    crush_rule_set_step(rule, step++, CRUSH_RULE_CHOOSE_INDEP, 2, 0 /* osd */); 
+    crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+    ASSERT_TRUE(step == steps);
+    auto r = crush_add_rule(crush.get_crush_map(), rule, rno);
+    ASSERT_TRUE(r >= 0);
+    crush.set_rule_name(rno, rule_name);
+    {
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.crush.clear();
+      crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      tmp.apply_incremental(pending_inc);
+    }
+
+    // create a erasuce-coded pool referencing the above rule
+    int64_t pool_37968;
+    {
+      OSDMap::Incremental new_pool_inc(tmp.get_epoch() + 1);
+      new_pool_inc.new_pool_max = tmp.get_pool_max();
+      new_pool_inc.fsid = tmp.get_fsid();
+      pg_pool_t empty;
+      pool_37968 = ++new_pool_inc.new_pool_max;
+      pg_pool_t *p = new_pool_inc.get_new_pool(pool_37968, &empty);
+      p->size = 4;
+      p->set_pg_num(8);
+      p->set_pgp_num(8);
+      p->type = pg_pool_t::TYPE_ERASURE;
+      p->crush_rule = rno;
+      p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      new_pool_inc.new_pool_names[pool_37968] = "pool_37968";
+      tmp.apply_incremental(new_pool_inc);
+    }
+
+    pg_t ec_pg(0, pool_37968);
+    pg_t ec_pgid = tmp.raw_pg_to_pg(ec_pg);
+    int from = -1;
+    int to = -1;
+    {
+      // insert a valid pg_upmap_item
+      vector<int> ec_up;
+      int ec_up_primary;
+      tmp.pg_to_raw_up(ec_pgid, &ec_up, &ec_up_primary);
+      ASSERT_TRUE(ec_up.size() == 4);
+      from = *(ec_up.begin());
+      ASSERT_TRUE(from >= 0);
+      auto parent = tmp.crush->get_parent_of_type(from, 1 /* host */, rno);
+      ASSERT_TRUE(parent < 0);
+      // pick an osd of the same parent with *from*
+      for (int i = 0; i < (int)get_num_osds(); i++) {
+        if (std::find(ec_up.begin(), ec_up.end(), i) == ec_up.end()) {
+          auto p = tmp.crush->get_parent_of_type(i, 1 /* host */, rno);
+          if (p == parent) {
+            to = i;
+            break;
+          }
+        }
+      }
+      ASSERT_TRUE(to >= 0);
+      ASSERT_TRUE(from != to);
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(from, to));
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[ec_pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+          new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      tmp.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmp.have_pg_upmaps(ec_pgid));
+    }
+    {
+      // *maybe_remove_pg_upmaps* should not remove the above upmap_item
+      OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
+      OSDMap nextmap;
+      nextmap.deepish_copy_from(tmp);
+      nextmap.maybe_remove_pg_upmaps(g_ceph_context, nextmap, &pending_inc);
+      tmp.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmp.have_pg_upmaps(ec_pgid));
     }
   }
 
