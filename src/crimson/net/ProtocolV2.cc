@@ -5,6 +5,9 @@
 
 #include "include/msgr.h"
 
+#include "crimson/auth/AuthClient.h"
+#include "crimson/auth/AuthServer.h"
+
 #include "Dispatcher.h"
 #include "Errors.h"
 #include "Socket.h"
