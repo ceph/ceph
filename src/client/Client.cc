@@ -11299,11 +11299,21 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     }
 
     // call pointer-to-member function
+    const char *tmp = strchr(name,'@');
     char buf[256];
-    if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))) {
-      r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf));
+    if (tmp){
+      const char *ug_name = tmp+1;
+      if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in, ug_name))) {
+        r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf), ug_name);
+      } else {
+        r = -ENODATA;
+      }
     } else {
-      r = -ENODATA;
+      if (!(vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in, NULL))) {
+        r = (this->*(vxattr->getxattr_cb))(in, buf, sizeof(buf), NULL);
+      } else {
+        r = -ENODATA;
+      }
     }
 
     if (size != 0) {
@@ -11699,32 +11709,160 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
   return _removexattr(in, name, perms);
 }
 
-bool Client::_vxattrcb_quota_exists(Inode *in)
+bool Client::_vxattrcb_quota_exists(Inode *in, const char *name)
 {
   return in->quota.is_enable() &&
 	 in->snaprealm && in->snaprealm->ino == in->ino;
 }
-size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size,
                   "max_bytes=%lld max_files=%lld",
                   (long long int)in->quota.max_bytes,
                   (long long int)in->quota.max_files);
 }
-size_t Client::_vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%lld", (long long int)in->quota.max_bytes);
 }
-size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%lld", (long long int)in->quota.max_files);
 }
 
-bool Client::_vxattrcb_layout_exists(Inode *in)
+bool Client::_vxattrcb_user_quota_exists(Inode *in, const char *name)
+{
+  if (name) {
+    struct passwd *pw = getpwnam(name);
+    if (!pw)
+      return -ENODATA;
+    return in->quota.is_user_enable(pw->pw_uid) &&
+      in->snaprealm && in->snaprealm->ino == in->ino;
+  } else {
+    return in->quota.is_user_enable() &&
+      in->snaprealm && in->snaprealm->ino == in->ino;
+  }
+}
+size_t Client::_vxattrcb_user_quota(Inode *in, char *val, size_t size, const char *name)
+{
+  if (name) {
+    struct passwd *pw = getpwnam(name);
+    if (!pw)
+      return -ENODATA;
+    int64_t user_max_bytes = in->quota.user_max_bytes[pw->pw_uid];
+    int64_t user_rbytes = in->rstat.user_rbytes.count(pw->pw_uid)? in->rstat.user_rbytes[pw->pw_uid] : 0;
+    return snprintf(val, size, "%lld used_bytes:%lld", (long long int)user_max_bytes, (long long int)user_rbytes);
+  } else {
+    size_t r=0;
+    for (auto& p : in->quota.user_max_bytes){
+      if(p.second > 0){
+        char buf[256];
+        int64_t user_rbytes = in->rstat.user_rbytes.count(p.first)? in->rstat.user_rbytes[p.first] : 0;
+        size_t len = snprintf(buf, sizeof(buf), "user_id:%lld max_bytes:%lld used_bytes:%lld ",
+           (long long int)p.first, (long long int)p.second, (long long int)user_rbytes);
+        if(len > (size - r))
+          break;
+        r += snprintf(val + r, size - r, "%s", buf);
+      }
+    }
+    return r;
+  }
+}
+size_t Client::_vxattrcb_user_quota_max_bytes(Inode *in, char *val, size_t size, const char *name)
+{
+  if (name) {
+    struct passwd *pw = getpwnam(name);
+    if (!pw)
+      return -ENODATA;
+    int64_t user_max_bytes = in->quota.user_max_bytes[pw->pw_uid];
+    int64_t user_rbytes = in->rstat.user_rbytes.count(pw->pw_uid)? in->rstat.user_rbytes[pw->pw_uid] : 0;
+    return snprintf(val, size, "%lld used_bytes:%lld", (long long int)user_max_bytes, (long long int)user_rbytes);
+  } else {
+    size_t r=0;
+    for (auto& p : in->quota.user_max_bytes){
+      if(p.second > 0){
+        char buf[256];
+        int64_t user_rbytes = in->rstat.user_rbytes.count(p.first)? in->rstat.user_rbytes[p.first] : 0;
+        size_t len = snprintf(buf, sizeof(buf), "user_id:%lld max_bytes:%lld used_bytes:%lld ",
+            (long long int)p.first, (long long int)p.second, (long long int)user_rbytes);
+        if(len > (size - r))
+          break;
+        r += snprintf(val + r, size - r, "%s", buf);
+      }
+    }
+    return r;
+  }
+}
+
+bool Client::_vxattrcb_group_quota_exists(Inode *in, const char *name)
+{
+  if (name){
+    struct group * data = getgrnam(name);
+    if (!data)
+      return -ENODATA;
+    return in->quota.is_group_enable(data->gr_gid) &&
+      in->snaprealm && in->snaprealm->ino == in->ino;
+  } else {
+    return in->quota.is_group_enable() &&
+      in->snaprealm && in->snaprealm->ino == in->ino;
+  }
+}
+size_t Client::_vxattrcb_group_quota(Inode *in, char *val, size_t size, const char *name)
+{
+  if (name) {
+    struct group * data = getgrnam(name);
+    if (!data)
+      return -ENODATA;
+    int64_t group_max_bytes = in->quota.group_max_bytes[data->gr_gid];
+    int64_t group_rbytes = in->rstat.group_rbytes.count(data->gr_gid)? in->rstat.group_rbytes[data->gr_gid] : 0;
+    return snprintf(val, size, "%lld used_bytes:%lld", (long long int)group_max_bytes, (long long int)group_rbytes);
+  } else {
+    size_t r=0;
+    for (auto& p : in->quota.group_max_bytes){
+      if(p.second > 0){
+        char buf[256];
+        int64_t group_rbytes = in->rstat.group_rbytes.count(p.first)? in->rstat.group_rbytes[p.first] : 0;
+        size_t len = snprintf(buf, sizeof(buf), "group_id:%lld max_bytes:%lld used_bytes:%lld ",
+          (long long int)p.first, (long long int)p.second, (long long int)group_rbytes);
+        if(len > (size - r))
+          break;
+        r += snprintf(val + r, size - r, "%s", buf);
+      }
+    }
+    return r;
+  }
+}
+size_t Client::_vxattrcb_group_quota_max_bytes(Inode *in, char *val, size_t size, const char *name)
+{
+  if (name) {
+    struct group * data = getgrnam(name);
+    if (!data)
+      return -ENODATA;
+    int64_t group_max_bytes = in->quota.group_max_bytes[data->gr_gid];
+    int64_t group_rbytes = in->rstat.group_rbytes.count(data->gr_gid)? in->rstat.group_rbytes[data->gr_gid] : 0;
+    return snprintf(val, size, "%lld used_bytes:%lld", (long long int)group_max_bytes, (long long int)group_rbytes);
+  } else {
+    size_t r=0;
+    for (auto& p : in->quota.group_max_bytes){
+      if(p.second > 0){
+        char buf[256];
+        int64_t group_rbytes = in->rstat.group_rbytes.count(p.first)? in->rstat.group_rbytes[p.first] : 0;
+        size_t len = snprintf(buf, sizeof(buf), "group_id:%lld max_bytes:%lld used_bytes:%lld ",
+            (long long int)p.first, (long long int)p.second, (long long int)group_rbytes);
+        if(len > (size - r))
+          break;
+        r += snprintf(val + r, size - r, "%s", buf);
+      }
+    }
+    return r;
+  }
+}
+
+bool Client::_vxattrcb_layout_exists(Inode *in, const char *name)
 {
   return in->layout != file_layout_t();
 }
-size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size, const char *name)
 {
   int r = snprintf(val, size,
       "stripe_unit=%llu stripe_count=%llu object_size=%llu pool=",
@@ -11744,19 +11882,19 @@ size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
 		  in->layout.pool_ns.c_str());
   return r;
 }
-size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->layout.stripe_unit);
 }
-size_t Client::_vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->layout.stripe_count);
 }
-size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout_object_size(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->layout.object_size);
 }
-size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size, const char *name)
 {
   size_t r;
   objecter->with_osdmap([&](const OSDMap& o) {
@@ -11768,58 +11906,72 @@ size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
     });
   return r;
 }
-size_t Client::_vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%s", in->layout.pool_ns.c_str());
 }
-size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)(in->dirstat.nfiles + in->dirstat.nsubdirs));
 }
-size_t Client::_vxattrcb_dir_files(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_files(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->dirstat.nfiles);
 }
-size_t Client::_vxattrcb_dir_subdirs(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_subdirs(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->dirstat.nsubdirs);
 }
-size_t Client::_vxattrcb_dir_rentries(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_rentries(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)(in->rstat.rfiles + in->rstat.rsubdirs));
 }
-size_t Client::_vxattrcb_dir_rfiles(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_rfiles(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rfiles);
 }
-size_t Client::_vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rsubdirs);
 }
-size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu", (unsigned long long)in->rstat.rbytes);
 }
-size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_user_rbytes(Inode *in, char *val, size_t size, const char *name)
+{
+  size_t r = 0;
+  for (auto& p : in->rstat.user_rbytes)
+    r += snprintf(val, size, "id:%llu rbytes:%llu ", (unsigned long long)p.first, (unsigned long long)p.second);
+  return r;
+}
+size_t Client::_vxattrcb_dir_group_rbytes(Inode *in, char *val, size_t size, const char *name)
+{
+  size_t r = 0;
+  for (auto& p : in->rstat.group_rbytes)
+    r += snprintf(val, size, "id:%llu rbytes:%llu ", (unsigned long long)p.first, (unsigned long long)p.second);
+  return r;
+}
+size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%ld.%09ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
-bool Client::_vxattrcb_dir_pin_exists(Inode *in)
+bool Client::_vxattrcb_dir_pin_exists(Inode *in, const char *name)
 {
   return in->dir_pin != -ENODATA;
 }
-size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%ld", (long)in->dir_pin);
 }
 
-bool Client::_vxattrcb_snap_btime_exists(Inode *in)
+bool Client::_vxattrcb_snap_btime_exists(Inode *in, const char *name)
 {
   return !in->snap_btime.is_zero();
 }
 
-size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
+size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size, const char *name)
 {
   return snprintf(val, size, "%llu.%09lu",
       (long long unsigned)in->snap_btime.sec(),
@@ -11861,6 +12013,22 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   exists_cb: &Client::_vxattrcb_quota_exists,			\
   flags: 0,                                                     \
 }
+#define XATTR_USER_QUOTA_FIELD(_type, _name)		                \
+{								\
+  name: CEPH_XATTR_NAME(_type, _name),			        \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
+  readonly: false,						\
+  exists_cb: &Client::_vxattrcb_user_quota_exists,			\
+  flags: 0,                                                     \
+}
+#define XATTR_GROUP_QUOTA_FIELD(_type, _name)		                \
+{								\
+  name: CEPH_XATTR_NAME(_type, _name),			        \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
+  readonly: false,						\
+  exists_cb: &Client::_vxattrcb_group_quota_exists,			\
+  flags: 0,                                                     \
+}
 
 const Client::VXattr Client::_dir_vxattrs[] = {
   {
@@ -11883,6 +12051,8 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH2(dir, rsubdirs, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rbytes, VXATTR_RSTAT),
   XATTR_NAME_CEPH2(dir, rctime, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, user_rbytes, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, group_rbytes, VXATTR_RSTAT),
   {
     name: "ceph.quota",
     getxattr_cb: &Client::_vxattrcb_quota,
@@ -11892,6 +12062,22 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
+  {
+    name: "ceph.user_quota",
+    getxattr_cb: &Client::_vxattrcb_user_quota,
+    readonly: false,
+    exists_cb: &Client::_vxattrcb_user_quota_exists,
+    flags: 0,
+  },
+  XATTR_USER_QUOTA_FIELD(user_quota, max_bytes),
+  {
+    name: "ceph.group_quota",
+    getxattr_cb: &Client::_vxattrcb_group_quota,
+    readonly: false,
+    exists_cb: &Client::_vxattrcb_group_quota_exists,
+    flags: 0,
+  },
+  XATTR_GROUP_QUOTA_FIELD(group_quota, max_bytes),
   {
     name: "ceph.dir.pin",
     getxattr_cb: &Client::_vxattrcb_dir_pin,
@@ -11943,11 +12129,17 @@ const Client::VXattr *Client::_get_vxattrs(Inode *in)
 
 const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
 {
+  string sub_name;
+  string sname(name);
+  if(sname.find("@") != sname.npos)
+    sub_name = sname.substr(0, sname.find("@"));
+  else
+    sub_name = name;
   if (strncmp(name, "ceph.", 5) == 0) {
     const VXattr *vxattr = _get_vxattrs(in);
     if (vxattr) {
       while (!vxattr->name.empty()) {
-	if (vxattr->name == name)
+	if (vxattr->name == sub_name)
 	  return vxattr;
 	vxattr++;
       }
