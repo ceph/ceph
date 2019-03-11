@@ -5943,6 +5943,8 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   newi->symlink = req->get_path2();
   newi->inode.size = newi->symlink.length();
   newi->inode.rstat.rbytes = newi->inode.size;
+  newi->inode.rstat.user_rbytes[newi->inode.uid] = newi->inode.size;
+  newi->inode.rstat.group_rbytes[newi->inode.gid] = newi->inode.size;
   newi->inode.rstat.rfiles = 1;
   newi->inode.version = dn->pre_dirty();
   newi->inode.update_backtrace();
