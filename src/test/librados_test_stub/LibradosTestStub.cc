@@ -102,7 +102,7 @@ void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
 librados::TestRadosClient *create_rados_client() {
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf.parse_env();
+  cct->_conf.parse_env(cct->get_module_type());
   cct->_conf.apply_changes(nullptr);
 
   auto rados_client =
@@ -152,7 +152,7 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   auto& conf = client->cct()->_conf;
-  conf.parse_env(var);
+  conf.parse_env(client->cct()->get_module_type(), var);
   conf.apply_changes(NULL);
   return 0;
 }
@@ -163,7 +163,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   auto& conf = client->cct()->_conf;
   int ret = conf.parse_config_files(path, NULL, 0);
   if (ret == 0) {
-    conf.parse_env();
+    conf.parse_env(client->cct()->get_module_type());
     conf.apply_changes(NULL);
     conf.complain_about_parse_errors(client->cct());
   } else if (ret == -ENOENT) {
