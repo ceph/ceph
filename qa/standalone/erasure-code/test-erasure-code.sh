@@ -292,8 +292,8 @@ function verify_chunk_mapping() {
     rm $dir/COPY
 
     local -a osds=($(get_osds $poolname SOMETHING$poolname))
-    grep --quiet --recursive --text FIRST$poolname $dir/${osds[$first]} || return 1
-    grep --quiet --recursive --text SECOND$poolname $dir/${osds[$second]} || return 1
+    objectstore_tool $dir ${osds[$first]} SOMETHING$poolname get-bytes | grep --quiet FIRST$poolname || return 1
+    objectstore_tool $dir ${osds[$second]} SOMETHING$poolname get-bytes | grep --quiet SECOND$poolname || return 1
 }
 
 function TEST_chunk_mapping() {
