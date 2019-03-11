@@ -5,8 +5,7 @@ import errno
 import json
 import mock
 
-from . import CmdException
-from .helper import ControllerTestCase, CLICommandTestMixin
+from . import CmdException, ControllerTestCase, CLICommandTestMixin
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient

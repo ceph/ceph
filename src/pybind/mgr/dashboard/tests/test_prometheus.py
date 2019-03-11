@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
+from . import ControllerTestCase
 from .. import mgr
 from ..controllers import BaseController, Controller
 from ..controllers.prometheus import Prometheus, PrometheusReceiver
-
-from .helper import ControllerTestCase
 
 
 @Controller('alertmanager/mocked/api/v1/alerts', secure=False)

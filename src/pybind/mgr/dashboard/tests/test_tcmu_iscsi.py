@@ -1,8 +1,8 @@
 from __future__ import absolute_import
 
+from . import ControllerTestCase
 from .. import mgr
 from ..controllers.tcmu_iscsi import TcmuIscsi
-from .helper import ControllerTestCase
 
 mocked_servers = [{
     'ceph_version': 'ceph version 13.0.0-5083- () mimic (dev)',
