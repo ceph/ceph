@@ -350,8 +350,6 @@ function unfound_erasure_coded() {
             run_osd $dir $id || return 1
 	fi
     done
-    create_rbd_pool || return 1
-    wait_for_clean || return 1
 
     create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
 
@@ -384,12 +382,12 @@ function unfound_erasure_coded() {
     #
     # it may take a bit to appear due to mon/mgr asynchrony
     for f in `seq 1 60`; do
-	ceph -s | grep "1/2 objects unfound" && break
+	ceph -s | grep "1/1 objects unfound" && break
 	sleep 1
     done
     ceph -s|grep "4 up" || return 1
     ceph -s|grep "4 in" || return 1
-    ceph -s|grep "1/2 objects unfound" || return 1
+    ceph -s|grep "1/1 objects unfound" || return 1
 
     teardown $dir || return 1
 }
