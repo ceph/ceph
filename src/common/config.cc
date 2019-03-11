@@ -453,7 +453,8 @@ int md_config_t::parse_config_files(ConfigValues& values,
   return 0;
 }
 
-void md_config_t::parse_env(ConfigValues& values,
+void md_config_t::parse_env(unsigned entity_type,
+			    ConfigValues& values,
 			    const ConfigTracker& tracker,
 			    const char *args_var)
 {
@@ -472,6 +473,19 @@ void md_config_t::parse_env(ConfigValues& values,
       const Option *o = find_option(name);
       ceph_assert(o);
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
+    }
+  }
+  const char *pod_req = getenv("POD_MEMORY_REQUEST");
+  if (pod_req) {
+    uint64_t v = atoll(pod_req);
+    if (v) {
+      switch (entity_type) {
+      case CEPH_ENTITY_TYPE_OSD:
+	_set_val(values, tracker, stringify(v),
+		 *find_option("osd_memory_target"),
+		 CONF_ENV, nullptr);
+	break;
+      }
     }
   }
   if (getenv(args_var)) {

@@ -135,6 +135,38 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
   }
 }
 
+int get_cgroup_memory_limit(uint64_t *limit)
+{
+  // /sys/fs/cgroup/memory/memory.limit_in_bytes
+
+  // the magic value 9223372036854771712 or 0x7ffffffffffff000
+  // appears to mean no limit.
+  FILE *f = fopen(PROCPREFIX "/sys/fs/cgroup/memory/memory.limit_in_bytes", "r");
+  if (!f) {
+    return -errno;
+  }
+  char buf[100];
+  int ret = 0;
+  long long value;
+  char *line = fgets(buf, sizeof(buf), f);
+  if (!line) {
+    ret = -EINVAL;
+    goto out;
+  }
+  if (sscanf(line, "%lld", &value) != 1) {
+    ret = -EINVAL;
+  }
+  if (value == 0x7ffffffffffff000) {
+    *limit = 0;  // no limit
+  } else {
+    *limit = value;
+  }
+out:
+  fclose(f);
+  return ret;
+}
+
+
 void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
   // version
@@ -226,6 +258,11 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
       }
     }
     fclose(f);
+  }
+  uint64_t cgroup_limit;
+  if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
+      cgroup_limit > 0) {
+    (*m)["mem_cgroup_limit"] = boost::lexical_cast<string>(cgroup_limit);
   }
 
   // processor
