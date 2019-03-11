@@ -217,22 +217,21 @@ void ProtocolV1::fault() {
 }
 
 void ProtocolV1::send_message(Message *m) {
-  bufferlist bl;
   uint64_t f = connection->get_features();
 
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
-  bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
-  if (can_fast_prepare) {
-    prepare_send_message(f, m, bl);
+  bool encode = messenger->ms_can_fast_dispatch(m);
+  if (encode) {
+    m->encode(f, messenger->crcflags);
   }
 
   std::lock_guard<std::mutex> l(connection->write_lock);
   // "features" changes will change the payload encoding
-  if (can_fast_prepare &&
+  if (encode &&
       (can_write == WriteStatus::NOWRITE || connection->get_features() != f)) {
     // ensure the correctness of message encoding
-    bl.clear();
+    encode = false;
     m->clear_payload();
     ldout(cct, 5) << __func__ << " clear encoded buffer previous " << f
                   << " != " << connection->get_features() << dendl;
@@ -243,7 +242,7 @@ void ProtocolV1::send_message(Message *m) {
     m->put();
   } else {
     m->trace.event("async enqueueing message");
-    out_q[m->get_priority()].emplace_back(std::move(bl), m);
+    out_q[m->get_priority()].emplace_back(m, encode);
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
                    << dendl;
     if (can_write != WriteStatus::REPLACING) {
@@ -302,6 +301,66 @@ void ProtocolV1::read_event() {
       break;
     default:
       break;
+  }
+}
+
+bool ProtocolV1::flush_out_q() {
+  WriteQueue *wqueue = connection->wqueue;
+  decltype(out_q)::reverse_iterator rit;
+  bool is_writable;
+
+  connection->write_lock.lock();
+  is_writable = (can_write == WriteStatus::CANWRITE);
+  if (out_q.empty() || !is_writable)
+    goto unlock;
+
+  /* Grab all priorities queues at once */
+  for (rit = out_q.rbegin(); rit != out_q.rend(); ++rit) {
+    auto &list = rit->second;
+    ceph_assert(!list.empty());
+    wqueue->enqueue(list);
+  }
+  /* XXX not nice, why not to keep empty lists in map? FIXME please! */
+  out_q.clear();
+  is_writable = true;
+
+unlock:
+  connection->write_lock.unlock();
+
+  return is_writable;
+}
+
+void ProtocolV1::enqueue_ack() {
+  WriteQueue *wqueue = connection->wqueue;
+
+  /* XXX No reason to keep ack_left or in_seq as atomic, FIXME please! */
+  uint64_t left = ack_left;
+  if (left) {
+    ceph_le64 seq;
+
+    seq = in_seq;
+    wqueue->enqueue(CEPH_MSGR_TAG_ACK, &seq, sizeof(seq));
+    ldout(cct, 10) << __func__ << " enqueue msg ack, acked " << left
+		   << " messages" << dendl;
+    ack_left -= left;
+  }
+}
+
+void ProtocolV1::enqueue_keepalive(struct ceph_timespec *ts /* = nullptr */) {
+  WriteQueue *wqueue = connection->wqueue;
+
+  if (keepalive) {
+    if (ts) {
+      wqueue->enqueue(CEPH_MSGR_TAG_KEEPALIVE2_ACK, ts, sizeof(*ts));
+    } else if (connection->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
+      struct ceph_timespec ts;
+      utime_t t = ceph_clock_now();
+      t.encode_timeval(&ts);
+      wqueue->enqueue(CEPH_MSGR_TAG_KEEPALIVE2, &ts, sizeof(ts));
+    } else {
+      wqueue->enqueue(CEPH_MSGR_TAG_KEEPALIVE, NULL, 0);
+    }
+    keepalive = false;
   }
 }
 
@@ -455,6 +514,58 @@ void ProtocolV1::fillin_bufferlist(WriteQueue *wqueue) {
 }
 
 void ProtocolV1::write_event() {
+  bool is_writable;
+  int sent = 0;
+
+  ldout(cct, 10) << __func__ << dendl;
+
+  /* Flush the whole out_q to wqueue */
+  is_writable = flush_out_q();
+  if (is_writable) {
+
+    /* Enqueue service messages directly */
+    enqueue_ack();
+    enqueue_keepalive();
+
+    auto start = ceph::mono_clock::now();
+
+    /* Flush write queue */
+    sent = connection->send_wqueue();
+
+    connection->logger->tinc(l_msgr_running_send_time,
+			     ceph::mono_clock::now() - start);
+
+    if (sent < 0) {
+      ldout(cct, 1) << __func__ << " send msg failed" << dendl;
+      connection->lock.lock();
+      fault();
+      connection->lock.unlock();
+    }
+  } else {
+    /* Not writable status */
+    connection->lock.lock();
+    connection->write_lock.lock();
+    if (state == STANDBY && !connection->policy.server && is_queued()) {
+      ldout(cct, 10) << __func__ << " policy.server is false" << dendl;
+      connection->_connect();
+    } else if (connection->cs && state != NONE && state != CLOSED &&
+               state != START_CONNECT) {
+      sent = connection->send_wqueue();
+      if (sent < 0) {
+        ldout(cct, 1) << __func__ << " send failed" << dendl;
+        connection->write_lock.unlock();
+        fault();
+        connection->lock.unlock();
+        return;
+      }
+    }
+    connection->write_lock.unlock();
+    connection->lock.unlock();
+  }
+}
+
+#if 0
+void ProtocolV1::write_event() {
   ldout(cct, 10) << __func__ << dendl;
   ssize_t r = 0;
 
@@ -549,6 +660,7 @@ void ProtocolV1::write_event() {
     connection->lock.unlock();
   }
 }
+#endif
 
 bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
@@ -671,14 +783,13 @@ CtPtr ProtocolV1::handle_keepalive2(char *buffer, int r) {
 
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
-  ceph_timespec *t;
-  t = (ceph_timespec *)buffer;
-  utime_t kp_t = utime_t(*t);
+  ceph_timespec *ts;
+  ts = (ceph_timespec *)buffer;
   connection->write_lock.lock();
-  append_keepalive_or_ack(true, &kp_t);
+  enqueue_keepalive(ts);
   connection->write_lock.unlock();
 
-  ldout(cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
+  ldout(cct, 20) << __func__ << " got KEEPALIVE2 " << utime_t(*ts) << dendl;
   connection->set_last_keepalive(ceph_clock_now());
 
   if (is_connected()) {
@@ -749,7 +860,21 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+  /* XXX Having that under lock is terrible! FIXME please! */
+  WriteQueue *wqueue = connection->wqueue;
+  decltype(wqueue->msgs) list;
+  auto it = wqueue->msgs.begin();
+  for (; it != wqueue->msgs_beg_it; it++) {
+    if (it->msg && it->msg->get_seq() > seq)
+      break;
+  }
+  /* Careful, this is linear, which is stupid, btw */
+  list.splice(list.end(), wqueue->msgs, wqueue->msgs.begin(), it);
   connection->write_lock.unlock();
+  /* Clear messages explicitly */
+  list.clear();
+
+  /* XXX To be removed ASAP */
   for (int k = 0; k < i; k++) {
     pending[k]->put();
   }
@@ -1323,18 +1448,30 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
 }
 
 void ProtocolV1::requeue_sent() {
+  WriteQueue *wqueue = connection->wqueue;
+
+  if (wqueue->msg_beg_pos)
+    lderr(cct) << __func__ << " something goes terribly wrong, previous message"
+      " was not fully sent, msg_beg_pos=" << wqueue->msg_beg_pos << dendl;
+
+  /* Rewind to the beginning */
+  wqueue->msgs_beg_it = wqueue->msgs.begin();
+  wqueue->msg_beg_pos = 0;
+
+
+  /* XXX Remove below ASAP */
   if (sent.empty()) {
     return;
   }
 
-  list<pair<bufferlist, Message *> > &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  list<QueuedMessage> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   out_seq -= sent.size();
   while (!sent.empty()) {
     Message *m = sent.back();
     sent.pop_back();
     ldout(cct, 10) << __func__ << " " << *m << " for resend "
                    << " (" << m->get_seq() << ")" << dendl;
-    rq.push_front(make_pair(bufferlist(), m));
+    rq.emplace_front(m, false);
   }
 }
 
@@ -1344,15 +1481,17 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
     return seq;
   }
-  list<pair<bufferlist, Message *> > &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  list<QueuedMessage> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   uint64_t count = out_seq;
   while (!rq.empty()) {
-    pair<bufferlist, Message *> p = rq.front();
-    if (p.second->get_seq() == 0 || p.second->get_seq() > seq) break;
-    ldout(cct, 10) << __func__ << " " << *(p.second) << " for resend seq "
-                   << p.second->get_seq() << " <= " << seq << ", discarding"
+    QueuedMessage &qmsg = rq.front();
+    Message *msg = qmsg.msg;
+    if (msg->get_seq() == 0 || msg->get_seq() > seq)
+      break;
+    ldout(cct, 10) << __func__ << " " << *msg << " for resend seq "
+                   << msg->get_seq() << " <= " << seq << ", discarding"
                    << dendl;
-    p.second->put();
+    msg->put();
     rq.pop_front();
     count++;
   }
@@ -1365,22 +1504,20 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
  * DispatchQueue Must hold write_lock prior to calling.
  */
 void ProtocolV1::discard_out_queue() {
+  WriteQueue *wqueue = connection->wqueue;
+
   ldout(cct, 10) << __func__ << " started" << dendl;
 
+  /* Discard everything which is sent but not acked yet */
+  wqueue->msgs.erase(wqueue->msgs.begin(), wqueue->msgs_beg_it);
+
+  /* XXX To be removed ASAP */
   for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
     ldout(cct, 20) << __func__ << " discard " << *p << dendl;
     (*p)->put();
   }
   sent.clear();
-  for (map<int, list<pair<bufferlist, Message *> > >::iterator p =
-           out_q.begin();
-       p != out_q.end(); ++p) {
-    for (list<pair<bufferlist, Message *> >::iterator r = p->second.begin();
-         r != p->second.end(); ++r) {
-      ldout(cct, 20) << __func__ << " discard " << r->second << dendl;
-      r->second->put();
-    }
-  }
+  /* Discard out queue */
   out_q.clear();
 }
 
@@ -1427,6 +1564,7 @@ void ProtocolV1::reset_recv_state() {
 
 Message *ProtocolV1::_get_next_outgoing(bufferlist *bl) {
   Message *m = 0;
+#if 0
   if (!out_q.empty()) {
     map<int, list<pair<bufferlist, Message *> > >::reverse_iterator it =
         out_q.rbegin();
@@ -1437,6 +1575,7 @@ Message *ProtocolV1::_get_next_outgoing(bufferlist *bl) {
     it->second.erase(p);
     if (it->second.empty()) out_q.erase(it->first);
   }
+#endif
   return m;
 }
 

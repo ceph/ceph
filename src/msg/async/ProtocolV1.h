@@ -106,7 +106,7 @@ protected:
   std::atomic<WriteStatus> can_write;
   std::list<Message *> sent;  // the first bufferlist need to inject seq
   // priority queue for outbound msgs
-  std::map<int, std::list<std::pair<bufferlist, Message *>>> out_q;
+  std::map<int, std::list<QueuedMessage>> out_q;
   bool keepalive;
 
   __u32 connect_seq, peer_global_seq;
@@ -268,6 +268,9 @@ private:
   CtPtr client_ready();
 
   void prepare_for_write(QueuedMessage *qmsg);
+  bool flush_out_q();
+  void enqueue_ack();
+  void enqueue_keepalive(struct ceph_timespec *ts = nullptr);
 
   // Server Protocol
 protected:

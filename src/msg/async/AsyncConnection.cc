@@ -845,7 +845,7 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
-  return outcoming_bl.length();
+  return outcoming_bl.length() || wqueue->has_msgs_to_send();
 }
 
 void AsyncConnection::shutdown_socket() {
