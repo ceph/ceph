@@ -2488,6 +2488,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     dout(10) << "check_inode_max_size size " << pi.inode.size << " -> " << new_size << dendl;
     pi.inode.size = new_size;
     pi.inode.rstat.rbytes = new_size;
+    pi.inode.rstat.user_rbytes[pi.inode.uid] = new_size;
+    pi.inode.rstat.group_rbytes[pi.inode.gid] = new_size;
     dout(10) << "check_inode_max_size mtime " << pi.inode.mtime << " -> " << new_mtime << dendl;
     pi.inode.mtime = new_mtime;
     if (new_mtime > pi.inode.ctime) {
@@ -3299,6 +3301,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->size = size;
       pi->rstat.rbytes = size;
+      pi->rstat.user_rbytes[pi->uid] = size;
+      pi->rstat.group_rbytes[pi->gid] = size;
     }
     if (in->inode.is_file() &&
         (dirty & CEPH_CAP_FILE_WR) &&
