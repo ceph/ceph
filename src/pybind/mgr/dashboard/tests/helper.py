@@ -10,10 +10,42 @@ import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 
-from .. import logger
+from . import exec_dashboard_cmd
+from .. import logger, mgr
 from ..controllers import json_error_page, generate_controller_routes
 from ..services.auth import AuthManagerTool
 from ..services.exception import dashboard_exception_handler
+
+
+class KVStoreMockMixin(object):
+    CONFIG_KEY_DICT = {}
+
+    @classmethod
+    def mock_set_module_option(cls, attr, val):
+        cls.CONFIG_KEY_DICT[attr] = val
+
+    @classmethod
+    def mock_get_module_option(cls, attr, default=None):
+        return cls.CONFIG_KEY_DICT.get(attr, default)
+
+    @classmethod
+    def mock_kv_store(cls):
+        cls.CONFIG_KEY_DICT.clear()
+        mgr.set_module_option.side_effect = cls.mock_set_module_option
+        mgr.get_module_option.side_effect = cls.mock_get_module_option
+        # kludge below
+        mgr.set_store.side_effect = cls.mock_set_module_option
+        mgr.get_store.side_effect = cls.mock_get_module_option
+
+    @classmethod
+    def get_key(cls, key):
+        return cls.CONFIG_KEY_DICT.get(key, None)
+
+
+class CLICommandTestMixin(KVStoreMockMixin):
+    @classmethod
+    def exec_cmd(cls, cmd, **kwargs):
+        return exec_dashboard_cmd(None, cmd, **kwargs)
 
 
 class ControllerTestCase(helper.CPWebCase):
