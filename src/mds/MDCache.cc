@@ -1984,9 +1984,7 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
     return;
 
   auto i = in->get_projected_inode();
-  
-  if (!i->quota.is_enable() &&
-  	  !quota_change)
+  if (!i->quota.is_any_enable() && !quota_change )
     return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
@@ -2002,9 +2000,12 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
       goto update;
 
     if (cap->last_rbytes == i->rstat.rbytes &&
-        cap->last_rsize == i->rstat.rsize())
+        cap->last_rsize == i->rstat.rsize() &&
+        cap->last_user_rbytes == i->rstat.user_rbytes &&
+        cap->last_group_rbytes == i->rstat.group_rbytes)
       continue;
 
+    //quota
     if (i->quota.max_files > 0) {
       if (i->rstat.rsize() >= i->quota.max_files)
         goto update;
@@ -2023,11 +2024,47 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
         goto update;
     }
 
+    //user quota
+    for (auto& p : i->quota.user_max_bytes) {
+      if (p.second > 0) {
+        auto riter = i->rstat.user_rbytes.find(p.first);
+        auto citer = cap->last_user_rbytes.find(p.first);
+        int64_t user_rbytes = riter != i->rstat.user_rbytes.end()? riter->second : 0;
+        int64_t last_user_rbytes = citer != cap->last_user_rbytes.end()? citer->second : 0;
+
+        if (user_rbytes > p.second - (p.second >> 3))
+          goto update;
+
+        if ((abs(last_user_rbytes - p.second) >> 4) <
+          abs(last_user_rbytes - user_rbytes))
+          goto update;
+      }
+    }
+
+    //group quota
+    for (auto& p : i->quota.group_max_bytes) {
+      if (p.second > 0) {
+        auto riter = i->rstat.group_rbytes.find(p.first);
+        auto citer = cap->last_group_rbytes.find(p.first);
+        int64_t group_rbytes = riter != i->rstat.group_rbytes.end()? riter->second : 0;
+        int64_t last_group_rbytes = citer != cap->last_group_rbytes.end()? citer->second : 0;
+
+        if (group_rbytes > p.second - (p.second >> 3))
+          goto update;
+
+        if ((abs(last_group_rbytes - p.second) >> 4) <
+          abs(last_group_rbytes - group_rbytes))
+          goto update;
+      }
+    }
+
     continue;
 
 update:
     cap->last_rsize = i->rstat.rsize();
     cap->last_rbytes = i->rstat.rbytes;
+    cap->last_user_rbytes = i->rstat.user_rbytes;
+    cap->last_group_rbytes = i->rstat.group_rbytes;
 
     auto msg = make_message<MClientQuota>();
     msg->ino = in->ino();

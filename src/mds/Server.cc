@@ -5199,7 +5199,7 @@ int Server::parse_user_quota_vxattr(string name, string value, quota_info_t *quo
       string::iterator begin = value.begin();
       string::iterator end = value.end();
       if (begin == end) {
-        // keep quota unchanged. (for create_user_quota_realm())
+        // keep quota unchanged. (for create_quota_realm())
         return 0;
       }
       keys_and_values<string::iterator> p;    // create instance of parser
@@ -5257,7 +5257,7 @@ int Server::parse_group_quota_vxattr(string name, string value, quota_info_t *qu
       string::iterator begin = value.begin();
       string::iterator end = value.end();
       if (begin == end) {
-        // keep quota unchanged. (for create_group_quota_realm())
+        // keep quota unchanged. (for create_quota_realm())
         return 0;
       }
       keys_and_values<string::iterator> p;    // create instance of parser
