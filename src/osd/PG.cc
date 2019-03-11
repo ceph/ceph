@@ -1767,14 +1767,16 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
-    if (want_acting == up) {
-      // There can't be any pending backfill if
-      // want is the same as crush map up OSDs.
-      ceph_assert(want_backfill.empty());
-      vector<int> empty;
-      osd->queue_want_pg_temp(info.pgid.pgid, empty);
-    } else
-      osd->queue_want_pg_temp(info.pgid.pgid, want);
+    if (!cct->_conf->osd_debug_no_acting_change) {
+      if (want_acting == up) {
+	// There can't be any pending backfill if
+	// want is the same as crush map up OSDs.
+	ceph_assert(want_backfill.empty());
+	vector<int> empty;
+	osd->queue_want_pg_temp(info.pgid.pgid, empty);
+      } else
+	osd->queue_want_pg_temp(info.pgid.pgid, want);
+    }
     return false;
   }
   want_acting.clear();
@@ -2993,6 +2995,9 @@ void PG::purge_strays()
   if (is_premerge()) {
     dout(10) << "purge_strays " << stray_set << " but premerge, doing nothing"
 	     << dendl;
+    return;
+  }
+  if (cct->_conf.get_val<bool>("osd_debug_no_purge_strays")) {
     return;
   }
   dout(10) << "purge_strays " << stray_set << dendl;
