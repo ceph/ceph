@@ -4754,10 +4754,25 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
 
   auto &pi = cur->project_inode();
 
-  if (mask & CEPH_SETATTR_UID)
+  if (mask & CEPH_SETATTR_UID) {
+    uid_t old_uid = pi.inode.uid;
     pi.inode.uid = req->head.args.setattr.uid;
-  if (mask & CEPH_SETATTR_GID)
+    if (pi.inode.is_file() && pi.inode.rstat.user_rbytes.count(old_uid)) {
+      int64_t rbytes = pi.inode.rstat.user_rbytes[old_uid];
+      pi.inode.rstat.user_rbytes.erase(old_uid);
+      pi.inode.rstat.user_rbytes[pi.inode.uid] = rbytes;
+    }
+  }
+
+  if (mask & CEPH_SETATTR_GID) {
+    gid_t old_gid = pi.inode.gid;
     pi.inode.gid = req->head.args.setattr.gid;
+    if (pi.inode.is_file() && pi.inode.rstat.group_rbytes.count(old_gid)) {
+      int64_t rbytes = pi.inode.rstat.group_rbytes[old_gid];
+      pi.inode.rstat.group_rbytes.erase(old_gid);
+      pi.inode.rstat.group_rbytes[pi.inode.gid] = rbytes;
+    }
+  }
 
   if (mask & CEPH_SETATTR_MODE)
     pi.inode.mode = (pi.inode.mode & ~07777) | (req->head.args.setattr.mode & 07777);
