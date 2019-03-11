@@ -121,7 +121,8 @@ Authentication
     __le32 method;  // CEPH_AUTH_{NONE, CEPHX, ...}
     __le32 num_preferred_modes;
     list<__le32> mode  // CEPH_CON_MODE_*
-    method specific payload
+    __le32 auth payload_len
+    auth payload (specific to the method)
 
 * TAG_AUTH_BAD_METHOD server -> client: reject client-selected auth method::
 
@@ -150,7 +151,8 @@ Authentication
 
     __le64 global_id
     __le32 connection mode // CEPH_CON_MODE_*
-    method specific payload
+    __le32 auth payload length
+    auth payload
 
   - The server is the one to decide authentication has completed and what
     the final connection mode will be.
