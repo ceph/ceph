@@ -14259,6 +14259,28 @@ bool Client::ms_handle_refused(Connection *con)
   return false;
 }
 
+Inode *Client::get_any_quota_root(Inode *in, const UserPerm& perms)
+{
+  Inode *quota_in = root_ancestor;
+  SnapRealm *realm = in->snaprealm;
+  while (realm) {
+    ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
+    if (realm->ino != in->ino) {
+      auto p = inode_map.find(vinodeno_t(realm->ino, CEPH_NOSNAP));
+      if (p == inode_map.end())
+	break;
+
+      if (p->second->quota.is_any_enable()) {
+	quota_in = p->second;
+	break;
+      }
+    }
+    realm = realm->pparent;
+  }
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << quota_in->vino() << dendl;
+  return quota_in;
+}
+
 Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
   Inode *quota_in = root_ancestor;
@@ -14340,6 +14362,168 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
         } else {
           return false;
         }
+      });
+}
+
+Inode *Client::get_user_quota_root(Inode *in, uid_t uid)
+{
+  Inode *quota_in = root_ancestor;
+  SnapRealm *realm = in->snaprealm;
+  while (realm) {
+    ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
+    if (realm->ino != in->ino) {
+      auto p = inode_map.find(vinodeno_t(realm->ino, CEPH_NOSNAP));
+      if (p == inode_map.end())
+        break;
+
+      if (p->second->quota.is_user_enable(uid)) {
+        quota_in = p->second;
+        break;
+      }
+    }
+    realm = realm->pparent;
+  }
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << quota_in->vino() << dendl;
+  return quota_in;
+}
+
+/**
+ * Traverse user quota ancestors of the Inode, return true
+ * if any of them passes the passed function
+ */
+bool Client::check_user_quota_condition(Inode *in, uid_t uid,
+				   std::function<bool (Inode &in)> test)
+{
+  while (true) {
+    assert(in != NULL);
+    if (test(*in)) {
+      return true;
+    }
+
+    if (in == root_ancestor) {
+      // We're done traversing, drop out
+      return false;
+    } else {
+      // Continue up the tree
+      in = get_user_quota_root(in, uid);
+    }
+  }
+  return false;
+}
+
+bool Client::is_user_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+    const UserPerm& perms, bool flag)
+{
+  uid_t tmp_uid = flag? perms.uid() : in->uid;
+
+  return check_user_quota_condition(in, tmp_uid,
+      [&new_bytes, &tmp_uid](Inode &in) {
+      int64_t user_maxbytes = in.quota.user_max_bytes.count(tmp_uid)? in.quota.user_max_bytes[tmp_uid] : 0;
+      int64_t user_rbytes = in.rstat.user_rbytes.count(tmp_uid)? in.rstat.user_rbytes[tmp_uid] : 0;
+        return (user_maxbytes > 0 && (user_rbytes + new_bytes) > user_maxbytes);
+      });
+}
+
+bool Client::is_user_quota_bytes_approaching(Inode *in, const UserPerm& perms, bool flag)
+{
+  uid_t tmp_uid = flag? perms.uid() : in->uid;
+  return check_user_quota_condition(in, tmp_uid,
+      [&tmp_uid](Inode &in) {
+        int64_t user_maxbytes = in.quota.user_max_bytes.count(tmp_uid)? in.quota.user_max_bytes[tmp_uid] : 0;
+        int64_t user_rbytes = in.rstat.user_rbytes.count(tmp_uid)? in.rstat.user_rbytes[tmp_uid] : 0;
+
+        if (user_maxbytes) {
+          if (user_rbytes >= user_maxbytes) {
+            return true;
+          }
+          assert(in.size >= in.reported_size);
+          uint64_t user_space = user_maxbytes - user_rbytes;
+          uint64_t size = in.size - in.reported_size;
+          if((user_space>> 4) < size)
+            return true;
+        }
+        return false;
+      });
+}
+
+Inode *Client::get_group_quota_root(Inode *in, gid_t gid)
+{
+  Inode *quota_in = root_ancestor;
+  SnapRealm *realm = in->snaprealm;
+  while (realm) {
+    ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
+    if (realm->ino != in->ino) {
+      auto p = inode_map.find(vinodeno_t(realm->ino, CEPH_NOSNAP));
+      if (p == inode_map.end())
+	      break;
+
+      if (p->second->quota.is_group_enable(gid)) {
+	      quota_in = p->second;
+	      break;
+      }
+    }
+    realm = realm->pparent;
+  }
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << quota_in->vino() << dendl;
+  return quota_in;
+}
+
+/**
+ * Traverse group quota ancestors of the Inode, return true
+ * if any of them passes the passed function
+ */
+bool Client::check_group_quota_condition(Inode *in, gid_t gid,
+				   std::function<bool (Inode &in)> test)
+{
+  while (true) {
+    assert(in != NULL);
+    if (test(*in)) {
+      return true;
+    }
+
+    if (in == root_ancestor) {
+      // We're done traversing, drop out
+      return false;
+    } else {
+      // Continue up the tree
+      in = get_group_quota_root(in, gid);
+    }
+  }
+  return false;
+}
+
+bool Client::is_group_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+    const UserPerm& perms, bool flag)
+{
+  gid_t tmp_gid = flag? perms.gid() : in->gid;
+
+  return check_group_quota_condition(in, tmp_gid,
+      [&new_bytes,  &tmp_gid](Inode &in) {
+      int64_t group_maxbytes = in.quota.group_max_bytes.count(tmp_gid)? in.quota.group_max_bytes[tmp_gid] : 0;
+      int64_t group_rbytes = in.rstat.group_rbytes.count(tmp_gid)? in.rstat.group_rbytes[tmp_gid] : 0;
+        return (group_maxbytes > 0 && (group_rbytes + new_bytes) > group_maxbytes);
+      });
+}
+
+bool Client::is_group_quota_bytes_approaching(Inode *in, const UserPerm& perms, bool flag)
+{
+  gid_t tmp_gid = flag? perms.gid() : in->gid;
+  return check_group_quota_condition(in, tmp_gid,
+      [&tmp_gid](Inode &in) {
+        int64_t group_maxbytes = in.quota.group_max_bytes.count(tmp_gid)? in.quota.group_max_bytes[tmp_gid] : 0;
+        int64_t group_rbytes = in.rstat.group_rbytes.count(tmp_gid)? in.rstat.group_rbytes[tmp_gid] : 0;
+
+        if (group_maxbytes) {
+          if (group_rbytes >= group_maxbytes) {
+            return true;
+          }
+          assert(in.size >= in.reported_size);
+          uint64_t group_space = group_maxbytes - group_rbytes;
+          uint64_t size = in.size - in.reported_size;
+          if((group_space>> 4) < size)
+            return true;
+        }
+        return false;
       });
 }
 

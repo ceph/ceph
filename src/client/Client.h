@@ -930,6 +930,7 @@ protected:
 
   int authenticate();
 
+  Inode* get_any_quota_root(Inode *in, const UserPerm& perms);
   Inode* get_quota_root(Inode *in, const UserPerm& perms);
   bool check_quota_condition(Inode *in, const UserPerm& perms,
 			     std::function<bool (const Inode &)> test);
@@ -937,6 +938,18 @@ protected:
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
 			       const UserPerm& perms);
   bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
+  Inode* get_user_quota_root(Inode *in, uid_t uid);
+  bool check_user_quota_condition(Inode *in, uid_t uid,
+			     std::function<bool (Inode &)> test);
+  bool is_user_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+               const UserPerm& perms, bool flag);
+  bool is_user_quota_bytes_approaching(Inode *in, const UserPerm& perms, bool flag);
+  Inode* get_group_quota_root(Inode *in, gid_t gid);
+  bool check_group_quota_condition(Inode *in, gid_t gid,
+      std::function<bool (Inode &)> test);
+  bool is_group_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
+      const UserPerm& perms, bool flag);
+  bool is_group_quota_bytes_approaching(Inode *in, const UserPerm& perms, bool flag);
 
   int check_pool_perm(Inode *in, int need);
 
