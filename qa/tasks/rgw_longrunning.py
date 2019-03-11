@@ -135,7 +135,7 @@ def task(ctx, config):
             run.Raw(';'),
             'git',
             'clone',
-            'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git',
+            'https://github.com/red-hat-storage/ceph-qe-scripts.git',
             '-b',
             '%s' % branch
         ])
