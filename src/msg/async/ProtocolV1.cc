@@ -33,8 +33,6 @@ ostream &ProtocolV1::_conn_prefix(std::ostream *_dout) {
 // it, just a big number.  PLR
 #define SEQ_MASK 0x7fffffff
 
-const int ASYNC_COALESCE_THRESHOLD = 256;
-
 using namespace std;
 
 static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
@@ -79,7 +77,6 @@ ProtocolV1::ProtocolV1(AsyncConnection *connection)
 
 ProtocolV1::~ProtocolV1() {
   ceph_assert(out_q.empty());
-  ceph_assert(sent.empty());
 
   delete[] temp_buffer;
 
@@ -249,24 +246,6 @@ void ProtocolV1::send_message(Message *m) {
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
-}
-
-void ProtocolV1::prepare_send_message(uint64_t features, Message *m,
-                                      bufferlist &bl) {
-  ldout(cct, 20) << __func__ << " m " << *m << dendl;
-
-  // associate message with Connection (for benefit of encode_payload)
-  ldout(cct, 20) << __func__ << (m->empty_payload() ? " encoding features " : " half-reencoding features ")
-		 << features << " " << m  << " " << *m << dendl;
-
-  // encode and copy out of *m
-  // in write_message we update header.seq and need recalc crc
-  // so skip calc header in encode function.
-  m->encode(features, messenger->crcflags, true);
-
-  bl.append(m->get_payload());
-  bl.append(m->get_middle());
-  bl.append(m->get_data());
 }
 
 void ProtocolV1::send_keepalive() {
@@ -564,104 +543,6 @@ void ProtocolV1::write_event() {
   }
 }
 
-#if 0
-void ProtocolV1::write_event() {
-  ldout(cct, 10) << __func__ << dendl;
-  ssize_t r = 0;
-
-  connection->write_lock.lock();
-  if (can_write == WriteStatus::CANWRITE) {
-    if (keepalive) {
-      append_keepalive_or_ack();
-      keepalive = false;
-    }
-
-    auto start = ceph::mono_clock::now();
-    bool more;
-    do {
-      bufferlist data;
-      Message *m = _get_next_outgoing(&data);
-      if (!m) {
-        break;
-      }
-
-      if (!connection->policy.lossy) {
-        // put on sent list
-        sent.push_back(m);
-        m->get();
-      }
-      more = !out_q.empty();
-      connection->write_lock.unlock();
-
-      // send_message or requeue messages may not encode message
-      if (!data.length()) {
-        prepare_send_message(connection->get_features(), m, data);
-      }
-
-      r = write_message(m, data, more);
-
-      connection->write_lock.lock();
-      if (r == 0) {
-        ;
-      } else if (r < 0) {
-        ldout(cct, 1) << __func__ << " send msg failed" << dendl;
-        break;
-      } else if (r > 0)
-        break;
-    } while (can_write == WriteStatus::CANWRITE);
-    connection->write_lock.unlock();
-
-    // if r > 0 mean data still lefted, so no need _try_send.
-    if (r == 0) {
-      uint64_t left = ack_left;
-      if (left) {
-        ceph_le64 s;
-        s = in_seq;
-        connection->outcoming_bl.append(CEPH_MSGR_TAG_ACK);
-        connection->outcoming_bl.append((char *)&s, sizeof(s));
-        ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
-                       << " messages" << dendl;
-        ack_left -= left;
-        left = ack_left;
-        r = connection->_try_send(left);
-      } else if (is_queued()) {
-        r = connection->_try_send();
-      }
-    }
-
-    connection->logger->tinc(l_msgr_running_send_time,
-                             ceph::mono_clock::now() - start);
-    if (r < 0) {
-      ldout(cct, 1) << __func__ << " send msg failed" << dendl;
-      connection->lock.lock();
-      fault();
-      connection->lock.unlock();
-      return;
-    }
-  } else {
-    connection->write_lock.unlock();
-    connection->lock.lock();
-    connection->write_lock.lock();
-    if (state == STANDBY && !connection->policy.server && is_queued()) {
-      ldout(cct, 10) << __func__ << " policy.server is false" << dendl;
-      connection->_connect();
-    } else if (connection->cs && state != NONE && state != CLOSED &&
-               state != START_CONNECT) {
-      r = connection->_try_send();
-      if (r < 0) {
-        ldout(cct, 1) << __func__ << " send outcoming bl failed" << dendl;
-        connection->write_lock.unlock();
-        fault();
-        connection->lock.unlock();
-        return;
-      }
-    }
-    connection->write_lock.unlock();
-    connection->lock.unlock();
-  }
-}
-#endif
-
 bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
 }
@@ -799,25 +680,6 @@ CtPtr ProtocolV1::handle_keepalive2(char *buffer, int r) {
   return CONTINUE(wait_message);
 }
 
-void ProtocolV1::append_keepalive_or_ack(bool ack, utime_t *tp) {
-  ldout(cct, 10) << __func__ << dendl;
-  if (ack) {
-    ceph_assert(tp);
-    struct ceph_timespec ts;
-    tp->encode_timeval(&ts);
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2_ACK);
-    connection->outcoming_bl.append((char *)&ts, sizeof(ts));
-  } else if (connection->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
-    struct ceph_timespec ts;
-    utime_t t = ceph_clock_now();
-    t.encode_timeval(&ts);
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE2);
-    connection->outcoming_bl.append((char *)&ts, sizeof(ts));
-  } else {
-    connection->outcoming_bl.append(CEPH_MSGR_TAG_KEEPALIVE);
-  }
-}
-
 CtPtr ProtocolV1::handle_keepalive2_ack(char *buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
@@ -847,19 +709,7 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
   ldout(cct, 20) << __func__ << " got ACK" << dendl;
 
   ldout(cct, 15) << __func__ << " got ack seq " << seq << dendl;
-  // trim sent list
-  static const int max_pending = 128;
-  int i = 0;
-  Message *pending[max_pending];
-  connection->write_lock.lock();
-  while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
-    Message *m = sent.front();
-    sent.pop_front();
-    pending[i++] = m;
-    ldout(cct, 10) << __func__ << " got ack seq " << seq
-                   << " >= " << m->get_seq() << " on " << m << " " << *m
-                   << dendl;
-  }
+
   /* XXX Having that under lock is terrible! FIXME please! */
   WriteQueue *wqueue = connection->wqueue;
   decltype(wqueue->msgs) list;
@@ -873,11 +723,6 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
   connection->write_lock.unlock();
   /* Clear messages explicitly */
   list.clear();
-
-  /* XXX To be removed ASAP */
-  for (int k = 0; k < i; k++) {
-    pending[k]->put();
-  }
 
   return CONTINUE(wait_message);
 }
@@ -1357,96 +1202,6 @@ void ProtocolV1::randomize_out_seq() {
   }
 }
 
-ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
-  FUNCTRACE(cct);
-  ceph_assert(connection->center->in_thread());
-  m->set_seq(++out_seq);
-
-  if (messenger->crcflags & MSG_CRC_HEADER) {
-    m->calc_header_crc();
-  }
-
-  ceph_msg_header &header = m->get_header();
-  ceph_msg_footer &footer = m->get_footer();
-
-  // TODO: let sign_message could be reentry?
-  // Now that we have all the crcs calculated, handle the
-  // digital signature for the message, if the AsyncConnection has session
-  // security set up.  Some session security options do not
-  // actually calculate and check the signature, but they should
-  // handle the calls to sign_message and check_signature.  PLR
-  if (session_security.get() == NULL) {
-    ldout(cct, 20) << __func__ << " no session security" << dendl;
-  } else {
-    if (session_security->sign_message(m)) {
-      ldout(cct, 20) << __func__ << " failed to sign m=" << m
-                     << "): sig = " << footer.sig << dendl;
-    } else {
-      ldout(cct, 20) << __func__ << " signed m=" << m
-                     << "): sig = " << footer.sig << dendl;
-    }
-  }
-
-  connection->outcoming_bl.append(CEPH_MSGR_TAG_MSG);
-  connection->outcoming_bl.append((char *)&header, sizeof(header));
-
-  ldout(cct, 20) << __func__ << " sending message type=" << header.type
-                 << " src " << entity_name_t(header.src)
-                 << " front=" << header.front_len << " data=" << header.data_len
-                 << " off " << header.data_off << dendl;
-
-  if ((bl.length() <= ASYNC_COALESCE_THRESHOLD) && (bl.buffers().size() > 1)) {
-    for (const auto &pb : bl.buffers()) {
-      connection->outcoming_bl.append((char *)pb.c_str(), pb.length());
-    }
-  } else {
-    connection->outcoming_bl.claim_append(bl);
-  }
-
-  // send footer; if receiver doesn't support signatures, use the old footer
-  // format
-  ceph_msg_footer_old old_footer;
-  if (connection->has_feature(CEPH_FEATURE_MSG_AUTH)) {
-    connection->outcoming_bl.append((char *)&footer, sizeof(footer));
-  } else {
-    if (messenger->crcflags & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-    } else {
-      old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    old_footer.data_crc =
-        messenger->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;
-    connection->outcoming_bl.append((char *)&old_footer, sizeof(old_footer));
-  }
-
-  m->trace.event("async writing message");
-  ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
-                 << dendl;
-  ssize_t total_send_size = connection->outcoming_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
-
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-  if (m->get_type() == CEPH_MSG_OSD_OP)
-    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
-  else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
-    OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
-#endif
-  m->put();
-
-  return rc;
-}
-
 void ProtocolV1::requeue_sent() {
   WriteQueue *wqueue = connection->wqueue;
 
@@ -1457,22 +1212,6 @@ void ProtocolV1::requeue_sent() {
   /* Rewind to the beginning */
   wqueue->msgs_beg_it = wqueue->msgs.begin();
   wqueue->msg_beg_pos = 0;
-
-
-  /* XXX Remove below ASAP */
-  if (sent.empty()) {
-    return;
-  }
-
-  list<QueuedMessage> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
-  out_seq -= sent.size();
-  while (!sent.empty()) {
-    Message *m = sent.back();
-    sent.pop_back();
-    ldout(cct, 10) << __func__ << " " << *m << " for resend "
-                   << " (" << m->get_seq() << ")" << dendl;
-    rq.emplace_front(m, false);
-  }
 }
 
 uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
@@ -1511,12 +1250,6 @@ void ProtocolV1::discard_out_queue() {
   /* Discard everything which is sent but not acked yet */
   wqueue->msgs.erase(wqueue->msgs.begin(), wqueue->msgs_beg_it);
 
-  /* XXX To be removed ASAP */
-  for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
-  }
-  sent.clear();
   /* Discard out queue */
   out_q.clear();
 }
@@ -1560,23 +1293,6 @@ void ProtocolV1::reset_recv_state() {
         << connection->dispatch_queue->dispatch_throttler.get_max() << dendl;
     connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
   }
-}
-
-Message *ProtocolV1::_get_next_outgoing(bufferlist *bl) {
-  Message *m = 0;
-#if 0
-  if (!out_q.empty()) {
-    map<int, list<pair<bufferlist, Message *> > >::reverse_iterator it =
-        out_q.rbegin();
-    ceph_assert(!it->second.empty());
-    list<pair<bufferlist, Message *> >::iterator p = it->second.begin();
-    m = p->second;
-    if (bl) bl->swap(p->first);
-    it->second.erase(p);
-    if (it->second.empty()) out_q.erase(it->first);
-  }
-#endif
-  return m;
 }
 
 /**

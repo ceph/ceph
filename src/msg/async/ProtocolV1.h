@@ -104,7 +104,6 @@ protected:
 
   enum class WriteStatus { NOWRITE, REPLACING, CANWRITE, CLOSED };
   std::atomic<WriteStatus> can_write;
-  std::list<Message *> sent;  // the first bufferlist need to inject seq
   // priority queue for outbound msgs
   std::map<int, std::list<QueuedMessage>> out_q;
   bool keepalive;
@@ -173,7 +172,6 @@ protected:
   CtPtr handle_message(char *buffer, int r);
 
   CtPtr handle_keepalive2(char *buffer, int r);
-  void append_keepalive_or_ack(bool ack = false, utime_t *t = nullptr);
   CtPtr handle_keepalive2_ack(char *buffer, int r);
   CtPtr handle_tag_ack(char *buffer, int r);
 
@@ -193,11 +191,6 @@ protected:
 
   void session_reset();
   void randomize_out_seq();
-
-  Message *_get_next_outgoing(bufferlist *bl);
-
-  void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  ssize_t write_message(Message *m, bufferlist &bl, bool more);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
