@@ -13,6 +13,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "msg/async/AsyncConnection.h"
 #include "RDMAStack.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -433,6 +434,23 @@ ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
   if (r < 0 && r != -EAGAIN)
     return r;
   return bytes;
+}
+
+ssize_t RDMAConnectedSocketImpl::send(WriteQueue *wqueue)
+{
+  ssize_t sent;
+
+  /* Keep bufferlist always full */
+  wqueue->fillin_bufferlist();
+  if (!wqueue->has_msgs_in_outcoming())
+    /* Nothing to send */
+    return 0;
+
+  sent = send(wqueue->outbl, false);
+  if (sent > 0)
+    wqueue->advance(sent);
+
+  return sent;
 }
 
 ssize_t RDMAConnectedSocketImpl::submit(bool more)

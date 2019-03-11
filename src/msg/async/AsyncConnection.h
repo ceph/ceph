@@ -202,6 +202,8 @@ class AsyncConnection : public Connection {
                 bool more=false);
   ssize_t _try_send(bool more=false);
 
+  ssize_t send_wqueue();
+
   void _connect();
   void _stop();
   void fault();

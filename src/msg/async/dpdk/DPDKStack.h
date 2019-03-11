@@ -20,6 +20,7 @@
 #include "common/ceph_context.h"
 #include "common/Tub.h"
 
+#include "msg/async/AsyncConnection.h"
 #include "msg/async/Stack.h"
 #include "net.h"
 #include "const.h"
@@ -165,6 +166,21 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
       return _conn.send(Packet(std::move(frags), make_deleter(std::move(del))));
     }
+  }
+  virtual ssize_t send(WriteQueue *wqueue) override {
+    ssize_t sent;
+
+    /* Keep bufferlist always full */
+    wqueue->fillin_bufferlist();
+    if (!wqueue->has_msgs_in_outcoming())
+      /* Nothing to send */
+      return 0;
+
+    sent = send(wqueue->outbl, false);
+    if (sent > 0)
+      wqueue->advance(sent);
+
+    return sent;
   }
   virtual void shutdown() override {
     _conn.close_write();

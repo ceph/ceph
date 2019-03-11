@@ -564,6 +564,32 @@ ssize_t AsyncConnection::_try_send(bool more)
   return outcoming_bl.length();
 }
 
+ssize_t AsyncConnection::send_wqueue() {
+  ssize_t sent;
+
+  do {
+    sent = cs.send(wqueue);
+  } while (sent > 0 &&
+	   /* Queue is still not empty and outcoming was fully flushed */
+	   wqueue->has_msgs_to_send() &&
+	   !wqueue->has_msgs_in_outcoming());
+
+  if (!open_write && wqueue->msgs_beg_it != wqueue->msgs.end()) {
+    center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
+    open_write = true;
+  }
+
+  if (open_write && wqueue->msgs_beg_it == wqueue->msgs.end()) {
+    center->delete_file_event(cs.fd(), EVENT_WRITABLE);
+    open_write = false;
+    if (writeCallback) {
+      center->dispatch_event_external(write_callback_handler);
+    }
+  }
+
+  return sent;
+}
+
 void AsyncConnection::inject_delay() {
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(async_msgr->cct, 10) << __func__ << " sleep for " <<
