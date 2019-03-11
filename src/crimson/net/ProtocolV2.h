@@ -127,6 +127,9 @@ class ProtocolV2 final : public Protocol {
 
   void execute_accepting();
 
+  // CONNECTING/ACCEPTING
+  seastar::future<> finish_auth();
+
   // ACCEPTING/REPLACING (server)
   seastar::future<> send_server_ident();
 
