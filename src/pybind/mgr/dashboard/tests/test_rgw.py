@@ -1,6 +1,6 @@
 import mock
 
-from .helper import ControllerTestCase
+from . import ControllerTestCase
 from ..controllers.rgw import RgwUser
 
 

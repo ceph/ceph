@@ -6,7 +6,7 @@ import json
 import cherrypy
 import mock
 
-from .helper import ControllerTestCase, KVStoreMockMixin
+from . import ControllerTestCase, KVStoreMockMixin
 from ..controllers import RESTController, Controller
 from ..tools import RequestLoggingTool
 from .. import mgr

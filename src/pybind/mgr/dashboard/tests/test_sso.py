@@ -5,12 +5,11 @@ from __future__ import absolute_import
 import errno
 import unittest
 
-from . import CmdException, exec_dashboard_cmd
-from .helper import CLICommandTestMixin
+from . import CmdException, exec_dashboard_cmd, KVStoreMockMixin
 from ..services.sso import handle_sso_command, load_sso_db
 
 
-class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
+class AccessControlTest(unittest.TestCase, KVStoreMockMixin):
     IDP_METADATA = '''<?xml version="1.0"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
                      xmlns:ds="http://www.w3.org/2000/09/xmldsig#"

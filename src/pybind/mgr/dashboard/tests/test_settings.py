@@ -3,11 +3,10 @@ from __future__ import absolute_import
 
 import errno
 import unittest
-from .helper import KVStoreMockMixin
+from . import KVStoreMockMixin, ControllerTestCase
 from .. import settings
 from ..controllers.settings import Settings as SettingsController
 from ..settings import Settings, handle_option_command
-from .helper import ControllerTestCase
 
 
 class SettingsTest(unittest.TestCase, KVStoreMockMixin):
