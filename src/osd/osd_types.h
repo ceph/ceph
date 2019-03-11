@@ -133,9 +133,6 @@ struct osd_reqid_t {
   osd_reqid_t()
     : tid(0), inc(0)
   {}
-  osd_reqid_t(const osd_reqid_t& other)
-    : name(other.name), tid(other.tid), inc(other.inc)
-  {}
   osd_reqid_t(const entity_name_t& a, int i, ceph_tid_t t)
     : name(a), tid(t), inc(i)
   {}
