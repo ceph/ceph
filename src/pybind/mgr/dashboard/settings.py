@@ -47,6 +47,9 @@ class Options(object):
     PROMETHEUS_API_HOST = ('', str)  # Not in use ATM
     ALERTMANAGER_API_HOST = ('', str)
 
+    # iSCSI management settings
+    ISCSI_API_SSL_VERIFICATION = (True, bool)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
