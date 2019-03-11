@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include <memory>
+#include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "crimson/net/Fwd.h"
 #include "osd/osd_types.h"
@@ -15,6 +18,7 @@
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 class OSDMap;
 class MQuery;
+class PGBackend;
 class PGPeeringEvent;
 namespace recovery {
   class Context;
@@ -40,7 +44,7 @@ public:
      pg_shard_t pg_shard,
      pg_pool_t&& pool,
      std::string&& name,
-     ec_profile_t&& ec_profile,
+     std::unique_ptr<PGBackend> backend,
      cached_map_t osdmap,
      ceph::net::Messenger& msgr);
 
@@ -123,6 +127,9 @@ private:
 			    int new_up_primary,
 			    const std::vector<int>& new_acting,
 			    int new_acting_primary);
+  seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
+  seastar::future<> do_osd_op(const object_info_t& oi, OSDOp* op);
+
 private:
   const spg_t pgid;
   pg_shard_t whoami;
@@ -153,6 +160,7 @@ private:
 
   seastar::future<> wait_for_active();
   std::optional<seastar::shared_promise<>> active_promise;
+  std::unique_ptr<PGBackend> backend;
 
   cached_map_t osdmap;
   ceph::net::Messenger& msgr;
