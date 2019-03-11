@@ -286,6 +286,8 @@ bool CDir::check_rstats(bool scrub)
       ceph_assert(nest_info.rbytes == fnode.rstat.rbytes);
       ceph_assert(nest_info.rfiles == fnode.rstat.rfiles);
       ceph_assert(nest_info.rsubdirs == fnode.rstat.rsubdirs);
+      ceph_assert(nest_info.user_rbytes == fnode.rstat.user_rbytes);
+      ceph_assert(nest_info.group_rbytes == fnode.rstat.group_rbytes);
     }
   }
   dout(10) << "check_rstats complete on " << this << dendl;
@@ -860,6 +862,8 @@ void CDir::steal_dentry(CDentry *dn)
       fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
       fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;
       fnode.rstat.rsnaps += pi->accounted_rstat.rsnaps;
+      fnode.rstat.user_rbytes_add(pi->accounted_rstat.user_rbytes);
+      fnode.rstat.group_rbytes_add(pi->accounted_rstat.group_rbytes);
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
 

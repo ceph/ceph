@@ -8999,6 +8999,8 @@ void _rollback_repair_dir(MutationRef& mut, CDir *dir, rename_rollback::drec &r,
     pf->rstat.rfiles += linkunlink * rstat.rfiles;
     pf->rstat.rsubdirs += linkunlink * rstat.rsubdirs;
     pf->rstat.rsnaps += linkunlink * rstat.rsnaps;
+    pf->rstat.user_rbytes_add(rstat.user_rbytes, linkunlink);
+    pf->rstat.group_rbytes_add(rstat.group_rbytes, linkunlink);
   }
   if (pf->fragstat.mtime == ctime) {
     pf->fragstat.mtime = r.dirfrag_old_mtime;
