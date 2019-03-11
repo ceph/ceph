@@ -2966,7 +2966,7 @@ void PGMap::get_health_checks(
 
     for (auto& a : osd_sum.os_alerts) {
       int left = max;
-      string s0 = " osd:";
+      string s0 = " osd.";
       s0 += stringify(a.first);
       for (auto& aa : a.second) {
         string s(s0);
