@@ -79,27 +79,60 @@ can disconnect.
 Frame format
 ------------
 
-All further data sent or received is contained by a frame.  Each frame has
-the form::
+All further data sent or received is contained by a frame.
 
-  frame_len (le32)
-  tag (TAG_* le32)
-  frame_header_checksum (le32)
-  payload
-  [payload padding -- only present after stream auth phase]
-  [signature -- only present after stream auth phase]
+Preamble
+^^^^^^^^
 
+Each frame is preceded by a preamble of the form::
 
-* The frame_header_checksum is over just the frame_len and tag values (8 bytes).
+  u8 tag
+  u8 num_segments
+  segment {
+    __le32 length in bytes
+    __le16 alignment
+  } segments[4];
+  __le16 reserved
+  __le32 crc32c of header
+  
+* The total size is 32 bytes  
 
-* frame_len includes everything after the frame_len le32 up to the end of the
-  frame (all payloads, signatures, and padding).
+* The frame_header_checksum is over all bytes except for the final 4 bytes for the checksum itself.
 
-* The payload format and length is determined by the tag.
+* The segment payload formats are determined by the tag.
 
-* The signature portion is only present if the authentication phase
-  has completed (TAG_AUTH_DONE has been sent) and signatures are
-  enabled.
+* Most frames use only the first segment.  Message frames (TAG_MESSAGE) use all four.
+
+Payload
+^^^^^^^
+
+The segment payloads follow.
+
+Epilogue
+^^^^^^^^
+
+Each frame is trailed by an epilogue.  There are two forms: a *plain* epilogue and a *secure* epilogue.  The secure variant is only used after authentication completes when the secure connection mode has been selected.
+
+The plain epilogue has the form::
+
+  u8 late_flags
+  __le32 crc32c_values[4]
+
+* The 4 crc32c values correspond to the four frame segments.  If a segment is
+  empty, the crc value should be -1.
+* One flag is currently defined:
+
+  - *FLAG_LATEABRT*: the frame was aborted mid-transmission and should
+    be ignored.
+
+The secure epilogue has the form::
+
+  u8 late_flags
+  u8 padding[15]
+  private cipher data
+
+The contents of the private cipher data is cipher-dependent.
+
 
 Hello
 -----
@@ -506,7 +539,7 @@ Once a session is established, we can exchange messages.
 
 
 Example of protocol interaction (WIP)
-_____________________________________
+-------------------------------------
 
 
 .. ditaa:: +---------+        +--------+
