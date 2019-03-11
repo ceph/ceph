@@ -1,11 +1,3 @@
-overrides:
-  ceph:
-    mon_bind_msgr2: false
-    conf:
-      global:
-        ms type: simple
-        ms bind msgr2: false
-
 tasks:
   - cephfs_test_runner:
       modules:
