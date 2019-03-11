@@ -5190,6 +5190,123 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
   return 0;
 }
 
+int Server::parse_user_quota_vxattr(string name, string value, quota_info_t *quota)
+{
+  dout(20) << "parse_user_quota_vxattr name " << name << " value '" << value << "'" << dendl;
+  int64_t uid;
+  try {
+    if (name == "quota") {
+      string::iterator begin = value.begin();
+      string::iterator end = value.end();
+      if (begin == end) {
+        // keep quota unchanged. (for create_user_quota_realm())
+        return 0;
+      }
+      keys_and_values<string::iterator> p;    // create instance of parser
+      std::map<string, string> m;             // map to receive results
+      if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+        return -EINVAL;
+      }
+      string left(begin, end);
+      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      if (begin != end)
+        return -EINVAL;
+      for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+        int r = parse_user_quota_vxattr(string("user_quota.") + q->first, q->second, quota);
+        if (r < 0)
+          return r;
+      }
+    } else {
+      string cp = name.substr(name.find("@")+1);
+      if (cp.size()==0)
+        return -EINVAL;
+
+      string sub_name = name.substr(0, name.find("@"));
+      if (sub_name == "user_quota.max_bytes") {
+        uid = boost::lexical_cast<int64_t>(cp);
+        int64_t q = boost::lexical_cast<int64_t>(value);
+        if (q < 0)
+          return -EINVAL;
+        quota->user_max_bytes[uid] = q;
+
+        if (0 == quota->user_max_bytes[uid])
+          quota->user_max_bytes.erase(uid);
+      } else {
+        dout(10) << " unknown user_quota vxattr " << name << dendl;
+        return -EINVAL;
+      }
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  if (!quota->is_user_valid(uid)) {
+    dout(10) << "bad user quota" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int Server::parse_group_quota_vxattr(string name, string value, quota_info_t *quota)
+{
+  dout(20) << "parse_group_quota_vxattr name " << name << " value '" << value << "'" << dendl;
+  int64_t gid;
+  try {
+    if (name == "quota") {
+      string::iterator begin = value.begin();
+      string::iterator end = value.end();
+      if (begin == end) {
+        // keep quota unchanged. (for create_group_quota_realm())
+        return 0;
+      }
+      keys_and_values<string::iterator> p;    // create instance of parser
+      std::map<string, string> m;             // map to receive results
+      if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+        return -EINVAL;
+      }
+      string left(begin, end);
+      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      if (begin != end)
+        return -EINVAL;
+      for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+        int r = parse_group_quota_vxattr(string("group_quota.") + q->first, q->second, quota);
+        if (r < 0)
+          return r;
+      }
+    } else {
+      string cp = name.substr(name.find("@")+1);
+      if (cp.size()==0)
+        return -EINVAL;
+
+      string sub_name = name.substr(0, name.find("@"));
+      if(sub_name == "group_quota.max_bytes"){
+        gid = boost::lexical_cast<int64_t>(cp);
+        int64_t q = boost::lexical_cast<int64_t>(value);
+        if (q < 0)
+          return -EINVAL;
+        quota->group_max_bytes[gid] = q;
+
+        if (0 == quota->group_max_bytes[gid])
+          quota->group_max_bytes.erase(gid);
+      } else {
+        dout(10) << " unknown group_quota vxattr " << name << dendl;
+        return -EINVAL;
+      }
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  if (!quota->is_group_valid(gid)) {
+    dout(10) << "bad group quota" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+
 void Server::create_quota_realm(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
@@ -5360,6 +5477,84 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 
     lov.add_xlock(&cur->policylock);
     if (quota.is_enable() && !cur->get_projected_srnode()) {
+      lov.add_xlock(&cur->snaplock);
+      new_realm = true;
+    }
+
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    auto &pi = cur->project_inode(false, new_realm);
+    pi.inode.quota = quota;
+
+    if (new_realm) {
+      SnapRealm *realm = cur->find_snaprealm();
+      auto seq = realm->get_newest_seq();
+      auto &newsnap = *pi.snapnode;
+      newsnap.created = seq;
+      newsnap.seq = seq;
+    }
+    mdr->no_early_reply = true;
+    pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
+  } else if (name.compare(0, 15, "ceph.user_quota") == 0) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    quota_info_t quota = cur->get_projected_inode()->quota;
+
+    rest = name.substr(5);
+    int r = parse_user_quota_vxattr(rest, value, &quota);
+    if (r < 0) {
+      respond_to_request(mdr, r);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    if (quota.is_user_enable() && !cur->get_projected_srnode()) {
+      lov.add_xlock(&cur->snaplock);
+      new_realm = true;
+    }
+
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    auto &pi = cur->project_inode(false, new_realm);
+    pi.inode.quota = quota;
+
+    if (new_realm) {
+      SnapRealm *realm = cur->find_snaprealm();
+      auto seq = realm->get_newest_seq();
+      auto &newsnap = *pi.snapnode;
+      newsnap.created = seq;
+      newsnap.seq = seq;
+    }
+    mdr->no_early_reply = true;
+    pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
+  } else if (name.compare(0, 16, "ceph.group_quota") == 0) {
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    quota_info_t quota = cur->get_projected_inode()->quota;
+
+    rest = name.substr(5);
+    int r = parse_group_quota_vxattr(rest, value, &quota);
+    if (r < 0) {
+      respond_to_request(mdr, r);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    if (quota.is_group_enable() && !cur->get_projected_srnode()) {
       lov.add_xlock(&cur->snaplock);
       new_realm = true;
     }
