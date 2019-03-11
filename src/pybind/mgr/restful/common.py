@@ -88,31 +88,34 @@ def pool_update_commands(pool_name, args):
 
     return commands
 
-
-def crush_rule_osds(nodes, rule):
-    nodes_by_id = dict((n['id'], n) for n in nodes)
+def crush_rule_osds(node_buckets, rule):
+    nodes_by_id = dict((b['id'], b) for b in node_buckets)
 
     def _gather_leaf_ids(node):
         if node['id'] >= 0:
             return set([node['id']])
 
         result = set()
-        for child_id in node['children']:
-            if child_id >= 0:
-                result.add(child_id)
+        for item in node['items']:
+            if item['id'] >= 0:
+                result.add(item['id'])
             else:
-                result |= _gather_leaf_ids(nodes_by_id[child_id])
+                result |= _gather_leaf_ids(nodes_by_id[item['id']])
 
         return result
 
     def _gather_descendent_ids(node, typ):
         result = set()
-        for child_id in node['children']:
-            child_node = nodes_by_id[child_id]
-            if child_node['type'] == typ:
-                result.add(child_node['id'])
-            elif 'children' in child_node:
-                result |= _gather_descendent_ids(child_node, typ)
+        for item in node['items']:
+            if item['id'] >= 0:
+                if typ == "osd":
+                    result.add(item['id'])
+            else:
+                child_node = nodes_by_id[item['id']]
+                if child_node['type_name'] == typ:
+                    result.add(child_node['id'])
+                elif 'items' in child_node:
+                    result |= _gather_descendent_ids(child_node, typ)
 
         return result
 
@@ -124,17 +127,26 @@ def crush_rule_osds(nodes, rule):
         step = steps[0]
         if step['op'] == 'choose_firstn':
             # Choose all descendents of the current node of type 'type'
-            d = _gather_descendent_ids(root, step['type'])
-            for desc_node in [nodes_by_id[i] for i in d]:
-                osds |= _gather_osds(desc_node, steps[1:])
+            descendent_ids = _gather_descendent_ids(root, step['type'])
+            for node_id in descendent_ids:
+                if node_id >= 0:
+                    osds.add(node_id)
+                else:
+                    for desc_node in nodes_by_id[node_id]:
+                        osds |= _gather_osds(desc_node, steps[1:])
         elif step['op'] == 'chooseleaf_firstn':
             # Choose all descendents of the current node of type 'type',
             # and select all leaves beneath those
-            for desc_node in [nodes_by_id[i] for i in _gather_descendent_ids(root, step['type'])]:
-                # Short circuit another iteration to find the emit
-                # and assume anything we've done a chooseleaf on
-                # is going to be part of the selected set of osds
-                osds |= _gather_leaf_ids(desc_node)
+            descendent_ids = _gather_descendent_ids(root, step['type'])
+            for node_id in descendent_ids:
+                if node_id >= 0:
+                    osds.add(node_id)
+                else:
+                    for desc_node in nodes_by_id[node_id]['items']:
+                        # Short circuit another iteration to find the emit
+                        # and assume anything we've done a chooseleaf on
+                        # is going to be part of the selected set of osds
+                        osds |= _gather_leaf_ids(desc_node)
         elif step['op'] == 'emit':
             if root['id'] >= 0:
                 osds |= root['id']

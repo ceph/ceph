@@ -14,11 +14,11 @@ class CrushRule(RestController):
         """
         Show crush rules
         """
-        rules = module.instance.get('osd_map_crush')['rules']
-        nodes = module.instance.get('osd_map_tree')['nodes']
+        crush = module.instance.get('osd_map_crush')
+        rules = crush['rules']
 
         for rule in rules:
-            rule['osd_count'] = len(common.crush_rule_osds(nodes, rule))
+            rule['osd_count'] = len(common.crush_rule_osds(crush['buckets'], rule))
 
         return rules
 
