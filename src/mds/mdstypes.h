@@ -224,9 +224,11 @@ struct nest_info_t : public scatter_info_t {
   int64_t rbytes = 0;
   int64_t rfiles = 0;
   int64_t rsubdirs = 0;
-  int64_t rsize() const { return rfiles + rsubdirs; }
-
   int64_t rsnaps = 0;
+  std::map<uid_t, int64_t> user_rbytes;
+  std::map<gid_t, int64_t> group_rbytes;
+
+  int64_t rsize() const { return rfiles + rsubdirs; }
 
   nest_info_t() {}
 
@@ -272,7 +274,14 @@ struct nest_info_t : public scatter_info_t {
 WRITE_CLASS_ENCODER(nest_info_t)
 
 inline bool operator==(const nest_info_t &l, const nest_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
+  return l.version == r.version &&
+        l.rctime == r.rctime &&
+        l.rbytes == r.rbytes &&
+        l.rfiles == r.rfiles &&
+        l.rsubdirs == r.rsubdirs &&
+        l.rsnaps == r.rsnaps &&
+        l.user_rbytes == r.user_rbytes &&
+        l.group_rbytes == r.group_rbytes;
 }
 inline bool operator!=(const nest_info_t &l, const nest_info_t &r) {
   return !(l == r);

@@ -76,7 +76,7 @@ ostream& operator<<(ostream &out, const frag_info_t &f)
 
 void nest_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(version, bl);
   encode(rbytes, bl);
   encode(rfiles, bl);
@@ -88,12 +88,14 @@ void nest_info_t::encode(bufferlist &bl) const
   }
   encode(rsnaps, bl);
   encode(rctime, bl);
+  encode(user_rbytes, bl);
+  encode(group_rbytes, bl);
   ENCODE_FINISH(bl);
 }
 
 void nest_info_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(version, bl);
   decode(rbytes, bl);
   decode(rfiles, bl);
@@ -104,6 +106,10 @@ void nest_info_t::decode(bufferlist::const_iterator &bl)
   }
   decode(rsnaps, bl);
   decode(rctime, bl);
+  if (struct_v >= 4) {
+    decode(user_rbytes, bl);
+    decode(group_rbytes, bl);
+  }
   DECODE_FINISH(bl);
 }
 
