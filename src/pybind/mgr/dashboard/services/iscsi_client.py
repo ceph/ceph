@@ -13,6 +13,7 @@ except ImportError:
 
 from .iscsi_cli import IscsiGatewaysConfig
 from .. import logger
+from ..settings import Settings
 from ..rest_client import RestClient
 
 
@@ -30,7 +31,8 @@ class IscsiClient(RestClient):
         service_url = gateways_config['service_url']
 
         instance = cls._instances.get(gateway_name)
-        if not instance or service_url != instance.service_url:
+        if not instance or service_url != instance.service_url or \
+                instance.session.verify != Settings.ISCSI_API_SSL_VERIFICATION:
             url = urlparse(service_url)
             ssl = url.scheme == 'https'
             host = url.hostname
@@ -39,8 +41,10 @@ class IscsiClient(RestClient):
             password = url.password
             if not port:
                 port = 443 if ssl else 80
+
             auth = HTTPBasicAuth(username, password)
-            instance = IscsiClient(host, port, IscsiClient._CLIENT_NAME, ssl, auth)
+            instance = IscsiClient(host, port, IscsiClient._CLIENT_NAME, ssl,
+                                   auth, Settings.ISCSI_API_SSL_VERIFICATION)
             instance.service_url = service_url
             cls._instances[gateway_name] = instance
 
