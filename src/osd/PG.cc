@@ -2378,11 +2378,12 @@ void PG::try_mark_clean()
 	if (target) {
 	  ldout(cct, 10) << "ready to merge (target)" << dendl;
 	  osd->set_ready_to_merge_target(this,
+					 info.last_update,
 					 info.history.last_epoch_started,
 					 info.history.last_epoch_clean);
 	} else {
 	  ldout(cct, 10) << "ready to merge (source)" << dendl;
-	  osd->set_ready_to_merge_source(this);
+	  osd->set_ready_to_merge_source(this, info.last_update);
 	}
       }
     } else {
@@ -2706,8 +2707,7 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
 
 void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 		    unsigned split_bits,
-		    epoch_t dec_last_epoch_started,
-		    epoch_t dec_last_epoch_clean)
+		    const pg_merge_meta_t& last_pg_merge_meta)
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
 	   << dendl;
@@ -2792,15 +2792,15 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
     // remapped in concert with each other...
     info.history = sources.begin()->second->info.history;
 
-    // we use the pg_num_dec_last_epoch_{started,clean} we got from
+    // we use the last_epoch_{started,clean} we got from
     // the caller, which are the epochs that were reported by the PGs were
     // found to be ready for merge.
-    info.history.last_epoch_clean = dec_last_epoch_clean;
-    info.history.last_epoch_started = dec_last_epoch_started;
-    info.last_epoch_started = dec_last_epoch_started;
+    info.history.last_epoch_clean = last_pg_merge_meta.last_epoch_clean;
+    info.history.last_epoch_started = last_pg_merge_meta.last_epoch_started;
+    info.last_epoch_started = last_pg_merge_meta.last_epoch_started;
     dout(10) << __func__
-	     << " set les/c to " << dec_last_epoch_started << "/"
-	     << dec_last_epoch_clean
+	     << " set les/c to " << last_pg_merge_meta.last_epoch_started << "/"
+	     << last_pg_merge_meta.last_epoch_clean
 	     << " from pool last_dec_*, source pg history was "
 	     << sources.begin()->second->info.history
 	     << dendl;
