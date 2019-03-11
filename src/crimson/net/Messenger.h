@@ -22,6 +22,11 @@
 
 class AuthAuthorizer;
 
+namespace ceph::auth {
+class AuthClient;
+class AuthServer;
+}
+
 namespace ceph::net {
 
 using Throttle = ceph::thread::Throttle;
@@ -32,6 +37,10 @@ class Messenger {
   entity_addrvec_t my_addrs;
   uint32_t global_seq = 0;
   uint32_t crc_flags = 0;
+
+ public:
+  ceph::auth::AuthClient *auth_client = 0;
+  ceph::auth::AuthServer *auth_server = 0;
 
  public:
   Messenger(const entity_name_t& name)
@@ -86,6 +95,13 @@ class Messenger {
   }
   void set_crc_header() {
     crc_flags |= MSG_CRC_HEADER;
+  }
+
+  void set_auth_client(ceph::auth::AuthClient *ac) {
+    auth_client = ac;
+  }
+  void set_auth_server(ceph::auth::AuthServer *as) {
+    auth_server = as;
   }
 
   // get the local messenger shard if it is accessed by another core
