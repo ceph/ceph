@@ -9,8 +9,13 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "common/Cond.h"
+#include "common/Throttle.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include <list>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_sum.hpp>
 
 void register_test_object_map() {
 }
@@ -148,4 +153,84 @@ TEST_F(TestObjectMap, AcquireLockInvalidatesWhenTooSmall) {
   ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP, RBD_FLAG_OBJECT_MAP_INVALID,
                                 &flags_set));
   ASSERT_TRUE(flags_set);
+}
+
+TEST_F(TestObjectMap, DISABLED_StressTest) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  uint64_t object_count = cls::rbd::MAX_OBJECT_MAP_OBJECT_COUNT;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, resize(ictx, ictx->layout.object_size * object_count));
+
+  bool flags_set;
+  ASSERT_EQ(0, ictx->test_flags(CEPH_NOSNAP, RBD_FLAG_OBJECT_MAP_INVALID,
+                                &flags_set));
+  ASSERT_FALSE(flags_set);
+
+  srand(time(NULL) % (unsigned long) -1);
+
+  coarse_mono_time start = coarse_mono_clock::now();
+  chrono::duration<double> last = chrono::duration<double>::zero();
+
+  const int WINDOW_SIZE = 5;
+  typedef boost::accumulators::accumulator_set<
+    double, boost::accumulators::stats<
+      boost::accumulators::tag::rolling_sum> > RollingSum;
+
+  RollingSum time_acc(
+    boost::accumulators::tag::rolling_window::window_size = WINDOW_SIZE);
+  RollingSum ios_acc(
+    boost::accumulators::tag::rolling_window::window_size = WINDOW_SIZE);
+
+  uint32_t io_threads = 16;
+  uint64_t cur_ios = 0;
+  SimpleThrottle throttle(io_threads, false);
+  for (uint64_t ios = 0; ios < 100000;) {
+    if (throttle.pending_error()) {
+      break;
+    }
+
+    throttle.start_op();
+    uint64_t object_no = (rand() % object_count);
+    auto ctx = new FunctionContext([&throttle, object_no](int r) {
+        ASSERT_EQ(0, r) << "object_no=" << object_no;
+        throttle.end_op(r);
+      });
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker object_map_locker(ictx->object_map_lock);
+    ASSERT_TRUE(ictx->object_map != nullptr);
+
+    if (!ictx->object_map->aio_update<
+          Context, &Context::complete>(CEPH_NOSNAP, object_no,
+                                       OBJECT_EXISTS, {}, {}, true,
+                                       ctx)) {
+      ctx->complete(0);
+    } else {
+      ++cur_ios;
+      ++ios;
+    }
+
+    coarse_mono_time now = coarse_mono_clock::now();
+    chrono::duration<double> elapsed = now - start;
+    if (last == chrono::duration<double>::zero()) {
+      last = elapsed;
+    } else if ((int)elapsed.count() != (int)last.count()) {
+      time_acc((elapsed - last).count());
+      ios_acc(static_cast<double>(cur_ios));
+      cur_ios = 0;
+
+      double time_sum = boost::accumulators::rolling_sum(time_acc);
+      std::cerr << std::setw(5) << (int)elapsed.count() << "\t"
+                << std::setw(8) << (int)ios << "\t"
+                << std::fixed << std::setw(8) << std::setprecision(2)
+                << boost::accumulators::rolling_sum(ios_acc) / time_sum
+                << std::endl;
+      last = elapsed;
+    }
+  }
+
+  ASSERT_EQ(0, throttle.wait_for_ret());
 }
