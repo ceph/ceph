@@ -7764,7 +7764,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
   }
 }
-
+  
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsSsd) {
   if (string(GetParam()) != "bluestore")
     return;
@@ -7795,6 +7795,84 @@ TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsSsd) {
 
     const PerfCounters* logger = store->get_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 8u);
+  }
+}
+  
+TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
+
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_debug_omit_block_device_write", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "10737418240");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid2 = hoid;
+  hoid2.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    uint64_t offs = 0;
+    bufferlist bl;
+    const int size = 0x100;
+    bufferptr ap(size);
+    memset(ap.c_str(), 'a', size);
+    bl.append(ap);
+    int i = 0;
+    uint64_t  blob_size = 524288;
+    uint64_t total = 0;
+    for (i = 0; i <= 512; i++) {
+      offs = 0 + i * size;
+      ObjectStore::Transaction t;
+      ghobject_t hoid2 = hoid;
+      hoid2.hobj.snap = i + 1;
+      while (offs < 128 * 1024 * 1024) {
+
+        t.write(cid, hoid, offs, ap.length(), bl);
+       offs += blob_size;
+       total += ap.length();
+      }
+      t.clone(cid, hoid, hoid2);
+      t.touch(cid, hoid); // intended to dump onode only
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    cerr << "Total written = " << total << std::endl;
+  }
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid); // intended to dump onode only
+    cerr << "Finalizing" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
   }
 }
 
