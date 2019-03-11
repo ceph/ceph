@@ -3639,6 +3639,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (cap) {
     cap->last_rbytes = file_i->rstat.rbytes;
     cap->last_rsize = file_i->rstat.rsize();
+    cap->last_user_rbytes = file_i->rstat.user_rbytes;
+    cap->last_group_rbytes = file_i->rstat.group_rbytes;
   }
 
   // auth
