@@ -2322,7 +2322,9 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     pf->accounted_rstat = pf->rstat;
 
     if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-      if (pi.inode.rstat.rbytes != pf->rstat.rbytes) {
+      if (pi.inode.rstat.rbytes != pf->rstat.rbytes ||
+        pi.inode.rstat.user_rbytes != pf->rstat.user_rbytes ||
+        pi.inode.rstat.group_rbytes != pf->rstat.group_rbytes) {
 	mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
 	  << parent->dirfrag() << ", inode has " << pi.inode.rstat
 	  << ", dirfrag has " << pf->rstat;
