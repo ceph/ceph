@@ -42,8 +42,8 @@ static ostream& _prefix(std::ostream *_dout, PGBackend *pgb) {
 void PGBackend::recover_delete_object(const hobject_t &oid, eversion_t v,
 				      RecoveryHandle *h)
 {
-  assert(get_parent()->get_actingbackfill_shards().size() > 0);
-  for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+  assert(get_parent()->get_acting_recovery_backfill_shards().size() > 0);
+  for (const auto& shard : get_parent()->get_acting_recovery_backfill_shards()) {
     if (shard == get_parent()->whoami_shard())
       continue;
     if (get_parent()->get_shard_missing(shard).is_missing(oid)) {
@@ -159,7 +159,7 @@ void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
     recovery_info.version = p.second;
     get_parent()->on_peer_recover(m->from, oid, recovery_info);
     bool peers_recovered = true;
-    for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+    for (const auto& shard : get_parent()->get_acting_recovery_backfill_shards()) {
       if (shard == get_parent()->whoami_shard())
 	continue;
       if (get_parent()->get_shard_missing(shard).is_missing(oid)) {

@@ -259,7 +259,7 @@ protected:
   SnapMapper snap_mapper;
   bool eio_errors_to_process = false;
 
-  virtual PGBackend *get_pgbackend() = 0;
+  virtual PGBackend *get_pgbackend() const = 0;
 public:
   std::string gen_prefix() const override;
   CephContext *get_cct() const override { return cct; }
@@ -542,6 +542,12 @@ public:
 	_inc_count(p->second);
       }
     }
+    void clear_location(const hobject_t &hoid) {
+      auto p = missing_loc.find(hoid);
+      if (p != missing_loc.end()) {
+        missing_loc.erase(p);
+      }
+    }
     void add_active_missing(const pg_missing_t &missing) {
       for (map<hobject_t, pg_missing_item>::const_iterator i =
 	     missing.get_items().begin();
@@ -560,8 +566,8 @@ public:
       }
     }
 
-    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have) {
-      needs_recovery_map[hoid] = pg_missing_item(need, have);
+    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have, bool is_delete=false) {
+      needs_recovery_map[hoid] = pg_missing_item(need, have, is_delete);
     }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       assert(needs_recovery(hoid));
@@ -635,6 +641,8 @@ public:
       if (!missing.is_missing(hoid))
 	mliter->second.insert(self);
       for (auto &&i: pmissing) {
+        if (i.first == self)
+          continue;
 	auto pinfoiter = pinfo.find(i.first);
 	assert(pinfoiter != pinfo.end());
 	if (item->need <= pinfoiter->second.last_update &&
@@ -712,7 +720,9 @@ public:
   pg_shard_t pg_whoami;
   pg_shard_t up_primary;
   vector<int> up, acting, want_acting;
-  set<pg_shard_t> actingbackfill, actingset, upset;
+  // acting_recovery_backfill contains shards that are acting,
+  // async recovery targets, or backfill targets.
+  set<pg_shard_t> acting_recovery_backfill, actingset, upset;
   map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -948,7 +958,7 @@ protected:
   friend class OSD;
 
 public:
-  set<pg_shard_t> backfill_targets;
+  set<pg_shard_t> backfill_targets, async_recovery_targets;
 
   bool is_backfill_targets(pg_shard_t osd) {
     return backfill_targets.count(osd);
@@ -1065,8 +1075,8 @@ protected:
 public:
   void clear_primary_state();
 
-  bool is_actingbackfill(pg_shard_t osd) const {
-    return actingbackfill.count(osd);
+  bool is_acting_recovery_backfill(pg_shard_t osd) const {
+    return acting_recovery_backfill.count(osd);
   }
   bool is_acting(pg_shard_t osd) const {
     return has_shard(pool.info.ec_pool(), acting, osd);
@@ -1120,9 +1130,9 @@ public:
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
+    ceph_assert(!acting_recovery_backfill.empty());
+    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+	 i != acting_recovery_backfill.end();
 	 ++i) {
       if (*i == get_primary()) continue;
       if (peer_last_complete_ondisk.count(*i) == 0)
@@ -1227,6 +1237,15 @@ public:
     set<pg_shard_t> *acting_backfill,
     pg_shard_t *want_primary,
     ostream &ss);
+  void choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
+                                const pg_info_t &auth_info,
+                                vector<int> *want,
+                                set<pg_shard_t> *async_recovery) const;
+  void choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_info,
+                                        const pg_info_t &auth_info,
+                                        vector<int> *want,
+                                        set<pg_shard_t> *async_recovery) const;
+  bool recoverable_and_ge_min_size(const vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
@@ -2696,7 +2715,7 @@ public:
 
   /**
    * Merge entries updating missing as necessary on all
-   * actingbackfill logs and missings (also missing_loc)
+   * acting_recovery_backfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,

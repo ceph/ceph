@@ -537,11 +537,11 @@ void ReplicatedBackend::submit_transaction(
     ).first->second;
 
   op.waiting_for_applied.insert(
-    parent->get_actingbackfill_shards().begin(),
-    parent->get_actingbackfill_shards().end());
+    parent->get_acting_recovery_backfill_shards().begin(),
+    parent->get_acting_recovery_backfill_shards().end());
   op.waiting_for_commit.insert(
-    parent->get_actingbackfill_shards().begin(),
-    parent->get_actingbackfill_shards().end());
+    parent->get_acting_recovery_backfill_shards().begin(),
+    parent->get_acting_recovery_backfill_shards().end());
 
   issue_op(
     soid,
@@ -1027,11 +1027,6 @@ Message * ReplicatedBackend::generate_subop(
 
   // ship resulting transaction, log entries, and pg_stats
   if (!parent->should_send_op(peer, soid)) {
-    dout(10) << "issue_repop shipping empty opt to osd." << peer
-	     <<", object " << soid
-	     << " beyond MAX(last_backfill_started "
-	     << ", pinfo.last_backfill "
-	     << pinfo.last_backfill << ")" << dendl;
     ObjectStore::Transaction t;
     ::encode(t, wr->get_data());
   } else {
@@ -1072,17 +1067,17 @@ void ReplicatedBackend::issue_op(
   if (op->op)
     op->op->pg_trace.event("issue replication ops");
 
-  if (parent->get_actingbackfill_shards().size() > 1) {
+  if (parent->get_acting_recovery_backfill_shards().size() > 1) {
     ostringstream ss;
-    set<pg_shard_t> replicas = parent->get_actingbackfill_shards();
+    set<pg_shard_t> replicas = parent->get_acting_recovery_backfill_shards();
     replicas.erase(parent->whoami_shard());
     ss << "waiting for subops from " << replicas;
     if (op->op)
       op->op->mark_sub_op_sent(ss.str());
   }
   for (set<pg_shard_t>::const_iterator i =
-	 parent->get_actingbackfill_shards().begin();
-       i != parent->get_actingbackfill_shards().end();
+	 parent->get_acting_recovery_backfill_shards().begin();
+       i != parent->get_acting_recovery_backfill_shards().end();
        ++i) {
     if (*i == parent->whoami_shard()) continue;
     pg_shard_t peer = *i;
@@ -1129,9 +1124,6 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // sanity checks
   assert(m->map_epoch >= get_info().history.same_interval_since);
 
-  // we better not be missing this.
-  assert(!parent->get_log().get_missing().is_missing(soid));
-
   parent->maybe_preempt_replica_scrub(soid);
 
   int ackerosd = m->get_source().num();
@@ -1177,6 +1169,16 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     // collections now.  Otherwise, we do it later on push.
     update_snaps = true;
   }
+  pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
+  if (pmissing.is_missing(soid)) {
+    dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
+    for (auto &&e: log) {
+      dout(30) << " add_next_event entry " << e << dendl;
+      get_parent()->add_local_next_event(e);
+      dout(30) << " entry is_delete " << e.is_delete() << dendl;
+    }
+  }
+
   parent->update_stats(m->pg_stats);
   parent->log_operation(
     log,
@@ -2311,10 +2313,10 @@ int ReplicatedBackend::start_pushes(
 
   dout(20) << __func__ << " soid " << soid << dendl;
   // who needs it?
-  assert(get_parent()->get_actingbackfill_shards().size() > 0);
+  assert(get_parent()->get_acting_recovery_backfill_shards().size() > 0);
   for (set<pg_shard_t>::iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     if (*i == get_parent()->whoami_shard()) continue;
     pg_shard_t peer = *i;
