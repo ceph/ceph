@@ -58,19 +58,30 @@ function TEST_a_merge_empty() {
 
     wait_for_clean || return 1
 
-    # now 1.0 is there but 1.1 is not
+    # osd.2: now 1.0 is there but 1.1 is not
+
+    # instantiate 1.1 on osd.2 with last_update=0'0 ('empty'), which is
+    # the problematic state... then let it merge with 1.0
     ceph tell osd.2 config set osd_debug_no_acting_change true
     ceph osd out 0 1
     ceph osd pool set foo pg_num 1
     sleep 5
     ceph tell osd.2 config set osd_debug_no_acting_change false
+
+    # go back to osd.1 being primary, and 3x so the osd.2 copy doesn't get
+    # removed
     ceph osd in 0 1
     ceph osd pool set foo size 3
 
     wait_for_clean || return 1
+
+    # scrub to ensure the osd.3 copy of 1.0 was incomplete (vs missing
+    # half of its objects).
     ceph pg scrub 1.0
-    sleep 5
-    ceph -s | grep inconsistent || return 1
+    sleep 10
+    ceph log last debug
+    ceph pg ls
+    ceph pg ls | grep ' active.clean ' || return 1
 }
 
 function TEST_import_after_merge_and_gap() {
