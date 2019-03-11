@@ -96,6 +96,8 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down does not generate a health warning
         """
 
+        self.mount_a.umount_wait()
+
         self.fs.set_down()
         try:
             self.wait_for_health("", 30)
@@ -111,6 +113,8 @@ class TestClusterResize(CephFSTestCase):
         That marking a FS down twice does not wipe old_max_mds.
         """
 
+        self.mount_a.umount_wait()
+
         self.grow(2)
         self.fs.set_down()
         self.fs.wait_for_daemons()
@@ -123,6 +127,8 @@ class TestClusterResize(CephFSTestCase):
         That setting max_mds undoes down.
         """
 
+        self.mount_a.umount_wait()
+
         self.fs.set_down()
         self.fs.wait_for_daemons()
         self.grow(2)
@@ -132,6 +138,8 @@ class TestClusterResize(CephFSTestCase):
         """
         That down setting toggles and sets max_mds appropriately.
         """
+
+        self.mount_a.umount_wait()
 
         self.fs.set_down()
         self.fs.wait_for_daemons()
