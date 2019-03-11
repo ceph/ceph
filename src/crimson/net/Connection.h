@@ -30,6 +30,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   peer_type_t peer_type = -1;
 
  public:
+  uint64_t peer_global_id = 0;
+
+ public:
   Connection() {}
   virtual ~Connection() {}
 
