@@ -25,7 +25,7 @@
 
 void Capability::Export::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(cap_id, bl);
   encode(wanted, bl);
   encode(issued, bl);
@@ -34,12 +34,13 @@ void Capability::Export::encode(bufferlist &bl) const
   encode(seq, bl);
   encode(mseq, bl);
   encode(last_issue_stamp, bl);
+  encode(state, bl);
   ENCODE_FINISH(bl);
 }
 
 void Capability::Export::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
   decode(cap_id, p);
   decode(wanted, p);
   decode(issued, p);
@@ -48,6 +49,8 @@ void Capability::Export::decode(bufferlist::const_iterator &p)
   decode(seq, p);
   decode(mseq, p);
   decode(last_issue_stamp, p);
+  if (struct_v >= 3)
+    decode(state, p);
   DECODE_FINISH(p);
 }
 
@@ -156,6 +159,16 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
   if (session) {
     session->touch_cap_bottom(this);
     cap_gen = session->get_cap_gen();
+
+    auto& conn = session->get_connection();
+    if (conn) {
+      if (!conn->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+	state |= STATE_NOINLINE;
+      if (!conn->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+	state |= STATE_NOPOOLNS;
+      if (!conn->has_feature(CEPH_FEATURE_MDS_QUOTA))
+	state |= STATE_NOQUOTA;
+    }
   }
 }
 

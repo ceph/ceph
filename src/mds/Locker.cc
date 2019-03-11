@@ -2007,11 +2007,10 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
     // add in any xlocker-only caps (for locks this client is the xlocker for)
     allowed |= xlocker_allowed & in->get_xlocker_mask(it->first);
 
-    Session *session = mds->get_session(it->first);
-    if (in->inode.inline_data.version != CEPH_INLINE_NONE &&
-	!(session &&
-	  session->get_connection() &&
-	  session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)))
+    if ((in->inode.inline_data.version != CEPH_INLINE_NONE &&
+	 cap->is_noinline()) ||
+	(!in->inode.layout.pool_ns.empty() &&
+	 cap->is_nopoolns()))
       allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
 
     int pending = cap->pending();
@@ -2079,7 +2078,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
                                            mds->get_osd_epoch_barrier());
 	in->encode_cap_message(m, cap);
 
-	mds->send_message_client_counted(m, it->first);
+	mds->send_message_client_counted(m, cap->get_session());
       }
     }
 
