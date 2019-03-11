@@ -1,3 +1,5 @@
+.. _msgr2:
+
 Messenger v2
 ============
 
@@ -216,4 +218,7 @@ the monitors' configuration database) may be helpful.  For example,::
           mon_host = [v2:10.0.0.1:3300/0,v1:10.0.0.1:6789/0]
   # mv /etc/ceph/ceph.conf.new /etc/ceph/ceph.conf
 
+Protocol
+--------
 
+For a detailed description of the v2 wire protocol, see :ref:`msgr2-protocol`.

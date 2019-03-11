@@ -60,7 +60,7 @@ Context
 The authentication messages described here are specific to the cephx
 auth implementation.  The messages are transferred by the Messenger
 protocol or by MAuth messages, depending on the version of the
-messenger protocol.  See also :ref:`msgr2`.
+messenger protocol.  See also :ref:`msgr2-protocol`.
 
 An initial (messenger) handshake negotiates an authentication method
 to be used (cephx vs none or krb or whatever) and an assertion of what

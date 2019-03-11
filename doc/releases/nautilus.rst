@@ -47,7 +47,7 @@ Major Changes from Mimic
   * The number of placement groups (PGs) per pool can now be decreased
     at any time, and the cluster can automatically tune the PG count
     based on cluster utilization or administrator hints.
-  * The new *v2* wire protocol brings support for encryption on the wire.
+  * The new :ref:`v2 wire protocol <msgr2>` brings support for encryption on the wire.
   * Physical storage devices consumed by OSD and Monitor daemons are
     now tracked by the cluster along with health metrics (i.e.,
     SMART), and the cluster can apply a pre-trained prediction model
@@ -273,7 +273,8 @@ Instructions
 
 #. Verify the cluster is healthy with ``ceph health``.
 
-#. To enable the new v2 network protocol, issue the following command::
+#. To enable the new :ref:`v2 network protocol <msgr2>`, issue the
+   following command::
 
      ceph mon enable-msgr2
 
