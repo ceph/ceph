@@ -6853,8 +6853,9 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
   if ((mask & CEPH_SETATTR_SIZE) &&
       (unsigned long)stx->stx_size > in->size &&
-      is_quota_bytes_exceeded(in, (unsigned long)stx->stx_size - in->size,
-			      perms)) {
+      (is_quota_bytes_exceeded(in, (unsigned long)stx->stx_size - in->size, perms) ||
+       is_user_quota_bytes_exceeded(in, (unsigned long)stx->stx_size - in->size, perms, false) ||
+       is_group_quota_bytes_exceeded(in, (unsigned long)stx->stx_size - in->size, perms, false))) {
     return -EDQUOT;
   }
 
@@ -9492,8 +9493,10 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // check quota
   uint64_t endoff = offset + size;
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
-						   f->actor_perms)) {
+  if (endoff > in->size &&
+      (is_quota_bytes_exceeded(in, endoff - in->size, f->actor_perms) ||
+       is_user_quota_bytes_exceeded(in, endoff - in->size, f->actor_perms, false) ||
+       is_group_quota_bytes_exceeded(in, endoff - in->size, f->actor_perms, false))) {
     return -EDQUOT;
   }
 
@@ -13683,7 +13686,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   uint64_t size = offset + length;
   if (!(mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)) &&
       size > in->size &&
-      is_quota_bytes_exceeded(in, size - in->size, fh->actor_perms)) {
+      (is_quota_bytes_exceeded(in, size - in->size, fh->actor_perms) ||
+       is_user_quota_bytes_exceeded(in, size - in->size, fh->actor_perms, false) ||
+       is_group_quota_bytes_exceeded(in, size - in->size, fh->actor_perms, false))) {
     return -EDQUOT;
   }
 
