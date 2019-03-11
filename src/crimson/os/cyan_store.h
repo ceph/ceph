@@ -37,6 +37,11 @@ public:
 				   uint64_t offset,
 				   size_t len,
 				   uint32_t op_flags = 0);
+  seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
+					    const ghobject_t& oid,
+					    std::string_view name);
+  using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
+  seastar::future<attrs_t> get_attrs(CollectionRef c, const ghobject_t& oid);
   using omap_values_t = std::map<std::string,bufferlist, std::less<>>;
   seastar::future<omap_values_t> omap_get_values(
     CollectionRef c,
