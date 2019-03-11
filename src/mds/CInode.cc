@@ -3870,6 +3870,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(any_i->change_attr, bl);
     encode(file_i->export_pin, bl);
     encode(snap_btime, bl);
+    encode(file_i->rstat.user_rbytes, bl);
+    encode(file_i->rstat.group_rbytes, bl);
     ENCODE_FINISH(bl);
   }
   else {
@@ -3925,6 +3927,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (conn->has_feature(CEPH_FEATURE_FS_BTIME)) {
       encode(any_i->btime, bl);
       encode(any_i->change_attr, bl);
+    }
+    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_USER_GROUP_QUOTA)) {
+      encode(file_i->rstat.user_rbytes, bl);
+      encode(file_i->rstat.group_rbytes, bl);
     }
   }
 
