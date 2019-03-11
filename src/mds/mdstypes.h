@@ -403,19 +403,27 @@ struct quota_info_t
 {
   int64_t max_bytes = 0;
   int64_t max_files = 0;
- 
+  std::map<uid_t, int64_t> user_max_bytes;
+  std::map<gid_t, int64_t> group_max_bytes;
+
   quota_info_t() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(max_bytes, bl);
     encode(max_files, bl);
+    encode(user_max_bytes, bl);
+    encode(group_max_bytes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& p) {
-    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, p);
     decode(max_bytes, p);
     decode(max_files, p);
+    if (struct_v >= 2) {
+      decode(user_max_bytes, p);
+      decode(group_max_bytes, p);
+    }
     DECODE_FINISH(p);
   }
 
@@ -432,7 +440,10 @@ struct quota_info_t
 WRITE_CLASS_ENCODER(quota_info_t)
 
 inline bool operator==(const quota_info_t &l, const quota_info_t &r) {
-  return memcmp(&l, &r, sizeof(l)) == 0;
+  return l.max_bytes == r.max_bytes &&
+        l.max_files == r.max_files &&
+        l.user_max_bytes == r.user_max_bytes &&
+        l.group_max_bytes == r.group_max_bytes;
 }
 
 ostream& operator<<(ostream &out, const quota_info_t &n);
