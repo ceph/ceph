@@ -3177,7 +3177,7 @@ int dir_state_assert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  cls::rbd::DirectoryState on_disk_directory_state;
+  cls::rbd::DirectoryState on_disk_directory_state = directory_state;
   int r = read_key(hctx, "state", &on_disk_directory_state);
   if (r < 0) {
     return r;
