@@ -4782,6 +4782,8 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
     } else {
       pi.inode.size = req->head.args.setattr.size;
       pi.inode.rstat.rbytes = pi.inode.size;
+      pi.inode.rstat.user_rbytes[pi.inode.uid] = pi.inode.size;
+      pi.inode.rstat.group_rbytes[pi.inode.gid] = pi.inode.size;
     }
     pi.inode.mtime = mdr->get_op_stamp();
 

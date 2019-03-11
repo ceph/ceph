@@ -633,6 +633,8 @@ struct inode_t {
     truncate_from = old_size;
     size = new_size;
     rstat.rbytes = new_size;
+    rstat.user_rbytes[uid] = new_size;
+    rstat.group_rbytes[gid] = new_size;
     truncate_size = size;
     truncate_seq++;
     truncate_pending++;
