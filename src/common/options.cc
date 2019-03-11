@@ -3649,6 +3649,11 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
 
+    Option("osd_debug_no_acting_change", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
+    Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
+
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
