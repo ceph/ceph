@@ -1080,6 +1080,45 @@ private:
 };
 WRITE_CLASS_ENCODER_FEATURES(pool_opts_t)
 
+struct pg_merge_meta_t {
+  pg_t source_pgid;
+  epoch_t ready_epoch = 0;
+  epoch_t last_epoch_started = 0;
+  epoch_t last_epoch_clean = 0;
+  eversion_t source_version;
+  eversion_t target_version;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(source_pgid, bl);
+    encode(ready_epoch, bl);
+    encode(last_epoch_started, bl);
+    encode(last_epoch_clean, bl);
+    encode(source_version, bl);
+    encode(target_version, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(source_pgid, p);
+    decode(ready_epoch, p);
+    decode(last_epoch_started, p);
+    decode(last_epoch_clean, p);
+    decode(source_version, p);
+    decode(target_version, p);
+    DECODE_FINISH(p);
+  }
+  void dump(Formatter *f) const {
+    f->dump_stream("source_pgid") << source_pgid;
+    f->dump_unsigned("ready_epoch", ready_epoch);
+    f->dump_unsigned("last_epoch_started", last_epoch_started);
+    f->dump_unsigned("last_epoch_clean", last_epoch_clean);
+    f->dump_stream("source_version") << source_version;
+    f->dump_stream("target_version") << target_version;
+  }
+};
+WRITE_CLASS_ENCODER(pg_merge_meta_t)
+
 /*
  * pg_pool
  */
@@ -1306,10 +1345,9 @@ public:
   /// last epoch that forced clients to resend (pre-luminous clients only)
   epoch_t last_force_op_resend_preluminous = 0;
 
-  /// last_epoch_started preceding pg_num decrement request
-  epoch_t pg_num_dec_last_epoch_started = 0;
-  /// last_epoch_clean preceding pg_num decrement request
-  epoch_t pg_num_dec_last_epoch_clean = 0;
+  /// metadata for the most recent PG merge
+  pg_merge_meta_t last_pg_merge_meta;
+  
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
@@ -1565,13 +1603,6 @@ public:
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
 
-  epoch_t get_pg_num_dec_last_epoch_started() const {
-    return pg_num_dec_last_epoch_started;
-  }
-  epoch_t get_pg_num_dec_last_epoch_clean() const {
-    return pg_num_dec_last_epoch_clean;
-  }
-
   bool is_pending_merge(pg_t pgid, bool *target) const;
 
   void set_pg_num(int p) {
@@ -1593,11 +1624,19 @@ public:
   void set_pgp_num_target(int p) {
     pgp_num_target = p;
   }
-  void dec_pg_num(epoch_t last_epoch_started,
+  void dec_pg_num(pg_t source_pgid,
+		  epoch_t ready_epoch,
+		  eversion_t source_version,
+		  eversion_t target_version,
+		  epoch_t last_epoch_started,
 		  epoch_t last_epoch_clean) {
     --pg_num;
-    pg_num_dec_last_epoch_started = last_epoch_started;
-    pg_num_dec_last_epoch_clean = last_epoch_clean;
+    last_pg_merge_meta.source_pgid = source_pgid;
+    last_pg_merge_meta.ready_epoch = ready_epoch;
+    last_pg_merge_meta.source_version = source_version;
+    last_pg_merge_meta.target_version = target_version;
+    last_pg_merge_meta.last_epoch_started = last_epoch_started;
+    last_pg_merge_meta.last_epoch_clean = last_epoch_clean;
     calc_pg_masks();
   }
 
