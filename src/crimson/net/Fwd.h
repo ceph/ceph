@@ -23,6 +23,9 @@
 using peer_type_t = int;
 using auth_proto_t = int;
 
+class AuthConnectionMeta;
+using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
+
 namespace ceph::net {
 
 using msgr_tag_t = uint8_t;
