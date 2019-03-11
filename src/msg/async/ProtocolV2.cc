@@ -94,7 +94,6 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       bannerExchangeCallback(nullptr),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
-  ceph::crypto::init(cct);
 }
 
 ProtocolV2::~ProtocolV2() {
