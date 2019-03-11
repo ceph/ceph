@@ -9648,7 +9648,9 @@ success:
     in->size = totalwritten + offset;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+    if (is_quota_bytes_approaching(in, f->actor_perms) ||
+        is_user_quota_bytes_approaching(in, f->actor_perms, false) ||
+        is_group_quota_bytes_approaching(in, f->actor_perms, false)) {
       check_caps(in, CHECK_CAPS_NODELAY);
     } else if (is_max_size_approaching(in)) {
       check_caps(in, 0);
@@ -13753,7 +13755,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-      if (is_quota_bytes_approaching(in, fh->actor_perms)) {
+      if (is_quota_bytes_approaching(in, fh->actor_perms) ||
+          is_user_quota_bytes_approaching(in, fh->actor_perms, false) ||
+          is_group_quota_bytes_approaching(in, fh->actor_perms, false)) {
         check_caps(in, CHECK_CAPS_NODELAY);
       } else if (is_max_size_approaching(in)) {
 	check_caps(in, 0);
