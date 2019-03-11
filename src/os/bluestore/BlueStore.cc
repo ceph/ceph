@@ -157,6 +157,15 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 #define LOG_LATENCY(logger, cct, idx, v) LOG_LATENCY_I(logger, cct, idx, v, "")
 
 /*
+ * spanning blob map shard key
+ *
+ * object prefix key
+ * u32
+ * 's'
+ */
+#define SPANBLOB_SHARD_KEY_SUFFIX 's'
+
+/*
  * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
@@ -477,25 +486,71 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
 }
 
 
-// extent shard keys are the onode key, plus a u32, plus 'x'.  the trailing
+
+// shard keys are the onode key, plus a u32, plus suffix char.  the trailing
 // char lets us quickly test whether it is a shard key without decoding any
 // of the prefix bytes.
 template<typename S>
-static void get_extent_shard_key(const S& onode_key, uint32_t offset,
+static void get_onode_shard_key(const S& onode_key, uint32_t offset,
+				 char suffix,
 				 string *key)
 {
   key->clear();
   key->reserve(onode_key.length() + 4 + 1);
   key->append(onode_key.c_str(), onode_key.size());
   _key_encode_u32(offset, key);
-  key->push_back(EXTENT_SHARD_KEY_SUFFIX);
+  key->push_back(suffix);
 }
 
-static void rewrite_extent_shard_key(uint32_t offset, string *key)
+static void rewrite_onode_shard_key(uint32_t offset, char suffix, string *key)
 {
   ceph_assert(key->size() > sizeof(uint32_t) + 1);
-  ceph_assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  ceph_assert(*key->rbegin() == suffix);
   _key_encode_u32(offset, key->size() - sizeof(uint32_t) - 1, key);
+}
+
+template<typename S>
+static void generate_onode_shard_key_and_apply(
+  const S& onode_key,
+  uint32_t offset,
+  char suffix,
+  string *key,
+  std::function<void(const string& final_key)> apply)
+{
+  if (key->empty()) { // make full key
+    ceph_assert(!onode_key.empty());
+    get_onode_shard_key(onode_key, offset, suffix, key);
+  } else {
+    rewrite_onode_shard_key(offset, suffix, key);
+  }
+  apply(*key);
+}
+
+int get_key_onode_shard(
+  const string& key,
+  char suffix,
+  string *onode_key,
+  uint32_t *offset)
+{
+  ceph_assert(key.size() > sizeof(uint32_t) + 1);
+  ceph_assert(*key.rbegin() == suffix);
+  int okey_len = key.size() - sizeof(uint32_t) - 1;
+  *onode_key = key.substr(0, okey_len);
+  const char *p = key.data() + okey_len;
+  _key_decode_u32(p, offset);
+  return 0;
+}
+
+static bool is_onode_shard_key(const string& key, char suffix)
+{
+  return *key.rbegin() == suffix;
+}
+// extent shards has 'x' suffix
+template<typename S>
+static void get_extent_shard_key(const S& onode_key, uint32_t offset,
+				 string *key)
+{
+  get_onode_shard_key(onode_key, offset, EXTENT_SHARD_KEY_SUFFIX, key);
 }
 
 template<typename S>
@@ -505,29 +560,58 @@ static void generate_extent_shard_key_and_apply(
   string *key,
   std::function<void(const string& final_key)> apply)
 {
-  if (key->empty()) { // make full key
-    ceph_assert(!onode_key.empty());
-    get_extent_shard_key(onode_key, offset, key);
-  } else {
-    rewrite_extent_shard_key(offset, key);
-  }
-  apply(*key);
+  generate_onode_shard_key_and_apply(
+    onode_key,
+    offset,
+    EXTENT_SHARD_KEY_SUFFIX,
+    key,
+    apply);
 }
 
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
-  ceph_assert(key.size() > sizeof(uint32_t) + 1);
-  ceph_assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
-  int okey_len = key.size() - sizeof(uint32_t) - 1;
-  *onode_key = key.substr(0, okey_len);
-  const char *p = key.data() + okey_len;
-  _key_decode_u32(p, offset);
-  return 0;
+  return get_key_onode_shard(key, EXTENT_SHARD_KEY_SUFFIX, onode_key, offset);
 }
 
 static bool is_extent_shard_key(const string& key)
 {
-  return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
+  return is_onode_shard_key(key, EXTENT_SHARD_KEY_SUFFIX);
+}
+
+// spanning blob map shards has 's' suffix
+template<typename S>
+static void get_spanblob_shard_key(const S& onode_key, uint32_t offset,
+				 string *key)
+{
+  get_onode_shard_key(onode_key, offset, SPANBLOB_SHARD_KEY_SUFFIX, key);
+}
+
+template<typename S>
+static void generate_spanblob_shard_key_and_apply(
+  const S& onode_key,
+  uint32_t offset,
+  string *key,
+  std::function<void(const string& final_key)> apply)
+{
+  generate_onode_shard_key_and_apply(
+    onode_key,
+    offset,
+    SPANBLOB_SHARD_KEY_SUFFIX,
+    key,
+    apply);
+}
+
+int get_key_spanblob_shard(
+  const string& key,
+  string *onode_key,
+  uint32_t *offset)
+{
+  return get_key_onode_shard(key, SPANBLOB_SHARD_KEY_SUFFIX, onode_key, offset);
+}
+
+static bool is_spanblob_shard_key(const string& key)
+{
+  return is_onode_shard_key(key, SPANBLOB_SHARD_KEY_SUFFIX);
 }
 
 // '-' < '.' < '~'
@@ -2669,35 +2753,118 @@ void BlueStore::ExtentMap::bound_encode_spanning_blobs(size_t& p)
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
-  __u8 struct_v = 2;
+  // Version 3 contains just the first shard(32 entries)of spanning blob map
+  // the rest are encoded as separate DB records
+  __u8 struct_v = 3;
 
   denc(struct_v, p);
   denc_varint((uint32_t)0, p);
-  size_t key_size = 0;
-  denc_varint((uint32_t)0, key_size);
-  p += spanning_blob_map.size() * key_size;
-  for (const auto& i : spanning_blob_map) {
-    i.second->bound_encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+  if (spanning_blob_map.bucket_count() > 0) {
+    spanning_blob_map.bound_encode_bucket(
+      0,
+      p,
+      struct_v,
+      [&] (size_t& p,
+	   uint64_t struct_v,
+           const BlobRef& b) {
+	b->bound_encode(p, struct_v, b->shared_blob->get_sbid(), true);
+      }
+    );
   }
 }
 
-void BlueStore::ExtentMap::encode_spanning_blobs(
-  bufferlist::contiguous_appender& p)
+size_t BlueStore::ExtentMap::encode_spanning_blobs(
+  bufferlist::contiguous_appender& p,
+   KeyValueDB::Transaction &txn)
 {
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
-  __u8 struct_v = 2;
+  // Version 3 contains just the first shard(32 entries)of spanning blob map
+  // the rest are encoded as separate DB records
+  __u8 struct_v = 3;
+  size_t encoded_shards_bytes = 0;
 
   denc(struct_v, p);
-  denc_varint(spanning_blob_map.size(), p);
-  for (auto i : spanning_blob_map) {
-    denc_varint(i.second->id, p);
-    i.second->encode(p, struct_v, i.second->shared_blob->get_sbid(), true);
+  uint32_t buckets = spanning_blob_map.bucket_count();
+  denc_varint(buckets, p);
+  if (buckets > 0) {
+    spanning_blob_map.encode_bucket(
+      0,
+      p,
+      struct_v,
+      [&] (bufferlist::contiguous_appender& p,
+	   uint64_t struct_v,
+           const BlobRef& b) {
+	b->encode(p, struct_v, b->shared_blob->get_sbid(), true);
+      }
+    );
+    auto new_buckets = buckets;
+    bool is_tail = true;
+    string key;
+    while (buckets > 0) {
+      auto bucket = buckets - 1;
+
+      if (spanning_blob_map.bucket_size(bucket) == 0 && is_tail) {
+	generate_spanblob_shard_key_and_apply(
+	  onode->key,
+	  bucket,
+	  &key,
+	  [&] (const string& final_key) {
+	    txn->rmkey(PREFIX_OBJ, key);
+	  });
+      } else {
+	if (is_tail) {
+	  new_buckets = buckets;
+	  is_tail = false;
+	}
+	if (spanning_blob_map.bucket_modified(bucket, true)) {
+	  // bound encode
+	  size_t bound = 0;
+	  spanning_blob_map.bound_encode_bucket(
+	    bucket,
+	    bound,
+	    struct_v,
+	    [&](size_t& p,
+		uint64_t struct_v,
+		const BlobRef& b) {
+	      b->bound_encode(p, struct_v, b->shared_blob->get_sbid(), true);
+	    }
+	  );
+	  // encode
+	  bufferlist bl;
+	  {
+	    auto p = bl.get_contiguous_appender(bound, true);
+	    spanning_blob_map.encode_bucket(
+	      bucket,
+	      p,
+	      struct_v,
+	      [&](bufferlist::contiguous_appender& p,
+		  uint64_t struct_v,
+		  const BlobRef& b) {
+		b->encode(p, struct_v, b->shared_blob->get_sbid(), true);
+	      }
+	    );
+	  }
+	  encoded_shards_bytes += bl.length();
+	  generate_spanblob_shard_key_and_apply(
+	    onode->key,
+	    bucket,
+	    &key,
+	    [&] (const string& final_key) {
+	      txn->set(PREFIX_OBJ, key, bl );
+	    });
+	}
+      }
+      buckets--;
+    }
+    spanning_blob_map.trim_buckets(new_buckets);
   }
+  return encoded_shards_bytes;
 }
 
 void BlueStore::ExtentMap::decode_spanning_blobs(
+  KeyValueDB *db,
   bufferptr::const_iterator& p)
 {
   __u8 struct_v;
@@ -2705,17 +2872,56 @@ void BlueStore::ExtentMap::decode_spanning_blobs(
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
-  ceph_assert(struct_v == 1 || struct_v == 2);
-
-  unsigned n;
-  denc_varint(n, p);
-  while (n--) {
-    BlobRef b(new Blob());
-    denc_varint(b->id, p);
-    spanning_blob_map.set(b->id, b);
-    uint64_t sbid = 0;
-    b->decode(onode->c, p, struct_v, &sbid, true);
-    onode->c->open_shared_blob(sbid, b);
+  // Version 3 contains just the first shard(32 entries)of spanning blob map
+  // the rest are encoded as separate DB records
+  ceph_assert(struct_v == 1 || struct_v == 2 || struct_v == 3);
+  if (struct_v >= 3) {
+    uint32_t buckets;
+    denc_varint(buckets, p);
+    if (buckets > 0) {
+      string key;
+      for (size_t bucket = 0; bucket < buckets; ++bucket) {
+        bufferlist v;
+	if (bucket) {
+	  int r;
+	  generate_spanblob_shard_key_and_apply(
+	    onode->key,
+	    bucket,
+	    &key,
+	    [&](const string& final_key) {
+	      r = db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
+	    });
+          ceph_assert(r == 0);
+	}
+	auto p1 = v.front().begin_deep();
+	spanning_blob_map.decode_bucket(
+	  bucket,
+	  bucket ? p1 : p,
+	  struct_v,
+	  [&] (bufferptr::const_iterator& p,
+	       uint64_t struct_v,
+	       const bid_t& id) {
+	    BlobRef b(new Blob());
+	    b->id = id;
+	    uint64_t sbid = 0;
+	    b->decode(onode->c, p, struct_v, &sbid, true);
+	    onode->c->open_shared_blob(sbid, b);
+	    return b;
+	  }
+	);
+      }
+    }
+  } else {
+    unsigned n;
+    denc_varint(n, p);
+    while (n--) {
+      BlobRef b(new Blob());
+      denc_varint(b->id, p);
+      spanning_blob_map.set(b->id, b);
+      uint64_t sbid = 0;
+      b->decode(onode->c, p, struct_v, &sbid, true);
+      onode->c->open_shared_blob(sbid, b);
+    }
   }
 }
 
@@ -3367,7 +3573,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
 
     // initialize extent_map
-    on->extent_map.decode_spanning_blobs(p);
+    on->extent_map.decode_spanning_blobs(store->db, p);
     if (on->onode.extent_map_shards.empty()) {
       denc(on->extent_map.inline_bl, p);
       on->extent_map.decode_some(on->extent_map.inline_bl);
@@ -7075,6 +7281,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  }
 	}
 	continue;
+      } else if (is_spanblob_shard_key(it->key())) {
+	//FIXME minor: to implement
+	continue;
       }
 
       ghobject_t oid;
@@ -7438,7 +7647,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	   it->next()) {
 	dout(30) << __func__ << " key "
 		 << pretty_binary_string(it->key()) << dendl;
-	if (is_extent_shard_key(it->key())) {
+
+	if (is_extent_shard_key(it->key()) ||
+	    is_spanblob_shard_key(it->key())) {
 	  continue;
 	}
 
@@ -9189,7 +9400,8 @@ int BlueStore::_collection_list(
       break;
     }
     dout(30) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
-    if (is_extent_shard_key(it->key())) {
+    if (is_extent_shard_key(it->key()) ||
+        is_spanblob_shard_key(it->key())) {
       it->next();
       continue;
     }
@@ -12670,6 +12882,18 @@ int BlueStore::_do_remove(
       }
     );
   }
+  key.clear();
+  for (size_t bucket = 0;
+       bucket < o->extent_map.spanning_blob_map.bucket_count();
+       ++bucket) {
+    dout(20) << __func__ << "  removing spanblob shard "
+	     << bucket << dendl;
+    generate_spanblob_shard_key_and_apply(o->key, bucket, &key,
+      [&](const string& final_key) {
+        txc->t->rmkey(PREFIX_OBJ, final_key);
+      }
+    );
+  }
   txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
   txc->note_removed_object(o);
   o->extent_map.clear();
@@ -13232,6 +13456,16 @@ int BlueStore::_rename(TransContext *txc,
       );
       s.dirty = true;
     }
+    key.clear();
+    for (size_t bucket = 0;
+	 bucket < oldo->extent_map.spanning_blob_map.bucket_count();
+	 ++bucket) {
+      generate_spanblob_shard_key_and_apply(oldo->key, bucket, &key,
+	[&](const string& final_key) {
+	  txc->t->rmkey(PREFIX_OBJ, final_key);
+	}
+      );
+    }
   }
 
   newo = oldo;
@@ -13734,12 +13968,13 @@ void BlueStore::_record_onode(OnodeRef &o, KeyValueDB::Transaction &txn)
 
   // encode
   bufferlist bl;
+  size_t spanblob_shards_bytes = 0;
   unsigned onode_part, blob_part, extent_part;
   {
     auto p = bl.get_contiguous_appender(bound, true);
     denc(o->onode, p);
     onode_part = p.get_logical_offset();
-    o->extent_map.encode_spanning_blobs(p);
+    spanblob_shards_bytes = o->extent_map.encode_spanning_blobs(p, txn);
     blob_part = p.get_logical_offset() - onode_part;
     if (o->onode.extent_map_shards.empty()) {
       denc(o->extent_map.inline_bl, p);
@@ -13749,10 +13984,13 @@ void BlueStore::_record_onode(OnodeRef &o, KeyValueDB::Transaction &txn)
 
   dout(20) << __func__  << " onode " << o->oid << " is " << bl.length()
 	    << " (" << onode_part << " bytes onode + "
-	    << blob_part << " bytes spanning blobs + "
-	    << extent_part << " bytes inline extents)"
+	    << blob_part << " bytes spanning blobs inline + "
+	    << extent_part << " bytes inline extents + "
+	    << spanblob_shards_bytes << " bytes spanning blob shards)"
+	    << " in " << o->onode.extent_map_shards.size() << " shards"
+	    << ", " << o->extent_map.spanning_blob_map.size()
+	    << " spanning blobs"
 	    << dendl;
-
 
   txn->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
 }

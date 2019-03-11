@@ -460,7 +460,7 @@ public:
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
-    ceph_assert(struct_v == 1 || struct_v == 2);
+    ceph_assert(struct_v == 1 || struct_v == 2 || struct_v == 3);
     denc(extents, p);
     denc_varint(flags, p);
     denc_varint_lowz(logical_length, p);
@@ -473,7 +473,7 @@ public:
   }
 
   void encode(bufferlist::contiguous_appender& p, uint64_t struct_v) const {
-    ceph_assert(struct_v == 1 || struct_v == 2);
+    ceph_assert(struct_v == 1 || struct_v == 2 || struct_v == 3);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {
@@ -493,7 +493,7 @@ public:
   }
 
   void decode(bufferptr::const_iterator& p, uint64_t struct_v) {
-    ceph_assert(struct_v == 1 || struct_v == 2);
+    ceph_assert(struct_v == 1 || struct_v == 2 || struct_v == 3);
     denc(extents, p);
     denc_varint(flags, p);
     if (is_compressed()) {

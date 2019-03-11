@@ -817,8 +817,9 @@ public:
     unsigned decode_some(bufferlist& bl);
 
     void bound_encode_spanning_blobs(size_t& p);
-    void encode_spanning_blobs(bufferlist::contiguous_appender& p);
-    void decode_spanning_blobs(bufferptr::const_iterator& p);
+    size_t encode_spanning_blobs(bufferlist::contiguous_appender& p,
+				 KeyValueDB::Transaction &txn);
+    void decode_spanning_blobs(KeyValueDB *db, bufferptr::const_iterator& p);
 
     BlobRef get_spanning_blob(int id) {
       auto& b = spanning_blob_map[id];
