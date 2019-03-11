@@ -422,32 +422,102 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
 
 seastar::future<> ProtocolV2::handle_auth_reply()
 {
-//return read_main_preamble()
-//.then([this] (Tag tag) {
-//  switch (tag) {
-//    case Tag::AUTH_BAD_METHOD:
-//      handle_auth_bad_method() logic
-//      return client_auth(bad_method.allowed_methods());
-//    case Tag::AUTH_REPLY_MORE:
-//      <prepare AuthReplyMoreFrame and send it>
-//      <then:>
-//        return handle_auth_reply()
-//    case Tag::AUTH_DONE:
-//      <handle AuthDoneFrame>
-//      <client auth is successful!>
-        return seastar::now();
-//    default: {
-//      return unexpected_tag(tag, conn, __func__);
-//    }
-//});
+  return read_main_preamble()
+  .then([this] (Tag tag) {
+    switch (tag) {
+      case Tag::AUTH_BAD_METHOD:
+        return read_frame_payload()
+        .then([this] {
+          // handle_auth_bad_method() logic
+          auto bad_method = AuthBadMethodFrame::Decode(rx_segments_data.back());
+          logger().warn("{} got AuthBadMethod, method={} reslt={}, "
+                        "allowed methods={}, allowed modes={}",
+                        conn, bad_method.method(), cpp_strerror(bad_method.result()),
+                        bad_method.allowed_methods(), bad_method.allowed_modes());
+          ceph_assert(messenger.auth_client);
+          int r = messenger.auth_client->handle_auth_bad_method(
+              conn.shared_from_this(), auth_meta,
+              bad_method.method(), bad_method.result(),
+              bad_method.allowed_methods(), bad_method.allowed_modes());
+          if (r < 0) {
+            logger().error("{} auth_client handle_auth_bad_method returned {}",
+                           conn, r);
+            abort_in_fault();
+          }
+          return client_auth(bad_method.allowed_methods());
+        });
+      case Tag::AUTH_REPLY_MORE:
+        return read_frame_payload()
+        .then([this] {
+          // handle_auth_reply_more() logic
+          auto auth_more = AuthReplyMoreFrame::Decode(rx_segments_data.back());
+          logger().debug("{} auth reply more len={}",
+                         conn, auth_more.auth_payload().length());
+          ceph_assert(messenger.auth_client);
+          ceph::bufferlist reply;
+          int r = messenger.auth_client->handle_auth_reply_more(
+               conn.shared_from_this(), auth_meta, auth_more.auth_payload(), &reply);
+          if (r < 0) {
+            logger().error("{} auth_client handle_auth_reply_more returned {}",
+                           conn, r);
+            abort_in_fault();
+          }
+          auto more_reply = AuthRequestMoreFrame::Encode(reply);
+          return write_frame(more_reply);
+        }).then([this] {
+          return handle_auth_reply();
+        });
+      case Tag::AUTH_DONE:
+        return read_frame_payload()
+        .then([this] {
+          // handle_auth_done() logic
+          auto auth_done = AuthDoneFrame::Decode(rx_segments_data.back());
+          ceph_assert(messenger.auth_client);
+          int r = messenger.auth_client->handle_auth_done(
+              conn.shared_from_this(), auth_meta,
+              auth_done.global_id(),
+              auth_done.con_mode(),
+              auth_done.auth_payload(),
+              &auth_meta->session_key,
+              &auth_meta->connection_secret);
+          if (r < 0) {
+            logger().error("{} auth_client handle_auth_done returned {}", conn, r);
+            abort_in_fault();
+          }
+          auth_meta->con_mode = auth_done.con_mode();
+          // TODO
+          ceph_assert(!auth_meta->is_mode_secure());
+          session_stream_handlers = { nullptr, nullptr };
+          return finish_auth();
+        });
+      default: {
+        return unexpected_tag(tag, conn, __func__);
+      }
+    }
+  });
 }
 
 seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods)
 {
   // send_auth_request() logic
-  // <prepare AuthRequestFrame and send>
-  // <then:>
-        return handle_auth_reply();
+  ceph_assert(messenger.auth_client);
+
+  bufferlist bl;
+  vector<uint32_t> preferred_modes;
+  int r = messenger.auth_client->get_auth_request(
+      conn.shared_from_this(), auth_meta, &auth_meta->auth_method,
+      &preferred_modes, &bl);
+  if (r < 0) {
+    logger().error("{} get_initial_auth_request returned {}", conn, r);
+    dispatch_reset();
+    abort_in_close();
+  }
+
+  auto frame = AuthRequestFrame::Encode(auth_meta->auth_method, preferred_modes, bl);
+  return write_frame(frame)
+  .then([this] {
+    return handle_auth_reply();
+  });
 }
 
 seastar::future<bool> ProtocolV2::process_wait()
@@ -514,6 +584,7 @@ void ProtocolV2::execute_connecting()
 {
   trigger_state(state_t::CONNECTING, write_state_t::delay, true);
   seastar::with_gate(pending_dispatch, [this] {
+      enable_recording();
       global_seq = messenger.get_global_seq();
       return Socket::connect(conn.peer_addr)
         .then([this](SocketFRef sock) {
@@ -563,44 +634,86 @@ void ProtocolV2::execute_connecting()
 seastar::future<> ProtocolV2::_auth_bad_method(int r)
 {
   // _auth_bad_method() logic
-  // <prepare and send AuthBadMethodFrame>
-  // <then:>
-       return server_auth();
+  ceph_assert(r < 0);
+  std::vector<uint32_t> allowed_methods;
+  std::vector<uint32_t> allowed_modes;
+  messenger.auth_server->get_supported_auth_methods(
+      conn.get_peer_type(), &allowed_methods, &allowed_modes);
+  logger().warn("{} send AuthBadMethod(auth_method={}, r={}, "
+                "allowed_methods={}, allowed_modes={})",
+                conn, auth_meta->auth_method, cpp_strerror(r),
+                allowed_methods, allowed_modes);
+  auto bad_method = AuthBadMethodFrame::Encode(
+      auth_meta->auth_method, r, allowed_methods, allowed_modes);
+  return write_frame(bad_method)
+  .then([this] {
+    return server_auth();
+  });
 }
 
 seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
 {
   // _handle_auth_request() logic
-  // <case done:>
-  //   <prepare and send AuthDoneFrame>
-  //   <then: server auth successful!>
-         return seastar::now();
-  // <case more:>
-  //   <prepare and send AuthReplyMoreFrame>
-  //   <then:>
-  //     return read_main_preamble()
-  //     .then([this] (Tag tag) {
-  //       expect_tag(Tag::AUTH_REQUEST_MORE, tag, conn, __func__);
-  //       <handle_auth_request_more() logic>
-  //       <process AuthRequestMoreFrame>
-  //       return _handle_auth_request(auth_more.auth_payload(), true);
-  //     });
-  // <case bad:>
-  //   return _auth_bad_method();
+  ceph_assert(messenger.auth_server);
+  bufferlist reply;
+  int r = messenger.auth_server->handle_auth_request(
+      conn.shared_from_this(), auth_meta,
+      more, auth_meta->auth_method, auth_payload,
+      &reply);
+  if (r == 1) {
+    auto auth_done = AuthDoneFrame::Encode(
+        conn.peer_global_id, auth_meta->con_mode, reply);
+    return write_frame(auth_done)
+    .then([this] {
+      ceph_assert(auth_meta);
+      // TODO
+      ceph_assert(!auth_meta->is_mode_secure());
+      session_stream_handlers = { nullptr, nullptr };
+      return finish_auth();
+    });
+  } else if (r == 0) {
+    auto more = AuthReplyMoreFrame::Encode(reply);
+    return write_frame(more)
+    .then([this] {
+      return read_main_preamble();
+    }).then([this] (Tag tag) {
+      expect_tag(Tag::AUTH_REQUEST_MORE, tag, conn, __func__);
+      return read_frame_payload();
+    }).then([this] {
+      auto auth_more = AuthRequestMoreFrame::Decode(rx_segments_data.back());
+      return _handle_auth_request(auth_more.auth_payload(), true);
+    });
+  } else if (r == -EBUSY) {
+    logger().warn("{} auth_server handle_auth_request returned -EBUSY", conn);
+    return abort_in_fault();
+  } else {
+    logger().warn("{} auth_server handle_auth_request returned {}", conn, r);
+    return _auth_bad_method(r);
+  }
 }
 
 seastar::future<> ProtocolV2::server_auth()
 {
-  // return read_main_preamble()
-  // .then([this] (Tag tag) {
-  //   expect_tag(Tag::AUTH_REQUEST, tag, conn, __func__);
-  //   <handle_auth_request() logic>
-  //   <case bad request:>
-  //     return _auth_bad_method();
-  //   <...>
-       auto dummy_auth = bufferlist{};
-       return _handle_auth_request(/*request.auth_payload()*/dummy_auth, false);
-  // });
+  return read_main_preamble()
+  .then([this] (Tag tag) {
+    expect_tag(Tag::AUTH_REQUEST, tag, conn, __func__);
+    return read_frame_payload();
+  }).then([this] {
+    // handle_auth_request() logic
+    auto request = AuthRequestFrame::Decode(rx_segments_data.back());
+    logger().debug("{} got AuthRequest(method={}, preferred_modes={}, payload_len={})",
+                   conn, request.method(), request.preferred_modes(),
+                   request.auth_payload().length());
+    auth_meta->auth_method = request.method();
+    auth_meta->con_mode = messenger.auth_server->pick_con_mode(
+        conn.get_peer_type(), auth_meta->auth_method,
+        request.preferred_modes());
+    if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
+      logger().warn("{} auth_server pick_con_mode returned mode CEPH_CON_MODE_UNKNOWN", conn);
+      return _auth_bad_method(-EOPNOTSUPP);
+    }
+    return _handle_auth_request(request.auth_payload(), false);
+  });
 }
 
 seastar::future<bool> ProtocolV2::send_wait()
@@ -690,6 +803,7 @@ void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
   seastar::with_gate(pending_dispatch, [this] {
+      enable_recording();
       return banner_exchange()
         .then([this] (entity_type_t _peer_type,
                       entity_addr_t _peer_addr) {
@@ -732,6 +846,42 @@ void ProtocolV2::execute_accepting()
           return fault();
         });
     });
+}
+
+// CONNECTING or ACCEPTING state
+
+seastar::future<> ProtocolV2::finish_auth()
+{
+  ceph_assert(auth_meta);
+
+  const auto sig = auth_meta->session_key.empty() ? sha256_digest_t() :
+    auth_meta->session_key.hmac_sha256(nullptr, rxbuf);
+  auto sig_frame = AuthSignatureFrame::Encode(sig);
+  ceph_assert(record_io);
+  record_io = false;
+  rxbuf.clear();
+  return write_frame(sig_frame)
+  .then([this] {
+    return read_main_preamble();
+  }).then([this] (Tag tag) {
+    expect_tag(Tag::AUTH_SIGNATURE, tag, conn, "post_finish_auth");
+    return read_frame_payload();
+  }).then([this] {
+    // handle_auth_signature() logic
+    auto sig_frame = AuthSignatureFrame::Decode(rx_segments_data.back());
+
+    const auto actual_tx_sig = auth_meta->session_key.empty() ?
+      sha256_digest_t() : auth_meta->session_key.hmac_sha256(nullptr, txbuf);
+    if (sig_frame.signature() != actual_tx_sig) {
+      logger().warn("{} pre-auth signature mismatch actual_tx_sig={}"
+                    " sig_frame.signature()={}",
+                    conn, actual_tx_sig, sig_frame.signature());
+      abort_in_fault();
+    }
+    logger().debug("{} pre-auth signature success sig_frame.signature()={}",
+                   conn, sig_frame.signature());
+    txbuf.clear();
+  });
 }
 
 // ACCEPTING or REPLACING state
