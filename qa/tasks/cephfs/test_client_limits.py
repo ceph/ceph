@@ -86,9 +86,7 @@ class TestClientLimits(CephFSTestCase):
         # which depend on the caps outstanding, cache size and overall ratio
         def expected_caps():
             num_caps = self.get_session(mount_a_client_id)['num_caps']
-            if num_caps < mds_min_caps_per_client:
-                raise RuntimeError("client caps fell below min!")
-            elif num_caps == mds_min_caps_per_client:
+            if num_caps <= mds_min_caps_per_client:
                 return True
             elif num_caps < cache_size:
                 return True
@@ -253,9 +251,7 @@ class TestClientLimits(CephFSTestCase):
         mount_a_client_id = self.mount_a.get_global_id()
         def expected_caps():
             num_caps = self.get_session(mount_a_client_id)['num_caps']
-            if num_caps < mds_min_caps_per_client:
-                raise RuntimeError("client caps fell below min!")
-            elif num_caps <= mds_max_caps_per_client:
+            if num_caps <= mds_max_caps_per_client:
                 return True
             else:
                 return False
