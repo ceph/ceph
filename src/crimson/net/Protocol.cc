@@ -3,6 +3,8 @@
 
 #include "Protocol.h"
 
+#include "auth/Auth.h"
+
 #include "crimson/common/log.h"
 #include "Socket.h"
 #include "SocketConnection.h"
@@ -20,7 +22,9 @@ Protocol::Protocol(int type,
                    SocketConnection& conn)
   : proto_type(type),
     dispatcher(dispatcher),
-    conn(conn) {}
+    conn(conn),
+    auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()}
+{}
 
 Protocol::~Protocol()
 {
