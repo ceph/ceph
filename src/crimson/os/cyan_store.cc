@@ -152,6 +152,36 @@ seastar::future<bufferlist> CyanStore::read(CollectionRef c,
   return seastar::make_ready_future<bufferlist>(std::move(bl));
 }
 
+seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
+                                                     const ghobject_t& oid,
+                                                     std::string_view name)
+{
+  logger().info("{} {} {}",
+                __func__, c->cid, oid);
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  if (auto found = o->xattr.find(name); found != o->xattr.end()) {
+    return seastar::make_ready_future<ceph::bufferptr>(found->second);
+  } else {
+    throw std::runtime_error(fmt::format("attr does not exist: {}/{}",
+                                         oid, name));
+  }
+}
+
+seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
+                                                         const ghobject_t& oid)
+{
+  logger().info("{} {} {}",
+                __func__, c->cid, oid);
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  return seastar::make_ready_future<attrs_t>(o->xattr);
+}
+
 seastar::future<CyanStore::omap_values_t>
 CyanStore::omap_get_values(CollectionRef c,
                            const ghobject_t& oid,
