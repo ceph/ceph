@@ -12857,6 +12857,15 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     else
       return -EROFS;
   }
+  if (fromdir != todir) {
+    Inode *fromdir_root =
+      fromdir->quota.is_any_enable() ? fromdir : get_any_quota_root(fromdir, perm);
+    Inode *todir_root =
+      todir->quota.is_any_enable() ? todir : get_any_quota_root(todir, perm);
+    if (fromdir_root != todir_root) {
+      return -EXDEV;
+    }
+  }
 
   InodeRef target;
   MetaRequest *req = new MetaRequest(op);
