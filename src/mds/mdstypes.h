@@ -236,6 +236,78 @@ struct nest_info_t : public scatter_info_t {
     *this = nest_info_t();
   }
 
+  void user_rbytes_sub(std::map<uid_t, int64_t> other) {
+    user_rbytes_add(other, -1);
+  }
+  void user_rbytes_add(std::map<uid_t, int64_t> other, int fac=1) {
+    for (auto& p : other) {
+      user_rbytes[p.first] += fac * p.second;
+      if (0 == user_rbytes[p.first])
+        user_rbytes.erase(p.first);
+    }
+  }
+
+  // *this += cur - acc;
+  void user_rbytes_add_delta(std::map<uid_t, int64_t> cur,   std::map<uid_t, int64_t> acc) {
+    int64_t urbytes = 0;
+    auto tmp = acc;
+
+    for (auto& p : cur) {
+      auto iter = tmp.find(p.first);
+      if (iter != tmp.end()) {
+        urbytes = iter->second;
+        tmp.erase(iter);
+      } else {
+        urbytes = 0;
+      }
+
+      user_rbytes[p.first] += p.second - urbytes;
+      if (0 == user_rbytes[p.first])
+        user_rbytes.erase(p.first);
+    }
+
+    for (auto& p : tmp) {
+      user_rbytes[p.first] += 0 - p.second;
+      if (0 == user_rbytes[p.first])
+        user_rbytes.erase(p.first);
+    }
+  }
+  void group_rbytes_sub(std::map<gid_t, int64_t> other) {
+    group_rbytes_add(other, -1);
+  }
+  void group_rbytes_add(std::map<gid_t, int64_t> other, int fac=1) {
+    for (auto& p : other) {
+      group_rbytes[p.first] += fac * p.second;
+      if (0 == group_rbytes[p.first])
+        group_rbytes.erase(p.first);
+    }
+  }
+  // *this += cur - acc;
+  void group_rbytes_add_delta(std::map<gid_t, int64_t> cur,    std::map<gid_t, int64_t> acc) {
+    int64_t grbytes = 0;
+    std::map<gid_t, int64_t> tmp = acc;
+
+    for (auto& p : cur) {
+      auto iter = tmp.find(p.first);
+      if (iter != tmp.end()) {
+        grbytes = iter->second;
+        tmp.erase(iter);
+      } else {
+        grbytes = 0;
+      }
+
+      group_rbytes[p.first] += p.second - grbytes;
+      if (0 == group_rbytes[p.first])
+        group_rbytes.erase(p.first);
+    }
+
+    for (auto& p : tmp) {
+      group_rbytes[p.first] += 0 - p.second;
+      if (0 == group_rbytes[p.first])
+        group_rbytes.erase(p.first);
+    }
+  }
+
   void sub(const nest_info_t &other) {
     add(other, -1);
   }
@@ -246,6 +318,8 @@ struct nest_info_t : public scatter_info_t {
     rfiles += fac*other.rfiles;
     rsubdirs += fac*other.rsubdirs;
     rsnaps += fac*other.rsnaps;
+    user_rbytes_add(other.user_rbytes, fac);
+    group_rbytes_add(other.group_rbytes, fac);
   }
 
   // *this += cur - acc;
@@ -256,6 +330,8 @@ struct nest_info_t : public scatter_info_t {
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
     rsnaps += cur.rsnaps - acc.rsnaps;
+    user_rbytes_add_delta(cur.user_rbytes, acc.user_rbytes);
+    group_rbytes_add_delta(cur.group_rbytes, acc.group_rbytes);
   }
 
   bool same_sums(const nest_info_t &o) const {
@@ -263,7 +339,9 @@ struct nest_info_t : public scatter_info_t {
         rbytes == o.rbytes &&
         rfiles == o.rfiles &&
         rsubdirs == o.rsubdirs &&
-        rsnaps == o.rsnaps;
+        rsnaps == o.rsnaps &&
+        user_rbytes == o.user_rbytes &&
+        group_rbytes == o.group_rbytes;
   }
 
   void encode(bufferlist &bl) const;
