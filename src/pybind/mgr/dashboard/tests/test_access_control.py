@@ -7,8 +7,7 @@ import json
 import time
 import unittest
 
-from . import CmdException
-from .helper import CLICommandTestMixin
+from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \

@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import unittest
 from mock import Mock, patch
 
-from .helper import KVStoreMockMixin
+from . import KVStoreMockMixin
 from ..plugins.feature_toggles import FeatureToggles, Features
 
 

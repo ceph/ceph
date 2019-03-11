@@ -5,7 +5,7 @@ import unittest
 
 from mock import MagicMock, Mock
 
-from .helper import KVStoreMockMixin
+from . import KVStoreMockMixin
 from .. import mgr
 from ..settings import Settings
 from ..services import ganesha

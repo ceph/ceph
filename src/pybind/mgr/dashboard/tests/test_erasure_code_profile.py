@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from .. import mgr
-from .helper import ControllerTestCase
+from . import ControllerTestCase
 from ..controllers.erasure_code_profile import ErasureCodeProfile
 
 

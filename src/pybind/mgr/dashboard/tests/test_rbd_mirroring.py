@@ -3,10 +3,10 @@ from __future__ import absolute_import
 import json
 import mock
 
+from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirroringSummary
-from .helper import ControllerTestCase
 
 
 mock_list_servers = [{
