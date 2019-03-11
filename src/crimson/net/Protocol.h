@@ -56,6 +56,7 @@ class Protocol {
 
   SocketFRef socket;
   seastar::gate pending_dispatch;
+  AuthConnectionMetaRef auth_meta;
 
   // write_state is changed with state atomically, indicating the write
   // behavior of the according state.
