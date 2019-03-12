@@ -12,10 +12,10 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGQuery.h"
 #include "messages/MPGStats.h"
 
 #include "crimson/mon/MonClient.h"
-
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
@@ -367,6 +367,8 @@ seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
     return handle_pg_notify(conn, boost::static_pointer_cast<MOSDPGNotify>(m));
   case MSG_OSD_PG_INFO:
     return handle_pg_info(conn, boost::static_pointer_cast<MOSDPGInfo>(m));
+  case MSG_OSD_PG_QUERY:
+    return handle_pg_query(conn, boost::static_pointer_cast<MOSDPGQuery>(m));
   default:
     return seastar::now();
   }
@@ -746,6 +748,22 @@ seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
       auto evt = std::make_unique<PGPeeringEvent>(pg_notify.epoch_sent,
                                                   pg_notify.query_epoch,
                                                   std::move(info));
+      return do_peering_event(pgid, std::move(evt));
+  });
+}
+
+seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
+                                       Ref<MOSDPGQuery> m)
+{
+  const int from = m->get_source().num();
+  return seastar::parallel_for_each(m->pg_list,
+    [from, this](pair<spg_t, pg_query_t> p) {
+      auto& [pgid, pg_query] = p;
+      MQuery query{pgid, pg_shard_t{from, pg_query.from},
+                   pg_query, pg_query.epoch_sent};
+      auto evt = std::make_unique<PGPeeringEvent>(pg_query.epoch_sent,
+                                                  pg_query.epoch_sent,
+                                                  std::move(query));
       return do_peering_event(pgid, std::move(evt));
   });
 }
