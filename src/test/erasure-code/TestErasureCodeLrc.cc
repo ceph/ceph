@@ -392,7 +392,7 @@ TEST(ErasureCodeLrc, layers_sanity_checks)
       "  [ \"DD\", \"\" ], "
       "]";
     profile["layers"] = description_string;
-    EXPECT_EQ(ERROR_LRC_MAPPING_SIZE, lrc.init(profile, &cerr));
+    EXPECT_EQ(-EINVAL, lrc.init(profile, &cerr));
   }
 }
 
