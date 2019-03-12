@@ -1203,6 +1203,8 @@ private:
   bool _ll_forget(Inode *in, uint64_t count);
 
   int worm_state_transition(Inode *in, const UserPerm& perms, int op); 
+  int set_worm_exptime(Inode *in, const char *name, const void *value,
+		      size_t size, int flags, const UserPerm& perms);
 
   uint32_t deleg_timeout = 0;
 

@@ -6982,6 +6982,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
         in->mtime = utime_t(stx->stx_mtime);
+      
       if (mask & CEPH_SETATTR_ATIME)
         in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
@@ -11525,6 +11526,11 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	return -EOPNOTSUPP;
       if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
 	check_realm = true;
+      
+      if (vxattr->name.compare(0, strlen("ceph.worm.exp_time"), "ceph.worm.exp_time") == 0){
+        int res = set_worm_exptime(in, name, value, size, flags, perms);
+        return res;
+      }
     }
   }
 
@@ -11705,11 +11711,44 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
   return _removexattr(in, name, perms);
 }
 
+int Client::set_worm_exptime(Inode *in, const char *name, const void *value,
+		      size_t size, int flags, const UserPerm& perms)
+{
+   int res = worm_state_transition(in, perms, 0);
+   if (res != -EROFS) {
+     return -EINVAL;
+   }
+
+   string v((const char*)value, size);
+   
+   size_t pos = v.find('.');
+   
+   if (pos == string::npos)
+     return -EINVAL;
+     
+   uint32_t sec  = boost::lexical_cast<uint32_t>(v.substr(0,pos));
+   uint32_t nsec = boost::lexical_cast<uint32_t>(v.substr(pos + 1));
+ 
+   utime_t exp_time(sec, nsec);
+   if (exp_time.tv.tv_sec < in->mtime + in->worm.auto_commit_period + in->worm.min_retention_period) {
+     exp_time.tv.tv_sec = in->mtime + in->worm.auto_commit_period + in->worm.min_retention_period;
+   } else if (exp_time.tv.tv_sec > in->mtime + in->worm.auto_commit_period + in->worm.max_retention_period) {
+     exp_time.tv.tv_sec = in->mtime + in->worm.auto_commit_period + in->worm.max_retention_period;
+   }
+
+   char buf[64];
+   snprintf(buf, sizeof(buf), "%u_%u", exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
+ 
+   res = _do_setxattr(in, "ceph.worm.exp_time", &buf, std::strlen(buf), flags, perms);
+
+   return res;
+} 
+
 /*
  A worm file has three state£º
  normal state£º the initial state of a file. in this state, the worm file is mutable and deletable¡£
  retained state: in this state, the worm file is immutable or undeletable.
- expired state: in this state, the worm like as the normal file, it is mutable and deletable 
+ expired state: in this state, the worm like as the normal file, it is mutable and deletable
                  (the worm file is immutable but deletable in some other storage).
  A worm file make transition between these three states:
  In normal state, the worm file will trans to retained state if the file's mtime > auto_commit_period.
