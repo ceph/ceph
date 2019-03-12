@@ -72,14 +72,17 @@ int ErasureCode::create_rule(
   return ruleid;
 }
 
-int ErasureCode::sanity_check_k(int k, ostream *ss)
+int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
 {
   if (k < 2) {
     *ss << "k=" << k << " must be >= 2" << std::endl;
     return -EINVAL;
-  } else {
-    return 0;
   }
+  if (m < 1) {
+    *ss << "m=" << m << " must be >= 1" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
 }
 
 int ErasureCode::chunk_index(unsigned int i) const
