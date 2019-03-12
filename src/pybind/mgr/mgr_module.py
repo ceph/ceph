@@ -352,6 +352,10 @@ def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
 
 
+def _get_localized_key(prefix, key):
+    return '{}/{}'.format(prefix, key)
+
+
 class Option(dict):
     """
     Helper class to declare options for MODULE_OPTIONS list.
@@ -428,10 +432,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :param default: the default value of the config if it is not found
         :return: str
         """
-        r = self._ceph_get_module_option(key, "")
+        r = self._ceph_get_module_option(key)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -453,8 +456,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_localized_module_option(self, key, default=None):
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -908,8 +910,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -938,7 +939,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         if module == self.module_name:
             self._validate_module_option(key)
-        r = self._ceph_get_module_option(module, key, "")
+        r = self._ceph_get_module_option(module, key)
         return default if r is None else r
 
     def get_store_prefix(self, key_prefix):
@@ -952,7 +953,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._ceph_get_store_prefix(key_prefix)
 
     def _set_localized(self, key, val, setter):
-        return setter(self.get_mgr_id() + '/' + key, val)
+        return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
     def get_localized_module_option(self, key, default=None):
         """
@@ -1021,11 +1022,11 @@ class MgrModule(ceph_module.BaseMgrModule):
             return r
 
     def get_localized_store(self, key, default=None):
-        r = self._ceph_get_store('{}/{}'.format(self.get_mgr_id(), key))
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
         if r is None:
             r = self._ceph_get_store(key)
-        if r is None:
-            r = default
+            if r is None:
+                r = default
         return r
 
     def set_localized_store(self, key, val):
