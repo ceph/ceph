@@ -35,9 +35,7 @@ public:
     return get_available();
   }
 
-  void dump() override
-  {
-  }
+  void dump() override;
   double get_fragmentation(uint64_t) override
   {
     return _get_fragmentation();
