@@ -94,24 +94,24 @@ class IscsiClient(RestClient):
             'skipchecks': 'true'
         })
 
-    @RestClient.api_put('/api/disk/{image_id}')
-    def create_disk(self, image_id, backstore, request=None):
-        logger.debug("iSCSI: Creating disk: %s", image_id)
+    @RestClient.api_put('/api/disk/{pool}/{image}')
+    def create_disk(self, pool, image, backstore, request=None):
+        logger.debug("iSCSI: Creating disk: %s/%s", pool, image)
         return request({
             'mode': 'create',
             'backstore': backstore
         })
 
-    @RestClient.api_delete('/api/disk/{image_id}')
-    def delete_disk(self, image_id, request=None):
-        logger.debug("iSCSI: Deleting disk: %s", image_id)
+    @RestClient.api_delete('/api/disk/{pool}/{image}')
+    def delete_disk(self, pool, image, request=None):
+        logger.debug("iSCSI: Deleting disk: %s/%s", pool, image)
         return request({
             'preserve_image': 'true'
         })
 
-    @RestClient.api_put('/api/disk/{image_id}')
-    def reconfigure_disk(self, image_id, controls, request=None):
-        logger.debug("iSCSI: Reconfiguring disk: %s", image_id)
+    @RestClient.api_put('/api/disk/{pool}/{image}')
+    def reconfigure_disk(self, pool, image, controls, request=None):
+        logger.debug("iSCSI: Reconfiguring disk: %s/%s", pool, image)
         return request({
             'controls': json.dumps(controls),
             'mode': 'reconfigure'
