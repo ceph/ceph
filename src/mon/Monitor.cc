@@ -6334,8 +6334,7 @@ int Monitor::ms_handle_authentication(Connection *con)
     s->caps.set_allow_all();
     s->authenticated = true;
     ret = 1;
-  }
-  if (caps_info.caps.length()) {
+  } else if (caps_info.caps.length()) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
     try {
