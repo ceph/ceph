@@ -302,7 +302,14 @@ target_link_libraries(rgw
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES})
+  ${EXPAT_LIBRARIES}
+  PUBLIC
+  dmclock::dmclock)
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
+endif()
+
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
