@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os
 
 import teuthology.openstack
 
@@ -43,7 +44,7 @@ def get_suite_parser():
     parser.add_argument(
         '-c', '--ceph',
         help='The ceph branch to run against',
-        default='master',
+        default=os.getenv('TEUTH_CEPH_BRANCH', 'master'),
     )
     parser.add_argument(
         '-k', '--kernel',
@@ -63,6 +64,7 @@ def get_suite_parser():
     parser.add_argument(
         '--suite-branch',
         help='Use this suite branch instead of the ceph branch',
+        default=os.getenv('TEUTH_SUITE_BRANCH', 'master'),
     )
     parser.add_argument(
         '-e', '--email',
@@ -173,10 +175,12 @@ def get_suite_parser():
     parser.add_argument(
         '--ceph-repo',
         help=("Query this repository for Ceph branch and SHA1"),
+        default=os.getenv('TEUTH_CEPH_REPO', 'https://github.com/ceph/ceph'),
     )
     parser.add_argument(
         '--suite-repo',
         help=("Use tasks and suite definition in this repository"),
+        default=os.getenv('TEUTH_SUITE_REPO', 'https://github.com/ceph/ceph'),
     )
     return parser
 
@@ -206,11 +210,12 @@ def get_openstack_parser():
     parser.add_argument(
         '--teuthology-git-url',
         help="git clone url for teuthology",
+        default=os.getenv('TEUTH_REPO', 'https://github.com/ceph/teuthology'),
     )
     parser.add_argument(
         '--teuthology-branch',
         help="use this teuthology branch instead of master",
-        default='master',
+        default=os.getenv('TEUTH_BRANCH', 'master'),
     )
     parser.add_argument(
         '--upload',
