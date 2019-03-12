@@ -15,7 +15,7 @@ class TestDashboard(MgrTestCase):
     def setUp(self):
         super(TestDashboard, self).setUp()
 
-        self._assign_ports("dashboard", "server_port")
+        self._assign_ports("dashboard", "ssl_server_port")
         self._load_module("dashboard")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("dashboard",
                                                      "create-self-signed-cert")
