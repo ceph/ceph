@@ -281,7 +281,7 @@ namespace buffer CEPH_BUFFER_API {
     raw *clone();
     void swap(ptr& other) noexcept;
     ptr& make_shareable();
-    void clone_replace();
+    void make_owner();
 
     iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
@@ -1095,9 +1095,9 @@ namespace buffer CEPH_BUFFER_API {
 
     void zero();
     void zero(unsigned o, unsigned l);
-    // clone the old buffers to new buffers, then replace old buffers with the
-    // new buffers so the old buffers are not referenced by this bufferlist
-    void clone_replace(unsigned o, unsigned l);
+    // make this the owner of the buffers when manage buffer from outside ceph, such as
+    // buffers created by buffer::create_static.
+    void make_owner(unsigned o, unsigned l);
 
     bool is_contiguous() const;
     void rebuild();

@@ -466,7 +466,7 @@ void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
         len = (*it)->len;
       }
       if (len > 0) {
-        connection->outcoming_bl.clone_replace(o, len);
+        connection->outcoming_bl.make_owner(o, len);
       }
     }
   }

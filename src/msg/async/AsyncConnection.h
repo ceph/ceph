@@ -167,7 +167,7 @@ class AsyncConnection : public Connection {
 
   DispatchQueue *dispatch_queue;
 
-  // lockfree, only used in own thread
+  // must be protected with send_lock
   bufferlist outcoming_bl;
   bool open_write = false;
   // lock order: lock -> write_lock -> send_lock

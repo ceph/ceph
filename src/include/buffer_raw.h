@@ -76,6 +76,10 @@ namespace ceph::buffer {
       }
     }
 
+    virtual raw *own() {
+      return this;
+    }
+
 private:
     // no copying.
     // cppcheck-suppress noExplicitConstructor

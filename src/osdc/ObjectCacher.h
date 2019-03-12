@@ -85,7 +85,9 @@ class ObjectCacher {
     OSDWrite(const SnapContext& sc, const bufferlist& b, ceph::real_time mt,
 	     int f, ceph_tid_t _journal_tid)
       : snapc(sc), bl(b), mtime(mt), fadvise_flags(f),
-	journal_tid(_journal_tid) {}
+	journal_tid(_journal_tid) {
+          bl.make_owner(0, bl.length());
+        }
   };
 
   OSDWrite *prepare_write(const SnapContext& sc,

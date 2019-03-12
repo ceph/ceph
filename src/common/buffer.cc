@@ -395,6 +395,9 @@ using namespace ceph;
     raw* clone_empty() override {
       return new buffer::raw_char(len);
     }
+    raw* own() override {
+      return clone();
+    }
   };
 
   class buffer::raw_claim_buffer : public buffer::raw {
@@ -621,12 +624,12 @@ using namespace ceph;
     return *this;
   }
 
-  void buffer::ptr::clone_replace() {
+  void buffer::ptr::make_owner() {
     if (_raw) {
       buffer::raw *tr = _raw;
-      _raw = tr->clone();
-      _raw->nref = 1;
-      if (likely(--tr->nref == 0)) {
+      _raw = tr->own();
+      _raw->nref++;
+      if (unlikely(--tr->nref == 0)) {
         ANNOTATE_HAPPENS_AFTER(&tr->nref);
         ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
         delete tr;
@@ -1269,13 +1272,13 @@ using namespace ceph;
     }
   }
 
-  void buffer::list::clone_replace(unsigned o, unsigned l)
+  void buffer::list::make_owner(unsigned o, unsigned l)
   {
     ceph_assert(o+l <= _len);
     unsigned p = 0;
     for (auto& node : _buffers) {
       if (p + node.length() > o) {
-        node.clone_replace();
+        node.make_owner();
       }
       p += node.length();
       if (o+l <= p) {
