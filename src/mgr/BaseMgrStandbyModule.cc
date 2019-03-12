@@ -65,7 +65,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *what = nullptr;
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &what)) {
+  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &what, &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
