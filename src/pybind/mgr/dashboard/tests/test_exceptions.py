@@ -4,9 +4,10 @@ from __future__ import absolute_import
 import time
 
 import rados
+
+from . import ControllerTestCase
 from ..services.ceph_service import SendCommandError
 from ..controllers import RESTController, Controller, Task, Endpoint
-from .helper import ControllerTestCase
 from ..services.exception import handle_rados_error, handle_send_command_error, \
     serialize_dashboard_exception
 from ..tools import ViewCache, TaskManager, NotificationQueue

@@ -5,22 +5,11 @@ from __future__ import absolute_import
 import errno
 import unittest
 
-from . import CmdException, exec_dashboard_cmd
-from .. import mgr
+from . import CmdException, exec_dashboard_cmd, KVStoreMockMixin
 from ..services.sso import handle_sso_command, load_sso_db
 
 
-class AccessControlTest(unittest.TestCase):
-    CONFIG_KEY_DICT = {}
-
-    @classmethod
-    def mock_set_module_option(cls, attr, val):
-        cls.CONFIG_KEY_DICT[attr] = val
-
-    @classmethod
-    def mock_get_module_option(cls, attr, default):
-        return cls.CONFIG_KEY_DICT.get(attr, default)
-
+class AccessControlTest(unittest.TestCase, KVStoreMockMixin):
     IDP_METADATA = '''<?xml version="1.0"?>
 <md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
                      xmlns:ds="http://www.w3.org/2000/09/xmldsig#"
@@ -69,16 +58,8 @@ class AccessControlTest(unittest.TestCase):
   </md:IDPSSODescriptor>
 </md:EntityDescriptor>'''
 
-    @classmethod
-    def setUpClass(cls):
-        mgr.set_module_option.side_effect = cls.mock_set_module_option
-        mgr.get_module_option.side_effect = cls.mock_get_module_option
-        # kludge below
-        mgr.set_store.side_effect = cls.mock_set_module_option
-        mgr.get_store.side_effect = cls.mock_get_module_option
-
     def setUp(self):
-        self.CONFIG_KEY_DICT.clear()
+        self.mock_kv_store()
         load_sso_db()
 
     @classmethod

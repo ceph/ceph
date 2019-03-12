@@ -6,7 +6,7 @@ import json
 import cherrypy
 import mock
 
-from .helper import ControllerTestCase
+from . import ControllerTestCase, KVStoreMockMixin
 from ..controllers import RESTController, Controller
 from ..tools import RequestLoggingTool
 from .. import mgr
@@ -28,8 +28,7 @@ class FooResource(RESTController):
         pass
 
 
-class ApiAuditingTest(ControllerTestCase):
-    settings = {}
+class ApiAuditingTest(ControllerTestCase, KVStoreMockMixin):
 
     def __init__(self, *args, **kwargs):
         cherrypy.tools.request_logging = RequestLoggingTool()
@@ -37,23 +36,11 @@ class ApiAuditingTest(ControllerTestCase):
         super(ApiAuditingTest, self).__init__(*args, **kwargs)
 
     @classmethod
-    def mock_set_module_option(cls, key, val):
-        cls.settings[key] = val
-
-    @classmethod
-    def mock_get_module_option(cls, key, default=None):
-        return cls.settings.get(key, default)
-
-    @classmethod
-    def setUpClass(cls):
-        mgr.get_module_option.side_effect = cls.mock_get_module_option
-        mgr.set_module_option.side_effect = cls.mock_set_module_option
-
-    @classmethod
     def setup_server(cls):
         cls.setup_controllers([FooResource])
 
     def setUp(self):
+        self.mock_kv_store()
         mgr.cluster_log = mock.Mock()
         mgr.set_module_option('AUDIT_API_ENABLED', True)
         mgr.set_module_option('AUDIT_API_LOG_PAYLOAD', True)

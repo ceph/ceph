@@ -3,7 +3,7 @@
 
 import time
 
-from .helper import ControllerTestCase
+from . import ControllerTestCase
 from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
 from ..tools import NotificationQueue, TaskManager

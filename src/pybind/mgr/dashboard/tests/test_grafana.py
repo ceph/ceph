@@ -1,4 +1,4 @@
-from .helper import ControllerTestCase
+from . import ControllerTestCase
 from ..controllers.grafana import Grafana
 from .. import mgr
 

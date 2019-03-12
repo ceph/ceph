@@ -5,13 +5,14 @@ import unittest
 
 from mock import MagicMock, Mock
 
+from . import KVStoreMockMixin
 from .. import mgr
 from ..settings import Settings
 from ..services import ganesha
 from ..services.ganesha import GaneshaConf, Export, GaneshaConfParser
 
 
-class GaneshaConfTest(unittest.TestCase):
+class GaneshaConfTest(unittest.TestCase, KVStoreMockMixin):
     export_1 = """
 EXPORT {
     Export_ID=1;
@@ -103,19 +104,8 @@ EXPORT
     def _ioctx_list_objects_mock(self):
         return [obj for _, obj in self.temp_store.items()]
 
-    CONFIG_KEY_DICT = {}
-
-    @classmethod
-    def mock_set_module_option(cls, attr, val):
-        cls.CONFIG_KEY_DICT[attr] = val
-
-    @classmethod
-    def mock_get_module_option(cls, attr, default):
-        return cls.CONFIG_KEY_DICT.get(attr, default)
-
     def setUp(self):
-        mgr.set_module_option.side_effect = self.mock_set_module_option
-        mgr.get_module_option.side_effect = self.mock_get_module_option
+        self.mock_kv_store()
 
         Settings.GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = "ganesha/ns"
 
