@@ -7277,10 +7277,9 @@ int OSD::ms_handle_authentication(Connection *con)
   }
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
-  if (caps_info.allow_all)
+  if (caps_info.allow_all) {
     s->caps.set_allow_all();
-
-  if (caps_info.caps.length() > 0) {
+  } else if (caps_info.caps.length() > 0) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
     try {
