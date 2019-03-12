@@ -1788,6 +1788,8 @@ struct rgw_obj_key {
     }
   }
 
+  // takes an oid and parses out the namespace (ns), name, and
+  // instance
   static bool parse_raw_oid(const string& oid, rgw_obj_key *key) {
     key->instance.clear();
     key->ns.clear();
