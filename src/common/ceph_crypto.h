@@ -209,8 +209,8 @@ namespace ceph {
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
-	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
-				   CKA_SIGN,  &keyItem, NULL);
+	symkey = PK11_ImportSymKey_FIPS(slot, cktype, PK11_OriginUnwrap,
+					CKA_SIGN,  &keyItem, NULL);
 	if (! symkey) {
 	  throw DigestException("PK11_ImportSymKey() failed");
 	}
