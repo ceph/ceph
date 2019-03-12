@@ -83,3 +83,19 @@ void BitmapAllocator::shutdown()
   ldout(cct, 1) << __func__ << dendl;
   _shutdown();
 }
+
+void BitmapAllocator::dump()
+{
+  // bin -> interval count
+  std::map<size_t, size_t> bins_overall;
+  collect_stats(bins_overall);
+  auto it = bins_overall.begin();
+  while (it != bins_overall.end()) {
+    ldout(cct, 0) << __func__
+	            << " bin " << it->first
+		    << "(< " << byte_u_t((1 << (it->first + 1)) * get_min_alloc_size()) << ")"
+		    << " : " << it->second << " extents"
+		    << dendl;
+    ++it;
+  }
+}
