@@ -22,6 +22,8 @@ placement groups for these pools. See
 `Pools <http://docs.ceph.com/docs/master/rados/operations/pools/#pools>`__
 for details on pool creation.
 
+.. _radosgw-pool-namespaces:
+
 Pool Namespaces
 ===============
 

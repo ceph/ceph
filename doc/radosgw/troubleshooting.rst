@@ -175,3 +175,34 @@ Also, check to ensure that the default site is disabled. ::
   
   
   
+Numerous objects in default.rgw.meta pool
+=========================================
+
+Clusters created prior to *jewel* have a metadata archival feature enabled by default, using the ``default.rgw.meta`` pool.
+This archive keeps all old versions of user and bucket metadata, resulting in large numbers of objects in the ``default.rgw.meta`` pool.
+
+Disabling the Metadata Heap
+---------------------------
+
+Users who want to disable this feature going forward should set the ``metadata_heap`` field to an empty string ``""``::
+
+  $ radosgw-admin zone get --rgw-zone=default > zone.json
+  [edit zone.json, setting "metadata_heap": ""]
+  $ radosgw-admin zone set --rgw-zone=default --infile=zone.json
+  $ radosgw-admin period update --commit
+
+This will stop new metadata from being written to the ``default.rgw.meta`` pool, but does not remove any existing objects or pool.
+
+Cleaning the Metadata Heap Pool
+-------------------------------
+
+Clusters created prior to *jewel* normally use ``default.rgw.meta`` only for the metadata archival feature.
+
+However, from *luminous* onwards, radosgw uses :ref:`Pool Namespaces <radosgw-pool-namespaces>` within ``default.rgw.meta`` for an entirely different purpose, that is, to store ``user_keys`` and other critical metadata.
+
+Users should check zone configuration before proceeding any cleanup procedures::
+
+  $ radosgw-admin zone get --rgw-zone=default | grep default.rgw.meta
+  [should not match any strings]
+
+Having confirmed that the pool is not used for any purpose, users may safely delete all objects in the ``default.rgw.meta`` pool, or optionally, delete the entire pool itself.
