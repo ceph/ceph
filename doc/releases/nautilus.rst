@@ -62,7 +62,7 @@ Major Changes from Mimic
   * OSDs more effectively prioritize the most important PGs and
     objects when performing recovery and backfill.
   * Progress for long-running background processes--like recovery
-    after a device failure--is not reported as part of ``ceph
+    after a device failure--is now reported as part of ``ceph
     status``.
   * An experimental `Coupled-Layer "Clay" erasure code
     <https://www.usenix.org/conference/fast18/presentation/vajha>`_
