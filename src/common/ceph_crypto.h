@@ -69,6 +69,20 @@ typedef unsigned char byte;
 
 namespace ceph {
   namespace crypto {
+    // workaround for no PK11_ImportSymKey in FIPS mode
+    PK11SymKey *PK11_ImportSymKey_FIPS(
+	PK11SlotInfo *slot,
+	CK_MECHANISM_TYPE type,
+	PK11Origin origin,
+	CK_ATTRIBUTE_TYPE operation,
+	SECItem *key,
+	void *wincx);
+  } // namespace crypto
+} // namespace
+
+
+namespace ceph {
+  namespace crypto {
     void assert_init();
     void init(CephContext *cct);
     void shutdown(bool shared=true);
