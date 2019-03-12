@@ -7,8 +7,8 @@ import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
+from . import ControllerTestCase
 from ..services.exception import handle_rados_error
-from .helper import ControllerTestCase
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy
 from ..tools import is_valid_ipv6_address, dict_contains_path, \

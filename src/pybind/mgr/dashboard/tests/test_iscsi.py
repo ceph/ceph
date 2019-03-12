@@ -1,18 +1,22 @@
 # pylint: disable=too-many-public-methods
 
 import copy
+import errno
+import json
 import mock
 
-from .helper import ControllerTestCase
+from . import CmdException, ControllerTestCase, CLICommandTestMixin
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
+from ..services.orchestrator import OrchClient
 
 
-class IscsiTest(ControllerTestCase):
+class IscsiTest(ControllerTestCase, CLICommandTestMixin):
 
     @classmethod
     def setup_server(cls):
+        OrchClient.instance().available = lambda: False
         mgr.rados.side_effect = None
         # pylint: disable=protected-access
         Iscsi._cp_config['tools.authenticate.on'] = False
@@ -20,9 +24,45 @@ class IscsiTest(ControllerTestCase):
         cls.setup_controllers([Iscsi, IscsiTarget])
 
     def setUp(self):
+        self.mock_kv_store()
         # pylint: disable=protected-access
         IscsiClientMock._instance = IscsiClientMock()
         IscsiClient.instance = IscsiClientMock.instance
+
+    def test_cli_add_gateway_invalid_url(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('iscsi-gateway-add', name='node1',
+                          service_url='http:/hello.com')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception),
+                         "Invalid service URL 'http:/hello.com'. Valid format: "
+                         "'<scheme>://<username>:<password>@<host>[:port]'.")
+
+    def test_cli_add_gateway(self):
+        self.exec_cmd('iscsi-gateway-add', name='node1',
+                      service_url='https://admin:admin@10.17.5.1:5001')
+        self.exec_cmd('iscsi-gateway-add', name='node2',
+                      service_url='https://admin:admin@10.17.5.2:5001')
+        iscsi_config = json.loads(self.get_key("_iscsi_config"))
+        self.assertEqual(iscsi_config['gateways'], {
+            'node1': {
+                'service_url': 'https://admin:admin@10.17.5.1:5001'
+            },
+            'node2': {
+                'service_url': 'https://admin:admin@10.17.5.2:5001'
+            }
+        })
+
+    def test_cli_remove_gateway(self):
+        self.test_cli_add_gateway()
+        self.exec_cmd('iscsi-gateway-rm', name='node1')
+        iscsi_config = json.loads(self.get_key("_iscsi_config"))
+        self.assertEqual(iscsi_config['gateways'], {
+            'node2': {
+                'service_url': 'https://admin:admin@10.17.5.2:5001'
+            }
+        })
 
     def test_enable_discoveryauth(self):
         discoveryauth = {

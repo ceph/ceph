@@ -7,7 +7,7 @@ import json
 import time
 import unittest
 
-from . import CmdException, exec_dashboard_cmd
+from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \
@@ -15,33 +15,16 @@ from ..services.access_control import load_access_control_db, \
                                       SYSTEM_ROLES
 
 
-class AccessControlTest(unittest.TestCase):
-    CONFIG_KEY_DICT = {}
-
-    @classmethod
-    def mock_set_module_option(cls, attr, val):
-        cls.CONFIG_KEY_DICT[attr] = val
-
-    @classmethod
-    def mock_get_module_option(cls, attr, default=None):
-        return cls.CONFIG_KEY_DICT.get(attr, default)
+class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     @classmethod
     def setUpClass(cls):
-        mgr.set_module_option.side_effect = cls.mock_set_module_option
-        mgr.get_module_option.side_effect = cls.mock_get_module_option
-        # kludge below
-        mgr.set_store.side_effect = cls.mock_set_module_option
-        mgr.get_store.side_effect = cls.mock_get_module_option
+        cls.mock_kv_store()
         mgr.ACCESS_CONTROL_DB = None
 
     def setUp(self):
         self.CONFIG_KEY_DICT.clear()
         load_access_control_db()
-
-    @classmethod
-    def exec_cmd(cls, cmd, **kwargs):
-        return exec_dashboard_cmd(None, cmd, **kwargs)
 
     def load_persistent_db(self):
         config_key = AccessControlDB.accessdb_config_key()
