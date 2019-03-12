@@ -50,7 +50,7 @@ namespace ceph {
 		    CrushWrapper &crush,
 		    std::ostream *ss) const;
 
-    int sanity_check_k(int k, std::ostream *ss);
+    int sanity_check_k_m(int k, int m, std::ostream *ss);
 
     unsigned int get_coding_chunk_count() const override {
       return get_chunk_count() - get_data_chunk_count();
