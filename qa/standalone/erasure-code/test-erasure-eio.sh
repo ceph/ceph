@@ -50,7 +50,6 @@ function setup_osds() {
     for id in $(seq 0 $(expr $count - 1)) ; do
         run_osd $dir $id || return 1
     done
-    wait_for_clean || return 1
 
     # check that erasure code plugins are preloaded
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) log flush || return 1
