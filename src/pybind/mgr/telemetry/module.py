@@ -315,10 +315,10 @@ class Module(MgrModule):
             self.set_config(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif command['prefix'] == 'telemetry on':
-            self.set_config('active', True)
+            self.set_config('enabled', True)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
-            self.set_config('active', False)
+            self.set_config('enabled', False)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
