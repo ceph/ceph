@@ -87,6 +87,8 @@ public:
   seastar::future<> handle_advance_map(cached_map_t next_map);
   seastar::future<> handle_activate_map();
 
+  void print(ostream& os) const;
+
 private:
   void update_primary_state(const std::vector<int>& new_up,
 			    int new_up_primary,
@@ -122,3 +124,5 @@ private:
   cached_map_t osdmap;
   ceph::net::Messenger& msgr;
 };
+
+std::ostream& operator<<(std::ostream&, const PG& pg);

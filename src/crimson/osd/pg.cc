@@ -560,3 +560,21 @@ seastar::future<> PG::handle_activate_map()
   // todo
   return seastar::now();
 }
+
+void PG::print(ostream& out) const
+{
+  out << "pg[" << info
+      << " " << up;
+  if (acting != up)
+    out << "/" << acting;
+  out << " lpr=" << last_peering_reset
+      << " " << pg_state_string(info.stats.state)
+      << "]";
+}
+
+
+std::ostream& operator<<(std::ostream& os, const PG& pg)
+{
+  pg.print(os);
+  return os;
+}
