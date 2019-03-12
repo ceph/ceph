@@ -22,7 +22,7 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
               `HTTP Frontends`_ for more on supported options.
 
 :Type: String
-:Default: ``civetweb port=7480``
+:Default: ``beast port=7480``
 
 ``rgw data``
 
