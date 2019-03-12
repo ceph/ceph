@@ -33,6 +33,7 @@ setup_teuthology() {
     read -r -d '' TEUTHOLOGY_PY_REQS <<EOF
 apache-libcloud==2.2.1 \
 asn1crypto==0.22.0 \
+backports.ssl-match-hostname==3.5.0.1 \
 bcrypt==3.1.4 \
 certifi==2018.1.18 \
 cffi==1.10.0 \
@@ -89,10 +90,14 @@ EOF
         fi
     fi
 
-#    export COVERAGE_ENABLED=true
-#    export COVERAGE_FILE=.coverage.mgr.dashboard
-
     cd $CURR_DIR
+
+    COVERAGE_VERSION=$(cat requirements.txt | grep coverage)
+    if [[ "$CEPH_MGR_PY_VERSION_MAJOR" == '3' ]]; then
+        pip3 install "$COVERAGE_VERSION"
+    else
+        pip install "$COVERAGE_VERSION"
+    fi
 }
 
 run_teuthology_tests() {
@@ -121,6 +126,10 @@ run_teuthology_tests() {
         export RGW=1
     fi
 
+    export COVERAGE_ENABLED=true
+    export COVERAGE_FILE=.coverage.mgr.dashboard
+    find . -iname "*${COVERAGE_FILE}*" -type f -delete
+
     eval python ../qa/tasks/vstart_runner.py $OPTIONS $TEST_CASES
 
     deactivate
@@ -131,6 +140,11 @@ cleanup_teuthology() {
     cd "$BUILD_DIR"
     killall ceph-mgr
     sleep 10
+    if [[ "$COVERAGE_ENABLED" == 'true' ]]; then
+        source $TEMP_DIR/venv/bin/activate
+        (coverage combine && coverage report) || true
+        deactivate
+    fi
     ../src/stop.sh
     sleep 5
 
