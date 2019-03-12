@@ -2387,7 +2387,11 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
   }
 
   // and make sure our xattr is durable.
-  ::fsync(fd);
+  r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " fsync failed: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
 
   _inject_failure();
 
@@ -2456,7 +2460,11 @@ void FileStore::_set_replay_guard(int fd,
   _inject_failure();
 
   // first make sure the previous operation commits
-  ::fsync(fd);
+  int r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " fsync failed: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
 
   if (!in_progress) {
     // sync object_map too.  even if this object has a header or keys,
@@ -2471,7 +2479,7 @@ void FileStore::_set_replay_guard(int fd,
   bufferlist v(40);
   ::encode(spos, v);
   ::encode(in_progress, v);
-  int r = chain_fsetxattr<true, true>(
+  r = chain_fsetxattr<true, true>(
     fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
@@ -2479,7 +2487,11 @@ void FileStore::_set_replay_guard(int fd,
   }
 
   // and make sure our xattr is durable.
-  ::fsync(fd);
+  r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " fsync failed: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
 
   _inject_failure();
 
@@ -2529,7 +2541,11 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
   }
 
   // and make sure our xattr is durable.
-  ::fsync(fd);
+  r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " fsync failed: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
 
   _inject_failure();
 
