@@ -441,7 +441,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
     def _login(self):
         resp = self._do_request('POST', 'login', data = {
             "eauth": self.get_module_option('salt_api_eauth'),
-            "sharedsecret" if self.get_module_option('salt_api_eauth') == 'sharedsecret' else 'password': self.get_module_option('salt_api_password'),
+            "password": self.get_module_option('salt_api_password'),
             "username": self.get_module_option('salt_api_username')
         })
         self._token = resp.json()['return'][0]['token']
