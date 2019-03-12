@@ -6,5 +6,6 @@ export enum SupportedLanguages {
   'id-ID' = 'Bahasa Indonesia',
   'pt-PT' = 'Português',
   'es-ES' = 'Español',
-  'zh-CN' = '中文'
+  'zh-CN' = '中文',
+  'pl-PL ' = 'Polish'
 }
