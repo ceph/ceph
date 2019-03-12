@@ -77,6 +77,8 @@ Each file system may set the number of standby daemons wanted using:
 Setting ``count`` to 0 will disable the health check.
 
 
+.. _mds-standby-replay:
+
 Configuring standby-replay
 --------------------------
 
