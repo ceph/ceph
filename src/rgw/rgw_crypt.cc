@@ -31,6 +31,7 @@ using namespace CryptoPP;
 #define dout_subsys ceph_subsys_rgw
 
 using namespace rgw;
+using ceph::crypto::PK11_ImportSymKey_FIPS;
 
 /**
  * Encryption in CTR mode. offset is used as IV for each block.
@@ -129,7 +130,7 @@ public:
       keyItem.data = key;
       keyItem.len = AES_256_KEYSIZE;
 
-      symkey = PK11_ImportSymKey(slot, CKM_AES_CTR, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
+      symkey = PK11_ImportSymKey_FIPS(slot, CKM_AES_CTR, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
       if (symkey) {
         static_assert(sizeof(ctr_params.cb) >= AES_256_IVSIZE, "Must fit counter");
         ctr_params.ulCounterBits = 128;
@@ -317,7 +318,7 @@ public:
       keyItem.type = siBuffer;
       keyItem.data = const_cast<unsigned char*>(&key[0]);
       keyItem.len = AES_256_KEYSIZE;
-      symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
+      symkey = PK11_ImportSymKey_FIPS(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
       if (symkey) {
         memcpy(ctr_params.iv, iv, AES_256_IVSIZE);
         ivItem.type = siBuffer;
@@ -577,7 +578,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 
       param = PK11_ParamFromIV(CKM_AES_ECB, NULL);
       if (param) {
-        symkey = PK11_ImportSymKey(slot, CKM_AES_ECB, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
+        symkey = PK11_ImportSymKey_FIPS(slot, CKM_AES_ECB, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
         if (symkey) {
           ectx = PK11_CreateContextBySymKey(CKM_AES_ECB, CKA_ENCRYPT, symkey, param);
           if (ectx) {
