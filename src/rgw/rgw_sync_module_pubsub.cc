@@ -1217,6 +1217,7 @@ public:
             yield PSManager::call_get_subscription_cr(sync_env, env->manager, this, *oiter, *siter, &sub);
             if (retcode < 0) {
               last_sub_conf_error = retcode;
+              retcode = 0; // not fatal
               continue;
             }
             sub_conf_found = true;
