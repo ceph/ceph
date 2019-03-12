@@ -86,6 +86,9 @@ public:
   virtual ~AllocatorLevel()
   {}
 
+  virtual void collect_stats(
+    std::map<size_t, size_t>& bins_overall) = 0;
+
 };
 
 class AllocatorLevel01 : public AllocatorLevel
@@ -464,6 +467,8 @@ public:
     }
     return res * l0_granularity;
   }
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override;
 };
 
 class AllocatorLevel01Compact : public AllocatorLevel01
@@ -473,6 +478,11 @@ class AllocatorLevel01Compact : public AllocatorLevel01
     return 8;
   }
 public:
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override
+  {
+    // not implemented
+  }
 };
 
 template <class L1>
@@ -500,6 +510,12 @@ public:
   inline uint64_t get_min_alloc_size() const
   {
     return l1.get_min_alloc_size();
+  }
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override {
+
+      std::lock_guard l(lock);
+      l1.collect_stats(bins_overall);
   }
 
 protected:
