@@ -103,8 +103,9 @@ static string log_lock_name = "rgw_log_lock";
 static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
-
 #define dout_subsys ceph_subsys_rgw
+
+const std::string MP_META_SUFFIX = ".meta";
 
 
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
@@ -2515,6 +2516,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
         ldout(cct, 0) << "ERROR: could not parse object name: " << obj.name << dendl;
         continue;
       }
+
       bool check_ns = (obj.ns == params.ns);
       if (!params.list_versions && !entry.is_visible()) {
         continue;
@@ -2634,11 +2636,14 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max,
 
   result->clear();
 
-  rgw_obj_key marker_obj(params.marker.name, params.marker.instance, params.ns);
+  rgw_obj_key marker_obj(params.marker.name,
+			 params.marker.instance,
+			 params.ns);
   rgw_obj_index_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  rgw_obj_key end_marker_obj(params.end_marker.name, params.end_marker.instance,
+  rgw_obj_key end_marker_obj(params.end_marker.name,
+			     params.end_marker.instance,
                              params.ns);
   rgw_obj_index_key cur_end_marker;
   end_marker_obj.get_index_key(&cur_end_marker);
@@ -2698,8 +2703,8 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max,
       }
 
       if (count < max) {
-        params.marker = index_key;
-        next_marker = index_key;
+	params.marker.set(index_key);
+        next_marker.set(index_key);
       }
 
       if (params.filter && !params.filter->filter(obj.name, index_key.name))
@@ -9026,7 +9031,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_
 
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      int shard_id,
-				      rgw_obj_index_key& start,
+				      const rgw_obj_index_key& start,
 				      const string& prefix,
 				      uint32_t num_entries,
 				      bool list_versions,
@@ -9150,7 +9155,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
 int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					int shard_id,
-					rgw_obj_index_key& start,
+					const rgw_obj_index_key& start,
 					const string& prefix,
 					uint32_t num_entries,
 					bool list_versions,
@@ -9162,10 +9167,10 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     " start " << start.name << "[" << start.instance <<
     "] num_entries " << num_entries << dendl;
 
+  static MultipartMetaFilter multipart_meta_filter;
+
   *is_truncated = false;
   librados::IoCtx index_ctx;
-
-  rgw_obj_index_key my_start = start;
 
   map<int, string> oids;
   int r = open_bucket_index(bucket_info, index_ctx, oids, shard_id);
@@ -9173,19 +9178,49 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     return r;
   const uint32_t num_shards = oids.size();
 
+  rgw_obj_index_key marker = start;
   uint32_t current_shard;
   if (shard_id >= 0) {
     current_shard = shard_id;
-  } else if (my_start.empty()) {
+  } else if (start.empty()) {
     current_shard = 0u;
   } else {
-    current_shard =
-      rgw_bucket_shard_index(my_start.name, num_shards);
+    // at this point we have a marker (start) that has something in
+    // it, so we need to get to the bucket shard index, so we can
+    // start reading from there
+
+    std::string key;
+    // test whether object name is a multipart meta name
+    if(! multipart_meta_filter.filter(start.name, key)) {
+      // if multipart_meta_filter fails, must be "regular" (i.e.,
+      // unadorned) and the name is the key
+      key = start.name;
+    }
+
+    // now convert the key (oid) to an rgw_obj_key since that will
+    // separate out the namespace, name, and instance
+    rgw_obj_key obj_key;
+    bool parsed = rgw_obj_key::parse_raw_oid(key, &obj_key);
+    if (!parsed) {
+      ldout(cct, 0) <<
+	"ERROR: RGWRados::cls_bucket_list_unordered received an invalid "
+	"start marker: '" << start << "'" << dendl;
+      return -EINVAL;
+    } else if (obj_key.name.empty()) {
+      // if the name is empty that means the object name came in with
+      // a namespace only, and therefore we need to start our scan at
+      // the first bucket index shard
+      current_shard = 0u;
+    } else {
+      // so now we have the key used to compute the bucket index shard
+      // and can extract the specific shard from it
+      current_shard = rgw_bucket_shard_index(obj_key.name, num_shards);
+    }
   }
 
   uint32_t count = 0u;
   map<string, bufferlist> updates;
-  std::string last_added_entry;
+  rgw_obj_index_key last_added_entry;
   while (count <= num_entries &&
 	 ((shard_id >= 0 && current_shard == uint32_t(shard_id)) ||
 	  current_shard < num_shards)) {
@@ -9193,7 +9228,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     // value - list result for the corresponding oid (shard), it is filled by
     //         the AIO callback
     map<int, struct rgw_cls_list_ret> list_results;
-    r = CLSRGWIssueBucketList(index_ctx, my_start, prefix, num_entries,
+    r = CLSRGWIssueBucketList(index_ctx, marker, prefix, num_entries,
 			      list_versions, oids, list_results,
 			      cct->_conf->rgw_bucket_index_max_aio)();
     if (r < 0)
@@ -9226,8 +9261,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 	  dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
 
 	if (count < num_entries) {
-	  last_added_entry = entry.first;
-	  my_start = dirent.key;
+	  marker = last_added_entry = dirent.key; // double assign
 	  ent_list.emplace_back(std::move(dirent));
 	  ++count;
 	} else {
@@ -9237,18 +9271,19 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
       } else { // r == -ENOENT
 	// in the case of -ENOENT, make sure we're advancing marker
 	// for possible next call to CLSRGWIssueBucketList
-	my_start = dirent.key;
+	marker = dirent.key;
       }
     } // entry for loop
 
     if (!result.is_truncated) {
       // if we reached the end of the shard read next shard
       ++current_shard;
-      my_start = rgw_obj_index_key();
+      marker = rgw_obj_index_key();
     }
   } // shard loop
 
 check_updates:
+
   // suggest updates if there is any
   map<string, bufferlist>::iterator miter = updates.begin();
   for (; miter != updates.end(); ++miter) {
@@ -9267,7 +9302,7 @@ check_updates:
   }
 
   return 0;
-}
+} // RGWRados::cls_bucket_list_unordered
 
 
 int RGWRados::cls_obj_usage_log_add(const string& oid,
@@ -10385,4 +10420,3 @@ int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *res
 
   return 0;
 }
-
