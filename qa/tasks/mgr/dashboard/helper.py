@@ -110,7 +110,7 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def setUpClass(cls):
         super(DashboardTestCase, cls).setUpClass()
-        cls._assign_ports("dashboard", "server_port")
+        cls._assign_ports("dashboard", "ssl_server_port")
         cls._load_module("dashboard")
         cls._base_uri = cls._get_uri("dashboard").rstrip('/')
 

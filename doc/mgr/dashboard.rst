@@ -220,6 +220,7 @@ cluster-wide level (so they apply to all manager instances) as follows::
 
   $ ceph config set mgr mgr/dashboard/server_addr $IP
   $ ceph config set mgr mgr/dashboard/server_port $PORT
+  $ ceph config set mgr mgr/dashboard/ssl_server_port $PORT
 
 Since each ``ceph-mgr`` hosts its own instance of dashboard, it may also be
 necessary to configure them separately. The IP address and port for a specific
@@ -227,6 +228,7 @@ manager instance can be changed with the following commands::
 
   $ ceph config set mgr mgr/dashboard/$name/server_addr $IP
   $ ceph config set mgr mgr/dashboard/$name/server_port $PORT
+  $ ceph config set mgr mgr/dashboard/$name/ssl_server_port $PORT
 
 Replace ``$name`` with the ID of the ceph-mgr instance hosting the dashboard web
 app.
