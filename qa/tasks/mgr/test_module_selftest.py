@@ -97,7 +97,7 @@ class TestModuleSelftest(MgrTestCase):
             return self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 "mgr", "self-test", "config", "get_localized", "testkey").strip()
 
-        self.assertEqual(get_localized_value(), "None")
+        self.assertEqual(get_localized_value(), "foo")
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
             "config", "set", "mgr", "mgr/selftest/{}/testkey".format(
                 self.mgr_cluster.get_active_id()),
