@@ -2428,8 +2428,11 @@ struct pool_stat_t {
       allocated_bytes = store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
-      allocated_bytes = stats.sum.num_bytes;
+      allocated_bytes = stats.sum.num_bytes +
+	stats.sum.num_bytes_hit_set_archive;
     }
+    // omap is not broken out by pool by nautilus bluestore
+    allocated_bytes += stats.sum.num_omap_bytes;
     return allocated_bytes;
   }
   uint64_t get_user_bytes(float raw_used_rate) const {
@@ -2438,8 +2441,11 @@ struct pool_stat_t {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
       // legacy mode, use numbers from 'stats'
-       user_bytes = stats.sum.num_bytes;
+      user_bytes = stats.sum.num_bytes +
+	stats.sum.num_bytes_hit_set_archive;
     }
+    // omap is not broken out by pool by nautilus bluestore
+    user_bytes += stats.sum.num_omap_bytes;
     return user_bytes;
   }
 
