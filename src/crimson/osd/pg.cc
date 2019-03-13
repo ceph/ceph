@@ -944,9 +944,24 @@ seastar::future<> PG::share_pg_info()
     });
 }
 
+seastar::future<> PG::wait_for_active()
+{
+  logger().info("wait_for_active: {}", pg_state_string(info.stats.state));
+  if (test_state(PG_STATE_ACTIVE)) {
+    return seastar::now();
+  } else {
+    if (!active_promise) {
+      active_promise = seastar::shared_promise<>();
+    }
+    return active_promise->get_shared_future();
+  }
+}
+
 seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
                                 Ref<MOSDOp> m)
 {
-  // todo
-  return seastar::now();
+  return wait_for_active().then([conn, m, this] {
+    // todo
+    return seastar::now();
+  });
 }
