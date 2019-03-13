@@ -38,6 +38,22 @@ class ClusterConfiguration(RESTController):
     def get(self, name):
         return self._get_config_option(name)
 
+    @RESTController.Collection('GET', query_params=['name'])
+    def filter(self, names=None):
+        config_options = []
+
+        if names:
+            for name in names.split(','):
+                try:
+                    config_options.append(self._get_config_option(name))
+                except cherrypy.HTTPError:
+                    pass
+
+        if not config_options:
+            raise cherrypy.HTTPError(404, 'Config options `{}` not found'.format(names))
+
+        return config_options
+
     def create(self, name, value):
         # Check if config option is updateable at runtime
         self._updateable_at_runtime([name])
@@ -56,6 +72,9 @@ class ClusterConfiguration(RESTController):
                     break
             else:
                 CephService.send_command('mon', 'config rm', who=section, name=name)
+
+    def delete(self, name, section):
+        return CephService.send_command('mon', 'config rm', who=section, name=name)
 
     def bulk_set(self, options):
         self._updateable_at_runtime(options.keys())

@@ -4,8 +4,6 @@ import { FormControl, Validators } from '@angular/forms';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
-import { forkJoin as observableForkJoin, of } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { OsdService } from '../../../../shared/api/osd.service';
@@ -76,24 +74,14 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   }
 
   ngOnInit() {
-    const observables = [];
-    Object.keys(this.priorityAttrs).forEach((configOptionName) => {
-      observables.push(this.configService.get(configOptionName));
-    });
-
-    observableForkJoin(observables)
-      .pipe(
-        mergeMap((configOptions) => {
-          return of(this.getCurrentValues(configOptions));
-        })
-      )
-      .subscribe((resp) => {
-        this.detectPriority(resp.values, (priority) => {
-          this.setPriority(priority);
-        });
-        this.setDescription(resp.configOptions);
-        this.setValidators(resp.configOptions);
+    this.configService.filter(Object.keys(this.priorityAttrs)).subscribe((data: any) => {
+      const config_option_values = this.getCurrentValues(data);
+      this.detectPriority(config_option_values.values, (priority) => {
+        this.setPriority(priority);
       });
+      this.setDescription(config_option_values.configOptions);
+      this.setValidators(config_option_values.configOptions);
+    });
   }
 
   detectPriority(configOptionValues: any, callbackFn: Function) {
