@@ -346,7 +346,7 @@ TEST(TestAllocatorLevel01, test_l2)
   ASSERT_EQ(0u, al2.debug_get_free());
   for (uint64_t i = 0; i < capacity; i += _1m) {
     interval_vector_t r;
-    r.emplace_back(interval_t(i, _1m));
+    r.emplace_back(i, _1m);
     al2.free_l2(r);
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "free1 " << i / 1024 / 1024 << " mb of "
@@ -378,7 +378,7 @@ TEST(TestAllocatorLevel01, test_l2)
 
   for (uint64_t i = 0; i < capacity; i += 0x2000) {
     interval_vector_t r;
-    r.emplace_back(interval_t(i, 0x1000));
+    r.emplace_back(i, 0x1000);
     al2.free_l2(r);
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "free2 " << i / 1024 / 1024 << " mb of "
@@ -869,5 +869,47 @@ TEST(TestAllocatorLevel01, test_4G_alloc_bug)
       ASSERT_EQ(allocated4, _1m);
       ASSERT_EQ(a4[0].offset, 0u);
       ASSERT_EQ(a4[0].length, _1m);
+  }
+}
+
+TEST(TestAllocatorLevel01, test_4G_alloc_bug2)
+{
+  {
+    TestAllocatorLevel02 al2;
+    uint64_t capacity = 0x8000 * _1m; // = 32GB
+    al2.init(capacity, 0x10000);
+
+    for (uint64_t i = 0; i < capacity; i += _1m) {
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(_1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1u);
+      ASSERT_EQ(allocated4, _1m);
+      ASSERT_EQ(a4[0].offset, i);
+      ASSERT_EQ(a4[0].length, _1m);
+    }
+    ASSERT_EQ(0u , al2.debug_get_free());
+
+    interval_vector_t r;
+    r.emplace_back(0x5fec30000, 0x13d0000);
+    r.emplace_back(0x628000000, 0x80000000);
+    r.emplace_back(0x6a8000000, 0x80000000);
+    r.emplace_back(0x728100000, 0x70000);
+    al2.free_l2(r);
+
+    std::map<size_t, size_t> bins_overall;
+    al2.collect_stats(bins_overall);
+
+    std::cout << "!!!!!!!!!!!!!!" << std::endl;
+
+    uint64_t allocated4 = 0;
+    interval_vector_t a4;
+    al2.allocate_l2(0x3e000000, _1m, &allocated4, &a4);
+    ASSERT_EQ(a4.size(), 2u);
+    ASSERT_EQ(allocated4, 0x3e000000u);
+    ASSERT_EQ(a4[0].offset, 0x5fed00000u);
+    ASSERT_EQ(a4[0].length, 0x1300000u);
+    ASSERT_EQ(a4[1].offset, 0x628000000u);
+    ASSERT_EQ(a4[1].length, 0x3cd00000u);
   }
 }
