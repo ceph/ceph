@@ -1,14 +1,159 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_PUBSUB_H
 #define CEPH_RGW_PUBSUB_H
 
-#include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
-
 #include "services/svc_sys_obj.h"
 
+/* S3 event records structure
+ * based on: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
+{  
+"Records":[  
+  {
+    "eventVersion":""
+    "eventSource":"",
+    "awsRegion":"",
+    "eventTime":"",
+    "eventName":"",
+    "userIdentity":{  
+      "principalId":""
+    },
+    "requestParameters":{
+      "sourceIPAddress":""
+    },
+    "responseElements":{
+      "x-amz-request-id":"",
+      "x-amz-id-2":""
+    },
+    "s3":{
+      "s3SchemaVersion":"1.0",
+      "configurationId":"",
+      "bucket":{
+        "name":"",
+        "ownerIdentity":{
+          "principalId":""
+        },
+        "arn":""
+      },
+      "object":{
+        "key":"",
+        "size": ,
+        "eTag":"",
+        "versionId":"",
+        "sequencer": ""
+      }
+    },
+    "eventId":"",
+  }
+]
+}*/
+
+struct rgw_pubsub_s3_record {
+  constexpr static const char* const json_type_single = "Record";
+  constexpr static const char* const json_type_plural = "Records";
+  // 2.1
+  std::string eventVersion;
+  // aws:s3
+  std::string eventSource;
+  // zone?
+  std::string awsRegion;
+  // time of the request
+  ceph::real_time eventTime;
+  // type of the event
+  std::string eventName;
+  // user that sent the requet (not implemented)
+  std::string userIdentity;
+  // IP address of source of the request (not implemented)
+  std::string sourceIPAddress;
+  // request ID (not implemented)
+  std::string x_amz_request_id;
+  // radosgw that received the request
+  std::string x_amz_id_2;
+  // 1.0
+  std::string s3SchemaVersion;
+  // ID received in the notification request
+  std::string configurationId;
+  // bucket name
+  std::string bucket_name;
+  // bucket owner (not implemented)
+  std::string bucket_ownerIdentity;
+  // bucket ARN
+  std::string bucket_arn;
+  // object key
+  std::string object_key;
+  // object size
+  uint64_t object_size;
+  // object etag
+  std::string object_etag;
+  // object version id bucket is versioned (not implemented)
+  std::string object_versionId;
+  // hexadecimal value used to determine event order for specific key
+  std::string object_sequencer;
+  // this is an rgw extension (not S3 standard)
+  // used to store a globally unique identifier of the event
+  // that could be used for acking
+  std::string id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(eventVersion, bl);
+    encode(eventSource, bl);
+    encode(awsRegion, bl);
+    encode(eventTime, bl);
+    encode(eventName, bl);
+    encode(userIdentity, bl);
+    encode(sourceIPAddress, bl);
+    encode(x_amz_request_id, bl);
+    encode(x_amz_id_2, bl);
+    encode(s3SchemaVersion, bl);
+    encode(configurationId, bl);
+    encode(bucket_name, bl);
+    encode(bucket_ownerIdentity, bl);
+    encode(bucket_arn, bl);
+    encode(object_key, bl);
+    encode(object_size, bl);
+    encode(object_etag, bl);
+    encode(object_versionId, bl);
+    encode(object_sequencer, bl);
+    encode(id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(eventVersion, bl);
+    decode(eventSource, bl);
+    decode(awsRegion, bl);
+    decode(eventTime, bl);
+    decode(eventName, bl);
+    decode(userIdentity, bl);
+    decode(sourceIPAddress, bl);
+    decode(x_amz_request_id, bl);
+    decode(x_amz_id_2, bl);
+    decode(s3SchemaVersion, bl);
+    decode(configurationId, bl);
+    decode(bucket_name, bl);
+    decode(bucket_ownerIdentity, bl);
+    decode(bucket_arn, bl);
+    decode(object_key, bl);
+    decode(object_size, bl);
+    decode(object_etag, bl);
+    decode(object_versionId, bl);
+    decode(object_sequencer, bl);
+    decode(id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_pubsub_s3_record)
 
 struct rgw_pubsub_event {
+  constexpr static const char* const json_type_single = "event";
+  constexpr static const char* const json_type_plural = "events";
   string id;
   string event;
   string source;
@@ -71,16 +216,18 @@ WRITE_CLASS_ENCODER(rgw_pubsub_sub_dest)
 
 struct rgw_pubsub_sub_config {
   rgw_user user;
-  string name;
-  string topic;
+  std::string name;
+  std::string topic;
   rgw_pubsub_sub_dest dest;
+  std::string s3_id;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(user, bl);
     encode(name, bl);
     encode(topic, bl);
     encode(dest, bl);
+    encode(s3_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -90,6 +237,9 @@ struct rgw_pubsub_sub_config {
     decode(name, bl);
     decode(topic, bl);
     decode(dest, bl);
+    if (struct_v >= 2) {
+      decode(s3_id, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -129,7 +279,7 @@ WRITE_CLASS_ENCODER(rgw_pubsub_topic)
 
 struct rgw_pubsub_topic_subs {
   rgw_pubsub_topic topic;
-  set<string> subs;
+  std::set<string> subs;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -149,9 +299,11 @@ struct rgw_pubsub_topic_subs {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topic_subs)
 
+typedef std::set<std::string, ltstr_nocase> EventTypeList;
+
 struct rgw_pubsub_topic_filter {
   rgw_pubsub_topic topic;
-  set<string, ltstr_nocase> events;
+  EventTypeList events;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -172,7 +324,7 @@ struct rgw_pubsub_topic_filter {
 WRITE_CLASS_ENCODER(rgw_pubsub_topic_filter)
 
 struct rgw_pubsub_bucket_topics {
-  map<string, rgw_pubsub_topic_filter> topics;
+  std::map<string, rgw_pubsub_topic_filter> topics;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -191,7 +343,7 @@ struct rgw_pubsub_bucket_topics {
 WRITE_CLASS_ENCODER(rgw_pubsub_bucket_topics)
 
 struct rgw_pubsub_user_topics {
-  map<string, rgw_pubsub_topic_subs> topics;
+  std::map<std::string, rgw_pubsub_topic_subs> topics;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -243,6 +395,7 @@ class RGWUserPubSub
 
   int read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker);
   int write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker);
+
 public:
   RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
                                                            user(_user),
@@ -264,14 +417,16 @@ public:
     }
 
     int get_topics(rgw_pubsub_bucket_topics *result);
-    int create_notification(const string& topic_name, const set<string, ltstr_nocase>& events);
+    int create_notification(const string& topic_name, const EventTypeList& events);
     int remove_notification(const string& topic_name);
   };
 
+  // base class for subscription
   class Sub {
     friend class RGWUserPubSub;
-    RGWUserPubSub *ps;
-    string sub;
+  protected:
+    RGWUserPubSub* const ps;
+    const std::string sub;
     rgw_raw_obj sub_meta_obj;
 
     int read_sub(rgw_pubsub_sub_config *result, RGWObjVersionTracker *objv_tracker);
@@ -282,20 +437,38 @@ public:
       ps->get_sub_meta_obj(sub, &sub_meta_obj);
     }
 
-    int subscribe(const string& topic_name, const rgw_pubsub_sub_dest& dest);
+    virtual ~Sub() = default;
+
+    int subscribe(const string& topic_name, const rgw_pubsub_sub_dest& dest, const std::string& s3_id="");
     int unsubscribe(const string& topic_name);
-    int get_conf(rgw_pubsub_sub_config *result);
+    int get_conf(rgw_pubsub_sub_config* result);
+    
+    static const int DEFAULT_MAX_EVENTS = 100;
+    // followint virtual methods should only be called in derived
+    virtual int list_events(const string& marker, int max_events) {ceph_assert(false);}
+    virtual int remove_event(const string& event_id) {ceph_assert(false);}
+    virtual void dump(Formatter* f) const {ceph_assert(false);}
+  };
 
+  // subscription with templated list of events to support both S3 compliant and Ceph specific events
+  template<typename EventType>
+  class SubWithEvents : public Sub {
+  private:
     struct list_events_result {
-      string next_marker;
+      std::string next_marker;
       bool is_truncated{false};
-      std::vector<rgw_pubsub_event> events;
-
       void dump(Formatter *f) const;
-    };
+      std::vector<EventType> events;
+    } list;
 
-    int list_events(const string& marker, int max_events, list_events_result *result);
-    int remove_event(const string& event_id);
+  public:
+    SubWithEvents(RGWUserPubSub *_ps, const string& _sub) : Sub(_ps, _sub) {}
+
+    virtual ~SubWithEvents() = default;
+    
+    int list_events(const string& marker, int max_events) override;
+    int remove_event(const string& event_id) override;
+    void dump(Formatter* f) const override;
   };
 
   using BucketRef = std::shared_ptr<Bucket>;
@@ -307,6 +480,18 @@ public:
 
   SubRef get_sub(const string& sub) {
     return std::make_shared<Sub>(this, sub);
+  }
+  
+  SubRef get_sub_with_events(const string& sub) {
+    auto tmpsub = Sub(this, sub);
+    rgw_pubsub_sub_config conf;
+    if (tmpsub.get_conf(&conf) < 0) {
+      return nullptr;
+    }
+    if (conf.s3_id.empty()) {
+      return std::make_shared<SubWithEvents<rgw_pubsub_event>>(this, sub);
+    }
+    return std::make_shared<SubWithEvents<rgw_pubsub_s3_record>>(this, sub);
   }
 
   void get_user_meta_obj(rgw_raw_obj *obj) const {
@@ -326,6 +511,7 @@ public:
   int create_topic(const string& name);
   int remove_topic(const string& name);
 };
+
 
 template <class T>
 int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)

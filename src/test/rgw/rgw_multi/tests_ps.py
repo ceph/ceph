@@ -12,6 +12,7 @@ from rgw_multi.tests import get_realm, \
 from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
+import boto3
 
 # configure logging for the tests module
 log = logging.getLogger('rgw_multi.tests')
@@ -26,8 +27,8 @@ def check_ps_configured():
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
 
-    es_zones = zonegroup.zones_by_type.get("pubsub")
-    if not es_zones:
+    ps_zones = zonegroup.zones_by_type.get("pubsub")
+    if not ps_zones:
         raise SkipTest("Requires at least one PS zone")
 
 
@@ -65,6 +66,33 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
             assert False, err
 
 
+def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False):
+    """ verify there is at least one record per element """
+    err = ''
+    for key in keys:
+        key_found = False
+        for record in records:
+            if record['s3']['bucket']['name'] == key.bucket.name and \
+               record['s3']['object']['key'] == key.name:
+                if deletions and record['eventName'] == 'ObjectRemoved':
+                    key_found = True
+                    break
+                elif not deletions and record['eventName'] == 'ObjectCreated':
+                    key_found = True
+                    break
+        if not key_found:
+            err = 'no ' + ('deletion' if deletions else 'creation') + ' event found for key: ' + str(key)
+            log.error(records)
+            assert False, err
+
+    if not len(records) == len(keys):
+        err = 'superfluous records are found'
+        log.debug(err)
+        if exact_match:
+            log.error(records)
+            assert False, err
+
+
 def init_env():
     """initialize the environment"""
     check_ps_configured()
@@ -91,10 +119,85 @@ def init_env():
 
 TOPIC_SUFFIX = "_topic"
 SUB_SUFFIX = "_sub"
+NOTIFICATION_SUFFIX = "_notif"
 
 ##############
 # pubsub tests
 ##############
+
+
+def test_ps_s3_notification():
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create boto3 client
+    client = boto3.client('s3',
+                          endpoint_url='http://'+ps_zones[0].conn.host+':'+str(ps_zones[0].conn.port),
+                          aws_access_key_id=ps_zones[0].conn.aws_access_key_id,
+                          aws_secret_access_key=ps_zones[0].conn.aws_secret_access_key)
+    # create s3 notification
+    topic_name = bucket_name + TOPIC_SUFFIX
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_arn = 'arn:aws:sns:::' + topic_name
+    response = client.put_bucket_notification_configuration(Bucket=bucket_name,
+                                                            NotificationConfiguration={
+                                                                'TopicConfigurations': [
+                                                                    {
+                                                                        'Id': notification_name,
+                                                                        'TopicArn': topic_arn,
+                                                                        'Events': ['s3:ObjectCreated:*'],
+                                                                    }
+                                                                ]
+                                                            })
+
+    status = response['ResponseMetadata']['HTTPStatusCode']
+    assert_equal(status/100, 2)
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # get auto-generated topic
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
+    result, _ = topic_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic']['name'], topic_name)
+    # get auto-generated notification
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       topic_name)
+    result, _ = notification_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(len(parsed_result['topics']), 1)
+    # get auto-generated subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, notification_name,
+                              topic_name)
+    result, _ = sub_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic'], topic_name)
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+
+    # get the events from the subscription
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    for record in parsed_result['Records']:
+        log.debug(record)
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+   
+    # cleanup
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the keys
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
 
 
 def test_ps_topic():

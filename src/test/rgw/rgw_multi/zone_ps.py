@@ -71,8 +71,10 @@ class PSTopic:
         assert topic_name.strip()
         self.resource = '/topics/'+topic_name
 
-    def send_request(self, method):
+    def send_request(self, method, get_list=False):
         """send request to radosgw"""
+        if get_list:
+            return make_request(self.conn, method, '/topics')
         return make_request(self.conn, method, self.resource)
 
     def get_config(self):
@@ -86,6 +88,10 @@ class PSTopic:
     def del_config(self):
         """delete topic"""
         return self.send_request('DELETE')
+    
+    def get_list(self):
+        """list all topics"""
+        return self.send_request('GET', get_list=True)
 
 
 class PSNotification:
