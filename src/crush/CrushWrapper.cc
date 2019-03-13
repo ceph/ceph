@@ -1443,50 +1443,69 @@ int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
 
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 {
-  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
   int changed = 0;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
-    crush_bucket *b = crush->buckets[bidx];
-    if (b == 0)
+    if (!crush->buckets[bidx]) {
       continue;
-    for (unsigned i = 0; i < b->size; i++) {
-      if (b->items[i] == id) {
-	int diff = bucket_adjust_item_weight(cct, b, id, weight);
-	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff
-		      << " in bucket " << bidx << dendl;
-	adjust_item_weight(cct, -1 - bidx, b->weight);
-	changed++;
-      }
+    }
+    int r = adjust_item_weight_in_bucket(cct, id, weight, -1-bidx);
+    if (r > 0) {
+      ++changed;
     }
   }
-  if (!changed)
+  if (!changed) {
     return -ENOENT;
+  }
   return changed;
 }
 
-int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc)
+int CrushWrapper::adjust_item_weight_in_bucket(
+  CephContext *cct, int id, int weight,
+  int bucket_id)
+{
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight
+		<< " in bucket " << bucket_id
+		<< dendl;
+  int changed = 0;
+  if (!bucket_exists(bucket_id)) {
+    return -ENOENT;
+  }
+  crush_bucket *b = get_bucket(bucket_id);
+  for (unsigned int i = 0; i < b->size; i++) {
+    if (b->items[i] == id) {
+      int diff = bucket_adjust_item_weight(cct, b, id, weight);
+      ldout(cct, 5) << __func__ << " " << id << " diff " << diff
+		    << " in bucket " << bucket_id << dendl;
+      adjust_item_weight(cct, bucket_id, b->weight);
+      changed++;
+    }
+  }
+  if (!changed) {
+    return -ENOENT;
+  }
+  return changed;
+}
+
+int CrushWrapper::adjust_item_weight_in_loc(
+  CephContext *cct, int id, int weight,
+  const map<string,string>& loc)
 {
   ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight
 		<< " in " << loc << dendl;
   int changed = 0;
-
   for (auto l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
-    crush_bucket *b = get_bucket(bid);
-    for (unsigned int i = 0; i < b->size; i++) {
-      if (b->items[i] == id) {
-	int diff = bucket_adjust_item_weight(cct, b, id, weight);
-	ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " diff " << diff
-		      << " in bucket " << bid << dendl;
-	adjust_item_weight(cct, bid, b->weight);
-	changed++;
-      }
+    int r = adjust_item_weight_in_bucket(cct, id, weight, bid);
+    if (r > 0) {
+      ++changed;
     }
   }
-  if (!changed)
+  if (!changed) {
     return -ENOENT;
+  }
   return changed;
 }
 
