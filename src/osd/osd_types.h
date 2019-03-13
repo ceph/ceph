@@ -960,6 +960,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_SNAPTRIM_ERROR     (1ULL << 29) // error stopped trimming snaps
 #define PG_STATE_FORCED_RECOVERY    (1ULL << 30) // force recovery of this pg before any other
 #define PG_STATE_FORCED_BACKFILL    (1ULL << 31) // force backfill of this pg before any other
+#define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const vector<int32_t> &a);

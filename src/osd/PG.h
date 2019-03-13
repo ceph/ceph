@@ -1702,6 +1702,11 @@ public:
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
+    // this flag indicates that we are scrubbing post repair to verify everything is fixed
+    bool check_repair;
+    // this flag indicates that if a regular scrub detects errors <= osd_scrub_auto_repair_num_errors,
+    // we should deep scrub in order to auto repair
+    bool deep_scrub_on_error;
 
     // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<pg_shard_t>> missing;
@@ -1814,6 +1819,8 @@ public:
       must_deep_scrub = false;
       must_repair = false;
       auto_repair = false;
+      check_repair = false;
+      deep_scrub_on_error = false;
 
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();
