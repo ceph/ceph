@@ -215,7 +215,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target...at:rh7-client>  auth chap=myiscsiusername/myiscsipassword
+       > /iscsi-target...at:rh7-client>  auth username=myiscsiusername password=myiscsipassword
 
    .. warning::
       CHAP must always be configured. Without CHAP, the target will
