@@ -28,9 +28,6 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
   m_cache_watermark =
     m_cct->_conf.get_val<double>("immutable_object_cache_watermark");
 
-  m_dir_num =
-    m_cct->_conf.get_val<uint64_t>("immutable_object_cache_dir_num");
-
   if (m_cache_root_dir.back() != '/') {
     m_cache_root_dir += "/";
   }
@@ -62,15 +59,10 @@ int ObjectCacheStore::init(bool reset) {
   if (reset) {
     std::error_code ec;
     if (efs::exists(m_cache_root_dir)) {
-       int dir = m_dir_num - 1;
-       while (dir >= 0) {
-         if (!efs::remove_all(
-           m_cache_root_dir + "/" + std::to_string(dir), ec)) {
-           lderr(m_cct) << "fail to remove old cache store: " << ec << dendl;
-           return ec.value();
-         }
-         dir--;
-       }
+      // remove all sub folders
+      for(auto& p: efs::directory_iterator(m_cache_root_dir)) {
+        efs::remove_all(p.path());
+      }
     } else {
       if (!efs::create_directories(m_cache_root_dir, ec)) {
         lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
@@ -92,11 +84,6 @@ int ObjectCacheStore::init_cache() {
   ldout(m_cct, 20) << dendl;
   std::string cache_dir = m_cache_root_dir;
 
-  int dir = m_dir_num - 1;
-  while (dir >= 0) {
-    efs::create_directories(cache_dir + "/" + std::to_string(dir));
-    dir--;
-  }
   return 0;
 }
 
@@ -156,7 +143,15 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     ret = 0;
   }
 
-  std::string cache_file_path = std::move(get_cache_file_path(cache_file_name));
+  std::string cache_file_path = std::move(
+    get_cache_file_path(cache_file_name, true));
+
+  if (cache_file_path == "") {
+    lderr(m_cct) << "fail to write cache file" << dendl;
+    m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
+    delete read_buf;
+    return -ENOSPC;
+  }
 
   ret = read_buf->write_file(cache_file_path.c_str());
   if (ret < 0) {
@@ -269,16 +264,33 @@ std::string ObjectCacheStore::get_cache_file_name(std::string pool_nspace,
          std::to_string(snap_id) + ":" + oid;
 }
 
-std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name) {
-  std::string cache_file_dir = "";
-  if (m_dir_num > 0) {
-    uint32_t crc = 0;
-    crc = ceph_crc32c(0, (unsigned char *)cache_file_name.c_str(),
-                     cache_file_name.length());
-    cache_file_dir = std::to_string(crc % m_dir_num);
+std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name,
+                                                  bool mkdir) {
+  ldout(m_cct, 20) << cache_file_name <<dendl;
+
+  uint32_t crc = 0;
+  crc = ceph_crc32c(0, (unsigned char *)cache_file_name.c_str(),
+                    cache_file_name.length());
+
+  std::string cache_file_dir = std::to_string(crc % 100) + "/";
+
+  if (mkdir) {
+    ldout(m_cct, 20) << "creating cache dir: " << cache_file_dir <<dendl;
+    std::error_code ec;
+    std::string new_dir = m_cache_root_dir + cache_file_dir;
+    if (efs::exists(new_dir, ec)) {
+      ldout(m_cct, 20) << "cache dir exists: " << cache_file_dir <<dendl;
+      return new_dir + cache_file_name;
+    }
+
+    if (!efs::create_directories(new_dir, ec)) {
+      ldout(m_cct, 5) << "fail to create cache dir: " << new_dir
+                      << "error: " << ec.message() << dendl;
+      return "";
+    }
   }
 
-  return m_cache_root_dir + cache_file_dir + "/" + cache_file_name;
+  return m_cache_root_dir + cache_file_dir + cache_file_name;
 }
 
 }  // namespace immutable_obj_cache

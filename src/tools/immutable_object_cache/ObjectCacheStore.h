@@ -36,7 +36,7 @@ class ObjectCacheStore {
  private:
   std::string get_cache_file_name(std::string pool_nspace, uint64_t pool_id,
                                   uint64_t snap_id, std::string oid);
-  std::string get_cache_file_path(std::string cache_file_name);
+  std::string get_cache_file_path(std::string cache_file_name, bool mkdir = false);
   int evict_objects();
   int do_promote(std::string pool_nspace, uint64_t pool_id,
                  uint64_t snap_id, std::string object_name);
@@ -51,7 +51,6 @@ class ObjectCacheStore {
   std::map<uint64_t, librados::IoCtx> m_ioctx_map;
   Mutex m_ioctx_map_lock;
   Policy* m_policy;
-  uint64_t m_dir_num;
   uint64_t m_object_cache_max_size;
   float m_cache_watermark;
   std::string m_cache_root_dir;

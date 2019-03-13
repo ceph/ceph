@@ -87,10 +87,7 @@ TEST_F(TestObjectStore, test_1) {
   efs::remove_all(test_cache_path);
 
   init_object_cache_store(m_temp_pool_name, m_temp_volume_name, 1000, true);
-  int temp_index = 0;
-  while(temp_index < 10) {
-    ASSERT_TRUE(efs::exists(cache_path + "/" + std::to_string(temp_index++)));
-  }
+
 
   // TODO add lookup interface testing
 
