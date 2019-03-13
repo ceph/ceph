@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+tasks:
+- mon_thrash:
+    check_mds_failover: True
+    revive_delay: 20
+    thrash_delay: 10
