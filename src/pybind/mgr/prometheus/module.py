@@ -64,6 +64,10 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
+OSD_POOL_STATS = ('recovering_objects_per_sec', 'recovering_bytes_per_sec',
+                  'recovering_keys_per_sec', 'num_objects_recovered',
+                  'num_bytes_recovered', 'num_bytes_recovered')
+
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
              'norecover', 'noscrub', 'nodeep-scrub')
 
@@ -285,6 +289,12 @@ class Module(MgrModule):
             'PG Total Count'
         )
 
+        metrics['scrape_duration_seconds'] = Metric(
+            'gauge',
+            'scrape_duration_secs',
+            'Time taken to gather metrics from Ceph (secs)'
+        )
+
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -307,6 +317,14 @@ class Module(MgrModule):
                 path,
                 'OSD stat {}'.format(stat),
                 ('ceph_daemon',)
+            )
+        for stat in OSD_POOL_STATS:
+            path = 'pool_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                "OSD POOL STATS: {}".format(stat),
+                ('pool_id',)
             )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
@@ -345,6 +363,17 @@ class Module(MgrModule):
         self.metrics['health_status'].set(
             health_status_to_number(health['status'])
         )
+
+    def get_pool_stats(self):
+        # retrieve pool stats to provide per pool recovery metrics
+        # (osd_pool_stats moved to mgr in Mimic)
+        pstats = self.get('osd_pool_stats')
+        for pool in pstats['pool_stats']:
+            for stat in OSD_POOL_STATS:
+                self.metrics['pool_{}'.format(stat)].set(
+                    pool['recovery_rate'].get(stat, 0),
+                    (pool['pool_id'],)
+                )
 
     def get_df(self):
         # maybe get the to-be-exported metrics from a config?
@@ -803,8 +832,11 @@ class Module(MgrModule):
         for k in self.metrics.keys():
             self.metrics[k].clear()
 
+        _start_time = time.time()
+
         self.get_health()
         self.get_df()
+        self.get_pool_stats()
         self.get_fs()
         self.get_osd_stats()
         self.get_quorum_status()
@@ -856,6 +888,9 @@ class Module(MgrModule):
                     self.metrics[path].set(value, (daemon,))
 
         self.get_rbd_stats()
+
+        _end_time = time.time()
+        self.metrics['scrape_duration_seconds'].set(_end_time - _start_time)
 
         # Return formatted metrics and clear no longer used data
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
