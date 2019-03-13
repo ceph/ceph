@@ -83,7 +83,12 @@ Major Changes from Mimic
     of all objects (including history) in a separate zone.
 
 - *CephFS*:
-
+  
+  * Multi-fs ("volume") support is now declared stable. Each CephFS volume has 
+    independent set of RADOS pools,MDS cluster
+  * First-class subvolume concept was added to the ceph-mgr based on the 
+    ceph_volume_client.py written for the OpenStack Manila driver. Sub-directory 
+    of a volume with quota, unique cephx user and restricted to a RADOS namespace. 
 
 - *RBD*:
 
