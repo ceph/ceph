@@ -151,6 +151,9 @@ private:
   pg_shard_set_t acting_recovery_backfill;
   std::vector<int> want_acting;
 
+  seastar::future<> wait_for_active();
+  std::optional<seastar::shared_promise<>> active_promise;
+
   cached_map_t osdmap;
   ceph::net::Messenger& msgr;
 };
