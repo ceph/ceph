@@ -498,6 +498,27 @@ class LocalFuseMount(FuseMount):
                                       check_status=check_status,
                                       omit_sudo=False)
 
+    def testcmd(self, args, wait=True, stdin=None, omit_sudo=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_shell(args, wait=wait, stdin=stdin, check_status=False,
+                              omit_sudo=omit_sudo)
+
+    def testcmd_as_user(self, args, user, wait=True, stdin=None):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_as_user(args, user=user, wait=wait, stdin=stdin,
+                                check_status=False)
+
+    def testcmd_as_root(self, args, wait=True, stdin=None):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        return self.run_as_root(args, wait=wait, stdin=stdin,
+                                check_status=False)
+
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
             # Previous mount existed, reuse the old name
