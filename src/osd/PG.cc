@@ -1123,6 +1123,8 @@ PG::Scrubber::Scrubber()
    shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
    auto_repair(false),
+   check_repair(false),
+   deep_scrub_on_error(false),
    num_digest_updates_pending(0),
    state(INACTIVE),
    deep(false)
@@ -2557,6 +2559,7 @@ void PG::_finish_recovery(Context *c)
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       scrub_after_recovery = false;
       scrubber.must_deep_scrub = true;
+      scrubber.check_repair = true;
       queue_scrub();
     }
   } else {
@@ -3446,8 +3449,10 @@ void PG::publish_stats_to_osd()
 
   if (info.stats.stats.sum.num_scrub_errors)
     state_set(PG_STATE_INCONSISTENT);
-  else
+  else {
     state_clear(PG_STATE_INCONSISTENT);
+    state_clear(PG_STATE_FAILED_REPAIR);
+  }
 
   utime_t now = ceph_clock_now();
   if (info.stats.state != state) {
@@ -4314,19 +4319,23 @@ bool PG::sched_scrub()
     }
   }
 
+  // Clear these in case user issues the scrub/repair command during
+  // the scheduling of the scrub/repair (e.g. request reservation)
+  scrubber.deep_scrub_on_error = false;
+  scrubber.auto_repair = false;
   if (cct->_conf->osd_scrub_auto_repair
       && get_pgbackend()->auto_repair_supported()
-      && time_for_deep
       // respect the command from user, and not do auto-repair
       && !scrubber.must_repair
       && !scrubber.must_scrub
       && !scrubber.must_deep_scrub) {
-    dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
-    scrubber.auto_repair = true;
-  } else {
-    // this happens when user issue the scrub/repair command during
-    // the scheduling of the scrub/repair (e.g. request reservation)
-    scrubber.auto_repair = false;
+    if (time_for_deep) {
+      dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
+      scrubber.auto_repair = true;
+    } else {
+      dout(20) << __func__ << ": auto repair with scrubbing, rescrub if errors found" << dendl;
+      scrubber.deep_scrub_on_error = true;
+    }
   }
 
   bool ret = true;
@@ -5728,7 +5737,9 @@ bool PG::ops_blocked_by_scrub() const {
 // the part that actually finalizes a scrub
 void PG::scrub_finish() 
 {
+  dout(20) << __func__ << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
+  bool do_deep_scrub = false;
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (repair && scrubber.auto_repair
@@ -5738,6 +5749,15 @@ void PG::scrub_finish()
   }
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+
+  // if a regular scrub had errors within the limit, do a deep scrub to auto repair.
+  if (scrubber.deep_scrub_on_error
+      && scrubber.authoritative.size() <= cct->_conf->osd_scrub_auto_repair_num_errors) {
+    ceph_assert(!deep_scrub);
+    scrubber.deep_scrub_on_error = false;
+    do_deep_scrub = true;
+    dout(20) << __func__ << " Try to auto repair after scrub errors" << dendl;
+  }
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
@@ -5778,10 +5798,17 @@ void PG::scrub_finish()
     if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
       ceph_assert(deep_scrub);
       scrubber.shallow_errors = scrubber.deep_errors = 0;
-    } else {
+      dout(20) << __func__ << " All may be fixed" << dendl;
+    } else if (has_error) {
       // Deep scrub in order to get corrected error counts
       scrub_after_recovery = true;
-    }
+      dout(20) << __func__ << " Set scrub_after_recovery" << dendl;
+    } else if (scrubber.shallow_errors || scrubber.deep_errors) {
+      // We have errors but nothing can be fixed, so there is no repair
+      // possible.
+      state_set(PG_STATE_FAILED_REPAIR); }
+      dout(10) << __func__ << " " << (scrubber.shallow_errors + scrubber.deep_errors)
+	       << " error(s) present with no repair possible" << dendl;
   }
   if (deep_scrub) {
     if ((scrubber.shallow_errors == 0) && (scrubber.deep_errors == 0))
@@ -5804,7 +5831,22 @@ void PG::scrub_finish()
   info.stats.stats.sum.num_scrub_errors = 
     info.stats.stats.sum.num_shallow_scrub_errors +
     info.stats.stats.sum.num_deep_scrub_errors;
+  if (scrubber.check_repair) {
+    scrubber.check_repair = false;
+    if (info.stats.stats.sum.num_scrub_errors) {
+      state_set(PG_STATE_FAILED_REPAIR);
+      dout(10) << __func__ << " " << info.stats.stats.sum.num_scrub_errors
+	       << " error(s) still present after re-scrub" << dendl;
+    }
+  }
   publish_stats_to_osd();
+  if (do_deep_scrub) {
+    // XXX: Auto scrub won't activate if must_scrub is set, but
+    // setting the scrub stamps affects what users see.
+    utime_t stamp = utime_t(0,1);
+    set_last_scrub_stamp(stamp);
+    set_last_deep_scrub_stamp(stamp);
+  }
   reg_next_scrub();
 
   {
@@ -6467,6 +6509,10 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_REPAIR";
   if (pg.scrubber.auto_repair)
     out << " AUTO_REPAIR";
+  if (pg.scrubber.check_repair)
+    out << " CHECK_REPAIR";
+  if (pg.scrubber.deep_scrub_on_error)
+    out << " DEEP_SCRUB_ON_ERROR";
   if (pg.scrubber.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
