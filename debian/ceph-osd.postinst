@@ -25,6 +25,9 @@ case "$1" in
     configure)
 	[ -x /etc/init.d/procps ] && invoke-rc.d procps restart || :
 	[ -x /sbin/start ] && start ceph-osd-all || :
+	# migrate ceph-disk osds to ceph-volume
+	ceph-volume simple scan || :
+	ceph-volume simple activate --all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:

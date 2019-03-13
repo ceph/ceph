@@ -1821,6 +1821,9 @@ fi
 %endif
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
+# migrate ceph-disk osds to ceph-volume
+ceph-volume simple scan || :
+ceph-volume simple activate --all || :
 fi
 %if 0%{?sysctl_apply}
     %sysctl_apply 90-ceph-osd.conf

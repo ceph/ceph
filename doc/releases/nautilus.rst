@@ -216,13 +216,6 @@ Instructions
         "ceph version 14.2.0 (...) nautilus (stable)": 22,
      }
 
-#. Scan for any OSDs deployed with the old ceph-disk tool to ensure
-   that ceph-volume can activate them after a host reboot.  On each
-   host containing OSDs,::
-
-     # ceph-volume simple scan
-     # ceph-volume simple activate --all
-
 #. Upgrade all CephFS MDS daemons.  For each CephFS file system,
 
    #. Reduce the number of ranks to 1.  (Make note of the original
