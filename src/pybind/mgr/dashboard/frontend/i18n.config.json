@@ -1,0 +1,12 @@
+{
+  "sourceDirectory": "src/locale",
+  "targetDirectory": "src/locale",
+  "sourceFile": "messages.xlf",
+  "languages": "cs,de-DE,es-ES,fr-FR,id-ID,it-IT,ja-JP,ko-KR,pl-PL,pt-BR,zh-CN,zh-TW",
+  "organization": "ceph",
+  "project": "ceph-dashboard",
+  "resource": "Master:master",
+  "removeUnusedIds": true,
+  "automate": true,
+  "quiet": false
+}

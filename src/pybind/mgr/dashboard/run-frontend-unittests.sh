@@ -33,7 +33,7 @@ Some errors might need a manual fix."
 fi
 
 # I18N
-npm run i18n
+npm run i18n:extract
 i18n_lint=`awk '/<source> |<source>$| <\/source>/,/<\/context-group>/ {printf "%-4s ", NR; print}' src/locale/messages.xlf`
 if [[ ! -z $i18n_lint ]]; then
   echo -e "The following source translations in 'messages.xlf' need to be \
