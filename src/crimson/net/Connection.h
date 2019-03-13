@@ -28,6 +28,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
  protected:
   entity_addr_t peer_addr;
   peer_type_t peer_type = -1;
+  int64_t peer_id = -1;
 
  public:
   uint64_t peer_global_id = 0;
