@@ -964,8 +964,12 @@ public:
     }
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
   }
-  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
-  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+  int adjust_item_weight_in_bucket(
+    CephContext *cct, int id, int weight, int bucket_id);
+  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight,
+				const map<string,string>& loc);
+  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight,
+				 const map<string,string>& loc) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
