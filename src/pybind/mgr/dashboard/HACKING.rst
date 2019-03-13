@@ -315,7 +315,7 @@ How to extract messages from source code?
 To extract the I18N messages from the templates and the TypeScript files just
 run the following command in ``src/pybind/mgr/dashboard/frontend``::
 
-  $ npm run i18n
+  $ npm run i18n:extract
 
 This will extract all marked messages from the HTML templates first and then
 add all marked strings from the TypeScript files to the translation template.
@@ -362,15 +362,28 @@ Updating translated messages
 Any time there are new messages translated and reviewed in a specific language
 we should update the translation file upstream.
 
-To do that, we need to download the language xlf file from transifex and replace
-the current one in the repository. Since Angular doesn't support missing
-translations, we need to do an extra step and fill all the untranslated strings
-with the source string.
+To do that, check the settings in the i18n config file
+``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
+organization is *ceph*, the project is *ceph-dashboard* and the resource is
+the one you want to pull from and push to e.g. *Master:master*. To find a list
+of avaiable resources visit ``https://www.transifex.com/ceph/ceph-dashboard/content/``::
 
-Each language file should be placed in ``src/locale/messages.<locale-id>.xlf``.
-For example, the path for german would be ``src/locale/messages.de-DE.xlf``.
-``<locale-id>`` should match the id previouisly inserted in
-``supported-languages.enum.ts``.
+After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend``:: and run
+
+  $ npm run i18n
+
+This command will extract all marked messages from the HTML templates and
+TypeScript files. Once the source file has been created it will push it to
+transifex and pull the latest translations. It will also fill all the
+untranslated strings with the source string.
+The tool will ask you for an api token, unless you added it by running:
+
+  $ npm run i18n:token
+
+To create a transifex api token visit ``https://www.transifex.com/user/settings/api/``::
+
+After the command ran successfully, build the UI and check if everything is
+working as expected. You also might want to run the frontend tests.
 
 Suggestions
 ~~~~~~~~~~~
