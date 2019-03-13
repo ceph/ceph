@@ -21,15 +21,22 @@ class TestDashboard(MgrTestCase):
                                                      "create-self-signed-cert")
 
     def test_standby(self):
-        original_active = self.mgr_cluster.get_active_id()
-
+        original_active_id = self.mgr_cluster.get_active_id()
         original_uri = self._get_uri("dashboard")
-        log.info("Originally running at {0}".format(original_uri))
+        log.info("Originally running manager '{}' at {}".format(
+            original_active_id, original_uri))
 
-        self.mgr_cluster.mgr_fail(original_active)
+        # Force a failover and wait until the previously active manager
+        # is listed as standby.
+        self.mgr_cluster.mgr_fail(original_active_id)
+        self.wait_until_true(
+            lambda: original_active_id in self.mgr_cluster.get_standby_ids(),
+            timeout=30)
 
+        failed_active_id = self.mgr_cluster.get_active_id()
         failed_over_uri = self._get_uri("dashboard")
-        log.info("After failover running at {0}".format(failed_over_uri))
+        log.info("After failover running manager '{}' at {}".format(
+            failed_active_id, failed_over_uri))
 
         self.assertNotEqual(original_uri, failed_over_uri)
 
