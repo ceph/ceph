@@ -1233,8 +1233,23 @@ Rados object in state %s." % self.state)
 
     def mon_command(self, cmd, inbuf, timeout=0, target=None):
         """
+        Send a command to the mon.
+
         mon_command[_target](cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :param cmd: JSON formatted string.
+        :param inbuf: optional string.
+        :param timeout: This parameter is ignored.
+        :param target: name of a specific mon. Optional
+        :return: (int ret, string outbuf, string outs)
+
+        Example:
+
+        >>> import json
+        >>> c = Rados(conffile='/etc/ceph/ceph.conf')
+        >>> c.connect()
+        >>> cmd = json.dumps({"prefix": "osd safe-to-destroy", "ids": ["2"], "format": "json"})
+        >>> c.mon_command(cmd, b'')
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1291,7 +1306,8 @@ Rados object in state %s." % self.state)
     def osd_command(self, osdid, cmd, inbuf, timeout=0):
         """
         osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1333,7 +1349,7 @@ Rados object in state %s." % self.state)
 
     def mgr_command(self, cmd, inbuf, timeout=0):
         """
-        returns (int ret, string outbuf, string outs)
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1375,7 +1391,8 @@ Rados object in state %s." % self.state)
     def pg_command(self, pgid, cmd, inbuf, timeout=0):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
