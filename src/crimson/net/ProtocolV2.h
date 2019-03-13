@@ -60,10 +60,15 @@ class ProtocolV2 : public Protocol {
 
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
+  entity_name_t peer_name;
   uint64_t connection_features = 0;
   uint64_t peer_required_features = 0;
 
+  uint64_t client_cookie = 0;
+  uint64_t server_cookie = 0;
   uint64_t global_seq = 0;
+  uint64_t peer_global_seq = 0;
+  uint64_t connect_seq = 0;
 
  // TODO: Frame related implementations, probably to a separate class.
  private:
@@ -92,6 +97,7 @@ class ProtocolV2 : public Protocol {
  private:
   seastar::future<> fault();
   void dispatch_reset();
+  void reset_session(bool full);
   seastar::future<entity_type_t, entity_addr_t> banner_exchange();
 
   // CONNECTING (client)
