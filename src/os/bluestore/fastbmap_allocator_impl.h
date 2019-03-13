@@ -21,7 +21,7 @@ typedef uint64_t slot_t;
 struct interval_t
 {
   uint64_t offset = 0;
-  uint32_t length = 0;
+  uint64_t length = 0;
 
   interval_t() {}
   interval_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
@@ -36,7 +36,7 @@ typedef std::vector<slot_t> slot_vector_t;
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 
-typedef bluestore_pextent_t interval_t;
+typedef bluestore_interval_t<uint64_t, uint64_t> interval_t;
 typedef PExtentVector interval_vector_t;
 
 typedef mempool::bluestore_alloc::vector<slot_t> slot_vector_t;
