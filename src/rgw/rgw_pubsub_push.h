@@ -14,6 +14,7 @@ class RGWDataSyncEnv;
 class RGWCoroutine;
 class RGWHTTPArgs;
 struct rgw_pubsub_event;
+struct rgw_pubsub_s3_record;
 
 // endpoint base class all endpoint  - types should derive from it
 class RGWPubSubEndpoint {
@@ -30,9 +31,13 @@ public:
   // may throw a configuration_error if creation fails
   static Ptr create(const std::string& endpoint, const std::string& topic, const RGWHTTPArgs& args);
  
-  // this method is used in order to send notification and wait for completion 
+  // this method is used in order to send notification (Ceph specific) and wait for completion 
   // in async manner via a coroutine
   virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) = 0;
+
+  // this method is used in order to send notification (S3 compliant) and wait for completion 
+  // in async manner via a coroutine
+  virtual RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_record& record, RGWDataSyncEnv* env) = 0;
 
   // present as string
   virtual std::string to_str() const { return ""; }

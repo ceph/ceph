@@ -169,11 +169,11 @@ void RGWREST_STS::send_response()
 
 int RGWSTSGetSessionToken::verify_permission()
 {
-  rgw::IAM::Partition partition = rgw::IAM::Partition::aws;
-  rgw::IAM::Service service = rgw::IAM::Service::s3;
+  rgw::Partition partition = rgw::Partition::aws;
+  rgw::Service service = rgw::Service::s3;
   if (!verify_user_permission(this,
                               s,
-                              rgw::IAM::ARN(partition, service, "", s->user->user_id.tenant, ""),
+                              rgw::ARN(partition, service, "", s->user->user_id.tenant, ""),
                               rgw::IAM::stsGetSessionToken)) {
     return -EACCES;
   }

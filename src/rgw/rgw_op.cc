@@ -79,7 +79,7 @@ using ceph::crypto::MD5;
 using boost::optional;
 using boost::none;
 
-using rgw::IAM::ARN;
+using rgw::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::Policy;
 
@@ -2147,8 +2147,8 @@ int RGWGetObj::init_common()
 
 int RGWListBuckets::verify_permission()
 {
-  rgw::IAM::Partition partition = rgw::IAM::Partition::aws;
-  rgw::IAM::Service service = rgw::IAM::Service::s3;
+  rgw::Partition partition = rgw::Partition::aws;
+  rgw::Service service = rgw::Service::s3;
 
   if (!verify_user_permission(this, s, ARN(partition, service, "", s->user->user_id.tenant, "*"), rgw::IAM::s3ListAllMyBuckets)) {
     return -EACCES;
@@ -3329,7 +3329,7 @@ int RGWPutObj::verify_permission()
 			      cs_object.instance.empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
-			      rgw::IAM::ARN(obj)); usr_policy_res == Effect::Deny)
+			      rgw::ARN(obj)); usr_policy_res == Effect::Deny)
             return -EACCES;
           else if (usr_policy_res == Effect::Allow)
             break;
@@ -3340,7 +3340,7 @@ int RGWPutObj::verify_permission()
 			      cs_object.instance.empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
-			      rgw::IAM::ARN(obj));
+			      rgw::ARN(obj));
   }
 	if (e == Effect::Deny) {
 	  return -EACCES; 
