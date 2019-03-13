@@ -416,7 +416,7 @@ private:
   struct C_OSD_RepModifyCommit;
 
   void repop_commit(RepModifyRef rm);
-  bool auto_repair_supported() const override { return false; }
+  bool auto_repair_supported() const override { return store->has_builtin_csum(); }
 
 
   int be_deep_scrub(
