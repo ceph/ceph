@@ -23,7 +23,7 @@ inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_lengt
     auto delta_off = res.offset - offset;
     if (len > delta_off) {
       res.length = len - delta_off;
-      res.length = p2align<uint32_t>(res.length, min_length);
+      res.length = p2align<uint64_t>(res.length, min_length);
       if (res.length) {
 	return res;
       }
@@ -189,7 +189,7 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
 	    (ctx->min_affordable_len == 0 ||
 	      (longest.length < ctx->min_affordable_len))) {
 
-          ctx->min_affordable_len = p2align<uint32_t>(longest.length, min_length);
+          ctx->min_affordable_len = p2align<uint64_t>(longest.length, min_length);
 	  ctx->min_affordable_offs = longest.offset;
         }
         if (mode == STOP_ON_PARTIAL) {
