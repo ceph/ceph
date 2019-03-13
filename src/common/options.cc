@@ -7413,10 +7413,6 @@ static std::vector<Option> get_immutable_object_cache_options() {
     Option("immutable_object_cache_watermark", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.1)
     .set_description("immutable object cache water mark"),
-
-    Option("immutable_object_cache_dir_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(10)
-    .set_description("immutable object cache dir number"),
   });
 }
 
