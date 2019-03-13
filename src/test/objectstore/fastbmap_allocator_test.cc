@@ -854,3 +854,20 @@ TEST(TestAllocatorLevel01, test_l2_contiguous_alignment)
   std::cout << "Done L2 cont aligned" << std::endl;
 }
 
+TEST(TestAllocatorLevel01, test_4G_alloc_bug)
+{
+  {
+    TestAllocatorLevel02 al2;
+    uint64_t capacity = 0x8000 * _1m; // = 32GB
+    al2.init(capacity, 0x10000);
+    std::cout << "Init L2 cont aligned" << std::endl;
+
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(_1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1u); // the bug caused no allocations here
+      ASSERT_EQ(allocated4, _1m);
+      ASSERT_EQ(a4[0].offset, 0u);
+      ASSERT_EQ(a4[0].length, _1m);
+  }
+}
