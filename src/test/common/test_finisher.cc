@@ -52,3 +52,17 @@ TEST(Bench, Finisher) {
   std::cout << "Queued and completed 1,000,000 C_SaferCond objects in " << end - begin
 	    << std::endl;
 }
+
+
+TEST(FireFuction, Finisher) {
+  std::atomic<bool> fired = false;
+  auto cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  Finisher f(cct);
+  f.start();
+  ASSERT_FALSE(fired);
+  f.queue([&fired]() { fired = true; });
+  std::this_thread::sleep_for(5s);
+  ASSERT_TRUE(fired);
+  f.stop();
+  cct->put();
+}
