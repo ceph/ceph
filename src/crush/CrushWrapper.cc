@@ -1055,7 +1055,8 @@ int CrushWrapper::get_leaves(const string &name, set<int> *leaves) const
 
 int CrushWrapper::insert_item(
   CephContext *cct, int item, float weight, string name,
-  const map<string,string>& loc)  // typename -> bucketname
+  const map<string,string>& loc,  // typename -> bucketname
+  bool init_weight_sets)
 {
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
@@ -1155,7 +1156,8 @@ int CrushWrapper::insert_item(
   }
 
   // adjust the item's weight in location
-  if (adjust_item_weightf_in_loc(cct, item, weight, loc) > 0) {
+  if (adjust_item_weightf_in_loc(cct, item, weight, loc,
+				 item >= 0 && init_weight_sets) > 0) {
     if (item >= crush->max_devices) {
       crush->max_devices = item + 1;
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices
