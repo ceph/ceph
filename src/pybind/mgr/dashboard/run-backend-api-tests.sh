@@ -109,7 +109,7 @@ run_teuthology_tests() {
     TEST_CASES=''
     if [[ "$@" == '' || "$@" == '--create-cluster-only' ]]; then
       TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
-      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
+      TEST_CASES="tasks.mgr.test_module_selftest tasks.mgr.test_dashboard $TEST_CASES"
       if [[ "$@" == '--create-cluster-only' ]]; then
         OPTIONS="$@"
       fi

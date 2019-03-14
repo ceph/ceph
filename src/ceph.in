@@ -1065,6 +1065,8 @@ def main():
         # an awfully simple callback
         def watch_cb(arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
             # Filter on channel
+            if sys.version_info[0] >= 3:
+                channel = channel.decode('utf-8')
             if (channel == parsed_args.watch_channel or \
                            parsed_args.watch_channel == "*"):
                 print(line.decode('utf-8'))
