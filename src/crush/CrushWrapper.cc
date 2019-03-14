@@ -1316,7 +1316,8 @@ int CrushWrapper::link_bucket(
 
 int CrushWrapper::create_or_move_item(
   CephContext *cct, int item, float weight, string name,
-  const map<string,string>& loc)  // typename -> bucketname
+  const map<string,string>& loc,  // typename -> bucketname
+  bool init_weight_sets)
 {
   int ret = 0;
   int old_iweight;
@@ -1337,7 +1338,8 @@ int CrushWrapper::create_or_move_item(
     ldout(cct, 5) << "create_or_move_item adding " << item
 		  << " weight " << weight
 		  << " at " << loc << dendl;
-    ret = insert_item(cct, item, weight, name, loc);
+    ret = insert_item(cct, item, weight, name, loc,
+		      item >= 0 && init_weight_sets);
     if (ret == 0)
       ret = 1;  // changed
   }
