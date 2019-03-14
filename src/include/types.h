@@ -561,6 +561,8 @@ WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 template <uint8_t S>
 struct sha_digest_t {
   constexpr static uint32_t SIZE = S;
+  // TODO: we might consider std::array in the future. Avoiding it for now
+  // as sha_digest_t is a part of our public API.
   unsigned char v[S] = {0};
 
   string to_str() const {
@@ -571,8 +573,29 @@ struct sha_digest_t {
     }
     return string(str);
   }
-  sha_digest_t(const unsigned char *_v) { memcpy(v, _v, S); };
+  sha_digest_t(const unsigned char *_v) { memcpy(v, _v, SIZE); };
   sha_digest_t() {}
+
+  bool operator==(const sha_digest_t& r) const {
+    return ::memcmp(v, r.v, SIZE) == 0;
+  }
+  bool operator!=(const sha_digest_t& r) const {
+    return ::memcmp(v, r.v, SIZE) != 0;
+  }
+
+  void encode(bufferlist &bl) const {
+    // copy to avoid reinterpret_cast, is_pod and other nasty things
+    using ceph::encode;
+    std::array<unsigned char, SIZE> tmparr;
+    memcpy(tmparr.data(), v, SIZE);
+    encode(tmparr, bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    using ceph::decode;
+    std::array<unsigned char, SIZE> tmparr;
+    decode(tmparr, bl);
+    memcpy(v, tmparr.data(), SIZE);
+  }
 };
 
 template <uint8_t S>
@@ -582,6 +605,10 @@ inline ostream &operator<<(ostream &out, const sha_digest_t<S> &b) {
 }
 
 using sha1_digest_t = sha_digest_t<20>;
+WRITE_CLASS_ENCODER(sha1_digest_t)
+
 using sha256_digest_t = sha_digest_t<32>;
+WRITE_CLASS_ENCODER(sha256_digest_t)
+
 
 #endif

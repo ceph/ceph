@@ -84,6 +84,39 @@ Major Changes from Mimic
 
 - *CephFS*:
 
+  * MDS stability has been greatly improved for large caches and
+    long-running clients with a lot of RAM. Cache trimming and client
+    capability recall is now throttled to prevent overloading the MDS.
+  * CephFS may now be exported via NFS-Ganesha clusters in environments managed
+    by Rook. Ceph manages the clusters and ensures high-availability and
+    scalability. An `introductory demo
+    <https://ceph.com/community/deploying-a-cephnfs-server-cluster-with-rook/>`_
+    is available. More automation of this feature is expected to be forthcoming
+    in future minor releases of Nautilus.
+  * The MDS ``mds_standby_for_*``, ``mon_force_standby_active``, and
+    ``mds_standby_replay`` configuration options have been obsoleted. Instead,
+    the operator :ref:`may now set <mds-standby-replay>` the new
+    ``allow_standby_replay`` flag on the CephFS file system. This setting
+    causes standbys to become standby-replay for any available rank in the file
+    system.
+  * MDS now supports dropping its cache which concurrently asks clients
+    to trim their caches. This is done using MDS admin socket ``cache drop``
+    command.
+  * It is now possible to check the progress of an on-going scrub in the MDS.
+    Additionally, a scrub may be paused or aborted. See :ref:`the disaster
+    recovery documentation <disaster-recovery-experts>` for more information.
+  * A new interface for creating volumes is provided via the ``ceph volume``
+    command-line-interface.
+  * A new cephfs-shell tool is available for manipulating a CephFS file
+    system without mounting.
+  * CephFS-related output from ``ceph status`` has been reformatted for brevity,
+    clarity, and usefulness.
+  * Lazy IO has been revamped. It can be turned on by the client using the new
+    CEPH_O_LAZY flag to the ``ceph_open`` C/C++ API or via the config option
+    ``client_force_lazyio``.
+  * CephFS file system can now be brought down rapidly via the ``ceph fs fail``
+    command. See :ref:`the administration page <cephfs-administration>` for
+    more information.
 
 - *RBD*:
 
@@ -539,12 +572,6 @@ These changes occurred between the Mimic and Nautilus releases.
   ``mds_recall_warning_threshold`` (default: 32K) and
   ``mds_recall_warning_decay_rate`` (default: 60s) sets the threshold
   for this warning.
-
-* The MDS mds_standby_for_*, mon_force_standby_active, and mds_standby_replay
-  configuration options have been obsoleted. Instead, the operator may now set
-  the new "allow_standby_replay" flag on the CephFS file system. This setting
-  causes standbys to become standby-replay for any available rank in the file
-  system.
 
 * The Telegraf module for the Manager allows for sending statistics to
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
