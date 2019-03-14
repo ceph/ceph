@@ -47,7 +47,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
     MODULE_OPTIONS = [
         {
             'name': 'salt_api_url',
-            'default': None
+            'default': ''
         },
         {
             'name': 'salt_api_eauth',
@@ -55,11 +55,11 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         },
         {
             'name': 'salt_api_username',
-            'default': None
+            'default': ''
         },
         {
             'name': 'salt_api_password',
-            'default': None
+            'default': ''
         }
     ]
 
