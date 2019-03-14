@@ -62,8 +62,8 @@ choose_args 0 {
   {
     bucket_id -1
     weight_set [
-      [ 3.000 ]
-      [ 3.000 ]
+      [ 2.000 ]
+      [ 2.000 ]
     ]
     ids [ -10 ]
   }
@@ -81,14 +81,17 @@ choose_args 0 {
 EOF
     crushtool -c $dir/map.txt -o $dir/map-new || return 1
     ceph osd setcrushmap -i $dir/map-new || return 1
+    ceph osd crush tree
 
     run_osd $dir 1 || return 1
+    ceph osd crush tree
     ceph osd getcrushmap > $dir/map-one-more || return 1
     crushtool -d $dir/map-one-more -o $dir/map-one-more.txt || return 1
     cat $dir/map-one-more.txt
     diff -u $dir/map-one-more.txt $CEPH_ROOT/src/test/crush/crush-choose-args-expected-one-more-3.txt || return 1
 
     destroy_osd $dir 1 || return 1
+    ceph osd crush tree
     ceph osd getcrushmap > $dir/map-one-less || return 1
     crushtool -d $dir/map-one-less -o $dir/map-one-less.txt || return 1
     diff -u $dir/map-one-less.txt $dir/map.txt || return 1
