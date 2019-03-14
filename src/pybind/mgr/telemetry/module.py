@@ -280,7 +280,7 @@ class Module(MgrModule):
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
             self.send(self.last_report)
-            return 0, 'Report send to {0}'.format(self.url), ''
+            return 0, 'Report sent to {0}'.format(self.url), ''
         elif command['prefix'] == 'telemetry show':
             report = self.last_report
             if not report:
