@@ -26,4 +26,4 @@ typedef std::function<void(CacheSession*, ObjectCacheRequest*)> ProcessMsg;
 
 }  // namespace immutable_obj_cache
 }  // namespace ceph
-#endif
+#endif  // CEPH_CACHE_SOCKET_COMMON_H

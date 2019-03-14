@@ -60,7 +60,7 @@ int ObjectCacheStore::init(bool reset) {
     std::error_code ec;
     if (efs::exists(m_cache_root_dir)) {
       // remove all sub folders
-      for(auto& p: efs::directory_iterator(m_cache_root_dir)) {
+      for (auto& p : efs::directory_iterator(m_cache_root_dir)) {
         efs::remove_all(p.path());
       }
     } else {

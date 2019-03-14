@@ -50,15 +50,12 @@ class SimplePolicy : public Policy {
 
   CephContext* cct;
   float m_watermark;
-  uint64_t m_entry_count;
   uint64_t m_max_inflight_ops;
   uint64_t m_max_cache_size;
   std::atomic<uint64_t> inflight_ops = 0;
 
   std::unordered_map<std::string, Entry*> m_cache_map;
   RWLock m_cache_map_lock;
-
-  std::deque<Entry*> m_free_list;
 
   std::atomic<uint64_t> m_cache_size;
 

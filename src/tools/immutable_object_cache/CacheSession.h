@@ -49,4 +49,4 @@ typedef std::shared_ptr<CacheSession> CacheSessionPtr;
 }  // namespace immutable_obj_cache
 }  // namespace ceph
 
-#endif
+#endif  // CEPH_CACHE_SESSION_H

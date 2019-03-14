@@ -79,4 +79,4 @@ class CacheClient {
 
 }  // namespace immutable_obj_cache
 }  // namespace ceph
-#endif
+#endif  // CEPH_CACHE_CACHE_CLIENT_H

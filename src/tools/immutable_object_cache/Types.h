@@ -124,4 +124,4 @@ ObjectCacheRequest* decode_object_cache_request(bufferlist payload_buffer);
 
 }  // namespace immutable_obj_cache
 }  // namespace ceph
-#endif
+#endif  // CEPH_CACHE_TYPES_H
