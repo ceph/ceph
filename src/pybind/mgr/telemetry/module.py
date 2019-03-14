@@ -272,10 +272,10 @@ class Module(MgrModule):
                 r[opt['name']] = getattr(self, opt['name'])
             return 0, json.dumps(r, indent=4), ''
         elif command['prefix'] == 'telemetry on':
-            self.set_config('active', True)
+            self.set_module_option('active', True)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
-            self.set_config('active', False)
+            self.set_module_option('active', False)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
