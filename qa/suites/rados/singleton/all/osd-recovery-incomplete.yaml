@@ -22,6 +22,7 @@ tasks:
       - \(PG_
       - \(OBJECT_
       - \(REQUEST_SLOW\)
+      - slow request
     conf:
       osd:
         osd min pg log entries: 5
