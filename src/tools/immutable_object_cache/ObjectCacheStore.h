@@ -57,6 +57,6 @@ class ObjectCacheStore {
   std::string m_cache_root_dir;
 };
 
-}  // namespace immutable_obje_cache
+}  // namespace immutable_obj_cache
 }  // ceph
 #endif  // CEPH_CACHE_OBJECT_CACHE_STORE_H

@@ -120,6 +120,7 @@ void SimplePolicy::update_status(std::string file_name,
 
     m_cache_map.erase(entry_it);
     inflight_ops--;
+    delete entry;
     return;
   }
 
@@ -134,6 +135,7 @@ void SimplePolicy::update_status(std::string file_name,
     m_promoted_lru.lru_remove(entry);
     m_cache_map.erase(entry_it);
     m_cache_size -= size;
+    delete entry;
     return;
   }
 }
