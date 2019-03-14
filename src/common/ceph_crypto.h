@@ -24,7 +24,9 @@
 #endif /*USE_NSS*/
 
 #ifdef USE_OPENSSL
+#include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
+#include <openssl/hmac.h>
 
 extern "C" {
   const EVP_MD *EVP_md5(void);
@@ -135,30 +137,10 @@ namespace ceph {
 }
 #endif /*USE_OPENSSL*/
 
-#if defined(USE_OPENSSL)
-namespace ceph {
-  namespace crypto {
-    using ceph::crypto::ssl::SHA256;
-    using ceph::crypto::ssl::MD5;
-    using ceph::crypto::ssl::SHA1;
-  }
-}
-#elif defined(USE_NSS)
-namespace ceph {
-  namespace crypto {
-    using ceph::crypto::nss::SHA256;
-    using ceph::crypto::nss::MD5;
-    using ceph::crypto::nss::SHA1;
-  }
-}
-#else
-# error "No supported crypto implementation found."
-#endif
-
 
 #ifdef USE_NSS
 namespace ceph {
-  namespace crypto {
+  namespace crypto::nss {
     class HMAC {
     private:
       PK11SlotInfo *slot;
@@ -217,7 +199,114 @@ namespace ceph {
     };
   }
 }
+#endif
 
+#ifdef USE_OPENSSL
+namespace ceph::crypto::ssl {
+# if OPENSSL_VERSION_NUMBER < 0x10100000L
+  class HMAC {
+  private:
+    HMAC_CTX mContext;
+    const EVP_MD *mpType;
+
+  public:
+    HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
+      : mpType(type) {
+      ::memset(&mContext, 0, sizeof(mContext));
+      const auto r = HMAC_Init_ex(&mContext, key, length, mpType, nullptr);
+      ceph_assert_always(r == 1);
+    }
+    ~HMAC () {
+      HMAC_CTX_cleanup(&mContext);
+    }
+
+    void Restart () {
+      const auto r = HMAC_Init_ex(&mContext, nullptr, 0, mpType, nullptr);
+      ceph_assert_always(r == 1);
+    }
+    void Update (const unsigned char *input, size_t length) {
+      if (length) {
+        const auto r = HMAC_Update(&mContext, input, length);
+        ceph_assert_always(r == 1);
+      }
+    }
+    void Final (unsigned char *digest) {
+      unsigned int s;
+      const auto r = HMAC_Final(&mContext, digest, &s);
+      ceph_assert_always(r == 1);
+    }
+  };
+# else
+  class HMAC {
+  private:
+    HMAC_CTX *mpContext;
+
+  public:
+    HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
+      : mpContext(HMAC_CTX_new()) {
+      const auto r = HMAC_Init_ex(mpContext, key, length, type, nullptr);
+      ceph_assert_always(r == 1);
+    }
+    ~HMAC () {
+      HMAC_CTX_free(mpContext);
+    }
+
+    void Restart () {
+      const EVP_MD * const type = HMAC_CTX_get_md(mpContext);
+      const auto r = HMAC_Init_ex(mpContext, nullptr, 0, type, nullptr);
+      ceph_assert_always(r == 1);
+    }
+    void Update (const unsigned char *input, size_t length) {
+      if (length) {
+        const auto r = HMAC_Update(mpContext, input, length);
+        ceph_assert_always(r == 1);
+      }
+    }
+    void Final (unsigned char *digest) {
+      unsigned int s;
+      const auto r = HMAC_Final(mpContext, digest, &s);
+      ceph_assert_always(r == 1);
+    }
+  };
+# endif // OPENSSL_VERSION_NUMBER < 0x10100000L
+
+  struct HMACSHA1 : public HMAC {
+    HMACSHA1 (const unsigned char *key, size_t length)
+      : HMAC(EVP_sha1(), key, length) {
+    }
+  };
+
+  struct HMACSHA256 : public HMAC {
+    HMACSHA256 (const unsigned char *key, size_t length)
+      : HMAC(EVP_sha256(), key, length) {
+    }
+  };
+}
+#endif /*USE_OPENSSL*/
+
+
+#if defined(USE_OPENSSL)
+namespace ceph {
+  namespace crypto {
+    using ceph::crypto::ssl::SHA256;
+    using ceph::crypto::ssl::MD5;
+    using ceph::crypto::ssl::SHA1;
+
+    using ceph::crypto::ssl::HMACSHA256;
+    using ceph::crypto::ssl::HMACSHA1;
+  }
+}
+#elif defined(USE_NSS)
+namespace ceph {
+  namespace crypto {
+    using ceph::crypto::nss::SHA256;
+    using ceph::crypto::nss::MD5;
+    using ceph::crypto::nss::SHA1;
+
+    using ceph::crypto::nss::HMACSHA256;
+    using ceph::crypto::nss::HMACSHA1;
+  }
+}
 #else
 // cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
