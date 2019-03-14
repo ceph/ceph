@@ -1044,7 +1044,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   } else {
     config.parse_config_files(nullptr, nullptr, 0);
   }
-  config.parse_env(g_ceph_context->get_module_type());
+  config.parse_env(CEPH_ENTITY_TYPE_CLIENT);
   config.parse_argv(args);
   cfg->poolname = config.get_val<std::string>("rbd_default_pool");
 
