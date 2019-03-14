@@ -1441,15 +1441,19 @@ int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
   return -ENOENT;
 }
 
-int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
+int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight,
+				     bool update_weight_sets)
 {
-  ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight
+		<< " update_weight_sets=" << (int)update_weight_sets
+		<< dendl;
   int changed = 0;
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     if (!crush->buckets[bidx]) {
       continue;
     }
-    int r = adjust_item_weight_in_bucket(cct, id, weight, -1-bidx);
+    int r = adjust_item_weight_in_bucket(cct, id, weight, -1-bidx,
+					 update_weight_sets);
     if (r > 0) {
       ++changed;
     }
@@ -1462,10 +1466,12 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 
 int CrushWrapper::adjust_item_weight_in_bucket(
   CephContext *cct, int id, int weight,
-  int bucket_id)
+  int bucket_id,
+  bool update_weight_sets)
 {
   ldout(cct, 5) << __func__ << " " << id << " weight " << weight
 		<< " in bucket " << bucket_id
+		<< " update_weight_sets=" << (int)update_weight_sets
 		<< dendl;
   int changed = 0;
   if (!bucket_exists(bucket_id)) {
@@ -1474,12 +1480,36 @@ int CrushWrapper::adjust_item_weight_in_bucket(
   crush_bucket *b = get_bucket(bucket_id);
   for (unsigned int i = 0; i < b->size; i++) {
     if (b->items[i] == id) {
-      int diff = bucket_adjust_item_weight(cct, b, id, weight);
+      int diff = bucket_adjust_item_weight(cct, b, id, weight,
+					   update_weight_sets);
       ldout(cct, 5) << __func__ << " " << id << " diff " << diff
 		    << " in bucket " << bucket_id << dendl;
-      adjust_item_weight(cct, bucket_id, b->weight);
+      adjust_item_weight(cct, bucket_id, b->weight, false);
       changed++;
     }
+  }
+  // update weight-sets so they continue to sum
+  for (auto& p : choose_args) {
+    auto &cmap = p.second;
+    if (!cmap.args) {
+      continue;
+    }
+    crush_choose_arg *arg = &cmap.args[-1 - bucket_id];
+    if (!arg->weight_set) {
+      continue;
+    }
+    ceph_assert(arg->weight_set_positions > 0);
+    vector<int> w(arg->weight_set_positions);
+    for (unsigned i = 0; i < b->size; ++i) {
+      for (unsigned j = 0; j < arg->weight_set_positions; ++j) {
+	crush_weight_set *weight_set = &arg->weight_set[j];
+	w[j] += weight_set->weights[i];
+      }
+    }
+    ldout(cct,5) << __func__ << "  adjusting bucket " << bucket_id
+		 << " cmap " << p.first << " weights to " << w << dendl;
+    ostringstream ss;
+    choose_args_adjust_item_weight(cct, cmap, bucket_id, w, &ss);
   }
   if (!changed) {
     return -ENOENT;
@@ -1489,16 +1519,20 @@ int CrushWrapper::adjust_item_weight_in_bucket(
 
 int CrushWrapper::adjust_item_weight_in_loc(
   CephContext *cct, int id, int weight,
-  const map<string,string>& loc)
+  const map<string,string>& loc,
+  bool update_weight_sets)
 {
   ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight
-		<< " in " << loc << dendl;
+		<< " in " << loc
+		<< " update_weight_sets=" << (int)update_weight_sets
+		<< dendl;
   int changed = 0;
   for (auto l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
-    int r = adjust_item_weight_in_bucket(cct, id, weight, bid);
+    int r = adjust_item_weight_in_bucket(cct, id, weight, bid,
+					 update_weight_sets);
     if (r > 0) {
       ++changed;
     }
@@ -2391,9 +2425,11 @@ int CrushWrapper::remove_rule(int ruleno)
   return rebuild_roots_with_classes(nullptr);
 }
 
-int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *bucket, int item, int weight)
+int CrushWrapper::bucket_adjust_item_weight(
+  CephContext *cct, crush_bucket *bucket, int item, int weight,
+  bool adjust_weight_sets)
 {
-  if (cct->_conf->osd_crush_update_weight_set) {
+  if (adjust_weight_sets) {
     unsigned position;
     for (position = 0; position < bucket->size; position++)
       if (bucket->items[position] == item)

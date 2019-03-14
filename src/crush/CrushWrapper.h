@@ -956,25 +956,32 @@ public:
     }
     return 0;
   }
-  int adjust_item_weight(CephContext *cct, int id, int weight);
-  int adjust_item_weightf(CephContext *cct, int id, float weight) {
+  int adjust_item_weight(CephContext *cct, int id, int weight,
+			 bool update_weight_sets=true);
+  int adjust_item_weightf(CephContext *cct, int id, float weight,
+			  bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
+    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000),
+			      update_weight_sets);
   }
-  int adjust_item_weight_in_bucket(
-    CephContext *cct, int id, int weight, int bucket_id);
+  int adjust_item_weight_in_bucket(CephContext *cct, int id, int weight,
+				   int bucket_id,
+				   bool update_weight_sets);
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight,
-				const map<string,string>& loc);
+				const map<string,string>& loc,
+				bool update_weight_sets=true);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight,
-				 const map<string,string>& loc) {
+				 const map<string,string>& loc,
+				 bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
+    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000),
+				     loc, update_weight_sets);
   }
   void reweight(CephContext *cct);
   void reweight_bucket(crush_bucket *b,
@@ -1288,7 +1295,9 @@ public:
 		 int *items, int *weights, int *idout);
   int bucket_add_item(crush_bucket *bucket, int item, int weight);
   int bucket_remove_item(struct crush_bucket *bucket, int item);
-  int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
+  int bucket_adjust_item_weight(
+    CephContext *cct, struct crush_bucket *bucket, int item, int weight,
+    bool adjust_weight_sets);
 
   void finalize() {
     ceph_assert(crush);
