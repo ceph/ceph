@@ -801,9 +801,12 @@ public:
    * @param weight item weight
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @param init_weight_sets initialize weight-set weights to weight (vs 0)
    * @return 0 for success, negative on error
    */
-  int insert_item(CephContext *cct, int id, float weight, string name, const map<string,string>& loc);
+  int insert_item(CephContext *cct, int id, float weight, string name,
+		  const map<string,string>& loc,
+		  bool init_weight_sets=true);
 
   /**
    * move a bucket in the hierarchy to the given location
