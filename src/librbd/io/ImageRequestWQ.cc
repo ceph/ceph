@@ -685,9 +685,8 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
     }
 
     throttle = t.second;
-    tokens = item->tokens_requested(flag);
-
-    if (throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
+    if (item->tokens_requested(flag, &tokens) &&
+        throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
 	      &ImageRequestWQ<I>::handle_throttle_ready>(
 		tokens, this, item, flag)) {
       blocked = true;
