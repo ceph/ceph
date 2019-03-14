@@ -174,7 +174,7 @@ int CephxClientHandler::handle_response(
 	    auto p = cbl.cbegin();
 	    string err;
 	    if (decode_decrypt(cct, *connection_secret, *session_key, p,
-			       err) < 0) {
+			       err)) {
 	      lderr(cct) << __func__ << " failed to decrypt connection_secret"
 			 << dendl;
 	    } else {
