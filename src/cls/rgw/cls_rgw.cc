@@ -757,7 +757,7 @@ static void log_entry(const char *func, const char *str, rgw_bucket_olh_entry *e
 
 template <class T>
 static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
-                           T *entry)
+                           T* entry)
 {
   bufferlist current_entry;
   int rc = cls_cxx_map_get_val(hctx, name, &current_entry);
@@ -776,7 +776,7 @@ static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
 }
 
 template <class T>
-static int read_index_entry(cls_method_context_t hctx, string& name, T *entry)
+static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
 {
   int ret = read_omap_entry(hctx, name, entry);
   if (ret < 0) {
@@ -3179,7 +3179,7 @@ static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, c
   string index;
   prepend_index_prefix(key, type, &index);
 
-  int ret = read_omap_entry(hctx, key, info);
+  int ret = read_omap_entry(hctx, index, info);
   if (ret < 0)
     return ret;
 
