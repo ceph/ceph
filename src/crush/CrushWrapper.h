@@ -868,10 +868,12 @@ public:
    * @param weight initial item weight (if we need to create it)
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @param init_weight_sets initialize weight-set values to weight (vs 0)
    * @return 0 for no change, 1 for successful change, negative on error
    */
   int create_or_move_item(CephContext *cct, int item, float weight, string name,
-			  const map<string,string>& loc);
+			  const map<string,string>& loc,
+			  bool init_weight_sets=true);
 
   /**
    * remove all instances of an item from the map
