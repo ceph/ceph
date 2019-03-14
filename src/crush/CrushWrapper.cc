@@ -504,13 +504,8 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
       if (id == item) {
 	ldout(cct, 5) << "remove_item removing item " << item
 		      << " from bucket " << b->id << dendl;
-	for (auto& p : choose_args) {
-	  // weight down each weight-set to 0 before we remove the item
-	  vector<int> weightv(get_choose_args_positions(p.second), 0);
-	  choose_args_adjust_item_weight(cct, p.second, item, weightv, nullptr);
-	}
+	adjust_item_weight_in_bucket(cct, item, 0, b->id, true);
 	bucket_remove_item(b, item);
-	adjust_item_weight(cct, b->id, b->weight);
 	ret = 0;
       }
     }
@@ -583,14 +578,8 @@ int CrushWrapper::_remove_item_under(
     if (id == item) {
       ldout(cct, 5) << "_remove_item_under removing item " << item
 		    << " from bucket " << b->id << dendl;
-      for (auto& p : choose_args) {
-	// weight down each weight-set to 0 before we remove the item
-	vector<int> weightv(get_choose_args_positions(p.second), 0);
-	_choose_args_adjust_item_weight_in_bucket(
-	  cct, p.second, b->id, item, weightv, nullptr);
-      }
+      adjust_item_weight_in_bucket(cct, item, 0, b->id, true);
       bucket_remove_item(b, item);
-      adjust_item_weight(cct, b->id, b->weight);
       ret = 0;
     } else if (id < 0) {
       int r = remove_item_under(cct, item, id, unlink_only);
@@ -1224,13 +1213,7 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
 
   if (!IS_ERR(parent_bucket)) {
     // zero out the bucket weight
-    bucket_adjust_item_weight(cct, parent_bucket, item, 0);
-    adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
-    for (auto& p : choose_args) {
-      // weight down each weight-set to 0 before we remove the item
-      vector<int> weightv(get_choose_args_positions(p.second), 0);
-      choose_args_adjust_item_weight(cct, p.second, item, weightv, nullptr);
-    }
+    adjust_item_weight_in_bucket(cct, item, 0, parent_bucket->id, true);
 
     // remove the bucket from the parent
     bucket_remove_item(parent_bucket, item);
