@@ -6195,10 +6195,22 @@ int Monitor::handle_auth_request(
     uint8_t mode;
     EntityName entity_name;
 
-    decode(mode, p);
-    assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
-    decode(entity_name, p);
-    decode(con->peer_global_id, p);
+    try {
+      decode(mode, p);
+      if (mode < AUTH_MODE_MON ||
+	  mode > AUTH_MODE_MON_MAX) {
+	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
+	delete auth_handler;
+	return -EACCES;
+      }
+      assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+      decode(entity_name, p);
+      decode(con->peer_global_id, p);
+    } catch (buffer::error& e) {
+      dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
+      delete auth_handler;
+      return -EACCES;
+    }
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
