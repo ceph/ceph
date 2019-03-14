@@ -235,12 +235,8 @@ def get_openstack_parser():
     parser.add_argument(
         '--test-repo',
         action='append',
-        help=('Package repository, or repositories, to be added on test nodes. '
-              'Repository to be specified as a NAME:URL pair. Multiple '
-              'repositories can be provided with multiple usage. '
-              'For example --test-repo foo:http://example.com/repo/foo '
-              '--test-repo bar:http://example.com/repo/bar specifies two '
-              'test package repositories named "foo" and "bar", respectively.'),
+        help=('Package repository to be added on test nodes, which are specified '
+              'as NAME:URL, NAME!PRIORITY:URL or @FILENAME, for details see below.'),
         default=None,
     )
     return parser
@@ -255,6 +251,90 @@ def get_parser():
         ],
         conflict_handler='resolve',
         add_help=False,
+        epilog="""test repos:
+
+Test repository can be specified using --test-repo optional argument
+with value in the following formats:  NAME:URL, NAME!PRIORITY:URL
+or @FILENAME. See examples:
+
+1) Essential usage requires to provide repo name and url:
+
+    --test-repo foo:http://example.com/repo/foo
+
+2) Repo can be prioritized by adding a number after '!' symbol
+   in the name:
+
+    --test-repo 'bar!10:http://example.com/repo/bar'
+
+3) Repo data can be taken from a file by simply adding '@' symbol
+   at the beginning argument value, for example from yaml:
+
+    --test-repo @path/to/foo.yaml
+
+  where `foo.yaml` contains one or more records like:
+
+  - name: foo
+    priority: 1
+    url: http://example.com/repo/foo
+
+4) Or from json file:
+
+    --test-repo @path/to/foo.json
+
+   where `foo.json` content is:
+
+   [{"name":"foo","priority":1,"url":"http://example.com/repo/foo"}]
+
+
+Several repos can be provided with multiple usage of --test-repo and/or
+you can provide several repos within one yaml or json file.
+The repositories are added in the order they appear in the command line or
+in the file. Example:
+
+    ---
+    # The foo0 repo will be included first, after all that have any priority,
+    # in particular after foo1 because it has lowest priority
+    - name: foo0
+      url: http://example.com/repo/foo0
+    # The foo1 will go after foo2 because it has lower priority then foo2
+    - name: foo1
+      url: http://example.com/repo/foo1
+      priority: 2
+    # The foo2 will go first because it has highest priority
+    - name: foo2
+      url: http://example.com/repo/foo2
+      priority: 1
+    # The foo3 will go after foo0 because it appears after it in this file
+    - name: foo3
+      url: http://example.com/repo/foo3
+
+Equivalent json file content below:
+
+    [
+      {
+        "name": "foo0",
+        "url": "http://example.com/repo/foo0"
+      },
+      {
+        "name": "foo1",
+        "url": "http://example.com/repo/foo1",
+        "priority": 2
+      },
+      {
+        "name": "foo2",
+        "url": "http://example.com/repo/foo2",
+        "priority": 1
+      },
+      {
+        "name": "foo3",
+        "url": "http://example.com/repo/foo3"
+      }
+    ]
+
+At the moment supported only files with extensions: .yaml, .yml, .json, .jsn.
+
+teuthology-openstack %s
+""" % teuthology.__version__,
         description="""
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite

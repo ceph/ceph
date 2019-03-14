@@ -83,10 +83,16 @@ def _zypper_addrepo(remote, repo_list):
     :return:
     """
     for repo in repo_list:
-        remote.run(args=[
-            'sudo', 'zypper', '-n', 'addrepo', '--refresh', '--no-gpgcheck',
-            '-p', '1', repo['url'], repo['name'],
-        ])
+        if 'priority' in repo:
+            remote.run(args=[
+                'sudo', 'zypper', '-n', 'addrepo', '--refresh', '--no-gpgcheck',
+                '-p', str(repo['priority']), repo['url'], repo['name'],
+            ])
+        else:
+            remote.run(args=[
+                'sudo', 'zypper', '-n', 'addrepo', '--refresh', '--no-gpgcheck',
+                repo['url'], repo['name'],
+            ])
 
 def _zypper_removerepo(remote, repo_list):
     """
