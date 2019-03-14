@@ -199,9 +199,9 @@ void* OutputDataSocket::entry()
     struct pollfd fds[2];
     memset(fds, 0, sizeof(fds));
     fds[0].fd = m_sock_fd;
-    fds[0].events = POLLIN | POLLRDBAND;
+    fds[0].events = POLLIN;
     fds[1].fd = m_shutdown_rd_fd;
-    fds[1].events = POLLIN | POLLRDBAND;
+    fds[1].events = POLLIN;
 
     int ret = poll(fds, 2, -1);
     if (ret < 0) {
