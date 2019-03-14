@@ -28,4 +28,4 @@ librados::AioCompletion *create_rados_callback(T *obj) {
 
 }  // namespace immutable_obj_cache
 }  // namespace ceph
-#endif
+#endif  // CEPH_CACHE_UTILS_H

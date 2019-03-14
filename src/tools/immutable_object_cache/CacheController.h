@@ -37,4 +37,4 @@ class CacheController {
 }  // namespace immutable_obj_cache
 }  // namespace ceph
 
-#endif
+#endif  // CEPH_CACHE_CACHE_CONTROLLER_H

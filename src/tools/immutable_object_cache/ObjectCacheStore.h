@@ -36,7 +36,8 @@ class ObjectCacheStore {
  private:
   std::string get_cache_file_name(std::string pool_nspace, uint64_t pool_id,
                                   uint64_t snap_id, std::string oid);
-  std::string get_cache_file_path(std::string cache_file_name, bool mkdir = false);
+  std::string get_cache_file_path(std::string cache_file_name,
+                                  bool mkdir = false);
   int evict_objects();
   int do_promote(std::string pool_nspace, uint64_t pool_id,
                  uint64_t snap_id, std::string object_name);
@@ -56,6 +57,6 @@ class ObjectCacheStore {
   std::string m_cache_root_dir;
 };
 
-}  // namespace ceph
-}  // namespace immutable_obj_cache
-#endif
+}  // namespace immutable_obje_cache
+}  // ceph
+#endif  // CEPH_CACHE_OBJECT_CACHE_STORE_H
