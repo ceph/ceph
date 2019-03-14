@@ -144,6 +144,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         dev.metadata_space_free = d['metadata_space_free']
                         devs.append(dev)
                     result.append(orchestrator.InventoryNode(node_name, devs))
+            else:
+                self.log.error(event_data['return'])
             return result
 
         with self._completion_lock:
@@ -189,6 +191,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         desc.service_instance = service_instance
                         desc.service_type = service_type
                         result.append(desc)
+            else:
+                self.log.error(event_data['return'])
             return result
 
         with self._completion_lock:
