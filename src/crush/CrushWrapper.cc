@@ -1184,7 +1184,8 @@ int CrushWrapper::move_bucket(
   int bucket_weight = detach_bucket(cct, id);
 
   // insert the bucket back into the hierarchy
-  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc,
+		     false);
 }
 
 int CrushWrapper::detach_bucket(CephContext *cct, int item)
