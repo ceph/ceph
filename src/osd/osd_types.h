@@ -1773,6 +1773,7 @@ struct object_stat_sum_t {
   int64_t num_objects_manifest = 0;
   int64_t num_omap_bytes = 0;
   int64_t num_omap_keys = 0;
+  int64_t num_objects_repaired = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1845,6 +1846,7 @@ struct object_stat_sum_t {
     FLOOR(num_evict_mode_full);
     FLOOR(num_objects_pinned);
     FLOOR(num_legacy_snapsets);
+    FLOOR(num_objects_repaired);
 #undef FLOOR
   }
 
@@ -1881,6 +1883,7 @@ struct object_stat_sum_t {
     SPLIT(num_objects_manifest);
     SPLIT(num_omap_bytes);
     SPLIT(num_omap_keys);
+    SPLIT(num_objects_repaired);
     SPLIT_PRESERVE_NONZERO(num_shallow_scrub_errors);
     SPLIT_PRESERVE_NONZERO(num_deep_scrub_errors);
     for (unsigned i = 0; i < out.size(); ++i) {
@@ -1945,6 +1948,7 @@ struct object_stat_sum_t {
         sizeof(num_objects_manifest) +
         sizeof(num_omap_bytes) +
         sizeof(num_omap_keys) +
+        sizeof(num_objects_repaired) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
