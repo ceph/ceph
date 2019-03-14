@@ -216,12 +216,30 @@ Instructions
         "ceph version 14.2.0 (...) nautilus (stable)": 22,
      }
 
-#. Scan for any OSDs deployed with the old ceph-disk tool to ensure
-   that ceph-volume can activate them after a host reboot.  On each
-   host containing OSDs,::
+#. If there are any OSDs in the cluster deployed with ceph-disk (e.g.,
+   almost any OSDs that were created before the Mimic release), you
+   need to tell ceph-volume to adopt responsibility for starting the
+   daemons.  On each host containing OSDs, ensure the OSDs are
+   currently running, and then::
 
      # ceph-volume simple scan
      # ceph-volume simple activate --all
+
+   We recommend that each OSD host be rebooted following this step to
+   verify that the OSDs start up automatically.
+
+   Note that ceph-volume doesn't have the same hot-plug capability
+   that ceph-disk did, where a newly attached disk is automatically
+   detected via udev events.  If the OSD isn't currently running when the
+   above ``scan`` command is run, or a ceph-disk-based OSD is moved to
+   a new host, or the host OSD is reinstalled, or the
+   ``/etc/ceph/osd`` directory is lost, you will need to scan the main
+   data partition for each ceph-disk OSD explicitly.  For example,::
+
+     # ceph-volume simple scan /dev/sdb1
+
+   The output will include the appopriate ``ceph-volume simple
+   activate`` command to enable the OSD.
 
 #. Upgrade all CephFS MDS daemons.  For each CephFS file system,
 
