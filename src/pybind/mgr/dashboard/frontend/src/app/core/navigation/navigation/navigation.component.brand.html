@@ -20,7 +20,8 @@
   </div>
 
   <!-- Collect the nav links, forms, and other content for toggling -->
-  <div class="collapse navbar-collapse"
+  <div *ngIf="enabledFeature$ | async as enabledFeature"
+       class="collapse navbar-collapse"
        id="bs-example-navbar-collapse-1"
        [collapse]="isCollapsed">
     <ul class="nav navbar-nav navbar-primary">
@@ -84,11 +85,24 @@
                routerLink="/crush-map">CRUSH map</a>
           </li>
           <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_modules"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/mgr-modules">Manager modules</a>
+          </li>
+          <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_log"
               *ngIf="permissions.log.read">
             <a i18n
                class="dropdown-item"
                routerLink="/logs">Logs</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_prometheus"
+              *ngIf="prometheusConfigured && permissions.prometheus.read">
+            <a i18n
+               routerLink="/alerts">Alerts</a>
           </li>
         </ul>
       </li>
@@ -105,7 +119,9 @@
       <li dropdown
           routerLinkActive="active"
           class="dropdown tc_menuitem tc_menuitem_block"
-          *ngIf="permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read">
+          *ngIf="
+          (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi) &&
+          (permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read)">
         <a dropdownToggle
            class="dropdown-toggle"
            data-toggle="dropdown"
@@ -116,7 +132,7 @@
 
         <ul class="dropdown-menu">
           <li routerLinkActive="active"
-              *ngIf="permissions.rbdImage.read">
+              *ngIf="enabledFeature.rbd && permissions.rbdImage.read">
             <a i18n
                class="dropdown-item"
                routerLink="/block/rbd">Images</a>
@@ -124,7 +140,7 @@
 
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_mirroring"
-              *ngIf="permissions.rbdMirroring.read">
+              *ngIf="enabledFeature.mirroring && permissions.rbdMirroring.read">
             <a class="dropdown-item"
                routerLink="/block/mirroring">
               <ng-container i18n>Mirroring</ng-container>
@@ -136,19 +152,26 @@
           </li>
 
           <li routerLinkActive="active"
-              *ngIf="permissions.iscsi.read">
+              *ngIf="enabledFeature.iscsi && permissions.iscsi.read">
             <a i18n
                class="dropdown-item"
                routerLink="/block/iscsi">iSCSI</a>
           </li>
-
         </ul>
+      </li>
+
+      <!-- NFS -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_nfs"
+          *ngIf="permissions?.nfs?.read">
+        <a i18n
+           routerLink="/nfs">NFS</a>
       </li>
 
       <!-- Filesystem -->
       <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_cephs"
-          *ngIf="permissions.cephfs.read">
+          *ngIf="enabledFeature.cephfs && permissions.cephfs.read">
         <a i18n
            routerLink="/cephfs">Filesystems</a>
       </li>
@@ -157,7 +180,7 @@
       <li dropdown
           routerLinkActive="active"
           class="dropdown tc_menuitem tc_menuitem_rgw"
-          *ngIf="permissions.rgw.read">
+          *ngIf="enabledFeature.rgw && permissions.rgw.read">
         <a dropdownToggle
            class="dropdown-toggle"
            data-toggle="dropdown">
