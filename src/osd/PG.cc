@@ -2335,6 +2335,8 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  // An interrupted recovery repair could leave this set.
+  state_clear(PG_STATE_REPAIR);
   scrubber.priority = scrubber.must_scrub ?
          cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
@@ -2544,6 +2546,8 @@ Context *PG::finish_recovery()
 void PG::_finish_recovery(Context *c)
 {
   lock();
+  // When recovery is initiated by a repair, that flag is left on
+  state_clear(PG_STATE_REPAIR);
   if (deleting) {
     unlock();
     return;
@@ -5540,11 +5544,12 @@ bool PG::range_intersects_scrub(const hobject_t &start, const hobject_t& end)
 	  end >= scrubber.start);
 }
 
-void PG::scrub_clear_state()
+void PG::scrub_clear_state(bool has_error)
 {
   ceph_assert(is_locked());
   state_clear(PG_STATE_SCRUBBING);
-  state_clear(PG_STATE_REPAIR);
+  if (!has_error)
+    state_clear(PG_STATE_REPAIR);
   state_clear(PG_STATE_DEEP_SCRUB);
   publish_stats_to_osd();
 
@@ -5862,7 +5867,7 @@ void PG::scrub_finish()
 	  DoRecovery())));
   }
 
-  scrub_clear_state();
+  scrub_clear_state(has_error);
   scrub_unreserve_replicas();
 
   if (is_active() && is_primary()) {
@@ -7689,6 +7694,7 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_REPAIR);
   pg->publish_stats_to_osd();
 }
 

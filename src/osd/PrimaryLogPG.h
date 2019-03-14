@@ -454,6 +454,10 @@ public:
     return is_undersized();
   }
   
+  bool pg_is_repair() const override {
+    return is_repair();
+  }
+
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) override {

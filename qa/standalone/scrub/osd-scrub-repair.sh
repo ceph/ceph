@@ -364,6 +364,10 @@ function TEST_auto_repair_bluestore_scrub() {
     diff $dir/ORIGINAL $dir/COPY || return 1
     grep scrub_finish $dir/osd.${primary}.log
 
+    # This should have caused 1 object to be repaired
+    COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "1" || return 1
+
     # Tear down
     teardown $dir || return 1
 }
@@ -486,6 +490,59 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     grep -q "scrub_finish.*present with no repair possible" $dir/osd.${primary}.log || return 1
     ceph pg dump pgs
     ceph pg dump pgs | grep -q "^$(pgid).*+failed_repair" || return 1
+
+    # Tear down
+    teardown $dir || return 1
+}
+
+function TEST_repair_stats() {
+    local dir=$1
+    local poolname=testpool
+    local OBJS=30
+    local REPAIRS=20
+
+    # Launch a cluster with 5 seconds scrub interval
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
+            --osd-scrub-interval-randomize-ratio=0"
+    for id in $(seq 0 2) ; do
+        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+    done
+
+    create_pool $poolname 1 1 || return 1
+    ceph osd pool set $poolname size 2
+    wait_for_clean || return 1
+
+    # Put an object
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    for i in $(seq 1 $OBJS)
+    do
+      rados --pool $poolname put obj$i $dir/ORIGINAL || return 1
+    done
+
+    # Remove the object from one shard physically
+    # Restarted osd get $ceph_osd_args passed
+    local other=$(get_not_primary $poolname obj1)
+    local pgid=$(get_pg $poolname obj1)
+    local primary=$(get_primary $poolname obj1)
+
+    kill_daemons $dir TERM osd.$other >&2 < /dev/null || return 1
+    for i in $(seq 1 $REPAIRS)
+    do
+      _objectstore_tool_nodown $dir $other obj$i remove || return 1
+    done
+    run_osd_bluestore $dir $other $ceph_osd_args || return 1
+
+    repair $pgid
+    wait_for_clean || return 1
+    ceph pg dump pgs
+
+    # This should have caused 1 object to be repaired
+    COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "$REPAIRS" || return 1
 
     # Tear down
     teardown $dir || return 1

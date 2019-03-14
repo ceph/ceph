@@ -1879,7 +1879,7 @@ protected:
   bool scrub_process_inconsistent();
   bool ops_blocked_by_scrub() const;
   void scrub_finish();
-  void scrub_clear_state();
+  void scrub_clear_state(bool keep_repair = false);
   void _scan_snaps(ScrubMap &map);
   void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const vector<ghobject_t> &rollback_obs);
@@ -2957,6 +2957,7 @@ protected:
   }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
+  bool is_repair() const { return state_test(PG_STATE_REPAIR); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 

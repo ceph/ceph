@@ -11493,6 +11493,8 @@ int PrimaryLogPG::recover_missing(
 	 if (!object_missing) {
 	   object_stat_sum_t stat_diff;
 	   stat_diff.num_objects_recovered = 1;
+	   if (scrub_after_recovery)
+	     stat_diff.num_objects_repaired = 1;
 	   on_global_recover(soid, stat_diff, true);
 	 } else {
 	   auto recovery_handle = pgbackend->open_recovery_op();
@@ -15230,6 +15232,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   if (!eio_errors_to_process) {
     eio_errors_to_process = true;
     ceph_assert(is_clean());
+    state_set(PG_STATE_REPAIR);
     queue_peering_event(
         PGPeeringEventRef(
 	  std::make_shared<PGPeeringEvent>(
