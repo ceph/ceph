@@ -5794,7 +5794,6 @@ void PG::scrub_finish()
     dout(25) << __func__ << " shard " << pg_whoami << " num_omap_bytes = "
              << info.stats.stats.sum.num_omap_bytes << " num_omap_keys = "
              << info.stats.stats.sum.num_omap_keys << dendl;
-    publish_stats_to_osd();
   } else {
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
@@ -5805,6 +5804,7 @@ void PG::scrub_finish()
   info.stats.stats.sum.num_scrub_errors = 
     info.stats.stats.sum.num_shallow_scrub_errors +
     info.stats.stats.sum.num_deep_scrub_errors;
+  publish_stats_to_osd();
   reg_next_scrub();
 
   {
