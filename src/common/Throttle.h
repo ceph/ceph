@@ -410,7 +410,7 @@ public:
   TokenBucketThrottle(CephContext *cct, const std::string &name,
                       uint64_t capacity, uint64_t avg,
                       SafeTimer *timer, Mutex *timer_lock);
-  
+
   ~TokenBucketThrottle();
 
   const std::string &get_name() {
@@ -424,12 +424,9 @@ public:
       });
     m_blockers.emplace_back(c, ctx);
   }
-  
+
   template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
   bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
-    if (0 == c)
-      return false;
-
     bool wait = false;
     uint64_t got = 0;
     std::lock_guard lock(m_lock);
@@ -439,7 +436,7 @@ public:
     } else {
       if (0 == m_throttle.max || 0 == m_avg)
         return false;
-  
+
       got = m_throttle.get(c);
       if (got < c) {
         // Not enough tokens, add a blocker for it.
@@ -452,7 +449,7 @@ public:
 
     return wait;
   }
-  
+
   int set_limit(uint64_t average, uint64_t burst);
   void set_schedule_tick_min(uint64_t tick);
 
