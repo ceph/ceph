@@ -75,17 +75,20 @@ seastar::future<> CyanStore::umount()
   return seastar::now();
 }
 
-seastar::future<> CyanStore::mkfs(uuid_d osd_fsid)
+seastar::future<> CyanStore::mkfs()
 {
   string fsid_str;
   int r = read_meta("fsid", &fsid_str);
   if (r == -ENOENT) {
+    osd_fsid.generate_random();
     write_meta("fsid", fmt::format("{}", osd_fsid));
   } else if (r < 0) {
     throw std::runtime_error("read_meta");
   } else {
-    logger().error("{} already has fsid {}", __func__, fsid_str);
-    throw std::runtime_error("mkfs");
+    logger().info("{} already has fsid {}", __func__, fsid_str);
+    if (!osd_fsid.parse(fsid_str.c_str())) {
+      throw std::runtime_error("failed to parse fsid");
+    }
   }
 
   string fn = path + "/collections";
@@ -303,5 +306,10 @@ int CyanStore::read_meta(const std::string& key,
   }
   *value = string{buf, static_cast<size_t>(r)};
   return 0;
+}
+
+uuid_d CyanStore::get_fsid() const
+{
+  return osd_fsid;
 }
 }
