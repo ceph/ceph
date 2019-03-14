@@ -991,13 +991,16 @@ public:
 		       crush_choose_arg_map& arg_map,
 		       vector<uint32_t> *weightv);
 
-  int adjust_subtree_weight(CephContext *cct, int id, int weight);
-  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+  int adjust_subtree_weight(CephContext *cct, int id, int weight,
+			    bool update_weight_sets=true);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight,
+			     bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000),
+				 update_weight_sets);
   }
 
   /// check if item id is present in the map hierarchy

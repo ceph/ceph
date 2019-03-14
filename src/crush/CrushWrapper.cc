@@ -1528,7 +1528,8 @@ int CrushWrapper::adjust_item_weight_in_loc(
   return changed;
 }
 
-int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
+int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight,
+					bool update_weight_sets)
 {
   ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
   crush_bucket *b = get_bucket(id);
@@ -1544,7 +1545,7 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
     for (unsigned i=0; i<b->size; ++i) {
       int n = b->items[i];
       if (n >= 0) {
-	bucket_adjust_item_weight(cct, b, n, weight);
+	adjust_item_weight_in_bucket(cct, n, weight, b->id, update_weight_sets);
 	++changed;
 	++local_changed;
       } else {
@@ -1553,9 +1554,6 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
 	  continue;
 	q.push_back(sub);
       }
-    }
-    if (local_changed) {
-      adjust_item_weight(cct, b->id, b->weight);
     }
   }
   return changed;
