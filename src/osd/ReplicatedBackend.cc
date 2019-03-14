@@ -1725,6 +1725,9 @@ bool ReplicatedBackend::handle_pull_response(
 
   if (complete) {
     pi.stat.num_objects_recovered++;
+    // XXX: This could overcount if regular recovery is needed right after a repair
+    if (get_parent()->pg_is_repair())
+      pi.stat.num_objects_repaired++;
     clear_pull_from(piter);
     to_continue->push_back({hoid, pi.stat});
     get_parent()->on_local_recover(
@@ -1996,8 +1999,11 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
-    if (stat)
+    if (stat) {
       stat->num_objects_recovered++;
+      if (get_parent()->pg_is_repair())
+        stat->num_objects_repaired++;
+    }
   }
 
   if (stat) {

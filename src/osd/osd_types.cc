@@ -2229,11 +2229,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_manifest", num_objects_manifest);
   f->dump_int("num_omap_bytes", num_omap_bytes);
   f->dump_int("num_omap_keys", num_omap_keys);
+  f->dump_int("num_objects_repaired", num_objects_repaired);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(19, 14, bl);
+  ENCODE_START(20, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -2276,6 +2277,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   encode(num_objects_manifest, bl);
   encode(num_omap_bytes, bl);
   encode(num_omap_keys, bl);
+  encode(num_objects_repaired, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -2283,7 +2285,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(19, bl);  // make sure to also update fast decode below
+  DECODE_START(20, bl);  // make sure to also update fast decode below
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 19) {  // this must match newest decode version
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
@@ -2340,6 +2342,9 @@ void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
       decode(num_omap_bytes, bl);
       decode(num_omap_keys, bl);
     }
+    if (struct_v >= 20) {
+      decode(num_objects_repaired, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2383,6 +2388,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_manifest = 2;
   a.num_omap_bytes = 20000;
   a.num_omap_keys = 200;
+  a.num_objects_repaired = 300;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -2427,6 +2433,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_manifest += o.num_objects_manifest;
   num_omap_bytes += o.num_omap_bytes;
   num_omap_keys += o.num_omap_keys;
+  num_objects_repaired += o.num_objects_repaired;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2470,6 +2477,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_manifest -= o.num_objects_manifest;
   num_omap_bytes -= o.num_omap_bytes;
   num_omap_keys -= o.num_omap_keys;
+  num_objects_repaired -= o.num_objects_repaired;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2513,7 +2521,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_large_omap_objects == r.num_large_omap_objects &&
     l.num_objects_manifest == r.num_objects_manifest &&
     l.num_omap_bytes == r.num_omap_bytes &&
-    l.num_omap_keys == r.num_omap_keys;
+    l.num_omap_keys == r.num_omap_keys &&
+    l.num_objects_repaired == r.num_objects_repaired;
 }
 
 // -- object_stat_collection_t --
