@@ -539,7 +539,7 @@ def remove_lv(lv):
     return True
 
 
-def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
+def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False, pv=''):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -578,7 +578,7 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
             '--yes',
             '-L',
             '%s' % size,
-            '-n', name, group
+            '-n', name, group, pv
         ])
     elif extents:
         process.run([
@@ -586,7 +586,7 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
             '--yes',
             '-l',
             '%s' % extents,
-            '-n', name, group
+            '-n', name, group, pv
         ])
     # create the lv with all the space available, this is needed because the
     # system call is different for LVM
@@ -596,7 +596,7 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
             '--yes',
             '-l',
             '100%FREE',
-            '-n', name, group
+            '-n', name, group, pv
         ])
 
     lv = get_lv(lv_name=name, vg_name=group)
@@ -668,6 +668,40 @@ def get_vg(vg_name=None, vg_tags=None):
         return None
     vgs = VolumeGroups()
     return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
+
+
+def create_lvmcache_pool(vg_name, cache_data_lv_name, cache_metadata_lv_name):
+    pool_data = vg_name + '/' + cache_data_lv_name
+    pool_md = vg_name + '/' + cache_metadata_lv_name
+    process.run([
+        'lvconvert',
+        '--yes',
+        '--poolmetadataspare', 'n',
+        '--type', 'cache-pool',
+        '--poolmetadata', pool_md, pool_data,
+    ])
+
+
+def create_lvmcache(vg_name, data_lv_name, osd_lv_name):
+    pool_data = vg_name + '/' + data_lv_name
+    osd_data = vg_name + '/' + osd_lv_name
+    process.run([
+        'lvconvert',
+        '--yes',
+        '--type', 'cache',
+        '--cachepool', pool_data, osd_data
+    ])
+
+
+def set_lvmcache_caching_mode(caching_mode, vg_name, osd_lv_name):
+    if caching_mode not in ['writeback', 'writethrough']:
+        return
+
+    osd_data = vg_name + '/' + osd_lv_name
+    process.run([
+        'lvchange',
+        '--cachemode', caching_mode, osd_data
+    ])
 
 
 class VolumeGroups(list):
