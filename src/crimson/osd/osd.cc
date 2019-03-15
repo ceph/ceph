@@ -39,7 +39,9 @@ OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
     nonce{nonce},
     beacon_timer{[this] { send_beacon(); }},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }}
+    heartbeat_timer{[this] { update_heartbeat_peers(); }},
+    store{std::make_unique<ceph::os::CyanStore>(
+      local_conf().get_val<std::string>("osd_data"))}
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
 }
@@ -77,8 +79,6 @@ CompatSet get_osd_initial_compat_set()
 
 seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
 {
-  const auto data_path = local_conf().get_val<std::string>("osd_data");
-  store = std::make_unique<ceph::os::CyanStore>(data_path);
   return store->mkfs().then([this] {
     return store->mount();
   }).then([cluster_fsid, this] {
@@ -93,11 +93,12 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
     meta_coll->create(t);
     meta_coll->store_superblock(t, superblock);
     return store->do_transaction(meta_coll->collection(), std::move(t));
-  }).then([cluster_fsid, data_path, this] {
+  }).then([cluster_fsid, this] {
     store->write_meta("ceph_fsid", cluster_fsid.to_string());
     store->write_meta("whoami", std::to_string(whoami));
     fmt::print("created object store {} for osd.{} fsid {}\n",
-               data_path, whoami, cluster_fsid);
+               local_conf().get_val<std::string>("osd_data"),
+               whoami, cluster_fsid);
     return seastar::now();
   });
 }
@@ -176,8 +177,6 @@ seastar::future<> OSD::start()
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
 
-    const auto data_path = local_conf().get_val<std::string>("osd_data");
-    store = std::make_unique<ceph::os::CyanStore>(data_path);
     return store->mount();
   }).then([this] {
     meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
