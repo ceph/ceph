@@ -2009,13 +2009,16 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(pg_num_target, bl);
     decode(pgp_num_target, bl);
     decode(pg_num_pending, bl);
-    epoch_t e;
-    decode(e, bl);
-    decode(e, bl);
+    epoch_t old_merge_last_epoch_clean, old_merge_last_epoch_started;
+    decode(old_merge_last_epoch_started, bl);
+    decode(old_merge_last_epoch_clean, bl);
     decode(last_force_op_resend, bl);
     decode(pg_autoscale_mode, bl);
     if (struct_v >= 29) {
       decode(last_pg_merge_meta, bl);
+    } else {
+      last_pg_merge_meta.last_epoch_clean = old_merge_last_epoch_clean;
+      last_pg_merge_meta.last_epoch_started = old_merge_last_epoch_started;
     }
   } else {
     pg_num_target = pg_num;
