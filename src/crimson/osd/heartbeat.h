@@ -25,7 +25,9 @@ public:
   Heartbeat(int whoami,
 	    uint32_t nonce,
 	    const OSDMapService& service,
-	    ceph::mon::Client& monc);
+	    ceph::mon::Client& monc,
+	    ceph::net::Messenger& front_msgr,
+	    ceph::net::Messenger& back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
@@ -65,15 +67,15 @@ private:
   /// add enough reporters for fast failure detection
   void add_reporter_peers(int whoami);
 
-  seastar::future<> start_messenger(ceph::net::Messenger* msgr,
+  seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
   const int whoami;
   const uint32_t nonce;
-  ceph::net::Messenger* front_msgr = nullptr;
-  ceph::net::Messenger* back_msgr = nullptr;
   const OSDMapService& service;
   ceph::mon::Client& monc;
+  ceph::net::Messenger& front_msgr;
+  ceph::net::Messenger& back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t
