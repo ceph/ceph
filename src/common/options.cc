@@ -2474,7 +2474,7 @@ std::vector<Option> get_global_options() {
     .add_service("osd"),
 
     Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
+    .set_default(false)
     .set_description("allow replicated pools to recover with < min_size active members")
     .add_service("osd"),
 
