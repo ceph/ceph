@@ -216,7 +216,7 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
 }
 
 static bool string_to_sync_type(const string& sync_string,
-                                sync_type_t& type) {
+                                RGWMDLogSyncType& type) {
   if (sync_string.compare("update-by-version") == 0)
     type = APPLY_UPDATES;
   else if (sync_string.compare("update-by-timestamp") == 0)
@@ -244,7 +244,7 @@ void RGWOp_Metadata_Put::execute() {
   
   frame_metadata_key(s, metadata_key);
 
-  RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
+  RGWMetadataHandler::RGWMDLogSyncType sync_type = RGWMetadataHandler::APPLY_ALWAYS;
 
   bool mode_exists = false;
   string mode_string = s->info.args.get("update-type", &mode_exists);

@@ -128,7 +128,7 @@ public:
                   real_time *pmtime,
                   map<string, bufferlist> *pattrs = nullptr,
                   rgw_cache_entry_info *cache_info = nullptr,
-                  boost::optional<obj_version> refresh_version = boost::none) = 0;
+                  boost::optional<obj_version> refresh_version = boost::none);
 
   virtual int put(Context *ctx,
                   bufferlist& bl,

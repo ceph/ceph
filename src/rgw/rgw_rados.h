@@ -1425,7 +1425,6 @@ public:
                              uint64_t end_epoch);
   int cls_obj_usage_log_clear(string& oid);
 
-  int key_to_shard_id(const string& key, int max_shards);
   void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
   void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
   void shard_name(const string& prefix, unsigned shard_id, string& name);

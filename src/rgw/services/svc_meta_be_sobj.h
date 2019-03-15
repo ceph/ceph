@@ -71,11 +71,11 @@ public:
                         real_time *pmtime,
                         map<string, bufferlist> *pattrs = nullptr,
                         rgw_cache_entry_info *cache_info = nullptr,
-                        boost::optional<obj_version> refresh_version = boost::none) = 0;
+                        boost::optional<obj_version> refresh_version = boost::none);
   virtual int put_entry(RGWSI_MetaBackend::Context *ctx, bufferlist& bl, bool exclusive,
-                        RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = nullptr) = 0;
+                        RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = nullptr);
   virtual int remove_entry(RGWSI_MetaBackend::Context *ctx,
-                           RGWObjVersionTracker *objv_tracker) = 0;
+                           RGWObjVersionTracker *objv_tracker);
 };
 
 

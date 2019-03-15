@@ -15,6 +15,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_rados.h"
 #include "rgw_sync_trace.h"
+#include "rgw_mdlog.h"
 
 
 #define ERROR_LOGGER_SHARDS 32
