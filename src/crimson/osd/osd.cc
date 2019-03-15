@@ -621,6 +621,8 @@ bool OSD::should_restart() const
 
 seastar::future<> OSD::restart()
 {
+  beacon_timer.cancel();
+  heartbeat_timer.cancel();
   up_epoch = 0;
   bind_epoch = osdmap->get_epoch();
   // TODO: promote to shutdown if being marked down for multiple times
