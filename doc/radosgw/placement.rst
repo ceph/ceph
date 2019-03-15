@@ -1,6 +1,6 @@
-==============
-Pool Placement
-==============
+==================================
+Pool Placement and Storage Classes
+==================================
 
 .. contents::
 
@@ -19,7 +19,22 @@ initial target named ``default-placement``. The zone configuration then maps
 each zonegroup placement target name onto its local storage. This zone
 placement information includes the ``index_pool`` name for the bucket index,
 the ``data_extra_pool`` name for metadata about incomplete multipart uploads,
-and a ``data_pool`` name for object data.
+and a ``data_pool`` name for each storage class.
+
+.. _storage_classes:
+
+Storage Classes
+===============
+
+.. versionadded:: Nautilus
+
+Storage classes are used to customize the placement of object data. S3 Bucket
+Lifecycle rules can automate the transition of objects between storage classes.
+
+Storage classes are defined in terms of placement targets. Each zonegroup
+placement target lists its available storage classes with an initial class
+named ``STANDARD``. The zone configuration is responsible for providing a
+``data_pool`` pool name for each of the zonegroup's storage classes.
 
 Zonegroup/Zone Configuration
 ============================
@@ -41,6 +56,9 @@ The zonegroup placement configuration can be queried with:
           {
               "name": "default-placement",
               "tags": [],
+              "storage_classes": [
+                  "STANDARD"
+              ]
           }
       ],
       "default_placement": "default-placement",
@@ -62,7 +80,11 @@ The zone placement configuration can be queried with:
               "key": "default-placement",
               "val": {
                   "index_pool": "default.rgw.buckets.index",
-                  "data_pool": "default.rgw.buckets.data",
+                  "storage_classes": {
+                      "STANDARD": {
+                          "data_pool": "default.rgw.buckets.data"
+                      }
+                  },
                   "data_extra_pool": "default.rgw.buckets.non-ec",
                   "index_type": 0
               }
@@ -99,7 +121,30 @@ Then provide the zone placement info for that target:
         --placement-id temporary \
         --data-pool default.rgw.temporary.data \
         --index-pool default.rgw.temporary.index \
-        --data-extra-pool default.rgw.temporary.non-ec \
+        --data-extra-pool default.rgw.temporary.non-ec
+
+Adding a Storage Class
+----------------------
+
+To add a new storage class named ``COLD`` to the ``default-placement`` target,
+start by adding it to the zonegroup:
+
+::
+
+  $ radosgw-admin zonegroup placement add \
+        --rgw-zonegroup default \
+        --placement-id default-placement \
+        --storage-class COLD
+
+Then provide the zone placement info for that storage class:
+
+::
+
+  $ radosgw-admin zone placement add \
+        --rgw-zone default \
+        --placement-id default-placement \
+        --storage-class COLD \
+        --data-pool default.rgw.cold.data \
         --compression lz4
 
 Customizing Placement
@@ -122,6 +167,8 @@ User Placement
 
 A Ceph Object Gateway user can override the zonegroup's default placement
 target by setting a non-empty ``default_placement`` field in the user info.
+Similarly, the ``default_storage_class`` can override the ``STANDARD``
+storage class applied to objects by default.
 
 ::
 
@@ -129,6 +176,7 @@ target by setting a non-empty ``default_placement`` field in the user info.
   {
       ...
       "default_placement": "",
+      "default_storage_class": "",
       "placement_tags": [],
       ...
   }
@@ -175,6 +223,21 @@ provided in the HTTP header ``X-Storage-Policy``:
 ::
 
   X-Storage-Policy: new-placement
+
+Using Storage Classes
+=====================
+
+All placement targets have a ``STANDARD`` storage class which is applied to
+new objects by default. The user can override this default with its
+``default_storage_class``.
+
+To create an object in a non-default storage class, provide that storage class
+name in an HTTP header with the request. The S3 protocol uses the
+``X-Amz-Storage-Class`` header, while the Swift protocol uses the
+``X-Object-Storage-Class`` header.
+
+S3 Object Lifecycle Management can then be used to move object data between
+storage classes using ``Transition`` actions.
 
 .. _`Pools`: ../pools
 .. _`Multisite Configuration`: ../multisite
