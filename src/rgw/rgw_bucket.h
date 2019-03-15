@@ -21,22 +21,23 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
+class RGWSI_Meta;
+
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
-extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
-                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 real_time mtime);
-extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferlist& bl, bool exclusive,
-                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                 real_time mtime);
+extern int rgw_bucket_store_entrypoint_info(RGWSI_Meta *meta_svc, const string& bucket_name, RGWBucketEntryPoint& be, bool exclusive,
+                                            map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                                            real_time mtime);
+extern int rgw_bucket_instance_store_info(RGWSI_Meta *meta_svc, string& entry, RGWBucketInfo& bucket_info, bool exclusive,
+                                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                                          real_time mtime);
+extern int rgw_bucket_instance_remove_entry(RGWSI_Meta *meta_svc, const string& entry, RGWObjVersionTracker *objv_tracker);
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
-extern int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry,
-					    RGWObjVersionTracker *objv_tracker);
 extern void rgw_bucket_instance_key_to_oid(string& key);
 extern void rgw_bucket_instance_oid_to_key(string& oid);
 
@@ -73,6 +74,10 @@ public:
 
   void dump(Formatter *f) const override {
     ep.dump(f);
+  }
+
+  RGWBucketEntryPoint& get_ep() {
+    return ep;
   }
 };
 

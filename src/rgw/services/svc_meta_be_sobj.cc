@@ -5,6 +5,9 @@
 #include "rgw/rgw_metadata.h"
 #include "rgw/rgw_mdlog.h"
 
+#define dout_subsys ceph_subsys_rgw
+
+
 struct rgwsi_meta_be_sobj_handler_info {
   RGWSI_MetaBackend::ModuleRef _module;
   RGWSI_MBSObj_Handler_Module *module;
@@ -21,10 +24,9 @@ int RGWSI_MetaBackend_SObj::init_handler(RGWMetadataHandler *handler, RGWSI_Meta
 {
   const auto& section = handler->get_type();
 
-  auto& info = handlers[handler->get_type()];
+  auto& info = handlers[section];
   info.section = section;
-
-  info._module = handler->get_backend_module(get_type());
+  info._module = handler->get_be_module();
   info.module = static_cast<RGWSI_MBSObj_Handler_Module *>(info._module.get());
   
   *phandle = (RGWSI_MetaBackend_Handle)(&info);
@@ -35,7 +37,7 @@ int RGWSI_MetaBackend_SObj::init_handler(RGWMetadataHandler *handler, RGWSI_Meta
 void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWSI_MetaBackend::Context *_ctx)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-  rgwsi_meta_be_sobj_handler_info *h = static_cast<rgwsi_meta_be_sobj_handler_info *>(ctx->handle);
+  rgwsi_meta_be_sobj_handler_info *h = static_cast<rgwsi_meta_be_sobj_handler_info *>(handle);
 
   ctx->handle = handle;
   ctx->module = h->module;

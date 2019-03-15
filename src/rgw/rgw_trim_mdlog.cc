@@ -58,7 +58,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
 
  public:
   PurgePeriodLogsCR(RGWRados *store, epoch_t realm_epoch, epoch_t *last_trim)
-    : RGWCoroutine(store->ctx()), store(store), metadata(store->meta_mgr),
+    : RGWCoroutine(store->ctx()), store(store), metadata(store->svc.meta->get_mgr()),
       realm_epoch(realm_epoch), last_trim_epoch(last_trim)
   {}
 
@@ -204,7 +204,7 @@ struct TrimEnv {
   TrimEnv(const DoutPrefixProvider *dpp, RGWRados *store, RGWHTTPManager *http, int num_shards)
     : dpp(dpp), store(store), http(http), num_shards(num_shards),
       zone(store->svc.zone->get_zone_params().get_id()),
-      current(store->period_history->get_current())
+      current(store->svc.mdlog->get_period_history()->get_current())
   {}
 };
 
@@ -387,7 +387,7 @@ int MetaMasterTrimCR::operate()
 
       // if realm_epoch == current, trim mdlog based on markers
       if (epoch == env.current.get_epoch()) {
-        auto mdlog = store->meta_mgr->get_log(env.current.get_period().get_id());
+        auto mdlog = store->svc.meta->get_mgr()->get_log(env.current.get_period().get_id());
         spawn(new MetaMasterTrimShardCollectCR(env, mdlog, min_status), true);
       }
     }
@@ -581,7 +581,7 @@ int MetaPeerTrimCR::operate()
     // if realm_epoch == current, trim mdlog based on master's markers
     if (mdlog_info.realm_epoch == env.current.get_epoch()) {
       yield {
-        auto meta_mgr = env.store->meta_mgr;
+        auto meta_mgr = env.store->svc.meta->get_mgr();
         auto mdlog = meta_mgr->get_log(env.current.get_period().get_id());
         call(new MetaPeerTrimShardCollectCR(env, mdlog));
         // ignore any errors during purge/trim because we want to hold the lock open

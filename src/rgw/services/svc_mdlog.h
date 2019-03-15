@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "common/static_ptr.h"
-
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_period_history.h"
 #include "rgw/rgw_period_puller.h"
@@ -32,9 +30,16 @@ class RGWCoroutine;
 class RGWSI_Zone;
 class RGWSI_SysObj;
 
+namespace mdlog {
+  class ReadHistoryCR;
+  class WriteHistoryCR;
+}
 
 class RGWSI_MDLog : public RGWServiceInstance
 {
+  friend class mdlog::ReadHistoryCR;
+  friend class mdlog::WriteHistoryCR;
+
   RGWSI_Zone *zone_svc{nullptr};
   RGWSI_SysObj *sysobj_svc{nullptr};
 
@@ -53,8 +58,22 @@ class RGWSI_MDLog : public RGWServiceInstance
   std::unique_ptr<RGWPeriodHistory> period_history;
 
 public:
-  RGWSI_MDLog(CephContext *cct) : RGWServiceInstance(cct) {}
-  virtual ~RGWSI_MDLog() {}
+  RGWSI_MDLog(CephContext *cct);
+  virtual ~RGWSI_MDLog();
+
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_MDLog *mdlog{nullptr};
+  } svc;
+
+  int init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc);
+
+  int do_start() override;
+
+  // traverse all the way back to the beginning of the period history, and
+  // return a cursor to the first period in a fully attached history
+  RGWPeriodHistory::Cursor find_oldest_period();
 
   /// initialize the oldest log period if it doesn't exist, and attach it to
   /// our current history
@@ -73,15 +92,15 @@ public:
   /// using a rados lock to provide atomicity
   RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
                                    RGWObjVersionTracker *objv) const;
-
-  int init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-           const std::string& current_period);
-
-  int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker);
+  int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker) const;
   int write_history(const RGWMetadataLogHistory& state,
                     RGWObjVersionTracker *objv_tracker,
                     bool exclusive = false);
 
   int add_entry(RGWSI_MetaBackend::Module *module, const string& section, const string& key, bufferlist& bl);
+
+  RGWPeriodHistory *get_period_history() {
+    return period_history.get();
+  }
 };
 

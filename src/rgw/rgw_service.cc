@@ -6,6 +6,10 @@
 #include "services/svc_finisher.h"
 #include "services/svc_bucket.h"
 #include "services/svc_cls.h"
+#include "services/svc_mdlog.h"
+#include "services/svc_meta.h"
+#include "services/svc_meta_be.h"
+#include "services/svc_meta_be_sobj.h"
 #include "services/svc_notify.h"
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
@@ -34,6 +38,9 @@ int RGWServices_Def::init(CephContext *cct,
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket = std::make_unique<RGWSI_Bucket>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
+  mdlog = std::make_unique<RGWSI_MDLog>(cct);
+  meta = std::make_unique<RGWSI_Meta>(cct);
+  meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
@@ -46,8 +53,15 @@ int RGWServices_Def::init(CephContext *cct,
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
   }
+
+  vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get()};
+
   finisher->init();
+  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(), meta.get());
   cls->init(zone.get(), rados.get());
+  mdlog->init(zone.get(), sysobj.get());
+  meta->init(sysobj.get(), mdlog.get(), meta_bes);
+  meta_be_sobj->init(sysobj.get(), mdlog.get());
   notify->init(zone.get(), rados.get(), finisher.get());
   rados->init();
   zone->init(sysobj.get(), rados.get(), sync_modules.get());
@@ -61,7 +75,6 @@ int RGWServices_Def::init(CephContext *cct,
   } else {
     sysobj->init(rados.get(), sysobj_core.get());
   }
-  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get());
 
   can_shutdown = true;
 
@@ -131,6 +144,24 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = mdlog->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start mdlog service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = meta_be_sobj->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start meta_be_sobj service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = meta->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start meta service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   r = bucket->start();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
@@ -178,6 +209,9 @@ int RGWServices::do_init(CephContext *cct, bool have_cache, bool raw)
   finisher = _svc.finisher.get();
   bucket = _svc.bucket.get();
   cls = _svc.cls.get();
+  mdlog = _svc.mdlog.get();
+  meta = _svc.meta.get();
+  meta_be = _svc.meta_be_sobj.get();
   notify = _svc.notify.get();
   rados = _svc.rados.get();
   zone = _svc.zone.get();

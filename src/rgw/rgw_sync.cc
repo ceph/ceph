@@ -16,6 +16,7 @@
 #include "rgw_zone.h"
 #include "rgw_sync.h"
 #include "rgw_metadata.h"
+#include "rgw_mdlog_types.h"
 #include "rgw_rest_conn.h"
 #include "rgw_tools.h"
 #include "rgw_cr_rados.h"
@@ -26,6 +27,7 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_meta.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -953,7 +955,7 @@ public:
             string s = *sections_iter + ":" + *iter;
             int shard_id;
             RGWRados *store = sync_env->store;
-            int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            int ret = store->svc.meta->get_mgr()->get_log_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
               tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
               ret_status = ret;
@@ -1083,7 +1085,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    int ret = store->svc.meta->get_mgr()->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1135,7 +1137,7 @@ class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   string raw_key;
 protected:
   int _send_request() override {
-    int ret = store->meta_mgr->remove(raw_key);
+    int ret = store->svc.meta->get_mgr()->remove(raw_key);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1928,7 +1930,7 @@ public:
       // loop through one period at a time
       tn->log(1, "start");
       for (;;) {
-        if (cursor == sync_env->store->period_history->get_current()) {
+        if (cursor == sync_env->store->svc.mdlog->get_period_history()->get_current()) {
           next = RGWPeriodHistory::Cursor{};
           if (cursor) {
             ldpp_dout(sync_env->dpp, 10) << "RGWMetaSyncCR on current period="
@@ -2067,7 +2069,7 @@ int RGWRemoteMetaLog::init_sync_status()
 
   rgw_meta_sync_info sync_info;
   sync_info.num_shards = mdlog_info.num_shards;
-  auto cursor = store->period_history->get_current();
+  auto cursor = store->svc.mdlog->get_period_history()->get_current();
   if (cursor) {
     sync_info.period = cursor.get_period().get_id();
     sync_info.realm_epoch = cursor.get_epoch();
@@ -2094,7 +2096,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
   }
 
   // look for an existing period in our history
-  auto cursor = store->period_history->lookup(info.realm_epoch);
+  auto cursor = store->svc.mdlog->get_period_history()->lookup(info.realm_epoch);
   if (cursor) {
     // verify that the period ids match
     auto& existing = cursor.get_period().get_id();
@@ -2116,7 +2118,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
     return RGWPeriodHistory::Cursor{r};
   }
   // attach the period to our history
-  cursor = store->period_history->attach(std::move(period));
+  cursor = store->svc.mdlog->get_period_history()->attach(std::move(period));
   if (!cursor) {
     r = cursor.get_error();
     lderr(store->ctx()) << "ERROR: failed to read period history back to "
@@ -2190,7 +2192,7 @@ int RGWRemoteMetaLog::run_sync()
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldpp_dout(dpp, 20) << __func__ << "(): init" << dendl;
       sync_status.sync_info.num_shards = mdlog_info.num_shards;
-      auto cursor = store->period_history->get_current();
+      auto cursor = store->svc.mdlog->get_period_history()->get_current();
       if (cursor) {
         // run full sync, then start incremental from the current period/epoch
         sync_status.sync_info.period = cursor.get_period().get_id();

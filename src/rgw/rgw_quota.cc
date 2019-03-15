@@ -28,6 +28,7 @@
 #include "rgw_user.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_meta.h"
 
 #include <atomic>
 
@@ -681,7 +682,7 @@ int RGWUserStatsCache::sync_all_users()
   string key = "user";
   void *handle;
 
-  int ret = store->meta_mgr->list_keys_init(key, &handle);
+  int ret = store->svc.meta->get_mgr()->list_keys_init(key, &handle);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
@@ -692,7 +693,7 @@ int RGWUserStatsCache::sync_all_users()
 
   do {
     list<string> keys;
-    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->svc.meta->get_mgr()->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
@@ -714,7 +715,7 @@ int RGWUserStatsCache::sync_all_users()
 
   ret = 0;
 done:
-  store->meta_mgr->list_keys_complete(handle);
+  store->svc.meta->get_mgr()->list_keys_complete(handle);
   return ret;
 }
 

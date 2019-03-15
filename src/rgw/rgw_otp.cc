@@ -20,6 +20,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_cls.h"
+#include "services/svc_meta_be.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -44,15 +45,21 @@ public:
 };
 
 class RGWOTPMetadataHandler : public RGWMetadataHandler {
-public:
-  string get_type() override { return "otp"; }
+  struct Svc {
+    RGWSI_MetaBackend *meta_be;
+  };
 
-  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
+    oid = key;
+    pool = store->svc.zone->get_zone_params().otp_pool;
+  }
+
+  int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker objv_tracker;
     real_time mtime;
 
     list<rados::cls::otp::otp_info_t> result;
-    int r = store->svc.cls->mfa.list_mfa(entry, &result, &objv_tracker, &mtime, null_yield);
+    int r = svc.cls->mfa.list_mfa(entry, &result, &objv_tracker, &mtime, null_yield);
     if (r < 0) {
       return r;
     }
@@ -61,8 +68,8 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_mode) override {
+  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker,
+          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_mode) override {
 
     list<rados::cls::otp::otp_info_t> devices;
     try {
@@ -71,10 +78,10 @@ public:
       return -EINVAL;
     }
 
-    int ret = store->meta_mgr->mutate(this, entry, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, sync_mode,
-                                      [&] {
-         return store->svc.cls->mfa.set_mfa(entry, devices, true, &objv_tracker, mtime, null_yield);
+    int ret = svc.meta_be->mutate(ctx, entry, mtime, &objv_tracker,
+				  MDLOG_STATUS_WRITE, sync_mode,
+				  [&] {
+         return svc.cls->mfa.set_mfa(entry, devices, true, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       return ret;
@@ -83,21 +90,19 @@ public:
     return STATUS_APPLIED;
   }
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
-    return store->meta_mgr->remove_entry(this, entry, &objv_tracker);
+  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    return svc.meta_be->remove_entry(this, entry, &objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
-    oid = key;
-    pool = store->svc.zone->get_zone_params().otp_pool;
-  }
+public:
+  string get_type() override { return "otp"; }
 
   struct list_keys_info {
     RGWRados *store;
     RGWListRawObjsCtx ctx;
   };
 
-  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
+  int list_keys_init(const string& marker, void **phandle) override
   {
     auto info = std::make_unique<list_keys_info>();
 

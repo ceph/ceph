@@ -40,7 +40,7 @@ public:
   obj_version& get_version();
   real_time get_mtime() { return mtime; }
 
-  virtual void dump(Formatter *f) const = 0;
+  virtual void dump(Formatter *f) const {}
 };
 
 class RGWMetadataManager;
@@ -49,20 +49,34 @@ class RGWMetadataHandler {
   friend class RGWSI_MetaBackend;
   friend class RGWMetadataManager;
 
+protected:
+  RGWSI_MetaBackend *meta_be{nullptr};
   RGWSI_MetaBackend_Handle be_handle{0};
+  RGWSI_MetaBackend::ModuleRef be_module;
+
+  virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
+                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+  virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+
+  virtual int init_module() = 0;
 
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
-  virtual RGWSI_MetaBackend::ModuleRef get_backend_module(RGWSI_MetaBackend::Type be_type) = 0;
+  virtual RGWSI_MetaBackend::Type required_be_type() = 0;
+  virtual RGWSI_MetaBackend::ModuleRef& get_be_module() {
+    return be_module;
+  }
 
-  virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-                  real_time mtime, JSONObj *obj, RGWMDLogSyncType type) = 0;
-  virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  virtual int list_keys_init(RGWRados *store, const string& marker, void **phandle) = 0;
+  int get(string& entry, RGWMetadataObject **obj);
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type);
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker);
+
+  virtual int list_keys_init(const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
@@ -78,7 +92,8 @@ protected:
    *
    * @return true if the update should proceed, false otherwise.
    */
-  static bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
+  static bool check_versions(bool exists,
+                             const obj_version& ondisk, const real_time& ondisk_time,
                              const obj_version& incoming, const real_time& incoming_time,
                              RGWMDLogSyncType sync_mode) {
     switch (sync_mode) {
@@ -91,6 +106,10 @@ protected:
       if (ondisk_time >= incoming_time)
 	return false;
       break;
+    case APPLY_EXCLUSIVE:
+      if (exists)
+        return false;
+      break;
     case APPLY_ALWAYS: //deliberate fall-thru -- we always apply!
     default: break;
     }
@@ -98,17 +117,21 @@ protected:
   }
 };
 
+class RGWMetadataTopHandler;
+
 class RGWMetadataManager {
-  map<string, RGWMetadataHandler *> handlers;
+  friend class RGWMetadataHandler;
+
   CephContext *cct;
+  RGWSI_Meta *meta_svc;
+  map<string, RGWMetadataHandler *> handlers;
+  std::unique_ptr<RGWMetadataTopHandler> md_top_handler;
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
-
-protected:
-  int register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handle *phandle);
+  int register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle);
 
 public:
-  RGWMetadataManager(CephContext *_cct);
+  RGWMetadataManager(RGWSI_Meta *_meta_svc);
   ~RGWMetadataManager();
 
   RGWMetadataHandler *get_handler(const string& type);
