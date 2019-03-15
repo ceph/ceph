@@ -710,6 +710,8 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     [&next, this](char *buffer, int r) {
       if (unlikely(pre_auth.enabled) && r >= 0) {
         pre_auth.rxbuf.append(*next.node);
+	ceph_assert(!cct->_conf->ms_die_on_bug ||
+		    pre_auth.rxbuf.length() < 1000000);
       }
       next.r = r;
       run_continuation(next);
@@ -718,6 +720,8 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     // error or done synchronously
     if (unlikely(pre_auth.enabled) && r >= 0) {
       pre_auth.rxbuf.append(*next.node);
+      ceph_assert(!cct->_conf->ms_die_on_bug ||
+		  pre_auth.rxbuf.length() < 1000000);
     }
     next.r = r;
     return &next;
@@ -739,6 +743,8 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
     pre_auth.txbuf.append(buffer);
+    ceph_assert(!cct->_conf->ms_die_on_bug ||
+		pre_auth.txbuf.length() < 1000000);
   }
 
   ssize_t r =
