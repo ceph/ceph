@@ -99,6 +99,8 @@ static constexpr std::uint64_t s3Count = 54;
 static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
 
 namespace {
+// Please update the table in doc/radosgw/s3/authentication.rst if you
+// modify this function.
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {
   case s3GetObject:
