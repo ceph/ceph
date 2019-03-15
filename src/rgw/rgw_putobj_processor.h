@@ -80,7 +80,7 @@ class RadosWriter : public DataProcessor {
   RGWRados *const store;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
-  const rgw_obj& head_obj;
+  const rgw_obj head_obj;
   RGWSI_RADOS::Obj stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
 
