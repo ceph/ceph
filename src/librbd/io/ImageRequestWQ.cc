@@ -661,7 +661,7 @@ void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item,
   ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
-    this->requeue_front(item);
+    this->requeue_back(item);
     --m_io_throttled;
     this->signal();
   }
