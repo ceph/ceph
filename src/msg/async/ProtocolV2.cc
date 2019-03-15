@@ -625,8 +625,6 @@ void ProtocolV2::write_event() {
     if (r == 0) {
       uint64_t left = ack_left;
       if (left) {
-        ceph_le64 s;
-        s = in_seq;
         auto ack = AckFrame::Encode(in_seq);
         connection->outcoming_bl.append(ack.get_buffer(session_stream_handlers));
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
