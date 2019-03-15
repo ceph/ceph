@@ -352,6 +352,7 @@ void MonMap::dump(Formatter *f) const
     f->dump_stream("addr") << get_addrs(*p).get_legacy_str();
     f->dump_stream("public_addr") << get_addrs(*p).get_legacy_str();
     f->dump_unsigned("priority", get_priority(*p));
+    f->dump_unsigned("weight", get_weight(*p));
     f->close_section();
   }
   f->close_section();
