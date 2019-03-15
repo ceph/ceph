@@ -279,6 +279,7 @@ seastar::future<> OSD::_send_boot()
 
 seastar::future<> OSD::stop()
 {
+  logger().info("stop");
   // see also OSD::shutdown()
   state.set_stopping();
   return gate.close().then([this] {
@@ -289,6 +290,8 @@ seastar::future<> OSD::stop()
     return public_msgr->shutdown();
   }).then([this] {
     return cluster_msgr->shutdown();
+  }).then([this] {
+    return store->umount();
   });
 }
 
