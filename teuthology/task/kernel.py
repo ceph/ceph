@@ -172,7 +172,7 @@ def need_to_install(ctx, role, version):
                     or a sha1.
     """
     ret = True
-    log.info('Checking kernel version of {role}, want {ver}...'.format(
+    log.info('Checking kernel version of {role}, want "{ver}"...'.format(
              role=role, ver=version))
     uname_fp = StringIO()
     ctx.cluster.only(role).run(
@@ -1052,6 +1052,8 @@ def get_latest_image_version_deb(remote, ostype):
     output = StringIO()
     newest = ''
     # Depend of virtual package has uname -r output in package name. Grab that.
+    # Note that a dependency list may have multiple comma-separated entries,
+    # but also each entry may be an alternative (pkg1 | pkg2)
     if 'debian' in ostype:
         remote.run(args=['sudo', 'apt-get', '-y', 'install',
                          'linux-image-amd64'], stdout=output)
@@ -1088,6 +1090,10 @@ def get_latest_image_version_deb(remote, ostype):
                 newest = line.split('linux-image-')[1]
                 if ',' in newest:
                     newest = newest.split(',')[0]
+                if '|' in newest:
+                    # not strictly correct, as any of the |-joined
+                    # packages may satisfy the dependency
+                    newest = newest.split('|')[0].strip()
     output.close()
     return newest
 
