@@ -1,3 +1,5 @@
+.. _mds-scrub:
+
 =====================
 Ceph Filesystem Scrub
 =====================
