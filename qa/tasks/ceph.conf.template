@@ -11,6 +11,7 @@
         auth debug = true
 
 	ms die on old message = true
+	ms die on bug = true
 
 	mon pg warn min per osd = 1
 	mon pg warn max per osd = 10000   # <= luminous
