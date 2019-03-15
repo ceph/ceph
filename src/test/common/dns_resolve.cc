@@ -148,15 +148,21 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_empty_domain) {
   os << it->second.addr;
   ASSERT_EQ(os.str(), "v2:192.168.1.11:6789/0");
   os.str("");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 40);
   it = records.find("mon.b");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
   ASSERT_EQ(os.str(), "v2:192.168.1.12:6789/0");
   os.str("");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 35);
   it = records.find("mon.c");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
   ASSERT_EQ(os.str(), "v2:192.168.1.13:6789/0");
+  ASSERT_EQ(it->second.priority, 10);
+  ASSERT_EQ(it->second.weight, 25);
 }
 
 TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
