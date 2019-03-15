@@ -225,7 +225,7 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
 
   ceph::bufferlist outbl;
   outbl.push_back(std::move(plainnode));
-  return std::move(outbl);
+  return outbl;
 }
 
 
