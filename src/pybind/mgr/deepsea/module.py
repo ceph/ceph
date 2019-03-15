@@ -133,16 +133,9 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             result = []
             if event_data['success']:
                 for node_name, node_devs in event_data["return"].items():
-                    devs = []
-                    for d in node_devs:
-                        dev = orchestrator.InventoryDevice()
-                        dev.blank = d['blank']
-                        dev.type = d['type']
-                        dev.id = d['id']
-                        dev.size = d['size']
-                        dev.extended = d['extended']
-                        dev.metadata_space_free = d['metadata_space_free']
-                        devs.append(dev)
+                    devs = list(map(lambda di:
+                        orchestrator.InventoryDevice.from_ceph_volume_inventory(di),
+                        node_devs))
                     result.append(orchestrator.InventoryNode(node_name, devs))
             else:
                 self.log.error(event_data['return'])
