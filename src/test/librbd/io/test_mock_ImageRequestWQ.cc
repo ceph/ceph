@@ -105,6 +105,7 @@ struct ThreadPool::PointerWQ<librbd::io::ImageDispatchSpec<librbd::MockTestImage
 
   MOCK_METHOD0(front, ImageDispatchSpec*());
   MOCK_METHOD1(requeue_front, void(ImageDispatchSpec*));
+  MOCK_METHOD1(requeue_back, void(ImageDispatchSpec*));
 
   MOCK_METHOD0(dequeue, void*());
   MOCK_METHOD1(queue, void(ImageDispatchSpec*));
@@ -170,8 +171,8 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
     EXPECT_CALL(image_request_wq, queue(_));
   }
 
-  void expect_requeue_front(MockImageRequestWQ &image_request_wq) {
-    EXPECT_CALL(image_request_wq, requeue_front(_));
+  void expect_requeue_back(MockImageRequestWQ &image_request_wq) {
+    EXPECT_CALL(image_request_wq, requeue_back(_));
   }
 
   void expect_front(MockImageRequestWQ &image_request_wq,
@@ -425,7 +426,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosNoBurst) {
   expect_tokens_requested(mock_queued_image_request, 2, true);
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
-  expect_requeue_front(mock_image_request_wq);
+  expect_requeue_back(mock_image_request_wq);
   expect_signal(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
@@ -449,7 +450,7 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosWithBurst) {
   expect_tokens_requested(mock_queued_image_request, 2, true);
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
-  expect_requeue_front(mock_image_request_wq);
+  expect_requeue_back(mock_image_request_wq);
   expect_signal(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
