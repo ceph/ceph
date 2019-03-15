@@ -930,6 +930,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Induce a daemon crash/exit if sender skips a message sequence number"),
 
+    Option("ms_die_on_bug", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Induce a crash/exit on various bugs (for testing purposes)"),
+
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Limit messages that are read off the network but still being processed"),
