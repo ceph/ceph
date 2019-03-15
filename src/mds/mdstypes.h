@@ -512,6 +512,7 @@ struct inode_t {
   frag_info_t dirstat;         // protected by my filelock
   nest_info_t rstat;           // protected by my nestlock
   nest_info_t accounted_rstat; // protected by parent's nestlock
+  utime_t rstat_dirty_from;
 
   quota_info_t quota;
 
@@ -1027,6 +1028,7 @@ struct fnode_t {
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
+  utime_t rstat_dirty_from;
   damage_flags_t damage_flags = 0;
 
   // we know we and all our descendants have been scrubbed since this version

@@ -226,6 +226,8 @@ public:
   }
   fnode_t *project_fnode();
 
+  const utime_t& get_rstat_dirty_from();
+
   void pop_and_dirty_projected_fnode(LogSegment *ls);
   bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);

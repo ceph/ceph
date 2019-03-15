@@ -3211,6 +3211,10 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
     pi->ctime = m->get_ctime();
     if (m->get_ctime() > pi->rstat.rctime)
       pi->rstat.rctime = m->get_ctime();
+
+    if (pi->rstat_dirty_from == utime_t() ||
+        pi->rstat_dirty_from > m->get_ctime())
+      pi->rstat_dirty_from = m->get_ctime();
   }
 
   if ((features & CEPH_FEATURE_FS_CHANGE_ATTR) &&

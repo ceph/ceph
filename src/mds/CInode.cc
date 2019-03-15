@@ -149,6 +149,12 @@ ostream& operator<<(ostream& out, const CInode& in)
   const CInode::mempool_inode *pi = in.get_projected_inode();
   if (pi->is_truncating())
     out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
+  
+  out << " rstat_dirty_from=" << in.inode.rstat_dirty_from;
+  if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
+    const CInode::mempool_inode *pi = in.get_projected_inode();
+    out << "->" << pi->rstat_dirty_from;
+  }
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
@@ -372,6 +378,21 @@ void CInode::mark_dirty_rstat()
     }
   }
 }
+
+const utime_t& CInode::get_dirfrags_rstat_dirty_from()
+{
+  CDir* pdir = NULL;
+  for (auto pi : dirfrags) {
+    if (pdir == NULL ||
+        (!pi.second->get_rstat_dirty_from().is_zero() &&
+         pi.second->get_rstat_dirty_from() < pdir->get_rstat_dirty_from()))
+      pdir = pi.second;
+  }
+  if (pdir)
+    return pdir->get_rstat_dirty_from();
+  return get_projected_inode()->rstat_dirty_from;
+}
+
 void CInode::clear_dirty_rstat()
 {
   if (state_test(STATE_DIRTYRSTAT)) {
@@ -2302,10 +2323,9 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
 	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
 	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
-	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
-					       dir->first, CEPH_NOSNAP, this, true);
+	  mdcache->project_rstat_frag_to_inode(dir, this, true);
 	  for (auto &p : dir->dirty_old_rstat) {
-	    mdcache->project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat,
+	    mdcache->project_rstat_to_inode(p.second.rstat, p.second.accounted_rstat,
 						 p.second.first, p.first, this, true);
           }
 	  if (update)  // dir contents not valid if frozen or non-auth

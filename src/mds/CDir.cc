@@ -136,6 +136,12 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_ASSIMRSTAT)) out << "|assimrstat";
 
   // fragstat
+  out << " rstat_dirty_from=" << dir.fnode.rstat_dirty_from;
+  if (g_conf()->mds_debug_scatterstat && dir.is_projected()) {
+    const fnode_t* pf = dir.get_projected_fnode();
+    out << "->" << pf->rstat_dirty_from;
+  }
+
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
@@ -3516,6 +3522,21 @@ bool CDir::should_split_fast() const
   }
 
   return effective_size > fast_limit;
+}
+
+const utime_t& CDir::get_rstat_dirty_from()
+{
+  utime_t& rstat_dirty_from = get_projected_fnode()->rstat_dirty_from;
+  for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
+      !p.end(); ++p) {
+    CInode* inode = *p;
+    if (!inode->get_rstat_dirty_from().is_zero() &&
+        (rstat_dirty_from.is_zero() ||
+         rstat_dirty_from > inode->get_rstat_dirty_from())) {
+      rstat_dirty_from = inode->get_rstat_dirty_from();
+    }
+  }
+  return rstat_dirty_from;
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDir, co_dir, mds_co);
