@@ -2718,17 +2718,19 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
     dout(10) << __func__ << " target incomplete" << dendl;
     incomplete = true;
   }
-  if (info.pgid.pgid != last_pg_merge_meta.source_pgid.get_parent()) {
-    dout(10) << __func__ << " target doesn't match expected parent "
-	     << last_pg_merge_meta.source_pgid.get_parent()
-	     << " of source_pgid " << last_pg_merge_meta.source_pgid
-	     << dendl;
-    incomplete = true;
-  }
-  if (info.last_update != last_pg_merge_meta.target_version) {
-    dout(10) << __func__ << " target version doesn't match expected "
-	     << last_pg_merge_meta.target_version << dendl;
-    incomplete = true;
+  if (last_pg_merge_meta.source_pgid != pg_t()) {
+    if (info.pgid.pgid != last_pg_merge_meta.source_pgid.get_parent()) {
+      dout(10) << __func__ << " target doesn't match expected parent "
+	       << last_pg_merge_meta.source_pgid.get_parent()
+	       << " of source_pgid " << last_pg_merge_meta.source_pgid
+	       << dendl;
+      incomplete = true;
+    }
+    if (info.last_update != last_pg_merge_meta.target_version) {
+      dout(10) << __func__ << " target version doesn't match expected "
+	       << last_pg_merge_meta.target_version << dendl;
+      incomplete = true;
+    }
   }
 
   PGLogEntryHandler handler{this, rctx->transaction};
@@ -2753,16 +2755,18 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 	       << dendl;
       incomplete = true;
     }
-    if (source->info.pgid.pgid != last_pg_merge_meta.source_pgid) {
-      dout(10) << __func__ << " source " << source->info.pgid.pgid
-	       << " doesn't match expected source pgid "
-	       << last_pg_merge_meta.source_pgid << dendl;
-      incomplete = true;
-    }
-    if (source->info.last_update != last_pg_merge_meta.source_version) {
-      dout(10) << __func__ << " source version doesn't match expected "
-	       << last_pg_merge_meta.target_version << dendl;
-      incomplete = true;
+    if (last_pg_merge_meta.source_pgid != pg_t()) {
+      if (source->info.pgid.pgid != last_pg_merge_meta.source_pgid) {
+	dout(10) << __func__ << " source " << source->info.pgid.pgid
+		 << " doesn't match expected source pgid "
+		 << last_pg_merge_meta.source_pgid << dendl;
+	incomplete = true;
+      }
+      if (source->info.last_update != last_pg_merge_meta.source_version) {
+	dout(10) << __func__ << " source version doesn't match expected "
+		 << last_pg_merge_meta.target_version << dendl;
+	incomplete = true;
+      }
     }
 
     // prepare log
