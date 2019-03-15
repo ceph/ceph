@@ -105,8 +105,11 @@ elif [[ "x$milestone" = "xluminous" ]] ; then
 elif [[ "x$milestone" = "xmimic" ]] ; then
     milestone_number=11
     target_branch=mimic
+elif [[ "x$milestone" = "xnautilus" ]] ; then
+    milestone_number=12
+    target_branch=nautilus
 else
-    echo "Please enter hammer, jewel, kraken, luminous, or mimic"
+    echo "Please enter hammer, jewel, kraken, luminous, mimic, or nautilus"
     exit 1
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
