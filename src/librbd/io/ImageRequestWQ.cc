@@ -661,7 +661,7 @@ void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item,
   ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
-    this->requeue(item);
+    this->requeue_front(item);
     --m_io_throttled;
     this->signal();
   }
@@ -910,7 +910,7 @@ void ImageRequestWQ<I>::handle_acquire_lock(
   } else {
     // since IO was stalled for acquire -- original IO order is preserved
     // if we requeue this op for work queue processing
-    this->requeue(req);
+    this->requeue_front(req);
   }
 
   ceph_assert(m_io_blockers.load() > 0);
@@ -929,7 +929,7 @@ void ImageRequestWQ<I>::handle_refreshed(
   } else {
     // since IO was stalled for refresh -- original IO order is preserved
     // if we requeue this op for work queue processing
-    this->requeue(req);
+    this->requeue_front(req);
   }
 
   ceph_assert(m_io_blockers.load() > 0);
