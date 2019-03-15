@@ -318,19 +318,19 @@ The Ceph Dashboard can manage iSCSI targets using the REST API provided
 by the `rbd-target-api` service of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_
 project. Please make sure that it's installed and enabled on the iSCSI gateways.
 
-The available iSCSI gateways must be defined using the following commands::
-
-    $ ceph dashboard iscsi-gateway-list
-    $ ceph dashboard iscsi-gateway-add <gateway_name> <scheme>://<username>:<password>@<host>[:port]
-    $ ceph dashboard iscsi-gateway-rm <gateway_name>
-
 If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
 certificate, then we need to configure the dashboard to avoid SSL certificate
 verification when accessing ceph-iscsi API.
 
 To disable API SSL verification run the following commmand::
 
-    $ ceph dashboard iscsi-set-api-ssl-verification false
+    $ ceph dashboard set-iscsi-api-ssl-verification false
+
+The available iSCSI gateways must be defined using the following commands::
+
+    $ ceph dashboard iscsi-gateway-list
+    $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
+    $ ceph dashboard iscsi-gateway-rm <gateway_name>
 
 
 .. _dashboard-grafana:
