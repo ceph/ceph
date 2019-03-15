@@ -6184,8 +6184,8 @@ int Monitor::handle_auth_request(
     }
 
     // handler?
-    AuthServiceHandler *auth_handler = get_auth_service_handler(
-      auth_method, g_ceph_context, &key_server);
+    unique_ptr<AuthServiceHandler> auth_handler{get_auth_service_handler(
+      auth_method, g_ceph_context, &key_server)};
     if (!auth_handler) {
       dout(1) << __func__ << " auth_method " << auth_method << " not supported"
 	      << dendl;
@@ -6195,10 +6195,20 @@ int Monitor::handle_auth_request(
     uint8_t mode;
     EntityName entity_name;
 
-    decode(mode, p);
-    assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
-    decode(entity_name, p);
-    decode(con->peer_global_id, p);
+    try {
+      decode(mode, p);
+      if (mode < AUTH_MODE_MON ||
+	  mode > AUTH_MODE_MON_MAX) {
+	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
+	return -EACCES;
+      }
+      assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+      decode(entity_name, p);
+      decode(con->peer_global_id, p);
+    } catch (buffer::error& e) {
+      dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
+      return -EACCES;
+    }
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
@@ -6209,7 +6219,6 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
-	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     } else {
@@ -6217,7 +6226,6 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
-	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     }
@@ -6230,7 +6238,6 @@ int Monitor::handle_auth_request(
       con->peer_global_id = authmon()->_assign_global_id();
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
-	delete auth_handler;
 	return -EBUSY;
       }
       dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
@@ -6239,7 +6246,7 @@ int Monitor::handle_auth_request(
 
     // set up partial session
     s = new MonSession(con);
-    s->auth_handler = auth_handler;
+    s->auth_handler = auth_handler.release();
     con->set_priv(RefCountedPtr{s, false});
 
     r = s->auth_handler->start_session(
