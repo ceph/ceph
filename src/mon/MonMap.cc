@@ -374,7 +374,7 @@ void MonMap::_add_ambiguous_addr(const string& name,
 	return;
       }
       if (!contains(addr)) {
-	add(name, entity_addrvec_t(addr));
+	add(name, entity_addrvec_t(addr), priority);
       }
     } else {
       if (!contains(addr)) {
@@ -388,16 +388,16 @@ void MonMap::_add_ambiguous_addr(const string& name,
       addr.set_type(entity_addr_t::TYPE_LEGACY);
       if (!contains(addr)) {
 	if (!for_mkfs) {
-	  add(name + "-legacy", entity_addrvec_t(addr));
+	  add(name + "-legacy", entity_addrvec_t(addr), priority);
 	} else {
-	  add(name, entity_addrvec_t(addr));
+	  add(name, entity_addrvec_t(addr), priority);
 	}
       }
     } else if (addr.get_port() == CEPH_MON_PORT_IANA) {
       // iana port implies msgr2 addr
       addr.set_type(entity_addr_t::TYPE_MSGR2);
       if (!contains(addr)) {
-	add(name, entity_addrvec_t(addr));
+	add(name, entity_addrvec_t(addr), priority);
       }
     } else if (addr.get_port() == 0) {
       // no port; include both msgr2 and legacy ports
@@ -405,12 +405,12 @@ void MonMap::_add_ambiguous_addr(const string& name,
 	addr.set_type(entity_addr_t::TYPE_MSGR2);
 	addr.set_port(CEPH_MON_PORT_IANA);
 	if (!contains(addr)) {
-	  add(name, entity_addrvec_t(addr));
+	  add(name, entity_addrvec_t(addr), priority);
 	}
 	addr.set_type(entity_addr_t::TYPE_LEGACY);
 	addr.set_port(CEPH_MON_PORT_LEGACY);
 	if (!contains(addr)) {
-	  add(name + "-legacy", entity_addrvec_t(addr));
+	  add(name + "-legacy", entity_addrvec_t(addr), priority);
 	}
       } else {
 	entity_addrvec_t av;
@@ -421,7 +421,7 @@ void MonMap::_add_ambiguous_addr(const string& name,
 	addr.set_port(CEPH_MON_PORT_LEGACY);
 	av.v.push_back(addr);
 	if (!contains(av)) {
-	  add(name, av);
+	  add(name, av, priority);
 	}
       }
     } else {
