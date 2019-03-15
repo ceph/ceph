@@ -2432,7 +2432,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 static inline std::string after_delim(std::string_view delim)
 {
   // assert: ! delim.empty()
-  char e = delim.back();
+  unsigned char e = delim.back();
   delim.remove_suffix(1);
   std::string result{delim.data(), delim.length()};
   if (e < 255) {
