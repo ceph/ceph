@@ -370,6 +370,11 @@ public:
     mon_info[n].public_addrs = a;
     calc_addr_mons();
   }
+  uint16_t get_priority(const string& n) const {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    return it->second.priority;
+  }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
