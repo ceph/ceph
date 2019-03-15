@@ -93,9 +93,11 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
     meta_coll->create(t);
     meta_coll->store_superblock(t, superblock);
     return store->do_transaction(meta_coll->collection(), std::move(t));
-  }).then([cluster_fsid, this] {
+  }).then([cluster_fsid, data_path, this] {
     store->write_meta("ceph_fsid", cluster_fsid.to_string());
     store->write_meta("whoami", std::to_string(whoami));
+    fmt::print("created object store {} for osd.{} fsid {}\n",
+               data_path, whoami, cluster_fsid);
     return seastar::now();
   });
 }
