@@ -774,6 +774,7 @@ OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL)
 OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
 OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
+OPTION(osd_debug_no_acting_change, OPT_BOOL)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track

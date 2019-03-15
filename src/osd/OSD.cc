@@ -1857,24 +1857,26 @@ bool OSDService::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
 
 // ---
 
-void OSDService::set_ready_to_merge_source(PG *pg)
+void OSDService::set_ready_to_merge_source(PG *pg, eversion_t version)
 {
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
-  ready_to_merge_source.insert(pg->pg_id.pgid);
+  ready_to_merge_source[pg->pg_id.pgid] = version;
   assert(not_ready_to_merge_source.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
 
 void OSDService::set_ready_to_merge_target(PG *pg,
+					   eversion_t version,
 					   epoch_t last_epoch_started,
 					   epoch_t last_epoch_clean)
 {
   std::lock_guard l(merge_lock);
   dout(10) << __func__ << " " << pg->pg_id << dendl;
   ready_to_merge_target.insert(make_pair(pg->pg_id.pgid,
-					 make_pair(last_epoch_started,
-						   last_epoch_clean)));
+					 make_tuple(version,
+						    last_epoch_started,
+						    last_epoch_clean)));
   assert(not_ready_to_merge_target.count(pg->pg_id.pgid) == 0);
   _send_ready_to_merge();
 }
@@ -1916,8 +1918,7 @@ void OSDService::_send_ready_to_merge()
     if (sent_ready_to_merge_source.count(src) == 0) {
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       src,
-			       0,
-			       0,
+			       {}, {}, 0, 0,
 			       false,
 			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(src);
@@ -1927,28 +1928,29 @@ void OSDService::_send_ready_to_merge()
     if (sent_ready_to_merge_source.count(p.second) == 0) {
       monc->send_mon_message(new MOSDPGReadyToMerge(
 			       p.second,
-			       0,
-			       0,
+			       {}, {}, 0, 0,
 			       false,
 			       osdmap->get_epoch()));
       sent_ready_to_merge_source.insert(p.second);
     }
   }
   for (auto src : ready_to_merge_source) {
-    if (not_ready_to_merge_source.count(src) ||
-	not_ready_to_merge_target.count(src.get_parent())) {
+    if (not_ready_to_merge_source.count(src.first) ||
+	not_ready_to_merge_target.count(src.first.get_parent())) {
       continue;
     }
-    auto p = ready_to_merge_target.find(src.get_parent());
+    auto p = ready_to_merge_target.find(src.first.get_parent());
     if (p != ready_to_merge_target.end() &&
-	sent_ready_to_merge_source.count(src) == 0) {
+	sent_ready_to_merge_source.count(src.first) == 0) {
       monc->send_mon_message(new MOSDPGReadyToMerge(
-			       src,
-			       p->second.first,   // PG's last_epoch_started
-			       p->second.second,  // PG's last_epoch_clean
+			       src.first,           // source pgid
+			       src.second,          // src version
+			       std::get<0>(p->second), // target version
+			       std::get<1>(p->second), // PG's last_epoch_started
+			       std::get<2>(p->second), // PG's last_epoch_clean
 			       true,
 			       osdmap->get_epoch()));
-      sent_ready_to_merge_source.insert(src);
+      sent_ready_to_merge_source.insert(src.first);
     }
   }
 }
@@ -8613,9 +8615,7 @@ bool OSD::advance_pg(
 	    pg->merge_from(
 	      sources, rctx, split_bits,
 	      nextmap->get_pg_pool(
-		pg->pg_id.pool())->get_pg_num_dec_last_epoch_started(),
-	      nextmap->get_pg_pool(
-		pg->pg_id.pool())->get_pg_num_dec_last_epoch_clean());
+		pg->pg_id.pool())->last_pg_merge_meta);
 	    pg->pg_slot->waiting_for_merge_epoch = 0;
 	  } else {
 	    dout(20) << __func__ << " not ready to merge yet" << dendl;
