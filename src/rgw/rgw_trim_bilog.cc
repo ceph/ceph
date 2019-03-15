@@ -32,6 +32,7 @@
 #include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_meta.h"
 
 #include <boost/asio/yield.hpp>
 #include "include/ceph_assert.h"
@@ -823,7 +824,7 @@ int BucketTrimCR::operate()
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->get_async_rados(), store->meta_mgr,
+        call(new MetadataListCR(cct, store->get_async_rados(), store->svc.meta->get_mgr(),
                                 section, status.marker, cb));
       }
       if (retcode < 0) {

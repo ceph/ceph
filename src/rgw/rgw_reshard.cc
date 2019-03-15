@@ -729,7 +729,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
       "RGWRados::clean_bucket_index returned " << ret << dendl;
   }
 
-  ret = rgw_bucket_instance_remove_entry(store,
+  ret = rgw_bucket_instance_remove_entry(store->svc.meta,
 					 bucket_info.bucket.get_key(),
 					 nullptr);
   if (ret < 0) {
@@ -761,7 +761,7 @@ error_out:
       "RGWRados::clean_bucket_index returned " << ret2 << dendl;
   }
 
-  ret2 = rgw_bucket_instance_remove_entry(store,
+  ret2 = rgw_bucket_instance_remove_entry(store->svc.meta,
 					  new_bucket_info.bucket.get_key(),
 					  nullptr);
   if (ret2 < 0) {

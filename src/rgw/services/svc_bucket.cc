@@ -4,6 +4,7 @@
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
+#include "svc_meta.h"
 
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_tools.h"
@@ -28,11 +29,12 @@ RGWSI_Bucket::Instance RGWSI_Bucket::instance(RGWSysObjectCtx& _ctx,
   return Instance(this, _ctx, _bucket);
 }
 
-void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc)
+void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc)
 {
   zone_svc = _zone_svc;
   sysobj_svc = _sysobj_svc;
   cache_svc = _cache_svc;
+  meta_svc = _meta_svc;
 }
 
 int RGWSI_Bucket::do_start()
@@ -40,6 +42,26 @@ int RGWSI_Bucket::do_start()
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
   binfo_cache->init(cache_svc);
 
+#warning store
+  auto mm = meta_svc->get_mgr();
+  auto sync_module = mm->get_store()->get_sync_module();
+  if (sync_module) {
+    bucket_meta_handler = sync_module->alloc_bucket_meta_handler();
+    bucket_instance_meta_handler = sync_module->alloc_bucket_instance_meta_handler();
+  } else {
+    bucket_meta_handler = RGWBucketMetaHandlerAllocator::alloc();
+    bucket_instance_meta_handler = RGWBucketInstanceMetaHandlerAllocator::alloc();
+  }
+
+  int r = bucket_meta_handler->init(mm);
+  if (r < 0) {
+    return r;
+  }
+
+  r = bucket_instance_meta_handler->init(mm);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 
@@ -229,12 +251,9 @@ int RGWSI_Bucket::Instance::write_bucket_instance_info(RGWBucketInfo& info,
                                                        map<string, bufferlist> *pattrs)
 {
   info.has_instance_obj = true;
-  bufferlist bl;
-
-  encode(info, bl);
 
   string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
-  int ret = rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
+  int ret = rgw_bucket_instance_store_info(meta_svc, key, info, exclusive, pattrs, &info.objv_tracker, mtime);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -277,3 +296,34 @@ int RGWSI_Bucket::Instance::SetOp::exec()
 
   return 0;
 }
+
+int RGWSI_Bucket::store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
+                                               RGWBucketEntryPoint& be, bool exclusive,
+                                               RGWObjVersionTracker *objv_tracker, real_time mtime)
+{
+  string entry;
+  rgw_make_bucket_entry_name(tenant, bucket_name, entry);
+  auto apply_type = (exclusive ? APPLY_EXCLUSIVE : APPLY_ALWAYS);
+  RGWBucketEntryMetadataObject mdo(be, objv_tracker->write_version, mtime);
+  return bucket_meta_handler->put(entry, &mdo, *objv_tracker, apply_type);
+}
+
+int RGWSI_Bucket::store_bucket_instance_info(RGWBucketInfo& bucket_info, bool exclusive,
+                                             map<string, bufferlist>& attrs,
+                                             RGWObjVersionTracker *objv_tracker,
+                                             real_time mtime)
+{
+  string entry = bucket_info.bucket.get_key();
+  auto apply_type = (exclusive ? APPLY_EXCLUSIVE : APPLY_ALWAYS);
+  RGWBucketCompleteInfo bci{bucket_info, attrs};
+  RGWBucketInstanceMetadataObject mdo(bci, objv_tracker->write_version, mtime);
+  return bucket_instance_meta_handler->put(entry, &mdo, *objv_tracker, apply_type);
+}
+
+int RGWSI_Bucket::remove_bucket_instance_info(const rgw_bucket& bucket,
+                                              RGWObjVersionTracker *objv_tracker)
+{
+  string entry = bucket.get_key();
+  return bucket_instance_meta_handler->remove(entry, *objv_tracker);
+}
+

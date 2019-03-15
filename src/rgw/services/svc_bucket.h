@@ -24,6 +24,8 @@
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
+class RGWSI_Meta;
+class RGWMetadataHandler;
 
 struct rgw_cache_entry_info;
 
@@ -37,6 +39,10 @@ class RGWSI_Bucket : public RGWServiceInstance
   RGWSI_Zone *zone_svc{nullptr};
   RGWSI_SysObj *sysobj_svc{nullptr};
   RGWSI_SysObj_Cache *cache_svc{nullptr};
+  RGWSI_Meta *meta_svc{nullptr};
+
+  RGWMetadataHandler *bucket_meta_handler;
+  RGWMetadataHandler *bucket_instance_meta_handler;
 
   struct bucket_info_cache_entry {
     RGWBucketInfo info;
@@ -52,12 +58,13 @@ public:
   RGWSI_Bucket(CephContext *cct);
   ~RGWSI_Bucket();
 
-  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc);
+  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc);
 
   class Instance {
     friend class Op;
 
     RGWSI_Bucket *bucket_svc;
+    RGWSI_Meta *meta_svc;
     RGWSysObjectCtx& ctx;
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
@@ -107,6 +114,7 @@ public:
                                        ctx(_ctx) {
       bucket.tenant = _tenant;
       bucket.name = _bucket_name;
+      meta_svc = bucket_svc->meta_svc;
     }
 
     Instance(RGWSI_Bucket *_bucket_svc,
@@ -210,4 +218,14 @@ public:
 
   Instance instance(RGWSysObjectCtx& _ctx,
                     const rgw_bucket& _bucket);
+
+
+  int store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
+				   RGWBucketEntryPoint& be, bool exclusive,
+				   RGWObjVersionTracker *objv_tracker, real_time mtime);
+  int store_bucket_instance_info(RGWBucketInfo& bucket_info, bool exclusive,
+				 map<string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
+				 real_time mtime);
+  int remove_bucket_instance_info(const rgw_bucket& bucket,
+				  RGWObjVersionTracker *objv_tracker);
 };

@@ -2819,7 +2819,7 @@ public:
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, sync_type_t sync_mode) override {
+          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_mode) override {
     RGWUserCompleteInfo uci;
 
     try {
@@ -2842,8 +2842,8 @@ public:
       return ret;
 
     // are we actually going to perform this put, or is it too old?
-    if (ret != -ENOENT &&
-        !check_versions(objv_tracker.read_version, orig_mtime,
+    bool exists = (ret != -ENOENT);
+    if (!check_versions(exists, objv_tracker.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_mode)) {
       return STATUS_NO_APPLY;
     }

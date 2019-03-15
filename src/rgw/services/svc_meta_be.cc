@@ -74,8 +74,8 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
-  if (ret != -ENOENT &&
-      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
+  bool exists = (ret != -ENOENT);
+  if (!RGWMetadataHandler::check_versions(exists, objv_tracker->read_version, orig_mtime,
                                           objv_tracker->write_version, mtime, sync_mode)) {
     return STATUS_NO_APPLY;
   }
@@ -175,3 +175,4 @@ int RGWSI_MetaBackend::remove(Context *ctx,
                 f,
                 false);
 }
+

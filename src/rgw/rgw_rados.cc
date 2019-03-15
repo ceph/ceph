@@ -1723,11 +1723,6 @@ int RGWRados::clear_usage()
   return ret;
 }
 
-int RGWRados::key_to_shard_id(const string& key, int max_shards)
-{
-  return rgw_shard_id(key, max_shards);
-}
-
 void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
 {
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
