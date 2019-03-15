@@ -31,11 +31,15 @@ namespace {
 Heartbeat::Heartbeat(int whoami,
                      uint32_t nonce,
                      const OSDMapService& service,
-                     ceph::mon::Client& monc)
+                     ceph::mon::Client& monc,
+                     ceph::net::Messenger& front_msgr,
+                     ceph::net::Messenger& back_msgr)
   : whoami{whoami},
     nonce{nonce},
     service{service},
     monc{monc},
+    front_msgr{front_msgr},
+    back_msgr{back_msgr},
     timer{[this] {send_heartbeats();}}
 {}
 
@@ -47,23 +51,8 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
   }
-  return seastar::when_all_succeed(
-      ceph::net::Messenger::create(entity_name_t::OSD(whoami),
-                                   "hb_front",
-                                   nonce,
-                                   seastar::engine().cpu_id())
-        .then([this, front_addrs] (auto msgr) {
-          front_msgr = msgr;
-          return start_messenger(front_msgr, front_addrs);
-        }),
-      ceph::net::Messenger::create(entity_name_t::OSD(whoami),
-                                   "hb_back",
-                                   nonce,
-                                   seastar::engine().cpu_id())
-        .then([this, back_addrs] (auto msgr) {
-          back_msgr = msgr;
-          return start_messenger(back_msgr, back_addrs);
-        }))
+  return seastar::when_all_succeed(start_messenger(front_msgr, front_addrs),
+                                   start_messenger(back_msgr, back_addrs))
     .then([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
@@ -71,36 +60,35 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
 }
 
 seastar::future<>
-Heartbeat::start_messenger(ceph::net::Messenger* msgr,
+Heartbeat::start_messenger(ceph::net::Messenger& msgr,
                            const entity_addrvec_t& addrs)
 {
   if (local_conf()->ms_crc_data) {
-    msgr->set_crc_data();
+    msgr.set_crc_data();
   }
   if (local_conf()->ms_crc_header) {
-    msgr->set_crc_header();
+    msgr.set_crc_header();
   }
-  return msgr->try_bind(addrs,
-                        local_conf()->ms_bind_port_min,
-                        local_conf()->ms_bind_port_max).then([msgr, this] {
-    return msgr->start(this);
+  return msgr.try_bind(addrs,
+                       local_conf()->ms_bind_port_min,
+                       local_conf()->ms_bind_port_max).then([&msgr, this] {
+    return msgr.start(this);
   });
 }
 
 seastar::future<> Heartbeat::stop()
 {
-  return seastar::when_all_succeed(front_msgr->shutdown(),
-                                   back_msgr->shutdown());
+  return seastar::now();
 }
 
 const entity_addrvec_t& Heartbeat::get_front_addrs() const
 {
-  return front_msgr->get_myaddrs();
+  return front_msgr.get_myaddrs();
 }
 
 const entity_addrvec_t& Heartbeat::get_back_addrs() const
 {
-  return back_msgr->get_myaddrs();
+  return back_msgr.get_myaddrs();
 }
 
 seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
@@ -111,10 +99,10 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
     auto osdmap = service.get_map();
     // TODO: msgr v2
     return seastar::when_all_succeed(
-        front_msgr->connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
-                            CEPH_ENTITY_TYPE_OSD),
-        back_msgr->connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
-                           CEPH_ENTITY_TYPE_OSD))
+        front_msgr.connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
+                           CEPH_ENTITY_TYPE_OSD),
+        back_msgr.connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
+                          CEPH_ENTITY_TYPE_OSD))
       .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
         PeerInfo info;
         // sharded-messenger compatible mode
