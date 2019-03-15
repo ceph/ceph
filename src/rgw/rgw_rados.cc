@@ -2438,7 +2438,7 @@ static inline std::string after_delim(std::string_view delim)
   unsigned char e = delim.back();
   delim.remove_suffix(1);
   std::string result{delim.data(), delim.length()};
-  if (e < 255) {
+  if (uint8_t(e) < 255) {
     result += char(++e);
   } else {
     result += e;
