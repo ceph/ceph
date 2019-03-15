@@ -10,6 +10,7 @@ from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
 from ..services.orchestrator import OrchClient
+from ..rest_client import RequestException
 
 
 class IscsiTest(ControllerTestCase, CLICommandTestMixin):
@@ -440,6 +441,7 @@ class IscsiClientMock(object):
 
     def __init__(self):
         self.gateway_name = None
+        self.service_url = None
         self.config = {
             "created": "2019/01/17 08:57:16",
             "discovery_auth": {
@@ -459,8 +461,9 @@ class IscsiClientMock(object):
         }
 
     @classmethod
-    def instance(cls, gateway_name=None):
+    def instance(cls, gateway_name=None, service_url=None):
         cls._instance.gateway_name = gateway_name
+        cls._instance.service_url = service_url
         # pylint: disable=unused-argument
         return cls._instance
 
@@ -605,6 +608,16 @@ class IscsiClientMock(object):
             'node3': ['192.168.100.203']
         }
         return {'data': ips[self.gateway_name]}
+
+    def get_hostname(self):
+        hostnames = {
+            'https://admin:admin@10.17.5.1:5001': 'node1',
+            'https://admin:admin@10.17.5.2:5001': 'node2',
+            'https://admin:admin@10.17.5.3:5001': 'node3'
+        }
+        if self.service_url not in hostnames:
+            raise RequestException('No route to host')
+        return {'data': hostnames[self.service_url]}
 
     def update_discoveryauth(self, user, password, mutual_user, mutual_password):
         self.config['discovery_auth']['username'] = user
