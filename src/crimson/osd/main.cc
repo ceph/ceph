@@ -68,7 +68,8 @@ int main(int argc, char* argv[])
       }).then([&osd, mkfs = config.count("mkfs")] {
         if (mkfs) {
           return osd.invoke_on(0, &OSD::mkfs,
-                               local_conf().get_val<uuid_d>("fsid"));
+                               local_conf().get_val<uuid_d>("fsid"))
+            .then([] { seastar::engine().exit(0); });
         } else {
           return osd.invoke_on(0, &OSD::start);
         }
