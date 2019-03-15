@@ -418,16 +418,16 @@ void CrushWrapper::update_choose_args(CephContext *cct)
       if (!b || b->alg != CRUSH_BUCKET_STRAW2) {
 	if (carg.ids) {
 	  if (cct)
-	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
-			 << (-1-j) << " ids" << dendl;
+	    ldout(cct,10) << __func__ << " removing " << i.first << " bucket "
+			  << (-1-j) << " ids" << dendl;
 	  free(carg.ids);
 	  carg.ids = 0;
 	  carg.ids_size = 0;
 	}
 	if (carg.weight_set) {
 	  if (cct)
-	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
-			 << (-1-j) << " weight_sets" << dendl;
+	    ldout(cct,10) << __func__ << " removing " << i.first << " bucket "
+			  << (-1-j) << " weight_sets" << dendl;
 	  for (unsigned p = 0; p < carg.weight_set_positions; ++p) {
 	    free(carg.weight_set[p].weights);
 	  }
