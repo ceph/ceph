@@ -103,8 +103,8 @@ Major Changes from Mimic
     to trim their caches. This is done using MDS admin socket ``cache drop``
     command.
   * It is now possible to check the progress of an on-going scrub in the MDS.
-    Additionally, a scrub may be paused or aborted. See :ref:`the disaster
-    recovery documentation <disaster-recovery-experts>` for more information.
+    Additionally, a scrub may be paused or aborted. See :ref:`the scrub
+    documentation <mds-scrub>` for more information.
   * A new interface for creating volumes is provided via the ``ceph volume``
     command-line-interface.
   * A new cephfs-shell tool is available for manipulating a CephFS file
