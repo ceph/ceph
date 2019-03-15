@@ -512,7 +512,8 @@ if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
 set_target_properties(ceph-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
 
 if (WITH_CEPHFS)
