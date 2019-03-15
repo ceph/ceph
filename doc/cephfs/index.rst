@@ -110,6 +110,7 @@ authentication keyring.
     Export over NFS <nfs>
     Application best practices <app-best-practices>
     Scrub <scrub>
+    LazyIO <lazyio>
 
 .. toctree:: 
    :hidden:
