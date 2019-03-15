@@ -1473,7 +1473,7 @@ public:
   int operator()(const boost::string_ref name, const rgw_obj_key& marker,
 		uint8_t type) {
 
-    ceph_assert(name.length() > 0); // XXX
+    assert(name.length() > 0); // all cases handled in callers
 
     /* hash offset of name in parent (short name) for NFS readdir cookie */
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
@@ -1558,6 +1558,12 @@ public:
 			     << " prefix=" << prefix << " "
 			     << " cpref=" << sref
 			     << dendl;
+
+      if (sref.empty()) {
+	/* null path segment--could be created in S3 but has no NFS
+	 * interpretation */
+	return;
+      }
 
       this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
       ++ix;
