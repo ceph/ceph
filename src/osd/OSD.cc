@@ -8457,7 +8457,8 @@ void OSD::check_osdmap_features()
   if (osdmap->require_osd_release != last_require_osd_release) {
     dout(1) << __func__ << " require_osd_release " << last_require_osd_release
 	    << " -> " << to_string(osdmap->require_osd_release) << dendl;
-    store->write_meta("require_osd_release", stringify(osdmap->require_osd_release));
+    store->write_meta("require_osd_release",
+		      stringify((int)osdmap->require_osd_release));
     last_require_osd_release = osdmap->require_osd_release;
   }
 }
