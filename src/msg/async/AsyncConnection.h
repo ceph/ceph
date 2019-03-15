@@ -346,7 +346,6 @@ class AsyncConnection : public Connection {
   DispatchQueue *dispatch_queue;
 
   WriteQueue *wqueue;
-  bufferlist outcoming_bl;
   bool open_write = false;
 
   std::mutex write_lock;

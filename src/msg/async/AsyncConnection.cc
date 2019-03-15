@@ -514,12 +514,13 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
   return nread;
 }
 
+/* XXX Remove ASAP when ProtocolV2 is switched to wqueue */
 ssize_t AsyncConnection::write(bufferlist &bl,
                                std::function<void(ssize_t)> callback,
                                bool more) {
 
     std::unique_lock<std::mutex> l(write_lock);
-    outcoming_bl.claim_append(bl);
+    wqueue->outbl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
       writeCallback = callback;
@@ -529,6 +530,7 @@ ssize_t AsyncConnection::write(bufferlist &bl,
 
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
+/* XXX Remove ASAP when ProtocolV2 is switched to wqueue */
 ssize_t AsyncConnection::_try_send(bool more)
 {
   if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
@@ -539,16 +541,16 @@ ssize_t AsyncConnection::_try_send(bool more)
   }
 
   ceph_assert(center->in_thread());
-  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
+  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << wqueue->outbl.length()
                              << " bytes" << dendl;
-  ssize_t r = cs.send(outcoming_bl, more);
+  ssize_t r = cs.send(wqueue->outbl, more);
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
-                             << " remaining bytes " << outcoming_bl.length() << dendl;
+                             << " remaining bytes " << wqueue->outbl.length() << dendl;
 
   if (!open_write && is_queued()) {
     center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
@@ -563,7 +565,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
-  return outcoming_bl.length();
+  return wqueue->outbl.length();
 }
 
 ssize_t AsyncConnection::send_wqueue() {
@@ -861,7 +863,9 @@ void AsyncConnection::_stop() {
 }
 
 bool AsyncConnection::is_queued() const {
-  return outcoming_bl.length() || wqueue->has_msgs_to_send();
+  return wqueue->has_msgs_to_send() ||
+         /* XXX Remove ASAP when ProtocolV2 is switched to wqueue */
+         wqueue->outbl.length();
 }
 
 void AsyncConnection::shutdown_socket() {
