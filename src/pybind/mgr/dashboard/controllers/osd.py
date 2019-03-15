@@ -183,6 +183,13 @@ class Osd(RESTController):
 
 @ApiController('/osd/flags', Scope.OSD)
 class OsdFlagsController(RESTController):
+    def __init__(self):
+        self.unsupported_set_unset_flags = [
+                'sortbitwise', 'recovery_deletes',
+                'require_jewel_osds', 'require_kraken_osds',
+                'purged_snapdirs'
+        ]
+
     @staticmethod
     def _osd_flags():
         enabled_flags = mgr.get('osd_map')['flags_set']
@@ -198,22 +205,25 @@ class OsdFlagsController(RESTController):
     def list(self):
         return self._osd_flags()
 
-    def bulk_set(self, flags):
-        """
-        The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
-        `purged_snapshots` cannot even be set. It is therefore required to at
-        least include those four flags for a successful operation.
-        """
+    def bulk_delete(self, flags):
         assert isinstance(flags, list)
 
-        enabled_flags = set(self._osd_flags())
-        data = set(flags)
-        added = data - enabled_flags
-        removed = enabled_flags - data
-        for flag in added:
-            CephService.send_command('mon', 'osd set', '', key=flag)
-        for flag in removed:
+        unset_flags = flags - self.unsupported_set_unset_flags
+        # `osd unset` is idempotent. If a flag is not present in the map, we
+        # still get a success.
+        for flag in unset_flags:
             CephService.send_command('mon', 'osd unset', '', key=flag)
-        logger.info('Changed OSD flags: added=%s removed=%s', added, removed)
+        logger.info('Changed OSD flags: removed=%s', unset_flags)
+        return sorted(unset_flags)
 
-        return sorted(enabled_flags - removed | added)
+    def bulk_set(self, flags):
+        assert isinstance(flags, list)
+
+        # `osd set` is idempotent. If a flag is already present in the map,
+        # we still get a success.
+
+        set_flags = flags - self.unsupported_set_unset_flags
+        for flag in set_flags:
+            CephService.send_command('mon', 'osd set', '', key=flag)
+        logger.info('Changed OSD flags: added=%s', set_flags)
+        return sorted(set_flags)
