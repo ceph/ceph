@@ -363,9 +363,7 @@ void MonMap::_add_ambiguous_addr(const string& name,
     // a v1: or v2: prefix was specified
     if (addr.get_port() == 0) {
       // use default port
-      if (addr.get_type() == entity_addr_t::TYPE_ANY) {
-	addr.set_port(CEPH_MON_PORT_IANA);
-      } else if (addr.get_type() == entity_addr_t::TYPE_LEGACY) {
+      if (addr.get_type() == entity_addr_t::TYPE_LEGACY) {
 	addr.set_port(CEPH_MON_PORT_LEGACY);
       } else if (addr.get_type() == entity_addr_t::TYPE_MSGR2) {
 	addr.set_port(CEPH_MON_PORT_IANA);
