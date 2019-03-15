@@ -450,10 +450,8 @@ void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
-  if (ret < 0)
-    return ret;
-
+  ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  // ignore errors; missing mime.types is not fatal
   return 0;
 }
 
