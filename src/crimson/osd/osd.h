@@ -126,6 +126,8 @@ private:
 
   seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_pg_log(ceph::net::ConnectionRef conn,
+				  Ref<MOSDPGLog> m);
   seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
 				     Ref<MOSDPGNotify> m);
   seastar::future<> handle_pg_info(ceph::net::ConnectionRef conn,

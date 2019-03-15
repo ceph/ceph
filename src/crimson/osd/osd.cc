@@ -369,6 +369,8 @@ seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
     return handle_pg_info(conn, boost::static_pointer_cast<MOSDPGInfo>(m));
   case MSG_OSD_PG_QUERY:
     return handle_pg_query(conn, boost::static_pointer_cast<MOSDPGQuery>(m));
+  case MSG_OSD_PG_LOG:
+    return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
   default:
     return seastar::now();
   }
@@ -766,6 +768,24 @@ seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
                                                   std::move(query));
       return do_peering_event(pgid, std::move(evt));
   });
+}
+
+seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
+                                       Ref<MOSDPGLog> m)
+{
+  const int from = m->get_source().num();
+  MLogRec log{pg_shard_t{from, m->from}, m.get()};
+  auto create_info = new PGCreateInfo{m->get_spg(),
+                                      m->get_query_epoch(),
+                                      m->info.history,
+                                      m->past_intervals,
+                                      false};
+  auto evt = std::make_unique<PGPeeringEvent>(m->get_epoch(),
+                                              m->get_query_epoch(),
+                                              std::move(log),
+                                              true,
+                                              create_info);
+  return do_peering_event(m->get_spg(), std::move(evt));
 }
 
 seastar::future<>
