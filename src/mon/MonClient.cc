@@ -13,6 +13,7 @@
  */
 
 #include <random>
+#include "common/weighted_shuffle.h"
 
 #include "include/scope_guard.h"
 #include "include/stringify.h"
@@ -687,21 +688,24 @@ MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 
 void MonClient::_add_conns(uint64_t global_id)
 {
-  uint16_t min_priority = std::numeric_limits<uint16_t>::max();
+  map<uint16_t, vector<unsigned>> rank_by_priority;
   for (const auto& m : monmap.mon_info) {
-    if (m.second.priority < min_priority) {
-      min_priority = m.second.priority;
-    }
+    rank_by_priority[m.second.priority].push_back(monmap.get_rank(m.first));
   }
   vector<unsigned> ranks;
-  for (const auto& m : monmap.mon_info) {
-    if (m.second.priority == min_priority) {
-      ranks.push_back(monmap.get_rank(m.first));
+  ceph_assert(!rank_by_priority.empty());
+  ranks = rank_by_priority.begin()->second;
+  if (ranks.size() > 1) {
+    vector<uint16_t> weights;
+    for (auto i : ranks) {
+      auto rank_name = monmap.get_name(i);
+      weights.push_back(monmap.get_weight(rank_name));
     }
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    weighted_shuffle(ranks, weights, gen);
   }
-  std::random_device rd;
-  std::mt19937 rng(rd());
-  std::shuffle(ranks.begin(), ranks.end(), rng);
+  ldout(cct, 10) << __func__ << " ranks=" << ranks << dendl;
   unsigned n = cct->_conf->mon_client_hunt_parallel;
   if (n == 0 || n > ranks.size()) {
     n = ranks.size();
