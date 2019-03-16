@@ -8,12 +8,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-struct rgwsi_meta_be_sobj_handler_info {
-  RGWSI_MetaBackend::ModuleRef _module;
-  RGWSI_MBSObj_Handler_Module *module;
-  string section;
-};
-
 RGWSI_MetaBackend_SObj::RGWSI_MetaBackend_SObj(CephContext *cct) : RGWSI_MetaBackend(cct) {
 }
 
@@ -34,7 +28,7 @@ int RGWSI_MetaBackend_SObj::init_handler(RGWMetadataHandler *handler, RGWSI_Meta
   return 0;
 }
 
-void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWSI_MetaBackend::Context *_ctx)
+void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, RGWSI_MetaBackend::Context *_ctx)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   rgwsi_meta_be_sobj_handler_info *h = static_cast<rgwsi_meta_be_sobj_handler_info *>(handle);
@@ -43,6 +37,7 @@ void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, const str
   ctx->module = h->module;
   ctx->section = h->section;
   ctx->key = key;
+  ctx->obj = obj;
   ctx->obj_ctx.emplace(sysobj_svc->init_obj_ctx());
   static_cast<RGWSI_MBSObj_Handler_Module *>(ctx->module)->get_pool_and_oid(key, ctx->pool, ctx->oid);
 }

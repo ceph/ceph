@@ -24,7 +24,14 @@
 #include "svc_sys_obj.h"
 
 
-struct rgwsi_meta_be_sobj_handler_info;
+class RGWSI_MBSObj_Handler_Module;
+
+struct rgwsi_meta_be_sobj_handler_info {
+  RGWSI_MetaBackend::ModuleRef _module;
+  RGWSI_MBSObj_Handler_Module *module;
+  string section;
+};
+
 
 class RGWSI_MBSObj_Handler_Module : public RGWSI_MetaBackend::Module {
 public:
@@ -36,16 +43,17 @@ public:
 
 class RGWSI_MetaBackend_SObj : public RGWSI_MetaBackend
 {
+protected:
   RGWSI_SysObj *sysobj_svc{nullptr};
 
   map<string, rgwsi_meta_be_sobj_handler_info> handlers;
 
-protected:
   int init_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handle *phandle) override;
 
 public:
   struct Context_SObj : public RGWSI_MetaBackend::Context {
     std::optional<RGWSysObjectCtx> obj_ctx;
+    RGWMetadataObject *obj;
     rgw_pool pool;
     string oid;
   };
@@ -63,7 +71,7 @@ public:
     sysobj_svc = _sysobj_svc;
   }
 
-  void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWSI_MetaBackend::Context *ctx) override;
+  void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, RGWSI_MetaBackend::Context *ctx) override;
 
   virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
                         bufferlist *pbl,
@@ -71,11 +79,11 @@ public:
                         real_time *pmtime,
                         map<string, bufferlist> *pattrs = nullptr,
                         rgw_cache_entry_info *cache_info = nullptr,
-                        boost::optional<obj_version> refresh_version = boost::none);
+                        boost::optional<obj_version> refresh_version = boost::none) override;
   virtual int put_entry(RGWSI_MetaBackend::Context *ctx, bufferlist& bl, bool exclusive,
-                        RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = nullptr);
+                        RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = nullptr) override;
   virtual int remove_entry(RGWSI_MetaBackend::Context *ctx,
-                           RGWObjVersionTracker *objv_tracker);
+                           RGWObjVersionTracker *objv_tracker) override;
 };
 
 
