@@ -96,6 +96,8 @@ int main(int argc, char* argv[])
       }).then([&conf_file_list] {
         return local_conf().parse_config_files(conf_file_list);
       }).then([&] {
+        return local_conf().parse_argv(ceph_args);
+      }).then([&] {
         return osd.start_single(std::stoi(local_conf()->name.get_id()),
                                 static_cast<uint32_t>(getpid()));
       }).then([&osd, mkfs = config.count("mkfs")] {
