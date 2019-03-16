@@ -3887,7 +3887,7 @@ void PG::append_log(
 
   PGLogEntryHandler handler{this, &t};
   if (!transaction_applied) {
-     /* We must be a backfill peer, so it's ok if we apply
+     /* We must be a backfill or async recovery peer, so it's ok if we apply
       * out-of-turn since we won't be considered when
       * determining a min possible last_update.
       *
