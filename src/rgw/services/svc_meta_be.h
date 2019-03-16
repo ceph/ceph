@@ -96,6 +96,7 @@ public:
 
   enum Type {
     MDBE_SOBJ = 0,
+    MDBE_OTP  = 1,
   };
 
   RGWSI_MetaBackend(CephContext *cct) : RGWServiceInstance(cct) {}
@@ -103,7 +104,7 @@ public:
 
   virtual Type get_type() = 0;
 
-  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, Context *ctx) = 0;
+  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, Context *ctx) = 0;
 
   /* these should be implemented by backends */
   virtual int get_entry(Context *ctx,

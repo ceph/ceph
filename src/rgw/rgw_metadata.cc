@@ -392,18 +392,21 @@ int RGWMetadataHandler::init(RGWMetadataManager *manager)
 int RGWMetadataHandler::get(string& entry, RGWMetadataObject **obj)
 {
   RGWSI_Meta_Ctx ctx;
+  init_ctx(be_handle, entry, nullptr, &ctx);
   return do_get(ctx.get(), entry, obj);
 }
 
 int RGWMetadataHandler::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type)
 {
   RGWSI_Meta_Ctx ctx;
+  init_ctx(be_handle, entry, obj, &ctx);
   return do_put(ctx.get(), entry, obj, objv_tracker, type);
 }
 
 int RGWMetadataHandler::remove(string& entry, RGWObjVersionTracker& objv_tracker)
 {
   RGWSI_Meta_Ctx ctx;
+  init_ctx(be_handle, entry, nullptr, &ctx);
   return do_remove(ctx.get(), entry, objv_tracker);
 }
 
