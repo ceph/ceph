@@ -294,7 +294,12 @@ class Module(MgrModule):
             proxies['http'] = self.config['proxy']
             proxies['https'] = self.config['proxy']
 
-        requests.put(url=self.config['url'], json=report, proxies=proxies)
+        resp = requests.put(url=self.config['url'],
+                            json=report, proxies=proxies)
+        if not resp.ok:
+            self.log.error("Report send failed: %d %s %s" %
+                           (resp.status_code, resp.reason, resp.text))
+        return resp
 
     def handle_command(self, command):
         if command['prefix'] == 'telemetry config-show':
@@ -317,8 +322,15 @@ class Module(MgrModule):
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
-            self.send(self.last_report)
-            return 0, 'Report send to {0}'.format(self.config['url']), ''
+            resp = self.send(self.last_report)
+            if resp.ok:
+                return 0, 'Report sent to {0}'.format(self.config['url']), ''
+            return 1, '', 'Failed to send report to %s: %d %s %s' % (
+                self.config['url'],
+                resp.status_code,
+                resp.reason,
+                resp.text
+            )
         elif command['prefix'] == 'telemetry show':
             report = self.last_report
             if not report:
@@ -368,9 +380,12 @@ class Module(MgrModule):
                     self.log.exception('Exception while compiling report:')
 
                 try:
-                    self.send(self.last_report)
-                    self.last_upload = now
-                    self.set_config('last_upload', str(now))
+                    resp = self.send(self.last_report)
+                    # self.send logs on failure; only update last_upload
+                    # if we succeed
+                    if resp.ok:
+                        self.last_upload = now
+                        self.set_config('last_upload', str(now))
                 except:
                     self.log.exception('Exception while sending report:')
             else:
