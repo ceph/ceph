@@ -808,7 +808,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_description("Connection modes (crc, secure) for connections from clients to monitors in order of preference")
     .add_see_also("ms_mon_service_mode")
     .add_see_also("ms_mon_cluster_mode")
