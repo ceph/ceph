@@ -57,7 +57,7 @@ int RGWServices_Def::init(CephContext *cct,
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get()};
 
   finisher->init();
-  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(), meta.get());
+  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(), meta.get(), sync_modules.get());
   cls->init(zone.get(), rados.get());
   mdlog->init(zone.get(), sysobj.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -67,7 +67,7 @@ int RGWServices_Def::init(CephContext *cct,
   zone->init(sysobj.get(), rados.get(), sync_modules.get());
   zone_utils->init(rados.get(), zone.get());
   quota->init(zone.get());
-  sync_modules->init();
+  sync_modules->init(zone.get());
   sysobj_core->core_init(rados.get(), zone.get());
   if (have_cache) {
     sysobj_cache->init(rados.get(), zone.get(), notify.get());
@@ -104,6 +104,12 @@ int RGWServices_Def::init(CephContext *cct,
       ldout(cct, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
       return r;
     }
+  }
+
+  r = sync_modules->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start sync modules service (" << cpp_strerror(-r) << dendl;
+    return r;
   }
 
   r = cls->start();

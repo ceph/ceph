@@ -1160,18 +1160,7 @@ int RGWRados::init_complete()
   /* 
    * create sync module instance even if we don't run sync thread, might need it for radosgw-admin
    */
-  auto& zone_public_config = svc.zone->get_zone();
-  ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
-  if (ret < 0) {
-    lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
-    if (ret == -ENOENT) {
-      lderr(cct) << "ERROR: " << zone_public_config.tier_type 
-        << " sync module does not exist. valid sync modules: " 
-        << svc.sync_modules->get_manager()->get_registered_module_names()
-        << dendl;
-    }
-    return ret;
-  }
+  sync_module = svc.sync_modules->get_sync_module();
 
   ret = open_root_pool_ctx();
   if (ret < 0)

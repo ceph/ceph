@@ -25,6 +25,7 @@ class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
+class RGWSI_SyncModules;
 class RGWMetadataHandler;
 
 struct rgw_cache_entry_info;
@@ -36,10 +37,14 @@ class RGWSI_Bucket : public RGWServiceInstance
 {
   friend class Instance;
 
-  RGWSI_Zone *zone_svc{nullptr};
-  RGWSI_SysObj *sysobj_svc{nullptr};
-  RGWSI_SysObj_Cache *cache_svc{nullptr};
-  RGWSI_Meta *meta_svc{nullptr};
+  struct Svc {
+    RGWSI_Bucket *bucket{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_SyncModules *sync_modules{nullptr};
+  } svc;
 
   RGWMetadataHandler *bucket_meta_handler;
   RGWMetadataHandler *bucket_instance_meta_handler;
@@ -58,13 +63,14 @@ public:
   RGWSI_Bucket(CephContext *cct);
   ~RGWSI_Bucket();
 
-  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc);
+  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+	    RGWSI_SyncModules *_sync_modules);
 
   class Instance {
     friend class Op;
 
-    RGWSI_Bucket *bucket_svc;
-    RGWSI_Meta *meta_svc;
+    RGWSI_Bucket::Svc& svc;
     RGWSysObjectCtx& ctx;
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
@@ -110,16 +116,15 @@ public:
     Instance(RGWSI_Bucket *_bucket_svc,
          RGWSysObjectCtx& _ctx,
          const string& _tenant,
-         const string& _bucket_name) : bucket_svc(_bucket_svc),
+         const string& _bucket_name) : svc(_bucket_svc->svc),
                                        ctx(_ctx) {
       bucket.tenant = _tenant;
       bucket.name = _bucket_name;
-      meta_svc = bucket_svc->meta_svc;
     }
 
     Instance(RGWSI_Bucket *_bucket_svc,
              RGWSysObjectCtx& _ctx,
-             const rgw_bucket& _bucket) : bucket_svc(_bucket_svc),
+             const rgw_bucket& _bucket) : svc(_bucket_svc->svc),
                                           ctx(_ctx),
                                           bucket(_bucket) {}
 
