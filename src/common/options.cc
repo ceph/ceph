@@ -850,7 +850,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_description("Allowed connection modes (crc, secure) for connections to mons")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_mon_cluster_mode")
