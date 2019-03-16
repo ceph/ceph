@@ -893,4 +893,8 @@ add_executable(unittest_any test_any.cc)
 add_ceph_unittest(unittest_any)
 target_link_libraries(unittest_any)
 
+# unittest_weighted_shuffle
+add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
+add_ceph_unittest(unittest_weighted_shuffle)
+
 #make check ends here
