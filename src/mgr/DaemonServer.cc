@@ -165,7 +165,6 @@ KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
 
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
-  int ret = 0;
   MgrSession *s = new MgrSession(cct);
   con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
@@ -180,27 +179,24 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
     s->caps.set_allow_all();
-  }
-
-  if (caps_info.caps.length() > 0) {
+  } else if (caps_info.caps.length() > 0) {
     auto p = caps_info.caps.cbegin();
     string str;
     try {
       decode(str, p);
     }
     catch (buffer::error& e) {
-      ret = -EPERM;
-    }
-    bool success = s->caps.parse(str);
-    if (success) {
       dout(10) << " session " << s << " " << s->entity_name
-	       << " has caps " << s->caps << " '" << str << "'" << dendl;
-      ret = 1;
-    } else {
+               << " failed to decode caps" << dendl;
+      return -EPERM;
+    }
+    if (!s->caps.parse(str)) {
       dout(10) << " session " << s << " " << s->entity_name
 	       << " failed to parse caps '" << str << "'" << dendl;
-      ret = -EPERM;
+      return -EPERM;
     }
+    dout(10) << " session " << s << " " << s->entity_name
+             << " has caps " << s->caps << " '" << str << "'" << dendl;
   }
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
@@ -211,7 +207,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     osd_cons[s->osd_id].insert(con);
   }
 
-  return ret;
+  return 1;
 }
 
 bool DaemonServer::ms_get_authorizer(
