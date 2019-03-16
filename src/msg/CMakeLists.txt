@@ -3,11 +3,7 @@ set(msg_srcs
   Message.cc
   Messenger.cc
   QueueStrategy.cc
-  msg_types.cc
-  simple/Accepter.cc
-  simple/Pipe.cc
-  simple/PipeConnection.cc
-  simple/SimpleMessenger.cc)
+  msg_types.cc)
 
 if(HAVE_XIO)
   list(APPEND msg_srcs

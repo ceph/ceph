@@ -8,7 +8,6 @@
 
 #include "Messenger.h"
 
-#include "msg/simple/SimpleMessenger.h"
 #include "msg/async/AsyncMessenger.h"
 #ifdef HAVE_XIO
 #include "msg/xio/XioMessenger.h"
@@ -28,11 +27,10 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 {
   int r = -1;
   if (type == "random") {
-    r = ceph::util::generate_random_number(0, 1);
+    r = 0;
+    //r = ceph::util::generate_random_number(0, 1);
   }
-  if (r == 0 || type == "simple")
-    return new SimpleMessenger(cct, name, std::move(lname), nonce);
-  else if (r == 1 || type.find("async") != std::string::npos)
+  if (r == 0 || type.find("async") != std::string::npos)
     return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
 #ifdef HAVE_XIO
   else if ((type == "xio") &&
