@@ -30,59 +30,85 @@ using namespace std;
 static RGWMetadataHandler *otp_meta_handler = NULL;
 
 
+class RGWOTPMetadataHandler;
+
 class RGWOTPMetadataObject : public RGWMetadataObject {
-  list<rados::cls::otp::otp_info_t> result;
+  friend class RGWOTPMetadataHandler;
+
+  list<rados::cls::otp::otp_info_t> devices;
 public:
-  RGWOTPMetadataObject(list<rados::cls::otp::otp_info_t>& _result, obj_version& v, real_time m) {
-    result.swap(_result);
+  RGWOTPMetadataObject() {}
+  RGWOTPMetadataObject(list<rados::cls::otp::otp_info_t>& _devices, obj_version& v, real_time m) {
+    devices.swap(_devices);
     objv = v;
     mtime = m;
   }
 
   void dump(Formatter *f) const override {
-    encode_json("devices", result, f);
+    encode_json("devices", devices, f);
+  }
+
+  list<rados::cls::otp::otp_info_t>& get_devs() {
+    return devices;
   }
 };
 
-class RGWOTPMetadataHandler : public RGWMetadataHandler {
-  struct Svc {
-    RGWSI_MetaBackend *meta_be;
-  };
+class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Zone *zone_svc;
+public:
+  RGW_MB_Handler_Module_OTP(RGWSI_Zone *_zone_svc) : zone_svc {}
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
     pool = store->svc.zone->get_zone_params().otp_pool;
+  }
+};
+
+class RGWOTPMetadataHandler : public RGWMetadataHandler {
+  int init_module() override {
+    be_module.reset(new RGW_MB_Handler_Module_OTP(store->svc.zone));
+    return 0;
+  }
+
+  RGWSI_MetaBackend::Type required_be_type() override {
+    return MDBE_OTP;
   }
 
   int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker objv_tracker;
     real_time mtime;
 
-    list<rados::cls::otp::otp_info_t> result;
-    int r = svc.cls->mfa.list_mfa(entry, &result, &objv_tracker, &mtime, null_yield);
-    if (r < 0) {
-      return r;
+    RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject;
+
+    ctx->obj = mdo;
+
+    int ret = meta_be->get_entry(ctx, nullptr,
+                                 objv_tracker, &mdo->mtime,
+				 nullptr,
+                                 nullptr, nullopt);
+    if (ret < 0) {
+      return ret;
     }
-    RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject(result, objv_tracker.read_version, mtime);
+
+    mdo->read_version = objv_tracker.read_version;
+
     *obj = mdo;
+
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_mode) override {
+  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override {
+    RGWOTPMetadataObject *obj = static_cast<RGWOTPMetadataObject *>(_obj);
 
-    list<rados::cls::otp::otp_info_t> devices;
-    try {
-      JSONDecoder::decode_json("devices", devices, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
+    ctx->obj = obj;
 
-    int ret = svc.meta_be->mutate(ctx, entry, mtime, &objv_tracker,
-				  MDLOG_STATUS_WRITE, sync_mode,
-				  [&] {
-         return svc.cls->mfa.set_mfa(entry, devices, true, &objv_tracker, mtime, null_yield);
-    });
+    bufferlist bl;
+    int ret = meta_be->put(ctx, bl,
+                           false, objv_tracker,
+			   obj->mtime, pattrs,
+                           APPLY_ALWAYS);
     if (ret < 0) {
       return ret;
     }

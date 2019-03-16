@@ -2433,8 +2433,6 @@ public:
     real_time mtime;
     map<string, bufferlist> attrs;
 
-    string tenant_name, bucket_name;
-    parse_bucket(entry, &tenant_name, &bucket_name);
     int ret = read_bucket_entrypoint_info(ctx, entry, &be, &ot, &mtime, &attrs);
     if (ret < 0)
       return ret;
