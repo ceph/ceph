@@ -5,6 +5,7 @@
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
 #include "svc_meta.h"
+#include "svc_sync_modules.h"
 
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_tools.h"
@@ -29,22 +30,25 @@ RGWSI_Bucket::Instance RGWSI_Bucket::instance(RGWSysObjectCtx& _ctx,
   return Instance(this, _ctx, _bucket);
 }
 
-void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc)
+void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+                        RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+                        RGWSI_SyncModules *_sync_modules_svc)
 {
-  zone_svc = _zone_svc;
-  sysobj_svc = _sysobj_svc;
-  cache_svc = _cache_svc;
-  meta_svc = _meta_svc;
+  svc.bucket = this;
+  svc.zone = _zone_svc;
+  svc.sysobj = _sysobj_svc;
+  svc.cache = _cache_svc;
+  svc.meta = _meta_svc;
+  svc.sync_modules = _meta_svc;
 }
 
 int RGWSI_Bucket::do_start()
 {
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
-  binfo_cache->init(cache_svc);
+  binfo_cache->init(svc.cache);
 
-#warning store
-  auto mm = meta_svc->get_mgr();
-  auto sync_module = mm->get_store()->get_sync_module();
+  auto mm = svc.meta->get_mgr();
+  auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
     bucket_meta_handler = sync_module->alloc_bucket_meta_handler();
     bucket_instance_meta_handler = sync_module->alloc_bucket_instance_meta_handler();
@@ -77,7 +81,7 @@ int RGWSI_Bucket::Instance::read_bucket_entrypoint_info(const rgw_bucket& bucket
   string bucket_entry;
 
   rgw_make_bucket_entry_name(bucket.tenant, bucket.name, bucket_entry);
-  int ret = rgw_get_system_obj(ctx, bucket_svc->zone_svc->get_zone_params().domain_root,
+  int ret = rgw_get_system_obj(ctx, svc.zone->get_zone_params().domain_root,
 			       bucket_entry, bl, objv_tracker, pmtime, pattrs,
 			       cache_info, refresh_version);
   if (ret < 0) {
@@ -88,7 +92,7 @@ int RGWSI_Bucket::Instance::read_bucket_entrypoint_info(const rgw_bucket& bucket
   try {
     decode(*entry_point, iter);
   } catch (buffer::error& err) {
-    ldout(bucket_svc->cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    ldout(svc.bucket->cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
   return 0;
@@ -100,7 +104,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_raw_obj& obj,
                                              rgw_cache_entry_info *cache_info,
                                              boost::optional<obj_version> refresh_version)
 {
-  ldout(bucket_svc->cct, 20) << "reading from " << obj << dendl;
+  ldout(svc.bucket->cct, 20) << "reading from " << obj << dendl;
 
   bufferlist epbl;
 
@@ -115,7 +119,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_raw_obj& obj,
   try {
     decode(*info, iter);
   } catch (buffer::error& err) {
-    ldout(bucket_svc->cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    ldout(svc.bucket->cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
   info->bucket.oid = obj.oid;
@@ -130,7 +134,7 @@ int RGWSI_Bucket::Instance::read_bucket_instance_info(const rgw_bucket& bucket,
                                                       boost::optional<obj_version> refresh_version,
                                                       optional_yield y)
 {
-  auto& domain_root = bucket_svc->zone_svc->get_zone_params().domain_root;
+  auto& domain_root = svc.zone->get_zone_params().domain_root;
   rgw_raw_obj obj(domain_root,
                   (bucket.oid.empty() ?  get_meta_oid(bucket) : bucket.oid));
 
@@ -156,13 +160,13 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
 
   rgw_make_bucket_entry_name(bucket.tenant, bucket.name, bucket_entry);
 
-  if (auto e = bucket_svc->binfo_cache->find(bucket_entry)) {
+  if (auto e = svc.bucket->binfo_cache->find(bucket_entry)) {
     if (refresh_version &&
         e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
-      lderr(bucket_svc->cct) << "WARNING: The bucket info cache is inconsistent. This is "
+      lderr(svc.bucket->cct) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
-      bucket_svc->binfo_cache->invalidate(bucket_entry);
+      svc.bucket->binfo_cache->invalidate(bucket_entry);
     } else {
       *info = e->info;
       if (pattrs)
@@ -173,7 +177,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
     }
   }
 
-  auto& domain_root = bucket_svc->zone_svc->get_zone_params().domain_root;
+  auto& domain_root = svc.zone->get_zone_params().domain_root;
 
   bucket_info_cache_entry e;
   RGWBucketEntryPoint entry_point;
@@ -194,7 +198,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
     info->bucket.oid = bucket.name;
     info->bucket.tenant = bucket.tenant;
     info->ep_objv = ot.read_version;
-    ldout(bucket_svc->cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info->bucket << " owner " << info->owner << dendl;
+    ldout(svc.bucket->cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info->bucket << " owner " << info->owner << dendl;
     return 0;
   }
 
@@ -205,7 +209,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
     pattrs->clear();
   }
 
-  ldout(bucket_svc->cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
+  ldout(svc.bucket->cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
 
 
   /* read bucket instance info */
@@ -219,7 +223,7 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
   e.info.ep_objv = ot.read_version;
   *info = e.info;
   if (ret < 0) {
-    lderr(bucket_svc->cct) << "ERROR: read_bucket_instance_from_oid failed: " << ret << dendl;
+    lderr(svc.bucket->cct) << "ERROR: read_bucket_instance_from_oid failed: " << ret << dendl;
     info->bucket = bucket;
     // XXX and why return anything in case of an error anyway?
     return ret;
@@ -231,13 +235,13 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
     *pattrs = e.attrs;
 
   /* chain to both bucket entry point and bucket instance */
-  if (!bucket_svc->binfo_cache->put(bucket_svc->cache_svc, bucket_entry, &e, {&entry_cache_info, &cache_info})) {
-    ldout(bucket_svc->cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
+  if (!svc.bucket->binfo_cache->put(svc.cache, bucket_entry, &e, {&entry_cache_info, &cache_info})) {
+    ldout(svc.bucket->cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
   if (refresh_version &&
       refresh_version->compare(&info->objv_tracker.read_version)) {
-    lderr(bucket_svc->cct) << "WARNING: The OSD has the same version I have. Something may "
+    lderr(svc.bucket->cct) << "WARNING: The OSD has the same version I have. Something may "
                << "have gone squirrelly. An administrator may have forced a "
                << "change; otherwise there is a problem somewhere." << dendl;
   }
@@ -253,7 +257,7 @@ int RGWSI_Bucket::Instance::write_bucket_instance_info(RGWBucketInfo& info,
   info.has_instance_obj = true;
 
   string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
-  int ret = rgw_bucket_instance_store_info(meta_svc, key, info, exclusive, pattrs, &info.objv_tracker, mtime);
+  int ret = rgw_bucket_instance_store_info(svc.meta, key, info, exclusive, pattrs, &info.objv_tracker, mtime);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
