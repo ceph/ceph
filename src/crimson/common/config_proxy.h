@@ -147,6 +147,20 @@ public:
     });
   }
 
+  seastar::future<> parse_argv(std::vector<const char*>& argv) {
+    // we could pass whatever is unparsed to seastar, but seastar::app_template
+    // is used for driving the seastar application, and
+    // ceph::common::ConfigProxy is not available until seastar engine is up
+    // and running, so we have to feed the command line args to app_template
+    // first, then pass them to ConfigProxy.
+    return do_change([&argv, this](ConfigValues& values) {
+      get_config().parse_argv(values,
+			      obs_mgr,
+			      argv,
+			      CONF_CMDLINE);
+    });
+  }
+
   seastar::future<> parse_config_files(const std::string& conf_files) {
     return do_change([this, conf_files](ConfigValues& values) {
       const char* conf_file_paths =
