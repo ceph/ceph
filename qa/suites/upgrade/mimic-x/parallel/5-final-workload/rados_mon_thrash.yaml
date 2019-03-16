@@ -14,5 +14,8 @@ tasks:
   - workunit:
       clients:
         client.1:
-          - rados/test.sh
+          - ceph versions
+          - rados/test.sh || true
+          - ceph versions
+          - sleep 60000
   - print: "**** done rados/test.sh 4-final-workload"
