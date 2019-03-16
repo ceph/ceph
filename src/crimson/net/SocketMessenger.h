@@ -107,9 +107,7 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   void unregister_conn(SocketConnectionRef);
 
   // required by sharded<>
-  seastar::future<> stop() {
-    return seastar::make_ready_future<>();
-  }
+  seastar::future<> stop();
 
   seastar::shard_id shard_id() const {
     return sid;
