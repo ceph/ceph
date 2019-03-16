@@ -101,6 +101,8 @@ const char *ceph_release_name(int r)
 		return "mimic";
 	case CEPH_RELEASE_NAUTILUS:
 		return "nautilus";
+	case CEPH_RELEASE_OCTOPUS:
+		return "octopus";
 	default:
 		if (r < 0)
 			return "unspecified";
@@ -112,6 +114,9 @@ int ceph_release_from_name(const char *s)
 {
 	if (!s) {
 		return -1;
+	}
+	if (strcmp(s, "octopus") == 0) {
+		return CEPH_RELEASE_OCTOPUS;
 	}
 	if (strcmp(s, "nautilus") == 0) {
 		return CEPH_RELEASE_NAUTILUS;
