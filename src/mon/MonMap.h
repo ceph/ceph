@@ -385,6 +385,11 @@ public:
     ceph_assert(it != mon_info.end());
     return it->second.weight;
   }
+  void set_weight(const string& n, uint16_t v) {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    it->second.weight = v;
+  }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
