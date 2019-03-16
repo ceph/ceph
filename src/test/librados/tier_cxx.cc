@@ -3148,18 +3148,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
 }
 
 TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
-  // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
-  }
+  // note: require >= mimic
 
   // create object
   {
@@ -6221,18 +6210,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetRedirectRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
-  // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
-  }
+  // note: require >= mimic
 
   // create object
   {
@@ -6296,18 +6274,7 @@ TEST_F(LibRadosTwoPoolsECPP, SetChunkRead) {
 }
 
 TEST_F(LibRadosTwoPoolsECPP, ManifestPromoteRead) {
-  // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
-  }
+  // note: require >= mimic
 
   // create object
   {
