@@ -463,6 +463,11 @@ COMMAND("mon set-addrs " \
 	"name=addrs,type=CephString",
 	"set the addrs (IPs and ports) a specific monitor binds to",
 	"mon", "rw")
+COMMAND("mon set-weight " \
+        "name=name,type=CephString " \
+        "name=weight,type=CephInt,range=0|65535",
+        "set the weight for the specified mon",
+        "mon", "rw")
 COMMAND("mon enable-msgr2",
 	"enable the msgr2 protocol on port 3300",
 	"mon", "rw")

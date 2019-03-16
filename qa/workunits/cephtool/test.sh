@@ -1177,6 +1177,19 @@ function test_mon_mon()
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
+function test_mon_priority_and_weight()
+{
+    for i in 0 1 65535; do
+      ceph mon set-weight a $i
+      w=$(ceph mon dump --format=json-pretty 2>/dev/null | jq '.mons[0].weight')
+      [[ "$w" == "$i" ]]
+    done
+
+    for i in -1 65536; do
+      expect_false ceph mon set-weight a $i
+    done
+}
+
 function gen_secrets_file()
 {
   # lets assume we can have the following types
