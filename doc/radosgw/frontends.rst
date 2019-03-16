@@ -57,6 +57,19 @@ Options
 :Type: String
 :Default: None
 
+``tcp_nodelay``
+
+:Description: If set the socket option will disable Nagle's algorithm on 
+              the connection which means that packets will be sent as soon 
+              as possible instead of waiting for a full buffer or timeout to occur.
+
+              ``1`` Disable Nagel's algorithm for all sockets.
+
+              ``0`` Keep the default: Nagel's algorithm enabled.
+
+:Type: Integer (0 or 1)
+:Default: 0
+
 
 Civetweb
 ========
