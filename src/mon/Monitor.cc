@@ -6192,6 +6192,14 @@ int Monitor::handle_auth_request(
 	   << " method " << auth_method
 	   << " payload " << payload.length()
 	   << dendl;
+  if (!payload.length()) {
+    if (!con->is_msgr2()) {
+      // for v1 connections, we tolerate no authorizer, because authentication
+      // happens via MAuth messages.
+      return 1;
+    }
+    return -EACCES;
+  }
   if (!more) {
     auth_meta->auth_mode = payload[0];
   }
