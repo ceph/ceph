@@ -237,11 +237,6 @@ else()
   set(PY_BINDING_INFIX 3)
 endif()
 
-if(HAVE_XIO)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread)
-endif(HAVE_XIO)
-
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS gperftools::tcmalloc)
