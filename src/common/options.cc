@@ -695,63 +695,6 @@ std::vector<Option> get_global_options() {
     .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
 
-    // XIO
-    Option("xio_trace_mempool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_trace_msgcnt", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_trace_xcon", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_queue_depth", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(128)
-    .set_description(""),
-
-    Option("xio_mp_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(128)
-    .set_description(""),
-
-    Option("xio_mp_max_64", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(65536)
-    .set_description(""),
-
-    Option("xio_mp_max_256", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(8192)
-    .set_description(""),
-
-    Option("xio_mp_max_1k", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(8192)
-    .set_description(""),
-
-    Option("xio_mp_max_page", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_description(""),
-
-    Option("xio_mp_max_hint", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_description(""),
-
-    Option("xio_portal_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2)
-    .set_description(""),
-
-    Option("xio_max_conns_per_portal", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(32)
-    .set_description(""),
-
-    Option("xio_transport_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("rdma")
-    .set_description(""),
-
-    Option("xio_max_send_inline", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(512)
-    .set_description(""),
-
     // Compressor
     Option("compressor_zlib_isal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

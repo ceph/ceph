@@ -5,15 +5,6 @@ set(msg_srcs
   QueueStrategy.cc
   msg_types.cc)
 
-if(HAVE_XIO)
-  list(APPEND msg_srcs
-    xio/XioConnection.cc
-    xio/XioMsg.cc
-    xio/XioPool.cc
-    xio/XioMessenger.cc
-    xio/XioPortal.cc)
-endif(HAVE_XIO)
-
 list(APPEND msg_srcs
   async/AsyncConnection.cc
   async/AsyncMessenger.cc

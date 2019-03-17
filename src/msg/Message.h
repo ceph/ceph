@@ -187,8 +187,7 @@
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
 // Xio Testing
-#define MSG_DATA_PING		  0x602
-
+//#define MSG_DATA_PING		  0x602
 // Xio intends to define messages 0x603..0x606
 
 // Special
