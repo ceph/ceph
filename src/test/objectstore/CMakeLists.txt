@@ -124,7 +124,7 @@ endif(WITH_BLUESTORE)
 add_executable(unittest_transaction
   test_transaction.cc)
 add_ceph_unittest(unittest_transaction)
-target_link_libraries(unittest_transaction os ceph-common ${XIO_LIBRARY})
+target_link_libraries(unittest_transaction os ceph-common)
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone

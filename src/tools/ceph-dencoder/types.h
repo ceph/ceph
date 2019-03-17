@@ -564,9 +564,6 @@ MESSAGE(MCommandReply)
 #include "messages/MConfig.h"
 MESSAGE(MConfig)
 
-#include "messages/MDataPing.h"
-MESSAGE(MDataPing)
-
 #include "messages/MDentryLink.h"
 MESSAGE(MDentryLink)
 

@@ -403,12 +403,6 @@ set(USE_NSS 1)
 set(USE_OPENSSL 1)
 set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
-option(WITH_XIO "Enable XIO messaging" OFF)
-if(WITH_XIO)
-  find_package(xio REQUIRED)
-  set(HAVE_XIO ${XIO_FOUND})
-endif()
-
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)

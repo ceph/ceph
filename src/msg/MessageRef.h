@@ -46,7 +46,6 @@ class MClientSnap;
 class MCommand;
 class MCommandReply;
 class MConfig;
-class MDataPing;
 class MDentryLink;
 class MDentryUnlink;
 class MDirUpdate;

@@ -63,7 +63,6 @@ overrides:
         debug asok: "0/0"
         debug throttle: "0/0"
         debug refs: "0/0"
-        debug xio: "0/0"
         debug compressor: "0/0"
         debug bluestore: "0/0"
         debug bluefs: "0/0"

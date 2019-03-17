@@ -103,7 +103,6 @@
 #include "messages/MMonHealth.h"
 #include "messages/MMonHealthChecks.h"
 #include "messages/MMonMetadata.h"
-#include "messages/MDataPing.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonSubscribe.h"
@@ -839,11 +838,6 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = MMonHealthChecks::create();
     break;
 
-#if defined(HAVE_XIO)
-  case MSG_DATA_PING:
-    m = MDataPing::create();
-    break;
-#endif
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
