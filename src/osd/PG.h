@@ -1323,14 +1323,14 @@ protected:
    *  - waiting_for_map
    *    - may start or stop blocking at any time (depending on client epoch)
    *  - waiting_for_peered
-   *    - !is_peered() or flushes_in_progress
+   *    - !is_peered()
    *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_flush
+   *    - flushes_in_progress
+   *    - waiting for final flush during activate
    *  - waiting_for_active
    *    - !is_active()
    *    - only starts blocking on interval change; never restarts
-   *  - waiting_for_flush
-   *    - is_active() and flushes_in_progress
-   *    - waiting for final flush during activate
    *  - waiting_for_scrub
    *    - starts and stops blocking for varying intervals during scrub
    *  - waiting_for_unreadable_object
