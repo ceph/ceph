@@ -161,13 +161,15 @@ void AsyncConnection::maybe_start_delay_thread()
     bool delay = false;
     string ms_inject_delay_type = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_type");
     string ms_inject_delay_name = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_name");
-    if (!ms_inject_delay_type.empty()) {
+    string peer_type_str = ceph_entity_type_name(peer_type);
+    string peer_name_str = peer_name.to_str();
+    if (!ms_inject_delay_type.empty() && !peer_type_str.empty()) {
       auto pos = ms_inject_delay_type.
 	find(ceph_entity_type_name(peer_type));
       if (pos != string::npos) {
 	delay = true;
       }
-    } else if (!ms_inject_delay_name.empty()) {
+    } else if (!ms_inject_delay_name.empty() && !peer_name_str.empty()) {
       auto pos = ms_inject_delay_name.find(peer_name.to_str());
       if (pos != string::npos) {
 	delay = true;
@@ -175,11 +177,20 @@ void AsyncConnection::maybe_start_delay_thread()
     }
     
     if (delay) {
-      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
+      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue for " << ceph_entity_type_name(peer_type)
+			  << "/" << peer_name << " which matches " << ms_inject_delay_type
+			  << "/" << ms_inject_delay_name
 			  << dendl;
+			     
       delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
 					conn_id);
-    }
+    } else {
+	ldout(msgr->cct, 1) << __func__ << "setting up normal dispatch for "<< ceph_entity_type_name(peer_type)
+			  << "/" << peer_name << " which does not match " << ms_inject_delay_type
+			  << "/" << ms_inject_delay_name
+			  << dendl;
+	  
+      }
   }
 }
 
