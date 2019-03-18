@@ -80,10 +80,8 @@ class Module(MgrModule):
     def do_ls(self, cmd, inbuf):
         keys = []
         for k, meta in self.timestamp_filter(lambda ts: True):
-            process_name = meta.get('process_name', 'unknown')
-            if not process_name:
-                process_name = 'unknown'
-            keys.append("%s %s" % (k.replace('crash/', ''), process_name))
+            entity_name = meta.get('entity_name', 'unknown')
+            keys.append("%s %s" % (k.replace('crash/', ''), entity_name))
         keys.sort()
         return 0, '\n'.join(keys), ''
 

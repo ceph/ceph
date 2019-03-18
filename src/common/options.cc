@@ -930,6 +930,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Induce a daemon crash/exit if sender skips a message sequence number"),
 
+    Option("ms_die_on_bug", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Induce a crash/exit on various bugs (for testing purposes)"),
+
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Limit messages that are read off the network but still being processed"),
@@ -3648,6 +3652,11 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_deep_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
+
+    Option("osd_debug_no_acting_change", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
+    Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
