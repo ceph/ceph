@@ -95,3 +95,45 @@ Manual bucket resharding
 ::
 
    # radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>
+
+
+Troubleshooting
+===============
+
+Clusters prior to Luminous 12.2.11 and Mimic 13.2.5 left behind stale bucket
+instance entries that weren't automatically cleaned up. The issue also affected
+LifeCycle policies which weren't applied to resharded buckets anymore. Both of
+these issues can be worked around using a couple of radosgw-admin commands.
+
+Stale Instance Management
+-------------------------
+
+::
+
+   # radosgw-admin reshard stale-instances list
+
+This lists the stale instances in a cluster that are ready to be cleaned up.
+Please note that the cleanup of these instances should be done only on a single
+site cluster. The cleanup can be done by the following command:
+
+::
+
+   # radosgw-admin reshard stale-instances rm
+
+
+Lifecycle fixes
+---------------
+
+For clusters which had resharded instances, it is highly likely that the old
+lifecycle processes would've flagged and deleted lifecycle processing as the
+bucket instance changed during a reshard. While this is fixed for newer clusters
+(from 13.2.6 and 12.2.12), older buckets which had lifecycle policies and
+would've undergone reshard will have to be manually fixed by issuing the following command
+
+::
+
+   # radosgw-admin lc reshard fix --bucket {bucketname}
+
+
+As a convenience wrapper, if the ``--bucket`` argument is dropped then this
+command will try and fix LC policies for all the buckets in the cluster.
