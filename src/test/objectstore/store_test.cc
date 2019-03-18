@@ -6936,8 +6936,9 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mkfs", "false");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "false");
   g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
   g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
   g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
