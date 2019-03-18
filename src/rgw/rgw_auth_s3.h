@@ -97,6 +97,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
+  using secret_cache_t = rgw::auth::keystone::SecretCache;
   using EC2Engine = rgw::auth::keystone::EC2Engine;
 
   boost::optional <EC2Engine> keystone_engine;
@@ -128,7 +129,8 @@ public:
       keystone_engine.emplace(cct, ver_abstractor,
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                               keystone_config_t::get_instance(),
-                              keystone_cache_t::get_instance<keystone_config_t>());
+                              keystone_cache_t::get_instance<keystone_config_t>(),
+			      secret_cache_t::get_instance());
       add_engine(Control::SUFFICIENT, *keystone_engine);
 
     }
