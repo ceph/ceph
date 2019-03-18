@@ -186,7 +186,7 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
   return 0;
 }
 
-int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, bool detailed_mode)
+int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode)
 {
   int r = orphan_store.init();
   if (r < 0) {
@@ -198,7 +198,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, boo
   max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
                                      MAX_LIST_OBJS_ENTRIES);
 
-  detailed_mode = detailed_mode;
+  detailed_mode = _detailed_mode;
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
