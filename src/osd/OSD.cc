@@ -271,8 +271,7 @@ OSDService::OSDService(OSD *osd) :
   cur_state(NONE),
   cur_ratio(0), physical_ratio(0),
   epoch_lock("OSDService::epoch_lock"),
-  boot_epoch(0), up_epoch(0), bind_epoch(0),
-  is_stopping_lock("OSDService::is_stopping_lock")
+  boot_epoch(0), up_epoch(0), bind_epoch(0)
 #ifdef PG_DEBUG_REFS
   , pgid_lock("OSDService::pgid_lock")
 #endif
@@ -1420,7 +1419,7 @@ void OSDService::set_epochs(const epoch_t *_boot_epoch, const epoch_t *_up_epoch
 
 bool OSDService::prepare_to_stop()
 {
-  std::lock_guard l(is_stopping_lock);
+  std::unique_lock l(is_stopping_lock);
   if (get_state() != NOT_STOPPING)
     return false;
 
@@ -1436,13 +1435,9 @@ bool OSDService::prepare_to_stop()
 	osdmap->get_epoch(),
 	true  // request ack
 	));
-    utime_t now = ceph_clock_now();
-    utime_t timeout;
-    timeout.set_from_double(now + cct->_conf->osd_mon_shutdown_timeout);
-    while ((ceph_clock_now() < timeout) &&
-       (get_state() != STOPPING)) {
-      is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
-    }
+    const auto timeout = ceph::make_timespan(cct->_conf->osd_mon_shutdown_timeout);
+    is_stopping_cond.wait_for(l, timeout,
+      [this] { return get_state() == STOPPING; });
   }
   dout(0) << __func__ << " starting shutdown" << dendl;
   set_state(STOPPING);
@@ -1451,11 +1446,11 @@ bool OSDService::prepare_to_stop()
 
 void OSDService::got_stop_ack()
 {
-  std::lock_guard l(is_stopping_lock);
+  std::scoped_lock l(is_stopping_lock);
   if (get_state() == PREPARING_TO_STOP) {
     dout(0) << __func__ << " starting shutdown" << dendl;
     set_state(STOPPING);
-    is_stopping_cond.Signal();
+    is_stopping_cond.notify_all();
   } else {
     dout(10) << __func__ << " ignoring msg" << dendl;
   }
