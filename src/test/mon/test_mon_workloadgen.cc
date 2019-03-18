@@ -537,8 +537,7 @@ class OSDStub : public TestStub
   void send_pg_stats() {
     dout(10) << __func__
 	     << " pgs " << pgs.size() << " osdmap " << osdmap << dendl;
-    utime_t now = ceph_clock_now();
-    MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch(), now);
+    MPGStats *mstats = new MPGStats(monc.get_fsid(), osdmap.get_epoch());
 
     mstats->set_tid(1);
     mstats->osd_stat = osd_stat;
