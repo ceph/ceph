@@ -31,6 +31,7 @@
 // until everything is moved from rgw_common
 #include "rgw_common.h"
 #include "rgw_reshard.h"
+#include "rgw_lc.h"
 #include "cls/user/cls_user_types.h"
 
 #define dout_context g_ceph_context
@@ -1875,6 +1876,94 @@ int RGWBucketAdminOp::clear_stale_instances(RGWRados *store,
                    };
 
   return process_stale_instances(store, op_state, flusher, process_f);
+}
+
+static int fix_single_bucket_lc(RGWRados *store,
+                                const std::string& tenant_name,
+                                const std::string& bucket_name)
+{
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  RGWBucketInfo bucket_info;
+  map <std::string, bufferlist> bucket_attrs;
+  int ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+                                   bucket_info, nullptr, &bucket_attrs);
+  if (ret < 0) {
+    // TODO: Should we handle the case where the bucket could've been removed between
+    // listing and fetching?
+    return ret;
+  }
+
+  return rgw::lc::fix_lc_shard_entry(store, bucket_info, bucket_attrs);
+}
+
+static void format_lc_status(Formatter* formatter,
+                             const std::string& tenant_name,
+                             const std::string& bucket_name,
+                             int status)
+{
+  formatter->open_object_section("bucket_entry");
+  std::string entry = tenant_name.empty() ? bucket_name : tenant_name + "/" + bucket_name;
+  formatter->dump_string("bucket", entry);
+  formatter->dump_int("status", status);
+  formatter->close_section(); // bucket_entry
+}
+
+static void process_single_lc_entry(RGWRados *store, Formatter *formatter,
+                                    const std::string& tenant_name,
+                                    const std::string& bucket_name)
+{
+  int ret = fix_single_bucket_lc(store, tenant_name, bucket_name);
+  format_lc_status(formatter, tenant_name, bucket_name, -ret);
+}
+
+int RGWBucketAdminOp::fix_lc_shards(RGWRados *store,
+                                    RGWBucketAdminOpState& op_state,
+                                    RGWFormatterFlusher& flusher)
+{
+  std::string marker;
+  void *handle;
+  Formatter *formatter = flusher.get_formatter();
+  static constexpr auto default_max_keys = 1000;
+
+  bool truncated;
+  if (const std::string& bucket_name = op_state.get_bucket_name();
+      ! bucket_name.empty()) {
+    const rgw_user user_id = op_state.get_user_id();
+    process_single_lc_entry(store, formatter, user_id.tenant, bucket_name);
+    formatter->flush(cout);
+  } else {
+    int ret = store->meta_mgr->list_keys_init("bucket", marker, &handle);
+    if (ret < 0) {
+      std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    {
+      formatter->open_array_section("lc_fix_status");
+      auto sg = make_scope_guard([&store, &handle, &formatter](){
+                                   store->meta_mgr->list_keys_complete(handle);
+                                   formatter->close_section(); // lc_fix_status
+                                   formatter->flush(cout);
+                                 });
+      do {
+        list<std::string> keys;
+        ret = store->meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+        if (ret < 0 && ret != -ENOENT) {
+          std::cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+          return ret;
+        } if (ret != -ENOENT) {
+          for (const auto &key:keys) {
+            auto [tenant_name, bucket_name] = split_tenant(key);
+            process_single_lc_entry(store, formatter, tenant_name, bucket_name);
+          }
+        }
+        formatter->flush(cout); // regularly flush every 1k entries
+      } while (truncated);
+    }
+
+  }
+  return 0;
+
 }
 
 void rgw_data_change::dump(Formatter *f) const
