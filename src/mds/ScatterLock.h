@@ -20,14 +20,37 @@
 
 #include "MDSContext.h"
 
+class PropagationId {
+private:
+  utime_t propagate_time;
+  CInode* propagate_root;
+public:
+  PropagationId()
+    : propagate_time(utime_t()), propagate_root(NULL)
+  {}
+  PropagationId(utime_t pt, CInode* pr)
+    : propagate_time(pt), propagate_root(pr)
+  {}
+  bool operator<(PropagationId const &propId) const {
+    return (propagate_time < propId.propagate_time)
+      || (propagate_time == propId.propagate_time
+          && propagate_root < propId.propagate_root);
+  }
+  bool operator!=(PropagationId const &propId) const {
+    return (propagate_time != propId.propagate_time)
+      || (propagate_root != propId.propagate_root);
+  }
+};
+
 class ScatterLock : public SimpleLock {
 
   struct more_bits_t {
     xlist<ScatterLock*>::item item_updated;
+    xlist<ScatterLock*>::item item_nudging;
     utime_t update_stamp;
 
     explicit more_bits_t(ScatterLock *lock) :
-      item_updated(lock)
+      item_updated(lock), item_nudging(lock)
     {}
   };
 
@@ -45,13 +68,24 @@ class ScatterLock : public SimpleLock {
     DIRTY            = 1 << 10,
     FLUSHING         = 1 << 11,
     FLUSHED          = 1 << 12,
+    NUDGING          = 1 << 13,        
   };
+
+  PropagationId nudged_by;
 
 public:
   ScatterLock(MDSCacheObject *o, LockType *lt) :
     SimpleLock(o, lt) {}
   ~ScatterLock() override {
     ceph_assert(!_more);
+  }
+
+  void set_nudged_by(PropagationId id) {
+    nudged_by = id;
+  }
+
+  PropagationId get_nudged_by() {
+    return nudged_by;
   }
 
   bool is_scatterlock() const override {
@@ -88,6 +122,7 @@ public:
   }
 
   xlist<ScatterLock*>::item *get_updated_item() { return &more()->item_updated; }
+  xlist<ScatterLock*>::item *get_nudging_item() { return &more()->item_nudging; }
 
   utime_t get_update_stamp() {
     return _more ? _more->update_stamp : utime_t();
@@ -113,6 +148,17 @@ public:
   bool get_unscatter_wanted() const {
     return state_flags & UNSCATTER_WANTED;
   }
+  void set_nudging() {
+    state_flags |= NUDGING;
+  }
+  void clear_nudging() {
+    state_flags &= ~NUDGING;
+    if (_more) {
+      _more->item_nudging.remove_myself();
+      if (!is_dirty())
+        _more.reset();
+    }
+  }
 
   bool is_dirty() const override {
     return state_flags & DIRTY;
@@ -125,6 +171,9 @@ public:
   }
   bool is_dirty_or_flushing() const {
     return is_dirty() || is_flushing();
+  }
+  bool is_nudging() const {
+    return state_flags & NUDGING;
   }
 
   void mark_dirty() { 
@@ -227,6 +276,8 @@ public:
       out << " flushed";
     if (get_scatter_wanted())
       out << " scatter_wanted";
+    if (is_nudging())
+      out << " nudging";
     out << ")";
   }
 
@@ -247,7 +298,8 @@ private:
     state_flags &= ~DIRTY;
     if (_more) {
       _more->item_updated.remove_myself();
-      _more.reset();
+      if (!_more->item_nudging.is_on_list())
+        _more.reset();
     }
   }
 };

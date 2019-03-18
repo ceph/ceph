@@ -9319,6 +9319,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_UPGRADE_SNAPREALM:
       upgrade_inode_snaprealm_work(mdr);
       break;
+    case CEPH_MDS_OP_PROPAGATE_RSTAT:
+      mds->locker->propagate_rstat(mdr);
+      break;
     default:
       ceph_abort();
     }
@@ -12284,6 +12287,18 @@ void C_MDS_RetryRequest::finish(int r)
   cache->dispatch_request(mdr);
 }
 
+C_MDS_RetryRequests_AfterLockNudge::C_MDS_RetryRequests_AfterLockNudge(MDCache* c, MDRequestRef& r, ScatterLock* l)
+  : MDSInternalContext(c->mds), cache(c), mdr(r), lock(l)
+{}
+
+void C_MDS_RetryRequests_AfterLockNudge::finish(int r)
+{
+  mdr->retry++;
+  cache->dispatch_request(mdr);
+}
+
+C_MDS_RetryRequests_AfterLockNudge::~C_MDS_RetryRequests_AfterLockNudge()
+{}
 
 class C_MDS_EnqueueScrub : public Context
 {
@@ -12877,4 +12892,12 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_PATH);
   f->close_section();
   return true;
+}
+
+void MDCache::propagate_rstats(CInode* to, MDSContext* fin) {
+  MDRequestRef mdr =  request_start_internal(CEPH_MDS_OP_PROPAGATE_RSTAT);
+  mdr->internal_op_finish = fin;
+  mdr->in[0] = to;
+  mdr->rstat_propagate_time = ceph_clock_now();
+  mds->locker->propagate_rstat(mdr);
 }

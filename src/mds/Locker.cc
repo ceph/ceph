@@ -4339,9 +4339,11 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
     lock->get_parent()->auth_pin(lock);
     if (need_recover)
       mds->mdcache->do_file_recover();
+    return;
   } else {
     lock->set_state(LOCK_LOCK);
     lock_stablized(lock, ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
+    return;
   }
 }
 
@@ -4583,29 +4585,35 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  *
  * we need to lock|scatter in order to push fnode changes into the
  * inode.dirstat.
+ *
+ * Return Value: true if c is put into some wait queue, false otherwise
  */
-void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange)
+bool Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool under_rstat_propagation)
 {
   CInode *p = static_cast<CInode *>(lock->get_parent());
 
   if (p->is_frozen() || p->is_freezing()) {
     dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
-    if (c) 
+    if (c) {
       p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
+      return true;
+    }
     else if (lock->is_dirty())
       // just requeue.  not ideal.. starvation prone..
       updated_scatterlocks.push_back(lock->get_updated_item());
-    return;
+    return false;
   }
 
   if (p->is_ambiguous_auth()) {
     dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
-    if (c) 
+    if (c) {
       p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
+      return true;
+    }
     else if (lock->is_dirty())
       // just requeue.  not ideal.. starvation prone..
       updated_scatterlocks.push_back(lock->get_updated_item());
-    return;
+    return false;
   }
 
   if (p->is_auth()) {
@@ -4673,9 +4681,11 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
 	}
       } else {
 	dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
-	if (c)
+	if (c) {
 	  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
-	return;
+          return true;
+        }
+	return false;
       }
     }
   } else {
@@ -4687,13 +4697,16 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
       mds->send_message_mds(make_message<MLock>(lock, LOCK_AC_NUDGE, mds->get_nodeid()), auth);
     }
 
-    // wait...
-    if (c)
-      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
-
     // also, requeue, in case we had wrong auth or something
     if (lock->is_dirty())
       updated_scatterlocks.push_back(lock->get_updated_item());
+
+    // wait...
+    if (c) {
+      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+      return true;
+    }
+    return false;
   }
 }
 
@@ -4715,9 +4728,20 @@ void Locker::scatter_tick()
 	       << *lock << " " << *lock->get_parent() << dendl;
       continue;
     }
+
+    if (lock->get_type() == CEPH_LOCK_INEST && lock->is_nudging())
+      //this lock could be nudged by some rstat propagate command,
+      //skip it for now.
+      continue;
+
     if (now - lock->get_update_stamp() < g_conf()->mds_scatter_nudge_interval)
       break;
     updated_scatterlocks.pop_front();
+    if (lock->get_type() == CEPH_LOCK_INEST) {
+      nudging_nestlocks[empty_propagate_id].push_back(lock->get_nudging_item());
+      lock->set_nudging();
+      lock->set_nudged_by(empty_propagate_id);
+    }
     scatter_nudge(lock, 0);
   }
   mds->mdlog->flush();
@@ -5436,15 +5460,107 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
 }
 
 void Locker::lock_stablized(SimpleLock* lock, uint64_t mask, int r, MDSContext::vec* finishers) {
-  if (lock->get_type() == CEPH_LOCK_INEST && lock->is_dirty()) {
-    dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent() 
-    << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
-    mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+  if (lock->get_type() == CEPH_LOCK_INEST) {
+    dout(20) << __func__ << " " << *lock << " on " << *lock->get_parent() << dendl;
+    if (lock->is_dirty()) {
+      dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent()
+        << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
+      mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+    }
+    if (static_cast<ScatterLock*>(lock)->is_nudging()) {
+      static_cast<ScatterLock*>(lock)->clear_nudging();
+      dout(20) << __func__ << " after clearing nudging, nudging_nestlocks: " << nudging_nestlocks[static_cast<ScatterLock*>(lock)->get_nudged_by()].size() << dendl;
+    }
   }
-
   if (finishers)
     lock->take_waiting(mask, *finishers);
   else
     lock->finish_waiters(mask, r);
 }
 
+void Locker::propagate_rstat(MDRequestRef& mdr) {
+  int nudged = 0;
+  CInode* to = mdr->in[0];
+  ceph_assert(to);
+  int locks_inflight = 0;
+
+  if (mdr->rstat_propagate_time == utime_t())
+    mdr->rstat_propagate_time = ceph_clock_now();
+
+  int n = updated_scatterlocks.size();
+  xlist<ScatterLock*>::iterator it = updated_scatterlocks.begin();
+  dout(20) << __func__ << " rstats propagate, updated_scatterlocks' size: " << n << dendl;
+  while (it != updated_scatterlocks.end()) {
+    if (n-- == 0)
+      break;
+    ScatterLock* lock = *it;
+    if (lock->get_type() == CEPH_LOCK_INEST &&
+        to->is_projected_ancestor_of(static_cast<CInode *>(lock->get_parent()))) {
+      dout(20) << __func__ << " found child inode: " << *(lock->get_parent()) << dendl;
+      if (!lock->is_dirty()) {
+        ++it;
+        lock->get_updated_item()->remove_myself();
+        dout(10) << __func__ << " removing from updated_scatterlocks "
+          << *lock << " " << *lock->get_parent() << dendl;
+        continue;
+      }
+      
+      CInode* ino = static_cast<CInode*>(lock->get_parent());
+      utime_t dirfrags_rstat_dirty_from = ino->get_dirfrags_rstat_dirty_from();
+      dout(20) << __func__ << " lock: " << *lock << " of " << *lock->get_parent()
+        << ", update_stamp: " << lock->get_update_stamp() << ", lock's parent's rstat_dirty_from:"
+        << ino->get_rstat_dirty_from() << ", lock's parent's subdir rstat_dirty_from:"
+        << dirfrags_rstat_dirty_from << ", mdr's rstats_propagate_time: " << mdr->rstat_propagate_time << dendl;
+
+      if (((!ino->get_rstat_dirty_from().is_zero()
+              && ino->get_rstat_dirty_from() <= mdr->rstat_propagate_time)
+            || (!dirfrags_rstat_dirty_from.is_zero()
+              && dirfrags_rstat_dirty_from <= mdr->rstat_propagate_time))) {
+        if (lock->is_nudging()) {
+          dout(20) << __func__ << " found already nudging scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
+
+          if (lock->get_nudged_by() != PropagationId(mdr->rstat_propagate_time, to)) {
+            dout(20) << __func__ << " waiting for already nudging scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
+            lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequests_AfterLockNudge(mdcache, mdr, lock));
+            locks_inflight++;
+          }
+        } else {
+          dout(20) << __func__ << " need to nudge scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
+          nudged++;
+          ++it;
+          lock->get_updated_item()->remove_myself();
+          lock->set_nudging();
+          lock->set_nudged_by(PropagationId(mdr->rstat_propagate_time, to));
+          scatter_nudge(lock, new C_MDS_RetryRequests_AfterLockNudge(mdcache, mdr, lock));
+          ceph_assert(!lock->get_nudging_item()->is_on_list());
+          nudging_nestlocks[PropagationId(mdr->rstat_propagate_time, to)].push_back(lock->get_nudging_item());
+        }
+      } else {
+        ++it;
+      }
+    } else {
+      ++it;
+    }
+  }
+
+/*  for (auto lock : nudging_nestlocks[empty_propagate_id]) {
+    CInode* ino = static_cast<CInode*>(lock->get_parent());
+    utime_t dirfrags_rstat_dirty_from = ino->get_dirfrags_rstat_dirty_from();
+    if (to->is_projected_ancestor_of(static_cast<CInode *>(lock->get_parent()))
+        && ((!ino->get_rstat_dirty_from().is_zero() && ino->get_rstat_dirty_from() <= mdr->rstat_propagate_time)
+          || (!dirfrags_rstat_dirty_from.is_zero() && dirfrags_rstat_dirty_from <= mdr->rstat_propagate_time))) {
+      lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequests_AfterLockNudge(mdcache, mdr, lock));
+      locks_inflight++;
+    }
+  }*/
+
+  dout(20) << __func__ << " updated_scatterlocks traversal finished, nudged: " << nudged
+    << ", locks_inflight: " << locks_inflight << ", nudging_nestlocks: " << nudging_nestlocks[PropagationId(mdr->rstat_propagate_time, to)].size() << dendl;
+
+  if (!nudged && !locks_inflight && !nudging_nestlocks[PropagationId(mdr->rstat_propagate_time, to)].size()) {
+    dout(20) << __func__ << " all propagated!" << dendl;
+    mdr->internal_op_finish->complete(0);
+    mdcache->request_finish(mdr);
+    nudging_nestlocks.erase(PropagationId(mdr->rstat_propagate_time, to));
+  }
+}

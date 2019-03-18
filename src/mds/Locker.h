@@ -57,6 +57,8 @@ private:
   void dispatch(const cref_t<Message> &m);
   void handle_lock(const cref_t<MLock> &m);
 
+  void propagate_rstat(MDRequestRef& internal_mdr);
+
   void tick();
 
   void nudge_log(SimpleLock *lock);
@@ -145,7 +147,7 @@ public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
-  void scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange=false);
+  bool scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange=false);
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, const cref_t<MLock> &m);
@@ -160,9 +162,10 @@ protected:
   void lock_stablized(SimpleLock* lock, uint64_t mask, int r=0, MDSContext::vec* finishers=NULL);
 
   xlist<ScatterLock*> updated_scatterlocks;
+  std::map<PropagationId, xlist<ScatterLock*>> nudging_nestlocks;
 public:
   void mark_updated_scatterlock(ScatterLock *lock);
-
+  const PropagationId empty_propagate_id;
 
   void handle_reqrdlock(SimpleLock *lock, const cref_t<MLock> &m);
 

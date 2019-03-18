@@ -99,6 +99,17 @@ public:
   }
 };
 
+class C_MDS_RstatsPropagate_finish : public ServerContext {
+  MDRequestRef mdr;
+  MDCache* mdcache;
+  CInode* to;
+public:
+  C_MDS_RstatsPropagate_finish(Server *s, MDRequestRef& r, MDCache* cache, CInode* ino) : ServerContext(s), mdr(r), mdcache(cache), to(ino) {}
+  void finish(int r) override {
+    server->respond_to_request(mdr, r);
+  }
+};
+
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
@@ -5341,6 +5352,18 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     auto &pi = cur->project_inode();
     cur->set_export_pin(rank);
     pip = &pi.inode;
+  } else if (name.find("ceph.rstats.propagate") == 0) {
+    if (!cur->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+    
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+    
+    C_MDS_RstatsPropagate_finish* fin = new C_MDS_RstatsPropagate_finish(this, mdr, mdcache, cur);
+    mdcache->propagate_rstats(cur, fin);
+    return;
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);

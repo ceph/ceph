@@ -479,7 +479,7 @@ public:
   void finish_committed_masters();
 
   void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
-
+  void propagate_rstats(CInode* to, MDSContext* fin);
   // -- recovery --
 protected:
   set<mds_rank_t> recovery_set;
@@ -1331,4 +1331,13 @@ class C_MDS_RetryRequest : public MDSInternalContext {
   void finish(int r) override;
 };
 
+class C_MDS_RetryRequests_AfterLockNudge : public MDSInternalContext {
+  MDCache* cache;
+  MDRequestRef mdr;
+  ScatterLock* lock;
+public:
+  C_MDS_RetryRequests_AfterLockNudge(MDCache* c, MDRequestRef& r, ScatterLock* lock);
+  void finish(int r) override;
+  virtual ~C_MDS_RetryRequests_AfterLockNudge();
+};
 #endif

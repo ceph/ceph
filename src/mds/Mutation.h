@@ -251,6 +251,7 @@ struct MDRequestImpl : public MutationImpl {
   CDentry *straydn;
   CInode *in[2];
   snapid_t snapid;
+  utime_t rstat_propagate_time = utime_t();
 
   CInode *tracei;
   CDentry *tracedn;
