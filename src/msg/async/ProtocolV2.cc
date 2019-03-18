@@ -1823,7 +1823,8 @@ CtPtr ProtocolV2::send_client_ident() {
       messenger->get_myaddrs().front().is_blank_ip()) {
     sockaddr_storage ss;
     socklen_t len = sizeof(ss);
-    getsockname(connection->cs.fd(), (sockaddr *)&ss, &len);
+    int r = getsockname(connection->cs.socket_fd(), (sockaddr *)&ss, &len);
+    ceph_assert(r == 0);
     ldout(cct, 1) << __func__ << " getsockname reveals I am " << (sockaddr *)&ss
                   << " when talking to " << connection->target_addr << dendl;
     entity_addr_t a;
