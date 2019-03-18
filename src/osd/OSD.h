@@ -711,14 +711,16 @@ public:
 
   // -- pg merge --
   Mutex merge_lock = {"OSD::merge_lock"};
-  set<pg_t> ready_to_merge_source;
-  map<pg_t,pair<epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (les,lec)
+  map<pg_t,eversion_t> ready_to_merge_source;   // pg -> version
+  map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (version,les,lec)
   set<pg_t> not_ready_to_merge_source;
   map<pg_t,pg_t> not_ready_to_merge_target;
   set<pg_t> sent_ready_to_merge_source;
 
-  void set_ready_to_merge_source(PG *pg);
+  void set_ready_to_merge_source(PG *pg,
+				 eversion_t version);
   void set_ready_to_merge_target(PG *pg,
+				 eversion_t version,
 				 epoch_t last_epoch_started,
 				 epoch_t last_epoch_clean);
   void set_not_ready_to_merge_source(pg_t source);

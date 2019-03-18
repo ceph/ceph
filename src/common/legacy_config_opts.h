@@ -125,6 +125,7 @@ OPTION(ms_die_on_bad_msg, OPT_BOOL)
 OPTION(ms_die_on_unhandled_msg, OPT_BOOL)
 OPTION(ms_die_on_old_message, OPT_BOOL)     // assert if we get a dup incoming message and shouldn't have (may be triggered by pre-541cd3c64be0dfa04e8a2df39422e0eb9541a428 code)
 OPTION(ms_die_on_skipped_message, OPT_BOOL)  // assert if we skip a seq (kernel client does this intentionally)
+OPTION(ms_die_on_bug, OPT_BOOL)
 OPTION(ms_dispatch_throttle_bytes, OPT_U64)
 OPTION(ms_bind_ipv6, OPT_BOOL)
 OPTION(ms_bind_port_min, OPT_INT)
@@ -774,6 +775,7 @@ OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL)
 OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
 OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
+OPTION(osd_debug_no_acting_change, OPT_BOOL)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track

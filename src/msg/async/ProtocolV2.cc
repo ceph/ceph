@@ -102,6 +102,7 @@ ProtocolV2::~ProtocolV2() {
 void ProtocolV2::connect() {
   ldout(cct, 1) << __func__ << dendl;
   state = START_CONNECT;
+  pre_auth.enabled = true;
 }
 
 void ProtocolV2::accept() {
@@ -224,7 +225,6 @@ void ProtocolV2::reset_recv_state() {
     auth_meta.reset(new AuthConnectionMeta);
     session_stream_handlers.tx.reset(nullptr);
     session_stream_handlers.rx.reset(nullptr);
-    pre_auth.enabled = true;
     pre_auth.txbuf.clear();
     pre_auth.rxbuf.clear();
   }
@@ -346,6 +346,7 @@ CtPtr ProtocolV2::_fault() {
       connect_seq++;
       global_seq = messenger->get_global_seq();
       state = START_CONNECT;
+      pre_auth.enabled = true;
       connection->state = AsyncConnection::STATE_CONNECTING;
     }
     backoff = utime_t();
@@ -367,6 +368,7 @@ CtPtr ProtocolV2::_fault() {
 
     global_seq = messenger->get_global_seq();
     state = START_CONNECT;
+    pre_auth.enabled = true;
     connection->state = AsyncConnection::STATE_CONNECTING;
     ldout(cct, 1) << __func__ << " waiting " << backoff << dendl;
     // woke up again;
@@ -708,6 +710,8 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     [&next, this](char *buffer, int r) {
       if (unlikely(pre_auth.enabled) && r >= 0) {
         pre_auth.rxbuf.append(*next.node);
+	ceph_assert(!cct->_conf->ms_die_on_bug ||
+		    pre_auth.rxbuf.length() < 1000000);
       }
       next.r = r;
       run_continuation(next);
@@ -716,6 +720,8 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
     // error or done synchronously
     if (unlikely(pre_auth.enabled) && r >= 0) {
       pre_auth.rxbuf.append(*next.node);
+      ceph_assert(!cct->_conf->ms_die_on_bug ||
+		  pre_auth.rxbuf.length() < 1000000);
     }
     next.r = r;
     return &next;
@@ -737,6 +743,8 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
     pre_auth.txbuf.append(buffer);
+    ceph_assert(!cct->_conf->ms_die_on_bug ||
+		pre_auth.txbuf.length() < 1000000);
   }
 
   ssize_t r =
@@ -2626,6 +2634,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
     ceph_assert(!connection->delay_state);
   }
   exproto->reset_recv_state();
+  exproto->pre_auth.enabled = false;
 
   if (!reconnecting) {
     exproto->client_cookie = client_cookie;

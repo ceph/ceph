@@ -401,7 +401,7 @@ ceph_get_module_option(BaseMgrModule *self, PyObject *args)
   char *module = nullptr;
   char *key = nullptr;
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "ssz:ceph_get_module_option", &module, &key,
+  if (!PyArg_ParseTuple(args, "ss|s:ceph_get_module_option", &module, &key,
 			&prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;

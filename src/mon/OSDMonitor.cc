@@ -3318,7 +3318,12 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
   }
 
   if (m->ready) {
-    p.dec_pg_num(m->last_epoch_started, m->last_epoch_clean);
+    p.dec_pg_num(m->pgid,
+		 pending_inc.epoch,
+		 m->source_version,
+		 m->target_version,
+		 m->last_epoch_started,
+		 m->last_epoch_clean);
     p.last_change = pending_inc.epoch;
   } else {
     // back off the merge attempt!
