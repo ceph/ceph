@@ -10280,36 +10280,58 @@ int BlueStore::_do_alloc_write(
       // FIXME: memory alignment here is bad
       bufferlist t;
       int r = c->compress(wi.bl, t);
-      assert(r == 0);
 
-      bluestore_compression_header_t chdr;
-      chdr.type = c->get_type();
-      chdr.length = t.length();
-      ::encode(chdr, wi.compressed_bl);
-      wi.compressed_bl.claim_append(t);
-
-      wi.compressed_len = wi.compressed_bl.length();
-      uint64_t newlen = P2ROUNDUP(wi.compressed_len, min_alloc_size);
       uint64_t want_len_raw = wi.blob_length * crr;
       uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
-      if (newlen <= want_len && newlen < wi.blob_length) {
-	// Cool. We compressed at least as much as we were hoping to.
-	// pad out to min_alloc_size
-	wi.compressed_bl.append_zero(newlen - wi.compressed_len);
-	logger->inc(l_bluestore_write_pad_bytes, newlen - wi.compressed_len);
-	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
-		 << " -> 0x" << wi.compressed_len << " => 0x" << newlen
-		 << " with " << c->get_type()
-		 << std::dec << dendl;
-	txc->statfs_delta.compressed() += wi.compressed_len;
-	txc->statfs_delta.compressed_original() += wi.blob_length;
-	txc->statfs_delta.compressed_allocated() += newlen;
-	logger->inc(l_bluestore_compress_success_count);
-	wi.compressed = true;
-	need += newlen;
+      bool rejected = false;
+      uint64_t compressed_len = t.length();
+      // do an approximate (fast) estimation for resulting blob size
+      // that doesn't take header overhead  into account
+      uint64_t result_len = P2ROUNDUP(compressed_len, min_alloc_size);
+      if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
+	bluestore_compression_header_t chdr;
+	chdr.type = c->get_type();
+	chdr.length = t.length();
+	encode(chdr, wi.compressed_bl);
+	wi.compressed_bl.claim_append(t);
+
+	compressed_len = wi.compressed_bl.length();
+	result_len = P2ROUNDUP(compressed_len, min_alloc_size);
+	if (result_len <= want_len && result_len < wi.blob_length) {
+	  // Cool. We compressed at least as much as we were hoping to.
+	  // pad out to min_alloc_size
+	  wi.compressed_bl.append_zero(result_len - compressed_len);
+	  wi.compressed_len = compressed_len;
+	  wi.compressed = true;
+	  logger->inc(l_bluestore_write_pad_bytes, result_len - compressed_len);
+	  dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
+		   << " -> 0x" << compressed_len << " => 0x" << result_len
+		   << " with " << c->get_type()
+		   << std::dec << dendl;
+	  txc->statfs_delta.compressed() += compressed_len;
+	  txc->statfs_delta.compressed_original() += wi.blob_length;
+	  txc->statfs_delta.compressed_allocated() += result_len;
+	  logger->inc(l_bluestore_compress_success_count);
+	  need += result_len;
+	} else {
+	  rejected = true;
+	}
+      } else if (r != 0) {
+	dout(5) << __func__ << std::hex << "  0x" << wi.blob_length
+		 << " bytes compressed using " << c->get_type_name()
+		 << std::dec
+		 << " failed with errcode = " << r
+		 << ", leaving uncompressed"
+		 << dendl;
+	logger->inc(l_bluestore_compress_rejected_count);
+	need += wi.blob_length;
       } else {
+	rejected = true;
+      }
+
+      if (rejected) {
 	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
-		 << " compressed to 0x" << wi.compressed_len << " -> 0x" << newlen
+		 << " compressed to 0x" << compressed_len << " -> 0x" << result_len
 		 << " with " << c->get_type()
 		 << ", which is more than required 0x" << want_len_raw
 		 << " -> 0x" << want_len
