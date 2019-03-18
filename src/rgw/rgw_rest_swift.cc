@@ -2598,7 +2598,7 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
 
 int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 {
-  ldout(s->cct, 10) << "Starting retarget" << dendl;
+  ldpp_dout(s, 10) << "Starting retarget" << dendl;
   RGWOp* op_override = nullptr;
 
   /* In Swift static web content is served if the request is anonymous or
@@ -2632,7 +2632,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 
 int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
 {
-  ldout(s->cct, 10) << "Starting object retarget" << dendl;
+  ldpp_dout(s, 10) << "Starting object retarget" << dendl;
   RGWOp* op_override = nullptr;
 
   /* In Swift static web content is served if the request is anonymous or
@@ -3066,7 +3066,7 @@ RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
 {
   int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
   if (ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return nullptr;
   }
 
