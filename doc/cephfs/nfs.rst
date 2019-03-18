@@ -56,10 +56,10 @@ Configuration for libcephfs clients
 Required ceph.conf for libcephfs clients includes:
 
 * a [client] section with ``mon_host`` option set to let the clients connect
-  to the Ceph cluster's monitors, e.g., ::
+  to the Ceph cluster's monitors, usually generated via ``ceph config generate-minimal-conf``, e.g., ::
 
-    [client]
-            mon host = 192.168.1.7:6789, 192.168.1.8:6789, 192.168.1.9:6789
+    [global]
+            mon host = [v2:192.168.1.7:3300,v1:192.168.1.7:6789], [v2:192.168.1.8:3300,v1:192.168.1.8:6789], [v2:192.168.1.9:3300,v1:192.168.1.9:6789]
 
 Mount using NFSv4 clients
 =========================
