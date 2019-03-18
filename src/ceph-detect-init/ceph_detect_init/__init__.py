@@ -14,6 +14,7 @@
 # GNU Library Public License for more details.
 #
 from ceph_detect_init import alpine
+from ceph_detect_init import alt
 from ceph_detect_init import arch
 from ceph_detect_init import centos
 from ceph_detect_init import debian
@@ -60,6 +61,7 @@ def _get_distro(distro, use_rhceph=False):
     distro = _normalized_distro_name(distro)
     distributions = {
         'alpine': alpine,
+        'alt': alt,
         'arch': arch,
         'debian': debian,
         'ubuntu': debian,
@@ -103,6 +105,8 @@ def _normalized_distro_name(distro):
         return 'gentoo'
     elif distro.startswith('virtuozzo'):
         return 'virtuozzo'
+    elif distro.startswith(('alt', 'altlinux', 'basealt', 'alt linux')):
+        return 'alt'
     return distro
 
 
