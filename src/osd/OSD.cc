@@ -7628,11 +7628,10 @@ MPGStats* OSD::collect_pg_stats()
   // their stats are always enqueued for sending.
   RWLock::RLocker l(map_lock);
 
-  utime_t had_for = ceph_clock_now() - had_map_since;
   osd_stat_t cur_stat = service.get_osd_stat();
   cur_stat.os_perf_stat = store->get_cur_stats();
 
-  auto m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
+  auto m = new MPGStats(monc->get_fsid(), osdmap->get_epoch());
   m->osd_stat = cur_stat;
 
   std::lock_guard lec{min_last_epoch_clean_lock};
@@ -8207,8 +8206,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       service.set_epochs(&boot_epoch, &up_epoch, NULL);
     }
   }
-
-  had_map_since = ceph_clock_now();
 
   epoch_t _bind_epoch = service.get_bind_epoch();
   if (osdmap->is_up(whoami) &&
