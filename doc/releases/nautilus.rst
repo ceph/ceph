@@ -344,6 +344,8 @@ Instructions
    includes the new ``v2:`` and ``v1:`` prefixes for IP addresses that
    is only understood by Nautilus.
 
+   For more information, see :ref:`msgr2_ceph_conf`.
+
 #. Consider enabling the :ref:`telemetry module <telemetry>` to send
    anonymized usage statistics and crash information to the Ceph
    upstream developers.  To see what would be reported (without actually
