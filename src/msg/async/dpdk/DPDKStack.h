@@ -176,6 +176,10 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int fd() const override {
     return _conn.fd();
   }
+  virtual int socket_fd() const override {
+    return _conn.fd();
+  }
+
 };
 
 template <typename Protocol>
