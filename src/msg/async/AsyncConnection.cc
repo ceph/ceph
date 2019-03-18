@@ -592,6 +592,22 @@ ssize_t AsyncConnection::send_wqueue() {
   return sent;
 }
 
+ssize_t AsyncConnection::enqueue_and_send(bufferlist &bl,
+					  std::function<void(ssize_t)> cb) {
+  std::unique_lock<std::mutex> l(write_lock);
+  ssize_t sent;
+
+  wqueue->enqueue(bl);
+  sent = send_wqueue();
+  if (sent > 0 && wqueue->has_msgs_to_send())
+    writeCallback = cb;
+  else if (sent > 0)
+    /* Caller expects 0 if everything is sent */
+    sent = 0;
+
+  return sent;
+}
+
 void AsyncConnection::inject_delay() {
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(async_msgr->cct, 10) << __func__ << " sleep for " <<
@@ -827,7 +843,7 @@ void AsyncConnection::fault()
 
   recv_start = recv_end = 0;
   state_offset = 0;
-  outcoming_bl.clear();
+  wqueue->discard_enqueued();
 }
 
 void AsyncConnection::_stop() {

@@ -417,6 +417,13 @@ void ProtocolV1::fillin_outcoming(WriteQueue *wqueue,
     QueuedMessage *qmsg = &*wqueue->msgs_end_it;
     Message *m = qmsg->msg;
 
+    if (unlikely(!m && qmsg->bl.length())) {
+      next = (wqueue->*fillin_from_bufl)(qmsg->bl, 0);
+      filled = (wqueue->msg_end_pos == qmsg->length);
+      /* Done for queued message with bufferlist */
+      goto end;
+    }
+
     header_pos = sizeof(qmsg->tag);
 
     if (wqueue->msg_end_pos < header_pos) {
@@ -573,7 +580,7 @@ CtPtr ProtocolV1::read(CONTINUATION_RX_TYPE<ProtocolV1> &next,
 
 CtPtr ProtocolV1::write(CONTINUATION_TX_TYPE<ProtocolV1> &next,
                         bufferlist &buffer) {
-  ssize_t r = connection->write(buffer, [&next, this](int r) {
+  ssize_t r = connection->enqueue_and_send(buffer, [&next, this](int r) {
     next.setParams(r);
     CONTINUATION_RUN(next);
   });
@@ -1174,9 +1181,9 @@ void ProtocolV1::session_reset() {
 
   connection->dispatch_queue->discard_queue(connection->conn_id);
   discard_out_queue();
-  // note: we need to clear outcoming_bl here, but session_reset may be
+  // note: we need to discard enqueued here, but session_reset may be
   // called by other thread, so let caller clear this itself!
-  // outcoming_bl.clear();
+  // connection->wqueue->discard_enqueued();
 
   connection->dispatch_queue->queue_remote_reset(connection);
 
@@ -1600,7 +1607,8 @@ CtPtr ProtocolV1::handle_connect_reply_2() {
     connect_seq = 0;
 
     // see session_reset
-    connection->outcoming_bl.clear();
+    connection->wqueue->discard_enqueued();
+
 
     return CONTINUE(send_connect_message);
   }
@@ -2282,7 +2290,7 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
             std::lock_guard<std::mutex> l(existing->lock);
             existing->write_lock.lock();
             exproto->requeue_sent();
-            existing->outcoming_bl.clear();
+            existing->wqueue->discard_enqueued();
             existing->open_write = false;
             existing->write_lock.unlock();
             if (exproto->state == NONE) {

@@ -56,6 +56,8 @@ struct QueuedMessage {
     ceph_msg_footer_old old_footer;
   } static_payload;  /* 13 bytes */
 
+  bufferlist bl;
+
   QueuedMessage(Message *msg_, bool encoded_) :
     msg(msg_),
     length(0),
@@ -71,6 +73,14 @@ struct QueuedMessage {
     ceph_assert(len_ <= sizeof(static_payload));
     if (len_)
       memcpy(&static_payload, data_, len_);
+  }
+
+  QueuedMessage(bufferlist &bl_) :
+    msg(nullptr),
+    length(bl_.length()),
+    encoded(true),
+    tag(0) {
+    bl.claim_append(bl_);
   }
 
   ~QueuedMessage() {
@@ -166,6 +176,24 @@ struct WriteQueue {
       msgs_end_it = --msgs.end();
   }
 
+  void enqueue(bufferlist &bl) {
+    msgs.emplace_back(bl);
+    if (msgs_beg_it == msgs.end())
+      msgs_beg_it = --msgs.end();
+    if (msgs_end_it == msgs.end())
+      msgs_end_it = --msgs.end();
+  }
+
+  void discard_enqueued() {
+    msgs.erase(msgs_beg_it, msgs.end());
+    msg_beg_pos = 0;
+    msg_end_pos = 0;
+    iovec_beg_it = iovec.begin();
+    iovec_end_it = iovec.begin();
+    iovec_len = 0;
+    outbl.clear();
+  }
+
   bufferlist::buffers_t::const_iterator
   find_buf(const bufferlist::buffers_t &bufs,
 	   unsigned int &pos);
@@ -198,11 +226,16 @@ class AsyncConnection : public Connection {
   ssize_t read_until(unsigned needed, char *p);
   ssize_t read_bulk(char *buf, unsigned len);
 
+  /*
+   * XXX These two below are outdated and should be removed when ProtocolV2
+   *     is switched to wqueue.
+   */
   ssize_t write(bufferlist &bl, std::function<void(ssize_t)> callback,
                 bool more=false);
   ssize_t _try_send(bool more=false);
 
   ssize_t send_wqueue();
+  ssize_t enqueue_and_send(bufferlist &bl, std::function<void(ssize_t)> cb);
 
   void _connect();
   void _stop();
