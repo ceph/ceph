@@ -14,8 +14,7 @@ import tempfile
 import threading
 import time
 from uuid import uuid4
-
-from OpenSSL import crypto
+from OpenSSL import crypto, SSL
 
 from mgr_module import MgrModule, MgrStandbyModule
 
@@ -107,6 +106,7 @@ class CherryPyConfig(object):
     Class for common server configuration done by both active and
     standby module, especially setting up SSL.
     """
+
     def __init__(self):
         self._stopping = threading.Event()
         self._url_prefix = ""
@@ -121,6 +121,7 @@ class CherryPyConfig(object):
     def url_prefix(self):
         return self._url_prefix
 
+    # pylint: disable=too-many-branches
     def _configure(self):
         """
         Configure CherryPy and initialize self.url_prefix
@@ -182,6 +183,37 @@ class CherryPyConfig(object):
                 raise ServerConfigException('certificate %s does not exist' % cert_fname)
             if not os.path.isfile(pkey_fname):
                 raise ServerConfigException('private key %s does not exist' % pkey_fname)
+
+            # Do some validations to the private key and certificate:
+            # - Check the type and format
+            # - Check the certificate expiration date
+            # - Check the consistency of the private key
+            # - Check that the private key and certificate match up
+            try:
+                with open(cert_fname) as f:
+                    x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
+                    if x509.has_expired():
+                        self.log.warning(
+                            'Certificate {} has been expired'.format(cert_fname))
+            except (ValueError, crypto.Error) as e:
+                raise ServerConfigException(
+                    'Invalid certificate {}: {}'.format(cert_fname, str(e)))
+            try:
+                with open(pkey_fname) as f:
+                    pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
+                    pkey.check()
+            except (ValueError, crypto.Error) as e:
+                raise ServerConfigException(
+                    'Invalid private key {}: {}'.format(pkey_fname, str(e)))
+            try:
+                context = SSL.Context(SSL.TLSv1_METHOD)
+                context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
+                context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
+                context.check_privatekey()
+            except crypto.Error as e:
+                self.log.warning(
+                    'Private key {} and certificate {} do not match up: {}'.format(
+                        pkey_fname, cert_fname, str(e)))
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
