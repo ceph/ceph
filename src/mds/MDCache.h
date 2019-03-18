@@ -186,6 +186,10 @@ class MDCache {
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
+  uint64_t cache_memory_target(void) {
+    return memory_target;
+  }
+
   double cache_toofull_ratio(void) const {
     double inode_reserve = cache_inode_limit*(1.0-cache_reservation);
     double memory_reserve = cache_memory_limit*(1.0-cache_reservation);
@@ -1256,10 +1260,16 @@ class MDCache {
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
+  // -- cache autotuning --
+  void adjust_cache_memory_limit();
+
+  bool cache_autotune;
   uint64_t cache_inode_limit;
   uint64_t cache_memory_limit;
+  uint64_t memory_target;
   double cache_reservation;
   double cache_health_threshold;
+  double cache_resize_interval;
 
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
 

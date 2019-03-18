@@ -7436,6 +7436,20 @@ std::vector<Option> get_mds_options() {
     .set_description("target maximum memory usage of MDS cache")
     .set_long_description("This sets a target maximum memory usage of the MDS cache and is the primary tunable to limit the MDS memory usage. The MDS will try to stay under a reservation of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata in its cache and recalling cached items in the client caches. It is possible for the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold (150%) sets a cache full threshold for when the MDS signals a cluster health warning."),
 
+    Option("mds_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Enable autotuning of mds_cache_memory_limit")
+    .set_long_description("When set, mds_cache_memory_limit is automatically tuned as per the rss usage periodically whose time interval is defined by mds_cache_resize_interval."),
+
+    Option("mds_memory_target", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1*(1LL<<30))
+    .set_description("Upper bound for the mds_cache_memory_limit")
+    .set_long_description("When cache autotuning is enabled, sets an upper bound for mds_cache_memory_limit" ),
+
+    Option("mds_memory_cache_resize_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(5)
+    .set_description("When mds_cache_autotune is set to true, wait this many seconds between resizing caches."),
+
     Option("mds_cache_reservation", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.05)
     .set_description("amount of memory to reserve for future cached objects"),

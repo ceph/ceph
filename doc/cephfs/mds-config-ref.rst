@@ -17,6 +17,24 @@
 :Type:  64-bit Integer Unsigned
 :Default: ``1073741824``
 
+``mds cache autotune``
+
+:Description: If ``true``, enables autotuning of the MDS cache.
+:Type:  Boolean
+:Default: ``false``
+
+``mds memory target``
+
+:Description: Sets an upper bound for the ``mds_cache_memory_limit``.
+:Type:  64-bit Integer Unsigned
+:Default: ``1073741824``
+
+``mds memory cache resize interval``
+
+:Description: When mds_cache_autotune is set to true, wait this many seconds between resizing caches.
+:Type:  Float
+:Default: ``5``
+
 ``mds cache reservation``
 
 :Description: The cache reservation (memory or inodes) for the MDS cache to maintain.

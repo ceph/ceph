@@ -205,6 +205,15 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
+  if (changed.count("mds_memory_target"))
+    cache_memory_limit = g_conf().get_val<Option::size_t>("mds_memory_target");
+  if (changed.count("mds_memory_cache_resize_interval"))
+    cache_resize_interval = g_conf().get_val<double>("mds_memory_cache_resize_interval");
+  if (changed.count("mds_cache_autotune")) {
+    if((cache_autotune = g_conf().get_val<bool>("mds_cache_autotune"))) {
+      std::thread tuning_thread(&MDCache::adjust_cache_memory_limit,this);
+    }
+  }
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   if (changed.count("mds_health_cache_threshold"))
@@ -1423,6 +1432,31 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
   show_subtrees();
 }
 
+// ===================================
+// Cache Autotuning
+
+
+/*
+ * If mds_cache_autotune is set to true, then adjust cache_memory_limit using the rss usage periodically as per the mds_memory_cache_resize_interval
+ */
+void MDCache::adjust_cache_memory_limit()
+{
+  static MemoryModel mm(g_ceph_context);
+  static MemoryModel::snap last;
+  utime_t next_tuning = ceph_clock_now();
+  while(cache_autotune)
+  {
+    if (cache_resize_interval > 0 && next_tuning < ceph_clock_now()) {
+      mm.sample(&last);
+      uint64_t temp_cache = ((uint64_t) (last.get_rss()/1.25));
+      if (temp_cache < memory_target) {
+        cache_memory_limit = temp_cache;
+      }
+      next_tuning += cache_resize_interval;
+    }
+  }
+}
+      
 // ===================================
 // journal and snap/cow helpers
 
