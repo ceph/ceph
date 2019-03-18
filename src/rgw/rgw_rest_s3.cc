@@ -437,7 +437,7 @@ int RGWPutObjTags_ObjStore_S3::get_params()
   try {
     RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
   } catch (RGWXMLDecoder::err& err) {
-    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
@@ -1246,7 +1246,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
     char* buf = data.c_str();
     bool success = parser.parse(buf, data.length(), 1);
-    ldout(s->cct, 20) << "create bucket input data=" << buf << dendl;
+    ldpp_dout(this, 20) << "create bucket input data=" << buf << dendl;
 
     if (!success) {
       ldpp_dout(this, 0) << "failed to parse input: " << buf << dendl;
@@ -1811,7 +1811,7 @@ int RGWPostObj_ObjStore_S3::get_tags()
     try {
       RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
     } catch (RGWXMLDecoder::err& err) {
-      ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+      ldpp_dout(this, 5) << "Malformed tagging request: " << err << dendl;
       return -EINVAL;
     }
 
@@ -3369,13 +3369,13 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
   return 0;
 }
 
-static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str, bool *verified)
+static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str, bool *verified, const DoutPrefixProvider *dpp)
 {
   vector<string> params;
   get_str_vec(mfa_str, " ", params);
 
   if (params.size() != 2) {
-    ldout(store->ctx(), 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
     return -EINVAL;
   }
 
@@ -3384,13 +3384,13 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
 
   auto i = user->mfa_ids.find(serial);
   if (i == user->mfa_ids.end()) {
-    ldout(store->ctx(), 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
     return -EACCES;
   }
 
   int ret = store->check_mfa(user->user_id, serial, pin);
   if (ret < 0) {
-    ldout(store->ctx(), 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
+    ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;
   }
 
@@ -3436,7 +3436,7 @@ int RGWHandler_REST_S3::postauth_init()
 
   const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
   if (mfa) {
-    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified);
+    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified, s);
   }
 
   return 0;
@@ -3477,7 +3477,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
                                           s->init_state.src_bucket,
                                           s->src_object);
     if (!ret) {
-      ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+      ldpp_dout(s, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
   }
@@ -3618,7 +3618,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
     }
   }
 
-  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name()
 		    << dendl;
   return handler;
 }
@@ -3661,7 +3661,7 @@ int RGWHandler_REST_S3Website::init(RGWRados *store, req_state *s,
 
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
-  ldout(s->cct, 10) << __func__ << " Starting retarget" << dendl;
+  ldpp_dout(s, 10) << __func__ << " Starting retarget" << dendl;
 
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
@@ -3680,7 +3680,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
 
   rgw_obj_key new_obj;
   s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
-  ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> "
+  ldpp_dout(s, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
   RGWBWRoutingRule rrule;
@@ -3697,7 +3697,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
     // APply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
-    ldout(s->cct, 10) << "retarget redirect code=" << redirect_code
+    ldpp_dout(s, 10) << "retarget redirect code=" << redirect_code
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
@@ -3741,13 +3741,13 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
 
   ret = init_permissions(getop.get());
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, init_permissions ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, init_permissions ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = read_permissions(getop.get());
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, read_permissions ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, read_permissions ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
@@ -3757,25 +3757,25 @@ int RGWHandler_REST_S3Website::serve_errordoc(int http_ret, const string& errord
 
   ret = getop->init_processing();
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, init_processing ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, init_processing ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_op_mask();
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, verify_op_mask ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, verify_op_mask ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_permission();
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, verify_permission ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, verify_permission ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
   ret = getop->verify_params();
   if (ret < 0) {
-    ldout(s->cct, 20) << "serve_errordoc failed, verify_params ret=" << ret << dendl;
+    ldpp_dout(s, 20) << "serve_errordoc failed, verify_params ret=" << ret << dendl;
     return -1; // Trigger double error handler
   }
 
@@ -3803,7 +3803,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
   if (r != rgw_http_s3_errors.end()) {
     http_error_code = r->second.first;
   }
-  ldout(s->cct, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
+  ldpp_dout(s, 10) << "RGWHandler_REST_S3Website::error_handler err_no=" << err_no << " http_ret=" << http_error_code << dendl;
 
   RGWBWRoutingRule rrule;
   bool should_redirect =
@@ -3820,7 +3820,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
     // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
-    ldout(s->cct, 10) << "error handler redirect code=" << redirect_code
+    ldpp_dout(s, 10) << "error handler redirect code=" << redirect_code
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
@@ -3837,7 +3837,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
       err_no = new_err_no;
     }
   } else {
-    ldout(s->cct, 20) << "No special error handling today!" << dendl;
+    ldpp_dout(s, 20) << "No special error handling today!" << dendl;
   }
 
   return err_no;
@@ -3944,7 +3944,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     get_v4_canonical_headers(s->info, signed_hdrs, using_qs);
   if (canonical_headers) {
     using sanitize = rgw::crypt_sanitize::log_content;
-    ldout(s->cct, 10) << "canonical headers format = "
+    ldpp_dout(s, 10) << "canonical headers format = "
                       << sanitize{*canonical_headers} << dendl;
   } else {
     throw -EPERM;
@@ -4039,7 +4039,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
      *   Version 4 requests. It provides a hash of the request payload. If
      *   there is no payload, you must provide the hash of an empty string. */
     if (!is_v4_payload_streamed(exp_payload_hash)) {
-      ldout(s->cct, 10) << "delaying v4 auth" << dendl;
+      ldpp_dout(s, 10) << "delaying v4 auth" << dendl;
 
       /* payload in a single chunk */
       switch (s->op_type)
@@ -4194,12 +4194,12 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   utime_t header_time;
   if (! rgw_create_s3_canonical_header(s->info, &header_time, string_to_sign,
         qsr)) {
-    ldout(cct, 10) << "failed to create the canonized auth header\n"
+    ldpp_dout(s, 10) << "failed to create the canonized auth header\n"
                    << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
     throw -EPERM;
   }
 
-  ldout(cct, 10) << "string_to_sign:\n"
+  ldpp_dout(s, 10) << "string_to_sign:\n"
                  << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
   if (!qsr && !is_time_skew_ok(header_time)) {
@@ -4264,11 +4264,11 @@ AWSEngine::VersionAbstractor::auth_data_t
 AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
 {
   if (s->auth.s3_postobj_creds.x_amz_algorithm == AWS4_HMAC_SHA256_STR) {
-    ldout(s->cct, 0) << "Signature verification algorithm AWS v4"
+    ldpp_dout(s, 0) << "Signature verification algorithm AWS v4"
                      << " (AWS4-HMAC-SHA256)" << dendl;
     return get_auth_data_v4(s);
   } else {
-    ldout(s->cct, 0) << "Signature verification algorithm AWS v2" << dendl;
+    ldpp_dout(s, 0) << "Signature verification algorithm AWS v2" << dendl;
     return get_auth_data_v2(s);
   }
 }
@@ -4479,7 +4479,7 @@ rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const n
 }
 
 int
-rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_token,
+rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
                                             STS::SessionToken& token) const
 {
   string decodedSessionToken = rgw::from_base64(session_token);
@@ -4492,7 +4492,7 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Invalid secret key" << dendl;
     return -EINVAL;
   }
   string error;
@@ -4508,7 +4508,7 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
 
   ret = keyhandler->decrypt(en_input, dec_output, &error);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: Decryption failed: " << error << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;
   } else {
     dec_output.append('\0');
@@ -4535,7 +4535,7 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   STS::SessionToken token;
-  if (int ret = get_session_token(session_token, token); ret < 0) {
+  if (int ret = get_session_token(dpp, session_token, token); ret < 0) {
     return result_t::reject(ret);
   }
   //Authentication
