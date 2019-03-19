@@ -21,7 +21,6 @@
 # please read http://rpm.org/user_doc/conditional_builds.html for explanation of
 # bcond syntax!
 #################################################################################
-%bcond_without ocf
 %bcond_with make_check
 %ifarch s390 s390x
 %bcond_with tcmalloc
@@ -34,6 +33,7 @@
 %bcond_without cephfs_java
 %bcond_without lttng
 %bcond_without libradosstriper
+%bcond_without ocf
 %bcond_without amqp_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
@@ -48,8 +48,10 @@
 %endif
 %if 0%{?is_opensuse}
 %bcond_without libradosstriper
+%bcond_without ocf
 %else
 %bcond_with libradosstriper
+%bcond_with ocf
 %endif
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
