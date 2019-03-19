@@ -21,7 +21,7 @@ class MOSDPGPush : public MessageInstance<MOSDPGPush, MOSDFastDispatchOp> {
 public:
   friend factory;
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 2;
 
 public:
@@ -29,6 +29,7 @@ public:
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   vector<PushOp> pushes;
+  bool is_repair = false;
 
 private:
   uint64_t cost;
@@ -79,6 +80,11 @@ public:
     } else {
       min_epoch = map_epoch;
     }
+    if (header.version >= 4) {
+      decode(is_repair, p);
+    } else {
+      is_repair = false;
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -90,6 +96,7 @@ public:
     encode(pgid.shard, payload);
     encode(from, payload);
     encode(min_epoch, payload);
+    encode(is_repair, payload);
   }
 
   std::string_view get_type_name() const override { return "MOSDPGPush"; }
