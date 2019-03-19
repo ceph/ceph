@@ -16,6 +16,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 
+#include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
@@ -51,6 +52,7 @@ static seastar::future<> run(unsigned rounds,
         : public ceph::net::Dispatcher,
           public seastar::peering_sharded_service<Server> {
       ceph::net::Messenger *msgr = nullptr;
+      ceph::auth::DummyAuthClientServer dummy_auth;
       const seastar::shard_id sid;
       const seastar::shard_id msgr_sid;
       std::string lname;
@@ -83,6 +85,8 @@ static seastar::future<> run(unsigned rounds,
           return fut.then([&server, addr](ceph::net::Messenger *messenger) {
               return server.container().invoke_on_all([messenger](auto& server) {
                   server.msgr = messenger->get_local_shard();
+                  server.msgr->set_auth_client(&server.dummy_auth);
+                  server.msgr->set_auth_server(&server.dummy_auth);
                 }).then([messenger, addr] {
                   return messenger->bind(entity_addrvec_t{addr});
                 }).then([&server, messenger] {
@@ -123,6 +127,7 @@ static seastar::future<> run(unsigned rounds,
       const unsigned msg_len;
       bufferlist msg_data;
       seastar::semaphore depth;
+      ceph::auth::DummyAuthClientServer dummy_auth;
 
       unsigned sent_count = 0u;
       ceph::net::ConnectionRef active_conn = nullptr;
@@ -180,6 +185,8 @@ static seastar::future<> run(unsigned rounds,
             return ceph::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
             .then([&client] (ceph::net::Messenger *messenger) {
               client.msgr = messenger;
+              client.msgr->set_auth_client(&client.dummy_auth);
+              client.msgr->set_auth_server(&client.dummy_auth);
               return client.msgr->start(&client);
             });
           }
@@ -287,7 +294,6 @@ static seastar::future<> run(unsigned rounds,
               test_state::Client *client) {
       entity_addr_t target_addr;
       target_addr.parse(addr.c_str(), nullptr);
-      target_addr.set_type(entity_addr_t::TYPE_LEGACY);
       if (mode == perf_mode_t::both) {
           logger().info("\nperf settings:\n  mode=server+client\n  server addr={}\n  server core={}\n  rounds={}\n  client jobs={}\n  bs={}\n  depth={}\n",
                         addr, core, rounds, jobs, bs, depth);
@@ -341,7 +347,7 @@ int main(int argc, char** argv)
 {
   seastar::app_template app;
   app.add_options()
-    ("addr", bpo::value<std::string>()->default_value("0.0.0.0:9010"),
+    ("addr", bpo::value<std::string>()->default_value("v1:0.0.0.0:9010"),
      "server address")
     ("core", bpo::value<unsigned>()->default_value(0),
      "server running core")
