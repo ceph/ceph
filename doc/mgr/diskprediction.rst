@@ -1,3 +1,5 @@
+.. _diskprediction:
+
 =====================
 Diskprediction Module
 =====================
