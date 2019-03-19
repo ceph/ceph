@@ -244,7 +244,7 @@ private:
     list<pull_complete_info> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(pg_shard_t from, const PushOp &op, PushReplyOp *response,
-		   ObjectStore::Transaction *t);
+		   ObjectStore::Transaction *t, bool is_repair);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
