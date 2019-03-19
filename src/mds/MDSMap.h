@@ -143,7 +143,7 @@ public:
     // The long form name for use in cluster log messages`
     std::string human_name() const;
 
-    static void generate_test_instances(list<mds_info_t*>& ls);
+    static void generate_test_instances(std::list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;
     void encode_unversioned(bufferlist& bl) const;
@@ -668,7 +668,7 @@ public:
   void print_summary(Formatter *f, ostream *out) const;
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<MDSMap*>& ls);
+  static void generate_test_instances(std::list<MDSMap*>& ls);
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
 };

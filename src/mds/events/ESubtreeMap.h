@@ -39,7 +39,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ESubtreeMap*>& ls);
+  static void generate_test_instances(std::list<ESubtreeMap*>& ls);
 
   void replay(MDSRank *mds) override;
 };

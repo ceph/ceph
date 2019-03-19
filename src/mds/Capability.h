@@ -87,7 +87,7 @@ public:
     void encode(bufferlist &bl) const;
     void decode(bufferlist::const_iterator &p);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<Export*>& ls);
+    static void generate_test_instances(std::list<Export*>& ls);
   };
   struct Import {
     int64_t cap_id;
@@ -107,7 +107,7 @@ public:
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<revoke_info*>& ls);
+    static void generate_test_instances(std::list<revoke_info*>& ls);
   };
 
   const static unsigned STATE_NOTABLE		= (1<<0);
@@ -333,7 +333,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<Capability*>& ls);
+  static void generate_test_instances(std::list<Capability*>& ls);
   
   snapid_t client_follows;
   version_t client_xattr_version;

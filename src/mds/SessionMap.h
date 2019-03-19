@@ -518,7 +518,7 @@ public:
     return s;
   }
 
-  static void generate_test_instances(list<SessionMapStore*>& ls);
+  static void generate_test_instances(std::list<SessionMapStore*>& ls);
 
   void reset_state()
   {

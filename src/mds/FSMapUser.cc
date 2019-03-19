@@ -41,7 +41,7 @@ void FSMapUser::fs_info_t::decode(bufferlist::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void FSMapUser::generate_test_instances(list<FSMapUser*>& ls)
+void FSMapUser::generate_test_instances(std::list<FSMapUser*>& ls)
 {
   FSMapUser *m = new FSMapUser();
   m->epoch = 2;

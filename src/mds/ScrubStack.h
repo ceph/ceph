@@ -142,7 +142,7 @@ private:
 
   // list of pending context completions for asynchronous scrub
   // control operations.
-  std::list<Context *> control_ctxs;
+  std::vector<Context *> control_ctxs;
 
   // list of inodes for which scrub operations are running -- used
   // to diplay out in `scrub status`.
