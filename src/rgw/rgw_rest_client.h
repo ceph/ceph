@@ -161,7 +161,6 @@ public:
 };
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
-  bool send_data_hint{false};
 protected:
   HostStyle host_style;
 public:
