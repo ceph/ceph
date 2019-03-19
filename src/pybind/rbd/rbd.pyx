@@ -1615,6 +1615,12 @@ cdef class Group(object):
         self._ioctx = convert_ioctx(ioctx)
         self._name = name
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        return False
+
     def add_image(self, image_ioctx, image_name):
         """
         Add an image to a group.
