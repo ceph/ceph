@@ -77,7 +77,7 @@ public:
 
   void handle_mds_failure(mds_rank_t who);
 
-  int dump_loads(Formatter *f);
+  int dump_loads(Formatter *f) const;
 
 private:
   bool bal_fragment_dirs;
@@ -102,7 +102,7 @@ private:
   void handle_heartbeat(const MHeartbeat::const_ref &m);
   void find_exports(CDir *dir,
                     double amount,
-                    std::list<CDir*>& exports,
+                    std::vector<CDir*>* exports,
                     double& have,
                     set<CDir*>& already_exporting);
 

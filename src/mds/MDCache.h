@@ -1169,8 +1169,8 @@ private:
 
   struct fragment_info_t {
     int bits;
-    list<CDir*> dirs;
-    list<CDir*> resultfrags;
+    std::vector<CDir*> dirs;
+    std::vector<CDir*> resultfrags;
     MDRequestRef mdr;
     set<mds_rank_t> notify_ack_waiting;
     bool finishing = false;
@@ -1188,21 +1188,21 @@ private:
   typedef map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    list<CDir*>& frags, MDSContext::vec& waiters, bool replay);
+			    std::vector<CDir*>* frags, MDSContext::vec& waiters, bool replay);
   void adjust_dir_fragments(CInode *diri,
-			    list<CDir*>& srcfrags,
+			    const std::vector<CDir*>& srcfrags,
 			    frag_t basefrag, int bits,
-			    list<CDir*>& resultfrags, 
+			    std::vector<CDir*>* resultfrags,
 			    MDSContext::vec& waiters,
 			    bool replay);
   CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
-  bool can_fragment(CInode *diri, list<CDir*>& dirs);
-  void fragment_freeze_dirs(list<CDir*>& dirs);
+  bool can_fragment(CInode *diri, const std::vector<CDir*>& dirs);
+  void fragment_freeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_mark_and_complete(MDRequestRef& mdr);
   void fragment_frozen(MDRequestRef& mdr, int r);
-  void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
+  void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
   void dispatch_fragment_dir(MDRequestRef& mdr);
