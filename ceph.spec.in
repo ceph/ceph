@@ -507,7 +507,7 @@ Requires:       python3-scipy
 Requires:       python2-scipy
 %endif
 %endif
-%if 0%{?rhel} <= 7
+%if 0%{?rhel} == 7
 Requires:       numpy
 Requires:       scipy
 %endif
