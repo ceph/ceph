@@ -517,7 +517,8 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_daemon_default("/var/log/ceph/$cluster-$name.log")
     .set_description("path to log file")
-    .add_see_also({"log_to_stderr",
+    .add_see_also({"log_to_file",
+		   "log_to_stderr",
                    "err_to_stderr",
                    "log_to_syslog",
                    "err_to_syslog"}),
@@ -532,6 +533,11 @@ std::vector<Option> get_global_options() {
     .set_daemon_default(10000)
     .set_description("recent log entries to keep in memory to dump in the event of a crash")
     .set_long_description("The purpose of this option is to log at a higher debug level only to the in-memory buffer, and write out the detailed log messages only if there is a crash.  Only log entries below the lower log level will be written unconditionally to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault or assertion failure, all entries will be dumped to the log."),
+
+    Option("log_to_file", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("send log lines to a file")
+    .add_see_also("log_file"),
 
     Option("log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(true)
