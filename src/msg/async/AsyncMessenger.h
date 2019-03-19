@@ -392,6 +392,7 @@ public:
    */
   void init_local_connection() {
     Mutex::Locker l(lock);
+    local_connection->is_loopback = true;
     _init_local_connection();
   }
 
