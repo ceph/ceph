@@ -656,11 +656,15 @@ struct RGWUserInfo
       type(TYPE_NONE) {
   }
 
-  RGWAccessKey* get_key0() {
+  RGWAccessKey* get_key(const string& access_key) {
     if (access_keys.empty())
       return nullptr;
+
+    auto k = access_keys.find(access_key);
+    if (k == access_keys.end())
+      return nullptr;
     else
-      return &(access_keys.begin()->second);
+      return &(k->second);
   }
 
   void encode(bufferlist& bl) const {
