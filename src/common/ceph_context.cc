@@ -263,6 +263,7 @@ public:
       "log_file",
       "log_max_new",
       "log_max_recent",
+      "log_to_file",
       "log_to_syslog",
       "err_to_syslog",
       "log_stderr_prefix",
@@ -297,7 +298,11 @@ public:
 
     // file
     if (changed.count("log_file")) {
-      log->set_log_file(conf->log_file);
+      if (conf->log_to_file) {
+	log->set_log_file(conf->log_file);
+      } else {
+	log->set_log_file({});
+      }
       log->reopen_log_file();
     }
 
