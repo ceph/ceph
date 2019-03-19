@@ -49,6 +49,11 @@ function expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+function expect_true()
+{
+	set -x
+	if ! "$@"; then return 1; else return 0; fi
+}
 
 TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
@@ -2700,6 +2705,48 @@ function test_mgr_tell()
   ceph tell mgr osd status
 }
 
+function test_per_pool_scrub_status()
+{
+  ceph osd pool create noscrub_pool 12
+  ceph osd pool create noscrub_pool2 12
+  ceph -s | expect_false grep -q "Some pool(s) have the.*scrub.* flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_false grep -q "Some pool(s) have the.*scrub.* flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail |
+    expect_false grep -q "Pool .* has .*scrub.* flag"
+  ceph health detail | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_false grep -q "Pool .* has .*scrub.* flag"
+
+  ceph osd pool set noscrub_pool noscrub 1
+  ceph -s | expect_true grep -q "Some pool(s) have the noscrub flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_true grep -q "Some pool(s) have the noscrub flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has noscrub flag"
+
+  ceph osd pool set noscrub_pool nodeep-scrub 1
+  ceph osd pool set noscrub_pool2 nodeep-scrub 1
+  ceph -s | expect_true grep -q "Some pool(s) have the noscrub, nodeep-scrub flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_true grep -q "Some pool(s) have the noscrub, nodeep-scrub flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has nodeep-scrub flag"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool2 has nodeep-scrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has nodeep-scrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool2 has nodeep-scrub flag"
+
+  ceph osd pool rm noscrub_pool noscrub_pool --yes-i-really-really-mean-it
+  ceph osd pool rm noscrub_pool2 noscrub_pool2 --yes-i-really-really-mean-it
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -2752,6 +2799,7 @@ OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
 OSD_TESTS+=" osd_compact"
+OSD_TESTS+=" per_pool_scrub_status"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
