@@ -405,7 +405,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
           (*conn)->send(MessageRef{new MPing, false});
           (*conn)->send(MessageRef{new MPing, false});
         }).then([server] {
-          server->wait();
+          return server->wait();
         }).finally([client] {
           logger().info("client shutdown...");
           return client->msgr->shutdown();
