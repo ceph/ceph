@@ -6236,9 +6236,17 @@ bool OSDMonitor::update_pools_status()
 			       (uint64_t)sum.num_bytes >= pool.quota_max_bytes);
     bool pool_is_full = pool_is_full_objects || pool_is_full_bytes;    
 
-    if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
-      if (pool_is_full)
-        continue;
+    bool was_full_objects = pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA_OBJECTS);
+    bool was_full_bytes = pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA_BYTES);
+
+    bool changed_objects = was_full_objects != pool_is_full_objects;
+    bool changed_bytes = was_full_bytes != pool_is_full_bytes;
+
+    if (!changed_objects && !changed_bytes) {
+      continue;
+    }
+
+    if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA) && !pool_is_full) {
 
       mon->clog->info() << "pool '" << pool_name
                        << "' no longer out of quota; removing NO_QUOTA flag";
@@ -6251,35 +6259,31 @@ bool OSDMonitor::update_pools_status()
 		       pg_pool_t::FLAG_FULL);
       ret = true;
     } else {
-      if (!pool_is_full)
-	continue;
-
-      if (pool.quota_max_bytes > 0 &&
-          (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
-        mon->clog->warn() << "pool '" << pool_name << "' is full"
-                         << " (reached quota's max_bytes: "
-                         << byte_u_t(pool.quota_max_bytes) << ")";
+      int flags_to_set = 0;
+      if (pool_is_full_bytes) {
+	flags_to_set |= pg_pool_t::FLAG_FULL_QUOTA_BYTES;
+	if (changed_bytes) {
+	  mon->clog->warn() << "pool '" << pool_name << "' is full"
+			    << " (reached quota's max_bytes: "
+			    << byte_u_t(pool.quota_max_bytes) << ")";
+	}
       }
-      if (pool.quota_max_objects > 0 &&
-		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
-        mon->clog->warn() << "pool '" << pool_name << "' is full"
-                         << " (reached quota's max_objects: "
-                         << pool.quota_max_objects << ")";
+      if (pool_is_full_objects) {
+	flags_to_set |= pg_pool_t::FLAG_FULL_QUOTA_OBJECTS;
+	if (changed_objects) {
+	  mon->clog->warn() << "pool '" << pool_name << "' is full"
+			    << " (reached quota's max_objects: "
+			    << pool.quota_max_objects << ")";
+	}
       }
       // set both FLAG_FULL_QUOTA and FLAG_FULL
       // note that below we try to cancel FLAG_BACKFILLFULL/NEARFULL too
       // since FLAG_FULL should always take precedence
-      set_pool_flags(it->first,
-                     pg_pool_t::FLAG_FULL_QUOTA | pg_pool_t::FLAG_FULL);
+      flags_to_set |= (pg_pool_t::FLAG_FULL_QUOTA | pg_pool_t::FLAG_FULL);
       clear_pool_flags(it->first,
                        pg_pool_t::FLAG_NEARFULL |
                        pg_pool_t::FLAG_BACKFILLFULL);
-      if (pool_is_full_objects) {
-	set_pool_flags(it->first, pg_pool_t::FLAG_FULL_QUOTA_OBJECTS);
-      }
-      if (pool_is_full_bytes) {
-	set_pool_flags(it->first, pg_pool_t::FLAG_FULL_QUOTA_BYTES);
-      }
+      set_pool_flags(it->first, flags_to_set);
       ret = true;
     }
   }
