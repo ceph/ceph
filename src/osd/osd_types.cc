@@ -381,6 +381,7 @@ void osd_stat_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
   f->dump_int("num_snap_trimming", num_snap_trimming);
+  f->dump_int("num_shards_repaired", num_shards_repaired);
   f->open_object_section("op_queue_age_hist");
   op_queue_age_hist.dump(f);
   f->close_section();
@@ -394,7 +395,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(10, 2, bl);
+  ENCODE_START(11, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -425,6 +426,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(statfs, bl);
   ///////////////////////////////////
   encode(os_alerts, bl);
+  encode(num_shards_repaired, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -432,7 +434,7 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(10, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -487,6 +489,11 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
   } else {
     os_alerts.clear();
   }
+  if (struct_v >= 11) {
+    decode(num_shards_repaired, bl);
+  } else {
+    num_shards_repaired = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -501,6 +508,7 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
+  o.back()->num_shards_repaired = 101;
   o.back()->os_alerts[0].emplace(
     "some alert", "some alert details");
   o.back()->os_alerts[1].emplace(

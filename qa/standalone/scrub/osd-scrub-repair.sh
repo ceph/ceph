@@ -498,7 +498,9 @@ function TEST_auto_repair_bluestore_failed_norecov() {
 function TEST_repair_stats() {
     local dir=$1
     local poolname=testpool
+    local OSDS=2
     local OBJS=30
+    # This need to be an even number
     local REPAIRS=20
 
     # Launch a cluster with 5 seconds scrub interval
@@ -507,7 +509,7 @@ function TEST_repair_stats() {
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
-    for id in $(seq 0 2) ; do
+    for id in $(seq 0 $(expr $OSDS - 1)) ; do
         run_osd_bluestore $dir $id $ceph_osd_args || return 1
     done
 
@@ -530,18 +532,113 @@ function TEST_repair_stats() {
     local primary=$(get_primary $poolname obj1)
 
     kill_daemons $dir TERM osd.$other >&2 < /dev/null || return 1
+    kill_daemons $dir TERM osd.$primary >&2 < /dev/null || return 1
     for i in $(seq 1 $REPAIRS)
     do
-      _objectstore_tool_nodown $dir $other obj$i remove || return 1
+      # Remove from both osd.0 and osd.1
+      OSD=$(expr $i % 2)
+      _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
+    run_osd_bluestore $dir $primary $ceph_osd_args || return 1
     run_osd_bluestore $dir $other $ceph_osd_args || return 1
+    wait_for_clean || return 1
 
     repair $pgid
     wait_for_clean || return 1
     ceph pg dump pgs
 
     # This should have caused 1 object to be repaired
+    ceph pg $pgid query | jq '.info.stats.stat_sum'
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "$REPAIRS" || return 1
+
+    ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $primary )"
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $primary ).num_shards_repaired")
+    test "$COUNT" = "$(expr $REPAIRS / 2)" || return 1
+
+    ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $other )"
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $other ).num_shards_repaired")
+    test "$COUNT" = "$(expr $REPAIRS / 2)" || return 1
+
+    ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum"
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "$REPAIRS" || return 1
+
+    # Tear down
+    teardown $dir || return 1
+}
+
+function TEST_repair_stats_ec() {
+    local dir=$1
+    local poolname=testpool
+    local OSDS=3
+    local OBJS=30
+    # This need to be an even number
+    local REPAIRS=26
+    local allow_overwrites=false
+
+    # Launch a cluster with 5 seconds scrub interval
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
+            --osd-scrub-interval-randomize-ratio=0"
+    for id in $(seq 0 $(expr $OSDS - 1)) ; do
+        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+    done
+
+    # Create an EC pool
+    create_ec_pool $poolname $allow_overwrites k=2 m=1 || return 1
+
+    # Put an object
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    for i in $(seq 1 $OBJS)
+    do
+      rados --pool $poolname put obj$i $dir/ORIGINAL || return 1
+    done
+
+    # Remove the object from one shard physically
+    # Restarted osd get $ceph_osd_args passed
+    local other=$(get_not_primary $poolname obj1)
+    local pgid=$(get_pg $poolname obj1)
+    local primary=$(get_primary $poolname obj1)
+
+    kill_daemons $dir TERM osd.$other >&2 < /dev/null || return 1
+    kill_daemons $dir TERM osd.$primary >&2 < /dev/null || return 1
+    for i in $(seq 1 $REPAIRS)
+    do
+      # Remove from both osd.0 and osd.1
+      OSD=$(expr $i % 2)
+      _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
+    done
+    run_osd_bluestore $dir $primary $ceph_osd_args || return 1
+    run_osd_bluestore $dir $other $ceph_osd_args || return 1
+    wait_for_clean || return 1
+
+    repair $pgid
+    wait_for_clean || return 1
+    ceph pg dump pgs
+
+    # This should have caused 1 object to be repaired
+    ceph pg $pgid query | jq '.info.stats.stat_sum'
+    COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "$REPAIRS" || return 1
+
+    for osd in $(seq 0 $(expr $OSDS - 1)) ; do
+      if [ $osd = $other -o $osd = $primary ]; then
+        repair=$(expr $REPAIRS / 2)
+      else
+        repair="0"
+      fi
+
+      ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $osd )"
+      COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats[] | select(.osd == $osd ).num_shards_repaired")
+      test "$COUNT" = "$repair" || return 1
+    done
+
+    ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum"
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
     test "$COUNT" = "$REPAIRS" || return 1
 
     # Tear down
