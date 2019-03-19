@@ -1071,8 +1071,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   // are not auth MDS of the subtree root at the time they receive the
   // lock messages. So the auth MDS of the subtree root inode may get no
   // or duplicated fragstat/neststat for the subtree root dirfrag.
-  lov.add_wrlock(&dir->get_inode()->filelock);
-  lov.add_wrlock(&dir->get_inode()->nestlock);
+  lov.lock_scatter_gather(&dir->get_inode()->filelock);
+  lov.lock_scatter_gather(&dir->get_inode()->nestlock);
   if (dir->get_inode()->is_auth()) {
     dir->get_inode()->filelock.set_scatter_wanted();
     dir->get_inode()->nestlock.set_scatter_wanted();
@@ -1264,8 +1264,9 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   get_export_lock_set(dir, lov);
   if ((diri->is_auth() && diri->is_frozen()) ||
       !mds->locker->can_rdlock_set(lov) ||
-      !diri->filelock.can_wrlock(-1) ||
-      !diri->nestlock.can_wrlock(-1)) {
+      // for pinning scatter gather. loner has a higher chance to get wrlock
+      !diri->filelock.can_wrlock(diri->get_loner()) ||
+      !diri->nestlock.can_wrlock(diri->get_loner())) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
@@ -2552,8 +2553,9 @@ void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_a
     dout(7) << " all ready, noting auth and freezing import region" << dendl;
 
     if (!mds->mdcache->is_readonly() &&
-	diri->filelock.can_wrlock(-1) &&
-	diri->nestlock.can_wrlock(-1)) {
+	// for pinning scatter gather. loner has a higher chance to get wrlock
+	diri->filelock.can_wrlock(diri->get_loner()) &&
+	diri->nestlock.can_wrlock(diri->get_loner())) {
       it->second.mut = new MutationImpl();
       // force some locks.  hacky.
       mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
