@@ -75,8 +75,9 @@ static seastar::future<> run(unsigned rounds,
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce,
-                             const entity_addr_t& addr) {
-        auto&& fut = ceph::net::Messenger::create(name, lname, nonce, 1);
+                             const entity_addr_t& addr,
+                             const int cpu) {
+        auto&& fut = ceph::net::Messenger::create(name, lname, nonce, cpu);
         return fut.then([this, addr](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
@@ -171,8 +172,9 @@ static seastar::future<> run(unsigned rounds,
 
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
-                             const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce, 2)
+                             const uint64_t nonce,
+                             const int cpu) {
+        return ceph::net::Messenger::create(name, lname, nonce, cpu)
           .then([this](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
@@ -284,9 +286,10 @@ static seastar::future<> run(unsigned rounds,
       entity_addr_t target_addr;
       target_addr.parse(addr.c_str(), nullptr);
       if (mode == perf_mode_t::both) {
+          ceph_assert(seastar::smp::count >= 2);
           return seastar::when_all_succeed(
-              server->init(entity_name_t::OSD(0), "server", 0, target_addr),
-              client->init(entity_name_t::OSD(1), "client", 0))
+              server->init(entity_name_t::OSD(0), "server", 0, target_addr, 0),
+              client->init(entity_name_t::OSD(1), "client", 0, 1))
           // dispatch pingpoing
             .then([client, target_addr] {
               return client->dispatch_messages(target_addr, false);
@@ -299,7 +302,7 @@ static seastar::future<> run(unsigned rounds,
               return server->shutdown();
             });
       } else if (mode == perf_mode_t::client) {
-          return client->init(entity_name_t::OSD(1), "client", 0)
+          return client->init(entity_name_t::OSD(1), "client", 0, 0)
           // dispatch pingpoing
             .then([client, target_addr] {
               return client->dispatch_messages(target_addr, false);
@@ -309,7 +312,7 @@ static seastar::future<> run(unsigned rounds,
               return client->shutdown();
             });
       } else { // mode == perf_mode_t::server
-          return server->init(entity_name_t::OSD(0), "server", 0, target_addr)
+          return server->init(entity_name_t::OSD(0), "server", 0, target_addr, 0)
           // dispatch pingpoing
             .then([server] {
               return server->msgr->wait();
