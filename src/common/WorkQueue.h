@@ -428,10 +428,15 @@ public:
       }
       return m_items.front();
     }
-    void requeue(T *item) {
+    void requeue_front(T *item) {
       std::lock_guard pool_locker(m_pool->_lock);
       _void_process_finish(nullptr);
       m_items.push_front(item);
+    }
+    void requeue_back(T *item) {
+      std::lock_guard pool_locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+      m_items.push_back(item);
     }
     void signal() {
       std::lock_guard pool_locker(m_pool->_lock);
