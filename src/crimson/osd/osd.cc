@@ -1,5 +1,6 @@
 #include "osd.h"
 
+#include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
@@ -390,9 +391,7 @@ seastar::future<OSD::cached_map_t> OSD::get_map(epoch_t e)
   if (auto found = osdmaps.find(e); found) {
     return seastar::make_ready_future<cached_map_t>(std::move(found));
   } else {
-    return load_map_bl(e).then([e, this](bufferlist bl) {
-      auto osdmap = std::make_unique<OSDMap>();
-      osdmap->decode(bl);
+    return load_map(e).then([e, this](unique_ptr<OSDMap> osdmap) {
       return seastar::make_ready_future<cached_map_t>(
         osdmaps.insert(e, std::move(osdmap)));
     });
@@ -415,11 +414,24 @@ seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
   }
 }
 
+seastar::future<std::unique_ptr<OSDMap>> OSD::load_map(epoch_t e)
+{
+  auto o = std::make_unique<OSDMap>();
+  if (e > 0) {
+    return load_map_bl(e).then([e, o=std::move(o), this](bufferlist bl) mutable {
+      o->decode(bl);
+      return seastar::make_ready_future<unique_ptr<OSDMap>>(std::move(o));
+    });
+  } else {
+    return seastar::make_ready_future<unique_ptr<OSDMap>>(std::move(o));
+  }
+}
+
 seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
                                   epoch_t start, Ref<MOSDMap> m)
 {
-  return seastar::do_for_each(boost::counting_iterator<epoch_t>(start),
-                              boost::counting_iterator<epoch_t>(m->get_last() + 1),
+  return seastar::do_for_each(boost::make_counting_iterator(start),
+                              boost::make_counting_iterator(m->get_last() + 1),
                               [&t, m, this](epoch_t e) {
     if (auto p = m->maps.find(e); p != m->maps.end()) {
       auto o = std::make_unique<OSDMap>();
@@ -430,19 +442,16 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
       return seastar::now();
     } else if (auto p = m->incremental_maps.find(e);
                p != m->incremental_maps.end()) {
-      OSDMap::Incremental inc;
-      auto i = p->second.cbegin();
-      inc.decode(i);
-      return load_map_bl(e - 1)
-        .then([&t, e, inc=std::move(inc), this](bufferlist bl) {
-          auto o = std::make_unique<OSDMap>();
-          o->decode(bl);
-          o->apply_incremental(inc);
-          bufferlist fbl;
-          o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
-          store_map_bl(t, e, std::move(fbl));
-          osdmaps.insert(e, std::move(o));
-          return seastar::now();
+      return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
+        OSDMap::Incremental inc;
+        auto i = bl.cbegin();
+        inc.decode(i);
+        o->apply_incremental(inc);
+        bufferlist fbl;
+        o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
+        store_map_bl(t, e, std::move(fbl));
+        osdmaps.insert(e, std::move(o));
+        return seastar::now();
       });
     } else {
       logger().error("MOSDMap lied about what maps it had?");
@@ -534,8 +543,9 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 {
   logger().info("osd.{}: committed_osd_maps({}, {})", whoami, first, last);
   // advance through the new maps
-  return seastar::parallel_for_each(boost::irange(first, last + 1),
-                                    [this](epoch_t cur) {
+  return seastar::do_for_each(boost::make_counting_iterator(first),
+                              boost::make_counting_iterator(last + 1),
+                              [this](epoch_t cur) {
     return get_map(cur).then([this](cached_map_t&& o) {
       osdmap = std::move(o);
       if (up_epoch != 0 &&
