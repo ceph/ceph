@@ -124,24 +124,6 @@ void rgw_get_token_id(const string& token, string& token_id)
   token_id = calc_md5;
 }
 
-bool rgw_decode_pki_token(CephContext * const cct,
-                          const string& token,
-                          bufferlist& bl)
-{
-  if (!rgw_is_pki_token(token)) {
-    return false;
-  }
-
-  int ret = rgw_decode_b64_cms(cct, token, bl);
-  if (ret < 0) {
-    return false;
-  }
-
-  ldout(cct, 20) << "successfully decoded pki token" << dendl;
-
-  return true;
-}
-
 
 namespace rgw {
 namespace keystone {

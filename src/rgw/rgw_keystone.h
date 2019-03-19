@@ -31,9 +31,6 @@ static inline std::string rgw_get_token_id(const string& token)
 
   return token_id;
 }
-bool rgw_decode_pki_token(CephContext *cct,
-                          const string& token,
-                          bufferlist& bl);
 
 namespace rgw {
 namespace keystone {
