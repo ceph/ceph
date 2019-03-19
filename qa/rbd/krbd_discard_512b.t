@@ -1,6 +1,6 @@
 
   $ rbd create --size 4M img
-  $ DEV=$(sudo rbd map -o alloc_size=1 img)
+  $ DEV=$(sudo rbd map -o alloc_size=512 img)
 
 Zero, < 1 block:
 
@@ -312,7 +312,7 @@ Empty clone:
   $ rbd snap protect img@snap
 
   $ rbd clone img@snap cloneimg1
-  $ DEV=$(sudo rbd map -o alloc_size=1 cloneimg1)
+  $ DEV=$(sudo rbd map -o alloc_size=512 cloneimg1)
   $ blkdiscard -o 720896 -l 2719744 $DEV
   $ hexdump $DEV
   0000000 abab abab abab abab abab abab abab abab
@@ -321,7 +321,7 @@ Empty clone:
   $ sudo rbd unmap $DEV
 
   $ rbd clone img@snap cloneimg2
-  $ DEV=$(sudo rbd map -o alloc_size=1 cloneimg2)
+  $ DEV=$(sudo rbd map -o alloc_size=512 cloneimg2)
   $ blkdiscard -o 1474560 -l 2719744 $DEV
   $ hexdump $DEV
   0000000 abab abab abab abab abab abab abab abab
@@ -330,7 +330,7 @@ Empty clone:
   $ sudo rbd unmap $DEV
 
   $ rbd clone img@snap cloneimg3
-  $ DEV=$(sudo rbd map -o alloc_size=1 cloneimg3)
+  $ DEV=$(sudo rbd map -o alloc_size=512 cloneimg3)
   $ blkdiscard -o 0 -l 4194304 $DEV
   $ hexdump $DEV
   0000000 abab abab abab abab abab abab abab abab
@@ -341,7 +341,7 @@ Empty clone:
 Full clone:
 
   $ rbd clone img@snap cloneimg4
-  $ DEV=$(sudo rbd map -o alloc_size=1 cloneimg4)
+  $ DEV=$(sudo rbd map -o alloc_size=512 cloneimg4)
 
   $ xfs_io -c 'pwrite -w 0 4M' $DEV >/dev/null
   $ blkdiscard -o 720896 -l 2719744 $DEV
@@ -375,7 +375,7 @@ Full clone:
 Multiple object requests:
 
   $ rbd create --size 50M --stripe-unit 16K --stripe-count 5 fancyimg
-  $ DEV=$(sudo rbd map -o alloc_size=1 fancyimg)
+  $ DEV=$(sudo rbd map -o alloc_size=512 fancyimg)
 
   $ xfs_io -c 'pwrite -b 4M -w 0 50M' $DEV >/dev/null
   $ blkdiscard -o 0 -l 143360 $DEV
