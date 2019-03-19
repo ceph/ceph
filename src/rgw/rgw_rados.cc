@@ -9073,21 +9073,41 @@ int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_in
   if (r < 0)
     return r;
 
-  bufferlist updates;
+  // if the count of files ,need to be deleted, is too big.
+  // Objecter will get error -90(msg is too long)
+  // so we should send 1000 files at one time
+  r = 0;
+  int cnt = 1000;     // the num of files at one time
+  list<rgw_obj_index_key>::iterator begin,end;
+  begin = end = oid_list.begin();
+  for (unsigned int begin_offset = 0; cnt > 0 && begin_offset < oid_list.size(); begin_offset += cnt){
+    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket_info.bucket << " objs=" << oid_list.size() << " " << begin_offset << "/" << cnt << dendl;
+    bufferlist updates;
 
-  for (auto iter = oid_list.begin(); iter != oid_list.end(); ++iter) {
-    rgw_bucket_dir_entry entry;
-    entry.key = *iter;
-    dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket_info.bucket << " obj=" << entry.key.name << ":" << entry.key.instance << dendl;
-    entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
-    updates.append(CEPH_RGW_REMOVE | suggest_flag);
-    encode(entry, updates);
+    // calc the begin of files
+    advance(begin, cnt);
+
+    // calc the end of files
+    if (cnt > 0 && oid_list.size() > begin_offset + cnt) {
+      advance(end, cnt);
+    }else
+      end = oid_list.end();
+    
+    // send files begin begin and end
+    for (auto iter = begin; iter != end; ++iter) {
+
+      rgw_bucket_dir_entry entry;
+      entry.key = *iter;
+      dout(2) << "RGWRados::remove_objs_from_index bucket=" << bucket_info.bucket << " obj=" << entry.key.name << ":" << entry.key.instance << dendl;
+      entry.ver.epoch = (uint64_t)-1; // ULLONG_MAX, needed to that objclass doesn't skip out request
+      updates.append(CEPH_RGW_REMOVE | suggest_flag);
+      ::encode(entry, updates);
+    }
+    bufferlist out;
+    r = index_ctx.exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
+    if(r < 0)
+      break;
   }
-
-  bufferlist out;
-
-  r = index_ctx.exec(dir_oid, RGW_CLASS, RGW_DIR_SUGGEST_CHANGES, updates, out);
-
   return r;
 }
 
