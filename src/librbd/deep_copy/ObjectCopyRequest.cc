@@ -628,7 +628,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
       // clip diff to size of object (in case it was truncated)
       if (end_size < prev_end_size) {
         interval_set<uint64_t> trunc;
-        trunc.insert(end_size, prev_end_size);
+        trunc.insert(end_size, prev_end_size - end_size);
         trunc.intersection_of(diff);
         diff.subtract(trunc);
         ldout(m_cct, 20) << "clearing truncate diff: " << trunc << dendl;
