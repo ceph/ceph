@@ -72,6 +72,8 @@ class ProtocolV2 final : public Protocol {
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
 
+  utime_t last_keepalive_ack_to_send;
+
  // TODO: Frame related implementations, probably to a separate class.
  private:
   bool record_io = false;
@@ -143,6 +145,8 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> send_reconnect_ok();
 
   // READY
+  seastar::future<> read_message(utime_t throttle_stamp);
+  void handle_message_ack(seq_num_t seq);
   void execute_ready();
 
   // STANDBY
