@@ -2321,6 +2321,7 @@ struct osd_stat_t {
   store_statfs_t statfs;
   vector<int> hb_peers;
   int32_t snap_trim_queue_len, num_snap_trimming;
+  uint64_t num_shards_repaired;
 
   pow2_hist_t op_queue_age_hist;
 
@@ -2332,12 +2333,14 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
-  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0) {}
+  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
+       num_shards_repaired(0)	{}
 
  void add(const osd_stat_t& o) {
     statfs.add(o.statfs);
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
+    num_shards_repaired += o.num_shards_repaired;
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
@@ -2352,6 +2355,7 @@ struct osd_stat_t {
     statfs.sub(o.statfs);
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
+    num_shards_repaired -= o.num_shards_repaired;
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
@@ -2376,6 +2380,7 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.statfs == r.statfs &&
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
+    l.num_shards_repaired == r.num_shards_repaired &&
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
     l.os_perf_stat == r.os_perf_stat &&
