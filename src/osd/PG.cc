@@ -2132,17 +2132,64 @@ void PG::mark_clean()
   kick_snap_trim();
 }
 
-void PG::_change_recovery_force_mode(int new_mode, bool clear)
+bool PG::set_force_recovery(bool b)
 {
+  bool did = false;
+  lock();
   if (!deleting) {
-    // we can't and shouldn't do anything if the PG is being deleted locally
-    if (clear) {
-      state_clear(new_mode);
-    } else {
-      state_set(new_mode);
+    if (b) {
+      if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_RECOVERY_WAIT |
+		    PG_STATE_RECOVERING))) {
+	dout(20) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_RECOVERY);
+	publish_stats_to_osd();
+	did = true;
+      }
+    } else if (state & PG_STATE_FORCED_RECOVERY) {
+      dout(20) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_RECOVERY);
+      publish_stats_to_osd();
+      did = true;
     }
-    publish_stats_to_osd();
   }
+  unlock();
+  if (did) {
+    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    osd->local_reserver.update_priority(info.pgid, get_recovery_priority());
+  }
+  return did;
+}
+
+bool PG::set_force_backfill(bool b)
+{
+  bool did = false;
+  lock();
+  if (!deleting) {
+    if (b) {
+      if (!(state & PG_STATE_FORCED_BACKFILL) &&
+	  (state & (PG_STATE_DEGRADED |
+		    PG_STATE_BACKFILL_WAIT |
+		    PG_STATE_BACKFILLING))) {
+	dout(10) << __func__ << " set" << dendl;
+	state_set(PG_STATE_FORCED_BACKFILL);
+	publish_stats_to_osd();
+	did = true;
+      }
+    } else if (state & PG_STATE_FORCED_BACKFILL) {
+      dout(10) << __func__ << " clear" << dendl;
+      state_clear(PG_STATE_FORCED_BACKFILL);
+      publish_stats_to_osd();
+      did = true;
+    }
+  }
+  unlock();
+  if (did) {
+    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    osd->local_reserver.update_priority(info.pgid, get_backfill_priority());
+  }
+  return did;
 }
 
 inline int PG::clamp_recovery_priority(int priority)
@@ -2180,7 +2227,7 @@ unsigned PG::get_backfill_priority()
   // a higher value -> a higher priority
   int ret = OSD_BACKFILL_PRIORITY_BASE;
   if (state & PG_STATE_FORCED_BACKFILL) {
-    ret = OSD_RECOVERY_PRIORITY_FORCED;
+    ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
     if (acting.size() < pool.info.min_size) {
       // inactive: no. of replicas < min_size, highest priority since it blocks IO

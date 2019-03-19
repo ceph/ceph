@@ -122,6 +122,11 @@ public:
 
   void dump(Formatter* f) const;
 
+  string get_current_state() {
+    if (pi == nullptr) return "unknown";
+    return std::get<1>(pi->embedded_states.top());
+  }
+
 private:
   bool pg_in_destructor = false;
   PG* thispg = nullptr;
@@ -252,6 +257,10 @@ struct PGPool {
  */
 
 class PG : public DoutPrefixProvider {
+public:
+  bool set_force_recovery(bool b);
+  bool set_force_backfill(bool b);
+
 protected:
   OSDService *osd;
   CephContext *cct;
@@ -1093,7 +1102,6 @@ public:
   unsigned get_backfill_priority();
 
   void mark_clean();  ///< mark an active pg clean
-  void _change_recovery_force_mode(int new_mode, bool clear);
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -2481,12 +2489,12 @@ protected:
   PG(OSDService *o, OSDMapRef curmap,
      const PGPool &pool, spg_t p);
   ~PG() override;
+  const spg_t pg_id;
 
  private:
   // Prevent copying
   explicit PG(const PG& rhs);
   PG& operator=(const PG& rhs);
-  const spg_t pg_id;
   uint64_t peer_features;
   uint64_t acting_features;
   uint64_t upacting_features;
