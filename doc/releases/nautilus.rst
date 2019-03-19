@@ -1,12 +1,7 @@
-v14.1.0 Nautilus (release candidate 1)
-======================================
+v14.2.0 Nautilus
+================
 
-.. note: We expect to make a msgr2 protocol revision after this first
-   release candidate.  If you upgrade to v14.1.0 *and* enable msgr2,
-   you will need to restart all daemons after upgrading to v14.1.1 or
-   any other later nautilus release.
-
-.. note: These are draft notes for the first Nautilus release.
+This is the first stable release of Ceph Nautilus.
 
 Major Changes from Mimic
 ------------------------
@@ -38,21 +33,21 @@ Major Changes from Mimic
   * Prometheus alert Management
 
   Also, the Ceph Dashboard is now split into its own package named
-  ``ceph-mgr-dashboard``. So, you might want to install it separately,
+  ``ceph-mgr-dashboard``. You might want to install it separately,
   if your package management software fails to do so when it installs
   ``ceph-mgr``.
 
 - *RADOS*:
 
   * The number of placement groups (PGs) per pool can now be decreased
-    at any time, and the cluster can automatically tune the PG count
+    at any time, and the cluster can `automatically tune the PG count <pg-autoscaler>`_
     based on cluster utilization or administrator hints.
   * The new :ref:`v2 wire protocol <msgr2>` brings support for encryption on the wire.
-  * Physical storage devices consumed by OSD and Monitor daemons are
+  * Physical `storage devices <devices>`_ consumed by OSD and Monitor daemons are
     now tracked by the cluster along with health metrics (i.e.,
     SMART), and the cluster can apply a pre-trained prediction model
-    or a cloud-based prediction service to warn about expected
-    HDD or SSD failures.
+    or a cloud-based prediction service to `warn about expected
+    HDD or SSD failures <diskprediction>`_.
   * The NUMA node for OSD daemons can easily be monitored via the
     ``ceph osd numa-status`` command, and configured via the
     ``osd_numa_node`` config option.
@@ -142,13 +137,13 @@ Upgrading from Mimic or Luminous
 Notes
 ~~~~~
 
-* During the upgrade from Luminous to nautilus, it will not be
+* During the upgrade from Luminous to Nautilus, it will not be
   possible to create a new OSD using a Luminous ceph-osd daemon after
   the monitors have been upgraded to Nautilus.  We recommend you avoid adding
-  or replacing any OSDs while the upgrade is in process.
+  or replacing any OSDs while the upgrade is in progress.
 
 * We recommend you avoid creating any RADOS pools while the upgrade is
-  in process.
+  in progress.
 
 * You can monitor the progress of your upgrade at each stage with the
   ``ceph versions`` command, which will tell you what ceph version(s) are
@@ -196,13 +191,13 @@ Instructions
      # ceph osd set noout
 
 #. Upgrade monitors by installing the new packages and restarting the
-   monitor daemons.  For example,::
+   monitor daemons.  For example, on each monitor host,::
 
      # systemctl restart ceph-mon.target
 
    Once all monitors are up, verify that the monitor upgrade is
    complete by looking for the ``nautilus`` string in the mon
-   map.  For example::
+   map.  The command::
 
      # ceph mon dump | grep min_mon_release
 
@@ -211,10 +206,10 @@ Instructions
      min_mon_release 14 (nautilus)
 
    If it doesn't, that implies that one or more monitors hasn't been
-   upgraded and restarted and the quorum is not complete.
+   upgraded and restarted and/or the quorum does not include all monitors.
 
 #. Upgrade ``ceph-mgr`` daemons by installing the new packages and
-   restarting all manager daemons.  For example,::
+   restarting all manager daemons.  For example, on each manager host,::
 
      # systemctl restart ceph-mgr.target
 
@@ -236,12 +231,12 @@ Instructions
      ...
   
 #. Upgrade all OSDs by installing the new packages and restarting the
-   ceph-osd daemons on all hosts::
+   ceph-osd daemons on all OSD hosts::
 
      # systemctl restart ceph-osd.target
 
    You can monitor the progress of the OSD upgrades with the
-   ``ceph versions`` or ``ceph osd versions`` command::
+   ``ceph versions`` or ``ceph osd versions`` commands::
 
      # ceph osd versions
      {
@@ -338,29 +333,36 @@ Instructions
    and verify that each monitor has both a ``v2:`` and ``v1:`` address
    listed.
 
-#. For each host that has been upgrade, you should update your
-   ``ceph.conf`` file so that it references both the v2 and v1
-   addresses.  Things will still work if only the v1 IP and port are
-   listed, but each CLI instantiation or daemon will need to reconnect
-   after learning the monitors real IPs, slowing things down a bit and
+#. For each host that has been upgraded, you should update your
+   ``ceph.conf`` file so that it either specifies no monitor port (if
+   you are running the monitors on the default ports) or references
+   both the v2 and v1 addresses and ports explicitly.  Things will
+   still work if only the v1 IP and port are listed, but each CLI
+   instantiation or daemon will need to reconnect after learning the
+   monitors also speak the v2 protocol, slowing things down a bit and
    preventing a full transition to the v2 protocol.
 
    This is also a good time to fully transition any config options in
-   ceph.conf into the cluster's configuration database.  On each host,
-   you can use the following command to import any option into the
+   ``ceph.conf`` into the cluster's configuration database.  On each host,
+   you can use the following command to import any options into the
    monitors with::
 
      ceph config assimilate-conf -i /etc/ceph/ceph.conf
 
-   To create a minimal but sufficient ceph.conf for each host,::
+   You can see the cluster's configuration database with::
+
+     ceph config dump
+     
+   To create a minimal but sufficient ``ceph.conf`` for each host,::
 
      ceph config generate-minimal-conf > /etc/ceph/ceph.conf
 
-   Be sure to use this new config--and, specifically, the new syntax
-   for the ``mon_host`` option that lists both ``v2:`` and ``v1:``
-   addresses in brackets--on hosts that have been upgraded to
-   Nautilus, since pre-nautilus versions of Ceph to not understand the
-   syntax.
+   Be sure to use this new config only on hosts that have been
+   upgraded to Nautilus, as it may contain a ``mon_host`` value that
+   includes the new ``v2:`` and ``v1:`` prefixes for IP addresses that
+   is only understood by Nautilus.
+
+   For more information, see :ref:`msgr2_ceph_conf`.
 
 #. Consider enabling the :ref:`telemetry module <telemetry>` to send
    anonymized usage statistics and crash information to the Ceph
@@ -374,6 +376,10 @@ Instructions
    automatically report the high-level cluster metadata with::
 
      ceph telemetry on
+
+   For more information about the telemetry module, see `the
+   documentation <telemetry>`_.
+
 
 Upgrading from pre-Luminous releases (like Jewel)
 -------------------------------------------------
