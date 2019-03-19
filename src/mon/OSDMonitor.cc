@@ -6232,10 +6232,9 @@ bool OSDMonitor::update_pools_status()
 
     bool pool_is_full_objects = pool.quota_max_objects > 0 &&
       (uint64_t)sum.num_objects >= pool.quota_max_objects;
-    bool pool_is_full = ((pool.quota_max_bytes > 0 &&
-			  (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
-			 pool_is_full_objects);
-    
+    bool pool_is_full_bytes = (pool.quota_max_bytes > 0 &&
+			       (uint64_t)sum.num_bytes >= pool.quota_max_bytes);
+    bool pool_is_full = pool_is_full_objects || pool_is_full_bytes;    
 
     if (pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA)) {
       if (pool_is_full)
@@ -6248,6 +6247,7 @@ bool OSDMonitor::update_pools_status()
       clear_pool_flags(it->first,
                        pg_pool_t::FLAG_FULL_QUOTA |
 		       pg_pool_t::FLAG_FULL_QUOTA_OBJECTS |
+		       pg_pool_t::FLAG_FULL_QUOTA_BYTES |
 		       pg_pool_t::FLAG_FULL);
       ret = true;
     } else {
@@ -6276,6 +6276,9 @@ bool OSDMonitor::update_pools_status()
                        pg_pool_t::FLAG_BACKFILLFULL);
       if (pool_is_full_objects) {
 	set_pool_flags(it->first, pg_pool_t::FLAG_FULL_QUOTA_OBJECTS);
+      }
+      if (pool_is_full_bytes) {
+	set_pool_flags(it->first, pg_pool_t::FLAG_FULL_QUOTA_BYTES);
       }
       ret = true;
     }
