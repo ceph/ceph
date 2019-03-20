@@ -35,10 +35,14 @@ public:
      std::string&& name,
      ec_profile_t&& ec_profile,
      cached_map_t osdmap,
-     ceph::net::Messenger* msgr);
+     ceph::net::Messenger& msgr);
 
   epoch_t get_osdmap_epoch() const;
   const pg_info_t& get_info() const;
+  const pg_stat_t& get_stats() const;
+  void clear_state(uint64_t mask);
+  bool test_state(uint64_t mask) const;
+  void set_state(uint64_t mask);
   const PastIntervals& get_past_intervals() const;
   pg_shard_t get_primary() const;
   bool is_primary() const;
@@ -67,5 +71,5 @@ private:
   pg_shard_set_t actingset, upset;
 
   cached_map_t osdmap;
-  ceph::net::Messenger* msgr = nullptr;
+  ceph::net::Messenger& msgr;
 };

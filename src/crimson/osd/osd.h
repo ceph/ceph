@@ -11,7 +11,7 @@
 
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
-#include "crimson/mon/MonClient.h"
+#include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
@@ -24,6 +24,10 @@ class OSDMap;
 class OSDMeta;
 class PG;
 class Heartbeat;
+
+namespace ceph::mon {
+  class Client;
+}
 
 namespace ceph::net {
   class Messenger;
@@ -38,7 +42,8 @@ namespace ceph::os {
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 
 class OSD : public ceph::net::Dispatcher,
-	    private OSDMapService {
+	    private OSDMapService,
+	    private ceph::mgr::WithStats {
   seastar::gate gate;
   const int whoami;
   const uint32_t nonce;
@@ -49,6 +54,7 @@ class OSD : public ceph::net::Dispatcher,
   ceph::net::Messenger& public_msgr;
   ChainedDispatchers dispatchers;
   std::unique_ptr<ceph::mon::Client> monc;
+  std::unique_ptr<ceph::mgr::Client> mgrc;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
@@ -79,6 +85,8 @@ class OSD : public ceph::net::Dispatcher,
   seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
+  // mgr::WithStats methods
+  MessageRef get_stats() override;
 
 public:
   OSD(int id, uint32_t nonce,
