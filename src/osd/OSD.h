@@ -1855,7 +1855,6 @@ protected:
 
   pool_pg_num_history_t pg_num_history;
 
-  utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
   deque<utime_t> osd_markdown_log;
