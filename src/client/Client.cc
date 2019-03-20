@@ -11792,6 +11792,18 @@ size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%ld", (long)in->dir_pin);
 }
 
+bool Client::_vxattrcb_snap_btime_exists(Inode *in)
+{
+  return !in->snap_btime.is_zero();
+}
+
+size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%llu.09%lu",
+      (long long unsigned)in->snap_btime.sec(),
+      (long unsigned)in->snap_btime.nsec());
+}
+
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
 
@@ -11872,6 +11884,14 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_dir_pin_exists,
     flags: 0,
   },
+  {
+    name: "ceph.snap.btime",
+    getxattr_cb: &Client::_vxattrcb_snap_btime,
+    readonly: true,
+    hidden: false,
+    exists_cb: &Client::_vxattrcb_snap_btime_exists,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
@@ -11889,6 +11909,14 @@ const Client::VXattr Client::_file_vxattrs[] = {
   XATTR_LAYOUT_FIELD(file, layout, object_size),
   XATTR_LAYOUT_FIELD(file, layout, pool),
   XATTR_LAYOUT_FIELD(file, layout, pool_namespace),
+  {
+    name: "ceph.snap.btime",
+    getxattr_cb: &Client::_vxattrcb_snap_btime,
+    readonly: true,
+    hidden: false,
+    exists_cb: &Client::_vxattrcb_snap_btime_exists,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
