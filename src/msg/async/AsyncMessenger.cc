@@ -661,7 +661,7 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
   }
 
   auto av = _filter_addrs(addrs);
-  AsyncConnectionRef conn = _lookup_conn(av);
+  auto&& conn = _lookup_conn(av);
   submit_message(m, conn, av, type);
   return 0;
 }
@@ -678,7 +678,7 @@ ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs
 
   auto av = _filter_addrs(addrs);
 
-  AsyncConnectionRef conn = _lookup_conn(av);
+  auto conn = _lookup_conn(av);
   if (conn) {
     ldout(cct, 10) << __func__ << " " << av << " existing " << conn << dendl;
   } else {
@@ -689,7 +689,7 @@ ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs
   return conn;
 }
 
-void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
+void AsyncMessenger::submit_message(Message *m, const AsyncConnectionRef& con,
                                     const entity_addrvec_t& dest_addrs,
 				    int dest_type)
 {
@@ -730,8 +730,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   } else {
     ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addrs
 		  << ", new connection." << dendl;
-    con = create_connect(dest_addrs, dest_type);
-    con->send_message(m);
+    auto&& new_con = create_connect(dest_addrs, dest_type);
+    new_con->send_message(m);
   }
 }
 
@@ -820,10 +820,10 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
 void AsyncMessenger::mark_down_addrs(const entity_addrvec_t& addrs)
 {
   lock.Lock();
-  AsyncConnectionRef p = _lookup_conn(addrs);
-  if (p) {
-    ldout(cct, 1) << __func__ << " " << addrs << " -- " << p << dendl;
-    p->stop(true);
+  auto&& conn = _lookup_conn(addrs);
+  if (conn) {
+    ldout(cct, 1) << __func__ << " " << addrs << " -- " << conn << dendl;
+    conn->stop(true);
   } else {
     ldout(cct, 1) << __func__ << " " << addrs << " -- connection dne" << dendl;
   }
@@ -849,12 +849,12 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
   return 0;
 }
 
-int AsyncMessenger::accept_conn(AsyncConnectionRef conn)
+int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
 {
   Mutex::Locker l(lock);
   auto it = conns.find(*conn->peer_addrs);
   if (it != conns.end()) {
-    AsyncConnectionRef existing = it->second;
+    auto& existing = it->second;
 
     // lazy delete, see "deleted_conns"
     // If conn already in, we will return 0
