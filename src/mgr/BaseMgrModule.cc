@@ -848,7 +848,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
             }
             d.regex_str = PyString_AsString(param_value);
             try {
-              d.regex = {d.regex_str.c_str()};
+              d.regex = d.regex_str.c_str();
             } catch (const std::regex_error& e) {
               derr << __func__ << " query " << query_param_name << " item " << j
                    << " contains invalid regex " << d.regex_str << dendl;
