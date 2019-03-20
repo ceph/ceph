@@ -16,7 +16,9 @@ struct Object : public boost::intrusive_ref_counter<
   using bufferlist = ceph::bufferlist;
 
   bufferlist data;
-  std::map<std::string,bufferptr> xattr;
+  // use transparent comparator for better performance, see
+  // https://en.cppreference.com/w/cpp/utility/functional/less_void
+  std::map<std::string,bufferptr,std::less<>> xattr;
   bufferlist omap_header;
   std::map<std::string,bufferlist> omap;
 

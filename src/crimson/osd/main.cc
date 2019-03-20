@@ -11,6 +11,7 @@
 
 #include "common/ceph_argparse.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/net/SocketMessenger.h"
 
 #include "osd.h"
 
@@ -67,47 +68,62 @@ int main(int argc, char* argv[])
     usage(argv[0]);
     return EXIT_SUCCESS;
   }
-  std::string cluster;
+  std::string cluster_name;
   std::string conf_file_list;
   // ceph_argparse_early_args() could _exit(), while local_conf() won't ready
   // until it's started. so do the boilerplate-settings parsing here.
   auto init_params = ceph_argparse_early_args(ceph_args,
                                               CEPH_ENTITY_TYPE_OSD,
-                                              &cluster,
+                                              &cluster_name,
                                               &conf_file_list);
   seastar::sharded<OSD> osd;
+  seastar::sharded<ceph::net::SocketMessenger> cluster_msgr, client_msgr;
+  seastar::sharded<ceph::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
   using ceph::common::sharded_conf;
   using ceph::common::sharded_perf_coll;
   using ceph::common::local_conf;
   try {
     return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()), [&] {
       auto& config = app.configuration();
-      seastar::engine().at_exit([] {
-        return sharded_conf().stop();
-      });
-      seastar::engine().at_exit([] {
-        return sharded_perf_coll().stop();
-      });
-      seastar::engine().at_exit([&] {
-       return osd.stop();
-      });
-      return sharded_conf().start(init_params.name, cluster).then([] {
-        return sharded_perf_coll().start();
-      }).then([&conf_file_list] {
-        return local_conf().parse_config_files(conf_file_list);
-      }).then([&] {
-        return local_conf().parse_argv(ceph_args);
-      }).then([&] {
-        return osd.start_single(std::stoi(local_conf()->name.get_id()),
-                                static_cast<uint32_t>(getpid()));
-      }).then([&osd, mkfs = config.count("mkfs")] {
-        if (mkfs) {
-          return osd.invoke_on(0, &OSD::mkfs,
-                               local_conf().get_val<uuid_d>("fsid"))
-            .then([] { seastar::engine().exit(0); });
+      return seastar::async([&] {
+        sharded_conf().start(init_params.name, cluster_name).get();
+        sharded_perf_coll().start().get();
+        local_conf().parse_config_files(conf_file_list).get();
+        local_conf().parse_argv(ceph_args).get();
+        const int whoami = std::stoi(local_conf()->name.get_id());
+        const auto nonce = static_cast<uint32_t>(getpid());
+        const auto shard = seastar::engine().cpu_id();
+        cluster_msgr.start(entity_name_t::OSD(whoami), "cluster"s, nonce, shard).get();
+        client_msgr.start(entity_name_t::OSD(whoami), "client"s, nonce, shard).get();
+        hb_front_msgr.start(entity_name_t::OSD(whoami), "hb_front"s, nonce, shard).get();
+        hb_back_msgr.start(entity_name_t::OSD(whoami), "hb_back"s, nonce, shard).get();
+        osd.start_single(whoami, nonce,
+          reference_wrapper<ceph::net::Messenger>(cluster_msgr.local()),
+          reference_wrapper<ceph::net::Messenger>(client_msgr.local()),
+          reference_wrapper<ceph::net::Messenger>(hb_front_msgr.local()),
+          reference_wrapper<ceph::net::Messenger>(hb_back_msgr.local())).get();
+        if (config.count("mkfs")) {
+          osd.invoke_on(0, &OSD::mkfs,
+                        local_conf().get_val<uuid_d>("fsid"))
+            .then([] { seastar::engine().exit(0); }).get();
         } else {
-          return osd.invoke_on(0, &OSD::start);
+          osd.invoke_on(0, &OSD::start).get();
         }
+        seastar::engine().at_exit([&] {
+          return osd.stop();
+        });
+        seastar::engine().at_exit([&] {
+          return seastar::when_all_succeed(cluster_msgr.stop(),
+                                           client_msgr.stop(),
+                                           hb_front_msgr.stop(),
+                                           hb_back_msgr.stop());
+        });
+        seastar::engine().at_exit([] {
+          return sharded_perf_coll().stop();
+        });
+        seastar::engine().at_exit([] {
+          return sharded_conf().stop();
+        });
       });
     });
   } catch (...) {
