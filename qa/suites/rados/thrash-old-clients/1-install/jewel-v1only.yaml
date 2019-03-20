@@ -1,13 +1,13 @@
 overrides:
   ceph:
-    crush_tunables: hammer
+    mon_bind_msgr2: false
     conf:
-      mon:
-        mon osd initial require min compat client: hammer
+      global:
+        ms type: async
+        ms bind msgr2: false
 tasks:
 - install:
-    branch: hammer
-    downgrade_packages: ['librbd1', 'librados2']
+    branch: jewel
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -19,7 +19,6 @@ tasks:
       - libcephfs2
       - libcephfs-devel
       - libcephfs-dev
-      - libradospp-devel
     extra_packages: ['librados2']
 - install.upgrade:
     mon.a:
