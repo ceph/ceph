@@ -304,22 +304,40 @@ public:
 
 static const std::string AMQP_0_9_1("0-9-1");
 static const std::string AMQP_1_0("1-0");
+static const std::string AMQP_SCHEMA("amqp");
 #endif	// ifdef WITH_RADOSGW_AMQP_ENDPOINT
+
+static const std::string WEBHOOK_SCHEMA("webhook");
+static const std::string UNKNOWN_SCHEMA("unknown");
+static const std::string NO_SCHEMA("");
+
+const std::string& RGWPubSubEndpoint::get_schema(const std::string& endpoint) {
+  if (endpoint.empty()) {
+    return NO_SCHEMA; 
+  }
+  const auto pos = endpoint.find(':');
+  if (pos == std::string::npos) {
+    return UNKNOWN_SCHEMA;
+  }
+  const auto& schema = endpoint.substr(0,pos);
+  if (schema == "http" || schema == "https") {
+    return WEBHOOK_SCHEMA;
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  } else if (schema == "amqp") {
+    return AMQP_SCHEMA;
+#endif
+  }
+  return UNKNOWN_SCHEMA;
+}
 
 RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
     const std::string& topic, 
     const RGWHTTPArgs& args) {
-  //fetch the schema from the endpoint
-  const auto pos = endpoint.find(':');
-  if (pos == std::string::npos) {
-    throw configuration_error("malformed endpoint " + endpoint);
-    return nullptr;
-  }
-  const auto& schema = endpoint.substr(0,pos);
-  if (schema == "http" || schema == "https") {
+  const auto& schema = get_schema(endpoint);
+  if (schema == WEBHOOK_SCHEMA) {
     return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  } else if (schema == "amqp") {
+  } else if (schema == AMQP_SCHEMA) {
     bool exists;
     std::string version = args.get("amqp-version", &exists);
     if (!exists) {
@@ -340,7 +358,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 #endif
   }
 
-  throw configuration_error("unknown schema " + schema);
+  throw configuration_error("unknown schema in: " + endpoint);
   return nullptr;
 }
 

@@ -424,6 +424,7 @@ static void make_event_ref(CephContext *cct, const rgw_bucket& bucket,
 }
 
 static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
+                       const rgw_user& owner,
                        const rgw_obj_key& key,
                        const ceph::real_time& mtime,
                        const std::vector<std::pair<std::string, std::string> > *attrs,
@@ -439,17 +440,17 @@ static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
   r->userIdentity = "";         // not supported yet
   r->sourceIPAddress = "";      // not supported yet
   r->x_amz_request_id = "";     // not supported yet
-  r->x_amz_id_2 = "";           // TODO: get that?
+  r->x_amz_id_2 = "";           // not supported yet
   r->s3SchemaVersion = "1.0";
   // configurationId is filled from subscription configuration
   r->bucket_name = bucket.name;
-  r->bucket_ownerIdentity = bucket.tenant;
+  r->bucket_ownerIdentity = owner.to_str();
   r->bucket_arn = to_string(rgw::ARN(bucket));
   r->object_key = key.name;
-  r->object_size = 0;           // TODO: get that?
+  r->object_size = 0;           // not supported yet
   objstore_event oevent(bucket, key, mtime, attrs);
   r->object_etag = oevent.get_hash();
-  r->object_versionId = "";     // not supported yet
+  r->object_versionId = key.instance;
  
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
@@ -1335,7 +1336,7 @@ public:
                        mtime, &attrs,
                        EVENT_NAME_OBJECT_CREATE, &event);
         make_s3_record_ref(sync_env->cct,
-                       bucket_info.bucket, key,
+                       bucket_info.bucket, bucket_info.owner, key,
                        mtime, &attrs,
                        EVENT_NAME_OBJECT_CREATE, &record);
       }
@@ -1459,7 +1460,7 @@ public:
                      mtime, nullptr,
                      event_name, &event);
       make_s3_record_ref(sync_env->cct,
-                     bucket, key,
+                     bucket, owner, key,
                      mtime, nullptr,
                      event_name, &record);
       yield call(new RGWPSHandleObjEventCR(sync_env, env, owner, event, record, topics));

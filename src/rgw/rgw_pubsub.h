@@ -8,6 +8,51 @@
 #include "rgw_zone.h"
 #include "services/svc_sys_obj.h"
 
+class XMLObj;
+
+/* S3 notification configuration
+ * based on: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTnotification.html
+<NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <TopicConfiguration>
+    <Filter>
+      <S3Key>
+        <FilterRule>
+          <Name>suffix</Name>
+          <Value>jpg</Value>
+        </FilterRule>
+      </S3Key>
+    </Filter>
+    <Id>notification1</Id>
+    <Topic>arn:aws:sns:::[<endpoint-type>:<endpoint-name>]:topic1</Topic>
+    <Event>s3:ObjectCreated:*</Event>
+    <Event>s3:ObjectRemoved:*</Event>
+  </TopicConfiguration>
+</NotificationConfiguration>
+*/
+struct rgw_pubsub_s3_notification {
+  // notification id
+  std::string id;
+  // type of endpoint (http, amqp etc.)
+  // empty of no endpoint is set
+  std::string endpoint_type;
+  // id of endpoint (usually URI)
+  // empty of no endpoint is set
+  std::string endpoint_id;
+  // topic
+  std::string topic;
+  // types of events
+  std::list<std::string> events;
+
+  bool decode_xml(XMLObj *obj);
+  void dump_xml(Formatter *f) const;
+};
+
+struct rgw_pubsub_s3_notifications {
+  std::list<rgw_pubsub_s3_notification> list;
+  bool decode_xml(XMLObj *obj);
+  void dump_xml(Formatter *f) const;
+};
+
 /* S3 event records structure
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
 {  
@@ -279,7 +324,7 @@ WRITE_CLASS_ENCODER(rgw_pubsub_topic)
 
 struct rgw_pubsub_topic_subs {
   rgw_pubsub_topic topic;
-  std::set<string> subs;
+  std::set<std::string> subs;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

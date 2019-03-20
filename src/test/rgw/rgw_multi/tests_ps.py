@@ -9,10 +9,9 @@ from rgw_multi.tests import get_realm, \
     zone_data_checkpoint, \
     check_bucket_eq, \
     gen_bucket_name
-from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription
+from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
-import boto3
 
 # configure logging for the tests module
 log = logging.getLogger('rgw_multi.tests')
@@ -126,53 +125,77 @@ NOTIFICATION_SUFFIX = "_notif"
 ##############
 
 
-def test_ps_s3_notification():
+def test_ps_s3_notification_low_level():
+    """ test low level implementation of s3 notifications """
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     # create bucket on the first of the rados zones
     bucket = zones[0].create_bucket(bucket_name)
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
-    # create boto3 client
-    client = boto3.client('s3',
-                          endpoint_url='http://'+ps_zones[0].conn.host+':'+str(ps_zones[0].conn.port),
-                          aws_access_key_id=ps_zones[0].conn.aws_access_key_id,
-                          aws_secret_access_key=ps_zones[0].conn.aws_secret_access_key)
+    # create s3 notification
+    topic_name = bucket_name + TOPIC_SUFFIX
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    generated_topic_name = notification_name+'_'+topic_name
+    topic_arn = 'arn:aws:sns:::' + topic_name
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
+                                            notification_name, topic_arn, ['s3:ObjectCreated:*'])
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # get auto-generated topic
+    topic_conf = PSTopic(ps_zones[0].conn, generated_topic_name)
+    result, status = topic_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(status/100, 2)
+    assert_equal(parsed_result['topic']['name'], generated_topic_name)
+    # get auto-generated notification
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       generated_topic_name)
+    result, status = notification_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(status/100, 2)
+    assert_equal(len(parsed_result['topics']), 1)
+    # get auto-generated subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, notification_name,
+                              generated_topic_name)
+    result, status = sub_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(status/100, 2)
+    assert_equal(parsed_result['topic'], generated_topic_name)
+
+    # low-level cleanup
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the keys
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_s3_notification_records():
+    """ test s3 records fetching """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
     # create s3 notification
     topic_name = bucket_name + TOPIC_SUFFIX
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_arn = 'arn:aws:sns:::' + topic_name
-    response = client.put_bucket_notification_configuration(Bucket=bucket_name,
-                                                            NotificationConfiguration={
-                                                                'TopicConfigurations': [
-                                                                    {
-                                                                        'Id': notification_name,
-                                                                        'TopicArn': topic_arn,
-                                                                        'Events': ['s3:ObjectCreated:*'],
-                                                                    }
-                                                                ]
-                                                            })
-
-    status = response['ResponseMetadata']['HTTPStatusCode']
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, 
+                                            notification_name, topic_arn, ['s3:ObjectCreated:*'])
+    response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
     zone_meta_checkpoint(ps_zones[0].zone)
-    # get auto-generated topic
-    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
-    result, _ = topic_conf.get_config()
-    parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic']['name'], topic_name)
-    # get auto-generated notification
-    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
-                                       topic_name)
-    result, _ = notification_conf.get_config()
-    parsed_result = json.loads(result)
-    assert_equal(len(parsed_result['topics']), 1)
     # get auto-generated subscription
     sub_conf = PSSubscription(ps_zones[0].conn, notification_name,
                               topic_name)
-    result, _ = sub_conf.get_config()
-    parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], topic_name)
+    _, status = sub_conf.get_config()
+    assert_equal(status/100, 2)
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -189,11 +212,66 @@ def test_ps_s3_notification():
     keys = list(bucket.list())
     # TODO: set exact_match to true
     verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
-   
+
     # cleanup
-    sub_conf.del_config()
-    notification_conf.del_config()
-    topic_conf.del_config()
+    _, status = s3_notification_conf.del_config()
+    assert_equal(status/100, 2)
+    # delete the keys
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_s3_notification():
+    """ test s3 notification set/get/delete """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create boto3 clientV
+    topic_name = bucket_name + TOPIC_SUFFIX
+    topic_arn = 'arn:aws:sns:::' + topic_name
+    # create one s3 notification
+    notification_name1 = bucket_name + NOTIFICATION_SUFFIX + '_1'
+    s3_notification_conf1 = PSNotificationS3(ps_zones[0].conn, bucket_name, 
+                                             notification_name1, topic_arn, ['s3:ObjectCreated:*'])
+    response, status = s3_notification_conf1.set_config()
+    assert_equal(status/100, 2)
+    # create another s3 notification
+    notification_name2 = bucket_name + NOTIFICATION_SUFFIX + '_2'
+
+    s3_notification_conf2 = PSNotificationS3(ps_zones[0].conn, bucket_name, 
+                                             notification_name2, topic_arn, ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'])
+    response, status = s3_notification_conf2.set_config()
+    assert_equal(status/100, 2)
+    zone_meta_checkpoint(ps_zones[0].zone)
+
+    # get all notification on a bucket
+    response, status = s3_notification_conf1.get_config()
+    assert_equal(status/100, 2)
+    assert_equal(len(response['TopicConfigurations']), 2)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn)
+
+    # get specific notification on a bucket
+    response, status = s3_notification_conf1.get_config(all_notifications=False)
+    assert_equal(status/100, 2)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name1)
+    response, status = s3_notification_conf2.get_config(all_notifications=False)
+    assert_equal(status/100, 2)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Id'], notification_name2)
+
+    # delete specific notifications
+    _, status = s3_notification_conf1.del_config(all_notifications=False)
+    assert_equal(status/100, 2)
+    _, status = s3_notification_conf2.del_config(all_notifications=False)
+    assert_equal(status/100, 2)
+
+    # cleanup
     # delete the keys
     for key in bucket.list():
         key.delete()
@@ -433,7 +511,7 @@ def test_ps_event_type_subscription():
     result, _ = sub_create_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) + \
+        log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     keys = list(bucket.list())
     # TODO: set exact_match to true
@@ -442,14 +520,14 @@ def test_ps_event_type_subscription():
     result, _ = sub_delete_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) + \
+        log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     assert_equal(len(parsed_result['events']), 0)
     # get the events from the all events subscription
     result, _ = sub_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' + \
+        log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' +
                   str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
     # TODO: set exact_match to true
     verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
@@ -464,7 +542,7 @@ def test_ps_event_type_subscription():
     result, _ = sub_create_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) + \
+        log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # deletions should not change the creation events
     # TODO: set exact_match to true
@@ -473,7 +551,7 @@ def test_ps_event_type_subscription():
     result, _ = sub_delete_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) + \
+        log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # only deletions should be listed here
     # TODO: set exact_match to true
@@ -482,17 +560,22 @@ def test_ps_event_type_subscription():
     result, _ = sub_create_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
-        log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) + \
+        log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # both deletions and creations should be here
     verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=False)
     # verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
     # TODO: (1) test deletions (2) test overall number of events
 
+    # test subscription deletion when topic is specified
+    _, status = sub_create_conf.del_config(topic=True)
+    assert_equal(status/100, 2)
+    _, status = sub_delete_conf.del_config(topic=True)
+    assert_equal(status/100, 2)
+    _, status = sub_conf.del_config(topic=True)
+    assert_equal(status/100, 2)
+
     # cleanup
-    sub_create_conf.del_config()
-    sub_delete_conf.del_config()
-    sub_conf.del_config()
     notification_create_conf.del_config()
     notification_delete_conf.del_config()
     notification_conf.del_config()

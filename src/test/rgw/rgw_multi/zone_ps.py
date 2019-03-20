@@ -4,8 +4,11 @@ import urllib
 import hmac
 import hashlib
 import base64
+import xmltodict
 from time import gmtime, strftime
 from multisite import Zone
+import boto3
+from botocore.client import Config
 
 log = logging.getLogger('rgw_multi.tests')
 
@@ -31,7 +34,7 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
 NO_HTTP_BODY = ''
 
 
-def make_request(conn, method, resource, parameters=None):
+def make_request(conn, method, resource, parameters=None, sign_parameters=False):
     """generic request sending to pubsub radogw
     should cover: topics, notificatios and subscriptions
     """
@@ -43,6 +46,8 @@ def make_request(conn, method, resource, parameters=None):
         url_params = '?' + url_params
     string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
     string_to_sign = method + '\n\n\n' + string_date + '\n' + resource
+    if sign_parameters:
+        string_to_sign += url_params
     signature = base64.b64encode(hmac.new(conn.aws_secret_access_key,
                                           string_to_sign.encode('utf-8'),
                                           hashlib.sha1).digest())
@@ -119,12 +124,74 @@ class PSNotification:
         return self.send_request('GET')
 
     def set_config(self):
-        """setnotification"""
+        """set notification"""
         return self.send_request('PUT', self.parameters)
 
     def del_config(self):
         """delete notification"""
         return self.send_request('DELETE', self.parameters)
+
+
+class PSNotificationS3:
+    """class to set/get/delete an S3 notification
+    PUT /<bucket>?notification
+    GET /<bucket>?notification[=<notification>]
+    DELETE /<bucket>?notification[=<notification>]
+    """
+    def __init__(self, conn, bucket_name, notification, topic_arn, events=None):
+        self.conn = conn
+        assert bucket_name.strip()
+        self.bucket_name = bucket_name
+        self.resource = '/'+bucket_name
+        self.notification = notification
+        self.topic_arn = topic_arn
+        self.events = events
+        self.client = boto3.client('s3',
+                                   endpoint_url='http://'+conn.host+':'+str(conn.port),
+                                   aws_access_key_id=conn.aws_access_key_id,
+                                   aws_secret_access_key=conn.aws_secret_access_key,
+                                   config=Config(signature_version='s3'))
+
+    def send_request(self, method, parameters=None):
+        """send request to radosgw"""
+        return make_request(self.conn, method, self.resource, parameters, sign_parameters=True)
+
+    def get_config(self, all_notifications=True):
+        """get notification info"""
+        parameters = None
+        if all_notifications:
+            response = self.client.get_bucket_notification_configuration(Bucket=self.bucket_name)
+            status = response['ResponseMetadata']['HTTPStatusCode']
+            return response, status
+        parameters = {'notification': self.notification}
+        response, status = self.send_request('GET', parameters=parameters)
+        dict_response = xmltodict.parse(response)
+        return dict_response, status
+
+    def set_config(self):
+        """set notification"""
+        response = self.client.put_bucket_notification_configuration(Bucket=self.bucket_name,
+                                                                     NotificationConfiguration={
+                                                                         'TopicConfigurations': [
+                                                                             {
+                                                                                 'Id': self.notification,
+                                                                                 'TopicArn': self.topic_arn,
+                                                                                 'Events': self.events,
+                                                                             }
+                                                                         ]
+                                                                     })
+        status = response['ResponseMetadata']['HTTPStatusCode']
+        return response, status
+
+    def del_config(self, all_notifications=True):
+        """delete notification"""
+        parameters = None
+        if all_notifications:
+            parameters = {'notification': None}
+        else:
+            parameters = {'notification': self.notification}
+
+        return self.send_request('DELETE', parameters)
 
 
 class PSSubscription:
@@ -154,8 +221,10 @@ class PSSubscription:
         """set subscription"""
         return self.send_request('PUT', self.parameters)
 
-    def del_config(self):
+    def del_config(self, topic=False):
         """delete subscription"""
+        if topic:
+            return self.send_request('DELETE', self.parameters)
         return self.send_request('DELETE')
 
     def get_events(self, max_entries=None, marker=None):

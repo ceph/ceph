@@ -185,7 +185,7 @@ boost::optional<ARN> ARN::parse(const std::string& s, bool wildcards) {
 }
 
 std::string ARN::to_string() const {
-  std::string s;
+  std::string s{"arn:"};
 
   if (partition == Partition::aws) {
     s.append("aws:");
@@ -361,6 +361,24 @@ boost::optional<ARNResource> ARNResource::parse(const std::string& s) {
   }
 
   return boost::none;
+}
+
+std::string ARNResource::to_string() const {
+  std::string s;
+
+  if (!resource_type.empty()) {
+    s.append(resource_type);
+    s.push_back(':');
+
+    s.append(resource);
+    s.push_back(':');
+
+    s.append(qualifier);
+  } else {
+    s.append(resource);
+  }
+
+  return s;
 }
 
 }

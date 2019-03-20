@@ -34,6 +34,15 @@ TEST(TestARN, Basic)
   }
 }
 
+TEST(TestARN, ToString)
+{
+  for (auto i = 0; i < BASIC_ENTRIES; ++i) {
+    boost::optional<ARN> arn = ARN::parse(basic_str[i]);
+    ASSERT_TRUE(arn);
+    EXPECT_STREQ(to_string(*arn).c_str(), basic_str[i].c_str());
+  }
+}
+
 const std::string expected_basic_resource_type[BASIC_ENTRIES] = 
     {"", "resourceType", "resourceType", "resourceType", "resourceType", "resourceType"};
 const std::string expected_basic_qualifier[BASIC_ENTRIES] = 

@@ -7,9 +7,7 @@
 #include <stdexcept>
 #include "include/buffer_fwd.h"
 
-// TODO the env should be used as a template parameter to differentiate
-// synchronization driven pushes to (when running on the pubsub zone) to direct rados driven pushes
-// when running on the main zone
+// TODO the env should be used as a template parameter to differentiate the source that triggers the pushes
 class RGWDataSyncEnv;
 class RGWCoroutine;
 class RGWHTTPArgs;
@@ -25,6 +23,8 @@ public:
   const RGWPubSubEndpoint& operator=(const RGWPubSubEndpoint&) = delete;
 
   typedef std::unique_ptr<RGWPubSubEndpoint> Ptr;
+
+  static const std::string& get_schema(const std::string& endpoint);
 
   // factory method for the actual notification endpoint
   // derived class specific arguments are passed in http args format
