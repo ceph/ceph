@@ -190,7 +190,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_LUMINOUS   12
 #define CEPH_RELEASE_MIMIC      13
 #define CEPH_RELEASE_NAUTILUS   14
-#define CEPH_RELEASE_MAX        15  /* highest + 1 */
+#define CEPH_RELEASE_OCTOPUS    15
+#define CEPH_RELEASE_MAX        16  /* highest + 1 */
 
 extern const char *ceph_release_name(int r);
 extern int ceph_release_from_name(const char *s);
