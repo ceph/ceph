@@ -193,7 +193,9 @@ function corrupt_and_repair_erasure_coded() {
 
 function create_ec_pool() {
     local pool_name=$1
-    local allow_overwrites=$2
+    shift
+    local allow_overwrites=$1
+    shift
 
     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd "$@" || return 1
 
@@ -291,7 +293,7 @@ function corrupt_and_repair_jerasure() {
 }
 
 function TEST_corrupt_and_repair_jerasure_appends() {
-    corrupt_and_repair_jerasure $1
+    corrupt_and_repair_jerasure $1 false
 }
 
 function TEST_corrupt_and_repair_jerasure_overwrites() {
@@ -325,12 +327,12 @@ function corrupt_and_repair_lrc() {
 }
 
 function TEST_corrupt_and_repair_lrc_appends() {
-    corrupt_and_repair_jerasure $1
+    corrupt_and_repair_lrc $1 false
 }
 
 function TEST_corrupt_and_repair_lrc_overwrites() {
     if [ "$use_ec_overwrite" = "true" ]; then
-        corrupt_and_repair_jerasure $1 true
+        corrupt_and_repair_lrc $1 true
     fi
 }
 
@@ -393,7 +395,7 @@ function unfound_erasure_coded() {
 }
 
 function TEST_unfound_erasure_coded_appends() {
-    unfound_erasure_coded $1
+    unfound_erasure_coded $1 false
 }
 
 function TEST_unfound_erasure_coded_overwrites() {
