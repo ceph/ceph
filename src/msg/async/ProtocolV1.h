@@ -284,7 +284,7 @@ protected:
   CtPtr send_connect_message_reply(char tag, ceph_msg_connect_reply &reply,
                                    bufferlist &authorizer_reply);
   CtPtr handle_connect_message_reply_write(int r);
-  CtPtr replace(AsyncConnectionRef existing, ceph_msg_connect_reply &reply,
+  CtPtr replace(const AsyncConnectionRef& existing, ceph_msg_connect_reply &reply,
                 bufferlist &authorizer_reply);
   CtPtr open(ceph_msg_connect_reply &reply, bufferlist &authorizer_reply);
   CtPtr handle_ready_connect_message_reply_write(int r);
