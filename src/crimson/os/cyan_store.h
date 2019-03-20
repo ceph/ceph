@@ -23,6 +23,7 @@ class CyanStore {
   std::unordered_map<coll_t, CollectionRef> coll_map;
   std::map<coll_t,CollectionRef> new_coll_map;
   uint64_t used_bytes = 0;
+  uuid_d osd_fsid;
 
 public:
   CyanStore(const std::string& path);
@@ -31,12 +32,17 @@ public:
   seastar::future<> mount();
   seastar::future<> umount();
 
-  seastar::future<> mkfs(uuid_d osd_fsid);
+  seastar::future<> mkfs();
   seastar::future<bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
 				   uint64_t offset,
 				   size_t len,
 				   uint32_t op_flags = 0);
+  seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
+					    const ghobject_t& oid,
+					    std::string_view name);
+  using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
+  seastar::future<attrs_t> get_attrs(CollectionRef c, const ghobject_t& oid);
   using omap_values_t = std::map<std::string,bufferlist, std::less<>>;
   seastar::future<omap_values_t> omap_get_values(
     CollectionRef c,
@@ -52,6 +58,7 @@ public:
   void write_meta(const std::string& key,
 		  const std::string& value);
   int read_meta(const std::string& key, std::string* value);
+  uuid_d get_fsid() const;
 
 private:
   int _write(const coll_t& cid, const ghobject_t& oid,

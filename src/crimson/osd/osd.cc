@@ -79,13 +79,11 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
 {
   const auto data_path = local_conf().get_val<std::string>("osd_data");
   store = std::make_unique<ceph::os::CyanStore>(data_path);
-  uuid_d osd_fsid;
-  osd_fsid.generate_random();
-  return store->mkfs(osd_fsid).then([this] {
+  return store->mkfs().then([this] {
     return store->mount();
-  }).then([cluster_fsid, osd_fsid, this] {
+  }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
-    superblock.osd_fsid = osd_fsid;
+    superblock.osd_fsid = store->get_fsid();
     superblock.whoami = whoami;
     superblock.compat_features = get_osd_initial_compat_set();
 
