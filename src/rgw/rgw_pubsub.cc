@@ -5,8 +5,89 @@
 #include "rgw_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
+#include "rgw_xml.h"
+#include "rgw_arn.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+bool rgw_pubsub_s3_notification::decode_xml(XMLObj *obj) {
+  const auto throw_if_missing = true;
+  RGWXMLDecoder::decode_xml("Id", id, obj, throw_if_missing);
+  
+  std::string str_arn;
+  RGWXMLDecoder::decode_xml("Topic", str_arn, obj, throw_if_missing);
+
+  // parse ARN. allow wildcards 
+  const auto arn = rgw::ARN::parse(str_arn, true);
+  if (arn == boost::none || arn->resource.empty()) {
+    throw RGWXMLDecoder::err("topic ARN parsing failed. ARN = '" + str_arn + "'");
+  }
+
+  // partition and service are expected to be "aws" and "sns"
+  // but there is no need to validate ARN them
+  
+  const auto arn_resource = rgw::ARNResource::parse(arn->resource);
+  if (arn_resource == boost::none || arn_resource->resource.empty()) {
+    throw RGWXMLDecoder::err("topic ARN resource parsing failed. ARNResource = '" + arn->resource + "'");
+  }
+
+  if (!arn_resource->resource_type.empty()) {
+    // endpoint exists
+    endpoint_type = arn_resource->resource_type;
+    endpoint_id = arn_resource->resource;
+    if (arn_resource->qualifier.empty()) {
+      throw RGWXMLDecoder::err("topic ARN resource parsing failed. missing qualifier for endpoint");
+    }
+    topic = arn_resource->qualifier;
+  } else {
+    // only topic
+    topic = arn_resource->resource;
+  }
+
+  do_decode_xml_obj(events, "Event", obj);
+  if (events.empty()) {
+    // if no events are provided, we assume all events
+    events.push_back("s3:ObjectCreated:*");
+    events.push_back("s3:ObjectRemoved:*");
+  }
+  return true;
+}
+
+void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
+  ::encode_xml("Id", id, f);
+  rgw::ARN arn;
+  arn.partition = rgw::Partition::aws;
+  arn.service = rgw::Service::sns;
+  //TODO: 
+  //arn.region = 
+  //arn.account =
+  rgw::ARNResource arn_resource;
+  if (endpoint_type.empty()) {
+    arn_resource.resource = topic;
+  } else {
+    arn_resource.resource_type = endpoint_type;
+    arn_resource.resource = endpoint_id;
+    arn_resource.qualifier = topic;
+  }
+
+  arn.resource = to_string(arn_resource);
+  ::encode_xml("Topic", to_string(arn).c_str(), f);
+  for (const auto& event : events) {
+    ::encode_xml("Event", event, f);
+  }
+}
+
+bool rgw_pubsub_s3_notifications::decode_xml(XMLObj *obj) {
+  do_decode_xml_obj(list, "TopicConfiguration", obj);
+  if (list.empty()) {
+    throw RGWXMLDecoder::err("at least one 'TopicConfiguration' must exist");
+  }
+  return true;
+}
+
+void rgw_pubsub_s3_notifications::dump_xml(Formatter *f) const {
+  do_encode_xml("NotificationConfiguration", list, "TopicConfiguration", f);
+}
 
 void rgw_pubsub_s3_record::dump(Formatter *f) const {
   encode_json("eventVersion", eventVersion, f);
@@ -20,7 +101,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
   else if (eventName == "OBJECT_DELETE") {
     encode_json("eventName", "ObjectRemoved", f);
   } else {
-    encode_json("eventName", eventName, f);
+    encode_json("eventName", "UNKNOWN_EVENT", f);
   }
   {
     Formatter::ObjectSection s(*f, "userIdentity");
@@ -191,7 +272,7 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
 
   auto iter = topics.topics.find(name);
   if (iter == topics.topics.end()) {
-    ldout(store->ctx(), 1) << "ERROR: cannot add subscription to topic: topic not found" << dendl;
+    ldout(store->ctx(), 1) << "ERROR: topic not found" << dendl;
     return -ENOENT;
   }
 
