@@ -40,6 +40,24 @@ public:
   virtual void oid_to_key(string& oid) {}
 };
 
+struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
+  std::optional<bufferlist> _bl;
+  bufferlist *pbl{nullptr};
+  map<string, bufferlist> *pattrs{nullptr};
+  rgw_cache_entry_info *cache_info{nullptr};
+  boost::optional<obj_version> refresh_version;
+  optional_yield y{null_yield};
+};
+
+struct RGWSI_MBSObj_PutParams : public RGWSI_MetaBackend::PutParams {
+  bufferlist bl;
+  map<string, bufferlist> *pattrs{nullptr};
+  bool exclusive{false};
+};
+
+struct RGWSI_MBSObj_RemoveParams : public RGWSI_MetaBackend::RemoveParams {
+  // nothing in here
+};
 
 class RGWSI_MetaBackend_SObj : public RGWSI_MetaBackend
 {
@@ -73,17 +91,17 @@ public:
 
   void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, RGWSI_MetaBackend::Context *ctx) override;
 
-  virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
-                        bufferlist *pbl,
-                        RGWObjVersionTracker *objv_tracker,
-                        real_time *pmtime,
-                        map<string, bufferlist> *pattrs = nullptr,
-                        rgw_cache_entry_info *cache_info = nullptr,
-                        boost::optional<obj_version> refresh_version = boost::none) override;
-  virtual int put_entry(RGWSI_MetaBackend::Context *ctx, bufferlist& bl, bool exclusive,
-                        RGWObjVersionTracker *objv_tracker, real_time mtime, map<string, bufferlist> *pattrs = nullptr) override;
-  virtual int remove_entry(RGWSI_MetaBackend::Context *ctx,
-                           RGWObjVersionTracker *objv_tracker) override;
+  RGWSI_MetaBackend::GetParams *alloc_default_get_params(ceph::real_time *pmtime) override;
+
+  int get_entry(RGWSI_MetaBackend::Context *ctx,
+                RGWSI_MetaBackend::GetParams& params,
+                RGWObjVersionTracker *objv_tracker) override;
+  int put_entry(RGWSI_MetaBackend::Context *ctx,
+                RGWSI_MetaBackend::PutParams& params,
+                RGWObjVersionTracker *objv_tracker) override;
+  int remove_entry(RGWSI_MetaBackend::Context *ctx,
+                   RGWSI_MetaBackend::RemoveParams& params,
+                   RGWObjVersionTracker *objv_tracker) override;
 };
 
 

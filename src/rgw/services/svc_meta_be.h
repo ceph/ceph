@@ -22,6 +22,7 @@
 
 class RGWMetadataHandler;
 class RGWMetadataLogData;
+class RGWMetadataObject;
 
 class RGWSI_MDLog;
 class RGWSI_Meta;
@@ -94,6 +95,24 @@ public:
     std::string key;
   };
 
+  struct PutParams {
+    virtual ~PutParams() = 0;
+
+    ceph::real_time mtime;
+  };
+
+  struct GetParams {
+    virtual ~GetParams();
+
+    ceph::real_time *pmtime{nullptr};
+  };
+
+  struct RemoveParams {
+    virtual ~RemoveParams() = 0;
+
+    ceph::real_time mtime;
+  };
+
   enum Type {
     MDBE_SOBJ = 0,
     MDBE_OTP  = 1,
@@ -106,42 +125,32 @@ public:
 
   virtual void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, Context *ctx) = 0;
 
+  virtual GetParams *alloc_default_get_params(ceph::real_time *pmtime) = 0;
+
   /* these should be implemented by backends */
-  virtual int get_entry(Context *ctx,
-                        bufferlist *pbl,
-                        RGWObjVersionTracker *objv_tracker,
-                        real_time *pmtime,
-                        map<string, bufferlist> *pattrs = nullptr,
-                        rgw_cache_entry_info *cache_info = nullptr,
-                        boost::optional<obj_version> refresh_version = boost::none) = 0;
-  virtual int put_entry(Context *ctx,
-                        bufferlist& bl,
-                        bool exclusive,
-                        RGWObjVersionTracker *objv_tracker,
-                        real_time mtime, map<string, bufferlist> *pattrs = nullptr) = 0;
+  virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
+                        RGWSI_MetaBackend::GetParams& params,
+                        RGWObjVersionTracker *objv_tracker) = 0;
+  virtual int put_entry(RGWSI_MetaBackend::Context *ctx,
+                        RGWSI_MetaBackend::PutParams& params,
+                        RGWObjVersionTracker *objv_tracker) = 0;
   virtual int remove_entry(Context *ctx,
+                           RGWSI_MetaBackend::RemoveParams& params,
                            RGWObjVersionTracker *objv_tracker) = 0;
 
   /* these should be called by handlers */
   virtual int get(Context *ctx,
-                  bufferlist *pbl,
-                  RGWObjVersionTracker *objv_tracker,
-                  real_time *pmtime,
-                  map<string, bufferlist> *pattrs = nullptr,
-                  rgw_cache_entry_info *cache_info = nullptr,
-                  boost::optional<obj_version> refresh_version = boost::none);
+                  GetParams &params,
+                  RGWObjVersionTracker *objv_tracker);
 
   virtual int put(Context *ctx,
-                  bufferlist& bl,
-                  bool exclusive,
+                  PutParams& params,
                   RGWObjVersionTracker *objv_tracker,
-                  const ceph::real_time& mtime,
-                  map<string, bufferlist> *pattrs,
                   RGWMDLogSyncType sync_mode);
 
   virtual int remove(Context *ctx,
+                     RemoveParams& params,
                      RGWObjVersionTracker *objv_tracker,
-                     const ceph::real_time& mtime,
                      RGWMDLogSyncType sync_mode);
 };
 

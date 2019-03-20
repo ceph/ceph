@@ -42,35 +42,42 @@ void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, const str
   static_cast<RGWSI_MBSObj_Handler_Module *>(ctx->module)->get_pool_and_oid(key, ctx->pool, ctx->oid);
 }
 
+RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_SObj::alloc_default_get_params(ceph::real_time *pmtime)
+{
+  auto params = new RGWSI_MBSObj_GetParams;
+  params->pmtime = pmtime;
+  params->_bl = bufferlist();
+  params->pbl = &(*params->_bl);
+  return params;
+}
+
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
-                                      bufferlist *pbl,
-                                      RGWObjVersionTracker *objv_tracker,
-                                      real_time *pmtime,
-                                      map<string, bufferlist> *pattrs,
-                                      rgw_cache_entry_info *cache_info,
-                                      boost::optional<obj_version> refresh_version)
+                                      GetParams& _params,
+                                      RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
+  RGWSI_MBSObj_GetParams& params = static_cast<RGWSI_MBSObj_GetParams&>(_params);
 
-  return rgw_get_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, *pbl,
-                            objv_tracker, pmtime,
-                            null_yield,
-                            pattrs, cache_info,
-                            refresh_version);
+  return rgw_get_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, *params.pbl,
+                            objv_tracker, params.pmtime,
+                            params.y,
+                            params.pattrs, params.cache_info,
+                            params.refresh_version);
 }
 
 int RGWSI_MetaBackend_SObj::put_entry(RGWSI_MetaBackend::Context *_ctx,
-                                      bufferlist& bl, bool exclusive,
-                                      RGWObjVersionTracker *objv_tracker,
-                                      real_time mtime, map<string, bufferlist> *pattrs)
+                                      PutParams& _params,
+                                      RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
+  RGWSI_MBSObj_PutParams& params = static_cast<RGWSI_MBSObj_PutParams&>(_params);
 
-  return rgw_put_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, bl, exclusive,
-                            objv_tracker, mtime, pattrs);
+  return rgw_put_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, params.bl, params.exclusive,
+                            objv_tracker, params.mtime, params.pattrs);
 }
 
 int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
+                                         RemoveParams& params,
                                          RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
