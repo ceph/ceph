@@ -32,6 +32,7 @@ if cherrypy is not None:
         from cherrypy.process import servers
         servers.wait_for_occupied_port = lambda host, port: None
 
+
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
 def os_exit_noop(*args, **kwargs):
     pass
@@ -289,12 +290,6 @@ class Module(MgrModule):
             'PG Total Count'
         )
 
-        metrics['scrape_duration_seconds'] = Metric(
-            'gauge',
-            'scrape_duration_secs',
-            'Time taken to gather metrics from Ceph (secs)'
-        )
-
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -323,7 +318,7 @@ class Module(MgrModule):
             metrics[path] = Metric(
                 'gauge',
                 path,
-                "OSD POOL STATS: {}".format(stat),
+                "OSD pool stats: {}".format(stat),
                 ('pool_id',)
             )
         for state in PG_STATES:
@@ -391,7 +386,6 @@ class Module(MgrModule):
     def get_fs(self):
         fs_map = self.get('fs_map')
         servers = self.get_service_list()
-        active_daemons = []
         for fs in fs_map['filesystems']:
             # collect fs metadata
             data_pools = ",".join([str(pool)
@@ -506,9 +500,8 @@ class Module(MgrModule):
                     break
 
             if dev_class is None:
-                self.log.info(
-                    "OSD {0} is missing from CRUSH map, skipping output".format(
-                        id_))
+                self.log.info("OSD {0} is missing from CRUSH map, "
+                              "skipping output".format(id_))
                 continue
 
             host_version = servers.get((str(id_), 'osd'), ('', ''))
@@ -574,7 +567,6 @@ class Module(MgrModule):
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
                               "occupation record for this osd".format(id_))
 
-        pool_meta = []
         for pool in osd_map['pools']:
             self.metrics['pool_metadata'].set(
                 1, (pool['pool'], pool['pool_name']))
@@ -586,7 +578,8 @@ class Module(MgrModule):
                 hostname, version = value
                 self.metrics['rgw_metadata'].set(
                     1,
-                    ('{}.{}'.format(service_type, service_id), hostname, version)
+                    ('{}.{}'.format(service_type, service_id),
+                     hostname, version)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)
@@ -832,8 +825,6 @@ class Module(MgrModule):
         for k in self.metrics.keys():
             self.metrics[k].clear()
 
-        _start_time = time.time()
-
         self.get_health()
         self.get_df()
         self.get_pool_stats()
@@ -888,9 +879,6 @@ class Module(MgrModule):
                     self.metrics[path].set(value, (daemon,))
 
         self.get_rbd_stats()
-
-        _end_time = time.time()
-        self.metrics['scrape_duration_seconds'].set(_end_time - _start_time)
 
         # Return formatted metrics and clear no longer used data
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
@@ -959,11 +947,11 @@ class Module(MgrModule):
             def index(self):
                 return '''<!DOCTYPE html>
 <html>
-	<head><title>Ceph Exporter</title></head>
-	<body>
-		<h1>Ceph Exporter</h1>
-		<p><a href='/metrics'>Metrics</a></p>
-	</body>
+    <head><title>Ceph Exporter</title></head>
+    <body>
+        <h1>Ceph Exporter</h1>
+        <p><a href='/metrics'>Metrics</a></p>
+    </body>
 </html>'''
 
             @cherrypy.expose
@@ -978,7 +966,8 @@ class Module(MgrModule):
 
             @staticmethod
             def _metrics(instance):
-                # Return cached data if available and collected before the cache times out
+                # Return cached data if available and collected before the
+                # cache times out
                 if instance.collect_cache and time.time() - instance.collect_time < instance.collect_timeout:
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
@@ -1058,11 +1047,11 @@ class StandbyModule(MgrStandbyModule):
                 active_uri = module.get_active_uri()
                 return '''<!DOCTYPE html>
 <html>
-	<head><title>Ceph Exporter</title></head>
-	<body>
-		<h1>Ceph Exporter</h1>
+    <head><title>Ceph Exporter</title></head>
+    <body>
+        <h1>Ceph Exporter</h1>
         <p><a href='{}metrics'>Metrics</a></p>
-	</body>
+    </body>
 </html>'''.format(active_uri)
 
             @cherrypy.expose
