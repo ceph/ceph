@@ -1165,6 +1165,9 @@ private:
   bool _vxattrcb_dir_pin_exists(Inode *in);
   size_t _vxattrcb_dir_pin(Inode *in, char *val, size_t size);
 
+  bool _vxattrcb_snap_btime_exists(Inode *in);
+  size_t _vxattrcb_snap_btime(Inode *in, char *val, size_t size);
+
   size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
 
   static const VXattr *_get_vxattrs(Inode *in);
