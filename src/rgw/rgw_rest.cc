@@ -1665,15 +1665,16 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 					int default_type,
 					bool configurable)
 {
-  s->format = default_type;
+  s->format = -1; // set to invalid value to allocation happens anyway 
+  auto type = default_type;
   if (configurable) {
     string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
-      s->format = RGW_FORMAT_XML;
+      type = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
-      s->format = RGW_FORMAT_JSON;
+      type = RGW_FORMAT_JSON;
     } else if (format_str.compare("html") == 0) {
-      s->format = RGW_FORMAT_HTML;
+      type = RGW_FORMAT_HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1684,15 +1685,30 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
         }
         format_buf[i] = 0;
         if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
-          s->format = RGW_FORMAT_XML;
+          type = RGW_FORMAT_XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
-          s->format = RGW_FORMAT_JSON;
+          type = RGW_FORMAT_JSON;
         } else if (strcmp(format_buf, "text/html") == 0) {
-          s->format = RGW_FORMAT_HTML;
+          type = RGW_FORMAT_HTML;
         }
       }
     }
   }
+  return RGWHandler_REST::reallocate_formatter(s, type);
+}
+
+int RGWHandler_REST::reallocate_formatter(struct req_state *s, int type)
+{
+  if (s->format == type) {
+    // do nothing, just reset
+    ceph_assert(s->formatter);
+    s->formatter->reset();
+    return 0;
+  }
+
+  delete s->formatter;
+  s->formatter = nullptr;
+  s->format = type;
 
   const string& mm = s->info.args.get("multipart-manifest");
   const bool multipart_delete = (mm.compare("delete") == 0);
@@ -1728,7 +1744,6 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 
   return 0;
 }
-
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
 int RGWHandler_REST::validate_bucket_name(const string& bucket)

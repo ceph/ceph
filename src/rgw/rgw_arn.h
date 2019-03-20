@@ -99,7 +99,13 @@ struct ARNResource {
     resource_type(std::move(_resource_type)), resource(std::move(_resource)), qualifier(std::move(_qualifier)) {}
 
   static boost::optional<ARNResource> parse(const std::string& s);
+  
+  std::string to_string() const;
 };
+
+inline std::string to_string(const ARNResource& r) {
+  return r.to_string();
+}
 
 } // namespace rgw
 
