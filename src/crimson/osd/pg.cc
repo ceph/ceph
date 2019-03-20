@@ -12,7 +12,7 @@ PG::PG(spg_t pgid,
        std::string&& name,
        ec_profile_t&& ec_profile,
        cached_map_t osdmap,
-       ceph::net::Messenger* msgr)
+       ceph::net::Messenger& msgr)
   : pgid{pgid},
     whoami{pg_shard},
     pool{std::move(pool)},
