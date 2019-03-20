@@ -380,6 +380,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_
   return std::make_pair(std::move(token_envelope), 0);
 }
 
+#ifdef CEPH_KEYSTONE_SECRET_CACHE
 std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
                                                                                  const std::string& user_id,
                                                                                  const boost::string_view& access_key_id) const
@@ -480,9 +481,10 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
   using server_signature_t = VersionAbstractor::server_signature_t;
   boost::optional<rgw::keystone::TokenEnvelope> token;
   int failure_reason;
+  boost::optional<boost::tuple<rgw::keystone::TokenEnvelope, std::string>> t;
 
   /* Get a token from the cache if one has already been stored */
-  boost::optional<boost::tuple<rgw::keystone::TokenEnvelope, std::string>>
+  if (!secret_cache.empty())
     t = secret_cache.find(access_key_id.to_string());
 
   /* Check that credentials can correctly be used to sign data */
@@ -495,7 +497,8 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
       ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
     }
   } else {
-    ldpp_dout(dpp, 0) << "No stored secret string, cache miss" << dendl;
+    if (!secret_cache.disabled())
+      ldpp_dout(dpp, 10) << "No stored secret string, cache miss" << dendl;
   }
 
   /* No cached token, token expired, or secret invalid: fall back to keystone */
@@ -506,7 +509,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
     boost::optional<std::string> secret;
     std::tie(secret, failure_reason) = get_secret_from_keystone(dpp, token->get_user_id(), access_key_id);
 
-    if (secret) {
+    if (secret && !secret_cache.disabled()) {
       /* Add token, secret pair to cache, and set timeout */
       secret_cache.add(access_key_id.to_string(), *token, *secret);
     }
@@ -514,6 +517,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
   return std::make_pair(token, failure_reason);
 }
+#endif
 
 EC2Engine::acl_strategy_t
 EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
@@ -579,9 +583,12 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     std::vector<std::string> admin;
   } accepted_roles(cct);
 
+#ifndef CEPH_KEYSTONE_SECRET_CACHE
+#define get_access_token(d,a,s,x,xf) get_from_keystone(d,a,s,x)
+#endif
   boost::optional<token_envelope_t> t;
   int failure_reason;
-  std::tie(t, failure_reason) = \
+  std::tie(t, failure_reason) =
     get_access_token(dpp, access_key_id, string_to_sign, signature, signature_factory);
   if (! t) {
     return result_t::deny(failure_reason);
@@ -621,6 +628,29 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   }
 }
 
+void rgw::auth::keystone::SecretCacheSize::recompute_value(const ConfigProxy& c)
+{
+  uint64_t s = c.get_val<uint64_t>("rgw_keystone_secret_cache_size");
+  saved = s;
+  changed = true;
+}
+
+const char **rgw::auth::keystone::SecretCacheSize::get_tracked_conf_keys() const
+{
+  static const char *keys[] = {
+    "rgw_keystone_secret_cache_size",
+  nullptr };
+  return keys;
+}
+
+void rgw::auth::keystone::SecretCacheSize::handle_conf_change(const ConfigProxy& c,
+	const std::set <std::string> &changed)
+{
+  if (changed.count("rgw_keystone_secret_cache_size")) {
+    recompute_value(c);
+  }
+}
+
 bool SecretCache::find(const std::string& token_id,
                        SecretCache::token_envelope_t& token,
 		       std::string &secret)
@@ -649,6 +679,25 @@ bool SecretCache::find(const std::string& token_id,
   return true;
 }
 
+void SecretCache::_trim()
+{
+  auto m = max.get_value();
+  while (secrets_lru.size() > m) {
+    list<string>::reverse_iterator riter = secrets_lru.rbegin();
+    auto iter = secrets.find(*riter);
+    assert(iter != secrets.end());
+    secrets.erase(iter);
+    secrets_lru.pop_back();
+  }
+  max.reset_changed();
+}
+
+void SecretCache::trim()
+{
+  std::lock_guard<std::mutex> l(lock);
+  _trim();
+}
+
 void SecretCache::add(const std::string& token_id,
                       const SecretCache::token_envelope_t& token,
 		      const std::string& secret)
@@ -669,13 +718,7 @@ void SecretCache::add(const std::string& token_id,
   entry.expires = now + s3_token_expiry_length;
   entry.lru_iter = secrets_lru.begin();
 
-  while (secrets_lru.size() > max) {
-    list<string>::reverse_iterator riter = secrets_lru.rbegin();
-    iter = secrets.find(*riter);
-    assert(iter != secrets.end());
-    secrets.erase(iter);
-    secrets_lru.pop_back();
-  }
+  _trim();
 }
 
 }; /* namespace keystone */

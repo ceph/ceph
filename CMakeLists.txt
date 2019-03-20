@@ -499,6 +499,11 @@ if(WITH_RADOSGW)
   else()
     message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
   endif()  # OPENSSL_FOUND
+
+  option(ENABLE_KEYSTONE_SECRET_CACHE "keystone secret key shortcut" ON)
+  if (ENABLE_KEYSTONE_SECRET_CACHE)
+    set(CEPH_KEYSTONE_SECRET_CACHE 1 CACHE INTERNAL "fetch and cache keystone secret keys")
+  endif (ENABLE_KEYSTONE_SECRET_CACHE)
 endif (WITH_RADOSGW)
 
 #option for CephFS

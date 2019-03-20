@@ -5722,6 +5722,14 @@ std::vector<Option> get_rgw_options() {
         "Implicitly create new users in their own tenant with the same name when "
         "authenticating via Keystone."),
 
+    Option("rgw_keystone_secret_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description("Keystone secret key cache size")
+    .set_long_description(
+        "Max number of Keystone secret keys that will be cached. Token that is not cached "
+        "requires RGW to access the Keystone server when authenticating. "
+        "Zero disables use of secret keys and falls back to using token validation."),
+
     Option("rgw_cross_domain_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("<allow-access-from domain=\"*\" secure=\"false\" />")
     .set_description("RGW handle cross domain policy")
@@ -6429,6 +6437,7 @@ std::vector<Option> get_rgw_options() {
         "A user can create this many buckets. Zero means unlimmited, negative number means "
         "user cannot create any buckets (although user will retain buckets already created."),
 
+// )
     Option("rgw_objexp_gc_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
     .set_description("Swift objects expirer garbage collector interval"),

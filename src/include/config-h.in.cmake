@@ -357,4 +357,7 @@
 /* Define if unit tests are built. */
 #cmakedefine UNIT_TESTS_BUILT
 
+/* define if rgw keystone secret key cache should be supported */
+#cmakedefine CEPH_KEYSTONE_SECRET_CACHE
+
 #endif /* CONFIG_H */

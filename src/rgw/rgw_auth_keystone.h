@@ -72,6 +72,30 @@ public:
   }
 }; /* class TokenEngine */
 
+class SecretCacheSize: public md_config_obs_t {
+private:
+  uint64_t saved;
+  bool changed;
+  ConfigProxy& ic;
+  void recompute_value(const ConfigProxy& );
+public:
+  SecretCacheSize(ConfigProxy& _c)
+    : ic(_c) {
+    ic.add_observer(this);
+    recompute_value(ic);
+  }
+  ~SecretCacheSize() { ic.remove_observer(this); }
+  uint64_t get_value() {
+    return saved;
+  }
+  bool was_changed() { return changed; }
+  void reset_changed() { changed = false; }
+private:
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+    const std::set <std::string> &changed) override;
+};
+
 class SecretCache {
   using token_envelope_t = rgw::keystone::TokenEnvelope;
 
@@ -89,18 +113,20 @@ class SecretCache {
 
   std::mutex lock;
 
-  const size_t max;
+  SecretCacheSize max;
 
   const utime_t s3_token_expiry_length;
 
   SecretCache()
     : cct(g_ceph_context),
       lock(),
-      max(cct->_conf->rgw_keystone_token_cache_size),
+      max(g_conf()),
       s3_token_expiry_length(300, 0) {
   }
 
   ~SecretCache() {}
+
+  void _trim();
 
 public:
   SecretCache(const SecretCache&) = delete;
@@ -122,6 +148,9 @@ public:
     return boost::none;
   }
   void add(const std::string& token_id, const token_envelope_t& token, const std::string& secret);
+  void trim();
+  inline bool disabled() { return max.get_value() == 0; }
+  inline bool empty() { if (max.was_changed()) trim(); return secrets_lru.empty(); }
 }; /* class SecretCache */
 
 class EC2Engine : public rgw::auth::s3::AWSEngine {
@@ -145,12 +174,17 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                     const boost::string_view& access_key_id,
                     const std::string& string_to_sign,
                     const boost::string_view& signature) const;
+#ifdef CEPH_KEYSTONE_SECRET_CACHE
   std::pair<boost::optional<token_envelope_t>, int>
   get_access_token(const DoutPrefixProvider* dpp,
                    const boost::string_view& access_key_id,
                    const std::string& string_to_sign,
                    const boost::string_view& signature,
 		   const signature_factory_t& signature_factory) const;
+  std::pair<boost::optional<std::string>, int> get_secret_from_keystone(const DoutPrefixProvider* dpp,
+                                                                        const std::string& user_id,
+                                                                        const boost::string_view& access_key_id) const;
+#endif
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const boost::string_view& access_key_id,
                         const boost::string_view& signature,
@@ -159,9 +193,6 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                         const signature_factory_t& signature_factory,
                         const completer_factory_t& completer_factory,
                         const req_state* s) const override;
-  std::pair<boost::optional<std::string>, int> get_secret_from_keystone(const DoutPrefixProvider* dpp,
-                                                                        const std::string& user_id,
-                                                                        const boost::string_view& access_key_id) const;
 public:
   EC2Engine(CephContext* const cct,
             const rgw::auth::s3::AWSEngine::VersionAbstractor* const ver_abstractor,
