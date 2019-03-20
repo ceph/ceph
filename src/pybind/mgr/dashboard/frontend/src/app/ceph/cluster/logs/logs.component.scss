@@ -39,3 +39,105 @@ p {
     color: $color-brand-teal;
   }
 }
+
+::ng-deep timepicker table tbody tr td {
+  .bs-timepicker-field {
+    width: 3.5rem;
+    font-size: 1rem;
+    padding: 4px 6px;
+  }
+  .btn {
+    font-size: 1rem;
+  }
+}
+
+.log-filters {
+  margin-bottom: 5px;
+  padding: 0 30px;
+  * {
+    box-sizing: border-box;
+  }
+
+  .filter-box {
+    margin: 0;
+    padding: 0 15px 5px 0;
+    display: -webkit-flex;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    label {
+      padding-top: 5px;
+      padding-right: 5px;
+    }
+  }
+
+  @media (max-width: 991px) {
+    .time-box {
+      margin-top: 20px;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .cd-col-4 {
+      width: 28vw;
+    }
+
+    .cd-col-3 {
+      width: 20vw;
+    }
+
+    .cd-col-2 {
+      width: 16vw;
+    }
+    .cd-col-1 {
+      width: 14vw;
+    }
+  }
+
+  @media (min-width: 1400px) {
+    .cd-col-4 {
+      width: 24vw;
+    }
+
+    .cd-col-3 {
+      width: 18vw;
+    }
+
+    .cd-col-2 {
+      width: 14vw;
+    }
+    .cd-col-1 {
+      width: 12vw;
+    }
+  }
+
+  @media (min-width: 1600px) {
+    .cd-col-4 {
+      width: 22vw;
+    }
+
+    .cd-col-3 {
+      width: 16vw;
+    }
+
+    .cd-col-2 {
+      width: 12vw;
+    }
+    .cd-col-1 {
+      width: 10vw;
+    }
+  }
+
+  @media (min-width: 1800px) {
+    .cd-col-3 {
+      width: 14vw;
+    }
+
+    .cd-col-2 {
+      width: 11vw;
+    }
+    .cd-col-1 {
+      width: 9vw;
+    }
+  }
+}
