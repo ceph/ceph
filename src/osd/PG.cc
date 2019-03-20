@@ -1719,7 +1719,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
   stringstream ss;
-  if (!pool.info.is_erasure())
+  if (pool.info.is_replicated())
     calc_replicated_acting(
       auth_log_shard,
       cct->_conf.get_val<uint64_t>(
@@ -9237,7 +9237,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt
 		       << "non-auth_log_shard osd." << logevt.from << dendl;
     return discard_event();
   }
-  ldout(pg->cct, 10) << "GetLog: received master log from osd"
+  ldout(pg->cct, 10) << "GetLog: received master log from osd."
 		     << logevt.from << dendl;
   msg = logevt.msg;
   post_event(GotLog());
