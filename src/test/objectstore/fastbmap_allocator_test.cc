@@ -900,8 +900,6 @@ TEST(TestAllocatorLevel01, test_4G_alloc_bug2)
     std::map<size_t, size_t> bins_overall;
     al2.collect_stats(bins_overall);
 
-    std::cout << "!!!!!!!!!!!!!!" << std::endl;
-
     uint64_t allocated4 = 0;
     interval_vector_t a4;
     al2.allocate_l2(0x3e000000, _1m, &allocated4, &a4);
@@ -911,5 +909,25 @@ TEST(TestAllocatorLevel01, test_4G_alloc_bug2)
     ASSERT_EQ(a4[0].length, 0x1300000u);
     ASSERT_EQ(a4[1].offset, 0x628000000u);
     ASSERT_EQ(a4[1].length, 0x3cd00000u);
+  }
+}
+
+TEST(TestAllocatorLevel01, test_4G_alloc_bug3)
+{
+  {
+    TestAllocatorLevel02 al2;
+    uint64_t capacity = 0x8000 * _1m; // = 32GB
+    al2.init(capacity, 0x10000);
+    std::cout << "Init L2 cont aligned" << std::endl;
+
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(4096ull * _1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 2u); // allocator has to split into 2 allocations
+      ASSERT_EQ(allocated4, 4096ull * _1m);
+      ASSERT_EQ(a4[0].offset, 0u);
+      ASSERT_EQ(a4[0].length, 2048ull * _1m);
+      ASSERT_EQ(a4[1].offset, 2048ull * _1m);
+      ASSERT_EQ(a4[1].length, 2048ull * _1m);
   }
 }
