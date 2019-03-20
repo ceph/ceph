@@ -31,8 +31,9 @@
   type 6 pod
   type 7 room
   type 8 datacenter
-  type 9 region
-  type 10 root
+  type 9 zone
+  type 10 region
+  type 11 root
   
   # buckets
   host localhost {

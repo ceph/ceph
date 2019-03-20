@@ -3957,9 +3957,10 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
   crush.set_type_name(6, "pod");
   crush.set_type_name(7, "room");
   crush.set_type_name(8, "datacenter");
-  crush.set_type_name(9, "region");
-  crush.set_type_name(10, "root");
-  return 10;
+  crush.set_type_name(9, "zone");
+  crush.set_type_name(10, "region");
+  crush.set_type_name(11, "root");
+  return 11;
 }
 
 int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
