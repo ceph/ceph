@@ -155,7 +155,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     interval_vector_t* res)
   {
     auto it = res->rbegin();
-
     if (max_length) {
       if (it != res->rend() && it->offset + it->length == offset) {
 	auto l = max_length - it->length;
@@ -635,6 +634,11 @@ protected:
     assert(max_length == 0 || (max_length % min_length) == 0);
     assert(length >= min_length);
     assert((length % min_length) == 0);
+
+    uint64_t cap = 1ull << 31;
+    if (max_length == 0 || max_length >= cap) {
+      max_length = cap;
+    }
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
