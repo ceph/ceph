@@ -112,7 +112,7 @@ struct InodeStat {
   version_t xattr_version = 0;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
-  utime_t ctime, btime, mtime, atime;
+  utime_t ctime, btime, mtime, atime, snap_btime;
   uint32_t time_warp_seq = 0;
   uint64_t size = 0, max_size = 0;
   uint64_t change_attr = 0;
@@ -190,6 +190,9 @@ struct InodeStat {
       } else {
         dir_pin = -ENODATA;
       }
+      if (struct_v >= 3) {
+        decode(snap_btime, p);
+      } // else remains zero
       DECODE_FINISH(p);
     }
     else {
