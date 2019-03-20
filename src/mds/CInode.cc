@@ -3324,7 +3324,21 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
   }
 
+  utime_t snap_btime;
   SnapRealm *realm = find_snaprealm();
+  if (snapid != CEPH_NOSNAP && realm) {
+    // add snapshot timestamp vxattr
+    map<snapid_t,const SnapInfo*> infomap;
+    realm->get_snap_info(infomap,
+                         snapid,  // min
+                         snapid); // max
+    if (!infomap.empty()) {
+      ceph_assert(infomap.size() == 1);
+      const SnapInfo *si = infomap.begin()->second;
+      snap_btime = si->stamp;
+    }
+  }
+
 
   bool no_caps = !valid ||
 		 session->is_stale() ||
@@ -3583,7 +3597,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -3625,6 +3639,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
     encode(file_i->export_pin, bl);
+    encode(snap_btime, bl);
     ENCODE_FINISH(bl);
   }
   else {
