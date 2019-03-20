@@ -1532,7 +1532,8 @@ public:
     const vector<int>& orig,
     vector<int>::const_iterator& i,
     set<int>& used,
-    vector<int> *pw) const;
+    vector<int> *pw,
+    int root_bucket) const;
 
   int try_remap_rule(
     CephContext *cct,
