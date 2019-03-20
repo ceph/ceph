@@ -643,7 +643,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
     auto it = m_out_bl.cbegin();
     cls_client::image_group_get_finish(&it, &m_group_spec);
   }
-  if (*result < 0) {
+  if (*result < 0 && *result != -EOPNOTSUPP) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
     return m_on_finish;
