@@ -304,8 +304,8 @@ public:
 
   string get_type() override { return string(); }
 
-  RGWSI_MetaBackend::Type required_be_type() {
-    return MDBE_SOBJ; /* handled doesn't really using the backend */
+  RGWSI_MetaBackend::Type required_be_type() override {
+    return RGWSI_MetaBackend::Type::MDBE_SOBJ; /* handled doesn't really using the backend */
   }
 
   int init_module() override {

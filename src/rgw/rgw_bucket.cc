@@ -2363,10 +2363,13 @@ public:
                                   RGWObjVersionTracker *objv_tracker,
                                   ceph::real_time *pmtime,
                                   map<string, bufferlist> *pattrs) {
+    RGWSI_MBSObj_GetParams params = {
+      .pmtime = pmtime,
+      .pattrs = pattrs,
+    };
     bufferlist bl;
-    int ret = meta_be->get_entry(ctx, &bl,
-                                 objv_tracker, pmtime, pattrs,
-                                 nullptr, nullopt);
+    int ret = meta_be->get_entry(ctx, params,
+                                 objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -2386,10 +2389,13 @@ public:
                                    RGWObjVersionTracker *objv_tracker,
                                    const ceph::real_time& mtime,
                                    map<string, bufferlist> *pattrs) {
-    bufferlist bl;
-    ceph::encode(be, bl);
-    int ret = meta_be->put(ctx, bl,
-                           false, objv_tracker, mtime, pattrs,
+    RGWSI_MBSObj_PutParams params = {
+      .mtime = mtime,
+      .pattrs = pattrs,
+    };
+    ceph::encode(be, params.bl);
+    int ret = meta_be->put(ctx, params,
+                           objv_tracker,
                            APPLY_ALWAYS);
     if (ret < 0) {
       return ret;
@@ -2402,10 +2408,11 @@ public:
                                     string& entry,
                                     RGWObjVersionTracker *objv_tracker,
                                     const ceph::real_time& mtime) {
-    bufferlist bl;
-    ceph::encode(be, bl);
-    int ret = meta_be->remove(ctx, bl,
-                              objv_tracker, mtime,
+    RGWSI_MBSObj_RemoveParams params = {
+      .mtime = mtime,
+    };
+    int ret = meta_be->remove(ctx, params,
+                              objv_tracker,
                               APPLY_ALWAYS);
     if (ret < 0) {
       return ret;

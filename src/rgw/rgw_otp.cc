@@ -21,6 +21,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_cls.h"
 #include "services/svc_meta_be.h"
+#include "services/svc_meta_be_sobj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -56,36 +57,34 @@ public:
 class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Zone *zone_svc;
 public:
-  RGW_MB_Handler_Module_OTP(RGWSI_Zone *_zone_svc) : zone_svc {}
+  RGW_MB_Handler_Module_OTP(RGWSI_Zone *_zone_svc) : zone_svc(_zone_svc) {}
 
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
+  void get_pool_and_oid(const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
-    pool = store->svc.zone->get_zone_params().otp_pool;
+    pool = zone_svc->get_zone_params().otp_pool;
   }
 };
 
 class RGWOTPMetadataHandler : public RGWMetadataHandler {
   int init_module() override {
-    be_module.reset(new RGW_MB_Handler_Module_OTP(store->svc.zone));
+    be_module.reset(new RGW_MB_Handler_Module_OTP(zone_svc));
     return 0;
   }
 
   RGWSI_MetaBackend::Type required_be_type() override {
-    return MDBE_OTP;
+    return RGWSI_MetaBackend::Type::MDBE_OTP;
   }
 
   int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker objv_tracker;
-    real_time mtime;
 
     RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject;
 
-    ctx->obj = mdo;
+    
+    RGWSI_MBOTP_GetParams params;
+    params.pdevices = &(mdo->get_devs());
 
-    int ret = meta_be->get_entry(ctx, nullptr,
-                                 objv_tracker, &mdo->mtime,
-				 nullptr,
-                                 nullptr, nullopt);
+    int ret = meta_be->get_entry(ctx, params, &objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -102,13 +101,11 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler {
              RGWMDLogSyncType type) override {
     RGWOTPMetadataObject *obj = static_cast<RGWOTPMetadataObject *>(_obj);
 
-    ctx->obj = obj;
+    RGWSI_MBOTP_PutParams params;
+    params.mtime = obj->mtime;
+    params.devices = obj->devices;
 
-    bufferlist bl;
-    int ret = meta_be->put(ctx, bl,
-                           false, objv_tracker,
-			   obj->mtime, pattrs,
-                           APPLY_ALWAYS);
+    int ret = meta_be->put_entry(ctx, params, &objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -117,7 +114,8 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler {
   }
 
   int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
-    return svc.meta_be->remove_entry(this, entry, &objv_tracker);
+    RGWSI_MBOTP_RemoveParams params;
+    return svc.meta_be->remove_entry(ctx, params, &objv_tracker);
   }
 
 public:
