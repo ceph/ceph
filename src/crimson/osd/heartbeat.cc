@@ -5,6 +5,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 
+#include "crimson/common/auth_service.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
@@ -228,11 +229,28 @@ seastar::future<> Heartbeat::ms_dispatch(ceph::net::ConnectionRef conn,
   logger().info("heartbeat: ms_dispatch {} from {}",
                 *m, m->get_source());
   switch (m->get_type()) {
-  case CEPH_MSG_PING:
+  case MSG_OSD_PING:
     return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
   default:
     return seastar::now();
   }
+}
+
+seastar::future<> Heartbeat::ms_handle_reset(ceph::net::ConnectionRef conn)
+{
+  auto found = std::find_if(peers.begin(), peers.end(),
+                            [conn](const peers_map_t::value_type& peer) {
+                              return (peer.second.con_front == conn ||
+                                      peer.second.con_back == conn);
+                            });
+  if (found == peers.end()) {
+    return seastar::now();
+  }
+  const auto peer = found->first;
+  const auto epoch = found->second.epoch;
+  return remove_peer(peer).then([peer, epoch, this] {
+    return add_peer(peer, epoch);
+  });
 }
 
 seastar::future<> Heartbeat::handle_osd_ping(ceph::net::ConnectionRef conn,
@@ -306,6 +324,11 @@ seastar::future<> Heartbeat::handle_you_died()
 {
   // TODO: ask for newer osdmap
   return seastar::now();
+}
+
+AuthAuthorizer* Heartbeat::ms_get_authorizer(peer_type_t peer) const
+{
+  return monc.get_authorizer(peer);
 }
 
 seastar::future<> Heartbeat::send_heartbeats()
