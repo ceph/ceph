@@ -150,6 +150,8 @@ class MDSRank {
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
 
+    uint64_t get_mds_memory_target() const { return memory_target }
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -582,6 +584,8 @@ private:
 
     // "task" string that gets displayed in ceph status
     inline static const std::string SCRUB_STATUS_KEY = "scrub status";
+
+    uint64_t memory_target;
 
     void get_task_status(std::map<std::string, std::string> *status);
     void schedule_update_timer_task();

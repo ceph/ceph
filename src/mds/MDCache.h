@@ -18,6 +18,7 @@
 #include <string_view>
 #include <thread>
 
+#include "common/MemoryModel.h"
 #include "common/DecayCounter.h"
 #include "include/types.h"
 #include "include/filepath.h"
@@ -122,6 +123,8 @@ class MDCache {
 
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
+  
+  time last_cache_resize_time = clock::zero();
 
   // -- discover --
   struct discover_info_t {
@@ -180,16 +183,14 @@ class MDCache {
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
 
+  void resize();
+
   uint64_t cache_limit_inodes(void) {
     return cache_inode_limit;
   }
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
-  uint64_t cache_memory_target(void) {
-    return memory_target;
-  }
-
   double cache_toofull_ratio(void) const {
     double inode_reserve = cache_inode_limit*(1.0-cache_reservation);
     double memory_reserve = cache_memory_limit*(1.0-cache_reservation);
@@ -1270,6 +1271,8 @@ class MDCache {
   double cache_reservation;
   double cache_health_threshold;
   double cache_resize_interval;
+
+  MemoryModel mm;
 
   std::array<CInode *, NUM_STRAY> strays{}; // my stray dir
 

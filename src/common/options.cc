@@ -7436,19 +7436,29 @@ std::vector<Option> get_mds_options() {
     .set_description("target maximum memory usage of MDS cache")
     .set_long_description("This sets a target maximum memory usage of the MDS cache and is the primary tunable to limit the MDS memory usage. The MDS will try to stay under a reservation of this limit (by default 95%; 1 - mds_cache_reservation) by trimming unused metadata in its cache and recalling cached items in the client caches. It is possible for the MDS to exceed this limit due to slow recall from clients. The mds_health_cache_threshold (150%) sets a cache full threshold for when the MDS signals a cluster health warning."),
 
-    Option("mds_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("mds_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
-    .set_description("Enable autotuning of mds_cache_memory_limit")
-    .set_long_description("When set, mds_cache_memory_limit is automatically tuned as per the rss usage periodically whose time interval is defined by mds_cache_resize_interval."),
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("autotuner for MDS cache size to stay within the mds_memory_target.")
+    .set_long_description("When set, mds_cache_memory_limit is automatically tuned as per the RSS usage periodically whose time interval is defined by mds_cache_resize_interval."),
 
-    Option("mds_memory_target", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(1*(1LL<<30))
-    .set_description("Upper bound for the mds_cache_memory_limit")
-    .set_long_description("When cache autotuning is enabled, sets an upper bound for mds_cache_memory_limit" ),
+    Option("mds_memory_target_cgroup_limit_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.8)
+    .set_min_max(0.0, 1.0)
+    .add_see_also("mds_memory_target")
+    .set_description("set the default value for mds_memory_target to the cgroup memory limit (if set) times this value")
+    .set_long_description("At startup, the MDS detects its cgroup memory limit. If the limit is not the magic value 9223372036854771712 or 0x7ffffffffffff000(which implies that there is no limit), it is used to initialize the mds_memory_target value multiplied by this ratio. A value of zero for this ratio disables this initialization."),
 
-    Option("mds_memory_cache_resize_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(5)
-    .set_description("When mds_cache_autotune is set to true, wait this many seconds between resizing caches."),
+    Option("mds_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
+    .set_default(2_G)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("target memory usage for MDS")
+    .add_see_also("mds_cache_autotune")
+    .set_long_description("When cache autotuning is enabled, the MDS tries to dynamically size its cache such that its RSS memory usage stays below this mds_memory_target." ),
+
+    Option("mds_cache_resize_interval", Option::TYPE_SECS, Option::LEVEL_DEV)
+    .set_default(60)
+    .set_description("interval between cache resizes(mds_cache_autotune must be set to true)."),
 
     Option("mds_cache_reservation", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.05)

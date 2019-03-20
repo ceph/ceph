@@ -15,7 +15,7 @@
 :Description: The memory limit the MDS should enforce for its cache.
               Administrators should use this instead of ``mds cache size``.
 :Type:  64-bit Integer Unsigned
-:Default: ``1073741824``
+:Default: ``1GB``
 
 ``mds cache autotune``
 
@@ -27,13 +27,19 @@
 
 :Description: Sets an upper bound for the ``mds_cache_memory_limit``.
 :Type:  64-bit Integer Unsigned
-:Default: ``1073741824``
+:Default: ``2GB``
 
-``mds memory cache resize interval``
+``mds cache resize interval``
 
-:Description: When mds_cache_autotune is set to true, wait this many seconds between resizing caches.
+:Description: Interval between resizing caches(``mds_cache_autotune`` must be set to ``true``).
+:Type:  64-bit Integer Signed
+:Default: ``60``
+
+``mds memory target cgroup limit ratio``
+
+:Description: Set the default value for mds_memory_target to the cgroup memory limit (if set) times this value
 :Type:  Float
-:Default: ``5``
+:Default: ``0.8``
 
 ``mds cache reservation``
 

@@ -41,6 +41,7 @@
 #include "include/ceph_fs.h"
 #include "include/filepath.h"
 #include "include/util.h"
+#include "include/stringify.h"
 
 #include "messages/MClientCaps.h"
 
@@ -138,6 +139,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   open_file_table(m),
   filer(m->objecter, m->finisher),
   stray_manager(m, purge_queue_),
+  mm(g_ceph_context),
   recovery_queue(m),
   trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate"))
 {
@@ -148,6 +150,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
                         (0.9 *(g_conf()->osd_max_write_size << 20));
 
   cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
+
   cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
   cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
@@ -172,6 +175,7 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
           return;
         if (mds->is_cache_trimmable()) {
           dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
+          resize();
           trim_client_leases();
           trim();
           check_memory_usage();
@@ -205,15 +209,8 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   if (changed.count("mds_cache_memory_limit"))
     cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
-  if (changed.count("mds_memory_target"))
-    cache_memory_limit = g_conf().get_val<Option::size_t>("mds_memory_target");
-  if (changed.count("mds_memory_cache_resize_interval"))
-    cache_resize_interval = g_conf().get_val<double>("mds_memory_cache_resize_interval");
-  if (changed.count("mds_cache_autotune")) {
-    if((cache_autotune = g_conf().get_val<bool>("mds_cache_autotune"))) {
-      std::thread tuning_thread(&MDCache::adjust_cache_memory_limit,this);
-    }
-  }
+  if (changed.count("mds_cache_autotune"))
+    cache_autotune = g_conf().get_val<bool>("mds_cache_autotune"); 
   if (changed.count("mds_cache_reservation"))
     cache_reservation = g_conf().get_val<double>("mds_cache_reservation");
   if (changed.count("mds_health_cache_threshold"))
@@ -1437,26 +1434,28 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
 
 
 /*
- * If mds_cache_autotune is set to true, then adjust cache_memory_limit using the rss usage periodically as per the mds_memory_cache_resize_interval
+ * If mds_cache_autotune is set to true, then adjust cache_memory_limit using the rss usage periodically as per the mds_cache_resize_interval
  */
-void MDCache::adjust_cache_memory_limit()
+void MDCache::resize()
 {
-  static MemoryModel mm(g_ceph_context);
-  static MemoryModel::snap last;
-  utime_t next_tuning = ceph_clock_now();
-  while(cache_autotune)
-  {
-    if (cache_resize_interval > 0 && next_tuning < ceph_clock_now()) {
-      mm.sample(&last);
-      uint64_t temp_cache = ((uint64_t) (last.get_rss()/1.25));
-      if (temp_cache < memory_target) {
-        cache_memory_limit = temp_cache;
+    if (cache_autotune) {
+      auto now = clock::now();
+      auto cache_resize_interval = g_conf().get_val<std::chrono::seconds>("mds_cache_resize_interval"); 
+      if (cache_resize_interval == std::chrono::duration<long int>(0) || ((now-last_cache_resize_time) > cache_resize_interval)) {
+        MemoryModel::snap last;
+        mm.sample(&last);
+        if (((uint64_t)(last.get_rss())) > mds->get_mds_memory_target()) 
+          cache_memory_limit = (cache_memory_limit/100)*99;
+	  dout(5) << "cache_memory_limit decreased to" << cache_memory_limit << dendl;
+        else if (!cache_overfull() && ((uint64_t)(last.get_rss())) < (mds->get_mds_memory_target()/100) * 98)
+          cache_memory_limit = (cache_memory_limit/100) * 101;
+	  dout(5) << "cache_memory_limit increased to" << cache_memory_limit << dendl;
+        last_cache_resize_time = now;
       }
-      next_tuning += cache_resize_interval;
     }
-  }
 }
-      
+
+
 // ===================================
 // journal and snap/cow helpers
 

@@ -490,6 +490,7 @@ MDSRank::MDSRank(
     mds_lock(mds_lock_), cct(msgr->cct), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
+    memory_target(g_conf().get_val<Option::size_t>("mds_memory_target")),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
     balancer(NULL), scrubstack(NULL),
     damage_table(whoami_),
@@ -3649,8 +3650,10 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
     "mds_cache_memory_limit",
+    "mds_cache_autotune",
     "mds_cache_mid",
     "mds_cache_reservation",
+    "mds_cache_resize_interval",
     "mds_cache_size",
     "mds_cache_trim_decay_rate",
     "mds_cap_revoke_eviction_timeout",
@@ -3665,6 +3668,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_snaps_per_dir",
+    "mds_memory_target",
     "mds_op_complaint_time",
     "mds_op_history_duration",
     "mds_op_history_size",
@@ -3709,6 +3713,8 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
       mdlog->kick_submitter();
     }
+    if (changed.count("mds_memory_target"))
+	memory_target = g_conf().get_val<Option::size_t>("mds_memory_target");
     sessionmap.handle_conf_change(changed);
     server->handle_conf_change(changed);
     mdcache->handle_conf_change(changed, *mdsmap);

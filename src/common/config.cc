@@ -533,6 +533,18 @@ void md_config_t::parse_env(unsigned entity_type,
 			    "osd_memory_target", stringify(pod_limit));
 	  }
 	}
+      case CEPH_ENTITY_TYPE_MDS:
+        {
+          double cgroup_ratio = get_val<double>(
+            values, "mds_memory_target_cgroup_limit_ratio");  
+          if (cgroup_ratio > 0.0) {
+            pod_limit = v * cgroup_ratio;
+            // set mds_memory_target *default* based on cgroup limit, so that
+            // it can be overridden by any explicit settings elsewhere.
+            set_val_default(values, tracker,
+                            "mds_memory_target", stringify(pod_limit));
+          }
+        }
       }
     }
   }
@@ -557,6 +569,12 @@ void md_config_t::parse_env(unsigned entity_type,
 	       *find_option("osd_memory_target"),
 	       CONF_ENV, &err);
       break;
+
+    case CEPH_ENTITY_TYPE_MDS:
+      _set_val(values, tracker, stringify(pod_request),
+               *find_option("mds_memory_target"),
+               CONF_ENV, &err);
+
     }
   }
 
