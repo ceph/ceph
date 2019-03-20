@@ -68,7 +68,6 @@ Standard arguments:
                               [default: qa]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
-                              [default: {default_suite_branch}]
   --suite-dir <suite_dir>     Use this alternative directory as-is when
                               assembling jobs from yaml fragments. This causes
                               <suite_branch> to be ignored for scheduling
@@ -144,7 +143,6 @@ Scheduler arguments:
     default_suite_repo=defaults('--suite-repo',
                             config.get_ceph_qa_suite_git_url()),
     default_ceph_branch=defaults('--ceph-branch', 'master'),
-    default_suite_branch=defaults('--suite-branch', 'master'),
     default_teuthology_branch=defaults('--teuthology-branch', 'master'),
 )
 
