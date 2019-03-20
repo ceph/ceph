@@ -35,7 +35,7 @@ public:
      std::string&& name,
      ec_profile_t&& ec_profile,
      cached_map_t osdmap,
-     ceph::net::Messenger* msgr);
+     ceph::net::Messenger& msgr);
 
   epoch_t get_osdmap_epoch() const;
   const pg_info_t& get_info() const;
@@ -67,5 +67,5 @@ private:
   pg_shard_set_t actingset, upset;
 
   cached_map_t osdmap;
-  ceph::net::Messenger* msgr = nullptr;
+  ceph::net::Messenger& msgr;
 };
