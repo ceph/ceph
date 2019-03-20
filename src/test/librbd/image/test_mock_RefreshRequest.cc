@@ -588,7 +588,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessV2) {
   expect_get_metadata(mock_image_ctx, mock_get_metadata_request, RBD_INFO, {},
                       0);
   expect_apply_metadata(mock_image_ctx, 0);
-  expect_get_group(mock_image_ctx, 0);
+  expect_get_group(mock_image_ctx, -EOPNOTSUPP);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
