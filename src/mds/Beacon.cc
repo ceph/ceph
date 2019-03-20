@@ -57,7 +57,8 @@ void Beacon::shutdown()
   if (!finished) {
     finished = true;
     lock.unlock();
-    sender.join();
+    if (sender.joinable())
+      sender.join();
   }
 }
 
