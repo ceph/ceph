@@ -1238,15 +1238,18 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
       // dup; no-op
       return;
     }
-    if (p->first <= end && p->first > start) {
-      // merge with existing range to the right
-      compact_queue.push_back(make_pair(start, p->second));
+    if (start <= p->first && p->first <= end) {
+      // new region crosses start of existing range
+      // select right bound that is bigger
+      compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);
       break;
     }
-    if (p->second >= start && p->second < end) {
-      // merge with existing range to the left
+    if (start <= p->second && p->second <= end) {
+      // new region crosses end of existing range
+      //p->first < p->second and p->second <= end, so p->first <= end.
+      //But we break if previous condition, so start > p->first.
       compact_queue.push_back(make_pair(p->first, end));
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);
