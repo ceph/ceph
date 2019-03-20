@@ -9,7 +9,10 @@
 
 
 RGWSI_MetaBackend::Context::~Context() {} // needed, even though destructor is pure virtual
-RGWSI_MetaBackend::Module::~Module() {} // needed, even though destructor is pure virtual
+RGWSI_MetaBackend::Module::~Module() {} // ditto
+RGWSI_MetaBackend::PutParams::~PutParams() {} // ...
+RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
+RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
 
 int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
                                   RGWMetadataLogData& log_data,
@@ -67,10 +70,10 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
                                       RGWObjVersionTracker *objv_tracker,
                                       RGWMDLogSyncType sync_mode)
 {
-  bufferlist bl;
   real_time orig_mtime;
-  int ret = get_entry(ctx, &bl, objv_tracker, &orig_mtime,
-                      nullptr, nullptr, boost::none);
+  unique_ptr<GetParams> params(alloc_default_get_params(&orig_mtime));
+
+  int ret = get_entry(ctx, *params, objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -127,50 +130,37 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::get(Context *ctx,
-                           bufferlist *pbl,
-                           RGWObjVersionTracker *objv_tracker,
-                           real_time *pmtime,
-                           map<string, bufferlist> *pattrs,
-                           rgw_cache_entry_info *cache_info,
-                           boost::optional<obj_version> refresh_version)
+                           GetParams& params,
+                           RGWObjVersionTracker *objv_tracker)
 {
-  return get_entry(ctx, pbl,
-                   objv_tracker, pmtime,
-                   pattrs,
-                   cache_info,
-                   refresh_version);
+  return get_entry(ctx, params, objv_tracker);
 }
 
 int RGWSI_MetaBackend::put(Context *ctx,
-                           bufferlist& bl,
-                           bool exclusive,
+                           PutParams& params,
                            RGWObjVersionTracker *objv_tracker,
-                           const ceph::real_time& mtime,
-                           map<string, bufferlist> *pattrs,
                            RGWMDLogSyncType sync_mode)
 {
   std::function<int()> f = [&]() {
-    return put_entry(ctx, bl,
-                     exclusive, objv_tracker,
-                     mtime, pattrs);
+    return put_entry(ctx, params, objv_tracker);
   };
 
-  return mutate(ctx, mtime, objv_tracker,
+  return mutate(ctx, params.mtime, objv_tracker,
                 MDLOG_STATUS_WRITE, sync_mode,
                 f,
                 false);
 }
 
 int RGWSI_MetaBackend::remove(Context *ctx,
+                              RemoveParams& params,
                               RGWObjVersionTracker *objv_tracker,
-                              const ceph::real_time& mtime,
                               RGWMDLogSyncType sync_mode)
 {
   std::function<int()> f = [&]() {
-    return remove_entry(ctx, objv_tracker);
+    return remove_entry(ctx, params, objv_tracker);
   };
 
-  return mutate(ctx, mtime, objv_tracker,
+  return mutate(ctx, params.mtime, objv_tracker,
                 MDLOG_STATUS_REMOVE, sync_mode,
                 f,
                 false);

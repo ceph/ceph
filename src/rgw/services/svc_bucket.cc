@@ -39,7 +39,7 @@ void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
   svc.meta = _meta_svc;
-  svc.sync_modules = _meta_svc;
+  svc.sync_modules = _sync_modules_svc;
 }
 
 int RGWSI_Bucket::do_start()
