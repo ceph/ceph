@@ -473,7 +473,7 @@ static void cache_list_dump_helper(Formatter* f,
 void RGWSI_SysObj_Cache::call_list(const std::optional<std::string>& filter, Formatter* f)
 {
   cache.for_each(
-    [this, &filter, f] (const string& name, const ObjectCacheEntry& entry) {
+    [&filter, f] (const string& name, const ObjectCacheEntry& entry) {
       if (!filter || name.find(*filter) != name.npos) {
 	cache_list_dump_helper(f, name, entry.info.meta.mtime,
                                entry.info.meta.size);

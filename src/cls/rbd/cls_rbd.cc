@@ -1731,7 +1731,7 @@ int parent_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
       return r;
     } else if (r == -ENOENT) {
       // examine oldest snapshot to see if it has a denormalized parent
-      auto parent_lambda = [hctx, &parent](const cls_rbd_snap& snap_meta) {
+      auto parent_lambda = [&parent](const cls_rbd_snap& snap_meta) {
         if (snap_meta.parent.exists()) {
           parent = snap_meta.parent;
         }

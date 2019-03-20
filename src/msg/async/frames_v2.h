@@ -161,7 +161,7 @@ static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
   if (padding_size) {
     bl.append_zero(padding_size);
   }
-  return bl;
+  return std::move(bl);
 }
 
 template <class T, uint16_t... SegmentAlignmentVs>

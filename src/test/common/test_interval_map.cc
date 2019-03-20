@@ -49,7 +49,7 @@ struct bufferlist_test_type {
       bufferlist merge(bufferlist &&left, bufferlist &&right) const {
 	bufferlist bl;
 	left.claim_append(right);
-	return left;
+	return std::move(left);
       }
       uint64_t length(const bufferlist &r) const {
 	return r.length();

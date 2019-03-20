@@ -1014,7 +1014,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
     orule.build();
 
-    ceph::real_time mtime;
     rgw_bucket_dir_entry o;
     for (; ol.get_obj(&o); ol.next()) {
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;

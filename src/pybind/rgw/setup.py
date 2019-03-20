@@ -18,7 +18,8 @@ clang = False
 def filter_unsupported_flags(flags):
     if clang:
         return [f for f in flags if not (f == '-mcet' or
-                                         f.startswith('-fcf-protection'))]
+                                         f.startswith('-fcf-protection') or
+                                         f == '-fstack-clash-protection')]
     return flags
 
 def monkey_with_compiler(compiler):
