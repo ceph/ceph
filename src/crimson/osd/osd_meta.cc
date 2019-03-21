@@ -1,5 +1,7 @@
 #include "osd_meta.h"
 
+#include <fmt/format.h>
+
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_store.h"
 #include "crimson/os/Transaction.h"
