@@ -219,6 +219,7 @@ public:
   class PeeringMachine : public boost::statechart::state_machine< PeeringMachine, Initial > {
     PeeringState *state;
   public:
+    CephContext *cct;
     PG *pg;
 
     utime_t event_time;
@@ -232,7 +233,8 @@ public:
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
 
-    PeeringMachine(PeeringState *state, PG *pg) : state(state), pg(pg), event_count(0) {}
+    PeeringMachine(PeeringState *state, CephContext *cct, PG *pg) :
+      state(state), cct(cct), pg(pg), event_count(0) {}
 
     /* Accessor functions for state methods */
     ObjectStore::Transaction* get_cur_transaction() {
@@ -954,6 +956,7 @@ public:
   };
 
   PeeringMachine machine;
+  CephContext* cct;
   PG *pg;
 
   /// context passed in by state machine caller
@@ -970,8 +973,8 @@ public:
   boost::optional<PeeringCtx> rctx;
 
 public:
-  explicit PeeringState(PG *pg)
-    : machine(this, pg), pg(pg), orig_ctx(0) {
+  explicit PeeringState(CephContext *cct, PG *pg)
+    : machine(this, cct, pg), cct(cct), pg(pg), orig_ctx(0) {
     machine.initiate();
   }
 
