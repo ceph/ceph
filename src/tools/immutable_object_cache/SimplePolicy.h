@@ -18,7 +18,8 @@ namespace immutable_obj_cache {
 
 class SimplePolicy : public Policy {
  public:
-  SimplePolicy(CephContext *cct, uint64_t block_num, float watermark);
+  SimplePolicy(CephContext *cct, uint64_t block_num, uint64_t max_inflight,
+               double watermark);
   ~SimplePolicy();
 
   cache_status_t lookup_object(std::string file_name);
@@ -49,7 +50,7 @@ class SimplePolicy : public Policy {
   };
 
   CephContext* cct;
-  float m_watermark;
+  double m_watermark;
   uint64_t m_max_inflight_ops;
   uint64_t m_max_cache_size;
   std::atomic<uint64_t> inflight_ops = 0;

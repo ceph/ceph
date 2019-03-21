@@ -30,7 +30,7 @@ public:
   static void SetUpTestCase() {}
   static void TearDownTestCase() {}
   void SetUp() override {
-    m_simple_policy = new SimplePolicy(g_ceph_context, m_cache_size, 0.1);
+    m_simple_policy = new SimplePolicy(g_ceph_context, m_cache_size, 128, 0.1);
     // populate 50 entries
     for (uint64_t i = 0; i < m_cache_size / 2; i++, m_entry_index++) {
       insert_entry_into_promoted_lru(generate_file_name(m_entry_index));

@@ -14,13 +14,17 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 SimplePolicy::SimplePolicy(CephContext *cct, uint64_t cache_size,
-                           float watermark)
-  : cct(cct), m_watermark(watermark), m_max_cache_size(cache_size),
+                           uint64_t max_inflight, double watermark)
+  : cct(cct), m_watermark(watermark), m_max_inflight_ops(max_inflight),
+    m_max_cache_size(cache_size),
     m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock") {
-  ldout(cct, 20) << dendl;
-  m_max_inflight_ops = cct->_conf.get_val<uint64_t>(
-    "immutable_object_cache_max_inflight_ops");
+
+  ldout(cct, 20) << "max cache size= " << m_max_cache_size
+                 << " ,watermark= " << m_watermark
+                 << " ,max inflight ops= " << m_max_inflight_ops << dendl;
+
   m_cache_size = 0;
+
 }
 
 SimplePolicy::~SimplePolicy() {
