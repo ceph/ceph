@@ -19,21 +19,25 @@ namespace immutable_obj_cache {
 ObjectCacheStore::ObjectCacheStore(CephContext *cct)
       : m_cct(cct), m_rados(new librados::Rados()),
         m_ioctx_map_lock("ceph::cache::ObjectCacheStore::m_ioctx_map_lock") {
-  m_object_cache_max_size =
-    m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
   m_cache_root_dir =
     m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
-
-  m_cache_watermark =
-    m_cct->_conf.get_val<double>("immutable_object_cache_watermark");
 
   if (m_cache_root_dir.back() != '/') {
     m_cache_root_dir += "/";
   }
 
-  m_policy = new SimplePolicy(m_cct, m_object_cache_max_size,
-                              m_cache_watermark);
+  uint64_t cache_max_size =
+    m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
+
+  double cache_watermark =
+    m_cct->_conf.get_val<double>("immutable_object_cache_watermark");
+
+  uint64_t max_inflight_ops =
+    m_cct->_conf.get_val<uint64_t>("immutable_object_cache_max_inflight_ops");
+
+  m_policy = new SimplePolicy(m_cct, cache_max_size, max_inflight_ops,
+                              cache_watermark);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
@@ -164,7 +168,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 
   // update metadata
   ceph_assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
-  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED, ret);
+  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED, read_buf->length());
   ceph_assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
 
   delete read_buf;
