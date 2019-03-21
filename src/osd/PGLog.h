@@ -1019,6 +1019,11 @@ protected:
 		       << " attempting to rollback"
 		       << dendl;
     bool can_rollback = true;
+    // We are going to make an important decision based on the
+    // olog_can_rollback_to value we have received, better known it.
+    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                       << " olog_can_rollback_to: "
+                       << olog_can_rollback_to << dendl;
     /// Distinguish between 4) and 5)
     for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	 i != entries.rend();
