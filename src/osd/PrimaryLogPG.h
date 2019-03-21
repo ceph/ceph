@@ -1601,7 +1601,7 @@ private:
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming") {
+	NamedState(nullptr, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context< SnapTrimmer >().can_trim());
       ceph_assert(in_flight.empty());
@@ -1626,7 +1626,7 @@ private:
     Context *wakeup = nullptr;
     explicit WaitTrimTimer(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
+	NamedState(nullptr, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
@@ -1676,7 +1676,7 @@ private:
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
+	NamedState(nullptr, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
     }
@@ -1699,7 +1699,7 @@ private:
       > reactions;
     explicit WaitRepops(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
+	NamedState(nullptr, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(!context<Trimming>().in_flight.empty());
     }
@@ -1753,7 +1753,7 @@ private:
 
     explicit WaitReservation(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
+	NamedState(nullptr, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
@@ -1786,7 +1786,7 @@ private:
       > reactions;
     explicit WaitScrub(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitScrub") {
+	NamedState(nullptr, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
     }
     void exit() {

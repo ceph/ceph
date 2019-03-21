@@ -11,6 +11,14 @@
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
 
+PeeringState::PeeringState(CephContext *cct, spg_t spgid, PG *pg)
+  : state_history(pg),
+    machine(this, cct, spgid, pg, &state_history), cct(cct),
+    spgid(spgid), pg(pg), orig_ctx(0) {
+  machine.initiate();
+}
+
+
 void PeeringState::PeeringMachine::send_query(
   pg_shard_t to, const pg_query_t &query) {
   ceph_assert(state->rctx);
@@ -31,7 +39,7 @@ void PeeringState::PeeringMachine::send_query(
 /*------Crashed-------*/
 PeeringState::Crashed::Crashed(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Crashed")
+    NamedState(context< PeeringMachine >().state_history, "Crashed")
 {
   context< PeeringMachine >().log_enter(state_name);
   ceph_abort_msg("we got a bad state machine event");
@@ -41,7 +49,7 @@ PeeringState::Crashed::Crashed(my_context ctx)
 /*------Initial-------*/
 PeeringState::Initial::Initial(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Initial")
+    NamedState(context< PeeringMachine >().state_history, "Initial")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -82,7 +90,7 @@ void PeeringState::Initial::exit()
 /*------Started-------*/
 PeeringState::Started::Started(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started")
+    NamedState(context< PeeringMachine >().state_history, "Started")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -136,7 +144,7 @@ void PeeringState::Started::exit()
 /*--------Reset---------*/
 PeeringState::Reset::Reset(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Reset")
+    NamedState(context< PeeringMachine >().state_history, "Reset")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -220,7 +228,7 @@ void PeeringState::Reset::exit()
 /*-------Start---------*/
 PeeringState::Start::Start(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Start")
+    NamedState(context< PeeringMachine >().state_history, "Start")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -245,7 +253,7 @@ void PeeringState::Start::exit()
 /*---------Primary--------*/
 PeeringState::Primary::Primary(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -350,7 +358,7 @@ void PeeringState::Primary::exit()
 /*---------Peering--------*/
 PeeringState::Peering::Peering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering"),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering"),
     history_les_bound(false)
 {
   context< PeeringMachine >().log_enter(state_name);
@@ -446,7 +454,7 @@ void PeeringState::Peering::exit()
 /*------Backfilling-------*/
 PeeringState::Backfilling::Backfilling(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Backfilling")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Backfilling")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -560,7 +568,7 @@ void PeeringState::Backfilling::exit()
 
 PeeringState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitRemoteBackfillReserved"),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitRemoteBackfillReserved"),
     backfill_osd_it(context< Active >().remote_shards_to_reserve_backfill.begin())
 {
   context< PeeringMachine >().log_enter(state_name);
@@ -658,7 +666,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRevoked &
 /*--WaitLocalBackfillReserved--*/
 PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitLocalBackfillReserved")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitLocalBackfillReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -686,7 +694,7 @@ void PeeringState::WaitLocalBackfillReserved::exit()
 /*----NotBackfilling------*/
 PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/NotBackfilling")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/NotBackfilling")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -718,7 +726,7 @@ void PeeringState::NotBackfilling::exit()
 /*----NotRecovering------*/
 PeeringState::NotRecovering::NotRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/NotRecovering")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/NotRecovering")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -737,7 +745,7 @@ void PeeringState::NotRecovering::exit()
 /*---RepNotRecovering----*/
 PeeringState::RepNotRecovering::RepNotRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepNotRecovering")
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepNotRecovering")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -762,7 +770,7 @@ void PeeringState::RepNotRecovering::exit()
 /*---RepWaitRecoveryReserved--*/
 PeeringState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepWaitRecoveryReserved")
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitRecoveryReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -802,7 +810,7 @@ void PeeringState::RepWaitRecoveryReserved::exit()
 /*-RepWaitBackfillReserved*/
 PeeringState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepWaitBackfillReserved")
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitBackfillReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -980,7 +988,7 @@ PeeringState::RepWaitBackfillReserved::react(
 /*---RepRecovering-------*/
 PeeringState::RepRecovering::RepRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepRecovering")
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepRecovering")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -1043,7 +1051,7 @@ void PeeringState::RepRecovering::exit()
 /*------Activating--------*/
 PeeringState::Activating::Activating(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Activating")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Activating")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -1058,7 +1066,7 @@ void PeeringState::Activating::exit()
 
 PeeringState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitLocalRecoveryReserved")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitLocalRecoveryReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -1103,7 +1111,7 @@ void PeeringState::WaitLocalRecoveryReserved::exit()
 
 PeeringState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
     remote_recovery_reservation_it(context< Active >().remote_shards_to_reserve_recovery.begin())
 {
   context< PeeringMachine >().log_enter(state_name);
@@ -1144,7 +1152,7 @@ void PeeringState::WaitRemoteRecoveryReserved::exit()
 
 PeeringState::Recovering::Recovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Recovering")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Recovering")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -1244,7 +1252,7 @@ void PeeringState::Recovering::exit()
 
 PeeringState::Recovered::Recovered(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Recovered")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Recovered")
 {
   pg_shard_t auth_log_shard;
 
@@ -1287,7 +1295,7 @@ void PeeringState::Recovered::exit()
 
 PeeringState::Clean::Clean(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Clean")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/Clean")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -1330,7 +1338,7 @@ set<pg_shard_t> unique_osd_shard_set(const pg_shard_t & skip, const T &in)
 /*---------Active---------*/
 PeeringState::Active::Active(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active"),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active"),
     remote_shards_to_reserve_recovery(
       unique_osd_shard_set(
 	context< PeeringMachine >().pg->pg_whoami,
@@ -1775,7 +1783,7 @@ void PeeringState::Active::exit()
 /*------ReplicaActive-----*/
 PeeringState::ReplicaActive::ReplicaActive(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive")
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -1871,7 +1879,7 @@ void PeeringState::ReplicaActive::exit()
 /*-------Stray---*/
 PeeringState::Stray::Stray(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Stray")
+    NamedState(context< PeeringMachine >().state_history, "Started/Stray")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -1973,7 +1981,7 @@ void PeeringState::Stray::exit()
 /*--------ToDelete----------*/
 PeeringState::ToDelete::ToDelete(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ToDelete")
+    NamedState(context< PeeringMachine >().state_history, "Started/ToDelete")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -1993,7 +2001,7 @@ void PeeringState::ToDelete::exit()
 /*----WaitDeleteReserved----*/
 PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg,
+    NamedState(context< PeeringMachine >().state_history,
 	       "Started/ToDelete/WaitDeleteReseved")
 {
   context< PeeringMachine >().log_enter(state_name);
@@ -2031,7 +2039,7 @@ void PeeringState::WaitDeleteReserved::exit()
 /*----Deleting-----*/
 PeeringState::Deleting::Deleting(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/ToDelete/Deleting")
+    NamedState(context< PeeringMachine >().state_history, "Started/ToDelete/Deleting")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -2060,7 +2068,7 @@ void PeeringState::Deleting::exit()
 /*--------GetInfo---------*/
 PeeringState::GetInfo::GetInfo(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/GetInfo")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering/GetInfo")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -2205,7 +2213,8 @@ void PeeringState::GetInfo::exit()
 PeeringState::GetLog::GetLog(my_context ctx)
   : my_base(ctx),
     NamedState(
-      context< PeeringMachine >().pg, "Started/Primary/Peering/GetLog"),
+      context< PeeringMachine >().state_history,
+      "Started/Primary/Peering/GetLog"),
     msg(0)
 {
   context< PeeringMachine >().log_enter(state_name);
@@ -2333,7 +2342,7 @@ void PeeringState::GetLog::exit()
 /*------WaitActingChange--------*/
 PeeringState::WaitActingChange::WaitActingChange(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/WaitActingChange")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/WaitActingChange")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
@@ -2393,7 +2402,7 @@ void PeeringState::WaitActingChange::exit()
 /*------Down--------*/
 PeeringState::Down::Down(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/Down")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering/Down")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -2455,7 +2464,7 @@ boost::statechart::result PeeringState::Down::react(const MNotifyRec& infoevt)
 /*------Incomplete--------*/
 PeeringState::Incomplete::Incomplete(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/Incomplete")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering/Incomplete")
 {
   context< PeeringMachine >().log_enter(state_name);
   PG *pg = context< PeeringMachine >().pg;
@@ -2522,7 +2531,7 @@ void PeeringState::Incomplete::exit()
 /*------GetMissing--------*/
 PeeringState::GetMissing::GetMissing(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/GetMissing")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering/GetMissing")
 {
   context< PeeringMachine >().log_enter(state_name);
 
@@ -2666,7 +2675,7 @@ void PeeringState::GetMissing::exit()
 /*------WaitUpThru--------*/
 PeeringState::WaitUpThru::WaitUpThru(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/WaitUpThru")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Peering/WaitUpThru")
 {
   context< PeeringMachine >().log_enter(state_name);
 }
