@@ -16,7 +16,7 @@ void PeeringState::PeeringMachine::send_query(
   ceph_assert(state->rctx);
   ceph_assert(state->rctx->query_map);
   (*state->rctx->query_map)[to.osd][
-    spg_t(pg->info.pgid.pgid, to.shard)] = query;
+    spg_t(context< PeeringMachine >().spgid.pgid, to.shard)] = query;
 }
 
 
@@ -483,7 +483,7 @@ void PeeringState::Backfilling::backfill_release_reservations()
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
 	  MBackfillReserve::RELEASE,
-	  spg_t(pg->info.pgid.pgid, it->shard),
+	  spg_t(context< PeeringMachine >().spgid.pgid, it->shard),
 	  pg->get_osdmap_epoch()),
 	con.get());
     }
@@ -597,7 +597,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
 	MBackfillReserve::REQUEST,
-	spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
+	spg_t(context< PeeringMachine >().spgid.pgid, backfill_osd_it->shard),
 	pg->get_osdmap_epoch(),
 	pg->get_backfill_priority(),
         num_bytes,
@@ -639,7 +639,7 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
       pg->osd->send_message_osd_cluster(
         new MBackfillReserve(
 	MBackfillReserve::RELEASE,
-	spg_t(pg->info.pgid.pgid, it->shard),
+	spg_t(context< PeeringMachine >().spgid.pgid, it->shard),
 	pg->get_osdmap_epoch()),
       con.get());
     }
@@ -786,7 +786,7 @@ PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
     pg->primary.osd,
     new MRecoveryReserve(
       MRecoveryReserve::GRANT,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      spg_t(context< PeeringMachine >().spgid.pgid, pg->primary.shard),
       pg->get_osdmap_epoch()),
     pg->get_osdmap_epoch());
   return transit<RepRecovering>();
@@ -952,7 +952,7 @@ PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
       pg->primary.osd,
       new MBackfillReserve(
 	MBackfillReserve::GRANT,
-	spg_t(pg->info.pgid.pgid, pg->primary.shard),
+	spg_t(context< PeeringMachine >().spgid.pgid, pg->primary.shard),
 	pg->get_osdmap_epoch()),
       pg->get_osdmap_epoch());
   return transit<RepRecovering>();
@@ -1005,7 +1005,7 @@ PeeringState::RepRecovering::react(const RemoteRecoveryPreempted &)
     pg->primary.osd,
     new MRecoveryReserve(
       MRecoveryReserve::REVOKE,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      spg_t(context< PeeringMachine >().spgid.pgid, pg->primary.shard),
       pg->get_osdmap_epoch()),
     pg->get_osdmap_epoch());
   return discard_event();
@@ -1020,7 +1020,7 @@ PeeringState::RepRecovering::react(const BackfillTooFull &)
     pg->primary.osd,
     new MBackfillReserve(
       MBackfillReserve::TOOFULL,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      spg_t(context< PeeringMachine >().spgid.pgid, pg->primary.shard),
       pg->get_osdmap_epoch()),
     pg->get_osdmap_epoch());
   return discard_event();
@@ -1035,7 +1035,7 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
     pg->primary.osd,
     new MBackfillReserve(
       MBackfillReserve::REVOKE,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
+      spg_t(context< PeeringMachine >().spgid.pgid, pg->primary.shard),
       pg->get_osdmap_epoch()),
     pg->get_osdmap_epoch());
   return discard_event();
@@ -1133,7 +1133,7 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
       pg->osd->send_message_osd_cluster(
         new MRecoveryReserve(
 	  MRecoveryReserve::REQUEST,
-	  spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
+	  spg_t(context< PeeringMachine >().spgid.pgid, remote_recovery_reservation_it->shard),
 	  pg->get_osdmap_epoch(),
 	  pg->get_recovery_priority()),
 	con.get());
@@ -1186,7 +1186,7 @@ void PeeringState::Recovering::release_reservations(bool cancel)
       pg->osd->send_message_osd_cluster(
         new MRecoveryReserve(
 	  MRecoveryReserve::RELEASE,
-	  spg_t(pg->info.pgid.pgid, i->shard),
+	  spg_t(context< PeeringMachine >().spgid.pgid, i->shard),
 	  pg->get_osdmap_epoch()),
 	con.get());
     }
@@ -1268,7 +1268,7 @@ PeeringState::Recovered::Recovered(my_context ctx)
   // if we finished backfill, all acting are active; recheck if
   // DEGRADED | UNDERSIZED is appropriate.
   ceph_assert(!pg->acting_recovery_backfill.empty());
-  if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <=
+  if (pg->get_osdmap()->get_pg_size(context< PeeringMachine >().spgid.pgid) <=
       pg->acting_recovery_backfill.size()) {
     pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
     pg->publish_stats_to_osd();
@@ -1493,9 +1493,10 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
-  if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
-      pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
-    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->actingset.size()) {
+  if (advmap.lastmap->get_pg_size(context< PeeringMachine >().spgid.pgid) !=
+      pg->get_osdmap()->get_pg_size(context< PeeringMachine >().spgid.pgid)) {
+    if (pg->get_osdmap()->get_pg_size(context< PeeringMachine >().spgid.pgid) <=
+	pg->actingset.size()) {
       pg->state_clear(PG_STATE_UNDERSIZED);
     } else {
       pg->state_set(PG_STATE_UNDERSIZED);
@@ -1535,12 +1536,12 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
+      pg->osd->clog->error() << context< PeeringMachine >().spgid.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically "
 			    << "mark these objects lost but this feature is not yet implemented "
 			    << "(osd_auto_mark_unfound_lost)";
     } else
-      pg->osd->clog->error() << pg->info.pgid.pgid << " has "
+      pg->osd->clog->error() << context< PeeringMachine >().spgid.pgid << " has "
                              << unfound << " objects unfound and apparently lost";
   }
 
@@ -1702,7 +1703,7 @@ boost::statechart::result PeeringState::Active::react(const QueryState& q)
 boost::statechart::result PeeringState::Active::react(const AllReplicasActivated &evt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  pg_t pgid = pg->info.pgid.pgid;
+  pg_t pgid = context< PeeringMachine >().spgid.pgid;
 
   all_replicas_activated = true;
 
