@@ -111,9 +111,7 @@ md_config_t::md_config_t(ConfigValues& values,
                 << std::endl;
       ceph_abort();
     }
-    schema.emplace(std::piecewise_construct,
-		   std::forward_as_tuple(i.name),
-		   std::forward_as_tuple(i));
+    schema.emplace(i.name, i);
   }
 
   // Define the debug_* options as well.
@@ -166,7 +164,7 @@ md_config_t::md_config_t(ConfigValues& values,
   // members if present.
   legacy_values = {
 #define OPTION(name, type) \
-    {std::string(STRINGIFY(name)), &ConfigValues::name},
+    {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
 #undef OPTION

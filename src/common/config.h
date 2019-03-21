@@ -89,13 +89,13 @@ public:
   /*
    * Mapping from legacy config option names to class members
    */
-  std::map<std::string, member_ptr_t> legacy_values;
+  std::map<std::string_view, member_ptr_t> legacy_values;
 
   /**
    * The configuration schema, in the form of Option objects describing
    * possible settings.
    */
-  std::map<std::string, const Option&> schema;
+  std::map<std::string_view, const Option&> schema;
 
   /// values from mon that we failed to set
   std::map<std::string,std::string> ignored_mon_values;
