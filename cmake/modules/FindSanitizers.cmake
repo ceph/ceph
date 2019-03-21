@@ -6,13 +6,13 @@ if(HAVE_JEMALLOC)
   message(WARNING "JeMalloc does not work well with sanitizers")
 endif()
 
-set(Sanitizers_OPTIONS)
+set(Sanitizers_COMPILE_OPTIONS)
 
 foreach(component ${Sanitizers_FIND_COMPONENTS})
   if(component STREQUAL "address")
-    set(Sanitizers_address_COMPILE_OPTIONS "address")
+    set(Sanitizers_address_COMPILE_OPTIONS "-fsanitize=address")
   elseif(component STREQUAL "leak")
-    set(Sanitizers_leak_COMPILE_OPTIONS "leak")
+    set(Sanitizers_leak_COMPILE_OPTIONS "-fsanitize=leak")
   elseif(component STREQUAL "thread")
     if ("address" IN_LIST ${Sanitizers_FIND_COMPONENTS} OR
         "leak" IN_LIST ${Sanitizers_FIND_COMPONENTS})
@@ -20,13 +20,14 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
     elseif(NOT CMAKE_POSITION_INDEPENDENT_CODE)
       message(SEND_ERROR "TSan requires all code to be position independent")
     endif()
-    set(Sanitizers_Thread_COMPILE_OPTIONS "thread")
+    set(Sanitizers_Thread_COMPILE_OPTIONS "-fsanitize=thread")
   elseif(component STREQUAL "undefined_behavior")
-    set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "undefined")
+    # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=88684
+    set(Sanitizers_undefined_behavior_COMPILE_OPTIONS "-fsanitize=undefined;-fno-sanitize=vptr")
   else()
     message(SEND_ERROR "Unsupported sanitizer: ${component}")
   endif()
-  list(APPEND Sanitizers_OPTIONS "${Sanitizers_${component}_COMPILE_OPTIONS}")
+  list(APPEND Sanitizers_COMPILE_OPTIONS "${Sanitizers_${component}_COMPILE_OPTIONS}")
 endforeach()
 
 if(Sanitizers_address_COMPILE_OPTIONS OR Sanitizers_leak_COMPILE_OPTIONS)
@@ -38,12 +39,9 @@ if(Sanitizers_address_COMPILE_OPTIONS OR Sanitizers_leak_COMPILE_OPTIONS)
       libasan.so.3)
 endif()
 
-if(Sanitizers_OPTIONS)
-  string(REPLACE ";" ","
-    Sanitizers_COMPILE_OPTIONS
-    "${Sanitizers_OPTIONS}")
-  set(Sanitizers_COMPILE_OPTIONS
-    "-fsanitize=${Sanitizers_COMPILE_OPTIONS} -fno-omit-frame-pointer")
+if(Sanitizers_COMPILE_OPTIONS)
+  list(APPEND Sanitizers_COMPILE_OPTIONS
+    "-fno-omit-frame-pointer")
 endif()
 
 include(CheckCXXSourceCompiles)
@@ -55,24 +53,24 @@ check_cxx_source_compiles("int main() {}"
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Sanitizers
   REQUIRED_VARS
-    Sanitizers_ARE_SUPPORTED
-    Sanitizers_COMPILE_OPTIONS)
+    Sanitizers_COMPILE_OPTIONS
+    Sanitizers_ARE_SUPPORTED)
 
 if(Sanitizers_FOUND)
   if(NOT TARGET Sanitizers::Sanitizers)
     add_library(Sanitizers::Sanitizers INTERFACE IMPORTED)
     set_target_properties(Sanitizers::Sanitizers PROPERTIES
-      INTERFACE_COMPILE_OPTIONS ${Sanitizers_COMPILE_OPTIONS}
-      INTERFACE_LINK_LIBRARIES ${Sanitizers_COMPILE_OPTIONS})
+      INTERFACE_COMPILE_OPTIONS "${Sanitizers_COMPILE_OPTIONS}"
+      INTERFACE_LINK_LIBRARIES "${Sanitizers_COMPILE_OPTIONS}")
   endif()
   foreach(component ${Sanitizers_FIND_COMPONENTS})
     if(NOT TARGET Sanitizers::${component})
       set(target Sanitizers::${component})
-      set(compile_option "-fsanitize=${Sanitizers_${component}_COMPILE_OPTIONS}")
+      set(compile_option "${Sanitizers_${component}_COMPILE_OPTIONS}")
       add_library(${target} INTERFACE IMPORTED)
       set_target_properties(${target} PROPERTIES
-        INTERFACE_COMPILE_OPTIONS ${compile_option}
-        INTERFACE_LINK_LIBRARIES ${compile_option})
+        INTERFACE_COMPILE_OPTIONS "${compile_option}"
+        INTERFACE_LINK_LIBRARIES "${compile_option}")
     endif()
   endforeach()
 endif()
