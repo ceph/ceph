@@ -483,7 +483,6 @@ double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxe
   if (maxex <= 0 || maxim <= 0) return 0.0;
 
   double howmuch = std::min(maxex, maxim);
-  if (howmuch <= 0) return 0.0;
 
   dout(5) << "   - mds." << ex << " exports " << howmuch << " to mds." << im << dendl;
 
