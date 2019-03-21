@@ -1693,8 +1693,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(snaps, bl, features);
     encode(removed_snaps, bl);
     encode(auid, bl);
-    uint64_t peer_flags = flags & ~(FLAG_FULL_QUOTA_OBJECTS|FLAG_FULL_QUOTA_BYTES);
-    encode(peer_flags, bl);
+    encode(flags, bl);
     encode((uint32_t)0, bl); // crash_replay_interval
     return;
   }
@@ -1721,8 +1720,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(snaps, bl, features);
     encode(removed_snaps, bl);
     encode(auid, bl);
-    uint64_t peer_flags = flags & ~(FLAG_FULL_QUOTA_OBJECTS|FLAG_FULL_QUOTA_BYTES);
-    encode(peer_flags, bl);
+    encode(flags, bl);
     encode((uint32_t)0, bl); // crash_replay_interval
     encode(min_size, bl);
     encode(quota_max_bytes, bl);
@@ -1749,7 +1747,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 29;
+  uint8_t v = 28;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -1780,14 +1778,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   encode(snaps, bl, features);
   encode(removed_snaps, bl);
   encode(auid, bl);
-  uint64_t peer_flags = flags;
-  if (v < 29) {
-    peer_flags &= ~(FLAG_FULL_QUOTA_OBJECTS|FLAG_FULL_QUOTA_BYTES);
-    if (v < 27) {
-      peer_flags &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
-    }
+  if (v >= 27) {
+    encode(flags, bl);
+  } else {
+    auto tmp = flags;
+    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
+    encode(tmp, bl);
   }
-  encode(peer_flags, bl);
   encode((uint32_t)0, bl); // crash_replay_interval
   encode(min_size, bl);
   encode(quota_max_bytes, bl);
@@ -1855,7 +1852,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
 
 void pg_pool_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(29, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1885,12 +1882,7 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
   }
 
   if (struct_v >= 4) {
-    uint64_t eflags;
-    decode(eflags, bl);
-    if (struct_v < 29) {
-      eflags &= ~(FLAG_FULL_QUOTA_OBJECTS|FLAG_FULL_QUOTA_BYTES);
-    }
-    flags = eflags;
+    decode(flags, bl);
     uint32_t crash_replay_interval;
     decode(crash_replay_interval, bl);
   } else {
