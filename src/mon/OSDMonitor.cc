@@ -6242,7 +6242,12 @@ bool OSDMonitor::update_pools_status()
     bool changed_objects = was_full_objects != pool_is_full_objects;
     bool changed_bytes = was_full_bytes != pool_is_full_bytes;
 
-    if (!changed_objects && !changed_bytes) {
+    if (!changed_objects && !changed_bytes &&
+	(pool.has_flag(pg_pool_t::FLAG_FULL_QUOTA == pool_is_full))) {
+      /* this if conditions is a bit complicated to deal with 
+	 the situation where we had an incorrect QUOTA_BYTES
+	 or QUOTA_OBJECTS flag set when it shouldn't be.
+	 See https://github.com/ceph/ceph/pull/26873#discussion_r267674431 */
       continue;
     }
 
