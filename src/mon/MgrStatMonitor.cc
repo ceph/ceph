@@ -34,6 +34,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
+  pending_service_map_bl.clear();
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
@@ -54,7 +55,8 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 	       << " service_map e" << service_map.epoch << dendl;
     }
     catch (buffer::error& e) {
-      derr << "failed to decode mgrstat state; luminous dev version?" << dendl;
+      derr << "failed to decode mgrstat state; luminous dev version? "
+	   << e.what() << dendl;
     }
   }
   check_subs();
