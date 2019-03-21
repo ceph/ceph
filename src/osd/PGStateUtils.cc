@@ -2,62 +2,36 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "PGStateUtils.h"
-#include "PG.h"
+#include "common/Clock.h"
 
 /*------NamedState----*/
-NamedState::NamedState(
-  PG *pg_, const char *state_name_)
-  : state_name(state_name_), enter_time(ceph_clock_now()), pg(pg_) {
-  pg->pgstate_history.enter(pg, enter_time, state_name);
-}
-
-NamedState::~NamedState() {
-  pg->pgstate_history.exit(state_name);
-}
-
-/*---------PGStateHistory---------*/
-void PGStateHistory::enter(PG* pg, const utime_t entime, const char* state)
-{
-  // Ignore trimming state machine for now
-  if (::strstr(state, "Trimming") != NULL) {
-    return;
-  } else if (pi != nullptr) {
-    pi->enter_state(entime, state);
-  } else {
-    // Store current state since we can't reliably take the PG lock here
-    if ( tmppi == nullptr) {
-      tmppi = std::unique_ptr<PGStateInstance>(new PGStateInstance);
-    }
-
-    thispg = pg;
-    tmppi->enter_state(entime, state);
+NamedState::NamedState(PGStateHistory *pgsh, const char *state_name)
+  : pgsh(pgsh), state_name(state_name) {
+  if(pgsh) {
+    pgsh->enter(ceph_clock_now(), state_name);
   }
 }
 
-void PGStateHistory::exit(const char* state) {
-  // Ignore trimming state machine for now
-  // Do nothing if PG is being destroyed!
-  if (::strstr(state, "Trimming") != NULL || pg_in_destructor) {
-    return;
-  } else {
-    bool ilocked = false;
-    if(!thispg->is_locked()) {
-      thispg->lock();
-      ilocked = true;
-    }
-    if (pi == nullptr) {
-      buffer.push_back(std::unique_ptr<PGStateInstance>(tmppi.release()));
-      pi = buffer.back().get();
-      pi->setepoch(thispg->get_osdmap_epoch());
-    }
+NamedState::~NamedState() {
+  if(pgsh) {
+    pgsh->exit(state_name);
+  }
+}
 
-    pi->exit_state(ceph_clock_now());
-    if (::strcmp(state, "Reset") == 0) {
-      this->reset();
-    }
-    if(ilocked) {
-      thispg->unlock();
-    }
+/*---------PGStateHistory---------*/
+void PGStateHistory::enter(const utime_t entime, const char* state)
+{
+  if (pi == nullptr) {
+    pi = std::unique_ptr<PGStateInstance>(new PGStateInstance);
+  }
+  pi->enter_state(entime, state);
+}
+
+void PGStateHistory::exit(const char* state) {
+  pi->setepoch(es->get_osdmap_epoch());
+  pi->exit_state(ceph_clock_now());
+  if (pi->empty()) {
+    reset();
   }
 }
 

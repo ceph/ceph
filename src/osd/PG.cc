@@ -323,7 +323,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 
 PG::~PG()
 {
-  pgstate_history.set_pg_in_destructor();
 #ifdef PG_DEBUG_REFS
   osd->remove_pgid(info.pgid, this);
 #endif
@@ -2361,7 +2360,8 @@ bool PG::set_force_recovery(bool b)
     did = true;
   }
   if (did) {
-    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    dout(20) << __func__ << " state " << recovery_state.get_current_state()
+	     << dendl;
     osd->local_reserver.update_priority(info.pgid, get_recovery_priority());
   }
   return did;
@@ -2387,7 +2387,8 @@ bool PG::set_force_backfill(bool b)
     did = true;
   }
   if (did) {
-    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    dout(20) << __func__ << " state " << recovery_state.get_current_state()
+	     << dendl;
     osd->local_reserver.update_priority(info.pgid, get_backfill_priority());
   }
   return did;
@@ -6960,7 +6961,7 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
 void PG::dump_pgstate_history(Formatter *f)
 {
   lock();
-  pgstate_history.dump(f);
+  recovery_state.dump_history(f);
   unlock();
 }
 

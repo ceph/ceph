@@ -196,7 +196,7 @@ struct PGPool {
  *
  */
 
-class PG : public DoutPrefixProvider {
+class PG : public DoutPrefixProvider, public EpochSource {
   friend class NamedState;
   friend class PeeringState;
 public:
@@ -222,7 +222,7 @@ public:
     ceph_assert(osdmap_ref);
     return osdmap_ref;
   }
-  epoch_t get_osdmap_epoch() const {
+  epoch_t get_osdmap_epoch() const override {
     return osdmap_ref->get_epoch();
   }
 
@@ -942,8 +942,6 @@ public:
   bool dne() { return info.dne(); }
 
 protected:
-  PGStateHistory pgstate_history;
-
   /*
    * peer_info    -- projected (updates _before_ replicas ack)
    * peer_missing -- committed (updates _after_ replicas ack)
