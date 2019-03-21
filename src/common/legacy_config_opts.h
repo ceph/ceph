@@ -116,6 +116,7 @@ OPTION(perf, OPT_BOOL)       // enable internal perf counters
 SAFE_OPTION(ms_type, OPT_STR)   // messenger backend. It will be modified in runtime, so use SAFE_OPTION
 OPTION(ms_public_type, OPT_STR)   // messenger backend
 OPTION(ms_cluster_type, OPT_STR)   // messenger backend
+OPTION(ms_learn_addr_from_peer, OPT_BOOL)
 OPTION(ms_tcp_nodelay, OPT_BOOL)
 OPTION(ms_tcp_rcvbuf, OPT_INT)
 OPTION(ms_tcp_prefetch_max_size, OPT_U32) // max prefetch size, we limit this to avoid extra memcpy
