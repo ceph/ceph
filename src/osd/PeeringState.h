@@ -11,6 +11,7 @@
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 
+#include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
@@ -20,15 +21,6 @@ class PG;
   /* Encapsulates PG recovery process */
 class PeeringState {
 public:
-  struct NamedState {
-    const char *state_name;
-    utime_t enter_time;
-    PG* pg;
-    const char *get_state_name() { return state_name; }
-    NamedState(PG *pg_, const char *state_name_);
-    virtual ~NamedState();
-  };
-
   // [primary only] content recovery state
   struct BufferedRecoveryMessages {
     map<int, map<spg_t, pg_query_t> > query_map;

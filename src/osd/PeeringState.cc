@@ -28,17 +28,6 @@ void PeeringState::PeeringMachine::send_query(
 		     << "state<" << get_state_name() << ">: ")
 #define psdout(x) ldout(context< PeeringMachine >().cct, x)
 
-/*------NamedState----*/
-PeeringState::NamedState::NamedState(
-  PG *pg_, const char *state_name_)
-  : state_name(state_name_), enter_time(ceph_clock_now()), pg(pg_) {
-  pg->pgstate_history.enter(pg, enter_time, state_name);
-}
-
-PeeringState::NamedState::~NamedState() {
-  pg->pgstate_history.exit(state_name);
-}
-
 /*------Crashed-------*/
 PeeringState::Crashed::Crashed(my_context ctx)
   : my_base(ctx),
