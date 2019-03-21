@@ -36,6 +36,7 @@ Andrew Leung <aleung@cs.ucsc.edu> <anwleung@29311d96-e01e-0410-9327-a35deaab8ce9
 Andrew Schoen <aschoen@redhat.com> <andrew.schoen@gmail.com>
 Andy Allan <andy@gravitystorm.co.uk> <github@gravitystorm.co.uk>
 Anis Ayari <ayari_anis@live.fr>
+Anton Oks <anton.oks@gmx.de>
 Aristoteles Neto <aristoteles.neto@webdrive.co.nz> <wdneto@users.noreply.github.com>
 Aron Gunn <ritz_303@yahoo.com>
 Ashish Chandra <ashish.a.chandra@ril.com> <mail.ashishchandra@gmail.com>
@@ -95,6 +96,7 @@ Dan Chai <tengweicai@gmail.com> <tengweicai@gmail.com>
 Daniel Gollub <d.gollub@telekom.de> <daniel.gollub@gmail.com>
 Daniel Oliveira <doliveira@suse.com> <doliveirabrz@gmail.com>
 Daniel Gryniewicz <dang@redhat.com> <dang@fprintf.net>
+Dan Guo <guodan1@lenovo.com>
 Dan Mick <dan.mick@inktank.com> <dan.mick@dreamhost.com>
 Dan Mick <dmick@redhat.com> <dan.mick@redhat.com>
 Dan Mick <dmick@redhat.com> <dmick@danceorelse.org>
@@ -167,6 +169,7 @@ Guang Yang <yguang@yahoo-inc.com> <yguang@yahoo-inc>
 Guilhem Lettron <guilhem@lettron.fr> <guilhem+github@lettron.fr>
 Hans Bogert <hansbogert@gmail.com>
 Haodong Tang <haodong.tang@intel.com>
+Haomai Wang <haomai@xsky.com>
 Haomai Wang <haomai@xsky.com> <haomaiwang@gmail.com>
 Haomai Wang <haomai@xsky.com> <haomai@xsky.io>
 Haomai Wang <haomai@xsky.com> <yuyuyu101@163.com>
@@ -194,6 +197,7 @@ Jacek J. Łakis <jacek.lakis@intel.com>
 Jacek J. Łakis <jacek.lakis@intel.com> <jlakis@gklab-126-033.igk.intel.com>
 Jaemyoun Lee <jaemyoun@gmail.com>
 James Mcclune <jmcclune@mcclunetechnologies.net>
+James Mcclune <jmcclune@mcclunetechnologies.net> <falcon78921@users.noreply.github.com>
 James Page <james.page@ubuntu.com> <jamespage@ubuntu.com>
 Jason Dillaman <dillaman@redhat.com> <jdillaman@redhat.com>
 Jason Dillaman <dillaman@redhat.com> <jdillama@redhat.com>
@@ -203,6 +207,7 @@ Jason Dillaman <dillaman@redhat.com> <dillamana@redhat.com>
 Jean-Charles Lopez <jelopez@redhat.com>
 Jeff Epstein <jepst79@gmail.com>
 Jeff Layton <jlayton@redhat.com>
+Jeff Layton <jlayton@redhat.com> <jlayton@kernel.org>
 Jeffrey Lu <lzhng2000@aliyun.com>
 Jeffrey Lu <lzhng2000@aliyun.com> <lzhng2000@hotmail.com>
 Jenkins <jenkins@ceph.com> <jenkins-build@jenkins-slave-wheezy.localdomain>
@@ -269,6 +274,8 @@ Ken Dreyer <kdreyer@redhat.com> <ktdreyer@redhat.com>
 Kévin Caradant <kevin.caradant@gmail.com>
 Kiseleva Alyona <akiselyova@mirantis.com>
 Kongming Wu <wu.kongming@h3c.com>
+Коренберг Марк <socketpair@gmail.com>
+Коренберг Марк <socketpair@gmail.com> <mark@ideco.ru>
 Kuanlong Li <likuanlong@sangfor.com.cn>
 Lan De <lan.de3@zte.com.cn>
 Laszlo Boszormenyi <gcs@debian.hu>
@@ -277,8 +284,10 @@ Lenz Grimmer <lgrimmer@suse.com> <lenz@grimmer.com>
 Liul <liul.stone@gmail.com>
 Luo Kexue <luo.kexue@zte.com.cn>
 Luo Muyao <luo.muyao@zte.com.cn>
-Luo Runbing <runsisi@hust.edu.cn>
-Luo Runbing <runsisi@zte.com.cn>
+Luo Runbing <luo.runbing@zte.com.cn>
+Luo Runbing <luo.runbing@zte.com.cn> <runsisi@zte.com.cn>
+Luo Runbing <luo.runbing@zte.com.cn> <runsisi@hust.edu.cn>
+Li Bingyang <li.bingyang1@zte.com.cn>
 Li Hongjie <lihongjie@cmss.chinamobile.com>
 Li Jing <lijing@gohighsec.com>
 Li Wang <li.wang@kylin-cloud.com> <liwang@ubuntukylin.com>
@@ -319,6 +328,7 @@ Matt Benjamin <mbenjamin@redhat.com> <mbenjami@redhat.com>
 Matthew Roy <matthew@royhousehold.net> <matthew@matthew-ubuntu.(none)>
 Matthew Roy <matthew@royhousehold.net> <mroy@sandbox-ed.com>
 Matthew Wodrich <matthew.wodrich@dreamhost.com> <mattheww@Mattsbox.(none)>
+Maxime Guyot <maxime@root314.com>
 Maxime Robert <maxime.robert1992@gmail.com>
 Mehdi Abaakouk <sileht@redhat.com> <sileht@sileht.net>
 Michael Riederer <michael@riederer.org>
@@ -348,7 +358,8 @@ Neha Ummareddy <nehaummareddy@gmail.com>
 Neil Levine <neil.levine@inktank.com> <levine@yoyo.org>
 Nick Fisk <nick@fisk.me.uk>
 Nicolas Yong <nicolas.yong93@gmail.com>
-Ning Tao <ningtao@sangfor.com.cn> <63358@sangfor.com>
+Tao Ning <ningtao@sangfor.com.cn> <63358@sangfor.com>
+Tao Ning <ningtao@sangfor.com.cn>
 Nick Erdmann <n@nirf.de>
 Nick Erdmann <n@nirf.de> <11783095+nrdmn@users.noreply.github.com>
 Ning Yao <yaoning@ruijie.com.cn> <zay11022@gmail.com>
@@ -357,11 +368,13 @@ Noah Watkins <nwatkins@redhat.com> <jayhawk@cs.ucsc.edu>
 Noah Watkins <nwatkins@redhat.com> <noahwatkins@gmail.com>
 Orit Wasserman <owasserm@redhat.com> <owassern@redhat.com>
 Orit Wasserman <owasserm@redhat.com> <owassrm@redhat.com>
+Orit Wasserman <owasserm@redhat.com> <owasserm@owasserm.redhat.com>
 Pascal de Bruijn <pascal@unilogicnetworks.net>
 Patience Warnick <patience@cranium.pelton.net> <patiencew@29311d96-e01e-0410-9327-a35deaab8ce9>
 Patrick McGarry <patrick@inktank.com>
 Patrick McGarry <pmcgarry@redhat.com> <pmcgarry@gmail.com>
 Patrick Nawracay <pnawracay@suse.com> <patrick@nawracay.de>
+Patrick Donnelly <pdonnell@redhat.com> <pdonell@redhat.com>
 Pan Liu <pan.liu@istuary.com> <liupan1111@gmail.com>
 Paul Emmerich <paul.emmerich@croit.io> <paul.emmerich@oocero.de>
 Pavan Rallabhandi <pavan.rallabhandi@sandisk.com> <pavanrallabhandis@gmail.com>
@@ -387,6 +400,7 @@ Ren Huanwen <ren.huanwen@zte.com.cn> <rhwlyw@163.com>
 Ren Huanwen <ren.huanwen@zte.com.cn> <sky@renhuanwentekiMacBook-Pro.local>
 Riccardo Ferretti <rferrett@soe.ucsc.edu> <rferrett@29311d96-e01e-0410-9327-a35deaab8ce9>
 Richard Brown <RBrownCCB@opensuse.org>
+Rick Chen <rick.chen@prophetstor.com>
 Roald J. van Loon <roald@roaldvanloon.nl> <roaldvanloon@gmail.com>
 Robert Jansen <r.jansen@fairbanks.nl> <r.jansen86@gmail.com>
 Robert LeBlanc <robert.leblanc@endurance.com> <robert@leblancnet.us>
@@ -435,6 +449,7 @@ Sangdi Xu <xu.sangdi@h3c.com> <xu.sangdi@h3c>
 Scott A. Brandt <scott@cs.ucsc.edu> <sbrandt@29311d96-e01e-0410-9327-a35deaab8ce9>
 Sebastian Wagner <swagner@suse.com> <sebastian.wagner@suse.com>
 Sebastien Chen <sebastien.chen92@gmail.com>
+Sébastien Han <shan@redhat.com>
 Sébastien Han <shan@redhat.com> <sebastien.han@enovance.com>
 Sébastien Han <shan@redhat.com> <han.sebastien@gmail.com>
 Sébastien Han <shan@redhat.com> <seb@redhat.com>
@@ -504,6 +519,7 @@ Valentin Arshanes Thomas <valentin.arshanes.thomas@gmail.com>
 Varada Kari <varada.kari@sandisk.com>
 Varada Kari <varada.kari@sandisk.com> <kariraja@yahoo.com>
 Varada Kari <varada.kari@sandisk.com> <varada.kari@gmail.com>
+Varada Kari <varadaraja.kari@flipkart.com>
 Vasu Kulkarni <vasu@redhat.com>
 Vasu Kulkarni <vasu@redhat.com> <vasu.kulkarni@gmail.com>
 Vasu Kulkarni <vasu@redhat.com> <vakulkar@redhat.com>
@@ -558,6 +574,7 @@ Xu Biao <xubiao.codeyz@gmail.com>
 Xuan Liu <liu.xuan@h3c.com>
 XueYu Bai <baixueyu@inspur.com>
 XueYu Bai <baixueyu@inspur.com> <root@localhost.localdomain>
+XueYu Bai <baixueyu@inspur.com> <baixueyu78@126.com>
 Yan Lei <yongyou.yl@alibaba-inc.com>
 Yan Lei <yongyou.yl@alibaba-inc.com> <yanlei_cv@aliyun.com>
 Yan Lei <yongyou.yl@alibaba-inc.com> <youngyou.yl@alibaba-inc.com>
@@ -589,7 +606,10 @@ Yehuda Sadeh <ysadehwe@redhat.com> <yehuda@redhat.com.>
 Ye Tian <tianye@sangfor.com.cn>
 Yichao Li <liyichao.good@gmail.com>
 Ying He <heyingbj@inspur.com>
+Yin Zheng <zhengyin@cmss.chinamobile.com>
 Yixing Yan <yanyx@umcloud.com>
+Yingxin Cheng <yingxin.cheng@intel.com>
+Yingxin Cheng <yingxin.cheng@intel.com> <yingxincheng@gmail.com>
 Yuelong Guang <yuelongguang@gmail.com>
 Yongqiang He <he.yongqiang@h3c.com>
 Yongyue Sun <abioy.sun@gmail.com>
@@ -604,25 +624,22 @@ Yuri Weinstein <yuriw@redhat.com> <yuri.weinstein@gmail.com>
 Yuri Weinstein <yuriw@redhat.com> <yuriw@magna002.ceph.redhat.com>
 Yuri Weinstein <yuriw@redhat.com> <yweins@redhat.com>
 Yuri Weinstein <yuriw@redhat.com> <yuri.weinstein@redhat.com>
+Yuri Weinstein <yuriw@redhat.com> <yweinstein@redhat.com>
+Yuval Lifshitz <ylifshit@redhat.com> <yuvalif@yahoo.com>
 Yuli Yang <yuliyang@cmss.chinamobile.com>
 Xianxia Xiao <xianxia.xiao@kylin-cloud.com>
-<<<<<<< HEAD
 XiaoCheng Wang <wangxiaocheng@sangfor.com.cn>
+Xiaofei Cui <cuixiaofei@sangfor.com.cn>
 Xiaofei Cui <cuixiaofei@sangfor.com.cn> <cuixiaofei@sangfor.com>
-=======
 Xie Xingguo <xie.xingguo@zte.com.cn> <xie.xingguo@gmail.com>
 Xuehan Xu <xuxuehan@360.cn> <xxhdx1985126@163.com>
->>>>>>> a688393f8d... doc: mailmap updates for mimic
 Zack Cerza <zack@redhat.com> <zack.cerza@inktank.com>
 Zack Cerza <zack@redhat.com> <zack@cerza.org>
 Zack Cerza <zack@redhat.com> <zcerza@redhat.com>
 Zengran Zhang <zhangzengran@h3c.com>
-<<<<<<< HEAD
 Zengran Zhang <zhangzengran@sangfor.com.cn> <13121369189@126.com>
 Zhen Zeng <zengzhen@sangfor.com.cn>
-=======
 Zengran Zhang <zhangzengran@h3c.com> <13121369189@126.com>
->>>>>>> a688393f8d... doc: mailmap updates for mimic
 Zeqiang Zhuang <zhuang.zeqiang@h3c.com>
 Zhang Lei <zhanglei@trendytech.com.cn>
 Zhang Lei <zhanglei@trendytech.com.cn> <243290414@qq.com>
@@ -652,6 +669,36 @@ Zhi Zhang <willzzhang@tencent.com>
 Zhi Zhang <willzzhang@tencent.com> <zhangz.david@outlook.com>
 Zhi Zhang <willzzhang@tencent.com> <zhangzhi@localhost.localdomain>
 Zhu Shangzhong <zhu.shangzhong@zte.com.cn>
+Zhu Jie Wen <jabber256@gmail.com>
 Zhuang Xiaochun <zhuangxc89@163.com>
 Ziye Yang <ziye.yang@intel.com> <optimistyzy@gmail.com>
 Zou Aiguo <zou.aiguo@zte.com.cn>
+Xinying Song <songxinying@sensetime.com>
+Xinying Song <songxinying@sensetime.com> <songxinyingftd@gmail.com>
+Li Kefei <likefei@cmss.chinamobile.com>
+Liu Peng <liupeng37@baidu.com>
+Ming Hao Cong <minghaocong@tencent.com>
+David Wang <planetbeing@gmail.com>
+Lan Liu <liulan@umcloud.com> <rjerk.whatever@gmail.com>
+Hyun-ha <hyun.ha@navercorp.com>
+Liu Yang kuan <liuyangkuan@gmail.com>
+Xiaoman Huang <huangxiaoman@cmss.chinamobile.com>
+Hao Wang <wanghao72@baidu.com>
+Chi Zhang <zhang.chi85@zte.com.cn>
+Enming Zhang <zvampirem77@gmail.com>
+Liu Wei <liu.wei8196@zte.com.cn>
+Chen Yu Peng <chenyupeng-it@360.cn>
+Anthony D Atri <anthonyeleven@users.noreply.github.com>
+Peng Lai <penglaiyxy@gmail.com>
+Peng Lai <penglaiyxy@gmail.com> <penglaiyxy>
+Ganesh Mahalingam <ganesh.mahalingam@intel.com>
+Song Shuangyang <songshuangyang@baidu.com>
+Tone Zhang <tone.zhang@arm.com>
+Alfonso Martínez <almartin@redhat.com>
+Wu Mingqiao <wumingqiao@inspur.com>
+Kaleb S. Keithley <kkeithle@redhat.com>
+Kyr Shatskyy <kyrylo.shatskyy@suse.com> <kyrylo.shatskyy@suse.de>
+Myoungwon Oh <omwmw@sk.com> <ommw@sk.com>
+Eric Ivancich <ivancich@redhat.com> <ivanvich@redhat.com>
+Yan Jun <yan.jun8@zte.com.cn>
+Liu Changcheng <changcheng.liu@intel.com>
