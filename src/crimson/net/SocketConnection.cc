@@ -71,6 +71,7 @@ seastar::future<bool> SocketConnection::is_connected()
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
+  logger().debug("{} --> {} === {}", messenger, get_peer_addr(), *msg);
   return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
       if (state == state_t::closing)
         return seastar::now();
@@ -214,6 +215,8 @@ seastar::future<> SocketConnection::read_message()
       auto msg_ref = MessageRef{msg, add_ref};
       // start dispatch, ignoring exceptions from the application layer
       seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+	  logger().debug("{} <= {}@{} === {}", messenger,
+                msg->get_source(), get_peer_addr(), *msg);
           return dispatcher.ms_dispatch(
               seastar::static_pointer_cast<SocketConnection>(shared_from_this()),
               std::move(msg))
