@@ -52,8 +52,6 @@ class ObjectCacheStore {
   std::map<uint64_t, librados::IoCtx> m_ioctx_map;
   Mutex m_ioctx_map_lock;
   Policy* m_policy;
-  uint64_t m_object_cache_max_size;
-  float m_cache_watermark;
   std::string m_cache_root_dir;
 };
 
