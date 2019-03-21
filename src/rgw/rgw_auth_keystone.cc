@@ -305,7 +305,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_
   }
 
   const auto api_version = config.get_api_version();
-  if (config.get_api_version() == rgw::keystone::ApiVersion::VER_3) {
+  if (api_version == rgw::keystone::ApiVersion::VER_3) {
     keystone_url.append("v3/s3tokens");
   } else {
     keystone_url.append("v2.0/s3tokens");
@@ -394,7 +394,7 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
   }
 
   const auto api_version = config.get_api_version();
-  if (config.get_api_version() == rgw::keystone::ApiVersion::VER_3) {
+  if (api_version == rgw::keystone::ApiVersion::VER_3) {
     keystone_url.append("v3/");
   } else {
     keystone_url.append("v2.0/");
