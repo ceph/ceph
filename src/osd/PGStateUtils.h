@@ -4,19 +4,28 @@
 #pragma once
 
 #include "include/utime.h"
+#include "common/Formatter.h"
 
 #include <stack>
 #include <vector>
 #include <boost/circular_buffer.hpp>
 
 class PG;
+class PGStateHistory;
+
+struct EpochSource {
+  virtual epoch_t get_osdmap_epoch() const = 0;
+  virtual ~EpochSource() {}
+};
 
 struct NamedState {
+  PGStateHistory *pgsh;
   const char *state_name;
   utime_t enter_time;
-  PG* pg;
   const char *get_state_name() { return state_name; }
-  NamedState(PG *pg_, const char *state_name_);
+  NamedState(
+    PGStateHistory *pgsh,
+    const char *state_name_);
   virtual ~NamedState();
 };
 
@@ -41,6 +50,10 @@ struct PGStateInstance {
     embedded_states.pop();
   }
 
+  bool empty() const {
+    return embedded_states.empty();
+  }
+
   epoch_t this_epoch;
   utime_t enter_time;
   std::vector<state_history_entry> state_history;
@@ -48,32 +61,27 @@ struct PGStateInstance {
 };
 
 class PGStateHistory {
-  // Member access protected with the PG lock
 public:
-  PGStateHistory() : buffer(10) {}
+  PGStateHistory(EpochSource *es) : buffer(10), es(es) {}
 
-  void enter(PG* pg, const utime_t entime, const char* state);
+  void enter(const utime_t entime, const char* state);
 
   void exit(const char* state);
 
   void reset() {
+    buffer.push_back(std::move(pi));
     pi = nullptr;
   }
 
-  void set_pg_in_destructor() { pg_in_destructor = true; }
-
   void dump(Formatter* f) const;
 
-  string get_current_state() {
+  const char *get_current_state() const {
     if (pi == nullptr) return "unknown";
     return std::get<1>(pi->embedded_states.top());
   }
 
 private:
-  bool pg_in_destructor = false;
-  PG* thispg = nullptr;
-  std::unique_ptr<PGStateInstance> tmppi;
-  PGStateInstance* pi = nullptr;
+  std::unique_ptr<PGStateInstance> pi;
   boost::circular_buffer<std::unique_ptr<PGStateInstance>> buffer;
-
+  EpochSource *es;
 };
