@@ -524,24 +524,23 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     goto update;
   } else if (prefix == "config reset") {
-    int64_t num;
-    if (!cmd_getval(g_ceph_context, cmdmap, "num", num)) {
+    int64_t num = -1;
+    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    int64_t revert_to = num;
+    if (revert_to < 0) // revert to last version
+      revert_to = version - 1;
+    if (revert_to > (int64_t)version) {
       err = -EINVAL;
-      ss << "must specify what to revert to";
+      ss << "must specify a valid historical version to revert to; "
+         << "see 'ceph config log' for a list of avialable configuration "
+         << "historical versions";
       goto reply;
     }
-    if (num < 0 ||
-	(num > 0 && num > (int64_t)version)) {
-      err = -EINVAL;
-      ss << "must specify a valid version to revert to";
-      goto reply;
-    }
-    if (num == (int64_t)version) {
+    if (revert_to == (int64_t)version) {
       err = 0;
       goto reply;
     }
-    ceph_assert((version_t)num < version);
-    for (int64_t v = version; v > num; --v) {
+    for (int64_t v = version; v > revert_to; --v) {
       ConfigChangeSet ch;
       load_changeset(v, &ch);
       for (auto& i : ch.diff) {
@@ -554,7 +553,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	}
       }
     }
-    pending_description = string("reset to ") + stringify(num);
+    pending_description = string("reset to ") + stringify(revert_to);
     goto update;
   } else if (prefix == "config assimilate-conf") {
     ConfFile cf;

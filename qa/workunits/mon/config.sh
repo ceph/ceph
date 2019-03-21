@@ -6,6 +6,19 @@ function expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+# some of the commands are just not idempotent.
+function without_test_dup_command()
+{
+  if [ -z ${CEPH_CLI_TEST_DUP_COMMAND+x} ]; then
+    $@
+  else
+    local saved=${CEPH_CLI_TEST_DUP_COMMAND}
+    unset CEPH_CLI_TEST_DUP_COMMAND
+    $@
+    CEPH_CLI_TEST_DUP_COMMAND=saved
+  fi
+}
+
 ceph config dump
 
 # value validation
@@ -51,6 +64,9 @@ ceph config get mon.a debug_asok | grep 11
 ceph config rm mon debug_asok
 ceph config get mon.a debug_asok | grep 33
 ceph config rm global debug_asok
+without_test_dup_command ceph config reset
+ceph config get mon.a debug_asok | grep 33
+without_test_dup_command ceph config reset
 
 # help
 ceph config help debug_asok | grep debug_asok
