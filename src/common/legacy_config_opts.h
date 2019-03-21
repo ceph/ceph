@@ -40,6 +40,7 @@ SAFE_OPTION(erasure_code_dir, OPT_STR) // default location for erasure-code plug
 OPTION(log_file, OPT_STR) // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT) // default changed by common_preinit()
 OPTION(log_max_recent, OPT_INT) // default changed by common_preinit()
+OPTION(log_to_file, OPT_BOOL)
 OPTION(log_to_stderr, OPT_BOOL) // default changed by common_preinit()
 OPTION(err_to_stderr, OPT_BOOL) // default changed by common_preinit()
 OPTION(log_to_syslog, OPT_BOOL)
