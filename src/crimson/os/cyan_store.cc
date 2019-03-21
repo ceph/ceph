@@ -1,6 +1,7 @@
 #include "cyan_store.h"
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "common/safe_io.h"
 

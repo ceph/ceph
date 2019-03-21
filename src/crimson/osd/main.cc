@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include <seastar/core/app-template.hh>
+#include <seastar/core/print.hh>
 #include <seastar/core/thread.hh>
 
 #include "common/ceph_argparse.h"

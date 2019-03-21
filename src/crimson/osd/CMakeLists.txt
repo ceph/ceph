@@ -7,4 +7,4 @@ add_executable(crimson-osd
   pg.cc
   pg_meta.cc)
 target_link_libraries(crimson-osd
-  crimson-common crimson-os crimson)
+  crimson-common crimson-os crimson fmt::fmt)
