@@ -134,10 +134,10 @@
                 <th i18n>Name</th>
                 <th i18n>PG status</th>
                 <th i18n>Usage</th>
-                <th colspan="2"
-                    i18n>Read</th>
-                <th colspan="2"
-                    i18n>Write</th>
+                <th i18n width="10%">Read Bytes</th>
+                <th i18n width="10%">Read Ops</th>
+                <th i18n width="10%">Write Bytes</th>
+                <th i18n width="10%">Write Ops</th>
               </tr>
             </thead>
             <tbody>
@@ -150,16 +150,16 @@
                   <cd-usage-bar [totalBytes]="pool.stats.bytes_used.latest +  pool.stats.max_avail.latest" [usedBytes]="pool.stats.bytes_used.latest"></cd-usage-bar>
                 </td>
                 <td>
-                  {{ pool.stats.rd_bytes.rate | dimless }}
+                  {{ pool.stats.rd_bytes.rate | dimless:1 }}
                 </td>
                 <td>
-                  {{ pool.stats.rd.rate | dimless }} ops
+                  {{ pool.stats.rd.rate | dimless:1 }} ops
                 </td>
                 <td>
-                  {{ pool.stats.wr_bytes.rate | dimless }}
+                  {{ pool.stats.wr_bytes.rate | dimless:1 }}
                 </td>
                 <td>
-                  {{ pool.stats.wr.rate | dimless }} ops
+                  {{ pool.stats.wr.rate | dimless:1 }} ops
                 </td>
               </tr>
             </tbody>

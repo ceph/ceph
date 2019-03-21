@@ -61,6 +61,7 @@ describe('FormatterService', () => {
       expect(service.format_number('1.2', 1024, formats)).toBe('1.2B');
       expect(service.format_number('1', 1024, formats)).toBe('1B');
       expect(service.format_number('1024', 1024, formats)).toBe('1KiB');
+      expect(service.format_number(55.000001, 1000, formats, 1)).toBe('55B');
       expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats)).toBe('23.4568GiB');
     });
 
