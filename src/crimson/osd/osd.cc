@@ -3,7 +3,8 @@
 #include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
-
+#include <fmt/format.h>
+#include <fmt/ostream.h>
 #include "common/pick_address.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
