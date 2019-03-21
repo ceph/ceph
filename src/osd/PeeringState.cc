@@ -26,6 +26,7 @@ void PeeringState::PeeringMachine::send_query(
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().pg->gen_prefix(*_dout) \
 		     << "state<" << get_state_name() << ">: ")
+#define psdout(x) ldout(context< PeeringMachine >().cct, x)
 
 /*------NamedState----*/
 PeeringState::NamedState::NamedState(
@@ -100,8 +101,7 @@ PeeringState::Started::Started(my_context ctx)
 boost::statechart::result
 PeeringState::Started::react(const IntervalFlush&)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Ending blocked outgoing recovery messages" << dendl;
+  psdout(10) << "Ending blocked outgoing recovery messages" << dendl;
   context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
   return discard_event();
 }
@@ -109,7 +109,7 @@ PeeringState::Started::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Started advmap" << dendl;
+  psdout(10) << "Started advmap" << dendl;
   pg->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (pg->should_restart_peering(
 	advmap.up_primary,
@@ -118,7 +118,7 @@ boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
 	advmap.newacting,
 	advmap.lastmap,
 	advmap.osdmap)) {
-    ldout(pg->cct, 10) << "should_restart_peering, transitioning to Reset"
+    psdout(10) << "should_restart_peering, transitioning to Reset"
 		       << dendl;
     post_event(advmap);
     return transit< Reset >();
@@ -159,8 +159,7 @@ PeeringState::Reset::Reset(my_context ctx)
 boost::statechart::result
 PeeringState::Reset::react(const IntervalFlush&)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Ending blocked outgoing recovery messages" << dendl;
+  psdout(10) << "Ending blocked outgoing recovery messages" << dendl;
   context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
   return discard_event();
 }
@@ -168,7 +167,7 @@ PeeringState::Reset::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Reset advmap" << dendl;
+  psdout(10) << "Reset advmap" << dendl;
 
   pg->check_full_transition(advmap.lastmap, advmap.osdmap);
 
@@ -179,7 +178,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 	advmap.newacting,
 	advmap.lastmap,
 	advmap.osdmap)) {
-    ldout(pg->cct, 10) << "should restart peering, calling start_peering_interval again"
+    psdout(10) << "should restart peering, calling start_peering_interval again"
 		       << dendl;
     pg->start_peering_interval(
       advmap.lastmap,
@@ -238,10 +237,10 @@ PeeringState::Start::Start(my_context ctx)
 
   PG *pg = context< PeeringMachine >().pg;
   if (pg->is_primary()) {
-    ldout(pg->cct, 1) << "transitioning to Primary" << dendl;
+    psdout(1) << "transitioning to Primary" << dendl;
     post_event(MakePrimary());
   } else { //is_stray
-    ldout(pg->cct, 1) << "transitioning to Stray" << dendl;
+    psdout(1) << "transitioning to Stray" << dendl;
     post_event(MakeStray());
   }
 }
@@ -286,7 +285,7 @@ PeeringState::Primary::Primary(my_context ctx)
 boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
+  psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   pg->proc_replica_info(
     notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   return discard_event();
@@ -295,7 +294,7 @@ boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 boost::statechart::result PeeringState::Primary::react(const ActMap&)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 7) << "handle ActMap primary" << dendl;
+  psdout(7) << "handle ActMap primary" << dendl;
   pg->publish_stats_to_osd();
   pg->take_waiters();
   return discard_event();
@@ -377,9 +376,9 @@ PeeringState::Peering::Peering(my_context ctx)
 boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Peering advmap" << dendl;
+  psdout(10) << "Peering advmap" << dendl;
   if (prior_set.affected_by_map(*(advmap.osdmap), pg)) {
-    ldout(pg->cct, 1) << "Peering, affected_by_map, going to Reset" << dendl;
+    psdout(1) << "Peering, affected_by_map, going to Reset" << dendl;
     post_event(advmap);
     return transit< Reset >();
   }
@@ -445,7 +444,7 @@ boost::statechart::result PeeringState::Peering::react(const QueryState& q)
 void PeeringState::Peering::exit()
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Leaving Peering" << dendl;
+  psdout(10) << "Leaving Peering" << dendl;
   context< PeeringMachine >().log_exit(state_name, enter_time);
   pg->state_clear(PG_STATE_PEERING);
   pg->clear_probe_targets();
@@ -512,7 +511,7 @@ boost::statechart::result
 PeeringState::Backfilling::react(const DeferBackfill &c)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
+  psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
@@ -524,7 +523,7 @@ boost::statechart::result
 PeeringState::Backfilling::react(const UnfoundBackfill &c)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
+  psdout(10) << "backfill has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_BACKFILL_UNFOUND);
   pg->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
@@ -588,7 +587,7 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
   PG *pg = context< PeeringMachine >().pg;
 
   int64_t num_bytes = pg->info.stats.stats.sum.num_bytes;
-  ldout(pg->cct, 10) << __func__ << " num_bytes " << num_bytes << dendl;
+  psdout(10) << __func__ << " num_bytes " << num_bytes << dendl;
   if (backfill_osd_it != context< Active >().remote_shards_to_reserve_backfill.end()) {
     //The primary never backfills itself
     ceph_assert(*backfill_osd_it != pg->pg_whoami);
@@ -857,8 +856,11 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
       local_num_bytes /= (int)pg->get_pgbackend()->get_ec_data_chunk_count();
       local_num_bytes += pg->get_pgbackend()->get_ec_stripe_chunk_size() * pg->info.stats.stats.sum.num_objects;
     }
-    pending_adjustment = pending_backfill(pg->cct, primary_num_bytes, local_num_bytes);
-    ldout(pg->cct, 10) << __func__ << " primary_num_bytes " << (primary_num_bytes >> 10) << "KiB"
+    pending_adjustment = pending_backfill(
+      context< PeeringMachine >().cct,
+      primary_num_bytes,
+      local_num_bytes);
+    psdout(10) << __func__ << " primary_num_bytes " << (primary_num_bytes >> 10) << "KiB"
                        << " local " << (local_num_bytes >> 10) << "KiB"
                        << " pending_adjustments " << (pending_adjustment >> 10) << "KiB"
                        << dendl;
@@ -869,12 +871,12 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
   osd_stat_t cur_stat = pg->osd->osd_stat;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
-    ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
+    psdout(10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RejectRemoteReservation());
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
       pg->osd->tentative_backfill_full(pg, pending_adjustment, cur_stat)) {
-    ldout(pg->cct, 10) << "backfill reservation rejected: backfill full"
+    psdout(10) << "backfill reservation rejected: backfill full"
 		       << dendl;
     post_event(RejectRemoteReservation());
   } else {
@@ -1220,10 +1222,10 @@ PeeringState::Recovering::react(const DeferRecovery &evt)
   if (!pg->state_test(PG_STATE_RECOVERING)) {
     // we may have finished recovery and have an AllReplicasRecovered
     // event queued to move us to the next state.
-    ldout(pg->cct, 10) << "got defer recovery but not recovering" << dendl;
+    psdout(10) << "got defer recovery but not recovering" << dendl;
     return discard_event();
   }
-  ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
+  psdout(10) << "defer recovery, retry delay " << evt.delay << dendl;
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
@@ -1235,7 +1237,7 @@ boost::statechart::result
 PeeringState::Recovering::react(const UnfoundRecovery &evt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
+  psdout(10) << "recovery has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_RECOVERY_UNFOUND);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
@@ -1357,7 +1359,7 @@ PeeringState::Active::Active(my_context ctx)
   ceph_assert(!pg->backfill_reserving);
   ceph_assert(!pg->backfill_reserved);
   ceph_assert(pg->is_primary());
-  ldout(pg->cct, 10) << "In Active, about to call activate" << dendl;
+  psdout(10) << "In Active, about to call activate" << dendl;
   pg->start_flush(context< PeeringMachine >().get_cur_transaction());
   pg->activate(*context< PeeringMachine >().get_cur_transaction(),
 	       pg->get_osdmap_epoch(),
@@ -1375,7 +1377,7 @@ PeeringState::Active::Active(my_context ctx)
     }
   }
   pg->publish_stats_to_osd();
-  ldout(pg->cct, 10) << "Activate Finished" << dendl;
+  psdout(10) << "Activate Finished" << dendl;
 }
 
 boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
@@ -1388,10 +1390,10 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 	advmap.newacting,
 	advmap.lastmap,
 	advmap.osdmap)) {
-    ldout(pg->cct, 10) << "Active advmap interval change, fast return" << dendl;
+    psdout(10) << "Active advmap interval change, fast return" << dendl;
     return forward_event();
   }
-  ldout(pg->cct, 10) << "Active advmap" << dendl;
+  psdout(10) << "Active advmap" << dendl;
   bool need_publish = false;
 
   if (advmap.osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
@@ -1476,7 +1478,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     }
   } else if (!pg->pool.newly_removed_snaps.empty()) {
     pg->snap_trimq.union_of(pg->pool.newly_removed_snaps);
-    ldout(pg->cct, 10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
+    psdout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
     pg->dirty_info = true;
     pg->dirty_big_info = true;
   }
@@ -1504,7 +1506,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 
   // if we haven't reported our PG stats in a long time, do so now.
   if (pg->info.stats.reported_epoch + pg->cct->_conf->osd_pg_stat_report_interval_max < advmap.osdmap->get_epoch()) {
-    ldout(pg->cct, 20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - pg->info.stats.reported_epoch)
+    psdout(20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - pg->info.stats.reported_epoch)
 		       << " epochs" << dendl;
     need_publish = true;
   }
@@ -1518,7 +1520,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 boost::statechart::result PeeringState::Active::react(const ActMap&)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Active: handling ActMap" << dendl;
+  psdout(10) << "Active: handling ActMap" << dendl;
   ceph_assert(pg->is_primary());
 
   if (pg->have_unfound()) {
@@ -1543,7 +1545,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   }
 
   if (pg->is_active()) {
-    ldout(pg->cct, 10) << "Active: kicking snap trim" << dendl;
+    psdout(10) << "Active: kicking snap trim" << dendl;
     pg->kick_snap_trim();
   }
 
@@ -1561,15 +1563,15 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
   PG *pg = context< PeeringMachine >().pg;
   ceph_assert(pg->is_primary());
   if (pg->peer_info.count(notevt.from)) {
-    ldout(pg->cct, 10) << "Active: got notify from " << notevt.from
+    psdout(10) << "Active: got notify from " << notevt.from
 		       << ", already have info from that osd, ignoring"
 		       << dendl;
   } else if (pg->peer_purged.count(notevt.from)) {
-    ldout(pg->cct, 10) << "Active: got notify from " << notevt.from
+    psdout(10) << "Active: got notify from " << notevt.from
 		       << ", already purged that peer, ignoring"
 		       << dendl;
   } else {
-    ldout(pg->cct, 10) << "Active: got notify from " << notevt.from
+    psdout(10) << "Active: got notify from " << notevt.from
 		       << ", calling proc_replica_info and discover_all_missing"
 		       << dendl;
     pg->proc_replica_info(
@@ -1606,7 +1608,7 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
   // share that until _everyone_ does the same.
   if (pg->is_acting_recovery_backfill(infoevt.from) &&
       pg->peer_activated.count(infoevt.from) == 0) {
-    ldout(pg->cct, 10) << " peer osd." << infoevt.from
+    psdout(10) << " peer osd." << infoevt.from
 		       << " activated and committed" << dendl;
     pg->peer_activated.insert(infoevt.from);
     pg->blocked_by.erase(infoevt.from.shard);
@@ -1621,7 +1623,7 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
 boost::statechart::result PeeringState::Active::react(const MLogRec& logevt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "searching osd." << logevt.from
+  psdout(10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
   pg->proc_replica_log(
     logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
@@ -1746,7 +1748,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   if (pg->flushes_in_progress == 0) {
     pg->requeue_ops(pg->waiting_for_peered);
   } else if (!pg->waiting_for_peered.empty()) {
-    ldout(pg->cct, 10) << __func__ << " flushes in progress, moving "
+    psdout(10) << __func__ << " flushes in progress, moving "
 		       << pg->waiting_for_peered.size()
 		       << " items to waiting_for_flush"
 		       << dendl;
@@ -1795,12 +1797,12 @@ PeeringState::ReplicaActive::ReplicaActive(my_context ctx)
 boost::statechart::result PeeringState::ReplicaActive::react(
   const Activate& actevt) {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "In ReplicaActive, about to call activate" << dendl;
+  psdout(10) << "In ReplicaActive, about to call activate" << dendl;
   map<int, map<spg_t, pg_query_t> > query_map;
   pg->activate(*context< PeeringMachine >().get_cur_transaction(),
 	       actevt.activation_epoch,
 	       query_map, NULL, NULL);
-  ldout(pg->cct, 10) << "Activate Finished" << dendl;
+  psdout(10) << "Activate Finished" << dendl;
   return discard_event();
 }
 
@@ -1815,7 +1817,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MInfoRec& inf
 boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& logevt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "received log from " << logevt.from << dendl;
+  psdout(10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   ceph_assert(pg->pg_log.get_head() == pg->info.last_update);
@@ -1900,7 +1902,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
 {
   PG *pg = context< PeeringMachine >().pg;
   MOSDPGLog *msg = logevt.msg.get();
-  ldout(pg->cct, 10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
+  psdout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
@@ -1928,7 +1930,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
 boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
+  psdout(10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
   if (pg->info.last_update > infoevt.info.last_update) {
     // rewind divergent log entries
@@ -2103,16 +2105,16 @@ void PeeringState::GetInfo::get_infos()
       continue;
     }
     if (pg->peer_info.count(peer)) {
-      ldout(pg->cct, 10) << " have osd." << peer << " info " << pg->peer_info[peer] << dendl;
+      psdout(10) << " have osd." << peer << " info " << pg->peer_info[peer] << dendl;
       continue;
     }
     if (peer_info_requested.count(peer)) {
-      ldout(pg->cct, 10) << " already requested info from osd." << peer << dendl;
+      psdout(10) << " already requested info from osd." << peer << dendl;
       pg->blocked_by.insert(peer.osd);
     } else if (!pg->get_osdmap()->is_up(peer.osd)) {
-      ldout(pg->cct, 10) << " not querying info from down osd." << peer << dendl;
+      psdout(10) << " not querying info from down osd." << peer << dendl;
     } else {
-      ldout(pg->cct, 10) << " querying info from osd." << peer << dendl;
+      psdout(10) << " querying info from osd." << peer << dendl;
       context< PeeringMachine >().send_query(
 	peer, pg_query_t(pg_query_t::INFO,
 			 it->shard, pg->pg_whoami.shard,
@@ -2142,7 +2144,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
     // we got something new ...
     PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
     if (old_start < pg->info.history.last_epoch_started) {
-      ldout(pg->cct, 10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
+      psdout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
       prior_set = pg->build_prior();
 
       // filter out any osds that got dropped from the probe set from
@@ -2151,7 +2153,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
       set<pg_shard_t>::iterator p = peer_info_requested.begin();
       while (p != peer_info_requested.end()) {
 	if (prior_set.probe.count(*p) == 0) {
-	  ldout(pg->cct, 20) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
+	  psdout(20) << " dropping osd." << *p << " from info_requested, no longer in probe set" << dendl;
 	  peer_info_requested.erase(p++);
 	} else {
 	  ++p;
@@ -2159,15 +2161,15 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
       }
       get_infos();
     }
-    ldout(pg->cct, 20) << "Adding osd: " << infoevt.from.osd << " peer features: "
+    psdout(20) << "Adding osd: " << infoevt.from.osd << " peer features: "
 		       << hex << infoevt.features << dec << dendl;
     pg->apply_peer_features(infoevt.features);
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set.pg_down) {
-      ldout(pg->cct, 20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
-      ldout(pg->cct, 20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
-      ldout(pg->cct, 20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
+      psdout(20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
+      psdout(20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
+      psdout(20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
       post_event(GotInfo());
     }
   }
@@ -2241,7 +2243,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
 
   // am i broken?
   if (pg->info.last_update < best.log_tail) {
-    ldout(pg->cct, 10) << " not contiguous with osd." << auth_log_shard << ", down" << dendl;
+    psdout(10) << " not contiguous with osd." << auth_log_shard << ", down" << dendl;
     post_event(IsIncomplete());
     return;
   }
@@ -2260,7 +2262,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   }
 
   // how much?
-  ldout(pg->cct, 10) << " requesting log from osd." << auth_log_shard << dendl;
+  psdout(10) << " requesting log from osd." << auth_log_shard << dendl;
   context<PeeringMachine>().send_query(
     auth_log_shard,
     pg_query_t(
@@ -2276,12 +2278,11 @@ PeeringState::GetLog::GetLog(my_context ctx)
 
 boost::statechart::result PeeringState::GetLog::react(const AdvMap& advmap)
 {
-  PG *pg = context< PeeringMachine >().pg;
   // make sure our log source didn't go down.  we need to check
   // explicitly because it may not be part of the prior set, which
   // means the Peering state check won't catch it going down.
   if (!advmap.osdmap->is_up(auth_log_shard.osd)) {
-    ldout(pg->cct, 10) << "GetLog: auth_log_shard osd."
+    psdout(10) << "GetLog: auth_log_shard osd."
 		       << auth_log_shard.osd << " went down" << dendl;
     post_event(advmap);
     return transit< Reset >();
@@ -2293,14 +2294,13 @@ boost::statechart::result PeeringState::GetLog::react(const AdvMap& advmap)
 
 boost::statechart::result PeeringState::GetLog::react(const MLogRec& logevt)
 {
-  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!msg);
   if (logevt.from != auth_log_shard) {
-    ldout(pg->cct, 10) << "GetLog: discarding log from "
+    psdout(10) << "GetLog: discarding log from "
 		       << "non-auth_log_shard osd." << logevt.from << dendl;
     return discard_event();
   }
-  ldout(pg->cct, 10) << "GetLog: received master log from osd."
+  psdout(10) << "GetLog: received master log from osd."
 		     << logevt.from << dendl;
   msg = logevt.msg;
   post_event(GotLog());
@@ -2310,9 +2310,9 @@ boost::statechart::result PeeringState::GetLog::react(const MLogRec& logevt)
 boost::statechart::result PeeringState::GetLog::react(const GotLog&)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "leaving GetLog" << dendl;
+  psdout(10) << "leaving GetLog" << dendl;
   if (msg) {
-    ldout(pg->cct, 10) << "processing master log" << dendl;
+    psdout(10) << "processing master log" << dendl;
     pg->proc_master_log(*context<PeeringMachine>().get_cur_transaction(),
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
@@ -2353,10 +2353,10 @@ boost::statechart::result PeeringState::WaitActingChange::react(const AdvMap& ad
   PG *pg = context< PeeringMachine >().pg;
   OSDMapRef osdmap = advmap.osdmap;
 
-  ldout(pg->cct, 10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
+  psdout(10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
   for (vector<int>::iterator p = pg->want_acting.begin(); p != pg->want_acting.end(); ++p) {
     if (!osdmap->is_up(*p)) {
-      ldout(pg->cct, 10) << " want_acting target osd." << *p << " went down, resetting" << dendl;
+      psdout(10) << " want_acting target osd." << *p << " went down, resetting" << dendl;
       post_event(advmap);
       return transit< Reset >();
     }
@@ -2366,22 +2366,19 @@ boost::statechart::result PeeringState::WaitActingChange::react(const AdvMap& ad
 
 boost::statechart::result PeeringState::WaitActingChange::react(const MLogRec& logevt)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "In WaitActingChange, ignoring MLocRec" << dendl;
+  psdout(10) << "In WaitActingChange, ignoring MLocRec" << dendl;
   return discard_event();
 }
 
 boost::statechart::result PeeringState::WaitActingChange::react(const MInfoRec& evt)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "In WaitActingChange, ignoring MInfoRec" << dendl;
+  psdout(10) << "In WaitActingChange, ignoring MInfoRec" << dendl;
   return discard_event();
 }
 
 boost::statechart::result PeeringState::WaitActingChange::react(const MNotifyRec& evt)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
+  psdout(10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
   return discard_event();
 }
 
@@ -2455,7 +2452,7 @@ boost::statechart::result PeeringState::Down::react(const MNotifyRec& infoevt)
   }
   // if we got something new to make pg escape down state
   if (pg->info.history.last_epoch_started > old_start) {
-      ldout(pg->cct, 10) << " last_epoch_started moved forward, re-enter getinfo" << dendl;
+      psdout(10) << " last_epoch_started moved forward, re-enter getinfo" << dendl;
     pg->state_clear(PG_STATE_DOWN);
     pg->state_set(PG_STATE_PEERING);
     return transit< GetInfo >();
@@ -2499,7 +2496,7 @@ boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) 
 
 boost::statechart::result PeeringState::Incomplete::react(const MNotifyRec& notevt) {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
+  psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   if (pg->proc_replica_info(
     notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
     // We got something new, try again!
@@ -2557,12 +2554,12 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       continue;                                // no pg data, nothing divergent
 
     if (pi.last_update < pg->pg_log.get_tail()) {
-      ldout(pg->cct, 10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
+      psdout(10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
       pg->peer_missing[*i].clear();
       continue;
     }
     if (pi.last_backfill == hobject_t()) {
-      ldout(pg->cct, 10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
+      psdout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
       pg->peer_missing[*i].clear();
       continue;
     }
@@ -2573,7 +2570,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
       // pull anything.
       // FIXME: we can do better here.  if last_update==last_complete we
       //        can infer the rest!
-      ldout(pg->cct, 10) << " osd." << *i << " has no missing, identical log" << dendl;
+      psdout(10) << " osd." << *i << " has no missing, identical log" << dendl;
       pg->peer_missing[*i].clear();
       continue;
     }
@@ -2583,7 +2580,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
     since.epoch = pi.last_epoch_started;
     ceph_assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
-      ldout(pg->cct, 10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
+      psdout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
       context< PeeringMachine >().send_query(
 	*i,
 	pg_query_t(
@@ -2592,7 +2589,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 	  since, pg->info.history,
 	  pg->get_osdmap_epoch()));
     } else {
-      ldout(pg->cct, 10) << " requesting fulllog+missing from osd." << *i
+      psdout(10) << " requesting fulllog+missing from osd." << *i
 			 << " (want since " << since << " < log.tail "
 			 << pi.log_tail << ")" << dendl;
       context< PeeringMachine >().send_query(
@@ -2607,7 +2604,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {
-      ldout(pg->cct, 10) << " still need up_thru update before going active"
+      psdout(10) << " still need up_thru update before going active"
 			 << dendl;
       post_event(NeedUpThru());
       return;
@@ -2629,11 +2626,11 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
 
   if (peer_missing_requested.empty()) {
     if (pg->need_up_thru) {
-      ldout(pg->cct, 10) << " still need up_thru update before going active"
+      psdout(10) << " still need up_thru update before going active"
 			 << dendl;
       post_event(NeedUpThru());
     } else {
-      ldout(pg->cct, 10) << "Got last missing, don't need missing "
+      psdout(10) << "Got last missing, don't need missing "
 			 << "posting Activate" << dendl;
       post_event(Activate(pg->get_osdmap_epoch()));
     }
@@ -2696,7 +2693,7 @@ boost::statechart::result PeeringState::WaitUpThru::react(const ActMap& am)
 boost::statechart::result PeeringState::WaitUpThru::react(const MLogRec& logevt)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 10) << "Noting missing from osd." << logevt.from << dendl;
+  psdout(10) << "Noting missing from osd." << logevt.from << dendl;
   pg->peer_missing[logevt.from].claim(logevt.msg->missing);
   pg->peer_info[logevt.from] = logevt.msg->info;
   return discard_event();
@@ -2727,7 +2724,7 @@ void PeeringState::WaitUpThru::exit()
 void PeeringState::PeeringMachine::log_enter(const char *state_name)
 {
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 5) << "enter " << state_name << dendl;
+  psdout(5) << "enter " << state_name << dendl;
   pg->osd->pg_recovery_stats.log_enter(state_name);
 }
 
@@ -2735,7 +2732,7 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
 {
   utime_t dur = ceph_clock_now() - enter_time;
   PG *pg = context< PeeringMachine >().pg;
-  ldout(pg->cct, 5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
+  psdout(5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
   pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now() - enter_time,
 				      event_count, event_time);
   event_count = 0;
