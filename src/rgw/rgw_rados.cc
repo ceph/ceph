@@ -66,6 +66,7 @@ using namespace librados;
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
+#include "rgw_sync_counters.h"
 #include "rgw_sync_trace.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
@@ -816,6 +817,7 @@ public:
 
 class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
 {
+  PerfCountersRef counters;
   RGWDataSyncStatusManager sync;
   bool initialized;
 
@@ -832,9 +834,10 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   }
 public:
   RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                             const string& _source_zone)
+                             const RGWZone* source_zone)
     : RGWSyncProcessorThread(_store, "data-sync"),
-      sync(_store, async_rados, _source_zone),
+      counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
+      sync(_store, async_rados, source_zone->id, counters.get()),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
@@ -1598,16 +1601,16 @@ int RGWRados::init_complete()
     data_log->set_observer(&*bucket_trim);
 
     Mutex::Locker dl(data_sync_thread_lock);
-    for (auto iter : svc.zone->get_zone_data_sync_from_map()) {
-      ldout(cct, 5) << "starting data sync thread for zone " << iter.first << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this, async_rados, iter.first);
+    for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
+      ldout(cct, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
+      auto *thread = new RGWDataSyncProcessorThread(this, async_rados, source_zone);
       ret = thread->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
-      data_sync_processor_threads[iter.first] = thread;
+      data_sync_processor_threads[source_zone->id] = thread;
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
@@ -4296,7 +4299,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
-               rgw_zone_set *zones_trace)
+               rgw_zone_set *zones_trace,
+               std::optional<uint64_t>* bytes_transferred)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4510,6 +4514,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
+  if (bytes_transferred) {
+    *bytes_transferred = cb.get_data_len();
+  }
   return 0;
 set_err_state:
   if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
