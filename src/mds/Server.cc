@@ -200,6 +200,7 @@ Server::Server(MDSRank *m) :
   reconnect_evicting(false),
   terminating_sessions(false)
 {
+  cap_revoke_eviction_timeout = g_conf->get_val<double>("mds_cap_revoke_eviction_timeout");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
