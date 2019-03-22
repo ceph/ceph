@@ -106,6 +106,9 @@ void Log::set_log_stderr_prefix(std::string_view p)
 void Log::reopen_log_file()
 {
   std::scoped_lock lock(m_flush_mutex);
+  if (!is_started()) {
+    return;
+  }
   m_flush_mutex_holder = pthread_self();
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
@@ -402,6 +405,7 @@ void Log::stop()
 
 void *Log::entry()
 {
+  reopen_log_file();
   {
     std::unique_lock lock(m_queue_mutex);
     m_queue_mutex_holder = pthread_self();
