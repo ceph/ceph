@@ -338,16 +338,22 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
-    if (g_conf()->mon_debug_no_require_mimic) {
-      derr << __func__ << " mon_debug_no_require_mimic=true and nautilus=true" << dendl;
-      newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+  if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
+      if (g_conf()->mon_debug_no_require_mimic) {
+	derr << __func__ << " mon_debug_no_require_octopus, nautilus, and mimic=true"
+	     << dendl;
+	newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+      } else {
+	derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
+	newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+      }
     } else {
-      derr << __func__ << " mon_debug_no_require_nautilus=true" << dendl;
-      newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+      derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
+      newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
     }
   } else {
-    newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
+    newmap.require_osd_release = CEPH_RELEASE_OCTOPUS;
     int r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client.c_str());
     if (r <= 0) {
