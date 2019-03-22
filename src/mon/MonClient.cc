@@ -730,8 +730,12 @@ void MonClient::_add_conns(uint64_t global_id)
       weights.push_back(monmap.get_weight(rank_name));
     }
     std::random_device rd;
-    weighted_shuffle(begin(ranks), end(ranks), begin(weights), end(weights),
-		     std::mt19937{rd()});
+    if (std::accumulate(begin(weights), end(weights), 0u) == 0) {
+      std::shuffle(begin(ranks), end(ranks), std::mt19937{rd()});
+    } else {
+      weighted_shuffle(begin(ranks), end(ranks), begin(weights), end(weights),
+		       std::mt19937{rd()});
+    }
   }
   ldout(cct, 10) << __func__ << " ranks=" << ranks << dendl;
   unsigned n = cct->_conf->mon_client_hunt_parallel;
