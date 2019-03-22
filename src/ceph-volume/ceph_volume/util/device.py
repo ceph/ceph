@@ -199,9 +199,11 @@ class Device(object):
         Please keep this implementation in sync with get_device_id() in
         src/common/blkdev.cc
         """
-        props = ['ID_VENDOR','ID_MODEL','ID_SERIAL_SHORT', 'ID_SERIAL',
+        props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
                  'ID_SCSI_SERIAL']
         p = disk.udevadm_property(self.abspath, props)
+        if p.get('ID_MODEL','').startswith('LVM PV '):
+            p['ID_MODEL'] = p.get('ID_MODEL_ENC').replace('\\x20', ' ').strip()
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
             dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
                               p['ID_SCSI_SERIAL']])
