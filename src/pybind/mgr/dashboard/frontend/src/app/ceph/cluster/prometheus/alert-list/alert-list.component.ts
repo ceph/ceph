@@ -2,20 +2,29 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../../shared/enum/icons.enum';
+import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { Permission } from '../../../../shared/models/permissions';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { PrometheusAlertService } from '../../../../shared/services/prometheus-alert.service';
+import { URLBuilderService } from '../../../../shared/services/url-builder.service';
+
+const BASE_URL = 'silence'; // as only silence actions can be used
 
 @Component({
   selector: 'cd-prometheus-list',
-  templateUrl: './prometheus-list.component.html',
-  styleUrls: ['./prometheus-list.component.scss']
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  templateUrl: './alert-list.component.html',
+  styleUrls: ['./alert-list.component.scss']
 })
-export class PrometheusListComponent implements OnInit {
+export class AlertListComponent implements OnInit {
   @ViewChild('externalLinkTpl')
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
+  tableActions: CdTableAction[];
+  permission: Permission;
   selection = new CdTableSelection();
   icons = Icons;
   customCss = {
@@ -26,10 +35,25 @@ export class PrometheusListComponent implements OnInit {
 
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
+    private authStorageService: AuthStorageService,
     public prometheusAlertService: PrometheusAlertService,
+    private urlBuilder: URLBuilderService,
     private i18n: I18n,
     private cdDatePipe: CdDatePipe
-  ) {}
+  ) {
+    this.permission = this.authStorageService.getPermissions().prometheus;
+    this.tableActions = [
+      {
+        permission: 'create',
+        canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) =>
+          !selection.hasSingleSelection || selection.first().cdExecuting,
+        icon: Icons.add,
+        routerLink: () => this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
+        name: this.i18n('Create silence')
+      }
+    ];
+  }
 
   ngOnInit() {
     this.columns = [

@@ -45,7 +45,7 @@ class Options(object):
     GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ('', str)
 
     # Prometheus settings
-    PROMETHEUS_API_HOST = ('', str)  # Not in use ATM
+    PROMETHEUS_API_HOST = ('', str)
     ALERTMANAGER_API_HOST = ('', str)
 
     # iSCSI management settings

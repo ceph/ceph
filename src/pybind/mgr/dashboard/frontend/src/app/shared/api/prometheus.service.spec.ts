@@ -2,7 +2,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-import { PrometheusNotification } from '../models/prometheus-alerts';
+import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { PrometheusService } from './prometheus.service';
 import { SettingsService } from './settings.service';
 
@@ -28,10 +28,43 @@ describe('PrometheusService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call list', () => {
-    service.list().subscribe();
+  it('should get alerts', () => {
+    service.getAlerts().subscribe();
     const req = httpTesting.expectOne('api/prometheus');
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should get silences', () => {
+    service.getSilences().subscribe();
+    const req = httpTesting.expectOne('api/prometheus/silences');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should set a silence', () => {
+    const silence = {
+      id: 'someId',
+      matchers: [
+        {
+          name: 'getZero',
+          value: 0,
+          isRegex: false
+        }
+      ],
+      startsAt: '2019-01-25T14:32:46.646300974Z',
+      endsAt: '2019-01-25T18:32:46.646300974Z',
+      createdBy: 'someCreator',
+      comment: 'for testing purpose'
+    };
+    service.setSilence(silence).subscribe();
+    const req = httpTesting.expectOne('api/prometheus/silence');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(silence);
+  });
+
+  it('should expire a silence', () => {
+    service.expireSilence('someId').subscribe();
+    const req = httpTesting.expectOne('api/prometheus/silence/someId');
+    expect(req.request.method).toBe('DELETE');
   });
 
   it('should call getNotificationSince without a notification', () => {
@@ -41,36 +74,89 @@ describe('PrometheusService', () => {
   });
 
   it('should call getNotificationSince with notification', () => {
-    service.getNotifications({ id: '42' } as PrometheusNotification).subscribe();
+    service.getNotifications({ id: '42' } as AlertmanagerNotification).subscribe();
     const req = httpTesting.expectOne('api/prometheus/notifications?from=42');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should get prometheus rules', () => {
+    service.getRules({}).subscribe();
+    const req = httpTesting.expectOne('api/prometheus/rules');
     expect(req.request.method).toBe('GET');
   });
 
   describe('ifAlertmanagerConfigured', () => {
     let x: any;
+    let host;
 
-    const receiveConfig = (value) => {
+    const receiveConfig = () => {
       const req = httpTesting.expectOne('api/settings/alertmanager-api-host');
       expect(req.request.method).toBe('GET');
-      req.flush({ value });
+      req.flush({ value: host });
     };
 
     beforeEach(() => {
       x = false;
       TestBed.get(SettingsService)['settings'] = {};
+      service.ifAlertmanagerConfigured((v) => (x = v), () => (x = []));
+      host = 'http://localhost:9093';
     });
 
     it('changes x in a valid case', () => {
-      service.ifAlertmanagerConfigured((v) => (x = v));
       expect(x).toBe(false);
-      const host = 'http://localhost:9093';
-      receiveConfig(host);
+      receiveConfig();
       expect(x).toBe(host);
     });
 
-    it('does not change x in a invalid case', () => {
+    it('does changes x an empty array in a invalid case', () => {
+      host = '';
+      receiveConfig();
+      expect(x).toEqual([]);
+    });
+
+    it('disables the set setting', () => {
+      receiveConfig();
+      service.disableAlertmanagerConfig();
+      x = false;
       service.ifAlertmanagerConfigured((v) => (x = v));
-      receiveConfig('');
+      expect(x).toBe(false);
+    });
+  });
+
+  describe('ifPrometheusConfigured', () => {
+    let x: any;
+    let host;
+
+    const receiveConfig = () => {
+      const req = httpTesting.expectOne('api/settings/prometheus-api-host');
+      expect(req.request.method).toBe('GET');
+      req.flush({ value: host });
+    };
+
+    beforeEach(() => {
+      x = false;
+      TestBed.get(SettingsService)['settings'] = {};
+      service.ifPrometheusConfigured((v) => (x = v), () => (x = []));
+      host = 'http://localhost:9090';
+    });
+
+    it('changes x in a valid case', () => {
+      expect(x).toBe(false);
+      receiveConfig();
+      expect(x).toBe(host);
+    });
+
+    it('does changes x an empty array in a invalid case', () => {
+      host = '';
+      receiveConfig();
+      expect(x).toEqual([]);
+    });
+
+    it('disables the set setting', () => {
+      receiveConfig();
+      service.disablePrometheusConfig();
+      x = false;
+      service.ifPrometheusConfigured((v) => (x = v));
       expect(x).toBe(false);
     });
   });
