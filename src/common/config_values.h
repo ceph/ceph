@@ -17,7 +17,7 @@
 // debug logging settings, and some other "unnamed" settings, like entity name of
 // the daemon.
 class ConfigValues {
-  using values_t = std::map<std::string, map<int32_t,Option::value_t>>;
+  using values_t = std::map<std::string_view, map<int32_t,Option::value_t>>;
   values_t values;
   // for populating md_config_impl::legacy_values in ctor
   friend struct md_config_t;
@@ -80,21 +80,21 @@ public:
   /**
    * @return true if changed, false otherwise
    */
-  set_value_result_t set_value(const std::string& key,
+  set_value_result_t set_value(std::string_view key,
                                Option::value_t&& value,
                                int level);
-  int rm_val(const std::string& key, int level);
+  int rm_val(const std::string_view key, int level);
   void set_logging(int which, const char* val);
   /**
    * @param level the level of the setting, -1 for the one with the 
    *              highest-priority
    */
-  std::pair<Option::value_t, bool> get_value(const std::string& name,
+  std::pair<Option::value_t, bool> get_value(const std::string_view name,
                                              int level) const;
   template<typename Func> void for_each(Func&& func) const {
     for (const auto& [name,configs] : values) {
       func(name, configs);
     }
   }
-  bool contains(const std::string& key) const;
+  bool contains(const std::string_view key) const;
 };
