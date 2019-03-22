@@ -38,6 +38,8 @@ namespace ceph {
   class Formatter;
 }
 
+constexpr uint16_t DEFAULT_WEIGHT = 10;
+
 struct mon_info_t {
   /**
    * monitor name
@@ -56,6 +58,7 @@ struct mon_info_t {
    * the priority of the mon, the lower value the more preferred
    */
   uint16_t priority{0};
+  uint16_t weight{DEFAULT_WEIGHT};
 
   // <REMOVE ME>
   mon_info_t(const string& n, const entity_addr_t& p_addr, uint16_t p)
@@ -63,8 +66,9 @@ struct mon_info_t {
   {}
   // </REMOVE ME>
 
-  mon_info_t(const string& n, const entity_addrvec_t& p_addrs, uint16_t p)
-    : name(n), public_addrs(p_addrs), priority(p)
+  mon_info_t(const string& n, const entity_addrvec_t& p_addrs,
+             uint16_t p, uint16_t w)
+    : name(n), public_addrs(p_addrs), priority(p), weight(w)
   {}
   mon_info_t(const string &n, const entity_addrvec_t& p_addrs)
     : name(n), public_addrs(p_addrs)
@@ -135,9 +139,10 @@ class MonMap {
   uint8_t min_mon_release = 0;
 
   void _add_ambiguous_addr(const string& name,
-			   entity_addr_t addr,
-			   int priority,
-			   bool for_mkfs=false);
+                           entity_addr_t addr,
+                           int priority,
+                           int weight,
+                           bool for_mkfs);
 
 public:
   void calc_legacy_ranks();
@@ -205,8 +210,8 @@ public:
    * @param addr Monitor's public address
    */
   void add(const string &name, const entity_addrvec_t &addrv,
-	   int priority=0) {
-    add(mon_info_t(name, addrv, priority));
+	   int priority=0, int weight=DEFAULT_WEIGHT) {
+    add(mon_info_t(name, addrv, priority, weight));
   }
 
   /**
@@ -374,6 +379,16 @@ public:
     auto it = mon_info.find(n);
     ceph_assert(it != mon_info.end());
     return it->second.priority;
+  }
+  uint16_t get_weight(const string& n) const {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    return it->second.weight;
+  }
+  void set_weight(const string& n, uint16_t v) {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    it->second.weight = v;
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
