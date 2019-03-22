@@ -10,6 +10,7 @@
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
+#include <string>
 
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
@@ -21,6 +22,10 @@ class PG;
   /* Encapsulates PG recovery process */
 class PeeringState {
 public:
+  struct PeeringListener : public EpochSource {
+    virtual ~PeeringListener() {}
+  };
+
   // [primary only] content recovery state
   struct BufferedRecoveryMessages {
     map<int, map<spg_t, pg_query_t> > query_map;
@@ -214,6 +219,8 @@ public:
     PGStateHistory *state_history;
     CephContext *cct;
     spg_t spgid;
+    DoutPrefixProvider *dpp;
+    PeeringListener *pl;
     PG *pg;
 
     utime_t event_time;
@@ -229,11 +236,15 @@ public:
 
     PeeringMachine(
       PeeringState *state, CephContext *cct,
-      spg_t spgid, PG *pg,
+      spg_t spgid,
+      DoutPrefixProvider *dpp,
+      PeeringListener *pl,
+      PG *pg,
       PGStateHistory *state_history) :
       state(state),
       state_history(state_history),
       cct(cct), spgid(spgid),
+      dpp(dpp), pl(pl),
       pg(pg), event_count(0) {}
 
     /* Accessor functions for state methods */
@@ -959,6 +970,8 @@ public:
   PeeringMachine machine;
   CephContext* cct;
   spg_t spgid;
+  DoutPrefixProvider *dpp;
+  PeeringListener *pl;
   PG *pg;
 
   /// context passed in by state machine caller
@@ -975,7 +988,12 @@ public:
   boost::optional<PeeringCtx> rctx;
 
 public:
-  PeeringState(CephContext *cct, spg_t spgid, PG *pg);
+  PeeringState(
+    CephContext *cct,
+    spg_t spgid,
+    DoutPrefixProvider *dpp,
+    PeeringListener *pl,
+    PG *pg);
 
   void handle_event(const boost::statechart::event_base &evt,
 	      PeeringCtx *rctx) {

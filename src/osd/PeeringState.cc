@@ -11,10 +11,15 @@
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
 
-PeeringState::PeeringState(CephContext *cct, spg_t spgid, PG *pg)
+PeeringState::PeeringState(
+  CephContext *cct,
+  spg_t spgid,
+  DoutPrefixProvider *dpp,
+  PeeringListener *pl,
+  PG *pg)
   : state_history(pg),
-    machine(this, cct, spgid, pg, &state_history), cct(cct),
-    spgid(spgid), pg(pg), orig_ctx(0) {
+    machine(this, cct, spgid, dpp, pl, pg, &state_history), cct(cct),
+    spgid(spgid), dpp(dpp), pl(pl), pg(pg), orig_ctx(0) {
   machine.initiate();
 }
 
@@ -32,7 +37,7 @@ void PeeringState::PeeringMachine::send_query(
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix (context< PeeringMachine >().pg->gen_prefix(*_dout) \
+#define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
 		     << "state<" << get_state_name() << ">: ")
 #define psdout(x) ldout(context< PeeringMachine >().cct, x)
 

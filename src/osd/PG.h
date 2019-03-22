@@ -196,7 +196,7 @@ struct PGPool {
  *
  */
 
-class PG : public DoutPrefixProvider, public EpochSource {
+class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend class NamedState;
   friend class PeeringState;
 public:
