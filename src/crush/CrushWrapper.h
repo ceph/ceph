@@ -801,9 +801,12 @@ public:
    * @param weight item weight
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @param init_weight_sets initialize weight-set weights to weight (vs 0)
    * @return 0 for success, negative on error
    */
-  int insert_item(CephContext *cct, int id, float weight, string name, const map<string,string>& loc);
+  int insert_item(CephContext *cct, int id, float weight, string name,
+		  const map<string,string>& loc,
+		  bool init_weight_sets=true);
 
   /**
    * move a bucket in the hierarchy to the given location
@@ -865,10 +868,12 @@ public:
    * @param weight initial item weight (if we need to create it)
    * @param name item name
    * @param loc location (map of type to bucket names)
+   * @param init_weight_sets initialize weight-set values to weight (vs 0)
    * @return 0 for no change, 1 for successful change, negative on error
    */
   int create_or_move_item(CephContext *cct, int item, float weight, string name,
-			  const map<string,string>& loc);
+			  const map<string,string>& loc,
+			  bool init_weight_sets=true);
 
   /**
    * remove all instances of an item from the map
@@ -887,7 +892,7 @@ public:
    * @param item id to remove
    * @return 0 on success, negative on error
    */
-  int remove_root(int item);
+  int remove_root(CephContext *cct, int item);
 
   /**
    * remove all instances of an item nested beneath a certain point from the map
@@ -956,34 +961,48 @@ public:
     }
     return 0;
   }
-  int adjust_item_weight(CephContext *cct, int id, int weight);
-  int adjust_item_weightf(CephContext *cct, int id, float weight) {
+  int adjust_item_weight(CephContext *cct, int id, int weight,
+			 bool update_weight_sets=true);
+  int adjust_item_weightf(CephContext *cct, int id, float weight,
+			  bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
+    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000),
+			      update_weight_sets);
   }
-  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
-  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+  int adjust_item_weight_in_bucket(CephContext *cct, int id, int weight,
+				   int bucket_id,
+				   bool update_weight_sets);
+  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight,
+				const map<string,string>& loc,
+				bool update_weight_sets=true);
+  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight,
+				 const map<string,string>& loc,
+				 bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
+    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000),
+				     loc, update_weight_sets);
   }
   void reweight(CephContext *cct);
   void reweight_bucket(crush_bucket *b,
 		       crush_choose_arg_map& arg_map,
 		       vector<uint32_t> *weightv);
 
-  int adjust_subtree_weight(CephContext *cct, int id, int weight);
-  int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
+  int adjust_subtree_weight(CephContext *cct, int id, int weight,
+			    bool update_weight_sets=true);
+  int adjust_subtree_weightf(CephContext *cct, int id, float weight,
+			     bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
       return r;
     }
-    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000));
+    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000),
+				 update_weight_sets);
   }
 
   /// check if item id is present in the map hierarchy
@@ -1284,7 +1303,9 @@ public:
 		 int *items, int *weights, int *idout);
   int bucket_add_item(crush_bucket *bucket, int item, int weight);
   int bucket_remove_item(struct crush_bucket *bucket, int item);
-  int bucket_adjust_item_weight(CephContext *cct, struct crush_bucket *bucket, int item, int weight);
+  int bucket_adjust_item_weight(
+    CephContext *cct, struct crush_bucket *bucket, int item, int weight,
+    bool adjust_weight_sets);
 
   void finalize() {
     ceph_assert(crush);
@@ -1313,9 +1334,9 @@ public:
   int get_rules_by_osd(int osd, set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
-  int rebuild_roots_with_classes();
+  int rebuild_roots_with_classes(CephContext *cct);
   /* remove unused roots generated for class devices */
-  int trim_roots_with_class();
+  int trim_roots_with_class(CephContext *cct);
 
   int reclassify(
     CephContext *cct,

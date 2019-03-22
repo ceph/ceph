@@ -9369,7 +9369,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
-      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc);
+      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc,
+					 g_conf()->osd_crush_update_weight_set);
       if (err == 0) {
 	ss << "create-or-move updated item name '" << osd_name
 	   << "' weight " << weight
@@ -9412,7 +9413,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
 	if (id >= 0) {
-	  err = newcrush.create_or_move_item(cct, id, 0, name, loc);
+	  err = newcrush.create_or_move_item(
+	    cct, id, 0, name, loc,
+	    g_conf()->osd_crush_update_weight_set);
 	} else {
 	  err = newcrush.move_bucket(cct, id, loc);
 	}
@@ -9633,7 +9636,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    err = newcrush.adjust_item_weightf(cct, id, w);
+    err = newcrush.adjust_item_weightf(cct, id, w,
+				       g_conf()->osd_crush_update_weight_set);
     if (err < 0)
       goto reply;
     pending_inc.crush.clear();
@@ -9671,7 +9675,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    err = newcrush.adjust_subtree_weightf(cct, id, w);
+    err = newcrush.adjust_subtree_weightf(cct, id, w,
+					  g_conf()->osd_crush_update_weight_set);
     if (err < 0)
       goto reply;
     pending_inc.crush.clear();
