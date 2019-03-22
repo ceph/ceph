@@ -263,7 +263,7 @@ void md_config_t::set_val_default(ConfigValues& values,
 int md_config_t::set_mon_vals(CephContext *cct,
     ConfigValues& values,
     const ConfigTracker& tracker,
-    const map<string,string>& kv,
+    const map<string,string,less<>>& kv,
     config_callback config_cb)
 {
   ignored_mon_values.clear();
