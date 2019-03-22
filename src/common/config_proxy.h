@@ -277,7 +277,7 @@ public:
     config.set_val_or_die(values, obs_mgr, key, val);
   }
   int set_mon_vals(CephContext *cct,
-		   const map<std::string,std::string>& kv,
+		   const std::map<std::string,std::string,std::less<>>& kv,
 		   md_config_t::config_callback config_cb) {
     int ret;
     rev_obs_map_t rev_obs;

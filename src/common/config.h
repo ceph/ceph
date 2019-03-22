@@ -157,7 +157,7 @@ public:
   int set_mon_vals(CephContext *cct,
       ConfigValues& values,
       const ConfigTracker& tracker,
-      const map<std::string,std::string>& kv,
+      const map<std::string,std::string, std::less<>>& kv,
       config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime

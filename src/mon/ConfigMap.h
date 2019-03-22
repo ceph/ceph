@@ -120,7 +120,7 @@ struct ConfigMap {
     by_id.clear();
   }
   void dump(Formatter *f) const;
-  std::map<std::string,std::string> generate_entity_map(
+  std::map<std::string,std::string,std::less<>> generate_entity_map(
     const EntityName& name,
     const map<std::string,std::string>& crush_location,
     const CrushWrapper *crush,

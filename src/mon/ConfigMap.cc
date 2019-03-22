@@ -101,7 +101,7 @@ void ConfigMap::dump(Formatter *f) const
   f->close_section();
 }
 
-std::map<std::string,std::string>
+std::map<std::string,std::string,std::less<>>
 ConfigMap::generate_entity_map(
   const EntityName& name,
   const map<std::string,std::string>& crush_location,
