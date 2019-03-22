@@ -184,7 +184,8 @@ void Log::submit_entry(Entry&& e)
     *(volatile int *)(0) = 0xdead;
 
   // wait for flush to catch up
-  while (m_new.size() > m_max_new) {
+  while (is_started() &&
+	 m_new.size() > m_max_new) {
     if (m_stop) break; // force addition
     m_cond_loggers.wait(lock);
   }
