@@ -11,6 +11,7 @@ import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
 
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -31,7 +32,11 @@ import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
-import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus-list.component';
+import { AlertListComponent } from './prometheus/alert-list/alert-list.component';
+import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
+import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
+import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
+import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
 
 @NgModule({
   entryComponents: [
@@ -40,7 +45,9 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     OsdFlagsModalComponent,
     OsdRecvSpeedModalComponent,
     OsdReweightModalComponent,
-    OsdPgScrubModalComponent
+    OsdPgScrubModalComponent,
+    OsdReweightModalComponent,
+    SilenceMatcherModalComponent
   ],
   imports: [
     CommonModule,
@@ -51,11 +58,13 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     FormsModule,
     ReactiveFormsModule,
     BsDropdownModule.forRoot(),
+    BsDatepickerModule.forRoot(),
     ModalModule.forRoot(),
     AlertModule.forRoot(),
     TooltipModule.forRoot(),
     TreeModule,
     MgrModulesModule,
+    TypeaheadModule.forRoot(),
     TimepickerModule.forRoot(),
     BsDatepickerModule.forRoot()
   ],
@@ -74,9 +83,14 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     OsdReweightModalComponent,
     CrushmapComponent,
     LogsComponent,
-    PrometheusListComponent,
     OsdRecvSpeedModalComponent,
-    OsdPgScrubModalComponent
+    OsdPgScrubModalComponent,
+    AlertListComponent,
+    OsdRecvSpeedModalComponent,
+    SilenceFormComponent,
+    SilenceListComponent,
+    PrometheusTabsComponent,
+    SilenceMatcherModalComponent
   ]
 })
 export class ClusterModule {}
