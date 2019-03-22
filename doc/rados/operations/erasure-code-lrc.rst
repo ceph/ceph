@@ -5,14 +5,14 @@ Locally repairable erasure code plugin
 With the *jerasure* plugin, when an erasure coded object is stored on
 multiple OSDs, recovering from the loss of one OSD requires reading
 from all the others. For instance if *jerasure* is configured with
-*k=8* and *m=4*, losing one OSD requires reading from the eleven
+*k=8* and *m=4*, losing one OSD requires reading from the eight
 others to repair.
 
 The *lrc* erasure code plugin creates local parity chunks to be able
 to recover using less OSDs. For instance if *lrc* is configured with
 *k=8*, *m=4* and *l=4*, it will create an additional parity chunk for
 every four OSDs. When a single OSD is lost, it can be recovered with
-only four OSDs instead of eleven.
+only four OSDs instead of eight.
 
 Erasure code profile examples
 =============================
