@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { of as observableOf, Subscriber } from 'rxjs';
+import { of as observableOf, Subscriber, throwError } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
@@ -61,6 +61,23 @@ describe('SummaryService', () => {
     // In order to not trigger setInterval again,
     // which would raise 'Error: 1 timer(s) still in the queue.'
     window.clearInterval(summaryService.polling);
+  }));
+
+  it('should not refresh anymore if an error occurred', fakeAsync(() => {
+    spyOn(TestBed.get(HttpClient), 'get').and.returnValue(throwError({}));
+    spyOn(summaryService, 'refresh').and.callThrough();
+    const calledWith = [];
+    summaryService.subscribe((data) => {
+      calledWith.push(data);
+    });
+    expect(calledWith).toEqual([summary]);
+    expect(summaryService.refresh).toHaveBeenCalledTimes(0);
+
+    summaryService.enablePolling();
+    expect(summaryService.refresh).toHaveBeenCalledTimes(1);
+    tick(20000);
+    expect(calledWith).toEqual([summary]);
+    expect(summaryService.refresh).toHaveBeenCalledTimes(1);
   }));
 
   describe('Should test methods after first refresh', () => {
