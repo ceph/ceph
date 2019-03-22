@@ -1,29 +1,25 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-// https://stackoverflow.com/questions/50221136/c-weighted-stdshuffle/50223540
-#ifndef CEPH_WEIGHTED_SHUFFLE_H
-#define CEPH_WEIGHTED_SHUFFLE_H
+
+#pragma once
 
 #include <algorithm>
+#include <iterator>
 #include <random>
-#include <vector>
 
-template <class T, class U, class R>
-void weighted_shuffle(std::vector<T> &data, std::vector<U> &weights, R &&gen)
+template <class RandomIt, class DistIt, class URBG>
+void weighted_shuffle(RandomIt first, RandomIt last,
+		      DistIt weight_first, DistIt weight_last,
+		      URBG &&g)
 {
-  auto itd = data.begin();
-  auto itw = weights.begin();
-
-  while (itd != data.end() && itw != weights.end()) {
-    std::discrete_distribution d(itw, weights.end());
-    auto i = d(gen);
-    if (i) {
-      std::iter_swap(itd, std::next(itd, i));
-      std::iter_swap(itw, std::next(itw, i));
+  if (first == last) {
+    return;
+  } else {
+    std::discrete_distribution d{weight_first, weight_last};
+    if (auto n = d(g); n > 0) {
+      std::iter_swap(first, std::next(first, n));
+      std::iter_swap(weight_first, std::next(weight_first, n));
     }
-    ++itd;
-    ++itw;
+    weighted_shuffle(++first, last, ++weight_first, weight_last, std::move(g));
   }
 }
-
-#endif
