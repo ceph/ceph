@@ -11,6 +11,7 @@
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
+#include "librbd/io/SimpleSchedulerObjectDispatch.h"
 #include <boost/algorithm/string/predicate.hpp>
 #include "include/ceph_assert.h"
 
@@ -575,7 +576,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   if (m_image_ctx->snap_name.empty() &&
       m_image_ctx->open_snap_id == CEPH_NOSNAP) {
     *result = 0;
-    return m_on_finish;
+    return finalize(*result);
   }
 
   CephContext *cct = m_image_ctx->cct;
@@ -612,6 +613,22 @@ Context *OpenRequest<I>::handle_set_snap(int *result) {
                << dendl;
     send_close_image(*result);
     return nullptr;
+  }
+
+  return finalize(*result);
+}
+
+template <typename I>
+Context *OpenRequest<I>::finalize(int r) {
+  if (r == 0) {
+    auto io_scheduler_cfg =
+      m_image_ctx->config.template get_val<std::string>("rbd_io_scheduler");
+
+    if (io_scheduler_cfg == "simple" && !m_image_ctx->read_only) {
+      auto io_scheduler =
+        io::SimpleSchedulerObjectDispatch<I>::create(m_image_ctx);
+      io_scheduler->init();
+    }
   }
 
   return m_on_finish;
