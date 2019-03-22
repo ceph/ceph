@@ -163,7 +163,7 @@ parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors,
 }
 
 int ConfFile::
-read(const std::string &section, const std::string &key, std::string &val) const
+read(const std::string &section, const std::string_view key, std::string &val) const
 {
   string k(normalize_key_name(key));
 
