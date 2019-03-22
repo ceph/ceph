@@ -43,6 +43,9 @@ elif [ $2 = "luminous" ] ; then
 elif [ $2 = "mimic" ] ; then
         # run mimic branch with /999 jobs
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 -e $5 $7
+elif [ $2 = "nautilus" ] ; then
+        # run nautilus branch with /2999 jobs == ~ 250 jobs
+        teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/2999 -e $5 $7
 else
         # run NON master branches without --newest 
         teuthology-suite -v -c $2 -m $3 -k $6 -s $4 --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/999 -e $5 $7
