@@ -276,14 +276,13 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	       << " class " << device_class << dendl;
     }
 
-    std::map<std::string,std::string> config;
     std::map<std::string,pair<std::string,const MaskedOption*>> src;
-    config_map.generate_entity_map(
+    auto config = config_map.generate_entity_map(
       entity,
       crush_location,
       mon->osdmon()->osdmap.crush.get(),
       device_class,
-      &config, &src);
+      &src);
 
     if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
       // get a single value
@@ -419,13 +418,11 @@ void ConfigMonitor::handle_get_config(MonOpRequestRef op)
   const OSDMap& osdmap = mon->osdmon()->osdmap;
   map<string,string> crush_location;
   osdmap.crush->get_full_location(m->host, &crush_location);
-  map<string,string> out;
-  config_map.generate_entity_map(
+  auto out = config_map.generate_entity_map(
     m->name,
     crush_location,
     osdmap.crush.get(),
-    m->device_class,
-    &out);
+    m->device_class);
   dout(20) << " config is " << out << dendl;
   m->get_connection()->send_message(new MConfig(out));
 }
@@ -770,13 +767,11 @@ void ConfigMonitor::load_config()
     const OSDMap& osdmap = mon->osdmon()->osdmap;
     map<string,string> crush_location;
     osdmap.crush->get_full_location(g_conf()->host, &crush_location);
-    map<string,string> out;
-    config_map.generate_entity_map(
+    auto out = config_map.generate_entity_map(
       g_conf()->name,
       crush_location,
       osdmap.crush.get(),
-      string(), // no device class
-      &out);
+      string{}); // no device class
     g_conf().set_mon_vals(g_ceph_context, out, nullptr);
   }
 }
@@ -832,13 +827,11 @@ bool ConfigMonitor::refresh_config(MonSession *s)
 
   dout(20) << __func__ << " " << s->entity_name << " crush " << crush_location
 	   << " device_class " << device_class << dendl;
-  map<string,string> out;
-  config_map.generate_entity_map(
+  auto out = config_map.generate_entity_map(
     s->entity_name,
     crush_location,
     osdmap.crush.get(),
-    device_class,
-    &out);
+    device_class);
 
   if (out == s->last_config && s->any_config) {
     dout(20) << __func__ << " no change, " << out << dendl;
@@ -846,7 +839,7 @@ bool ConfigMonitor::refresh_config(MonSession *s)
   }
 
   dout(20) << __func__ << " " << out << dendl;
-  s->last_config = out;
+  s->last_config = std::move(out);
   s->any_config = true;
   return true;
 }
