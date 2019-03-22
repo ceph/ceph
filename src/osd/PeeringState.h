@@ -15,15 +15,60 @@
 #include "PGLog.h"
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
+#include "osd_types.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 
 class PG;
 
+struct PGPool {
+  CephContext* cct;
+  epoch_t cached_epoch;
+  int64_t id;
+  string name;
+
+  pg_pool_t info;
+  SnapContext snapc;   // the default pool snapc, ready to go.
+
+  // these two sets are for < mimic only
+  interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
+  interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
+
+  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
+	 const string& name)
+    : cct(cct),
+      cached_epoch(map->get_epoch()),
+      id(i),
+      name(name),
+      info(info) {
+    snapc = info.get_snap_context();
+    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+      info.build_removed_snaps(cached_removed_snaps);
+    }
+  }
+
+  void update(CephContext *cct, OSDMapRef map);
+};
+
   /* Encapsulates PG recovery process */
 class PeeringState {
 public:
   struct PeeringListener : public EpochSource {
+    virtual void prepare_write(
+      pg_info_t &info,
+      PGLog &pglog,
+      bool dirty_info,
+      bool dirty_big_info,
+      bool need_write_epoch,
+      ObjectStore::Transaction &t) = 0;
+    virtual void update_store_with_options(const pool_opts_t &opts) = 0;
+
+    virtual void on_pool_change() = 0;
+    virtual void on_role_change() = 0;
+    virtual void on_change(ObjectStore::Transaction *t) = 0;
+    virtual void on_activate() = 0;
+    virtual void on_flushed() = 0;
+    virtual void check_blacklisted_watchers() = 0;
     virtual ~PeeringListener() {}
   };
 
@@ -990,6 +1035,14 @@ public:
 
 public:
   /**
+   * OSDMap state
+   */
+  OSDMapRef osdmap_ref;              ///< Reference to current OSDMap
+  PGPool pool;                       ///< Current pool state
+  epoch_t last_persisted_osdmap = 0; ///< Last osdmap epoch persisted
+
+
+  /**
    * Peering state information
    */
   int role = -1;             ///< 0 = primary, 1 = replica, -1=none.
@@ -1075,10 +1128,18 @@ public:
   bool deleting = false;  /// true while in removing or OSD is shutting down
   atomic<bool> deleted = {false}; /// true once deletion complete
 
+  void update_osdmap_ref(OSDMapRef newmap) {
+    osdmap_ref = std::move(newmap);
+  }
+
+  void write_if_dirty(ObjectStore::Transaction& t);
+
 public:
   PeeringState(
     CephContext *cct,
     spg_t spgid,
+    const PGPool &pool,
+    OSDMapRef curmap,
     DoutPrefixProvider *dpp,
     PeeringListener *pl,
     PG *pg);
@@ -1109,4 +1170,40 @@ public:
     return last_peering_reset;
   }
 
+  /// Returns stable reference to internal pool structure
+  const PGPool &get_pool() const {
+    return pool;
+  }
+
+  /// Returns reference to current osdmap
+  const OSDMapRef &get_osdmap() const {
+    ceph_assert(osdmap_ref);
+    return osdmap_ref;
+  }
+
+  /// Returns epoch of current osdmap
+  epoch_t get_osdmap_epoch() const {
+    return get_osdmap()->get_epoch();
+  }
+
+  /// Updates peering state with new map
+  void advance_map(
+    OSDMapRef osdmap,       ///< [in] new osdmap
+    OSDMapRef lastmap,      ///< [in] prev osdmap
+    vector<int>& newup,     ///< [in] new up set
+    int up_primary,         ///< [in] new up primary
+    vector<int>& newacting, ///< [in] new acting
+    int acting_primary,     ///< [in] new acting primary
+    PeeringCtx *rctx        ///< [out] recovery context
+    );
+
+  /// Activates most recently updated map
+  void activate_map(
+    PeeringCtx *rctx        ///< [out] recovery context
+    );
+
+  /// resets last_persisted_osdmap
+  void reset_last_persisted() {
+    last_persisted_osdmap = 0;
+  }
 };

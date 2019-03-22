@@ -163,35 +163,6 @@ class PGRecoveryStats {
   }
 };
 
-struct PGPool {
-  CephContext* cct;
-  epoch_t cached_epoch;
-  int64_t id;
-  string name;
-
-  pg_pool_t info;      
-  SnapContext snapc;   // the default pool snapc, ready to go.
-
-  // these two sets are for < mimic only
-  interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
-  interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
-
-  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
-	 const string& name)
-    : cct(cct),
-      cached_epoch(map->get_epoch()),
-      id(i),
-      name(name),
-      info(info) {
-    snapc = info.get_snap_context();
-    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
-      info.build_removed_snaps(cached_removed_snaps);
-    }
-  }
-
-  void update(CephContext *cct, OSDMapRef map);
-};
-
 /** PG - Replica Placement Group
  *
  */
@@ -273,11 +244,11 @@ public:
 
   const OSDMapRef& get_osdmap() const {
     ceph_assert(is_locked());
-    ceph_assert(osdmap_ref);
-    return osdmap_ref;
+    return recovery_state.get_osdmap();
   }
+
   epoch_t get_osdmap_epoch() const override {
-    return osdmap_ref->get_epoch();
+    return recovery_state.get_osdmap()->get_epoch();
   }
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
@@ -539,10 +510,7 @@ public:
 protected:
   CephContext *cct;
 
-  // osdmap
-  OSDMapRef osdmap_ref;
-
-  PGPool pool;
+  const PGPool &pool;
 
   // locking and reference counting.
   // I destroy myself when the reference count hits zero.
@@ -590,14 +558,7 @@ protected:
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
-  epoch_t last_persisted_osdmap;
-
   void requeue_map_waiters();
-
-  void update_osdmap_ref(OSDMapRef newmap) {
-    ceph_assert(_lock.is_locked_by_me());
-    osdmap_ref = std::move(newmap);
-  }
 
 protected:
 
@@ -1811,8 +1772,6 @@ protected:
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
 protected:
-  epoch_t last_epoch;
-
   bool delete_needs_sleep = false;
 
 protected:
@@ -1919,12 +1878,22 @@ public:
   static void _init(ObjectStore::Transaction& t,
 		    spg_t pgid, const pg_pool_t *pool);
 
-protected:
-  void prepare_write_info(map<string,bufferlist> *km);
+  virtual void prepare_write(
+    pg_info_t &info,
+    PGLog &pglog,
+    bool dirty_info,
+    bool dirty_big_info,
+    bool need_write_epoch,
+    ObjectStore::Transaction &t) override;
 
-  void update_store_with_options();
+  void prepare_write_info(
+    bool dirty_info,
+    bool dirty_big_info,
+    bool need_update_epoch,
+    map<string,bufferlist> *km);
 
-public:
+  void update_store_with_options(const pool_opts_t &opts) override;
+
   static int _prepare_write_info(
     CephContext* cct,
     map<string,bufferlist> *km,
@@ -1941,7 +1910,9 @@ public:
     write_if_dirty(*rctx->transaction);
   }
 protected:
-  void write_if_dirty(ObjectStore::Transaction& t);
+  void write_if_dirty(ObjectStore::Transaction& t) {
+    recovery_state.write_if_dirty(t);
+  }
 
   PGLog::IndexedLog projected_log;
   bool check_in_progress_op(
@@ -2062,13 +2033,6 @@ protected:
 
   // abstract bits
   friend class FlushState;
-
-  virtual void on_role_change() = 0;
-  virtual void on_pool_change() = 0;
-  virtual void on_change(ObjectStore::Transaction *t) = 0;
-  virtual void on_activate() = 0;
-  virtual void on_flushed() = 0;
-  virtual void check_blacklisted_watchers() = 0;
 
   friend ostream& operator<<(ostream& out, const PG& pg);
 };
