@@ -204,6 +204,7 @@ Server::Server(MDSRank *m) :
   terminating_sessions(false),
   recall_throttle(ceph_clock_now(), g_conf->get_val<double>("mds_recall_max_decay_rate"))
 {
+  cap_revoke_eviction_timeout = g_conf->get_val<double>("mds_cap_revoke_eviction_timeout");
 }
 
 
