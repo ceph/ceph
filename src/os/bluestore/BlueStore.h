@@ -2661,7 +2661,10 @@ public:
   Either automatically applies allocated extents to underlying 
   BlueFS (extents == nullptr) or just return them (non-null extents) provided
   */
-  int allocate_bluefs_freespace(uint64_t size, PExtentVector* extents);
+  int allocate_bluefs_freespace(
+    uint64_t min_size,
+    uint64_t size,
+    PExtentVector* extents);
 
   void log_latency_fn(int idx,
 		      const ceph::timespan& lat,
@@ -2991,8 +2994,11 @@ private:
     auto delta = _get_bluefs_size_delta(bluefs_free, bluefs_total);
     return delta > 0 ? delta : 0;
   }
-  int allocate_freespace(uint64_t size, PExtentVector& extents) override {
-    return allocate_bluefs_freespace(size, &extents);
+  int allocate_freespace(
+    uint64_t min_size,
+    uint64_t size,
+    PExtentVector& extents) override {
+    return allocate_bluefs_freespace(min_size, size, &extents);
   };
 };
 

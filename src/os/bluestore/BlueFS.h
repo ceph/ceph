@@ -48,7 +48,10 @@ protected:
 public:
   virtual uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
     uint64_t bluefs_total) = 0;
-  virtual int allocate_freespace(uint64_t size, PExtentVector& extents) = 0;
+  virtual int allocate_freespace(
+    uint64_t min_size,
+    uint64_t size,
+    PExtentVector& extents) = 0;
 };
 
 class BlueFS {
