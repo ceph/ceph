@@ -71,7 +71,7 @@ public:
   const_section_iter_t sections_end() const;
 
   static void trim_whitespace(std::string &str, bool strip_internal);
-  static std::string normalize_key_name(const std::string &key);
+  static std::string normalize_key_name(std::string_view key);
   friend std::ostream &operator<<(std::ostream &oss, const ConfFile &cf);
 
 private:
