@@ -2823,7 +2823,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   // make sure upgrades stop at nautilus
-  if (HAVE_FEATURE(m->osd_features, SERVER_O) &&
+  if (HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS) &&
       osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
     mon->clog->info() << "disallowing boot of post-nautilus OSD "
 		      << m->get_orig_source_inst()
