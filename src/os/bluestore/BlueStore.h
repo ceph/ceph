@@ -2994,6 +2994,8 @@ private:
   int allocate_freespace(uint64_t size, PExtentVector& extents) override {
     return allocate_bluefs_freespace(size, &extents);
   };
+
+  inline bool _use_rotational_settings();
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
