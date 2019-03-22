@@ -516,7 +516,7 @@ int AsyncConnection::send_message(Message *m)
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_BEGIN", true);
 
-  if (async_msgr->get_myaddrs() == get_peer_addrs()) { //loopback connection
+  if (is_loopback) { //loopback connection
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     std::lock_guard<std::mutex> l(write_lock);
     if (protocol->is_connected()) {

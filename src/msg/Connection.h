@@ -53,6 +53,7 @@ struct Connection : public RefCountedObject {
 private:
   uint64_t features;
 public:
+  bool is_loopback;
   bool failed; // true if we are a lossy connection that has failed.
 
   int rx_buffers_version;
@@ -81,6 +82,7 @@ public:
       msgr(m),
       peer_type(-1),
       features(0),
+      is_loopback(false),
       failed(false),
       rx_buffers_version(0) {
   }
