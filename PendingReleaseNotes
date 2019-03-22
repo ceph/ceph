@@ -1,0 +1,8 @@
+>=15.0.0
+--------
+
+* The RGW "num_rados_handles" has been removed.
+  * If you were using a value of "num_rados_handles" greater than 1
+    multiply your current "objecter_inflight_ops" and 
+    "objecter_inflight_op_bytes" paramaeters by the old
+    "num_rados_handles" to get the same throttle behavior.

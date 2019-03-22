@@ -157,18 +157,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: 100 threads.
 
 
-``rgw num rados handles``
-
-:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
-              Having a configurable number of RADOS handles is resulting in
-              significant performance boost for all types of workloads. Each RGW
-              worker thread would now get to pick a RADOS handle for its lifetime,
-              from the available bunch.
-
-:Type: Integer
-:Default: ``1``
-
-
 ``rgw num control oids``
 
 :Description: The number of notification objects used for cache synchronization
