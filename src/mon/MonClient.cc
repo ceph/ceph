@@ -13,6 +13,10 @@
  */
 
 #include <random>
+#include <boost/range/adaptor/map.hpp>
+#include <boost/range/adaptor/filtered.hpp>
+#include <boost/range/algorithm/copy.hpp>
+#include <boost/range/algorithm_ext/copy_n.hpp>
 #include "common/weighted_shuffle.h"
 
 #include "include/scope_guard.h"
@@ -368,8 +372,8 @@ void MonClient::handle_monmap(MMonMap *m)
   ldout(cct, 10) << __func__ << " " << *m << dendl;
   auto con_addrs = m->get_source_addrs();
   string old_name = monmap.get_name(con_addrs);
+  const auto old_epoch = monmap.get_epoch();
 
-  // NOTE: we're not paying attention to the epoch, here.
   auto p = m->monmapbl.cbegin();
   decode(monmap, p);
 
@@ -381,6 +385,9 @@ void MonClient::handle_monmap(MMonMap *m)
   monmap.print(*_dout);
   *_dout << dendl;
 
+  if (old_epoch != monmap.get_epoch()) {
+    tried.clear();
+  }
   if (old_name.size() == 0) {
     ldout(cct,10) << " can't identify which mon we were connected to" << dendl;
     _reopen_session();
@@ -688,13 +695,34 @@ MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 
 void MonClient::_add_conns(uint64_t global_id)
 {
-  map<uint16_t, vector<unsigned>> rank_by_priority;
-  for (const auto& m : monmap.mon_info) {
-    rank_by_priority[m.second.priority].push_back(monmap.get_rank(m.first));
+  // collect the next batch of candidates who are listed right next to the ones
+  // already tried
+  auto get_next_batch = [this]() -> vector<unsigned> {
+    multimap<uint16_t, unsigned> ranks_by_priority;
+    boost::copy(monmap.mon_info | boost::adaptors::filtered([this](auto& info) {
+                  auto rank = monmap.get_rank(info.first);
+                  return tried.count(rank) == 0;
+                }) | boost::adaptors::transformed([this](auto& info) {
+                  auto rank = monmap.get_rank(info.first);
+                  return make_pair(info.second.priority, rank);
+                }), std::inserter(ranks_by_priority, end(ranks_by_priority)));
+    if (ranks_by_priority.empty()) {
+      return {};
+    }
+    // only choose the monitors with lowest priority
+    auto cands = boost::make_iterator_range(
+      ranks_by_priority.equal_range(ranks_by_priority.begin()->first));
+    vector<unsigned> ranks;
+    boost::range::copy(cands | boost::adaptors::map_values,
+		       std::back_inserter(ranks));
+    return ranks;
+  };
+  auto ranks = get_next_batch();
+  if (ranks.empty()) {
+    tried.clear();  // start over
+    ranks = get_next_batch();
   }
-  vector<unsigned> ranks;
-  ceph_assert(!rank_by_priority.empty());
-  ranks = rank_by_priority.begin()->second;
+  ceph_assert(!ranks.empty());
   if (ranks.size() > 1) {
     vector<uint16_t> weights;
     for (auto i : ranks) {
@@ -712,6 +740,7 @@ void MonClient::_add_conns(uint64_t global_id)
   }
   for (unsigned i = 0; i < n; i++) {
     _add_conn(ranks[i], global_id);
+    tried.insert(ranks[i]);
   }
 }
 
