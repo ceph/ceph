@@ -7,6 +7,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
 #include "crimson/common/simple_lru.h"
@@ -17,12 +18,13 @@
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
 
-#include "osd/OSDMap.h"
+#include "osd/osd_types.h"
 
 class MOSDMap;
 class OSDMap;
 class OSDMeta;
 class PG;
+class PGPeeringEvent;
 class Heartbeat;
 
 namespace ceph::mon {
@@ -109,6 +111,9 @@ private:
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
+  epoch_t up_thru_wanted = 0;
+  seastar::future<> _send_alive(epoch_t want);
+
   // OSDMapService methods
   seastar::future<cached_map_t> get_map(epoch_t e) override;
   cached_map_t get_map() const override;
@@ -125,9 +130,32 @@ private:
 
   seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_pg_log(ceph::net::ConnectionRef conn,
+				  Ref<MOSDPGLog> m);
+  seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
+				     Ref<MOSDPGNotify> m);
+  seastar::future<> handle_pg_info(ceph::net::ConnectionRef conn,
+				   Ref<MOSDPGInfo> m);
+  seastar::future<> handle_pg_query(ceph::net::ConnectionRef conn,
+				    Ref<MOSDPGQuery> m);
+
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
+
+  // order the promises in descending order of the waited osdmap epoch,
+  // so we can access all the waiters expecting a map whose epoch is less
+  // than a given epoch
+  using waiting_peering_t = std::map<epoch_t, seastar::shared_promise<epoch_t>,
+				     std::greater<epoch_t>>;
+  waiting_peering_t waiting_peering;
+  // wait for an osdmap whose epoch is greater or equal to given epoch
+  seastar::future<epoch_t> wait_for_map(epoch_t epoch);
+  seastar::future<> consume_map(epoch_t epoch);
+  seastar::future<> do_peering_event(spg_t pgid,
+				     std::unique_ptr<PGPeeringEvent> evt);
+  seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
+
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();
