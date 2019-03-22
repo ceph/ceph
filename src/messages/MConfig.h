@@ -18,7 +18,10 @@ public:
   MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MConfig(const std::map<std::string,std::string,std::less<>>& c)
     : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
-      config(c) {}
+      config{c} {}
+  MConfig(std::map<std::string,std::string,std::less<>>&& c)
+    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+      config{std::move(c)} {}
 
   std::string_view get_type_name() const override {
     return "config";

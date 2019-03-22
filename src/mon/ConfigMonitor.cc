@@ -424,7 +424,7 @@ void ConfigMonitor::handle_get_config(MonOpRequestRef op)
     osdmap.crush.get(),
     m->device_class);
   dout(20) << " config is " << out << dendl;
-  m->get_connection()->send_message(new MConfig(out));
+  m->get_connection()->send_message(new MConfig{std::move(out)});
 }
 
 bool ConfigMonitor::prepare_update(MonOpRequestRef op)
