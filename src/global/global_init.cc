@@ -154,7 +154,7 @@ void global_pre_init(
       _exit(1);
     }
   }
-
+  cct->_log->start();
   // do the --show-config[-val], if present in argv
   conf.do_argv_commands();
 
