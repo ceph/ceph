@@ -29,7 +29,11 @@ export enum URLVerbs {
 
   /* Non-standard verbs */
   COPY = 'copy',
-  CLONE = 'clone'
+  CLONE = 'clone',
+
+  /* Prometheus wording */
+  RECREATE = 'recreate',
+  EXPIRE = 'expire'
 }
 
 export enum ActionLabels {
@@ -56,7 +60,11 @@ export enum ActionLabels {
   CLONE = 'Clone',
 
   /* Read-only */
-  SHOW = 'Show'
+  SHOW = 'Show',
+
+  /* Prometheus wording */
+  RECREATE = 'Recreate',
+  EXPIRE = 'Expire'
 }
 
 @Injectable({
@@ -75,6 +83,10 @@ export class ActionLabelsI18n {
   COPY: string;
   CLONE: string;
   SHOW: string;
+  TRASH: string;
+  UNPROTECT: string;
+  RECREATE: string;
+  EXPIRE: string;
 
   constructor(private i18n: I18n) {
     /* Create a new item */
@@ -98,6 +110,12 @@ export class ActionLabelsI18n {
     this.CLONE = this.i18n('Clone');
 
     this.SHOW = this.i18n('Show');
+    this.TRASH = this.i18n('Move to Trash');
+    this.UNPROTECT = this.i18n('Unprotect');
+
+    /* Prometheus wording */
+    this.RECREATE = this.i18n('Recreate');
+    this.EXPIRE = this.i18n('Expire');
   }
 }
 
@@ -116,23 +134,11 @@ export class SucceededActionLabelsI18n {
   CANCELED: string;
   COPIED: string;
   CLONED: string;
-  DEEP_SCRUBBED: string;
-  DESTROYED: string;
-  FLATTENED: string;
-  MARKED_DOWN: string;
-  MARKED_IN: string;
-  MARKED_LOST: string;
-  MARKED_OUT: string;
-  PROTECTED: string;
-  PURGED: string;
-  RENAMED: string;
-  RESTORED: string;
-  REWEIGHTED: string;
-  ROLLED_BACK: string;
-  SCRUBBED: string;
   SHOWED: string;
   TRASHED: string;
   UNPROTECTED: string;
+  RECREATED: string;
+  EXPIRED: string;
 
   constructor(private i18n: I18n) {
     /* Create a new item */
@@ -154,22 +160,12 @@ export class SucceededActionLabelsI18n {
     /* Non-standard actions */
     this.CLONED = this.i18n('Cloned');
     this.COPIED = this.i18n('Copied');
-    this.DEEP_SCRUBBED = this.i18n('Deep Scrubbed');
-    this.DESTROYED = this.i18n('Destroyed');
-    this.FLATTENED = this.i18n('Flattened');
-    this.MARKED_DOWN = this.i18n('Marked Down');
-    this.MARKED_IN = this.i18n('Marked In');
-    this.MARKED_LOST = this.i18n('Marked Lost');
-    this.MARKED_OUT = this.i18n('Marked Out');
-    this.PROTECTED = this.i18n('Protected');
-    this.PURGED = this.i18n('Purged');
-    this.RENAMED = this.i18n('Renamed');
-    this.RESTORED = this.i18n('Restored');
-    this.REWEIGHTED = this.i18n('Reweighted');
-    this.ROLLED_BACK = this.i18n('Rolled back');
-    this.SCRUBBED = this.i18n('Scrubbed');
     this.SHOWED = this.i18n('Showed');
     this.TRASHED = this.i18n('Moved to Trash');
     this.UNPROTECTED = this.i18n('Unprotected');
+
+    /* Prometheus wording */
+    this.RECREATED = this.i18n('Recreated');
+    this.EXPIRED = this.i18n('Expired');
   }
 }
