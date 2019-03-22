@@ -103,7 +103,6 @@ about Ceph, see our `Architecture`_ section.
    mgr/dashboard
    api/index
    architecture
-   Developer Guide <dev/index>
    dev/internals
    governance
    ceph-volume/index
