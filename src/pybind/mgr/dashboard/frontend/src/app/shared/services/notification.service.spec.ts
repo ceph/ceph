@@ -62,120 +62,141 @@ describe('NotificationService', () => {
     expect(service['dataSource'].getValue().length).toBe(0);
   }));
 
-  it('should create a success notification and save it', fakeAsync(() => {
-    service.show(new CdNotificationConfig(NotificationType.success, 'Simple test'));
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(1);
-    expect(service['dataSource'].getValue()[0].type).toBe(NotificationType.success);
-  }));
+  describe('Saved notifications', () => {
+    const expectSavedNotificationToHave = (expected: {}) => {
+      tick(510);
+      expect(service['dataSource'].getValue().length).toBe(1);
+      const notification = service['dataSource'].getValue()[0];
+      Object.keys(expected).forEach((key) => {
+        expect(notification[key]).toBe(expected[key]);
+      });
+    };
 
-  it('should create an error notification and save it', fakeAsync(() => {
-    service.show(NotificationType.error, 'Simple test');
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(1);
-    expect(service['dataSource'].getValue()[0].type).toBe(NotificationType.error);
-  }));
-
-  it('should create an info notification and save it', fakeAsync(() => {
-    service.show(new CdNotificationConfig(NotificationType.info, 'Simple test'));
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(1);
-    const notification = service['dataSource'].getValue()[0];
-    expect(notification.type).toBe(NotificationType.info);
-    expect(notification.title).toBe('Simple test');
-    expect(notification.message).toBe(undefined);
-  }));
-
-  it('should never have more then 10 notifications', fakeAsync(() => {
-    for (let index = 0; index < 15; index++) {
-      service.show(NotificationType.info, 'Simple test');
-      tick(100);
-    }
-    expect(service['dataSource'].getValue().length).toBe(10);
-  }));
-
-  it('should show a success task notification', fakeAsync(() => {
-    const task = _.assign(new FinishedTask(), {
-      success: true
+    beforeEach(() => {
+      service.cancel(service['justShownTimeoutId']);
     });
-    service.notifyTask(task, true);
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(1);
-    const notification = service['dataSource'].getValue()[0];
-    expect(notification.type).toBe(NotificationType.success);
-    expect(notification.title).toBe('Executed unknown task');
-    expect(notification.message).toBe(undefined);
-  }));
 
-  it('should be able to stop notifyTask from notifying', fakeAsync(() => {
-    const task = _.assign(new FinishedTask(), {
-      success: true
-    });
-    const timeoutId = service.notifyTask(task, true);
-    service.cancel(timeoutId);
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(0);
-  }));
+    it('should create a success notification and save it', fakeAsync(() => {
+      service.show(new CdNotificationConfig(NotificationType.success, 'Simple test'));
+      expectSavedNotificationToHave({ type: NotificationType.success });
+    }));
 
-  it('should show a error task notification', fakeAsync(() => {
-    const task = _.assign(
-      new FinishedTask('rbd/create', {
-        pool_name: 'somePool',
-        image_name: 'someImage'
-      }),
-      {
-        success: false,
-        exception: {
-          code: 17
-        }
+    it('should create an error notification and save it', fakeAsync(() => {
+      service.show(NotificationType.error, 'Simple test');
+      expectSavedNotificationToHave({ type: NotificationType.error });
+    }));
+
+    it('should create an info notification and save it', fakeAsync(() => {
+      service.show(new CdNotificationConfig(NotificationType.info, 'Simple test'));
+      expectSavedNotificationToHave({
+        type: NotificationType.info,
+        title: 'Simple test',
+        message: undefined
+      });
+    }));
+
+    it('should never have more then 10 notifications', fakeAsync(() => {
+      for (let index = 0; index < 15; index++) {
+        service.show(NotificationType.info, 'Simple test');
+        tick(510);
       }
-    );
-    service.notifyTask(task);
-    tick(100);
-    expect(service['dataSource'].getValue().length).toBe(1);
-    const notification = service['dataSource'].getValue()[0];
-    expect(notification.type).toBe(NotificationType.error);
-    expect(notification.title).toBe(`Failed to create RBD 'somePool/someImage'`);
-    expect(notification.message).toBe(`Name is already used by RBD 'somePool/someImage'.`);
-  }));
+      expect(service['dataSource'].getValue().length).toBe(10);
+    }));
+
+    it('should show a success task notification', fakeAsync(() => {
+      const task = _.assign(new FinishedTask(), {
+        success: true
+      });
+      service.notifyTask(task, true);
+      expectSavedNotificationToHave({
+        type: NotificationType.success,
+        title: 'Executed unknown task',
+        message: undefined
+      });
+    }));
+
+    it('should be able to stop notifyTask from notifying', fakeAsync(() => {
+      const task = _.assign(new FinishedTask(), {
+        success: true
+      });
+      const timeoutId = service.notifyTask(task, true);
+      service.cancel(timeoutId);
+      tick(100);
+      expect(service['dataSource'].getValue().length).toBe(0);
+    }));
+
+    it('should show a error task notification', fakeAsync(() => {
+      const task = _.assign(
+        new FinishedTask('rbd/create', {
+          pool_name: 'somePool',
+          image_name: 'someImage'
+        }),
+        {
+          success: false,
+          exception: {
+            code: 17
+          }
+        }
+      );
+      service.notifyTask(task);
+      expectSavedNotificationToHave({
+        type: NotificationType.error,
+        title: `Failed to create RBD 'somePool/someImage'`,
+        message: `Name is already used by RBD 'somePool/someImage'.`
+      });
+    }));
+
+    it('combines different notifications with the same title', fakeAsync(() => {
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path a');
+      tick(60);
+      service.show(NotificationType.error, '502 - Bad Gateway', 'Error occurred in path b');
+      expectSavedNotificationToHave({
+        type: NotificationType.error,
+        title: '502 - Bad Gateway',
+        message: '<ul><li>Error occurred in path a</li><li>Error occurred in path b</li></ul>'
+      });
+    }));
+  });
 
   describe('notification queue', () => {
     const n1 = new CdNotificationConfig(NotificationType.success, 'Some success');
     const n2 = new CdNotificationConfig(NotificationType.info, 'Some info');
 
+    const showArray = (arr) => arr.forEach((n) => service.show(n));
+
     beforeEach(() => {
-      spyOn(service, 'show').and.stub();
+      spyOn(service, 'save').and.stub();
     });
 
     it('filters out duplicated notifications on single call', fakeAsync(() => {
-      service.queueNotifications([n1, n1, n2, n2]);
-      tick(500);
-      expect(service.show).toHaveBeenCalledTimes(2);
+      showArray([n1, n1, n2, n2]);
+      tick(510);
+      expect(service.save).toHaveBeenCalledTimes(2);
     }));
 
     it('filters out duplicated notifications presented in different calls', fakeAsync(() => {
-      service.queueNotifications([n1, n2]);
-      service.queueNotifications([n1, n2]);
-      tick(500);
-      expect(service.show).toHaveBeenCalledTimes(2);
+      showArray([n1, n2]);
+      showArray([n1, n2]);
+      tick(1000);
+      expect(service.save).toHaveBeenCalledTimes(2);
     }));
 
     it('will reset the timeout on every call', fakeAsync(() => {
-      service.queueNotifications([n1, n2]);
-      tick(400);
-      service.queueNotifications([n1, n2]);
-      tick(100);
-      expect(service.show).toHaveBeenCalledTimes(0);
-      tick(400);
-      expect(service.show).toHaveBeenCalledTimes(2);
+      showArray([n1, n2]);
+      tick(490);
+      showArray([n1, n2]);
+      tick(450);
+      expect(service.save).toHaveBeenCalledTimes(0);
+      tick(60);
+      expect(service.save).toHaveBeenCalledTimes(2);
     }));
 
     it('wont filter out duplicated notifications if timeout was reached before', fakeAsync(() => {
-      service.queueNotifications([n1, n2]);
-      tick(500);
-      service.queueNotifications([n1, n2]);
-      tick(500);
-      expect(service.show).toHaveBeenCalledTimes(4);
+      showArray([n1, n2]);
+      tick(510);
+      showArray([n1, n2]);
+      tick(510);
+      expect(service.save).toHaveBeenCalledTimes(4);
     }));
   });
 
