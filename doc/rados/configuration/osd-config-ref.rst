@@ -335,6 +335,22 @@ scrubbing operations.
 :Default: 512 KB. ``524288``
 
 
+``osd scrub auto repair``
+
+:Description: Setting this to ``true`` will enable automatic pg repair when errors
+              are found in deep-scrub.  However, if more than ``osd scrub auto repair num errors``
+              errors are found a repair is NOT performed.
+:Type: Boolean
+:Default: ``false``
+
+
+``osd scrub auto repair num errors``
+
+:Description: Auto repair will not occur if more than this many errors are found.
+:Type: 32-bit Integer
+:Default: ``5``
+
+
 .. index:: OSD; operations settings
 
 Operations
