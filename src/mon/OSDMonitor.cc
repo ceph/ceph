@@ -10365,6 +10365,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply;
       }
+    } else if (rel == CEPH_RELEASE_OCTOPUS) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_OCTOPUS)) {
+	ss << "not all mons are octopus";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_OCTOPUS))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_OCTOPUS feature";
+	err = -EPERM;
+	goto reply;
+      }
     } else {
       ss << "not supported for this release yet";
       err = -EPERM;
