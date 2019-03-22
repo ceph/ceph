@@ -22,9 +22,6 @@ upgrade-sequence:
        daemons: [mon.c]
        wait-for-healthy: false
        mon-health-to-clog: false
-   - exec:
-       mon.a:
-         - ceph config set global mon_warn_on_msgr2_not_enabled false
    - ceph.healthy:
    - sleep:
        duration: 60

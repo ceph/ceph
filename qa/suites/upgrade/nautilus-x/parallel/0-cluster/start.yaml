@@ -28,8 +28,6 @@ roles:
   - client.3
 overrides:
   ceph:
-    mon_bind_msgr2: false
-    mon_bind_addrvec: false
     log-whitelist:
     - scrub mismatch
     - ScrubResult
@@ -38,7 +36,6 @@ overrides:
     - \(SLOW_OPS\)
     - overall HEALTH_
     - slow request
-    - \(MON_MSGR2_NOT_ENABLED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
@@ -47,4 +44,3 @@ overrides:
       osd:
         osd class load list: "*"
         osd class default list: "*"
-    fs: xfs
