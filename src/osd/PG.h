@@ -199,9 +199,63 @@ struct PGPool {
 class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend class NamedState;
   friend class PeeringState;
+
+  PeeringState recovery_state;
 public:
   using PeeringCtx = PeeringState::PeeringCtx;
 
+
+protected:
+  /**
+   * Peering state information being moved to PeeringState
+   */
+  int &role;
+  uint64_t &state;
+  pg_shard_t &primary;
+  pg_shard_t &pg_whoami;
+  pg_shard_t &up_primary;
+  vector<int> &up;
+  set<pg_shard_t> &upset;
+  vector<int> &acting;
+  set<pg_shard_t> &actingset;
+  set<pg_shard_t> &acting_recovery_backfill;
+  bool &send_notify;
+  bool &dirty_info;
+  bool &dirty_big_info;
+  pg_info_t &info;
+  pg_info_t &last_written_info;
+  PastIntervals &past_intervals;
+  PGLog &pg_log;
+  epoch_t &last_peering_reset;
+  eversion_t &last_update_ondisk;
+  eversion_t &last_complete_ondisk;
+  eversion_t &last_update_applied;
+  eversion_t &last_rollback_info_trimmed_to_applied;
+  unsigned &flushes_in_progress;
+  set<pg_shard_t> &stray_set;
+  map<pg_shard_t, pg_info_t> &peer_info;
+  map<pg_shard_t, int64_t> &peer_bytes;
+  set<pg_shard_t> &peer_purged;
+  map<pg_shard_t, pg_missing_t> &peer_missing;
+  set<pg_shard_t> &peer_log_requested;
+  set<pg_shard_t> &peer_missing_requested;
+  uint64_t &peer_features;
+  uint64_t &acting_features;
+  uint64_t &upacting_features;
+  unsigned &last_require_osd_release;
+  vector<int> &want_acting;
+  map<pg_shard_t,eversion_t> &peer_last_complete_ondisk;
+  eversion_t &min_last_complete_ondisk;
+  eversion_t &pg_trim_to;
+  set<int> &blocked_by;
+  set<pg_shard_t> &peer_activated;
+  set<pg_shard_t> &backfill_targets;
+  set<pg_shard_t> &async_recovery_targets;
+  set<pg_shard_t> &might_have_unfound;
+  bool &deleting;
+  atomic<bool> &deleted;
+
+public:
   // -- members --
   const spg_t pg_id;
   const coll_t coll;
@@ -547,20 +601,10 @@ protected:
 
 protected:
 
-
-  bool deleting;  // true while in removing or OSD is shutting down
-  atomic<bool> deleted = {false};
-
   ZTracer::Endpoint trace_endpoint;
 
 
 protected:
-  bool dirty_info, dirty_big_info;
-
-protected:
-  // pg state
-  pg_info_t info;               ///< current pg info
-  pg_info_t last_written_info;  ///< last written info
   __u8 info_struct_v = 0;
   static const __u8 latest_struct_v = 10;
   // v10 is the new past_intervals encoding
@@ -572,7 +616,6 @@ protected:
   void upgrade(ObjectStore *store);
 
 protected:
-  PGLog  pg_log;
   ghobject_t    pgmeta_oid;
 
   // ------------------
@@ -601,7 +644,6 @@ protected:
 
 
   private:
-
     loc_count_t _get_count(const set<pg_shard_t>& shards) {
       loc_count_t r;
       for (auto s : shards) {
@@ -893,8 +935,6 @@ protected:
     }
   } missing_loc;
   
-  PastIntervals past_intervals;
-
   interval_set<snapid_t> snap_trimq;
 
   /* You should not use these items without taking their respective queue locks
@@ -909,60 +949,11 @@ protected:
   multiset<hobject_t> recovering_oids;
 #endif
 
-protected:
-  int         role;    // 0 = primary, 1 = replica, -1=none.
-  uint64_t    state;   // PG_STATE_*
-
-  bool send_notify;    ///< true if we are non-primary and should notify the primary
-
-protected:
-  eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
-  eversion_t  last_complete_ondisk;  // last_complete that has committed.
-  eversion_t  last_update_applied;
-
-  // entries <= last_rollback_info_trimmed_to_applied have been trimmed
-  eversion_t  last_rollback_info_trimmed_to_applied;
-
-  // primary state
-protected:
-  pg_shard_t primary;
-  pg_shard_t pg_whoami;
-  pg_shard_t up_primary;
-  vector<int> up, acting, want_acting;
-  // acting_recovery_backfill contains shards that are acting,
-  // async recovery targets, or backfill targets.
-  set<pg_shard_t> acting_recovery_backfill, actingset, upset;
-  map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
-  eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
-  eversion_t  pg_trim_to;
-
-  set<int> blocked_by; ///< osds we are blocked by (for pg stats)
-
 public:
   bool dne() { return info.dne(); }
 
 protected:
-  /*
-   * peer_info    -- projected (updates _before_ replicas ack)
-   * peer_missing -- committed (updates _after_ replicas ack)
-   */
-  
-  bool        need_up_thru;
-  set<pg_shard_t>    stray_set;   // non-acting osds that have PG data.
-  map<pg_shard_t, pg_info_t>    peer_info;   // info from peers (stray or prior)
-  map<pg_shard_t, int64_t>    peer_bytes;   // Peer's num_bytes from peer_info
-  set<pg_shard_t> peer_purged; // peers purged
-  map<pg_shard_t, pg_missing_t> peer_missing;
-  set<pg_shard_t> peer_log_requested;  // logs i've requested (and start stamps)
-  set<pg_shard_t> peer_missing_requested;
-
-  // i deleted these strays; ignore racing PGInfo from them
-  set<pg_shard_t> peer_activated;
-
-  // primary-only, recovery-only state
-  set<pg_shard_t> might_have_unfound;  // These osds might have objects on them
-                                       // which are unfound on the primary
-  epoch_t last_peering_reset;
+  bool need_up_thru; ///< Flag indicating that this pg needs up through published
 
   epoch_t get_last_peering_reset() const {
     return last_peering_reset;
@@ -1066,8 +1057,6 @@ protected:
   map<pg_shard_t, BackfillInterval> peer_backfill_info;
   bool backfill_reserved;
   bool backfill_reserving;
-
-  set<pg_shard_t> backfill_targets,  async_recovery_targets;
 
   // The primary's num_bytes and local num_bytes for this pg, only valid
   // during backfill for non-primary shards.
@@ -1223,9 +1212,6 @@ protected:
    * unreadable that was previously okay, e.g. when scrub or op processing
    * encounter an unexpected error.  FIXME.
    */
-
-  // pg waiters
-  unsigned flushes_in_progress;
 
   // ops with newer maps than our (or blocked behind them)
   // track these by client, since inter-request ordering doesn't otherwise
@@ -1825,17 +1811,8 @@ protected:
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
 protected:
-
-  PeeringState recovery_state;
-
-  uint64_t peer_features;
-  uint64_t acting_features;
-  uint64_t upacting_features;
-
   epoch_t last_epoch;
 
-  /// most recently consumed osdmap's require_osd_version
-  unsigned last_require_osd_release = 0;
   bool delete_needs_sleep = false;
 
 protected:
