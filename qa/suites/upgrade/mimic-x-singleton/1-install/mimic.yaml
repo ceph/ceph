@@ -5,10 +5,10 @@ overrides:
       - \(MGR_DOWN\)
       - slow request
 meta:
-- desc: install ceph/luminous latest
+- desc: install ceph/mimic latest
 tasks:
 - install:
-    branch: luminous
+    branch: mimic
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -17,6 +17,6 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-ssh
     extra_packages: ['librados2']
-- print: "**** done install luminous"
+- print: "**** done install mimic"
 - ceph:
 - print: "**** done ceph"
