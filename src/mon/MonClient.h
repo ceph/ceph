@@ -15,6 +15,7 @@
 #define CEPH_MONCLIENT_H
 
 #include <memory>
+#include <set>
 
 #include "msg/Messenger.h"
 
@@ -242,6 +243,7 @@ private:
 
   std::unique_ptr<MonConnection> active_con;
   std::map<entity_addrvec_t, MonConnection> pending_cons;
+  std::set<unsigned> tried;
 
   EntityName entity_name;
 
