@@ -3,16 +3,16 @@
 ================
 
 Swift API requests that require authentication must contain an
-``X-Storage-Token`` authentication token in the request header. 
+``X-Storage-Token`` authentication token in the request header.
 The token may be retrieved from RADOS Gateway, or from another authenticator.
-To obtain a token from RADOS Gateway, you must create a user. For example:: 
+To obtain a token from RADOS Gateway, you must create a user. For example::
 
-    sudo radosgw-admin user create --subuser="{username}:{subusername}" --uid="{username}" 
+    sudo radosgw-admin user create --subuser="{username}:{subusername}" --uid="{username}"
     --display-name="{Display Name}" --key-type=swift --secret="{password}" --access=full
 
-For details on RADOS Gateway administration, see `radosgw-admin`_. 
+For details on RADOS Gateway administration, see `radosgw-admin`_.
 
-.. _radosgw-admin: ../../../man/8/radosgw-admin/ 
+.. _radosgw-admin: ../../../man/8/radosgw-admin/
 
 Auth Get
 --------
@@ -33,13 +33,13 @@ Syntax
 Request Headers
 ~~~~~~~~~~~~~~~
 
-``X-Auth-User`` 
+``X-Auth-User``
 
 :Description: The key RADOS GW username to authenticate.
 :Type: String
 :Required: Yes
 
-``X-Auth-Key`` 
+``X-Auth-Key``
 
 :Description: The key associated to a RADOS GW username.
 :Type: String
@@ -49,24 +49,24 @@ Request Headers
 Response Headers
 ~~~~~~~~~~~~~~~~
 
-The response from the server should include an ``X-Auth-Token`` value. The 
-response may also contain a ``X-Storage-Url`` that provides the 
+The response from the server should include an ``X-Auth-Token`` value. The
+response may also contain a ``X-Storage-Url`` that provides the
 ``{api version}/{account}`` prefix that is specified in other requests
 throughout the API documentation.
 
 
-``X-Storage-Token`` 
+``X-Storage-Token``
 
 :Description: The authorization token for the ``X-Auth-User`` specified in the request.
 :Type: String
 
 
-``X-Storage-Url`` 
+``X-Storage-Url``
 
 :Description: The URL and ``{api version}/{account}`` path for the user.
 :Type: String
 
-A typical response looks like this:: 
+A typical response looks like this::
 
 	HTTP/1.1 204 No Content
 	Date: Mon, 16 Jul 2012 11:05:33 GMT

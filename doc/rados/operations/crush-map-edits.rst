@@ -312,7 +312,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   fairly “compete” against each other for replica placement through a
 	   process analogous to a draw of straws.
 
-        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data 
+        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data
            movement between items when neighbor weights change.
 
            For example the weight of item A including adding it anew or removing
@@ -489,7 +489,7 @@ A rule takes the following form::
 	      The reason has to do with how they behave when a
 	      previously-selected device fails. Let's say you have a PG stored
 	      on OSDs 1, 2, 3, 4, 5. Then 3 goes down.
-	      
+
 	      With the "firstn" mode, CRUSH simply adjusts its calculation to
 	      select 1 and 2, then selects 3 but discovers it's down, so it
 	      retries and selects 4 and 5, and then goes on to select a new
@@ -501,7 +501,7 @@ A rule takes the following form::
 	      not do that. You can instead expect it, when it selects the failed
 	      OSD 3, to try again and pick out 6, for a final transformation of:
 	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
-	      
+
 .. _crush-reclassify:
 
 Migrating from a legacy SSD rule to device classes

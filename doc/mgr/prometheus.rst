@@ -52,7 +52,7 @@ Statistic names and labels
 ==========================
 
 The names of the stats are exactly as Ceph names them, with
-illegal characters ``.``, ``-`` and ``::`` translated to ``_``, 
+illegal characters ``.``, ``-`` and ``::`` translated to ``_``,
 and ``ceph_`` prefixed to all names.
 
 
@@ -65,7 +65,7 @@ rocksdb stats.
 
 
 The *cluster* statistics (i.e. those global to the Ceph cluster)
-have labels appropriate to what they report on.  For example, 
+have labels appropriate to what they report on.  For example,
 metrics relating to pools have a ``pool_id`` label.
 
 
@@ -99,7 +99,7 @@ Correlating drive statistics with node_exporter
 The prometheus output from Ceph is designed to be used in conjunction
 with the generic host monitoring from the Prometheus node_exporter.
 
-To enable correlation of Ceph OSD statistics with node_exporter's 
+To enable correlation of Ceph OSD statistics with node_exporter's
 drive statistics, special series are output like this:
 
 ::
@@ -236,8 +236,8 @@ node_targets.yml
 Notes
 =====
 
-Counters and gauges are exported; currently histograms and long-running 
-averages are not.  It's possible that Ceph's 2-D histograms could be 
+Counters and gauges are exported; currently histograms and long-running
+averages are not.  It's possible that Ceph's 2-D histograms could be
 reduced to two separate 1-D histograms, and that long-running averages
 could be exported as Prometheus' Summary type.
 

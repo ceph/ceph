@@ -36,7 +36,7 @@ In principle a fine-grained discard could communicate our intent to
 the device, but in practice discard is poorly implemented in the
 device and intervening software layers.
 
-  
+
 Basics
 ======
 
@@ -62,7 +62,7 @@ The key is to mix a small bit of cleaning work with every write
 transaction to avoid spikes and variance in write latency.
 
 
-  
+
 Data layout basics
 ==================
 

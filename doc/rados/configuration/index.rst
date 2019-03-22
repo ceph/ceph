@@ -22,7 +22,7 @@ For general object store configuration, refer to the following:
    ceph-conf
 
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Reference</h3>
 
@@ -46,7 +46,7 @@ To optimize the performance of your cluster, refer to the following:
    Messaging Settings <ms-ref>
    General Settings <general-config-ref>
 
-   
+
 .. raw:: html
 
 	</td></tr></tbody></table>

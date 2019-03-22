@@ -2,8 +2,8 @@
  Service Operations
 ====================
 
-To retrieve data about our Swift-compatible service, you may execute ``GET`` 
-requests using the ``X-Storage-Url`` value retrieved during authentication. 
+To retrieve data about our Swift-compatible service, you may execute ``GET``
+requests using the ``X-Storage-Url`` value retrieved during authentication.
 
 List Containers
 ===============
@@ -35,7 +35,7 @@ Request Parameters
 
 ``format``
 
-:Description: Defines the format of the result. 
+:Description: Defines the format of the result.
 :Type: String
 :Valid Values: ``json`` | ``xml``
 :Required: No

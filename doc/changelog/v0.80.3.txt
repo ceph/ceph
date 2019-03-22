@@ -9,9 +9,9 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Thu Jul 10 10:36:16 2014 -0700
 
     rgw: fix RGWObjManifestRule decoder
-    
+
     Only decode the new field if it is a new struct.
-    
+
     Fixes: #8804
     Backport: firefly
     Signed-off-by: Sage Weil <sage@inktank.com>

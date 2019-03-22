@@ -16,7 +16,7 @@ Notable Changes
   after completely upgrading to 12.2.11. Once the cluster has this flag
   set, the length of the pg log will be capped by a hard limit. Once set,
   this flag *must not* be unset anymore.
-  
+
 * There have been fixes to RGW dynamic and manual resharding, which no longer
   leaves behind stale bucket instances to be removed manually. For finding and
   cleaning up older instances from a reshard a radosgw-admin command `reshard

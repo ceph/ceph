@@ -9,7 +9,7 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Thu May 2 14:13:07 2013 -0700
 
     mon: dump MonitorDBStore transactions to file
-    
+
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     (cherry picked from commit 797089ef082b99910eebfd9454c03d1f027c93bb)
 
@@ -18,7 +18,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Mon May 6 14:21:28 2013 -0700
 
     osd: optionally enable leveldb logging
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 0b4c5c1a3349670d11cc3c4fb3c4b3c1a80b2502)
 
@@ -27,9 +27,9 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Mon May 6 14:13:50 2013 -0700
 
     mon: allow leveldb logging
-    
+
     'mon leveldb log = filename'
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit c1d5f815546b731e10bfcb81cbcd48b7d432e9c4)
 
@@ -38,11 +38,11 @@ Author: Gary Lowell <glowell@inktank.com>
 Date:   Wed May 8 16:33:05 2013 -0700
 
     debian/control:  squeeze requres cryptsetup package
-    
+
     Squeeze requires the cryptsetup package which has been renamed
     cryptsetup-bin in later versions.  Allow either package to
     satisfy the dependency.
-    
+
     Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
     (cherry picked from commit 83bbae415de16f708ca1cb24861ddbb0bd514a7f)
 
@@ -51,11 +51,11 @@ Author: Yehuda Sadeh <yehuda@inktank.com>
 Date:   Wed May 8 12:18:49 2013 -0700
 
     osd: don't assert if get_omap_iterator() returns NULL
-    
+
     Fixes: #4949
     This can happen if the object does not exist and it's
     a write operation. Just return -ENOENT.
-    
+
     Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
     (cherry picked from commit 36ec6f9bce63641f4fc2e4ab04d03d3ec1638ea0)
 
@@ -64,13 +64,13 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Wed May 8 14:54:33 2013 -0700
 
     ceph-create-keys: gracefully handle no data from admin socket
-    
+
     Old ceph-mon (prior to 393c9372f82ef37fc6497dd46fc453507a463d42) would
     return an empty string and success if the command was not registered yet.
     Gracefully handle that case by retrying.
-    
+
     If we still fail to parse, exit entirely with EINVAL.
-    
+
     Fixes: #4952
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Dan Mick <dan.mick@intank.com>
@@ -81,9 +81,9 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Wed May 8 14:35:54 2013 -0700
 
     init-ceph: fix osd_data location when checking df utilization
-    
+
     Do not assume default osd data location.
-    
+
     Fixes: #4951
     Backport: cuttlefish, bobtail
     Signed-off-by: Sage Weil <sage@inktank.com>
@@ -95,11 +95,11 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Tue May 7 16:41:22 2013 -0700
 
     OSD: handle stray snap collections from upgrade bug
-    
+
     Previously, we failed to clear snap_collections, which causes split to
     spawn a bunch of snap collections.  In load_pgs, we now clear any such
     snap collections and then snap_collections field on the PG itself.
-    
+
     Related: #4927
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>
@@ -110,7 +110,7 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Tue May 7 16:35:57 2013 -0700
 
     PG: clear snap_collections on upgrade
-    
+
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 252d71a81ef4536830a74897c84a7015ae6ec9fe)
@@ -120,7 +120,7 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Tue May 7 16:34:57 2013 -0700
 
     OSD: snap collections can be ignored on split
-    
+
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 438d9aa152e546b2008ec355b481df71aa1c51a5)
@@ -130,10 +130,10 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Wed May 8 11:05:29 2013 -0700
 
     ceph: return error code when failing to get result from admin socket
-    
+
     Make sure we return a non-zero result code when we fail to read something
     from the admin socket.
-    
+
     Backport: cuttlefish, bobtail
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 393c9372f82ef37fc6497dd46fc453507a463d42)

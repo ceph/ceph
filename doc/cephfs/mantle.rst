@@ -58,7 +58,7 @@ Mantle with `vstart.sh`
 
     cd build
     ../src/vstart.sh -n -l
-    for i in a b c; do 
+    for i in a b c; do
       bin/ceph --admin-daemon out/mds.$i.asok config set debug_ms 0
       bin/ceph --admin-daemon out/mds.$i.asok config set debug_mds 2
       bin/ceph --admin-daemon out/mds.$i.asok config set mds_beacon_grace 1500
@@ -200,7 +200,7 @@ For Mantle, we don't care if a Lua error crashes our balancer -- in that case,
 we will fall back to the original balancer.
 
 The performance improvement of using `lua_call` over `lua_pcall` would not be
-leveraged here because the balancer is invoked every 10 seconds by default. 
+leveraged here because the balancer is invoked every 10 seconds by default.
 
 Returning Policy Decision to C++
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -214,7 +214,7 @@ Lua side.
 Iterating through tables returned by Lua is done through the stack. In Lua
 jargon: a dummy value is pushed onto the stack and the next iterator replaces
 the top of the stack with a (k, v) pair. After reading each value, pop that
-value but keep the key for the next call to `lua_next`. 
+value but keep the key for the next call to `lua_next`.
 
 Reading from RADOS
 ~~~~~~~~~~~~~~~~~~

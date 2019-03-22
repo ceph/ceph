@@ -39,11 +39,11 @@ case the ``POOLNAME`` defaults to "rbd". ``RBDOPTS`` is an optional list of
 parameters to be passed to the underlying ``rbd map`` command. These parameters
 and their values should be specified as a comma-separated string::
 
-    PARAM1=VAL1,PARAM2=VAL2,...,PARAMN=VALN 
+    PARAM1=VAL1,PARAM2=VAL2,...,PARAMN=VALN
 
 This will cause the script to issue an ``rbd map`` command like the following::
 
-    rbd map POOLNAME/IMAGENAME --PARAM1 VAL1 --PARAM2 VAL2 
+    rbd map POOLNAME/IMAGENAME --PARAM1 VAL1 --PARAM2 VAL2
 
 (See the ``rbd`` manpage for a full list of possible options.)
 For parameters and values which contain commas or equality signs, a simple
@@ -79,7 +79,7 @@ sequence.)
 Examples
 ========
 
-Example ``/etc/ceph/rbdmap`` for three RBD images called "bar1", "bar2" and "bar3", 
+Example ``/etc/ceph/rbdmap`` for three RBD images called "bar1", "bar2" and "bar3",
 which are in pool "foopool"::
 
     foopool/bar1    id=admin,keyring=/etc/ceph/ceph.client.admin.keyring

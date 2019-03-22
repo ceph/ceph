@@ -9,7 +9,7 @@ for development, testing and proof-of-concept projects.
 APT
 ---
 
-To install ``ceph-deploy`` with ``apt``, execute the following:: 
+To install ``ceph-deploy`` with ``apt``, execute the following::
 
 	sudo apt-get update && sudo apt-get install ceph-deploy
 
@@ -17,7 +17,7 @@ To install ``ceph-deploy`` with ``apt``, execute the following::
 RPM
 ---
 
-To install ``ceph-deploy`` with ``yum``, execute the following:: 
+To install ``ceph-deploy`` with ``yum``, execute the following::
 
 	sudo yum install ceph-deploy
 

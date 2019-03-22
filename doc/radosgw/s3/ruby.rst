@@ -14,7 +14,7 @@ You can setup the connection on global way:
 		endpoint: 'https://objects.dreamhost.com.',
 		access_key_id: 'my-access-key',
 		secret_access_key: 'my-secret-key',
-		force_path_style: true, 
+		force_path_style: true,
 		region: 'us-east-1'
 	)
 
@@ -53,7 +53,7 @@ This creates a new bucket called ``my-new-bucket``
 
 	s3_client.create_bucket(bucket: 'my-new-bucket')
 
-If you want a private bucket: 
+If you want a private bucket:
 
 `acl` option accepts: # private, public-read, public-read-write, authenticated-read
 
@@ -98,7 +98,7 @@ First, you need to clear the bucket:
 .. code-block:: ruby
 
 	Aws::S3::Bucket.new('my-new-bucket', client: s3_client).clear!
-	
+
 after, you can destroy the bucket
 
 .. code-block:: ruby

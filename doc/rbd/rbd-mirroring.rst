@@ -115,9 +115,9 @@ peer cluster connection attributes when adding a mirroring peer, use the
         $ rbd --cluster local mirror pool peer add image-pool client.remote@remote --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file <(echo 'AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==')
         $ rbd --cluster local mirror pool info image-pool --all
         Mode: pool
-        Peers: 
-          UUID                                 NAME   CLIENT        MON_HOST                KEY                                      
-          587b08db-3d33-4f32-8af8-421e77abb081 remote client.remote 192.168.1.1,192.168.1.2 AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw== 
+        Peers:
+          UUID                                 NAME   CLIENT        MON_HOST                KEY
+          587b08db-3d33-4f32-8af8-421e77abb081 remote client.remote 192.168.1.1,192.168.1.2 AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
 
 Remove Cluster Peer
 -------------------

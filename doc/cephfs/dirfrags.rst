@@ -77,9 +77,9 @@ operations on directory fragments.  The decaying load counters have an
 exponential decay based on the ``mds_decay_halflife`` setting.
 
 On writes, the write counter is
-incremented, and compared with ``mds_bal_split_wr``, triggering a 
+incremented, and compared with ``mds_bal_split_wr``, triggering a
 split if the threshold is exceeded.  Write operations include metadata IO
-such as renames, unlinks and creations. 
+such as renames, unlinks and creations.
 
 The ``mds_bal_split_rd`` threshold is applied based on the read operation
 load counter, which tracks readdir operations.
@@ -89,7 +89,7 @@ By the default, the read threshold is 25000 and the write threshold is
 a split.
 
 After fragments are split due to the activity thresholds, they are only
-merged based on the size threshold (``mds_bal_merge_size``), so 
+merged based on the size threshold (``mds_bal_merge_size``), so
 a spike in activity may cause a directory to stay fragmented
 forever unless some entries are unlinked.
 

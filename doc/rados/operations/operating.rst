@@ -101,25 +101,25 @@ Starting all Daemons
 --------------------
 
 To start all daemons on a Ceph Node (irrespective of type), execute the
-following:: 
+following::
 
 	sudo start ceph-all
-	
 
-Stopping all Daemons	
+
+Stopping all Daemons
 --------------------
 
 To stop all daemons on a Ceph Node (irrespective of type), execute the
-following:: 
+following::
 
 	sudo stop ceph-all
-	
+
 
 Starting all Daemons by Type
 ----------------------------
 
 To start all daemons of a particular type on a Ceph Node, execute one of the
-following:: 
+following::
 
 	sudo start ceph-osd-all
 	sudo start ceph-mon-all
@@ -141,13 +141,13 @@ Starting a Daemon
 -----------------
 
 To start a specific daemon instance on a Ceph Node, execute one of the
-following:: 
+following::
 
 	sudo start ceph-osd id={id}
 	sudo start ceph-mon id={hostname}
 	sudo start ceph-mds id={hostname}
 
-For example:: 
+For example::
 
 	sudo start ceph-osd id=1
 	sudo start ceph-mon id=ceph-server
@@ -158,13 +158,13 @@ Stopping a Daemon
 -----------------
 
 To stop a specific daemon instance on a Ceph Node, execute one of the
-following:: 
+following::
 
 	sudo stop ceph-osd id={id}
 	sudo stop ceph-mon id={hostname}
 	sudo stop ceph-mds id={hostname}
 
-For example:: 
+For example::
 
 	sudo stop ceph-osd id=1
 	sudo start ceph-mon id=ceph-server
@@ -214,7 +214,7 @@ The ``ceph`` commands include:
 +------------------+------------------------------------------------------------+
 |  ``forcestop``   | Force the daemon(s) to stop. Same as ``kill -9``           |
 +------------------+------------------------------------------------------------+
-|   ``killall``    | Kill all daemons of a particular type.                     | 
+|   ``killall``    | Kill all daemons of a particular type.                     |
 +------------------+------------------------------------------------------------+
 |  ``cleanlogs``   | Cleans out the log directory.                              |
 +------------------+------------------------------------------------------------+
@@ -223,7 +223,7 @@ The ``ceph`` commands include:
 
 For subsystem operations, the ``ceph`` service can target specific daemon types
 by adding a particular daemon type for the ``[daemons]`` option. Daemon types
-include: 
+include:
 
 - ``mon``
 - ``osd``

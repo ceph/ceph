@@ -47,7 +47,7 @@ Terms
 - *service ticket*: a ticket proving identify and authorization to a
   service
 
-  
+
 Terminology
 -----------
 
@@ -73,7 +73,7 @@ The cephx exchange begins with the monitor knowing who the client
 claims to be, and an initial cephx message from the monitor to the
 client/principal.::
 
-  a->p : 
+  a->p :
     CephxServerChallenge {
       u64 server_challenge     # random (by server)
     }
@@ -191,7 +191,7 @@ mgr).::
     CephxRequestHeader {
       u16 CEPHX_GET_PRINCIPAL_SESSION_KEY
     }
-    CephxAuthorizer authorizer      
+    CephxAuthorizer authorizer
     CephxServiceTicketRequest {
       u32 keys    # bitmask of CEPH_ENTITY_TYPE_NAME (MGR, OSD, MDS, etc)
     }
@@ -230,7 +230,7 @@ The response looks like::
     u8 encoding_version = 1
     u32 num_tickets
     ticket_info * N
-  
+
 Where, as above,::
 
     ticket_info {
@@ -297,7 +297,7 @@ of::
       u8 1
       u64 nonce               # random from client
     }
-    
+
 The server will inspect the auth_ticket CephxTicketBlob (by decrypting
 it with its current rotating service key).  If it is a pre-v12.2.6 or
 pre-v13.2.2 client, the server immediately replies with::

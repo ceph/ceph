@@ -84,7 +84,7 @@ this time, the op is passed to PG::do_request, which checks that:
   2. the client requesting the op has enough permissions (PG::op_has_sufficient_caps)
   3. the op is not to be discarded (PG::can_discard_{request,op,subop,scan,backfill})
   4. the PG is active (PG::flushed boolean)
-  5. the op is a CEPH_MSG_OSD_OP and the PG is in PG_STATE_ACTIVE state and not in PG_STATE_REPLAY 
+  5. the op is a CEPH_MSG_OSD_OP and the PG is in PG_STATE_ACTIVE state and not in PG_STATE_REPLAY
 
 If these conditions are not met, the op is either discarded or queued for later processing. If all conditions are met, the op is processed according to its type:
 

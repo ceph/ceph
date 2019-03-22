@@ -31,12 +31,12 @@ Request Parameters
 :Description: The trust relationship policy document that grants an entity permission to assume the role.
 :Type: String
 
-For example:: 	
-	
+For example::
+
   radosgw-admin role create --role-name=S3Access1 --path=/application_abc/component_xyz/ --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
-  
+
 .. code-block:: javascript
-  
+
   {
     "id": "ca43045c-082c-491a-8af1-2eebca13deec",
     "name": "S3Access1",
@@ -63,8 +63,8 @@ Request Parameters
 :Description: Name of the role.
 :Type: String
 
-For example:: 	
-	
+For example::
+
   radosgw-admin role rm --role-name=S3Access1
 
 Note: A role can be deleted only when it doesn't have any permission policy attached to it.
@@ -84,12 +84,12 @@ Request Parameters
 :Description: Name of the role.
 :Type: String
 
-For example:: 	
-	
+For example::
+
   radosgw-admin role get --role-name=S3Access1
-  
+
 .. code-block:: javascript
-  
+
   {
     "id": "ca43045c-082c-491a-8af1-2eebca13deec",
     "name": "S3Access1",
@@ -116,12 +116,12 @@ Request Parameters
 :Description: Path prefix for filtering roles. If this is not specified, all roles are listed.
 :Type: String
 
-For example:: 	
-	
+For example::
+
   radosgw-admin role list --path-prefix="/application"
-  
+
 .. code-block:: javascript
-  
+
   [
     {
         "id": "3e1c0ff7-8f2b-456c-8fdf-20f428ba6a7f",

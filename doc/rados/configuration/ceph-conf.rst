@@ -3,7 +3,7 @@
 ==================
 
 When you start the Ceph service, the initialization process activates a series
-of daemons that run in the background. A :term:`Ceph Storage Cluster` runs 
+of daemons that run in the background. A :term:`Ceph Storage Cluster` runs
 three types of daemons:
 
 - :term:`Ceph Monitor` (``ceph-mon``)
@@ -114,7 +114,7 @@ These sections include:
 ``mon``
 
 :Description: Settings under ``mon`` affect all ``ceph-mon`` daemons in
-              the Ceph Storage Cluster, and override the same setting in 
+              the Ceph Storage Cluster, and override the same setting in
               ``global``.
 
 :Example: ``mon_cluster_log_to_syslog = true``
@@ -123,7 +123,7 @@ These sections include:
 ``mgr``
 
 :Description: Settings in the ``mgr`` section affect all ``ceph-mgr`` daemons in
-              the Ceph Storage Cluster, and override the same setting in 
+              the Ceph Storage Cluster, and override the same setting in
               ``global``.
 
 :Example: ``mgr_stats_period = 10``
@@ -179,11 +179,11 @@ dramatically. When a metavariable is set in a configuration value,
 Ceph expands the metavariable into a concrete value at the time the
 configuration value is used. Ceph metavariables are similar to variable expansion in the Bash shell.
 
-Ceph supports the following metavariables: 
+Ceph supports the following metavariables:
 
 ``$cluster``
 
-:Description: Expands to the Ceph Storage Cluster name. Useful when running 
+:Description: Expands to the Ceph Storage Cluster name. Useful when running
               multiple Ceph Storage Clusters on the same hardware.
 
 :Example: ``/etc/ceph/$cluster.keyring``
@@ -264,7 +264,7 @@ surrounded by square brackets. For example,
 
 	[global]
 	debug ms = 0
-	
+
 	[osd]
 	debug ms = 1
 

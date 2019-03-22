@@ -11,7 +11,7 @@ This **Preflight Checklist** will help you prepare an admin node for use with
 Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
 have a few things set up first on your admin node and on nodes running Ceph
 daemons.
- 
+
 
 Install an Operating System
 ===========================
@@ -33,7 +33,7 @@ SSH server. ::
 Create a User
 =============
 
-Create a user on nodes running Ceph daemons. 
+Create a user on nodes running Ceph daemons.
 
 .. tip:: We recommend a username that brute force attackers won't
    guess easily (e.g., something other than ``root``, ``ceph``, etc).
@@ -46,12 +46,12 @@ Create a user on nodes running Ceph daemons.
 
 
 ``ceph-deploy`` installs packages onto your nodes. This means that
-the user you create requires passwordless ``sudo`` privileges. 
+the user you create requires passwordless ``sudo`` privileges.
 
-.. note:: We **DO NOT** recommend enabling the ``root`` password 
-   for security reasons. 
+.. note:: We **DO NOT** recommend enabling the ``root`` password
+   for security reasons.
 
-To provide full privileges to the user, add the following to 
+To provide full privileges to the user, add the following to
 ``/etc/sudoers.d/ceph``. ::
 
 	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
@@ -72,11 +72,11 @@ running Ceph daemons (leave the passphrase empty). ::
 	Your identification has been saved in /ceph-client/.ssh/id_rsa.
 	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
 
-Copy the key to each node running Ceph daemons:: 
+Copy the key to each node running Ceph daemons::
 
 	ssh-copy-id ceph@ceph-server
 
-Modify your ~/.ssh/config file of your admin node so that it defaults 
+Modify your ~/.ssh/config file of your admin node so that it defaults
 to logging in as the user you created when no username is specified. ::
 
 	Host ceph-server
@@ -87,11 +87,11 @@ to logging in as the user you created when no username is specified. ::
 Install ceph-deploy
 ===================
 
-To install ``ceph-deploy``, execute the following:: 
+To install ``ceph-deploy``, execute the following::
 
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-	sudo apt-get update	
+	sudo apt-get update
 	sudo apt-get install ceph-deploy
 
 

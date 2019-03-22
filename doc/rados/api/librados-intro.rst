@@ -10,12 +10,12 @@ Store)`, the ``librados`` API enables you to create your own interface to the
 Ceph Storage Cluster.
 
 The ``librados`` API enables you to interact with the two types of daemons in
-the Ceph Storage Cluster: 
+the Ceph Storage Cluster:
 
-- The :term:`Ceph Monitor`, which maintains a master copy of the cluster map. 
+- The :term:`Ceph Monitor`, which maintains a master copy of the cluster map.
 - The :term:`Ceph OSD Daemon` (OSD), which stores data as objects on a storage node.
 
-.. ditaa::  
+.. ditaa::
             +---------------------------------+
             |  Ceph Storage Cluster Protocol  |
             |           (librados)            |
@@ -24,9 +24,9 @@ the Ceph Storage Cluster:
             |      OSDs     | |    Monitors   |
             +---------------+ +---------------+
 
-This guide provides a high-level introduction to using ``librados``. 
+This guide provides a high-level introduction to using ``librados``.
 Refer to :doc:`../../architecture` for additional details of the Ceph
-Storage Cluster. To use the API, you need a running Ceph Storage Cluster. 
+Storage Cluster. To use the API, you need a running Ceph Storage Cluster.
 See `Installation (Quick)`_ for details.
 
 
@@ -36,7 +36,7 @@ Step 1: Getting librados
 Your client application must bind with ``librados`` to connect to the Ceph
 Storage Cluster. You must install ``librados`` and any required packages to
 write applications that use ``librados``. The ``librados`` API is written in
-C++, with additional bindings for C, Python, Java and PHP. 
+C++, with additional bindings for C, Python, Java and PHP.
 
 
 Getting librados for C/C++
@@ -52,7 +52,7 @@ distributions, execute the following::
 
 	sudo yum install librados2-devel
 
-Once you install ``librados`` for developers, you can find the required 
+Once you install ``librados`` for developers, you can find the required
 headers for C/C++ under ``/usr/include/rados``. ::
 
 	ls /usr/include/rados
@@ -86,7 +86,7 @@ Getting librados for Java
 
 To install ``librados`` for Java, you need to execute the following procedure:
 
-#. Install ``jna.jar``. For Debian/Ubuntu, execute:: 
+#. Install ``jna.jar``. For Debian/Ubuntu, execute::
 
 	sudo apt-get install libjna-java
 
@@ -100,18 +100,18 @@ To install ``librados`` for Java, you need to execute the following procedure:
 
 	git clone --recursive https://github.com/ceph/rados-java.git
 
-#. Build the ``rados-java`` repository:: 
+#. Build the ``rados-java`` repository::
 
 	cd rados-java
 	ant
 
    The JAR file is located under ``rados-java/target``.
 
-#. Copy the JAR for RADOS to a common location (e.g., ``/usr/share/java``) and 
+#. Copy the JAR for RADOS to a common location (e.g., ``/usr/share/java``) and
    ensure that it and the JNA JAR are in your JVM's classpath. For example::
 
 	sudo cp target/rados-0.1.3.jar /usr/share/java/rados-0.1.3.jar
-	sudo ln -s /usr/share/java/jna-3.2.7.jar /usr/lib/jvm/default-java/jre/lib/ext/jna-3.2.7.jar  
+	sudo ln -s /usr/share/java/jna-3.2.7.jar /usr/lib/jvm/default-java/jre/lib/ext/jna-3.2.7.jar
 	sudo ln -s /usr/share/java/rados-0.1.3.jar  /usr/lib/jvm/default-java/jre/lib/ext/rados-0.1.3.jar
 
 To build the documentation, execute the following::
@@ -158,14 +158,14 @@ and retrieve data. To interact with OSDs, the client app must invoke
 retrieves the  :term:`Cluster Map` from the Ceph Monitor. When the client app
 wants to read or write data, it creates an I/O context and binds to a
 :term:`pool`. The pool has an associated :term:`CRUSH Rule` that defines how it
-will place data in the storage cluster. Via the I/O context, the client 
+will place data in the storage cluster. Via the I/O context, the client
 provides the object name to ``librados``, which takes the object name
 and the cluster map (i.e., the topology of the cluster) and `computes`_ the
 placement group and `OSD`_  for locating the data. Then the client application
 can read or write data. The client app doesn't need to learn about the topology
 of the cluster directly.
 
-.. ditaa:: 
+.. ditaa::
             +--------+  Retrieves  +---------------+
             | Client |------------>|  Cluster Map  |
             +--------+             +---------------+
@@ -183,7 +183,7 @@ of the cluster directly.
 
 The Ceph Storage Cluster handle encapsulates the client configuration, including:
 
-- The `user ID`_ for ``rados_create()`` or user name for ``rados_create2()`` 
+- The `user ID`_ for ``rados_create()`` or user name for ``rados_create2()``
   (preferred).
 - The :term:`cephx` authentication key
 - The monitor ID and IP address
@@ -196,7 +196,7 @@ and then 2) use that handle to connect. To connect to the cluster, the
 app must supply a monitor address, a username and an authentication key
 (cephx is enabled by default).
 
-.. tip:: Talking to different Ceph Storage Clusters – or to the same cluster 
+.. tip:: Talking to different Ceph Storage Clusters – or to the same cluster
    with different users – requires different cluster handles.
 
 RADOS provides a number of ways for you to set the required values. For
@@ -261,7 +261,7 @@ C Example
 ---------
 
 For C, creating a simple cluster handle using the ``admin`` user, configuring
-it and connecting to the cluster might look something like this: 
+it and connecting to the cluster might look something like this:
 
 .. code-block:: c
 
@@ -270,7 +270,7 @@ it and connecting to the cluster might look something like this:
 	#include <string.h>
 	#include <rados/librados.h>
 
-	int main (int argc, const char **argv) 
+	int main (int argc, const char **argv)
 	{
 
 		/* Declare the cluster handle and required arguments. */
@@ -278,8 +278,8 @@ it and connecting to the cluster might look something like this:
 		char cluster_name[] = "ceph";
 		char user_name[] = "client.admin";
 		uint64_t flags = 0;
-	
-		/* Initialize the cluster handle with the "ceph" cluster name and the "client.admin" user */  
+
+		/* Initialize the cluster handle with the "ceph" cluster name and the "client.admin" user */
 		int err;
 		err = rados_create2(&cluster, cluster_name, user_name, flags);
 
@@ -320,7 +320,7 @@ it and connecting to the cluster might look something like this:
 
 	}
 
-Compile your client and link to ``librados`` using ``-lrados``. For example:: 
+Compile your client and link to ``librados`` using ``-lrados``. For example::
 
 	gcc ceph-client.c -lrados -o ceph-client
 
@@ -343,13 +343,13 @@ you to initialize a ``librados::Rados`` cluster handle object:
 
 		int ret = 0;
 
-		/* Declare the cluster handle and required variables. */	
+		/* Declare the cluster handle and required variables. */
 		librados::Rados cluster;
 		char cluster_name[] = "ceph";
 		char user_name[] = "client.admin";
-		uint64_t flags = 0; 
-	
-		/* Initialize the cluster handle with the "ceph" cluster name and "client.admin" user */ 
+		uint64_t flags = 0;
+
+		/* Initialize the cluster handle with the "ceph" cluster name and "client.admin" user */
 		{
 			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
@@ -360,9 +360,9 @@ you to initialize a ``librados::Rados`` cluster handle object:
 			}
 		}
 
-		/* Read a Ceph configuration file to configure the cluster handle. */	
-		{	
-			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");	
+		/* Read a Ceph configuration file to configure the cluster handle. */
+		{
+			ret = cluster.conf_read_file("/etc/ceph/ceph.conf");
 			if (ret < 0) {
 				std::cerr << "Couldn't read the Ceph configuration file! error " << ret << std::endl;
 				return EXIT_FAILURE;
@@ -370,7 +370,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 				std::cout << "Read the Ceph configuration file." << std::endl;
 			}
 		}
-		
+
 		/* Read command line arguments */
 		{
 			ret = cluster.conf_parse_argv(argc, argv);
@@ -381,7 +381,7 @@ you to initialize a ``librados::Rados`` cluster handle object:
 				std::cout << "Parsed command line options." << std::endl;
 			}
 		}
-	
+
 		/* Connect to the cluster */
 		{
 			ret = cluster.connect();
@@ -392,12 +392,12 @@ you to initialize a ``librados::Rados`` cluster handle object:
 				std::cout << "Connected to the cluster." << std::endl;
 			}
 		}
-	
+
 		return 0;
 	}
-	
 
-Compile the source; then, link ``librados`` using ``-lrados``. 
+
+Compile the source; then, link ``librados`` using ``-lrados``.
 For example::
 
 	g++ -g -c ceph-client.cc -o ceph-client.o
@@ -423,7 +423,7 @@ into exceptions.
 	except TypeError as e:
 		print 'Argument validation error: ', e
 		raise e
-		
+
 	print "Created cluster handle."
 
 	try:
@@ -451,22 +451,22 @@ binding converts C++-based errors into exceptions.
 
 	import com.ceph.rados.Rados;
 	import com.ceph.rados.RadosException;
-	
+
 	import java.io.File;
-	
+
 	public class CephClient {
 		public static void main (String args[]){
-	
+
 			try {
 				Rados cluster = new Rados("admin");
 				System.out.println("Created cluster handle.");
-	            
+
 				File f = new File("/etc/ceph/ceph.conf");
 				cluster.confReadFile(f);
 				System.out.println("Read the configuration file.");
 
 				cluster.connect();
-				System.out.println("Connected to the cluster.");            
+				System.out.println("Connected to the cluster.");
 
 			} catch (RadosException e) {
 				System.out.println(e.getMessage() + ": " + e.getReturnValue());
@@ -513,7 +513,7 @@ Once your app has a cluster handle and a connection to a Ceph Storage Cluster,
 you may create an I/O Context and begin reading and writing data. An I/O Context
 binds the connection to a specific pool. The user must have appropriate
 `CAPS`_ permissions to access the specified pool. For example, a user with read
-access but not write access will only be able to read data. I/O Context 
+access but not write access will only be able to read data. I/O Context
 functionality includes:
 
 - Write/read data and extended attributes
@@ -526,8 +526,8 @@ functionality includes:
            +---------+     +---------+     +---------+
                 |               |               |
                 |-----+ create  |               |
-                |     | I/O     |               | 
-                |<----+ context |               |              
+                |     | I/O     |               |
+                |<----+ context |               |
                 |               |               |
                 |  write data   |               |
                 |---------------+-------------->|
@@ -559,11 +559,11 @@ RADOS enables you to interact both synchronously and asynchronously. Once your
 app has an I/O Context, read/write operations only require you to know the
 object/xattr name. The CRUSH algorithm encapsulated in ``librados`` uses the
 cluster map to identify the appropriate OSD. OSD daemons handle the replication,
-as described in `Smart Daemons Enable Hyperscale`_. The ``librados`` library also 
+as described in `Smart Daemons Enable Hyperscale`_. The ``librados`` library also
 maps objects to placement groups, as described in  `Calculating PG IDs`_.
 
 The following examples use the default ``data`` pool. However, you may also
-use the API to list pools, ensure they exist, or create and delete pools. For 
+use the API to list pools, ensure they exist, or create and delete pools. For
 the write operations, the examples illustrate how to use synchronous mode. For
 the read operations, the examples illustrate how to use asynchronous mode.
 
@@ -582,16 +582,16 @@ C Example
 	#include <string.h>
 	#include <rados/librados.h>
 
-	int main (int argc, const char **argv) 
+	int main (int argc, const char **argv)
 	{
-		/* 
+		/*
 		 * Continued from previous C example, where cluster handle and
-		 * connection are established. First declare an I/O Context. 
+		 * connection are established. First declare an I/O Context.
 		 */
 
 		rados_ioctx_t io;
 		char *poolname = "data";
-	
+
 		err = rados_ioctx_create(cluster, poolname, &io);
 		if (err < 0) {
 			fprintf(stderr, "%s: cannot open rados pool %s: %s\n", argv[0], poolname, strerror(-err));
@@ -601,7 +601,7 @@ C Example
 			printf("\nCreated I/O context.\n");
 		}
 
-		/* Write data to the cluster synchronously. */	
+		/* Write data to the cluster synchronously. */
 		err = rados_write(io, "hw", "Hello World!", 12, 0);
 		if (err < 0) {
 			fprintf(stderr, "%s: Cannot write object \"hw\" to pool %s: %s\n", argv[0], poolname, strerror(-err));
@@ -611,7 +611,7 @@ C Example
 		} else {
 			printf("\nWrote \"Hello World\" to object \"hw\".\n");
 		}
-	
+
 		char xattr[] = "en_US";
 		err = rados_setxattr(io, "hw", "lang", xattr, 5);
 		if (err < 0) {
@@ -622,9 +622,9 @@ C Example
 		} else {
 			printf("\nWrote \"en_US\" to xattr \"lang\" for object \"hw\".\n");
 		}
-	
+
 		/*
-		 * Read data from the cluster asynchronously. 
+		 * Read data from the cluster asynchronously.
 		 * First, set up asynchronous I/O completion.
 		 */
 		rados_completion_t comp;
@@ -649,14 +649,14 @@ C Example
 		} else {
 			printf("\nRead object \"hw\". The contents are:\n %s \n", read_res);
 		}
-		
+
 		/* Wait for the operation to complete */
 		rados_aio_wait_for_complete(comp);
-		
+
 		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
-		rados_aio_release(comp);		
-		
-	
+		rados_aio_release(comp);
+
+
 		char xattr_res[100];
 		err = rados_getxattr(io, "hw", "lang", xattr_res, 5);
 		if (err < 0) {
@@ -706,12 +706,12 @@ C++ Example
 	{
 
 		/* Continued from previous C++ example, where cluster handle and
-		 * connection are established. First declare an I/O Context. 
+		 * connection are established. First declare an I/O Context.
 		 */
 
 		librados::IoCtx io_ctx;
 		const char *pool_name = "data";
-		
+
 		{
 			ret = cluster.ioctx_create(pool_name, io_ctx);
 			if (ret < 0) {
@@ -721,7 +721,7 @@ C++ Example
 				std::cout << "Created an ioctx for the pool." << std::endl;
 			}
 		}
-		
+
 
 		/* Write an object synchronously. */
 		{
@@ -735,8 +735,8 @@ C++ Example
 				std::cout << "Wrote new object 'hw' " << std::endl;
 			}
 		}
-		
-		
+
+
 		/*
 		 * Add an xattr to the object.
 		 */
@@ -752,8 +752,8 @@ C++ Example
 				std::cout << "Set the xattr 'lang' on our object!" << std::endl;
 			}
 		}
-		
-		
+
+
 		/*
 		 * Read the object back asynchronously.
 		 */
@@ -763,7 +763,7 @@ C++ Example
 
 			//Create I/O Completion.
 			librados::AioCompletion *read_completion = librados::Rados::aio_create_completion();
-			
+
 			//Send read request.
 			ret = io_ctx.aio_read("hw", read_completion, &read_buf, read_len, 0);
 			if (ret < 0) {
@@ -782,8 +782,8 @@ C++ Example
 				<< read_buf.c_str() << std::endl;
 			}
 		}
-		
-		
+
+
 		/*
 		 * Read the xattr.
 		 */
@@ -799,8 +799,8 @@ C++ Example
 				<< lang_res.c_str() << std::endl;
 			}
 		}
-		
-		
+
+
 		/*
 		 * Remove the xattr.
 		 */
@@ -814,7 +814,7 @@ C++ Example
 				std::cout << "Removed the xattr 'lang' from our object!" << std::endl;
 			}
 		}
-		
+
 		/*
 		 * Remove the object.
 		 */
@@ -838,39 +838,39 @@ Python Example
 
 	print "\n\nI/O Context and Object Operations"
 	print "================================="
-	
+
 	print "\nCreating a context for the 'data' pool"
 	if not cluster.pool_exists('data'):
 		raise RuntimeError('No data pool exists')
 	ioctx = cluster.open_ioctx('data')
-	
+
 	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
 	ioctx.write("hw", "Hello World!")
 	print "Writing XATTR 'lang' with value 'en_US' to object 'hw'"
 	ioctx.set_xattr("hw", "lang", "en_US")
-	
-	
+
+
 	print "\nWriting object 'bm' with contents 'Bonjour tout le monde!' to pool 'data'."
 	ioctx.write("bm", "Bonjour tout le monde!")
 	print "Writing XATTR 'lang' with value 'fr_FR' to object 'bm'"
 	ioctx.set_xattr("bm", "lang", "fr_FR")
-	
+
 	print "\nContents of object 'hw'\n------------------------"
 	print ioctx.read("hw")
-	
+
 	print "\n\nGetting XATTR 'lang' from object 'hw'"
 	print ioctx.get_xattr("hw", "lang")
-	
+
 	print "\nContents of object 'bm'\n------------------------"
 	print ioctx.read("bm")
-	
+
 	print "Getting XATTR 'lang' from object 'bm'"
 	print ioctx.get_xattr("bm", "lang")
-	
-	
+
+
 	print "\nRemoving object 'hw'"
 	ioctx.remove_object("hw")
-	
+
 	print "Removing object 'bm'"
 	ioctx.remove_object("bm")
 
@@ -904,11 +904,11 @@ Java-Example
 
 				String oidone = "hw";
 				String contentone = "Hello World!";
-				io.write(oidone, contentone); 
+				io.write(oidone, contentone);
 
 				String oidtwo = "bm";
 				String contenttwo = "Bonjour tout le monde!";
-				io.write(oidtwo, contenttwo); 
+				io.write(oidtwo, contenttwo);
 
 				String[] objects = io.listObjects();
                        		for (String object: objects)
@@ -953,7 +953,7 @@ C Example
 .. code-block:: c
 
 	rados_ioctx_destroy(io);
-	rados_shutdown(cluster);	
+	rados_shutdown(cluster);
 
 
 C++ Example
@@ -972,8 +972,8 @@ Java Example
 
 	cluster.ioCtxDestroy(io);
 	cluster.shutDown();
-	
-	
+
+
 Python Example
 --------------
 
@@ -981,7 +981,7 @@ Python Example
 
 	print "\nClosing the connection."
 	ioctx.close()
-	
+
 	print "Shutting down the handle."
 	cluster.shutdown()
 

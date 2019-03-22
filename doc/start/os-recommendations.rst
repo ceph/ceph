@@ -5,7 +5,7 @@
 Ceph Dependencies
 =================
 
-As a general rule, we recommend deploying Ceph on newer releases of Linux. 
+As a general rule, we recommend deploying Ceph on newer releases of Linux.
 We also recommend deploying on releases with long-term support.
 
 Linux Kernel
@@ -65,7 +65,7 @@ Jewel (10.2.z)
 --------------
 
 +----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
 +==========+==========+====================+==============+=========+============+
 | CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -82,7 +82,7 @@ Hammer (0.94.z)
 ---------------
 
 +----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
 +==========+==========+====================+==============+=========+============+
 | CentOS   | 6        | N/A                | linux-2.6.32 | 1, 2    |            |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -99,7 +99,7 @@ Firefly (0.80.z)
 ----------------
 
 +----------+----------+--------------------+--------------+---------+------------+
-| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    | 
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
 +==========+==========+====================+==============+=========+============+
 | CentOS   | 6        | N/A                | linux-2.6.32 | 1, 2    | B, I       |
 +----------+----------+--------------------+--------------+---------+------------+

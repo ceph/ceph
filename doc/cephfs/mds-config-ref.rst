@@ -2,13 +2,13 @@
  MDS Config Reference
 ======================
 
-``mon force standby active`` 
+``mon force standby active``
 
 :Description: If ``true`` monitors force standby-replay to be active. Set
               under ``[mon]`` or ``[global]``.
 
 :Type: Boolean
-:Default: ``true`` 
+:Default: ``true``
 
 ``mds cache memory limit``
 
@@ -37,7 +37,7 @@
 
 ``mds cache mid``
 
-:Description: The insertion point for new items in the cache LRU 
+:Description: The insertion point for new items in the cache LRU
               (from the top).
 
 :Type:  Float
@@ -46,7 +46,7 @@
 
 ``mds dir commit ratio``
 
-:Description: The fraction of directory that is dirty before Ceph commits using 
+:Description: The fraction of directory that is dirty before Ceph commits using
               a full update (instead of partial update).
 
 :Type:  Float
@@ -55,9 +55,9 @@
 
 ``mds dir max commit size``
 
-:Description: The maximum size of a directory update before Ceph breaks it into 
+:Description: The maximum size of a directory update before Ceph breaks it into
               smaller transactions) (MB).
-              
+
 :Type:  32-bit Integer
 :Default: ``90``
 
@@ -70,7 +70,7 @@
 
 ``mds beacon interval``
 
-:Description: The frequency (in seconds) of beacon messages sent 
+:Description: The frequency (in seconds) of beacon messages sent
               to the monitor.
 
 :Type:  Float
@@ -79,9 +79,9 @@
 
 ``mds beacon grace``
 
-:Description: The interval without beacons before Ceph declares an MDS laggy 
+:Description: The interval without beacons before Ceph declares an MDS laggy
               (and possibly replace it).
-              
+
 :Type:  Float
 :Default: ``15``
 
@@ -100,7 +100,7 @@
 
 ``mds reconnect timeout``
 
-:Description: The interval (in seconds) to wait for clients to reconnect 
+:Description: The interval (in seconds) to wait for clients to reconnect
               during MDS restart.
 
 :Type:  Float
@@ -116,9 +116,9 @@
 
 ``mds dirstat min interval``
 
-:Description: The minimum interval (in seconds) to try to avoid propagating 
+:Description: The minimum interval (in seconds) to try to avoid propagating
               recursive stats up the tree.
-              
+
 :Type:  Float
 :Default: ``1``
 
@@ -138,7 +138,7 @@
 
 ``mds early reply``
 
-:Description: Determines whether the MDS should allow clients to see request 
+:Description: Determines whether the MDS should allow clients to see request
               results before they commit to the journal.
 
 :Type:  Boolean
@@ -154,9 +154,9 @@
 
 ``mds log skip corrupt events``
 
-:Description: Determines whether the MDS should try to skip corrupt journal 
+:Description: Determines whether the MDS should try to skip corrupt journal
               events during journal replay.
-              
+
 :Type:  Boolean
 :Default:  ``false``
 
@@ -165,14 +165,14 @@
 
 :Description: The maximum events in the journal before we initiate trimming.
               Set to ``-1`` to disable limits.
-              
+
 :Type:  32-bit Integer
 :Default: ``-1``
 
 
 ``mds log max segments``
 
-:Description: The maximum number of segments (objects) in the journal before 
+:Description: The maximum number of segments (objects) in the journal before
               we initiate trimming. Set to ``-1`` to disable limits.
 
 :Type:  32-bit Integer
@@ -195,54 +195,54 @@
 
 ``mds bal sample interval``
 
-:Description: Determines how frequently to sample directory temperature 
+:Description: Determines how frequently to sample directory temperature
               (for fragmentation decisions).
-              
+
 :Type:  Float
 :Default: ``3``
 
 
 ``mds bal replicate threshold``
 
-:Description: The maximum temperature before Ceph attempts to replicate 
+:Description: The maximum temperature before Ceph attempts to replicate
               metadata to other nodes.
-              
+
 :Type:  Float
 :Default: ``8000``
 
 
 ``mds bal unreplicate threshold``
 
-:Description: The minimum temperature before Ceph stops replicating 
+:Description: The minimum temperature before Ceph stops replicating
               metadata to other nodes.
-              
+
 :Type:  Float
 :Default: ``0``
 
 
 ``mds bal split size``
 
-:Description: The maximum directory size before the MDS will split a directory 
+:Description: The maximum directory size before the MDS will split a directory
               fragment into smaller bits.
-              
+
 :Type:  32-bit Integer
 :Default: ``10000``
 
 
 ``mds bal split rd``
 
-:Description: The maximum directory read temperature before Ceph splits 
+:Description: The maximum directory read temperature before Ceph splits
               a directory fragment.
-              
+
 :Type:  Float
 :Default: ``25000``
 
 
 ``mds bal split wr``
 
-:Description: The maximum directory write temperature before Ceph splits 
+:Description: The maximum directory write temperature before Ceph splits
               a directory fragment.
-              
+
 :Type:  Float
 :Default: ``10000``
 
@@ -256,9 +256,9 @@
 
 ``mds bal merge size``
 
-:Description: The minimum directory size before Ceph tries to merge 
+:Description: The minimum directory size before Ceph tries to merge
               adjacent directory fragments.
-              
+
 :Type:  32-bit Integer
 :Default: ``50``
 
@@ -294,16 +294,16 @@
 
 ``mds bal idle threshold``
 
-:Description: The minimum temperature before Ceph migrates a subtree 
+:Description: The minimum temperature before Ceph migrates a subtree
               back to its parent.
-              
+
 :Type:  Float
 :Default: ``0``
 
 
 ``mds bal max``
 
-:Description: The number of iterations to run balancer before Ceph stops. 
+:Description: The number of iterations to run balancer before Ceph stops.
               (used for testing purposes only)
 
 :Type:  32-bit Integer
@@ -312,7 +312,7 @@
 
 ``mds bal max until``
 
-:Description: The number of seconds to run balancer before Ceph stops. 
+:Description: The number of seconds to run balancer before Ceph stops.
               (used for testing purposes only)
 
 :Type:  32-bit Integer
@@ -321,12 +321,12 @@
 
 ``mds bal mode``
 
-:Description: The method for calculating MDS load. 
+:Description: The method for calculating MDS load.
 
               - ``0`` = Hybrid.
-              - ``1`` = Request rate and latency. 
+              - ``1`` = Request rate and latency.
               - ``2`` = CPU load.
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
@@ -361,18 +361,18 @@
 
 ``mds bal midchunk``
 
-:Description: Ceph will migrate any subtree that is larger than this fraction 
+:Description: Ceph will migrate any subtree that is larger than this fraction
               of the target subtree size.
-              
+
 :Type:  Float
 :Default: ``0.3``
 
 
 ``mds bal minchunk``
 
-:Description: Ceph will ignore any subtree that is smaller than this fraction 
+:Description: Ceph will ignore any subtree that is smaller than this fraction
               of the target subtree size.
-              
+
 :Type:  Float
 :Default: ``0.001``
 
@@ -381,16 +381,16 @@
 
 :Description: The minimum number of balancer iterations before Ceph removes
               an old MDS target from the MDS map.
-              
+
 :Type:  32-bit Integer
 :Default: ``5``
 
 
 ``mds bal target removal max``
 
-:Description: The maximum number of balancer iteration before Ceph removes 
+:Description: The maximum number of balancer iteration before Ceph removes
               an old MDS target from the MDS map.
-              
+
 :Type:  32-bit Integer
 :Default: ``10``
 
@@ -399,7 +399,7 @@
 
 :Description: The journal poll interval when in standby-replay mode.
               ("hot standby")
-              
+
 :Type:  Float
 :Default: ``1``
 
@@ -434,36 +434,36 @@
 
 ``mds dump cache after rejoin``
 
-:Description: Ceph will dump MDS cache contents to a file after 
+:Description: Ceph will dump MDS cache contents to a file after
               rejoining the cache (during recovery).
-              
+
 :Type:  Boolean
 :Default:  ``false``
 
 
 ``mds verify scatter``
 
-:Description: Ceph will assert that various scatter/gather invariants 
+:Description: Ceph will assert that various scatter/gather invariants
               are ``true`` (developers only).
-              
+
 :Type:  Boolean
 :Default:  ``false``
 
 
 ``mds debug scatterstat``
 
-:Description: Ceph will assert that various recursive stat invariants 
+:Description: Ceph will assert that various recursive stat invariants
               are ``true`` (for developers only).
-              
+
 :Type:  Boolean
 :Default:  ``false``
 
 
 ``mds debug frag``
 
-:Description: Ceph will verify directory fragmentation invariants 
+:Description: Ceph will verify directory fragmentation invariants
               when convenient (developers only).
-              
+
 :Type:  Boolean
 :Default:  ``false``
 
@@ -484,79 +484,79 @@
 
 ``mds kill mdstable at``
 
-:Description: Ceph will inject MDS failure in MDSTable code 
+:Description: Ceph will inject MDS failure in MDSTable code
               (for developers only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds kill export at``
 
-:Description: Ceph will inject MDS failure in the subtree export code 
+:Description: Ceph will inject MDS failure in the subtree export code
               (for developers only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds kill import at``
 
-:Description: Ceph will inject MDS failure in the subtree import code 
+:Description: Ceph will inject MDS failure in the subtree import code
               (for developers only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds kill link at``
 
-:Description: Ceph will inject MDS failure in hard link code 
+:Description: Ceph will inject MDS failure in hard link code
               (for developers only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds kill rename at``
 
-:Description: Ceph will inject MDS failure in the rename code 
+:Description: Ceph will inject MDS failure in the rename code
               (for developers only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds wipe sessions``
 
-:Description: Ceph will delete all client sessions on startup 
+:Description: Ceph will delete all client sessions on startup
               (for testing only).
-              
+
 :Type:  Boolean
 :Default: ``false``
 
 
 ``mds wipe ino prealloc``
 
-:Description: Ceph will delete ino preallocation metadata on startup 
+:Description: Ceph will delete ino preallocation metadata on startup
               (for testing only).
-              
+
 :Type:  Boolean
 :Default: ``false``
 
 
 ``mds skip ino``
 
-:Description: The number of inode numbers to skip on startup 
+:Description: The number of inode numbers to skip on startup
               (for testing only).
-              
+
 :Type:  32-bit Integer
 :Default: ``0``
 
 
 ``mds standby for name``
 
-:Description: An MDS daemon will standby for another MDS daemon of the name 
+:Description: An MDS daemon will standby for another MDS daemon of the name
               specified in this setting.
 
 :Type:  String
@@ -565,16 +565,16 @@
 
 ``mds standby for rank``
 
-:Description: An MDS daemon will standby for an MDS daemon of this rank. 
+:Description: An MDS daemon will standby for an MDS daemon of this rank.
 :Type:  32-bit Integer
 :Default: ``-1``
 
 
 ``mds standby replay``
 
-:Description: Determines whether a ``ceph-mds`` daemon should poll and replay 
+:Description: Determines whether a ``ceph-mds`` daemon should poll and replay
               the log of an active MDS (hot standby).
-              
+
 :Type:  Boolean
 :Default:  ``false``
 

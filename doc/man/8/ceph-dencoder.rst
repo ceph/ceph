@@ -134,7 +134,7 @@ do that like this:
       "snaps": [],
       "need_to_purge": {},
       "pending_create": [],
-      "pending_destroy": []}} 
+      "pending_destroy": []}}
 
 
 Availability

@@ -227,7 +227,7 @@ component logging include::
   *FULL_DEBUG* verbose trace output
 
 Example::
-  
+
   LOG {
 
 	Components {
@@ -284,7 +284,7 @@ When regular gateway instances and NFS-Ganesha instances overlap the
 same data resources, they will be accessible from both the standard S3
 API and through the NFS-Ganesha instance as exported. You can
 co-locate the NFS-Ganesha instance with a Ceph Object Gateway instance
-on the same host. 
+on the same host.
 
 RGW vs RGW NFS
 ==============
@@ -358,7 +358,7 @@ starts a new upload when the first write is sent to a file at offset
 0, and finalizes the upload when no new writes to the file have been
 seen for a period of time, by default, 10 seconds. To change this
 timeout, set an alternate value for ``rgw_nfs_write_completion_interval_s``
-in the RGW section(s) of the Ceph configuration file. 
+in the RGW section(s) of the Ceph configuration file.
 
 References
 ==========

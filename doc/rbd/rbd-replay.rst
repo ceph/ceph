@@ -6,7 +6,7 @@
 
 RBD Replay is a set of tools for capturing and replaying Rados Block Device
 (RBD) workloads. To capture an RBD workload, ``lttng-tools`` must be installed
-on the client, and ``librbd`` on the client must be the v0.87 (Giant) release 
+on the client, and ``librbd`` on the client must be the v0.87 (Giant) release
 or later. To replay an RBD workload, ``librbd`` on the client must be the Giant
 release or later.
 
@@ -26,12 +26,12 @@ Capture and replay takes three steps:
 
     rbd-replay-prep traces/ust/uid/*/* replay.bin
 
-#. Replay the trace with `rbd-replay`_. Use read-only until you know 
+#. Replay the trace with `rbd-replay`_. Use read-only until you know
    it's doing what you want::
 
     rbd-replay --read-only replay.bin
 
-.. important:: ``rbd-replay`` will destroy data by default.  Do not use against 
+.. important:: ``rbd-replay`` will destroy data by default.  Do not use against
    an image you wish to keep, unless you use the ``--read-only`` option.
 
 The replayed workload does not have to be against the same RBD image or even the

@@ -58,7 +58,7 @@ On Debian/Ubuntu execute:
 ::
 
    > sudo apt install git
-   
+
 To know more about Git and how it works, please, visit https://git-scm.com
 
 
@@ -77,7 +77,7 @@ Ceph iSCSI specific requirements are that the following build options must be
 enabled:
 
     ::
-    
+
        CONFIG_TARGET_CORE=m
        CONFIG_TCM_USER2=m
        CONFIG_ISCSI_TARGET=m
@@ -103,8 +103,8 @@ tcmu-runner
 
    ::
 
-       > ./extra/install_dep.sh   
-   
+       > ./extra/install_dep.sh
+
    Now you can build the tcmu-runner.
    To do so, use the following build command:
 

@@ -170,7 +170,7 @@ No MDS actually holds this state. Instead, it is applied to the rank in the file
     max_mds 1
     in      0
     up      {}
-    failed  
+    failed
     damaged 0
     ...
 
@@ -182,7 +182,7 @@ that could not be automatically recovered. Operator intervention is required.
 ::
 
     down:stopped
-    
+
 No MDS actually holds this state. Instead, it is applied to the rank in the file system. For example:
 
 ::
@@ -192,8 +192,8 @@ No MDS actually holds this state. Instead, it is applied to the rank in the file
     max_mds 1
     in      0
     up      {}
-    failed  
-    damaged 
+    failed
+    damaged
     stopped 1
     ...
 

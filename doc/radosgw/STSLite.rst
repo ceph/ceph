@@ -18,9 +18,9 @@ STS Lite REST APIs
 The following STS Lite REST APIs have been implemented in Ceph Object Gateway:
 
 1. GetSessionToken: Returns a set of temporary credentials for a set of AWS
-credentials. This API can be used for initial authentication with Keystone 
+credentials. This API can be used for initial authentication with Keystone
 and the temporary credentials returned can be used to make subsequent S3
-calls. The temporary credentials will have the same permission as that of the 
+calls. The temporary credentials will have the same permission as that of the
 AWS credentials.
 
 Parameters:
@@ -28,7 +28,7 @@ Parameters:
     credentials should remain valid. Its default value is 3600. Its default max
     value is 43200 which is can be configured using rgw sts max session duration.
 
-    **SerialNumber** (String/ Optional): The Id number of the MFA device associated 
+    **SerialNumber** (String/ Optional): The Id number of the MFA device associated
     with the user making the GetSessionToken call.
 
     **TokenCode** (String/ Optional): The value provided by the MFA device, if MFA is required.
@@ -44,7 +44,7 @@ The user attaching the policy needs to have admin caps. For example::
 
     radosgw-admin caps add --uid="TESTER" --caps="user-policy=*"
 
-2. AssumeRole: Returns a set of temporary credentials that can be used for 
+2. AssumeRole: Returns a set of temporary credentials that can be used for
 cross-account access. The temporary credentials will have permissions that are
 allowed by both - permission policies attached with the Role and policy attached
 with the AssumeRole API.
@@ -135,7 +135,7 @@ Keystone.
 .. code-block:: python
 
     import boto3
- 
+
     access_key = <ec2 access key>
     secret_key = <ec2 secret key>
 
@@ -197,7 +197,7 @@ Note: A role 'S3Access', needs to be created before calling the AssumeRole API.
 Limitations and Workarounds
 ===========================
 
-1. Keystone currently supports only S3 requests, hence in order to successfully 
+1. Keystone currently supports only S3 requests, hence in order to successfully
 authenticate an STS request, the following workaround needs to be added to boto
 to the following file - botocore/auth.py
 

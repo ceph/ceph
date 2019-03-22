@@ -13,7 +13,7 @@ To view by caller (where you can see what each top function calls)::
 
   sudo perf report --call-graph caller
 
-To view by callee (where you can see who calls each top function)::  
+To view by callee (where you can see who calls each top function)::
 
   sudo perf report --call-graph callee
 

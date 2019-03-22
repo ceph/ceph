@@ -109,7 +109,7 @@ for each bucket.
 		&listServiceCallback
 	};
 	bool header_printed = false;
-	S3_list_service(S3ProtocolHTTP, access_key, secret_key, security_token, host, 
+	S3_list_service(S3ProtocolHTTP, access_key, secret_key, security_token, host,
                     auth_region, NULL, 0, &listServiceHandler, &header_printed);
 
 

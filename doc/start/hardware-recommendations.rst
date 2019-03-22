@@ -3,13 +3,13 @@
 ==========================
 
 Ceph was designed to run on commodity hardware, which makes building and
-maintaining petabyte-scale data clusters economically feasible. 
-When planning out your cluster hardware, you will need to balance a number 
+maintaining petabyte-scale data clusters economically feasible.
+When planning out your cluster hardware, you will need to balance a number
 of considerations, including failure domains and potential performance
-issues. Hardware planning should include distributing Ceph daemons and 
-other processes that use Ceph across many hosts. Generally, we recommend 
-running Ceph daemons of a specific type on a host configured for that type 
-of daemon. We recommend using other hosts for processes that utilize your 
+issues. Hardware planning should include distributing Ceph daemons and
+other processes that use Ceph across many hosts. Generally, we recommend
+running Ceph daemons of a specific type on a host configured for that type
+of daemon. We recommend using other hosts for processes that utilize your
 data cluster (e.g., OpenStack, CloudStack, etc).
 
 
@@ -69,8 +69,8 @@ performance tradeoffs to consider when planning for data storage. Simultaneous
 OS operations, and simultaneous request for read and write operations from
 multiple daemons against a single drive can slow performance considerably.
 
-.. important:: Since Ceph has to write all data to the journal before it can 
-   send an ACK (for XFS at least), having the journal and OSD 
+.. important:: Since Ceph has to write all data to the journal before it can
+   send an ACK (for XFS at least), having the journal and OSD
    performance in balance is really important!
 
 
@@ -88,13 +88,13 @@ at $150.00 has a cost of $0.05 per gigabyte (i.e., $150 / 3072 = 0.0488). In the
 foregoing example, using the 1 terabyte disks would generally increase the cost
 per gigabyte by 40%--rendering your cluster substantially less cost efficient.
 Also, the larger the storage drive capacity, the more memory per Ceph OSD Daemon
-you will need, especially during rebalancing, backfilling and recovery. A 
-general rule of thumb is ~1GB of RAM for 1TB of storage space. 
+you will need, especially during rebalancing, backfilling and recovery. A
+general rule of thumb is ~1GB of RAM for 1TB of storage space.
 
-.. tip:: Running multiple OSDs on a single disk--irrespective of partitions--is 
+.. tip:: Running multiple OSDs on a single disk--irrespective of partitions--is
    **NOT** a good idea.
 
-.. tip:: Running an OSD and a monitor or a metadata server on a single 
+.. tip:: Running an OSD and a monitor or a metadata server on a single
    disk--irrespective of partitions--is **NOT** a good idea either.
 
 Storage drives are subject to limitations on seek time, access time, read and
@@ -133,10 +133,10 @@ performance of sequential reads and writes. An SSD that has 400MB/s sequential
 write throughput may have much better performance than an SSD with 120MB/s of
 sequential write throughput when storing multiple journals for multiple OSDs.
 
-.. important:: We recommend exploring the use of SSDs to improve performance. 
+.. important:: We recommend exploring the use of SSDs to improve performance.
    However, before making a significant investment in SSDs, we **strongly
    recommend** both reviewing the performance metrics of an SSD and testing the
-   SSD in a test configuration to gauge performance. 
+   SSD in a test configuration to gauge performance.
 
 Since SSDs have no moving mechanical parts, it makes sense to use them in the
 areas of Ceph that do not use a lot of storage space (e.g., journals).
@@ -144,20 +144,20 @@ Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
 Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
 are a few important performance considerations for journals and SSDs:
 
-- **Write-intensive semantics:** Journaling involves write-intensive semantics, 
+- **Write-intensive semantics:** Journaling involves write-intensive semantics,
   so you should ensure that the SSD you choose to deploy will perform equal to
-  or better than a hard disk drive when writing data. Inexpensive SSDs may 
-  introduce write latency even as they accelerate access time, because 
-  sometimes high performance hard drives can write as fast or faster than 
+  or better than a hard disk drive when writing data. Inexpensive SSDs may
+  introduce write latency even as they accelerate access time, because
+  sometimes high performance hard drives can write as fast or faster than
   some of the more economical SSDs available on the market!
-  
-- **Sequential Writes:** When you store multiple journals on an SSD you must 
-  consider the sequential write limitations of the SSD too, since they may be 
+
+- **Sequential Writes:** When you store multiple journals on an SSD you must
+  consider the sequential write limitations of the SSD too, since they may be
   handling requests to write to multiple OSD journals simultaneously.
 
-- **Partition Alignment:** A common problem with SSD performance is that 
+- **Partition Alignment:** A common problem with SSD performance is that
   people like to partition drives as a best practice, but they often overlook
-  proper partition alignment with SSDs, which can cause SSDs to transfer data 
+  proper partition alignment with SSDs, which can cause SSDs to transfer data
   much more slowly. Ensure that SSD partitions are properly aligned.
 
 While SSDs are cost prohibitive for object storage, OSDs may see a significant
@@ -183,7 +183,7 @@ consider your selection of disk controllers to ensure that they do not create
 a performance bottleneck.
 
 .. tip:: The `Ceph blog`_ is often an excellent source of information on Ceph
-   performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
+   performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write
    Throughput 2`_ for additional details.
 
 
@@ -203,13 +203,13 @@ is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
 ``syncfs(2)`` to ensure that your hardware performs as expected when running
 multiple OSDs per host.
 
-Hosts with high numbers of OSDs (e.g., > 20) may spawn a lot of threads, 
-especially during recovery and rebalancing. Many Linux kernels default to 
+Hosts with high numbers of OSDs (e.g., > 20) may spawn a lot of threads,
+especially during recovery and rebalancing. Many Linux kernels default to
 a relatively small maximum number of threads (e.g., 32k). If you encounter
 problems starting up OSDs on hosts with a high number of OSDs, consider
 setting ``kernel.pid_max`` to a higher number of threads. The theoretical
 maximum is 4,194,303 threads. For example, you could add the following to
-the ``/etc/sysctl.conf`` file:: 
+the ``/etc/sysctl.conf`` file::
 
 	kernel.pid_max = 4194303
 
@@ -251,7 +251,7 @@ etc. can impose significant loads on a network.  Running three networks may seem
 like overkill, but each traffic path represents a potential capacity, throughput
 and/or performance bottleneck that you should carefully consider before
 deploying a large scale data cluster.
- 
+
 
 Failure Domains
 ===============

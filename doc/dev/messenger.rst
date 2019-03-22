@@ -22,7 +22,7 @@ read/write io request is fast dispatched without queueing to Dispatcher, in orde
 to achieve better performance. So CEPH_OSD_OP message will be processed inline,
 "think time" is used by mock this "inline process" process.
 
-# ./ceph_perf_msgr_client 172.16.30.181:10001 1 32 10000 10 4096 
+# ./ceph_perf_msgr_client 172.16.30.181:10001 1 32 10000 10 4096
 
 The first argument is specified the server ip:port, and the second argument is
 used to specify client threads. The third argument specify the concurrency(the

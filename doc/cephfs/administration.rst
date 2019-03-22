@@ -110,14 +110,14 @@ Taking the cluster down
 -----------------------
 
 Taking a CephFS cluster down is done by setting the down flag:
- 
-:: 
- 
+
+::
+
     fs set <fs_name> down true
- 
+
 To bring the cluster back online:
- 
-:: 
+
+::
 
     fs set <fs_name> down false
 

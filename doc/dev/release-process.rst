@@ -54,7 +54,7 @@ Edit configure.ac and update the version number. Example diff::
 
 	-AC_INIT([ceph], [0.54], [ceph-devel@vger.kernel.org])
 	+AC_INIT([ceph], [0.55], [ceph-devel@vger.kernel.org])
- 
+
 Update the version number in the debian change log::
 
 	DEBEMAIL user@host dch -v 0.xx-1

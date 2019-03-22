@@ -44,7 +44,7 @@ the protocol.  Furthermore the length may be described using an earlier item in
 the structure.
 
 ::
-	
+
 	struct blob {
 		u32le size;
 		u8    data[size];
@@ -60,9 +60,9 @@ Primitive Aliases
 These types are just aliases for primitive types.
 
 ::
-	
+
 	// From /src/include/types.h
-	
+
 	typedef u32le epoch_t;
 	typedef u32le ceph_seq_t;
 	typedef u64le ceph_tid_t;
@@ -81,7 +81,7 @@ Optional
 Optionals are represented as a presence byte, followed by the item if it exists.
 
 ::
-	
+
 	struct ceph_optional<T> {
 		u8 present;
 		T  element[present? 1 : 0]; // Only if present is non-zero.
@@ -95,7 +95,7 @@ Pair
 Pairs are simply the first item followed by the second.
 
 ::
-	
+
 	struct ceph_pair<A,B> {
 		A a;
 		B b;
@@ -109,7 +109,7 @@ Triple
 Triples are simply the tree elements one after another.
 
 ::
-	
+
 	struct ceph_triple<A,B,C> {
 		A a;
 		B b;
@@ -125,7 +125,7 @@ List
 Lists are represented as an element count followed by that many elements.
 
 ::
-	
+
 	struct ceph_list<T> {
 		u32le length;
 		T     elements[length];
@@ -143,13 +143,13 @@ Blob
 A Blob is simply a list of bytes.
 
 ::
-	
+
 	struct ceph_string {
 		ceph_list<u8>;
 	}
-	
+
 	// AKA
-	
+
 	struct ceph_string {
 		u32le size;
 		u8    data[size];
@@ -166,13 +166,13 @@ Map
 Maps are a list of pairs.
 
 ::
-	
+
 	struct ceph_map<K,V> {
 		ceph_list<ceph_pair<K,V>>;
 	}
-	
+
 	// AKA
-	
+
 	struct ceph_map<K,V> {
 		u32le length;
 		ceph_pair<K,V> entries[length];
@@ -191,7 +191,7 @@ utime_t
 -------
 
 ::
-	
+
 	// From /src/include/utime.h
 	struct utime_t {
 		u32le tv_sec;  // Seconds since epoch.
@@ -202,13 +202,13 @@ ceph_entity_name
 ----------------
 
 ::
-	
+
 	// From /src/include/msgr.h
 	struct ceph_entity_name {
 		u8    type; // CEPH_ENTITY_TYPE_*
 		u64le num;
 	}
-	
+
 	// CEPH_ENTITY_TYPE_* defined in /src/include/msgr.h
 
 .. vi: textwidth=80 noexpandtab

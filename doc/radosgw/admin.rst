@@ -3,7 +3,7 @@
 =============
 
 Once you have your Ceph Object Storage service up and running, you may
-administer the service with user management, access controls, quotas 
+administer the service with user management, access controls, quotas
 and usage tracking among other features.
 
 
@@ -15,17 +15,17 @@ service (i.e., not the Ceph Object Gateway as a user of the Ceph Storage
 Cluster). You must create a user, access key and secret to enable end users to
 interact with Ceph Object Gateway services.
 
-There are two user types: 
+There are two user types:
 
 - **User:** The term 'user' reflects a user of the S3 interface.
 
 - **Subuser:** The term 'subuser' reflects a user of the Swift interface. A subuser
   is associated to a user .
-  
+
 .. ditaa:: +---------+
            |   User  |
-           +----+----+  
-                |     
+           +----+----+
+                |
                 |     +-----------+
                 +-----+  Subuser  |
                       +-----------+
@@ -45,12 +45,12 @@ To create a user (S3 interface), execute the following::
 
 	radosgw-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
 
-For example:: 	
-	
+For example::
+
   radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
-  
+
 .. code-block:: javascript
-  
+
   { "user_id": "johndoe",
     "display_name": "John Doe",
     "email": "john@example.com",
@@ -75,14 +75,14 @@ For example::
     "temp_url_keys": []}
 
 Creating a user also creates an ``access_key`` and ``secret_key`` entry for use
-with any S3 API-compatible client.  
+with any S3 API-compatible client.
 
 .. important:: Check the key output. Sometimes ``radosgw-admin``
    generates a JSON escape (``\``) character, and some clients
-   do not know how to handle JSON escape characters. Remedies include 
+   do not know how to handle JSON escape characters. Remedies include
    removing the JSON escape character (``\``), encapsulating the string
-   in quotes, regenerating the key and ensuring that it 
-   does not have a JSON escape character or specify the key and secret 
+   in quotes, regenerating the key and ensuring that it
+   does not have a JSON escape character or specify the key and secret
    manually.
 
 
@@ -133,7 +133,7 @@ Get User Info
 -------------
 
 To get information about a user, you must specify ``user info`` and the user ID
-(``--uid={username}``) . :: 
+(``--uid={username}``) . ::
 
 	radosgw-admin user info --uid=johndoe
 
@@ -144,7 +144,7 @@ Modify User Info
 
 To modify information about a user, you must specify the user ID (``--uid={username}``)
 and the attributes you want to modify. Typical modifications are to keys and secrets,
-email addresses, display names and access levels. For example:: 
+email addresses, display names and access levels. For example::
 
 	radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
@@ -162,10 +162,10 @@ user  privileges and re-enable them at a later time. To suspend a user, specify
 
 	radosgw-admin user suspend --uid=johndoe
 
-To re-enable a suspended user, specify ``user enable`` and the user ID. :: 
+To re-enable a suspended user, specify ``user enable`` and the user ID. ::
 
 	radosgw-admin user enable --uid=johndoe
-	
+
 .. note:: Disabling the user disables the subuser.
 
 
@@ -185,18 +185,18 @@ To remove the subuser only, specify ``subuser rm`` and the subuser ID. ::
 
 Options include:
 
-- **Purge Data:** The ``--purge-data`` option purges all data associated 
+- **Purge Data:** The ``--purge-data`` option purges all data associated
   to the UID.
-  
-- **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
+
+- **Purge Keys:** The ``--purge-keys`` option purges all keys associated
   to the UID.
 
 
 Remove a Subuser
 ----------------
 
-When you remove a sub user, you are removing access to the Swift interface. 
-The user will remain in the system. To remove the subuser, specify 
+When you remove a sub user, you are removing access to the Swift interface.
+The user will remain in the system. To remove the subuser, specify
 ``subuser rm`` and the subuser ID. ::
 
 	radosgw-admin subuser rm --subuser=johndoe:swift
@@ -204,8 +204,8 @@ The user will remain in the system. To remove the subuser, specify
 
 
 Options include:
-  
-- **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
+
+- **Purge Keys:** The ``--purge-keys`` option purges all keys associated
   to the UID.
 
 
@@ -213,10 +213,10 @@ Add / Remove a Key
 ------------------------
 
 Both users and subusers require the key to access the S3 or Swift interface. To
-use S3, the user needs a key pair which is composed of an access key and a 
-secret key. On the other hand, to use Swift, the user typically needs a secret 
+use S3, the user needs a key pair which is composed of an access key and a
+secret key. On the other hand, to use Swift, the user typically needs a secret
 key (password), and use it together with the associated user ID. You may create
-a key and either specify or generate the access key and/or secret key. You may 
+a key and either specify or generate the access key and/or secret key. You may
 also remove a key. Options include:
 
 - ``--key-type=<type>`` specifies the key type. The options are: s3, swift
@@ -264,10 +264,10 @@ To attach a specified swift secret key for a subuser. ::
 
 Note that a subuser can have only one swift secret key.
 
-Subusers can also be used with S3 APIs if the subuser is associated with a S3 key pair. ::	
+Subusers can also be used with S3 APIs if the subuser is associated with a S3 key pair. ::
 
 	radosgw-admin key create --subuser=foo:bar --key-type=s3 --access-key barAccessKey --secret-key barSecretKey
-	
+
 .. code-block:: javascript
 
   { "user_id": "foo",
@@ -285,9 +285,9 @@ Subusers can also be used with S3 APIs if the subuser is associated with a S3 ke
   }
 
 
-To remove a S3 key pair, specify the access key. :: 
+To remove a S3 key pair, specify the access key. ::
 
-	radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey 
+	radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey
 
 To remove the swift secret key. ::
 
@@ -302,12 +302,12 @@ execute administrative functions via the REST API. By default, users do NOT have
 access to this API. To enable a user to exercise  administrative functionality,
 provide the user with administrative capabilities.
 
-To add administrative capabilities to a user, execute the following:: 
+To add administrative capabilities to a user, execute the following::
 
 	radosgw-admin caps add --uid={uid} --caps={caps}
 
 
-You can add read, write or all capabilities to users, buckets, metadata and 
+You can add read, write or all capabilities to users, buckets, metadata and
 usage (utilization). For example::
 
 	--caps="[users|buckets|metadata|usage|zone]=[*|read|write|read, write]"
@@ -317,7 +317,7 @@ For example::
 	radosgw-admin caps add --uid=johndoe --caps="users=*;buckets=*"
 
 
-To remove administrative capabilities from a user, execute the following:: 
+To remove administrative capabilities from a user, execute the following::
 
 	radosgw-admin caps rm --uid=johndoe --caps={caps}
 
@@ -334,12 +334,12 @@ storage size a bucket can hold.
 
 - **Maximum Objects:** The ``--max-objects`` setting allows you to specify
   the maximum number of objects. A negative value disables this setting.
-  
+
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
   size in B/K/M/G/T, where B is the default. A negative value disables this setting.
-  
+
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
-  The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
+  The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a
   user owns. User quotas apply to a user.
 
 
@@ -347,11 +347,11 @@ Set User Quota
 --------------
 
 Before you enable a quota, you must first set the quota parameters.
-For example:: 
+For example::
 
 	radosgw-admin quota set --quota-scope=user --uid=<uid> [--max-objects=<num objects>] [--max-size=<max size>]
 
-For example:: 
+For example::
 
 	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
 
@@ -363,11 +363,11 @@ specific quota attribute check is disabled.
 Enable/Disable User Quota
 -------------------------
 
-Once you set a user quota, you may enable it. For example:: 
+Once you set a user quota, you may enable it. For example::
 
 	radosgw-admin quota enable --quota-scope=user --uid=<uid>
 
-You may disable an enabled user quota. For example:: 
+You may disable an enabled user quota. For example::
 
 	radosgw-admin quota disable --quota-scope=user --uid=<uid>
 
@@ -387,11 +387,11 @@ specific quota attribute check is disabled.
 Enable/Disable Bucket Quota
 ---------------------------
 
-Once you set a bucket quota, you may enable it. For example:: 
+Once you set a bucket quota, you may enable it. For example::
 
 	radosgw-admin quota enable --quota-scope=bucket --uid=<uid>
 
-You may disable an enabled bucket quota. For example:: 
+You may disable an enabled bucket quota. For example::
 
 	radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
 
@@ -400,7 +400,7 @@ Get Quota Settings
 ------------------
 
 You may access each user's quota settings via the user information
-API. To read user quota setting information with the CLI interface, 
+API. To read user quota setting information with the CLI interface,
 execute the following::
 
 	radosgw-admin user info --uid=<uid>
@@ -423,7 +423,7 @@ To see how much of the quota a user has consumed, execute the following::
 
 	radosgw-admin user stats --uid=<uid>
 
-.. note:: You should execute ``radosgw-admin user stats`` with the 
+.. note:: You should execute ``radosgw-admin user stats`` with the
    ``--sync-stats`` option to receive the latest data.
 
 Default Quotas
@@ -477,21 +477,21 @@ Usage
 The Ceph Object Gateway logs usage for each user. You can track
 user usage within date ranges too.
 
-- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
+- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service.
 
-Options include: 
+Options include:
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
   stats from a particular start date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
 
 - **End Date:** The ``--end-date`` option allows you to filter usage up
-  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``). 
-  
+  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
+
 - **Log Entries:** The ``--show-log-entries`` option allows you to specify
-  whether or not to include log entries with the usage stats 
+  whether or not to include log entries with the usage stats
   (options: ``true`` | ``false``).
 
-.. note:: You may specify time with minutes and seconds, but it is stored 
+.. note:: You may specify time with minutes and seconds, but it is stored
    with 1 hour resolution.
 
 
@@ -517,7 +517,7 @@ usage logs for all users and for specific users. You may also specify date
 ranges for trim operations. ::
 
 	radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
-	radosgw-admin usage trim --uid=johndoe	
+	radosgw-admin usage trim --uid=johndoe
 	radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
 
 

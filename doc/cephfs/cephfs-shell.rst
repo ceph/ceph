@@ -22,28 +22,28 @@ mkdir
 
 Create the directory(ies), if they do not already exist.
 
-Usage : 
-        
-    mkdir [-option] <directory>... 
+Usage :
+
+    mkdir [-option] <directory>...
 
 * directory - name of the directory to be created.
 
 Options :
   -m MODE    Sets the access mode for the new directory.
   -p, --parent         Create parent directories as necessary. When this option is specified, no error is reported if a directory already exists.
- 
+
 put
 ---
 
 Copy a file/directory to Ceph Filesystem from Local Filesystem.
 
-Usage : 
-    
+Usage :
+
         put [options] <source_path> [target_path]
 
 * source_path - local file/directory path to be copied to cephfs.
     * if `.` copies all the file/directories in the local working directory.
-    * if `-`  Reads the input from stdin. 
+    * if `-`  Reads the input from stdin.
 
 * target_path - remote directory path where the files/directories are to be copied to.
     * if `.` files/directories are copied to the remote working directory.
@@ -54,18 +54,18 @@ Options :
 
 get
 ---
- 
+
 Copy a file from Ceph Filesystem to Local Filesystem.
 
-Usage : 
+Usage :
 
     get [options] <source_path> [target_path]
 
 * source_path - remote file/directory path which is to be copied to local filesystem.
     * if `.` copies all the file/directories in the remote working directory.
-                    
+
 * target_path - local directory path where the files/directories are to be copied to.
-    * if `.` files/directories are copied to the local working directory. 
+    * if `.` files/directories are copied to the local working directory.
     * if `-` Writes output to stdout.
 
 Options:
@@ -76,16 +76,16 @@ ls
 
 List all the files and directories in the current working directory.
 
-Usage : 
-    
+Usage :
+
     ls [option] [directory]...
 
-* directory - name of directory whose files/directories are to be listed. 
+* directory - name of directory whose files/directories are to be listed.
     * By default current working directory's files/directories are listed.
 
 Options:
   -l, --long	    list with long format - show permissions
-  -r, --reverse     reverse sort     
+  -r, --reverse     reverse sort
   -H                human readable
   -a, -all          ignore entries starting with .
   -S                Sort by file_size
@@ -96,7 +96,7 @@ cat
 
 Concatenate files and print on the standard output
 
-Usage : 
+Usage :
 
     cat  <file>....
 
@@ -107,10 +107,10 @@ cd
 
 Change current working directory.
 
-Usage : 
-    
+Usage :
+
     cd [directory]
-        
+
 * directory - path/directory name. If no directory is mentioned it is changed to the root directory.
     * If '.' moves to the parent directory of the current directory.
 
@@ -118,9 +118,9 @@ cwd
 ---
 
 Get current working directory.
- 
-Usage : 
-    
+
+Usage :
+
     cwd
 
 
@@ -133,9 +133,9 @@ chmod
 -----
 
 Change the permissions of file/directory.
- 
-Usage : 
-    
+
+Usage :
+
     chmod <mode> <file/directory>
 
 mv
@@ -143,8 +143,8 @@ mv
 
 Moves files/Directory from source to destination.
 
-Usage : 
-    
+Usage :
+
     mv <source_path> <destination_path>
 
 rmdir
@@ -152,8 +152,8 @@ rmdir
 
 Delete a directory(ies).
 
-Usage : 
-    
+Usage :
+
     rmdir <directory_name>.....
 
 rm
@@ -161,8 +161,8 @@ rm
 
 Remove a file(es).
 
-Usage : 
-    
+Usage :
+
     rm <file_name/pattern>...
 
 
@@ -171,8 +171,8 @@ write
 
 Create and Write a file.
 
-Usage : 
-        
+Usage :
+
         write <file_name>
         <Enter Data>
         Ctrl+D Exit.
@@ -182,8 +182,8 @@ lls
 
 Lists all files and directories in the specified directory.Current local directory files and directories are listed if no     path is mentioned
 
-Usage: 
-    
+Usage:
+
     lls <path>.....
 
 lcd
@@ -191,8 +191,8 @@ lcd
 
 Moves into the given local directory.
 
-Usage : 
-    
+Usage :
+
     lcd <path>
 
 lpwd
@@ -200,18 +200,18 @@ lpwd
 
 Prints the absolute path of the current local directory.
 
-Usage : 
-    
+Usage :
+
     lpwd
 
 
 umask
 -----
 
-Set and get the file mode creation mask 
+Set and get the file mode creation mask
 
-Usage : 
-    
+Usage :
+
     umask [mode]
 
 alias
@@ -219,7 +219,7 @@ alias
 
 Define or display aliases
 
-Usage: 
+Usage:
 
     alias [name] | [<name> <value>]
 
@@ -231,8 +231,8 @@ pyscript
 
 Runs a python script file inside the console
 
-Usage: 
-    
+Usage:
+
     pyscript <script_path> [script_arguments]
 
 * Console commands can be executed inside this script with cmd ("your command")
@@ -244,7 +244,7 @@ py
 
 Invoke python command, shell, or script
 
-Usage : 
+Usage :
 
         py <command>: Executes a Python command.
         py: Enters interactive Python mode.
@@ -259,8 +259,8 @@ history
 
 View, run, edit, and save previously entered commands.
 
-Usage : 
-    
+Usage :
+
     history [-h] [-r | -e | -s | -o FILE | -t TRANSCRIPT] [arg]
 
 Options:
@@ -275,9 +275,9 @@ unalias
 -------
 
 Unsets aliases
- 
-Usage : 
-    
+
+Usage :
+
     unalias [-a] name [name ...]
 
 * name - name of the alias being unset
@@ -290,7 +290,7 @@ set
 
 Sets a settable parameter or shows current settings of parameters.
 
-Usage : 
+Usage :
 
     set [-h] [-a] [-l] [settable [settable ...]]
 
@@ -306,7 +306,7 @@ edit
 
 Edit a file in a text editor.
 
-Usage:  
+Usage:
 
     edit [file_path]
 
@@ -317,8 +317,8 @@ load
 
 Runs commands in script file that is encoded as either ASCII or UTF-8 text.
 
-Usage:  
-    
+Usage:
+
     load <file_path>
 
 * file_path - a file path pointing to a script
@@ -330,8 +330,8 @@ shell
 
 Execute a command as if at the OS prompt.
 
-Usage:  
-    
+Usage:
+
     shell <command> [arguments]
 
 locate
@@ -344,5 +344,5 @@ Usage:
 
 Options :
   -c       Count number of items found
-  -i       Ignore case 
+  -i       Ignore case
 

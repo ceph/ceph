@@ -47,7 +47,7 @@ To run the Ceph Filesystem, you must have a running Ceph Storage Cluster with at
 least one :term:`Ceph Metadata Server` running.
 
 
-.. toctree:: 
+.. toctree::
 	:maxdepth: 1
 
 	Add/Remove MDS(s) <add-remove-mds>
@@ -58,7 +58,7 @@ least one :term:`Ceph Metadata Server` running.
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Step 2: Mount CephFS</h3>
 
@@ -67,7 +67,7 @@ one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
 Ensure that your client has network connectivity and the proper
 authentication keyring.
 
-.. toctree:: 
+.. toctree::
 	:maxdepth: 1
 
 	Create CephFS <createfs>
@@ -81,11 +81,11 @@ authentication keyring.
 	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
 
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Additional Details</h3>
 
-.. toctree:: 
+.. toctree::
     :maxdepth: 1
 
     Deployment best practices <best-practices>
@@ -111,7 +111,7 @@ authentication keyring.
     Application best practices <app-best-practices>
     Scrub <scrub>
 
-.. toctree:: 
+.. toctree::
    :hidden:
 
     Advanced: Metadata repair <disaster-recovery-experts>
@@ -123,7 +123,7 @@ authentication keyring.
 For developers
 ==============
 
-.. toctree:: 
+.. toctree::
     :maxdepth: 1
 
     Client's Capabilities <capabilities>

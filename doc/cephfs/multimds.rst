@@ -72,7 +72,7 @@ Decreasing the number of ranks
 Reducing the number of ranks is as simple as reducing ``max_mds``:
 
 ::
-    
+
     # fsmap e9: 2/2/2 up {0=a=up:active,1=c=up:active}, 1 up:standby
     ceph fs set <fs_name> max_mds 1
     # fsmap e10: 2/2/1 up {0=a=up:active,1=c=up:stopping}, 1 up:standby

@@ -4,7 +4,7 @@
 Diskprediction Module
 =====================
 
-The *diskprediction* module supports two modes: cloud mode and local mode. In cloud mode, the disk and Ceph operating status information is collected from Ceph cluster and sent to a cloud-based DiskPrediction server over the Internet. DiskPrediction server analyzes the data and provides the analytics and prediction results of performance and disk health states for Ceph clusters. 
+The *diskprediction* module supports two modes: cloud mode and local mode. In cloud mode, the disk and Ceph operating status information is collected from Ceph cluster and sent to a cloud-based DiskPrediction server over the Internet. DiskPrediction server analyzes the data and provides the analytics and prediction results of performance and disk health states for Ceph clusters.
 
 Local mode doesn't require any external server for data analysis and output results. In local mode, the *diskprediction* module uses an internal predictor module for disk prediction service, and then returns the disk prediction result to the Ceph system.
 
@@ -26,7 +26,7 @@ Select the prediction mode::
     ceph config set global device_failure_prediction_mode local
 
 or::
-  
+
     ceph config set global device_failure_prediction_mode cloud
 
 To disable prediction,::
@@ -36,7 +36,7 @@ To disable prediction,::
 
 Connection settings
 ===================
-The connection settings are used for connection between Ceph and DiskPrediction server. 
+The connection settings are used for connection between Ceph and DiskPrediction server.
 
 Local Mode
 ----------
@@ -50,14 +50,14 @@ Run the following command to use local predictor predict device life expectancy.
     ceph device predict-life-expectancy <device id>
 
 
-Cloud Mode 
+Cloud Mode
 ----------
 
-The user registration is required in cloud mode. The users have to sign up their accounts at https://www.diskprophet.com/#/ to receive the following DiskPrediction server information for connection settings. 
+The user registration is required in cloud mode. The users have to sign up their accounts at https://www.diskprophet.com/#/ to receive the following DiskPrediction server information for connection settings.
 
 **Certificate file path**: After user registration is confirmed, the system will send a confirmation email including a certificate file download link. Download the certificate file and save it to the Ceph system. Run the following command to verify the file. Without certificate file verification, the connection settings cannot be completed.
-	
-**DiskPrediction server**: The DiskPrediction server name. It could be an IP address if required. 
+
+**DiskPrediction server**: The DiskPrediction server name. It could be an IP address if required.
 
 **Connection account**: An account name used to set up the connection between Ceph and DiskPrediction server
 
@@ -68,7 +68,7 @@ Run the following command to complete connection setup.
 ::
 
     ceph device set-cloud-prediction-config <diskprediction_server> <connection_account> <connection_password> <certificate file path>
-	
+
 
 You can use the following command to display the connection settings:
 
@@ -283,7 +283,7 @@ SMART Data
 Prediction Data
 ----------------
 - Ceph physical device prediction data
- 
+
 
 Receiving predicted health status from a Ceph OSD disk drive
 ============================================================
@@ -336,7 +336,7 @@ The *near_failure* attribute for disk failure prediction state indicates disk li
 +--------------------+-----------------------------------------------------+
 |Bad                 | < 2 weeks                                           |
 +--------------------+-----------------------------------------------------+
- 
+
 
 Debugging
 =========

@@ -132,7 +132,7 @@ Options
 
 
 The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set: ::
- 
+
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
 

@@ -68,7 +68,7 @@ The MDS acts as a cache for the metadata stored in RADOS.  Metadata
 performance is very different for workloads whose metadata fits within
 that cache.
 
-If your workload has more files than fit in your cache (configured using 
+If your workload has more files than fit in your cache (configured using
 ``mds_cache_memory_limit`` or ``mds_cache_size`` settings), then
 make sure you test it appropriately: don't test your system with a small
 number of files and then expect equivalent performance when you move

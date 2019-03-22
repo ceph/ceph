@@ -121,7 +121,7 @@ for the Rook operator and Ceph daemons) and "ceph-toolbox-amd64" (used
 for the "toolbox" container where the CLI is run).
 
 The rest of this guide assumes that you will want to load your own binaries,
-and then push the container directly into your docker repository.  
+and then push the container directly into your docker repository.
 
 
 4. Build Ceph
@@ -155,7 +155,7 @@ binaries:
 
     You can also set ``BASEIMAGE`` to control that Rook image used
     as the base -- by default this is set to any "ceph-amd64" image.
-    
+
 
 Now you've got your freshly built Rook and freshly built Ceph into
 a single container image, ready to run.  Next time you change something
@@ -188,14 +188,14 @@ the setup you want:
 - Edit the ``storage`` section of the cluster: set ``useAllNodes`` and
   ``useAllDevices`` to false if you want to create OSDs explicitly
   using ceph-mgr.
-    
+
 Then, load the configuration into the kubernetes API using ``kubectl``:
 
 ::
 
-    kubectl apply -f ./operator.yaml 
-    kubectl apply -f ./cluster.yaml 
-    kubectl apply -f ./toolbox.yaml 
+    kubectl apply -f ./operator.yaml
+    kubectl apply -f ./cluster.yaml
+    kubectl apply -f ./toolbox.yaml
 
 Use ``kubectl -n rook-ceph-system get pods`` to check the operator
 pod is coming up, then ``kubectl -n rook-ceph get pods`` to check on

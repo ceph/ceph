@@ -11,11 +11,11 @@ Concepts
   See PG::RecoveryState::Reset
 
   A peering interval is a maximal set of contiguous map epochs in which the
-  up and acting sets did not change.  PG::RecoveryMachine represents a 
+  up and acting sets did not change.  PG::RecoveryMachine represents a
   transition from one interval to another as passing through
   RecoveryState::Reset.  On PG::RecoveryState::AdvMap PG::acting_up_affected can
   cause the pg to transition to Reset.
-  
+
 
 Peering Details and Gotchas
 ---------------------------

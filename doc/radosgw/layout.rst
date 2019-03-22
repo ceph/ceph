@@ -35,7 +35,7 @@ You can use the following commands to introspect metadata entries: ::
     $ radosgw-admin metadata get bucket:<bucket>
     $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
     $ radosgw-admin metadata get user:<user>   # get or set
-    
+
 Some variables have been used in above commands, they are:
 
 - user: Holds user information

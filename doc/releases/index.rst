@@ -28,6 +28,6 @@ Archived Releases
 ~~~~~~~~~~~~~~~~~
 
 .. toctree::
-   :maxdepth: 1 
+   :maxdepth: 1
 
    Archived releases index <archived-index>

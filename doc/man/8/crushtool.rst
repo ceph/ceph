@@ -64,9 +64,9 @@ Running tests with --test
 The test mode will use the input crush map ( as specified with **-i
 map** ) and perform a dry run of CRUSH mapping or random placement
 (if **--simulate** is set ). On completion, two kinds of reports can be
-created. 
+created.
 1) The **--show-...** option outputs human readable information
-on stderr. 
+on stderr.
 2) The **--output-csv** option creates CSV files that are
 documented by the **--help-output** option.
 

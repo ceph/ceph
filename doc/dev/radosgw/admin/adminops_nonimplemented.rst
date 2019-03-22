@@ -132,7 +132,7 @@ If successful, returns cluster pool configuration.
 
 ``control_pool``
 
-:Description: 
+:Description:
 :Type: String
 :Parent: ``cluster``
 

@@ -91,7 +91,7 @@ Async messenger options
 ``ms async transport type``
 
 :Description: Transport type used by Async Messenger. Can be ``posix``, ``dpdk``
-              or ``rdma``. Posix uses standard TCP/IP networking and is default. 
+              or ``rdma``. Posix uses standard TCP/IP networking and is default.
               Other transports may be experimental and support may be limited.
 :Type: String
 :Required: No
@@ -111,8 +111,8 @@ Async messenger options
 
 ``ms async max op threads``
 
-:Description: Maximum number of worker threads used by each Async Messenger instance. 
-              Set to lower values when your machine has limited CPU count, and increase 
+:Description: Maximum number of worker threads used by each Async Messenger instance.
+              Set to lower values when your machine has limited CPU count, and increase
               when your CPUs are underutilized (i. e. one or more of CPUs are
               constantly on 100% load during I/O operations).
 :Type: 64-bit Unsigned Integer

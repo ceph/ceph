@@ -23,7 +23,7 @@ digraph Paxos {
   begin -> state_updating;
   begin -> send_mmp_begin;
   begin -> commit;
-  
+
   send_mmp_begin -> handle_begin [style=dotted];
   handle_begin -> state_updating;
   handle_begin -> send_mmp_accept;

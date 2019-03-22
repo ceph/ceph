@@ -4,7 +4,7 @@
 
 When you remove Ceph daemons and uninstall Ceph, there may still be  extraneous
 data from the cluster on your server. The ``purge`` and  ``purgedata`` commands
-provide a convenient means of cleaning up a  host. 
+provide a convenient means of cleaning up a  host.
 
 
 Purge Data
@@ -14,7 +14,7 @@ To remove all data from ``/var/lib/ceph`` (but leave Ceph packages intact),
 execute the ``purgedata`` command.
 
 	ceph-deploy purgedata {hostname} [{hostname} ...]
-	
+
 
 Purge
 =====

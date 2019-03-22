@@ -56,7 +56,7 @@ This creates a new container called ``my-new-container``:
 Create an Object
 ================
 
-This creates an object ``foo.txt`` from the file named ``foo.txt`` in 
+This creates an object ``foo.txt`` from the file named ``foo.txt`` in
 the container ``my-new-container``:
 
 .. code-block:: java
@@ -104,7 +104,7 @@ The output will look something like this::
 List a Container's Content
 ==========================
 
-This gets a list of objects in the container ``my-new-container``; and, it also 
+This gets a list of objects in the container ``my-new-container``; and, it also
 prints out each object's name, the file size, and last modified date:
 
 .. code-block:: java
@@ -140,7 +140,7 @@ in a container named ``my-new-container``:
 Retrieve an Object
 ==================
 
-This downloads the object ``foo.txt`` in the container ``my-new-container`` 
+This downloads the object ``foo.txt`` in the container ``my-new-container``
 and saves it in ``./outfile.txt``:
 
 .. code-block:: java
@@ -165,11 +165,11 @@ This deletes the object ``goodbye.txt`` in the container "my-new-container":
 Delete a Container
 ==================
 
-This deletes a container named "my-new-container": 
+This deletes a container named "my-new-container":
 
 .. code-block:: java
 
        Container container = account.getContainer("my-new-container");
        container.delete();
-	
+
 .. note:: The container must be empty! Otherwise it won't work!

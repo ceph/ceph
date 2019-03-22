@@ -2,10 +2,10 @@
  Placement Group States
 ========================
 
-When checking a cluster's status (e.g., running ``ceph -w`` or ``ceph -s``), 
-Ceph will report on the status of the placement groups. A placement group has 
+When checking a cluster's status (e.g., running ``ceph -w`` or ``ceph -s``),
+Ceph will report on the status of the placement groups. A placement group has
 one or more states. The optimum state for placement groups in the placement group
-map is ``active + clean``. 
+map is ``active + clean``.
 
 *creating*
   Ceph is still creating the placement group.

@@ -64,7 +64,7 @@ using the commands ``ceph mgr module enable <module>`` and
 If a module is *enabled* then the active ceph-mgr daemon will load
 and execute it.  In the case of modules that provide a service,
 such as an HTTP server, the module may publish its address when it
-is loaded.  To see the addresses of such modules, use the command 
+is loaded.  To see the addresses of such modules, use the command
 ``ceph mgr services``.
 
 Some modules may also implement a special standby mode which runs on

@@ -160,7 +160,7 @@ Ceph configuration file.
 
 :Description: The default CRUSH rule to use when creating a replicated pool.
 :Type: 8-bit Integer
-:Default: ``-1``, which means "pick the rule with the lowest numerical ID and 
+:Default: ``-1``, which means "pick the rule with the lowest numerical ID and
           use that".  This is to make pool creation work in the absence of rule 0.
 
 

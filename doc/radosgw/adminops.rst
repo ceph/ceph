@@ -1967,7 +1967,7 @@ Binding libraries
  - `QuentinPerez/go-radosgw`_
 
 ``Java``
- 
+
  - `twonote/radosgw-admin4j`_
 
 ``Python``

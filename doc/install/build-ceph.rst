@@ -3,14 +3,14 @@
 ============
 
 You can get Ceph software by retrieving Ceph source code and building it yourself.
-To build Ceph, you need to set up a development environment, compile Ceph, 
-and then either install in user space or build packages and install the packages. 
+To build Ceph, you need to set up a development environment, compile Ceph,
+and then either install in user space or build packages and install the packages.
 
 Build Prerequisites
 ===================
 
 
-.. tip:: Check this section to see if there are specific prerequisites for your 
+.. tip:: Check this section to see if there are specific prerequisites for your
    Linux/Unix distribution.
 
 Before you can build Ceph source code, you need to install several libraries
@@ -33,13 +33,13 @@ repository and execute the following::
     make
 
 .. note:: By default do_cmake.sh will build a debug version of ceph that may
-   perform up to 5 times slower with certain workloads. Pass 
+   perform up to 5 times slower with certain workloads. Pass
    '-DCMAKE_BUILD_TYPE=RelWithDebInfo' to do_cmake.sh if you would like to
    build a release version of the ceph executables instead.
 
 .. topic:: Hyperthreading
 
-	You can use ``make -j`` to execute multiple jobs depending upon your system. For 
+	You can use ``make -j`` to execute multiple jobs depending upon your system. For
 	example, ``make -j4`` for a dual core processor may build faster.
 
 See `Installing a Build`_ to install a build in user space.
@@ -47,20 +47,20 @@ See `Installing a Build`_ to install a build in user space.
 Build Ceph Packages
 ===================
 
-To build packages, you must clone the `Ceph`_ repository. You can create 
-installation packages from the latest code using ``dpkg-buildpackage`` for 
+To build packages, you must clone the `Ceph`_ repository. You can create
+installation packages from the latest code using ``dpkg-buildpackage`` for
 Debian/Ubuntu or ``rpmbuild`` for the RPM Package Manager.
 
-.. tip:: When building on a multi-core CPU, use the ``-j`` and the number of 
-   cores * 2. For example, use ``-j4`` for a dual-core processor to accelerate 
+.. tip:: When building on a multi-core CPU, use the ``-j`` and the number of
+   cores * 2. For example, use ``-j4`` for a dual-core processor to accelerate
    the build.
 
 
 Advanced Package Tool (APT)
 ---------------------------
 
-To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the 
-`Ceph`_ repository, installed the `Build Prerequisites`_ and installed 
+To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the
+`Ceph`_ repository, installed the `Build Prerequisites`_ and installed
 ``debhelper``::
 
 	sudo apt-get install debhelper
@@ -76,7 +76,7 @@ RPM Package Manager
 -------------------
 
 To create ``.rpm`` packages, ensure that you have cloned the `Ceph`_ repository,
-installed the `Build Prerequisites`_ and installed ``rpm-build`` and 
+installed the `Build Prerequisites`_ and installed ``rpm-build`` and
 ``rpmdevtools``::
 
 	yum install rpm-build rpmdevtools

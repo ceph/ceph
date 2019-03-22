@@ -20,7 +20,7 @@ deleted.  Each DeletingState object in deleting_pgs lives while at
 least one reference to it remains.  Each item in RemoveWQ carries a
 reference to the DeletingState for the relevant pg such that
 deleting_pgs.lookup(pgid) will return a null ref only if there are no
-collections currently being deleted for that pg. 
+collections currently being deleted for that pg.
 
 The DeletingState for a pg also carries information about the status
 of the current deletion and allows the deletion to be cancelled.

@@ -10,9 +10,9 @@ Author: Loic Dachary <loic@dachary.org>
 Date:   Fri Apr 10 17:51:38 2015 +0200
 
     Merge pull request #4328 from dachary/wip-11364-hammer
-    
+
     v4 bucket feature detection
-    
+
     Reviewed-by: Sage Weil <sage@redhat.com>
 
 commit 5ca771a7d1df8e78ee503a7063068cf744d5efcc
@@ -20,15 +20,15 @@ Author: Sage Weil <sage@redhat.com>
 Date:   Fri Apr 10 08:43:45 2015 -0700
 
     crush: fix has_v4_buckets()
-    
+
     alg, not type!
-    
+
     This bug made us incorrectly think we were using v4 features when user type
     5 was being used.  That's currently 'rack' with recent crush maps, but
     was other types for clusters that were created with older versions.  This
     is clearly problematic as it will lock out non-hammer clients incorrectly,
     breaking deployments on upgrade.
-    
+
     Fixes: #11364
     Backport: hammer
     Signed-off-by: Sage Weil <sage@redhat.com>
@@ -39,7 +39,7 @@ Author: Sage Weil <sage@redhat.com>
 Date:   Thu Apr 9 17:17:59 2015 -0700
 
     crush: fix dump of has_v4_buckets
-    
+
     Backport: hammer
     Signed-off-by: Sage Weil <sage@redhat.com>
     (cherry picked from commit d6e23413017fb8f5d7f18d74e993ceeedb82d8bc)
@@ -49,10 +49,10 @@ Author: Sage Weil <sage@redhat.com>
 Date:   Thu Apr 9 14:42:34 2015 -0700
 
     crush/mapper: fix divide-by-0 in straw2
-    
+
     If the item weight is 0 we don't want to divide; instead draw a minimal
     value.
-    
+
     Fixes: #11357
     Reported-by: Yann Dupont <yd@objoo.org>
     Tested-by: Yann Dupont <yd@objoo.org>
@@ -64,11 +64,11 @@ Author: Guang Yang <yguang@yahoo-inc.com>
 Date:   Thu Feb 26 08:13:12 2015 +0000
 
     osd: fix negative degraded objects during backfilling
-    
+
     When there is deleting requests during backfilling, the reported number of degraded
     objects could be negative, as the primary's num_objects is the latest (locally) but
     the number for replicas might not reflect the deletings. A simple fix is to ignore
     the negative subtracted value.
-    
+
     Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
     (cherry picked from commit 14d7e36d3c978844da73d0e1c8a3a1ec863bac15)

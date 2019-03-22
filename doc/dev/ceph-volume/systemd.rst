@@ -9,7 +9,7 @@ ability to persist information as a suffix to the instance name.
 
     ceph-volume@<sub command>-<extra metadata>
 
-For example, this is how enabling an OSD could look like for the 
+For example, this is how enabling an OSD could look like for the
 :ref:`ceph-volume-lvm` sub command::
 
     systemctl enable ceph-volume@lvm-0-8715BEB4-15C5-49DE-BA6F-401086EC7B41

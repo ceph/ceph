@@ -22,7 +22,7 @@ Concepts
    is the same as the *acting set*, except when the *acting set* has been
    explicitly overridden via *PG temp* in the OSDMap.
 
-*PG temp* 
+*PG temp*
    a temporary placement group acting set used while backfilling the
    primary osd. Let say acting is [0,1,2] and we are
    active+clean. Something happens and acting is now [3,1,2]. osd 3 is

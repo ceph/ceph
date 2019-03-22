@@ -47,7 +47,7 @@ Example request::
    Content-Type: application/json
    X-Auth-Token: 7f7d588dd29b44df983bc961a6b73a10
    Content-Length: 299
-   
+
    {
        "name": "my-key",
        "expiration": "2016-12-28T19:14:44.180394",

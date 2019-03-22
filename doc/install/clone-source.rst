@@ -27,7 +27,7 @@ To install ``git`` on CentOS/RHEL, execute::
 
 You must also have a ``github`` account. If you do not have a
 ``github`` account, go to `github.com`_ and register.
-Follow the directions for setting up git at 
+Follow the directions for setting up git at
 `Set Up Git`_.
 
 .. _github.com: https://github.com
@@ -38,10 +38,10 @@ Add SSH Keys (Optional)
 =======================
 
 If you intend to commit code to Ceph or to clone using SSH
-(``git@github.com:ceph/ceph.git``), you must generate SSH keys for github. 
+(``git@github.com:ceph/ceph.git``), you must generate SSH keys for github.
 
-.. tip:: If you only intend to clone the repository, you may 
-   use ``git clone --recursive https://github.com/ceph/ceph.git`` 
+.. tip:: If you only intend to clone the repository, you may
+   use ``git clone --recursive https://github.com/ceph/ceph.git``
    without generating SSH keys.
 
 To generate SSH keys for ``github``, execute::
@@ -69,7 +69,7 @@ To clone the Ceph source code repository, execute::
 
 	git clone --recursive https://github.com/ceph/ceph.git
 
-Once ``git clone`` executes, you should have a full copy of the Ceph 
+Once ``git clone`` executes, you should have a full copy of the Ceph
 repository.
 
 .. tip:: Make sure you maintain the latest copies of the submodules
@@ -88,8 +88,8 @@ If your submodules are out of date, run::
 Choose a Branch
 ===============
 
-Once you clone the source code and submodules, your Ceph repository 
-will be on the ``master`` branch by default, which is the unstable 
+Once you clone the source code and submodules, your Ceph repository
+will be on the ``master`` branch by default, which is the unstable
 development branch. You may choose other branches too.
 
 - ``master``: The unstable development branch.

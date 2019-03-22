@@ -64,7 +64,7 @@ Commands
 :command:`bluefs-bdev-new-db` --path *osd path* --dev-target *new-device*
 
    Adds DB device to BlueFS, fails if DB device already exists.
-   
+
 :command:`bluefs-bdev-migrate` --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 
    Moves BlueFS data from source device(s) to the target one, source devices
@@ -79,7 +79,7 @@ Commands
 
 :command:`show-label` --dev *device* [...]
 
-   Show device label(s).	   
+   Show device label(s).
 
 Options
 =======

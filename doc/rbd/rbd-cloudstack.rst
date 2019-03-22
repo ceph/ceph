@@ -32,15 +32,15 @@ following diagram depicts the CloudStack/Ceph technology stack.
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
 
-.. important:: To use Ceph Block Devices with CloudStack, you must have  
+.. important:: To use Ceph Block Devices with CloudStack, you must have
    access to a running Ceph Storage Cluster.
 
 CloudStack integrates with Ceph's block devices to provide CloudStack with a
 back end for CloudStack's Primary Storage. The instructions below detail the
 setup for CloudStack Primary Storage.
 
-.. note:: We recommend installing with Ubuntu 14.04 or later so that 
-   you can use package installation instead of having to compile 
+.. note:: We recommend installing with Ubuntu 14.04 or later so that
+   you can use package installation instead of having to compile
    libvirt from source.
 
 Installing and configuring QEMU for use with CloudStack doesn't require any
@@ -63,7 +63,7 @@ CloudStack NFS Primary Storage. Ensure your Ceph cluster is running, then create
 the pool. ::
 
    ceph osd pool create cloudstack
-   
+
 See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
@@ -83,7 +83,7 @@ access to the ``cloudstack`` pool. ::
 
   ceph auth get-or-create client.cloudstack mon 'profile rbd' osd 'profile rbd pool=cloudstack'
 
-Use the information returned by the command in the next step when adding the 
+Use the information returned by the command in the next step when adding the
 Primary Storage.
 
 See `User Management`_ for additional details.
@@ -91,40 +91,40 @@ See `User Management`_ for additional details.
 Add Primary Storage
 ===================
 
-To add a Ceph block device as Primary Storage, the steps include: 
+To add a Ceph block device as Primary Storage, the steps include:
 
 #. Log in to the CloudStack UI.
-#. Click **Infrastructure** on the left side navigation bar. 
+#. Click **Infrastructure** on the left side navigation bar.
 #. Select **View All** under **Primary Storage**.
 #. Click the **Add Primary Storage** button on the top right hand side.
 #. Fill in the following information, according to your infrastructure setup:
 
    - Scope (i.e. Cluster or Zone-Wide).
-   
+
    - Zone.
-   
+
    - Pod.
-   
+
    - Cluster.
-   
+
    - Name of Primary Storage.
-   
+
    - For **Protocol**, select ``RBD``.
-   
+
    - For **Provider**, select the appropriate provider type (i.e. DefaultPrimary, SolidFire, SolidFireShared, or CloudByte).  Depending on the provider chosen, fill out the information pertinent to your setup.
-   
+
 #. Add cluster information (``cephx`` is supported).
 
    - For **RADOS Monitor**, provide the IP address of a Ceph monitor node.
-   
+
    - For **RADOS Pool**, provide the name of an RBD pool.
-   
+
    - For **RADOS User**, provide a user that has sufficient rights to the RBD pool. Note: Do not include the ``client.`` part of the user.
-   
+
    - For **RADOS Secret**, provide the secret the user's secret.
-   
+
    - **Storage Tags** are optional. Use tags at your own discretion. For more information about storage tags in CloudStack, refer to `Storage Tags`_.
-   
+
 #. Click **OK**.
 
 Create a Disk Offering

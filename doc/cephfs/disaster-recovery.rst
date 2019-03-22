@@ -28,7 +28,7 @@ be missing (reads will return zeros).
 
 Losing a data PG may affect many files.  Files are split into many objects,
 so identifying which files are affected by loss of particular PGs requires
-a full scan over all object IDs that may exist within the size of a file. 
+a full scan over all object IDs that may exist within the size of a file.
 This type of scan may be useful for identifying which files require
 restoring from a backup.
 

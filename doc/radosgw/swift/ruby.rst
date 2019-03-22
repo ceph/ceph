@@ -48,7 +48,7 @@ This creates a file ``hello.txt`` from the file named ``my_hello.txt``
 List Owned Containers
 =====================
 
-This gets a list of Containers that you own, and also prints out 
+This gets a list of Containers that you own, and also prints out
 the container name:
 
 .. code-block:: ruby
@@ -67,7 +67,7 @@ The output will look something like this::
 List a Container's Contents
 ===========================
 
-This gets a list of objects in the container, and prints out each 
+This gets a list of objects in the container, and prints out each
 object's name, the file size, and last modified date:
 
 .. code-block:: ruby
@@ -105,7 +105,7 @@ This deletes the object ``goodbye.txt``:
 .. code-block:: ruby
 
 	container.delete_object('goodbye.txt')
-	
+
 
 Delete a Container
 ==================

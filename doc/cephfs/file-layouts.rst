@@ -69,11 +69,11 @@ Read individual layout fields:
     ceph.file.layout.stripe_count="1"
     $ getfattr -n ceph.file.layout.object_size file
     # file: file
-    ceph.file.layout.object_size="4194304"    
+    ceph.file.layout.object_size="4194304"
 
 .. note::
 
-    When reading layouts, the pool will usually be indicated by name.  However, in 
+    When reading layouts, the pool will usually be indicated by name.  However, in
     rare cases when pools have only just been created, the ID may be output instead.
 
 Directories do not have an explicit layout until it is customized.  Attempts to read
@@ -124,7 +124,7 @@ Layout fields are modified using ``setfattr``:
     $ echo "hello world" > file1
     $ setfattr -n ceph.file.layout.stripe_count -v 4 file1
     setfattr: file1: Directory not empty
-    
+
 Clearing layouts
 ----------------
 
@@ -201,7 +201,7 @@ directories do not have layouts set:
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
 
-    
+
 Adding a data pool to the MDS
 -----------------------------
 
@@ -222,7 +222,7 @@ You can then update the layout on a directory in CephFS to use the pool you adde
     $ mkdir /mnt/cephfs/myssddir
     $ setfattr -n ceph.dir.layout.pool -v cephfs_data_ssd /mnt/cephfs/myssddir
 
-All new files created within that directory will now inherit its layout and place their data in your newly added pool. 
+All new files created within that directory will now inherit its layout and place their data in your newly added pool.
 
 You may notice that object counts in your primary data pool (the one passed to ``fs new``) continue to increase, even if files are being created in the pool you added.  This is normal: the file data is stored in the pool specified by the layout, but a small amount of metadata is kept in the primary data pool for all files.
 

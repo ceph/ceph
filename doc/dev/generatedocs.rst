@@ -66,5 +66,5 @@ by running ``serve-doc``::
 	cd ceph
 	admin/serve-doc
 
-This will serve the ``build-doc/output/html`` directory over port 8080 via 
+This will serve the ``build-doc/output/html`` directory over port 8080 via
 Python's ``SimpleHTTPServer`` module.

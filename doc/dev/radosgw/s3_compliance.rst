@@ -12,17 +12,17 @@ Naming code reference
 Here comes a BNF definition on how to name a feature in the code for referencing purpose : ::
 
     name ::= request_type "_" ( header | operation ) ( "_" header_option )?
-    
+
     request_type ::= "req" | "res"
-    
+
     header ::= string
-    
+
     operation ::= method resource
-    
+
     method ::= "GET" | "PUT" | "POST" | "DELETE" | "OPTIONS" | "HEAD"
-    
+
     resource ::= string
-    
+
     header_option ::= string
 
 ----------------------

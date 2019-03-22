@@ -7,11 +7,11 @@ into the ``ceph-radosgw`` daemon) instead of Apache and FastCGI. Using Civetweb
 simplifies the Ceph Object Gateway installation and configuration.
 
 .. note:: To run the Ceph Object Gateway service, you should have a running
-          Ceph storage cluster, and the gateway host should have access to the 
+          Ceph storage cluster, and the gateway host should have access to the
           public network.
 
 .. note:: In version 0.80, the Ceph Object Gateway does not support SSL. You
-          may setup a reverse proxy server with SSL to dispatch HTTPS requests 
+          may setup a reverse proxy server with SSL to dispatch HTTPS requests
           as HTTP requests to CivetWeb.
 
 Execute the Pre-Installation Procedure
@@ -94,7 +94,7 @@ after the ``[global]`` section::
 
 .. note:: Ensure that you leave no whitespace between ``port=<port-number>`` in
           the ``rgw_frontends`` key/value pair. The ``[client.rgw.gateway-node1]``
-          heading identifies this portion of the Ceph configuration file as 
+          heading identifies this portion of the Ceph configuration file as
           configuring a Ceph Storage Cluster client where the client type is a Ceph
           Object Gateway (i.e., ``rgw``), and the name of the instance is
           ``gateway-node1``.
@@ -173,11 +173,11 @@ non-ssl connections are hosted by a single rgw instance. For eg::
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
-Additional Civetweb Configuration Options 
------------------------------------------ 
-Some additional configuration options can be adjusted for the embedded Civetweb web server 
-in the **Ceph Object Gateway** section of the ``ceph.conf`` file. 
-A list of supported options, including an example, can be found in the `HTTP Frontends`_. 
+Additional Civetweb Configuration Options
+-----------------------------------------
+Some additional configuration options can be adjusted for the embedded Civetweb web server
+in the **Ceph Object Gateway** section of the ``ceph.conf`` file.
+A list of supported options, including an example, can be found in the `HTTP Frontends`_.
 
 Migrating from Apache to Civetweb
 ---------------------------------
@@ -409,14 +409,14 @@ The output of the command will be something like the following::
 
 .. important:: Check the key output. Sometimes ``radosgw-admin`` generates a
                JSON escape character ``\`` in ``access_key`` or ``secret_key``
-               and some clients do not know how to handle JSON escape 
+               and some clients do not know how to handle JSON escape
                characters. Remedies include removing the JSON escape character
-               ``\``, encapsulating the string in quotes, regenerating the key 
-               and ensuring that it does not have a JSON escape character or 
+               ``\``, encapsulating the string in quotes, regenerating the key
+               and ensuring that it does not have a JSON escape character or
                specify the key and secret manually. Also, if ``radosgw-admin``
                generates a JSON escape character ``\`` and a forward slash ``/``
-               together in a key, like ``\/``, only remove the JSON escape 
-               character ``\``. Do not remove the forward slash ``/`` as it is 
+               together in a key, like ``\/``, only remove the JSON escape
+               character ``\``. Do not remove the forward slash ``/`` as it is
                a valid character in the key.
 
 Create a Swift User

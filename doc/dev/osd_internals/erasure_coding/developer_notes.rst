@@ -7,7 +7,7 @@ Introduction
 
 Each chapter of this document explains an aspect of the implementation
 of the erasure code within Ceph. It is mostly based on examples being
-explained to demonstrate how things work. 
+explained to demonstrate how things work.
 
 Reading and writing encoded chunks from and to OSDs
 ---------------------------------------------------
@@ -34,7 +34,7 @@ name. Chunk *1* contains *ABC* and is stored on *OSD5* while chunk *4*
 contains *YXY* and is stored on *OSD3*.
 
 ::
- 
+
                              +-------------------+
                         name |        NYAN       |
                              +-------------------+
@@ -83,14 +83,14 @@ chunk *3* containing *GHI* and chunk *4* containing *YXY* and rebuild
 the original content of the object *ABCDEFGHI*. The decoding function
 is informed that the chunks *2* and *5* are missing ( they are called
 *erasures* ). The chunk *5* could not be read because the *OSD4* is
-*out*. 
+*out*.
 
 The decoding function could be called as soon as three chunks are
 read : *OSD2* was the slowest and its chunk does not need to be taken into
 account. This optimization is not implemented in Firefly.
 
 ::
- 
+
                              +-------------------+
                         name |        NYAN       |
                              +-------------------+
@@ -159,12 +159,12 @@ means more calls and more overhead.
 Although Reed-Solomon is provided as a default, Ceph uses it via an
 `abstract API <https://github.com/ceph/ceph/blob/v0.78/src/erasure-code/ErasureCodeInterface.h>`_ designed to
 allow each pool to choose the plugin that implements it using
-key=value pairs stored in an `erasure code profile`_. 
+key=value pairs stored in an `erasure code profile`_.
 
 .. _erasure code profile: ../../../erasure-coded-pool
 
 ::
- 
+
  $ ceph osd erasure-code-profile set myprofile \
      crush-failure-domain=osd
  $ ceph osd erasure-code-profile get myprofile
@@ -177,13 +177,13 @@ key=value pairs stored in an `erasure code profile`_.
  $ ceph osd pool create ecpool 12 12 erasure myprofile
 
 The *plugin* is dynamically loaded from *directory*  and expected to
-implement the *int __erasure_code_init(char *plugin_name, char *directory)* function 
-which is responsible for registering an object derived from *ErasureCodePlugin* 
+implement the *int __erasure_code_init(char *plugin_name, char *directory)* function
+which is responsible for registering an object derived from *ErasureCodePlugin*
 in the registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ plugin reads:
 
 ::
- 
-  ErasureCodePluginRegistry &instance = 
+
+  ErasureCodePluginRegistry &instance =
                              ErasureCodePluginRegistry::instance();
   instance.add(plugin_name, new ErasureCodePluginExample());
 
@@ -192,18 +192,18 @@ from which the concrete implementation of the *ErasureCodeInterface*
 object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/v0.78/src/test/erasure-code/ErasureCodePluginExample.cc>`_ reads:
 
 ::
- 
+
   virtual int factory(const map<std::string,std::string> &parameters,
                       ErasureCodeInterfaceRef *erasure_code) {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample(parameters));
     return 0;
-  } 
+  }
 
 The *parameters* argument is the list of *key=value* pairs that were
 set in the erasure code profile, before the pool was created.
 
 ::
- 
+
   ceph osd erasure-code-profile set myprofile \
      directory=<dir>         \ # mandatory
      plugin=jerasure         \ # mandatory

@@ -283,7 +283,7 @@ which are as follows:
 
 :command:`data sync status`
   Get data sync status of the specified source zone.
-  
+
 :command:`data sync init`
   Init data sync for the specified source zone.
 
@@ -558,7 +558,7 @@ Options
 .. option:: --purge-keys
 
 	When specified, subuser removal will also purge all the subuser keys.
-   
+
 .. option:: --purge-objects
 
    When specified, the bucket removal will also purge all objects in it.
@@ -881,7 +881,7 @@ Generate a new user::
 Remove a user::
 
         $ radosgw-admin user rm --uid=johnny
-        
+
 Remove a user and all associated buckets with their contents::
 
         $ radosgw-admin user rm --uid=johnny --purge-data
@@ -891,7 +891,7 @@ Remove a bucket::
 	$ radosgw-admin bucket rm --bucket=foo
 
 Link bucket to specified user::
-	
+
 	$ radosgw-admin bucket link --bucket=foo --bucket_id=<bucket id> --uid=johnny
 
 Unlink bucket from specified user::

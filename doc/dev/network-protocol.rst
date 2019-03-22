@@ -30,7 +30,7 @@ negotiation begins.  First the client sends a ``ceph_msg_connect`` structure
 with its information.
 
 ::
-	
+
 	// From src/include/msgr.h
 	struct ceph_msg_connect {
 		u64le features;            // Supported features (CEPH_FEATURE_*)
@@ -51,7 +51,7 @@ Once the connect has been sent the connection has effectively been opened,
 however the first message the server sends must be a connect reply message.
 
 ::
-	
+
 	struct ceph_msg_connect_reply {
 		u8    tag; // Tag indicating response code.
 		u64le features;
@@ -71,7 +71,7 @@ at this level consist of a tag byte, identifying the type of message, followed
 by the message data.
 
 ::
-	
+
 	// Virtual structure.
 	struct {
 		u8 tag; // CEPH_MSGR_TAG_*
@@ -94,7 +94,7 @@ CEPH_MSGR_TAG_CLOSE (0x06)
 --------------------------
 
 ::
-	
+
 	struct ceph_msgr_close {
 		u8 tag = 0x06;
 		u8 data[0]; // No data.
@@ -106,7 +106,7 @@ CEPH_MSGR_TAG_MSG (0x07)
 ------------------------
 
 ::
-	
+
 	struct ceph_msgr_msg {
 		u8 tag = 0x07;
 		ceph_msg_header header;
@@ -115,7 +115,7 @@ CEPH_MSGR_TAG_MSG (0x07)
 		u8 data  [header.data_len  ];
 		ceph_msg_footer footer;
 	}
-	
+
 	// From src/include/msgr.h
 	struct ceph_msg_header {
 		u64le seq;       // Sequence number.
@@ -123,19 +123,19 @@ CEPH_MSGR_TAG_MSG (0x07)
 		u16le type;      // Message type (CEPH_MSG_* or MSG_*).
 		u16le priority;  // Priority (higher is more important).
 		u16le version;   // Version of message encoding.
-		
+
 		u32le front_len;  // The size of the front section.
 		u32le middle_len; // The size of the middle section.
 		u32le data_len;   // The size of the data section.
 		u16le data_off;   // The way data should be aligned by the receiver.
-		
+
 		ceph_entity_name src; // Information about the sender.
-		
+
 		u16le compat_version; // Oldest compatible encoding version.
 		u16le reserved;       // Unused.
 		u32le crc;            // CRC of header.
 	}
-	
+
 	// From src/include/msgr.h
 	struct ceph_msg_footer {
 		u32le front_crc;  // Checksums of the various sections.
@@ -158,7 +158,7 @@ CEPH_MSGR_TAG_ACK (0x08)
 ------------------------
 
 ::
-	
+
 	struct ceph_msgr_ack {
 		u8    tag = 0x08;
 		u64le seq; // The sequence number of the message being acknowledged.
@@ -168,7 +168,7 @@ CEPH_MSGR_TAG_KEEPALIVE (0x09)
 ------------------------------
 
 ::
-	
+
 	struct ceph_msgr_keepalive {
 		u8 tag = 0x09;
 		u8 data[0]; // No data.
@@ -178,7 +178,7 @@ CEPH_MSGR_TAG_KEEPALIVE2 (0x0E)
 -------------------------------
 
 ::
-	
+
 	struct ceph_msgr_keepalive2 {
 		u8      tag = 0x0E;
 		utime_t timestamp;
@@ -188,7 +188,7 @@ CEPH_MSGR_TAG_KEEPALIVE2_ACK (0x0F)
 -----------------------------------
 
 ::
-	
+
 	struct ceph_msgr_keepalive2_ack {
 		u8      tag = 0x0F;
 		utime_t timestamp;

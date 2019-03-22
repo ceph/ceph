@@ -6,21 +6,21 @@ Before mounting a Ceph File System in User Space (FUSE), ensure that the client
 host has a copy of the Ceph configuration file and a keyring with CAPS for the
 Ceph metadata server.
 
-#. From your client host, copy the Ceph configuration file from the monitor host 
-   to the ``/etc/ceph`` directory. :: 
+#. From your client host, copy the Ceph configuration file from the monitor host
+   to the ``/etc/ceph`` directory. ::
 
 	sudo mkdir -p /etc/ceph
 	sudo scp {user}@{server-machine}:/etc/ceph/ceph.conf /etc/ceph/ceph.conf
 
-#. From your client host, copy the Ceph keyring from the monitor host to 
-   to the ``/etc/ceph`` directory. :: 
+#. From your client host, copy the Ceph keyring from the monitor host to
+   to the ``/etc/ceph`` directory. ::
 
 	sudo scp {user}@{server-machine}:/etc/ceph/ceph.keyring /etc/ceph/ceph.keyring
 
-#. Ensure that the Ceph configuration file and the keyring have appropriate 
+#. Ensure that the Ceph configuration file and the keyring have appropriate
    permissions set on your client machine  (e.g., ``chmod 644``).
 
-For additional details on ``cephx`` configuration, see 
+For additional details on ``cephx`` configuration, see
 `CEPHX Config Reference`_.
 
 To mount the Ceph file system as a FUSE, you may use the ``ceph-fuse`` command.

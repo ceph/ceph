@@ -3,11 +3,11 @@
 ===================
 
 An object is a container for storing data and metadata. A container may
-have many objects, but the object names must be unique. This API enables a 
-client to create an object, set access controls and metadata, retrieve an 
-object's data and metadata, and delete an object. Since this API makes requests 
-related to information in a particular user's account, all requests in this API 
-must be authenticated unless the container or object's access control is 
+have many objects, but the object names must be unique. This API enables a
+client to create an object, set access controls and metadata, retrieve an
+object's data and metadata, and delete an object. Since this API makes requests
+related to information in a particular user's account, all requests in this API
+must be authenticated unless the container or object's access control is
 deliberately made publicly accessible (i.e., allows anonymous requests).
 
 
@@ -16,12 +16,12 @@ Create/Update an Object
 
 To create a new object, make a ``PUT`` request with the API version, account,
 container name and the name of the new object. You must have write permission
-on the container to create or update an object. The object name must be 
+on the container to create or update an object. The object name must be
 unique within the container. The ``PUT`` request is not idempotent, so if you
 do not use a unique name, the request will update the object. However, you may
-use pseudo-hierarchical syntax in your object name to distinguish it from 
-another object of the same name if it is under a different pseudo-hierarchical 
-directory. You may include access control headers and metadata headers in the 
+use pseudo-hierarchical syntax in your object name to distinguish it from
+another object of the same name if it is under a different pseudo-hierarchical
+directory. You may include access control headers and metadata headers in the
 request.
 
 
@@ -30,7 +30,7 @@ Syntax
 
 ::
 
-   PUT /{api version}/{account}/{container}/{object} HTTP/1.1 
+   PUT /{api version}/{account}/{container}/{object} HTTP/1.1
 	Host: {fqdn}
 	X-Auth-Token: {auth-token}
 
@@ -40,7 +40,7 @@ Request Headers
 
 ``ETag``
 
-:Description: An MD5 hash of the object's contents. Recommended. 
+:Description: An MD5 hash of the object's contents. Recommended.
 :Type: String
 :Required: No
 
@@ -66,17 +66,17 @@ Copy an Object
 Copying an object allows you to make a server-side copy of an object, so that
 you don't have to download it and upload it under another container/name.
 To copy the contents of one object to another object, you may make either a
-``PUT`` request or a ``COPY`` request with the API version, account, and the 
+``PUT`` request or a ``COPY`` request with the API version, account, and the
 container name. For a ``PUT`` request, use the destination container and object
 name in the request, and the source container and object in the request header.
 For a ``Copy`` request, use the source container and object in the request, and
-the destination container and object in the request header. You must have write 
-permission on the container to copy an object. The destination object name must be 
-unique within the container. The request is not idempotent, so if you do not use 
-a unique name, the request will update the destination object. However, you may 
-use pseudo-hierarchical syntax in your object name to distinguish the destination 
-object from the source object of the same name if it is under a different 
-pseudo-hierarchical directory. You may include access control headers and metadata 
+the destination container and object in the request header. You must have write
+permission on the container to copy an object. The destination object name must be
+unique within the container. The request is not idempotent, so if you do not use
+a unique name, the request will update the destination object. However, you may
+use pseudo-hierarchical syntax in your object name to distinguish the destination
+object from the source object of the same name if it is under a different
+pseudo-hierarchical directory. You may include access control headers and metadata
 headers in the request.
 
 Syntax
@@ -146,7 +146,7 @@ Delete an Object
 
 To delete an object, make a ``DELETE`` request with the API version, account,
 container and object name. You must have write permissions on the container to delete
-an object within it. Once you have successfully deleted the object, you will be able to 
+an object within it. Once you have successfully deleted the object, you will be able to
 reuse the object name.
 
 Syntax
@@ -220,14 +220,14 @@ Response Headers
 
 ``Content-Range``
 
-:Description: The range of the subset of object contents. Returned only if the range header field was specified in the request  
+:Description: The range of the subset of object contents. Returned only if the range header field was specified in the request
 
 
 Get Object Metadata
 ===================
 
-To retrieve an object's metadata, make a ``HEAD`` request with the API version, 
-account, container and object name. You must have read permissions on the 
+To retrieve an object's metadata, make a ``HEAD`` request with the API version,
+account, container and object name. You must have read permissions on the
 container to retrieve metadata from an object within the container. This request
 returns the same header information as the request for the object itself, but
 it does not return the object's data.
@@ -246,8 +246,8 @@ Syntax
 Add/Update Object Metadata
 ==========================
 
-To add metadata to an object, make a ``POST`` request with the API version, 
-account, container and object name. You must have write permissions on the 
+To add metadata to an object, make a ``POST`` request with the API version,
+account, container and object name. You must have write permissions on the
 parent container to add or update metadata.
 
 

@@ -24,7 +24,7 @@ Requirements
 Configuration
 -------------
 
-Because a Rook cluster's ceph-mgr daemon is running as a Kubernetes pod, 
+Because a Rook cluster's ceph-mgr daemon is running as a Kubernetes pod,
 the ``rook`` module can connect to the Kubernetes API without any explicit
 configuration.
 

@@ -42,21 +42,21 @@ Example request::
    POST /v1/data/ceph/authz HTTP/1.1
    Host: opa.example.com:8181
    Content-Type: application/json
-   
+
    {
        "input": {
            "method": "GET",
            "user_info": {
                "used_id": "john",
-               "display_name": "John"  
+               "display_name": "John"
            },
            "bucket_info": {
                "bucket": {
                    "name": "Testbucket",
-                   "bucket_id": "testbucket" 
+                   "bucket_id": "testbucket"
                },
-               "owner": "john" 
-           }             
+               "owner": "john"
+           }
        }
    }
 

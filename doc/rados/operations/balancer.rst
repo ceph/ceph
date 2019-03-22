@@ -111,7 +111,7 @@ You can also evaluate the distribution for a single pool with::
 Greater detail for the evaluation can be seen with::
 
   ceph balancer eval-verbose ...
-  
+
 The balancer can generate a plan, using the currently configured mode, with::
 
   ceph balancer optimize <plan-name>

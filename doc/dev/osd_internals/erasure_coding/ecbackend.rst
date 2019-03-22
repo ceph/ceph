@@ -152,7 +152,7 @@ OSD Object Write and Consistency
 Regardless of the algorithm chosen above, writing of the data is a two
 phase process: commit and rollforward. The primary sends the log
 entries with the operation described (see
-osd_types.h:TransactionInfo::(LocalRollForward|LocalRollBack).  
+osd_types.h:TransactionInfo::(LocalRollForward|LocalRollBack).
 In all cases, the "commit" is performed in place, possibly leaving some
 information required for a rollback in a write-aside object.  The
 rollforward phase occurs once all acting set replicas have committed

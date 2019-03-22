@@ -22,7 +22,7 @@ requires at least three hosts::
     $ rados --pool ecpool get NYAN -
     ABCDEFGHI
 
-.. note:: the 12 in *pool create* stands for 
+.. note:: the 12 in *pool create* stands for
           `the number of placement groups <../pools>`_.
 
 Erasure code profiles
@@ -109,7 +109,7 @@ no two *chunks* are stored in the same rack.
               +----------------->| OSD5 |
                                  +------+
 
- 
+
 More information can be found in the `erasure code profiles
 <../erasure-code-profile>`_ documentation.
 

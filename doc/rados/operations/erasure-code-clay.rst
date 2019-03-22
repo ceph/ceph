@@ -2,25 +2,25 @@
 CLAY code plugin
 ================
 
-CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings 
+CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings
 in terms of network bandwidth and disk IO when a failed node/OSD/rack is being repaired. Let:
 
 	d = number of OSDs contacted during repair
 
-If *jerasure* is configured with *k=8* and *m=4*, losing one OSD requires 
+If *jerasure* is configured with *k=8* and *m=4*, losing one OSD requires
 reading from the *d=8* others to repair. And recovery of say a 1GiB needs
 a download of 8 X 1GiB = 8GiB of information.
 
 However, in the case of the *clay* plugin *d* is configurable within the limits:
 
-	k+1 <= d <= k+m-1 
+	k+1 <= d <= k+m-1
 
-By default, the clay code plugin picks *d=k+m-1* as it provides the greatest savings in terms 
-of network bandwidth and disk IO. In the case of the *clay* plugin configured with 
-*k=8*, *m=4* and *d=11* when a single OSD fails, d=11 osds are contacted and 
-250MiB is downloaded from each of them, resulting in a total download of 11 X 250MiB = 2.75GiB 
-amount of information. More general parameters are provided below. The benefits are substantial 
-when the repair is carried out for a rack that stores information on the order of 
+By default, the clay code plugin picks *d=k+m-1* as it provides the greatest savings in terms
+of network bandwidth and disk IO. In the case of the *clay* plugin configured with
+*k=8*, *m=4* and *d=11* when a single OSD fails, d=11 osds are contacted and
+250MiB is downloaded from each of them, resulting in a total download of 11 X 250MiB = 2.75GiB
+amount of information. More general parameters are provided below. The benefits are substantial
+when the repair is carried out for a rack that stores information on the order of
 Terabytes.
 
 	+-------------+---------------------------+
@@ -31,7 +31,7 @@ Terabytes.
 	| clay        | d*S/(d-k+1) = (k+m-1)*S/m |
 	+-------------+---------------------------+
 
-where *S* is the amount of data stored on a single OSD undergoing repair. In the table above, we have 
+where *S* is the amount of data stored on a single OSD undergoing repair. In the table above, we have
 used the largest possible value of *d* as this will result in the smallest amount of data download needed
 to achieve recovery from an OSD failure.
 
@@ -96,8 +96,8 @@ Where:
 
 ``scalar_mds={jerasure|isa|shec}``
 
-:Description: **scalar_mds** specifies the plugin that is used as a 
-             building block in the layered construction. It can be 
+:Description: **scalar_mds** specifies the plugin that is used as a
+             building block in the layered construction. It can be
              one of *jerasure*, *isa*, *shec*
 
 :Type: String
@@ -108,7 +108,7 @@ Where:
 
 :Description: **technique** specifies the technique that will be picked
              within the 'scalar_mds' plugin specified. Supported techniques
-             are 'reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig', 
+             are 'reed_sol_van', 'reed_sol_r6_op', 'cauchy_orig',
              'cauchy_good', 'liber8tion' for jerasure, 'reed_sol_van',
              'cauchy' for isa and 'single', 'multiple' for shec.
 
@@ -170,8 +170,8 @@ Notion of sub-chunks
 ====================
 
 The Clay code is able to save in terms of disk IO, network bandwidth as it
-is a vector code and it is able to view and manipulate data within a chunk 
-at a finer granularity termed as a sub-chunk. The number of sub-chunks within 
+is a vector code and it is able to view and manipulate data within a chunk
+at a finer granularity termed as a sub-chunk. The number of sub-chunks within
 a chunk for a Clay code is given by:
 
 	sub-chunk count = q\ :sup:`(k+m)/q`, where q=d-k+1
@@ -187,10 +187,10 @@ Examples
 --------
 
 #. For a configuration with *k=4*, *m=2*, *d=5*, the sub-chunk count is
-   8 and  the repair sub-chunk count is 4. Therefore, only half of a chunk is read 
+   8 and  the repair sub-chunk count is 4. Therefore, only half of a chunk is read
    during repair.
 #. When *k=8*, *m=4*, *d=11* the sub-chunk count is 64 and repair sub-chunk count
-   is 16. A quarter of a chunk is read from an available OSD for repair of a failed 
+   is 16. A quarter of a chunk is read from an available OSD for repair of a failed
    chunk.
 
 
@@ -199,7 +199,7 @@ How to choose a configuration given a workload
 ==============================================
 
 Only a few sub-chunks are read of all the sub-chunks within a chunk. These sub-chunks
-are not necessarily stored consecutively within a chunk. For best disk IO 
+are not necessarily stored consecutively within a chunk. For best disk IO
 performance, it is helpful to read contiguous data. For this reason, it is suggested that
 you choose stripe-size such that the sub-chunk size is sufficiently large.
 

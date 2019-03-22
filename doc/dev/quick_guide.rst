@@ -43,10 +43,10 @@ the current pools:
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
 	pool cephfs_data_a id 1
 	  nothing is going on
-	
+
 	pool cephfs_metadata_a id 2
 	  nothing is going on
-	
+
 	$ bin/ceph osd pool stats cephfs_data_a
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
 	pool cephfs_data_a id 1

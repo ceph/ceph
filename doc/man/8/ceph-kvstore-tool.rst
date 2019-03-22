@@ -42,13 +42,13 @@ which are as follows:
     If file is also specified, write the value to the file.
 
 :command:`crc <prefix> <key>`
-    Get the CRC of the KV pair stored with the URL encoded prefix and key. 
+    Get the CRC of the KV pair stored with the URL encoded prefix and key.
 
 :command:`get-size [<prefix> <key>]`
     Get estimated store size or size of value specified by prefix and key.
 
 :command:`set <prefix> <key> [ver <N>|in <file>]`
-    Set the value of the KV pair stored with the URL encoded prefix and key. 
+    Set the value of the KV pair stored with the URL encoded prefix and key.
     The value could be *version_t* or text.
 
 :command:`rm <prefix> <key>`
@@ -58,7 +58,7 @@ which are as follows:
     Remove all KV pairs stored with the URL encoded prefix.
 
 :command:`store-copy <path> [num-keys-per-tx]`
-    Copy all KV pairs to another directory specified by ``path``. 
+    Copy all KV pairs to another directory specified by ``path``.
     [num-keys-per-tx] is the number of KV pairs copied for a transaction.
 
 :command:`store-crc <path>`
@@ -66,12 +66,12 @@ which are as follows:
 
 :command:`compact`
     Subcommand ``compact`` is used to compact all data of kvstore. It will open
-    the database, and trigger a database's compaction. After compaction, some 
+    the database, and trigger a database's compaction. After compaction, some
     disk space may be released.
 
 :command:`compact-prefix <prefix>`
-    Compact all entries specified by the URL encoded prefix. 
-   
+    Compact all entries specified by the URL encoded prefix.
+
 :command:`compact-range <prefix> <start> <end>`
     Compact some entries specified by the URL encoded prefix and range.
 

@@ -85,7 +85,7 @@ End
 Diffs records
 ~~~~~~~~~~~~~
 
-Record the all snapshots and the HEAD in this section. 
+Record the all snapshots and the HEAD in this section.
 
 Snap Protection status
 ----------------------

@@ -46,7 +46,7 @@ Options
    Sets 'conf' option to /etc/ceph/foo.conf via ceph-fuse command line.
 
 
-Any valid ceph-fuse options can be passed this way.   
+Any valid ceph-fuse options can be passed this way.
 
 Additional Info
 ===============

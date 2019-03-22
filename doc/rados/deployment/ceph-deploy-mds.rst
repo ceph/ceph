@@ -25,17 +25,17 @@ Remove a Metadata Server
 
 Coming soon...
 
-.. If you have a metadata server in your cluster that you'd like to remove, you may use 
-.. the ``destroy`` option. :: 
+.. If you have a metadata server in your cluster that you'd like to remove, you may use
+.. the ``destroy`` option. ::
 
 ..	ceph-deploy mds destroy {host-name}[:{daemon-name}] [{host-name}[:{daemon-name}] ...]
 
 .. You may specify a daemon instance a name (optional) if you would like to destroy
 .. a particular daemon that runs on a single server with multiple MDS daemons.
- 
+
 .. .. note:: Ensure that if you remove a metadata server, the remaining metadata
    servers will be able to service requests from CephFS clients. If that is not
-   possible, consider adding a metadata server before destroying the metadata 
+   possible, consider adding a metadata server before destroying the metadata
    server you would like to take offline.
 
 

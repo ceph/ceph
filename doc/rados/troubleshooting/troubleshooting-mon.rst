@@ -105,7 +105,7 @@ output you would get with ``quorum_status``.
 
 Take the following example of ``mon_status``::
 
-  
+
   { "name": "c",
     "rank": 2,
     "state": "peon",
@@ -265,7 +265,7 @@ monitors::
       0: 127.0.0.1:6789/0 mon.a
       1: 127.0.0.1:6790/0 mon.b
       2: 127.0.0.1:6795/0 mon.c
-      
+
 This may not be what you have however. For instance, in some versions of
 early Cuttlefish there was this one bug that could cause your ``monmap``
 to be nullified.  Completely filled with zeros. This means that not even
@@ -418,7 +418,7 @@ information stored in OSDs.::
 
   ms=/root/mon-store
   mkdir $ms
-  
+
   # collect the cluster map from OSDs
   for host in $hosts; do
     rsync -avz $ms/. user@host:$ms.remote
@@ -430,7 +430,7 @@ information stored in OSDs.::
     EOF
     rsync -avz user@host:$ms.remote/. $ms
   done
-  
+
   # rebuild the monitor store from the collected map, if the cluster does not
   # use cephx authentication, we can skip the following steps to update the
   # keyring with the caps, and there is no need to pass the "--keyring" option.
@@ -440,7 +440,7 @@ information stored in OSDs.::
   ceph-authtool /path/to/admin.keyring -n client.admin \
     --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
   ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring
-  
+
   # make a backup of the corrupted store.db just in case!  repeat for
   # all monitors.
   mv /var/lib/ceph/mon/mon.foo/store.db /var/lib/ceph/mon/mon.foo/store.db.corrupted

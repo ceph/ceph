@@ -82,7 +82,7 @@ For CentOS 7, perform the following steps:
 openSUSE
 --------
 
-The Ceph project does not currently publish release RPMs for openSUSE, but 
+The Ceph project does not currently publish release RPMs for openSUSE, but
 a stable version of Ceph is included in the default update repository, so
 installing it is just a matter of::
 

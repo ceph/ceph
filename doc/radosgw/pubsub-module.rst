@@ -103,7 +103,7 @@ PubSub Performance Stats
 -------------------------
 - **pubsub_event_triggered**: running counter of events with at lease one pubsub topic associated with them
 - **pubsub_event_lost**: running counter of events that had  pubsub topics and subscriptions associated with them but that were not stored or pushed to any of the subscriptions
-- **pubsub_store_ok**: running counter, for all subscriptions, of stored pubsub events 
+- **pubsub_store_ok**: running counter, for all subscriptions, of stored pubsub events
 - **pubsub_store_fail**: running counter, for all subscriptions, of pubsub events that needed to be stored but failed
 - **pubsub_push_ok**: running counter, for all subscriptions, of pubsub events successfully pushed to their endpoint
 - **pubsub_push_fail**: running counter, for all subscriptions, of pubsub events failed to be pushed to their endpoint
@@ -174,7 +174,7 @@ This will create a publisher for a specific bucket into a topic.
 
 Request Params:
  - topic-name: name of topic
- - event: event type (string), one of: OBJECT_CREATE, OBJECT_DELETE 
+ - event: event type (string), one of: OBJECT_CREATE, OBJECT_DELETE
 
 
 
@@ -213,8 +213,8 @@ Request Params:
 
  - verify-ssl: can be used with https endpoints (ignored for other endpoints), indicate whether the server certificate is validated or not ("true" by default)
  - amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
- - amqp-ack-level: 2 ack levels exist: "none" - message is considered "delivered" if sent to broker; 
-   "broker" message is considered "delivered" if acked by broker. 
+ - amqp-ack-level: 2 ack levels exist: "none" - message is considered "delivered" if sent to broker;
+   "broker" message is considered "delivered" if acked by broker.
    No end2end acking is required, as messages may persist in the broker before delivered into their final destination
 
 Get Subscription Info

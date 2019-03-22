@@ -13,7 +13,7 @@ on the number of buckets that each user can create, the mapping of source object
 It is possible to configure different targets to different buckets and bucket prefixes. Note that source ACLs will not
 be preserved. It is possible to map permissions of specific source users to specific destination users.
 
-Due to API limitations there is no way to preserve original object modification time and ETag. The cloud sync module 
+Due to API limitations there is no way to preserve original object modification time and ETag. The cloud sync module
 stores these as metadata attributes on the destination objects.
 
 
@@ -156,7 +156,7 @@ For example: ``target_path = rgwx-${zone}-${sid}/${owner}/${bucket}``
 An array of of ``acl_profile``.
 
 * ``acl_profile`` (container)
- 
+
 Each profile contains ``acls_id`` (string) that represents the profile, and ``acls`` array that
 holds a list of ``acl_mappings``.
 

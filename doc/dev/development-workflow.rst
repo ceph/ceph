@@ -40,16 +40,16 @@ Release Cycle
 ::
 
     Ceph              hammer                             infernalis
-    Developer          CDS                                  CDS 
+    Developer          CDS                                  CDS
     Summit              |                                    |
                         |                                    |
     development         |                                    |
     release             |  v0.88  v0.89  v0.90   ...         |  v9.0.0
-                   --v--^----^--v---^------^--v-     ---v----^----^---  2015       
+                   --v--^----^--v---^------^--v-     ---v----^----^---  2015
                      |          |             |         |
     stable         giant        |             |      hammer
     release        v0.87        |             |      v0.94
-                                |             |          
+                                |             |
     point                    firefly       dumpling
     release                  v0.80.8       v0.67.12
 

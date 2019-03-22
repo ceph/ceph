@@ -5,7 +5,7 @@ Erasure Coded Placement Groups
 Glossary
 --------
 
-*chunk* 
+*chunk*
    when the encoding function is called, it returns chunks of the same
    size. Data chunks which can be concatenated to reconstruct the original
    object and coding chunks which can be used to rebuild a lost chunk.
@@ -15,7 +15,7 @@ Glossary
    rank of the first chunk is 0, the rank of the second chunk is 1
    etc.
 
-*stripe* 
+*stripe*
    when an object is too large to be encoded with a single call,
    each set of chunks created by a call to the encoding function is
    called a stripe.
@@ -34,30 +34,30 @@ Glossary
    original object is divided. For instance if *K* = 2 a 10KB object
    will be divided into *K* objects of 5KB each.
 
-*M* 
+*M*
    the number of coding *chunks*, i.e. the number of additional *chunks*
-   computed by the encoding functions. If there are 2 coding *chunks*, 
+   computed by the encoding functions. If there are 2 coding *chunks*,
    it means 2 OSDs can be out without losing data.
 
 *N*
-   the number of data *chunks* plus the number of coding *chunks*, 
+   the number of data *chunks* plus the number of coding *chunks*,
    i.e. *K+M*.
 
 *rate*
    the proportion of the *chunks* that contains useful information, i.e. *K/N*.
-   For instance, for *K* = 9 and *M* = 3 (i.e. *K+M* = *N* = 12) the rate is 
+   For instance, for *K* = 9 and *M* = 3 (i.e. *K+M* = *N* = 12) the rate is
    *K* = 9 / *N* = 12 = 0.75, i.e. 75% of the chunks contain useful information.
 
 The definitions are illustrated as follows (PG stands for placement group):
 ::
- 
+
                  OSD 40                       OSD 33
        +-------------------------+ +-------------------------+
        |      shard 0 - PG 10    | |      shard 1 - PG 10    |
        |+------ object O -------+| |+------ object O -------+|
        ||+---------------------+|| ||+---------------------+||
  stripe|||    chunk  0         ||| |||    chunk  1         ||| ...
-   0   |||    stripe 0         ||| |||    stripe 0         ||| 
+   0   |||    stripe 0         ||| |||    stripe 0         |||
        ||+---------------------+|| ||+---------------------+||
        ||+---------------------+|| ||+---------------------+||
  stripe|||    chunk  0         ||| |||    chunk  1         ||| ...

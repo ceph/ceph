@@ -2,9 +2,9 @@
  Placement Group Concepts
 ==========================
 
-When you execute commands like ``ceph -w``, ``ceph osd dump``, and other 
+When you execute commands like ``ceph -w``, ``ceph osd dump``, and other
 commands related to placement groups, Ceph may return values using some
-of the following terms: 
+of the following terms:
 
 *Peering*
    The process of bringing all of the OSDs that store
@@ -20,7 +20,7 @@ of the following terms:
 *Up Set*
    The ordered list of OSDs responsible for a particular placement
    group for a particular epoch according to CRUSH. Normally this
-   is the same as the *Acting Set*, except when the *Acting Set* has 
+   is the same as the *Acting Set*, except when the *Acting Set* has
    been explicitly overridden via ``pg_temp`` in the OSD Map.
 
 *Current Interval* or *Past Interval*
@@ -44,16 +44,16 @@ of the following terms:
 
 *Recovery*
    Ensuring that copies of all of the objects in a placement group
-   are on all of the OSDs in the *Acting Set*.  Once *Peering* has 
-   been performed, the *Primary* can start accepting write operations, 
+   are on all of the OSDs in the *Acting Set*.  Once *Peering* has
+   been performed, the *Primary* can start accepting write operations,
    and *Recovery* can proceed in the background.
 
-*PG Info* 
+*PG Info*
    Basic metadata about the placement group's creation epoch, the version
-   for the most recent write to the placement group, *last epoch started*, 
+   for the most recent write to the placement group, *last epoch started*,
    *last epoch clean*, and the beginning of the *current interval*.  Any
-   inter-OSD communication about placement groups includes the *PG Info*, 
-   such that any OSD that knows a placement group exists (or once existed) 
+   inter-OSD communication about placement groups includes the *PG Info*,
+   such that any OSD that knows a placement group exists (or once existed)
    also has a lower bound on *last epoch clean* or *last epoch started*.
 
 *PG Log*

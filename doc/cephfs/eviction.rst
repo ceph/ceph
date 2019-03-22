@@ -76,14 +76,14 @@ It is useful to inspect the list of clients first:
             }
         }
     ]
-    
+
 
 
 Once you have identified the client you want to evict, you can
 do that using its unique ID, or various other attributes to identify it:
 
 ::
-    
+
     # These all work
     ceph tell mds.0 client evict id=4305
     ceph tell mds.0 client evict client_metadata.=4305
@@ -139,7 +139,7 @@ For the equivalent behaviour on manual evictions, set
 Note that if blacklisting is disabled, then evicting a client will
 only have an effect on the MDS you send the command to.  On a system
 with multiple active MDS daemons, you would need to send an
-eviction command to each active daemon.  When blacklisting is enabled 
+eviction command to each active daemon.  When blacklisting is enabled
 (the default), sending an eviction command to just a single
 MDS is sufficient, because the blacklist propagates it to the others.
 

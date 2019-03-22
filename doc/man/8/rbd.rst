@@ -361,7 +361,7 @@ Commands
 
 :command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Create a new image and imports its data from path (use - for
-  stdin).  The import operation will try to create sparse rbd images 
+  stdin).  The import operation will try to create sparse rbd images
   if possible.  For import from stdin, the sparsification unit is
   the data block size of the destination image (object size).
 
@@ -376,7 +376,7 @@ Commands
   was generated relative to a start snapshot, we verify that snapshot already exists before
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
-  
+
 :command:`info` *image-spec* | *snap-spec*
   Will dump information (such as size and object size) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
@@ -560,7 +560,7 @@ Commands
 :command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
   Resize rbd image. The size parameter also needs to be specified.
   The --allow-shrink option lets the size be reduced.
-  
+
 :command:`rm` *image-spec*
   Delete an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
@@ -620,18 +620,18 @@ Commands
   List all entries from trash.
 
 :command:`trash mv` *image-spec*
-  Move an image to the trash. Images, even ones actively in-use by 
+  Move an image to the trash. Images, even ones actively in-use by
   clones, can be moved to the trash and deleted at a later time.
 
 :command:`trash purge` [*pool-name*]
   Remove all expired images from trash.
 
-:command:`trash restore` *image-id*  
+:command:`trash restore` *image-id*
   Restore an image from trash.
 
-:command:`trash rm` *image-id* 
+:command:`trash rm` *image-id*
   Delete an image from trash. If image deferment time has not expired
-  you can not removed it unless use force. But an actively in-use by clones 
+  you can not removed it unless use force. But an actively in-use by clones
   or has snapshots can not be removed.
 
 :command:`watch` *image-spec*

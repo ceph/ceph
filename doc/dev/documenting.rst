@@ -13,7 +13,7 @@ for end users of the software, unless you are making additions in
 ``/doc/dev/``, which is the section for developers.
 
 All pull requests that modify user-facing functionality must
-include corresponding updates to documentation: see 
+include corresponding updates to documentation: see
 `Submitting Patches`_ for more detail.
 
 Check your .rst syntax is working as expected by using the "View"
@@ -21,7 +21,7 @@ button in the github user interface when looking at a diff on
 an .rst file, or build the docs locally using the ``admin/build-doc``
 script.
 
-For more information about the Ceph documentation, see 
+For more information about the Ceph documentation, see
 :doc:`/start/documenting-ceph`.
 
 Code Documentation

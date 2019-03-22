@@ -9,7 +9,7 @@ Cache Settings
 
 .. sidebar:: Kernel Caching
 
-	The kernel driver for Ceph block devices can use the Linux page cache to 
+	The kernel driver for Ceph block devices can use the Linux page cache to
 	improve performance.
 
 The user space implementation of the Ceph block device (i.e., ``librbd``) cannot
@@ -45,7 +45,7 @@ if there are others accessing the image. Running GFS or OCFS on top of
 RBD will not work with caching enabled.
 
 The ``ceph.conf`` file settings for RBD should be set in the ``[client]``
-section of your configuration file. The settings include: 
+section of your configuration file. The settings include:
 
 
 ``rbd cache``
@@ -84,7 +84,7 @@ section of your configuration file. The settings include:
 
 ``rbd cache max dirty age``
 
-:Description: The number of seconds dirty data is in the cache before writeback starts. 
+:Description: The number of seconds dirty data is in the cache before writeback starts.
 :Type: Float
 :Required: No
 :Default: ``1.0``
@@ -161,7 +161,7 @@ RBD supports advanced features which can be specified via the command line when 
 
 ``Exclusive locking``
 
-:Description: When enabled, it requires a client to get a lock on an object before making a write. Exclusive lock should only be enabled when a single client is accessing an image at the same time. 
+:Description: When enabled, it requires a client to get a lock on an object before making a write. Exclusive lock should only be enabled when a single client is accessing an image at the same time.
 :Internal value: 4
 :CLI value: exclusive-lock
 :Added in: v0.92 (Hammer)

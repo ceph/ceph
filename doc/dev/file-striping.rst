@@ -65,7 +65,7 @@ subsequent file data.
 
 Note that by default, Ceph uses a simple striping strategy in which
 object_size equals stripe_unit and stripe_count is 1.  This simply
-puts one stripe_unit in each object.  
+puts one stripe_unit in each object.
 
 Here's a more complex example::
 

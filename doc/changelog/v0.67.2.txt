@@ -9,7 +9,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Aug 9 12:49:57 2013 -0700
 
     .gitignore: ignore test-driver
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit edf2c3449ec96d91d3d7ad01c50f7a79b7b2f7cc)
 
@@ -18,10 +18,10 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Aug 9 12:42:49 2013 -0700
 
     fuse: fix warning when compiled against old fuse versions
-    
+
     client/fuse_ll.cc: In function 'void invalidate_cb(void*, vinodeno_t, int64_t, int64_t)':
     warning: client/fuse_ll.cc:540: unused variable 'fino'
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 9833e9dabe010e538cb98c51d79b6df58ce28f9e)
 
@@ -30,14 +30,14 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Aug 9 12:40:34 2013 -0700
 
     json_spirit: remove unused typedef
-    
+
     In file included from json_spirit/json_spirit_writer.cpp:7:0:
     json_spirit/json_spirit_writer_template.h: In function 'String_type json_spirit::non_printable_to_string(unsigned int)':
     json_spirit/json_spirit_writer_template.h:37:50: warning: typedef 'Char_type' locally defined but not used [-Wunused-local-typedefs]
              typedef typename String_type::value_type Char_type;
-    
+
     (Also, ha ha, this file uses \r\n.)
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 6abae35a3952e5b513895267711fea63ff3bad09)
 
@@ -46,7 +46,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Aug 9 12:31:41 2013 -0700
 
     gtest: add build-aux/test-driver to .gitignore
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit c9cdd19d1cd88b84e8a867f5ab85cb51fdc6f8e4)
 
@@ -55,16 +55,16 @@ Author: Josh Durgin <josh.durgin@inktank.com>
 Date:   Wed Aug 21 14:28:49 2013 -0700
 
     objecter: resend unfinished lingers when osdmap is no longer paused
-    
+
     Plain Ops that haven't finished yet need to be resent if the osdmap
     transitions from full or paused to unpaused.  If these Ops are
     triggered by LingerOps, they will be cancelled instead (since
     should_resend = false), but the LingerOps that triggered them will not
     be resent.
-    
+
     Fix this by checking the registered flag for all linger ops, and
     resending any of them that aren't paused anymore.
-    
+
     Fixes: #6070
     Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
     Reviewed-by: Sage Weil <sage.weil@inktank.com>
@@ -75,11 +75,11 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Tue Aug 20 11:23:46 2013 -0700
 
     pybind: fix Rados.conf_parse_env test
-    
+
     This happens after we connect, which means we get ENOSYS always.
     Instead, parse_env inside the normal setup method, which had the added
     benefit of being able to debug these tests.
-    
+
     Backport: dumpling
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 6ef1970340c57d6e02f947348fb38882b51d131c)
@@ -89,10 +89,10 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Tue Aug 13 13:14:59 2013 -0700
 
     librados: fix MWatchNotify leak
-    
+
     Do not leak the message if the watcher is not registered.  Also, simplify
     this block.
-    
+
     Fixes (part of): #5949
     Backport: dumpling, cuttlefish
     Signed-off-by: Sage Weil <sage@inktank.com>
@@ -104,10 +104,10 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Mon Aug 19 17:23:44 2013 -0700
 
     PG: remove old log when we upgrade log version
-    
+
     Otherwise the log_oid will be non-empty and the next
     boot will cause us to try to upgrade again.
-    
+
     Fixes: #6057
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>
@@ -118,10 +118,10 @@ Author: Samuel Just <sam.just@inktank.com>
 Date:   Mon Aug 19 00:02:24 2013 -0700
 
     PGLog: add a config to disable PGLog::check()
-    
+
     This is a debug check which may be causing excessive
     cpu usage.
-    
+
     Reviewed-by: Sage Weil <sage@inktank.com>
     Signed-off-by: Samuel Just <sam.just@inktank.com>
     (cherry picked from commit 00080d785f6695b800f71317a3048a21064e61cb)
@@ -131,7 +131,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Mon Aug 19 12:48:50 2013 -0700
 
     ceph: parse CEPH_ARGS environment variable
-    
+
     Fixes: #6052
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Dan Mick <dan.mick@inktank.com>
@@ -142,7 +142,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Mon Aug 19 12:48:40 2013 -0700
 
     rados pybind: add conf_parse_env()
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Dan Mick <dan.mick@inktank.com>
     (cherry picked from commit eef7cacdb19313907a9367187b742db5382ee584)
@@ -152,9 +152,9 @@ Author: Yehuda Sadeh <yehuda@inktank.com>
 Date:   Tue Aug 13 13:16:07 2013 -0700
 
     rgw: drain requests before exiting
-    
+
     Fixes: #5953
-    
+
     Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 3cbf6a7b031c2ce8072733c5c0b7ceb53fdcb090)
@@ -164,9 +164,9 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Tue Aug 13 11:16:17 2013 -0700
 
     rgw: do not leak handler in get_handler() error path
-    
+
     If we fail to initialize, delete the handler.
-    
+
     Fixes (part of): #5949
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
@@ -177,7 +177,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Jul 26 23:20:54 2013 -0700
 
     rgw: fix leak of RGWDataChangesLog::renew_thread
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 25948319c4d256c4aeb0137eb88947e54d14cc79)
 
@@ -186,7 +186,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Jul 26 23:17:10 2013 -0700
 
     rgw: free resolver on shutdown
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit a31356338b8ae55df59d829d9080ffad70b97d10)
 
@@ -195,13 +195,13 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Fri Jul 26 23:22:20 2013 -0700
 
     rgw: fix up signal handling
-    
+
     OMG libfcgi is annoying with shutdown and signals.  You need to close
     the fd *and* resend a signal to ensure that you kick the accept loop
     hard enough to make it shut down.
-    
+
     Document this, and switch to the async signal handlers.  Put them
     tightly around the runtime loop as we do with other daemons.
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     (cherry picked from commit 59b13cebee600dad2551d2c7dc3482b05eaf8b22)

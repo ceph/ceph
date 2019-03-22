@@ -3,7 +3,7 @@ Jerasure erasure code plugin
 ============================
 
 The *jerasure* plugin is the most generic and flexible plugin, it is
-also the default for Ceph erasure coded pools. 
+also the default for Ceph erasure coded pools.
 
 The *jerasure* plugin encapsulates the `Jerasure
 <http://jerasure.org>`_ library. It is
@@ -54,7 +54,7 @@ Where:
               can be faster but you need to chose the *packetsize*
               carefully. All of *reed_sol_r6_op*, *liberation*,
               *blaum_roth*, *liber8tion* are *RAID6* equivalents in
-              the sense that they can only be configured with *m=2*. 
+              the sense that they can only be configured with *m=2*.
 
 :Type: String
 :Required: No.

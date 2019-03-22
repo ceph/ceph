@@ -68,7 +68,7 @@ separate locations; however, the configuration can work on the same
 site. This guide also assumes two Ceph object gateway servers named
 ``rgw1`` and ``rgw2``.
 
-.. important:: Running a single Ceph storage cluster is NOT recommended unless you have 
+.. important:: Running a single Ceph storage cluster is NOT recommended unless you have
                low latency WAN connections.
 
 A multi-site configuration requires a master zone group and a master

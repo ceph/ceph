@@ -200,7 +200,7 @@ bug fixes only.
 
 * Release candidate release every 1-2 weeks
 * Intended for final testing and validation of the upcoming stable release
-  
+
 Stable releases (x.2.z)
 ^^^^^^^^^^^^^^^^^^^^^^^
 

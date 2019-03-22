@@ -59,12 +59,12 @@ check the default ``iptables`` configuration.
 	sudo iptables -L
 
 Some Linux distributions include rules that reject all inbound requests
-except SSH from all network interfaces. For example:: 
+except SSH from all network interfaces. For example::
 
 	REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
 
 You will need to delete these rules on both your public and cluster networks
-initially, and replace them with appropriate rules when you are ready to 
+initially, and replace them with appropriate rules when you are ready to
 harden the ports on your Ceph Nodes.
 
 
@@ -84,8 +84,8 @@ network and ``{netmask}`` with the netmask for the public network. ::
 MDS and Manager IP Tables
 -------------------------
 
-A :term:`Ceph Metadata Server` or :term:`Ceph Manager` listens on the first 
-available port on the public network beginning at port 6800. Note that this 
+A :term:`Ceph Metadata Server` or :term:`Ceph Manager` listens on the first
+available port on the public network beginning at port 6800. Note that this
 behavior is not deterministic, so if you are running more than one OSD or MDS
 on the same host, or if you restart the daemons within a short window of time,
 the daemons will bind to higher ports. You should open the entire 6800-7300
@@ -94,7 +94,7 @@ you replace ``{iface}`` with the public network interface (e.g., ``eth0``,
 ``eth1``, etc.), ``{ip-address}`` with the IP address of the public network
 and ``{netmask}`` with the netmask of the public network.
 
-For example:: 
+For example::
 
 	sudo iptables -A INPUT -i {iface} -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
@@ -112,7 +112,7 @@ Each Ceph OSD Daemon on a Ceph Node may use up to four ports:
 #. One for sending data to other OSDs.
 #. Two for heartbeating on each interface.
 
-.. ditaa:: 
+.. ditaa::
               /---------------\
               |      OSD      |
               |           +---+----------------+-----------+
@@ -135,12 +135,12 @@ the public network and other Ceph OSD Daemons will connect using the cluster
 network. When you add the rule using the example below, make sure you replace
 ``{iface}`` with the network interface (e.g., ``eth0``, ``eth1``, etc.),
 ``{ip-address}`` with the IP address and ``{netmask}`` with the netmask of the
-public or cluster network. For example:: 
+public or cluster network. For example::
 
 	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:7300 -j ACCEPT
 
-.. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
-   Ceph OSD Daemons, you can consolidate the public network configuration step. 
+.. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the
+   Ceph OSD Daemons, you can consolidate the public network configuration step.
 
 
 Ceph Networks
@@ -175,7 +175,7 @@ Public Network
 --------------
 
 To configure a public network, add the following option to the ``[global]``
-section of your Ceph configuration file. 
+section of your Ceph configuration file.
 
 .. code-block:: ini
 
@@ -190,7 +190,7 @@ Cluster Network
 If you declare a cluster network, OSDs will route heartbeat, object replication
 and recovery traffic over the cluster network. This may improve performance
 compared to using a single network. To configure a cluster network, add the
-following option to the ``[global]`` section of your Ceph configuration file. 
+following option to the ``[global]`` section of your Ceph configuration file.
 
 .. code-block:: ini
 
@@ -233,12 +233,12 @@ configuration option.  For example,
 
 .. topic:: One NIC OSD in a Two Network Cluster
 
-   Generally, we do not recommend deploying an OSD host with a single NIC in a 
-   cluster with two networks. However, you may accomplish this by forcing the 
+   Generally, we do not recommend deploying an OSD host with a single NIC in a
+   cluster with two networks. However, you may accomplish this by forcing the
    OSD host to operate on the public network by adding a ``public addr`` entry
-   to the ``[osd.n]`` section of the Ceph configuration file, where ``n`` 
+   to the ``[osd.n]`` section of the Ceph configuration file, where ``n``
    refers to the number of the OSD with one NIC. Additionally, the public
-   network and cluster network must be able to route traffic to each other, 
+   network and cluster network must be able to route traffic to each other,
    which we don't recommend for security reasons.
 
 
@@ -246,7 +246,7 @@ Network Config Settings
 =======================
 
 Network configuration settings are not required. Ceph assumes a public network
-with all hosts operating on it unless you specifically configure a cluster 
+with all hosts operating on it unless you specifically configure a cluster
 network.
 
 
@@ -254,13 +254,13 @@ Public Network
 --------------
 
 The public network configuration allows you specifically define IP addresses
-and subnets for the public network. You may specifically assign static IP 
+and subnets for the public network. You may specifically assign static IP
 addresses or override ``public network`` settings using the ``public addr``
 setting for a specific daemon.
 
 ``public network``
 
-:Description: The IP address and netmask of the public (front-side) network 
+:Description: The IP address and netmask of the public (front-side) network
               (e.g., ``192.168.0.0/24``). Set in ``[global]``. You may specify
               comma-delimited subnets.
 
@@ -271,7 +271,7 @@ setting for a specific daemon.
 
 ``public addr``
 
-:Description: The IP address for the public (front-side) network. 
+:Description: The IP address for the public (front-side) network.
               Set for each daemon.
 
 :Type: IP Address
@@ -291,7 +291,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 
 ``cluster network``
 
-:Description: The IP address and netmask of the cluster (back-side) network 
+:Description: The IP address and netmask of the cluster (back-side) network
               (e.g., ``10.0.0.0/24``).  Set in ``[global]``. You may specify
               comma-delimited subnets.
 
@@ -302,7 +302,7 @@ settings using the ``cluster addr`` setting for specific OSD daemons.
 
 ``cluster addr``
 
-:Description: The IP address for the cluster (back-side) network. 
+:Description: The IP address for the cluster (back-side) network.
               Set for each daemon.
 
 :Type: Address
@@ -334,7 +334,7 @@ addresses.
 :Description: The maximum port number to which an OSD or MDS daemon will bind.
 :Type: 32-bit Integer
 :Default: ``7300``
-:Required: No. 
+:Required: No.
 
 
 ``ms bind ipv6``
@@ -369,11 +369,11 @@ Ceph disables TCP buffering by default.
 
 ``ms tcp nodelay``
 
-:Description: Ceph enables ``ms tcp nodelay`` so that each request is sent 
+:Description: Ceph enables ``ms tcp nodelay`` so that each request is sent
               immediately (no buffering). Disabling `Nagle's algorithm`_
-              increases network traffic, which can introduce latency. If you 
-              experience large numbers of small packets, you may try 
-              disabling ``ms tcp nodelay``. 
+              increases network traffic, which can introduce latency. If you
+              experience large numbers of small packets, you may try
+              disabling ``ms tcp nodelay``.
 
 :Type: Boolean
 :Required: No
@@ -395,8 +395,8 @@ Ceph disables TCP buffering by default.
 ``ms tcp read timeout``
 
 :Description: If a client or daemon makes a request to another Ceph daemon and
-              does not drop an unused connection, the ``ms tcp read timeout`` 
-              defines the connection as idle after the specified number 
+              does not drop an unused connection, the ``ms tcp read timeout``
+              defines the connection as idle after the specified number
               of seconds.
 
 :Type: Unsigned 64-bit Integer

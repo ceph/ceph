@@ -56,14 +56,14 @@ To list the cluster's keys and their capabilities, execute the following::
 Placement Group Subsystem
 =========================
 
-To display the statistics for all placement groups, execute the following:: 
+To display the statistics for all placement groups, execute the following::
 
 	ceph pg dump [--format {format}]
 
 The valid formats are ``plain`` (default) and ``json``.
 
-To display the statistics for all placement groups stuck in a specified state, 
-execute the following:: 
+To display the statistics for all placement groups stuck in a specified state,
+execute the following::
 
 	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
@@ -238,7 +238,7 @@ Creates/deletes/renames a storage pool. ::
 	ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 	ceph osd pool rename {old-name} {new-name}
 
-Changes a pool setting. :: 
+Changes a pool setting. ::
 
 	ceph osd pool set {pool-name} {field} {value}
 
@@ -323,8 +323,8 @@ The ``quorum`` list at the end lists monitor nodes that are part of the current 
 This is also available more directly::
 
 	ceph quorum_status -f json-pretty
-	
-.. code-block:: javascript	
+
+.. code-block:: javascript
 
 	{
 	    "election_epoch": 6,
@@ -372,7 +372,7 @@ This is also available more directly::
 		]
 	    }
 	}
-	  
+
 
 The above will block until a quorum is reached.
 
@@ -380,10 +380,10 @@ For a status of just the monitor you connect to (use ``-m HOST:PORT``
 to select)::
 
 	ceph mon_status -f json-pretty
-	
-	
+
+
 .. code-block:: javascript
-	
+
 	{
 	    "name": "b",
 	    "rank": 1,

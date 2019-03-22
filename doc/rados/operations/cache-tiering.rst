@@ -9,23 +9,23 @@ configured to act as a cache tier, and a backing pool of either erasure-coded
 or relatively slower/cheaper devices configured to act as an economical storage
 tier. The Ceph objecter handles where to place the objects and the tiering
 agent determines when to flush objects from the cache to the backing storage
-tier. So the cache tier and the backing storage tier are completely transparent 
+tier. So the cache tier and the backing storage tier are completely transparent
 to Ceph clients.
 
 
-.. ditaa:: 
+.. ditaa::
            +-------------+
            | Ceph Client |
            +------+------+
                   ^
-     Tiering is   |  
+     Tiering is   |
     Transparent   |              Faster I/O
         to Ceph   |           +---------------+
-     Client Ops   |           |               |   
+     Client Ops   |           |               |
                   |    +----->+   Cache Tier  |
                   |    |      |               |
                   |    |      +-----+---+-----+
-                  |    |            |   ^ 
+                  |    |            |   ^
                   v    v            |   |   Active Data in Cache Tier
            +------+----+--+         |   |
            |   Objecter   |         |   |
@@ -40,19 +40,19 @@ to Ceph clients.
                                  Slower I/O
 
 
-The cache tiering agent handles the migration of data between the cache tier 
+The cache tiering agent handles the migration of data between the cache tier
 and the backing storage tier automatically. However, admins have the ability to
-configure how this migration takes place. There are two main scenarios: 
+configure how this migration takes place. There are two main scenarios:
 
 - **Writeback Mode:** When admins configure tiers with ``writeback`` mode, Ceph
   clients write data to the cache tier and receive an ACK from the cache tier.
   In time, the data written to the cache tier migrates to the storage tier
-  and gets flushed from the cache tier. Conceptually, the cache tier is 
-  overlaid "in front" of the backing storage tier. When a Ceph client needs 
+  and gets flushed from the cache tier. Conceptually, the cache tier is
+  overlaid "in front" of the backing storage tier. When a Ceph client needs
   data that resides in the storage tier, the cache tiering agent migrates the
-  data to the cache tier on read, then it is sent to the Ceph client. 
-  Thereafter, the Ceph client can perform I/O using the cache tier, until the 
-  data becomes inactive. This is ideal for mutable data (e.g., photo/video 
+  data to the cache tier on read, then it is sent to the Ceph client.
+  Thereafter, the Ceph client can perform I/O using the cache tier, until the
+  data becomes inactive. This is ideal for mutable data (e.g., photo/video
   editing, transactional data, etc.).
 
 - **Read-proxy Mode:** This mode will use any objects that already
@@ -134,32 +134,32 @@ tiering.
 Setting Up Pools
 ================
 
-To set up cache tiering, you must have two pools. One will act as the 
+To set up cache tiering, you must have two pools. One will act as the
 backing storage and the other will act as the cache.
 
 
 Setting Up a Backing Storage Pool
 ---------------------------------
 
-Setting up a backing storage pool typically involves one of two scenarios: 
+Setting up a backing storage pool typically involves one of two scenarios:
 
 - **Standard Storage**: In this scenario, the pool stores multiple copies
   of an object in the Ceph Storage Cluster.
 
-- **Erasure Coding:** In this scenario, the pool uses erasure coding to 
+- **Erasure Coding:** In this scenario, the pool uses erasure coding to
   store data much more efficiently with a small performance tradeoff.
 
-In the standard storage scenario, you can setup a CRUSH rule to establish 
-the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
-Daemons perform optimally when all storage drives in the rule are of the 
-same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
-for details on creating a rule. Once you have created a rule, create 
-a backing storage pool. 
+In the standard storage scenario, you can setup a CRUSH rule to establish
+the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD
+Daemons perform optimally when all storage drives in the rule are of the
+same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_
+for details on creating a rule. Once you have created a rule, create
+a backing storage pool.
 
 In the erasure coding scenario, the pool creation arguments will generate the
 appropriate rule automatically. See `Create a Pool`_ for details.
 
-In subsequent examples, we will refer to the backing storage pool 
+In subsequent examples, we will refer to the backing storage pool
 as ``cold-storage``.
 
 
@@ -177,7 +177,7 @@ that have the high performance drives while omitting the hosts that don't. See
 In subsequent examples, we will refer to the cache pool as ``hot-storage`` and
 the backing pool as ``cold-storage``.
 
-For cache tier configuration and default values, see 
+For cache tier configuration and default values, see
 `Pools - Set Pool Values`_.
 
 
@@ -197,18 +197,18 @@ To set the cache mode, execute the following::
 
 	ceph osd tier cache-mode {cachepool} {cache-mode}
 
-For example:: 
+For example::
 
 	ceph osd tier cache-mode hot-storage writeback
 
 The cache tiers overlay the backing storage tier, so they require one
-additional step: you must direct all client traffic from the storage pool to 
-the cache pool. To direct client traffic directly to the cache pool, execute 
-the following:: 
+additional step: you must direct all client traffic from the storage pool to
+the cache pool. To direct client traffic directly to the cache pool, execute
+the following::
 
 	ceph osd tier set-overlay {storagepool} {cachepool}
 
-For example:: 
+For example::
 
 	ceph osd tier set-overlay cold-storage hot-storage
 
@@ -217,7 +217,7 @@ Configuring a Cache Tier
 ========================
 
 Cache tiers have several configuration options. You may set
-cache tier configuration options with the following usage:: 
+cache tier configuration options with the following usage::
 
 	ceph osd pool set {cachepool} {key} {value}
 
@@ -246,7 +246,7 @@ store, and how much time each HitSet should cover. ::
           the ``ceph-osd`` process.
 
 Binning accesses over time allows Ceph to determine whether a Ceph client
-accessed an object at least once, or more than once over a time period 
+accessed an object at least once, or more than once over a time period
 ("age" vs "temperature").
 
 The ``min_read_recency_for_promote`` defines how many HitSets to check for the
@@ -275,12 +275,12 @@ A similar parameter can be set for the write operation, which is
 Cache Sizing
 ------------
 
-The cache tiering agent performs two main functions: 
+The cache tiering agent performs two main functions:
 
 - **Flushing:** The agent identifies modified (or dirty) objects and forwards
   them to the storage pool for long-term storage.
-  
-- **Evicting:** The agent identifies objects that haven't been modified 
+
+- **Evicting:** The agent identifies objects that haven't been modified
   (or clean) and evicts the least recently used among them from the cache.
 
 
@@ -326,7 +326,7 @@ storage pool. To set the ``cache_target_dirty_ratio``, execute the following::
 	ceph osd pool set {cachepool} cache_target_dirty_ratio {0.0..1.0}
 
 For example, setting the value to ``0.4`` will begin flushing modified
-(dirty) objects when they reach 40% of the cache pool's capacity:: 
+(dirty) objects when they reach 40% of the cache pool's capacity::
 
 	ceph osd pool set hot-storage cache_target_dirty_ratio 0.4
 
@@ -342,13 +342,13 @@ between dirty_ratio and full_ratio::
 	ceph osd pool set hot-storage cache_target_dirty_high_ratio 0.6
 
 When the cache pool reaches a certain percentage of its capacity, the cache
-tiering agent will evict objects to maintain free capacity. To set the 
-``cache_target_full_ratio``, execute the following:: 
+tiering agent will evict objects to maintain free capacity. To set the
+``cache_target_full_ratio``, execute the following::
 
 	ceph osd pool set {cachepool} cache_target_full_ratio {0.0..1.0}
 
 For example, setting the value to ``0.8`` will begin flushing unmodified
-(clean) objects when they reach 80% of the cache pool's capacity:: 
+(clean) objects when they reach 80% of the cache pool's capacity::
 
 	ceph osd pool set hot-storage cache_target_full_ratio 0.8
 
@@ -356,13 +356,13 @@ For example, setting the value to ``0.8`` will begin flushing unmodified
 Cache Age
 ---------
 
-You can specify the minimum age of an object before the cache tiering agent 
+You can specify the minimum age of an object before the cache tiering agent
 flushes a recently modified (or dirty) object to the backing storage pool::
 
 	ceph osd pool set {cachepool} cache_min_flush_age {#seconds}
 
-For example, to flush modified (or dirty) objects after 10 minutes, execute 
-the following:: 
+For example, to flush modified (or dirty) objects after 10 minutes, execute
+the following::
 
 	ceph osd pool set hot-storage cache_min_flush_age 600
 
@@ -371,7 +371,7 @@ the cache tier::
 
 	ceph osd pool {cache-tier} cache_min_evict_age {#seconds}
 
-For example, to evict objects after 30 minutes, execute the following:: 
+For example, to evict objects after 30 minutes, execute the following::
 
 	ceph osd pool set hot-storage cache_min_evict_age 1800
 
@@ -379,7 +379,7 @@ For example, to evict objects after 30 minutes, execute the following::
 Removing a Cache Tier
 =====================
 
-Removing a cache tier differs depending on whether it is a writeback 
+Removing a cache tier differs depending on whether it is a writeback
 cache or a read-only cache.
 
 
@@ -387,13 +387,13 @@ Removing a Read-Only Cache
 --------------------------
 
 Since a read-only cache does not have modified data, you can disable
-and remove it without losing any recent changes to objects in the cache. 
+and remove it without losing any recent changes to objects in the cache.
 
-#. Change the cache-mode to ``none`` to disable it. :: 
+#. Change the cache-mode to ``none`` to disable it. ::
 
 	ceph osd tier cache-mode {cachepool} none
 
-   For example:: 
+   For example::
 
 	ceph osd tier cache-mode hot-storage none
 
@@ -410,17 +410,17 @@ and remove it without losing any recent changes to objects in the cache.
 Removing a Writeback Cache
 --------------------------
 
-Since a writeback cache may have modified data, you must take steps to ensure 
-that you do not lose any recent changes to objects in the cache before you 
+Since a writeback cache may have modified data, you must take steps to ensure
+that you do not lose any recent changes to objects in the cache before you
 disable and remove it.
 
 
-#. Change the cache mode to ``proxy`` so that new and modified objects will 
+#. Change the cache mode to ``proxy`` so that new and modified objects will
    flush to the backing storage pool. ::
 
 	ceph osd tier cache-mode {cachepool} proxy
 
-   For example:: 
+   For example::
 
 	ceph osd tier cache-mode hot-storage proxy
 
@@ -429,7 +429,7 @@ disable and remove it.
 
 	rados -p {cachepool} ls
 
-   If the cache pool still has objects, you can flush them manually. 
+   If the cache pool still has objects, you can flush them manually.
    For example::
 
 	rados -p {cachepool} cache-flush-evict-all
@@ -446,7 +446,7 @@ disable and remove it.
 
 #. Finally, remove the cache tier pool from the backing storage pool. ::
 
-	ceph osd tier remove {storagepool} {cachepool} 
+	ceph osd tier remove {storagepool} {cachepool}
 
    For example::
 

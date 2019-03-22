@@ -3,7 +3,7 @@
 ========================================
 
 If you mount CephFS in your file systems table, the Ceph file system will mount
-automatically on startup. 
+automatically on startup.
 
 Kernel Driver
 =============
@@ -13,16 +13,16 @@ following to ``/etc/fstab``::
 
 	{ipaddress}:{port}:/ {mount}/{mountpoint} {filesystem-name}	[name=username,secret=secretkey|secretfile=/path/to/secretfile],[{mount.options}]
 
-For example:: 
+For example::
 
 	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime,_netdev    0       2
-	
-.. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
-   mandatory when you have Ceph authentication running. 
- 
+
+.. important:: The ``name`` and ``secret`` or ``secretfile`` options are
+   mandatory when you have Ceph authentication running.
+
 See `User Management`_ for details.
-   
-   
+
+
 FUSE
 ====
 
@@ -37,7 +37,7 @@ For example::
        none    /mnt/ceph  fuse.ceph ceph.id=myuser,_netdev,defaults  0 0
        none    /mnt/ceph  fuse.ceph ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
 
-Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass any valid 
+Ensure you use the ID (e.g., ``admin``, not ``client.admin``). You can pass any valid
 ``ceph-fuse`` option to the command line this way.
 
 See `User Management`_ for details.

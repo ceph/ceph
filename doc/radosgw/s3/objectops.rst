@@ -92,7 +92,7 @@ Syntax
 
 Get Object
 ----------
-Retrieves an object from a bucket within RADOS. 
+Retrieves an object from a bucket within RADOS.
 
 Syntax
 ~~~~~~

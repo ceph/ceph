@@ -61,7 +61,7 @@ When a prepare operation is performed, the new data is written into a
 temporary object. The PG log for the
 operation will contain a reference to the temporary object so that it
 can be located for recovery purposes as well as a record of all of the
-shards which are involved in the operation. 
+shards which are involved in the operation.
 
 In order to avoid fragmentation (and hence, future read performance),
 creation of the temporary object needs special attention. The name of

@@ -9,7 +9,7 @@ Concepts
    See src/msg/Messenger.h
 
    Handles sending and receipt of messages on behalf of the OSD.  The OSD uses
-   two messengers: 
+   two messengers:
 
      1. cluster_messenger - handles traffic to other OSDs, monitors
      2. client_messenger - handles client traffic
@@ -73,7 +73,7 @@ Concepts
   See src/osd/OSDMap.h
 
   The crush algorithm takes two inputs: a picture of the cluster
-  with status information about which nodes are up/down and in/out, 
+  with status information about which nodes are up/down and in/out,
   and the pgid to place.  The former is encapsulated by the OSDMap.
   Maps are numbered by *epoch* (epoch_t).  These maps are passed around
   within the OSD as std::tr1::shared_ptr<const OSDMap>.
@@ -103,4 +103,4 @@ Overview
   The OSD process represents one leaf device in the crush hierarchy.  There
   might be one OSD process per physical machine, or more than one if, for
   example, the user configures one OSD instance per disk.
-  
+

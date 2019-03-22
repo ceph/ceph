@@ -9,10 +9,10 @@ Author: Dan Mick <dan.mick@inktank.com>
 Date:   Thu Aug 15 17:10:56 2013 -0700
 
     ceph.in: --admin-daemon was not returning EINVAL on bad command
-    
+
     Fix by restructuring code to hoist common code and have only one
     place where admin_socket is actually called.
-    
+
     Signed-off-by: Dan Mick <dan.mick@inktank.com>
     (cherry picked from commit 266460e97ec9ef9711e9eaa4bd954f3188d8da69)
 
@@ -21,9 +21,9 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Thu Aug 15 14:37:07 2013 -0700
 
     mon: use str_join instead of std::copy
-    
+
     The std::copy method leaves a trailing separator.
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Dan Mick <dan.mick@inktank.com>
     (cherry picked from commit 35565ee64e41d7fddc7849c6006692c78227132c)
@@ -33,11 +33,11 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Thu Aug 15 14:36:57 2013 -0700
 
     config: fix stringification of config values
-    
+
     The std::copy construct leaves a trailing separator character, which breaks
     parsing for booleans (among other things) and probably mangles everything
     else too.
-    
+
     Backport: dumpling
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Samuel Just <sam.just@inktank.com>
@@ -48,7 +48,7 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Thu Aug 15 14:36:49 2013 -0700
 
     common: add str_join helper
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Dan Mick <dan.mick@inktank.com>
     (cherry picked from commit ce3a0944d9b47f7b178fe7775c9d105305b238e0)
@@ -58,10 +58,10 @@ Author: Josh Durgin <josh.durgin@inktank.com>
 Date:   Wed Aug 14 15:50:59 2013 -0700
 
     rados.py: fix Rados() unicode checking
-    
+
     Check new parameters and check that rados_id is not None again to
     catch the empty string.
-    
+
     Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
     Reviewed-by: Sage Weil <sage.weil@inktank.com>
     (cherry picked from commit 4422f21a6586467a63ce6841552d0f60aa849cf1)
@@ -71,16 +71,16 @@ Author: Josh Durgin <josh.durgin@inktank.com>
 Date:   Wed Aug 14 15:28:19 2013 -0700
 
     rados.py: fix Rados() backwards compatibility
-    
+
     Previously it had no name parameter, so the default will be used by
     old clients. However, if an old client set rados_id, a new check that
     both rados_id and name are set would result in an error. Fix this by
     only applying the default names after the check, and add tests of this
     behavior.
-    
+
     This was introduced in 783b7ec847c7f987ac1814c9c41c91921cac4eba,
     so it does not affect cuttlefish.
-    
+
     Fixes: #5970
     Reported-by: Michael Morgan <mmorgan@dca.net>
     Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
@@ -92,27 +92,27 @@ Author: Sage Weil <sage@inktank.com>
 Date:   Tue Aug 13 12:52:41 2013 -0700
 
     librados: fix async aio completion wakeup
-    
+
     For aio flush, we register a wait on the most recent write.  The write
     completion code, however, was *only* waking the waiter if they were waiting
     on that write, without regard to previous writes (completed or not).
     For example, we might have 6 and 7 outstanding and wait on 7.  If they
     finish in order all is well, but if 7 finishes first we do the flush
     completion early.  Similarly, if we
-    
+
      - start 6
      - start 7
      - finish 7
      - flush; wait on 7
      - finish 6
-    
+
     we can hang forever.
-    
+
     Fix by doing any completions that are prior to the oldest pending write in
     the aio write completion handler.
-    
+
     Refs: #5919
-    
+
     Signed-off-by: Sage Weil <sage@inktank.com>
     Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
     Tested-by: Oliver Francke <Oliver.Francke@filoo.de>
@@ -123,18 +123,18 @@ Author: Josh Durgin <josh.durgin@inktank.com>
 Date:   Mon Aug 12 19:17:09 2013 -0700
 
     librados: fix locking for AioCompletionImpl refcounting
-    
+
     Add an already-locked helper so that C_Aio{Safe,Complete} can
     increment the reference count when their caller holds the
     lock. C_AioCompleteAndSafe's caller is not holding the lock, so call
     regular get() to ensure no racing updates can occur.
-    
+
     This eliminates all direct manipulations of AioCompletionImpl->ref,
     and makes the necessary locking clear.
-    
+
     The only place C_AioCompleteAndSafe is used is in handling
     aio_flush_async(). This could cause a missing completion.
-    
+
     Refs: #5919
     Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
     Reviewed-by: Sage Weil <sage@inktank.com>

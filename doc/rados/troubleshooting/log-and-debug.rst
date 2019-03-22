@@ -7,7 +7,7 @@ runtime. You can also add Ceph debug logging to your Ceph configuration file if
 you are encountering issues when starting your cluster. You may view Ceph log
 files under ``/var/log/ceph`` (the default location).
 
-.. tip:: When debug output slows down your system, the latency can hide 
+.. tip:: When debug output slows down your system, the latency can hide
    race conditions.
 
 Logging is resource intensive. If you are encountering a problem in a specific
@@ -16,9 +16,9 @@ if your OSDs are running fine, but your metadata servers are not, you should
 start by enabling debug logging for the specific metadata server instance(s)
 giving you trouble. Enable logging for each subsystem as needed.
 
-.. important:: Verbose logging can generate over 1GB of data per hour. If your 
+.. important:: Verbose logging can generate over 1GB of data per hour. If your
    OS disk reaches its capacity, the node will stop working.
-   
+
 If you enable or increase the rate of Ceph logging, ensure that you have
 sufficient disk space on your OS disk.  See `Accelerating Log Rotation`_ for
 details on rotating log files. When your system is running well, remove
@@ -32,7 +32,7 @@ Runtime
 =======
 
 If you would like to see the configuration settings at runtime, you must log
-in to a host with a running daemon and execute the following:: 
+in to a host with a running daemon and execute the following::
 
 	ceph daemon {daemon-name} config show | less
 
@@ -41,21 +41,21 @@ For example,::
   ceph daemon osd.0 config show | less
 
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
-``ceph tell`` command to inject arguments into the runtime configuration:: 
+``ceph tell`` command to inject arguments into the runtime configuration::
 
 	ceph tell {daemon-type}.{daemon id or *} config set {name} {value}
-	
+
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
 a specific daemon's ID. For example, to increase
-debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
+debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following::
 
 	ceph tell osd.0 config set debug_osd 0/5
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
 whose configuration you'd like to change using ``ceph daemon``.
-For example:: 
+For example::
 
 	sudo ceph daemon osd.0 config set debug_osd 0/5
 
@@ -73,18 +73,18 @@ particular daemons are set under the daemon section in your configuration file
 
 	[global]
 		debug ms = 1/5
-		
+
 	[mon]
 		debug mon = 20
 		debug paxos = 1/5
 		debug auth = 2
-		 
+
  	[osd]
  		debug osd = 1/5
  		debug filestore = 1/5
  		debug journal = 1
  		debug monc = 5/20
- 		
+
 	[mds]
 		debug mds = 1
 		debug mds balancer = 1
@@ -101,14 +101,14 @@ the Ceph log rotation file at ``/etc/logrotate.d/ceph``. Add  a size setting
 after the rotation frequency to accelerate log rotation (via cronjob) if your
 logs exceed the size setting. For example, the  default setting looks like
 this::
-   
+
 	rotate 7
   	weekly
   	compress
   	sharedscripts
-   	
+
 Modify it by adding a ``size`` setting. ::
-   
+
   	rotate 7
   	weekly
   	size 500M
@@ -116,11 +116,11 @@ Modify it by adding a ``size`` setting. ::
   	sharedscripts
 
 Then, start the crontab editor for your user space. ::
-   
+
   	crontab -e
-	
+
 Finally, add an entry to check the ``etc/logrotate.d/ceph`` file. ::
-   
+
   	30 * * * * /usr/sbin/logrotate /etc/logrotate.d/ceph >/dev/null 2>&1
 
 The preceding example checks the ``etc/logrotate.d/ceph`` file every 30 minutes.
@@ -129,17 +129,17 @@ The preceding example checks the ``etc/logrotate.d/ceph`` file every 30 minutes.
 Valgrind
 ========
 
-Debugging may also require you to track down memory and threading issues. 
-You can run a single daemon, a type of daemon, or the whole cluster with 
-Valgrind. You should only use Valgrind when developing or debugging Ceph. 
-Valgrind is computationally expensive, and will slow down your system otherwise. 
-Valgrind messages are logged to ``stderr``. 
+Debugging may also require you to track down memory and threading issues.
+You can run a single daemon, a type of daemon, or the whole cluster with
+Valgrind. You should only use Valgrind when developing or debugging Ceph.
+Valgrind is computationally expensive, and will slow down your system otherwise.
+Valgrind messages are logged to ``stderr``.
 
 
 Subsystem, Log and Debug Settings
 =================================
 
-In most cases, you will enable debug logging output via subsystems. 
+In most cases, you will enable debug logging output via subsystems.
 
 Ceph Subsystems
 ---------------
@@ -165,7 +165,7 @@ as ``debug ms = 1/5``. For example:
 
 
 
-.. code-block:: ini 
+.. code-block:: ini
 
 	debug {subsystem} = {log-level}/{memory-level}
 	#for example
@@ -424,14 +424,14 @@ OSD
 
 ``osd debug drop ping duration``
 
-:Description: 
+:Description:
 :Type: Integer
 :Required: No
 :Default: 0
 
 ``osd debug drop pg create probability``
 
-:Description: 
+:Description:
 :Type: Integer
 :Required: No
 :Default: 0
@@ -446,7 +446,7 @@ OSD
 
 ``osd min pg log entries``
 
-:Description: The minimum number of log entries for placement groups. 
+:Description: The minimum number of log entries for placement groups.
 :Type: 32-bit Unsigned Integer
 :Required: No
 :Default: 1000
@@ -454,7 +454,7 @@ OSD
 
 ``osd op log threshold``
 
-:Description: How many op log messages to show up in one pass. 
+:Description: How many op log messages to show up in one pass.
 :Type: Integer
 :Required: No
 :Default: 5
@@ -478,7 +478,7 @@ MDS
 
 ``mds debug scatterstat``
 
-:Description: Ceph will assert that various recursive stat invariants are true 
+:Description: Ceph will assert that various recursive stat invariants are true
               (for developers only).
 
 :Type: Boolean
@@ -488,7 +488,7 @@ MDS
 
 ``mds debug frag``
 
-:Description: Ceph will verify directory fragmentation invariants when 
+:Description: Ceph will verify directory fragmentation invariants when
               convenient (developers only).
 
 :Type: Boolean
@@ -575,7 +575,7 @@ RADOS Gateway
 
 ``rgw intent log object name``
 
-:Description: 
+:Description:
 :Type: String
 :Required: No
 :Default: ``%Y-%m-%d-%i-%n``

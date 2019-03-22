@@ -8,7 +8,7 @@ add or remove one or more monitors on the command line with one command. Before
 numerous manual steps. Using ``ceph-deploy`` imposes a restriction:  **you may
 only install one monitor per host.**
 
-.. note:: We do not recommend comingling monitors and OSDs on 
+.. note:: We do not recommend comingling monitors and OSDs on
    the same host.
 
 For high availability, you should run a production Ceph cluster with **AT
@@ -41,14 +41,14 @@ the tool enforces a single monitor per host. ::
 Remove a Monitor
 ================
 
-If you have a monitor in your cluster that you'd like to remove, you may use 
-the ``destroy`` option. :: 
+If you have a monitor in your cluster that you'd like to remove, you may use
+the ``destroy`` option. ::
 
 	ceph-deploy mon destroy {host-name [host-name]...}
 
 
-.. note:: Ensure that if you remove a monitor, the remaining monitors will be 
-   able to establish a consensus. If that is not possible, consider adding a 
+.. note:: Ensure that if you remove a monitor, the remaining monitors will be
+   able to establish a consensus. If that is not possible, consider adding a
    monitor before removing the monitor you would like to take offline.
 
 

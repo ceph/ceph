@@ -1,5 +1,5 @@
 ===============
-Telegraf Module 
+Telegraf Module
 ===============
 The Telegraf module collects and sends statistics series to a Telegraf agent.
 
@@ -13,7 +13,7 @@ a UNIX socket.
 The Telegraf module was introduced in the 13.x *Mimic* release.
 
 --------
-Enabling 
+Enabling
 --------
 
 To enable the module, use the following command:
@@ -30,7 +30,7 @@ If you wish to subsequently disable the module, you can use the corresponding
     ceph mgr module disable telegraf
 
 -------------
-Configuration 
+Configuration
 -------------
 
 For the telegraf module to send statistics to a Telegraf agent it is
@@ -51,7 +51,7 @@ For example, a typical configuration might look like this:
 
     ceph telegraf config-set address udp://:8094
     ceph telegraf config-set interval 10
-    
+
 The default values for these configuration keys are:
 
 - address: unixgram:///tmp/telegraf.sock

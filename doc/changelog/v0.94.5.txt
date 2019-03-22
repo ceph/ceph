@@ -10,9 +10,9 @@ Author: Loic Dachary <loic@dachary.org>
 Date:   Fri Oct 23 20:41:33 2015 +0200
 
     Merge pull request #6348 from dillaman/wip-13567-hammer
-    
+
     librbd: potential assertion failure during cache read
-    
+
     Reviewed-by: Sage Weil <sage@redhat.com>
 
 commit d86eab5b860186066c888208d92a42a748569d78
@@ -21,9 +21,9 @@ Author: Loic Dachary <loic@dachary.org>
 Date:   Fri Oct 23 15:20:32 2015 +0200
 
     Merge pull request #6362 from liewegas/wip-shut-up-osd-hammer
-    
+
     osd/ReplicatedPG: remove stray debug line
-    
+
     Reviewed-by: Loic Dachary <ldachary@redhat.com>
 
 commit 250dc0722b9156fe1b8be81e09fb4ead699065f3 (refs/remotes/me/wip-shut-up-osd-hammer)
@@ -31,9 +31,9 @@ Author: Sage Weil <sage@redhat.com>
 Date:   Sat Sep 12 08:33:44 2015 -0400
 
     osd/ReplicatedPG: remove stray debug line
-    
+
     This snuck in
-    
+
     Signed-off-by: Sage Weil <sage@redhat.com>
     (cherry picked from commit ff9600a6cef613d40e875597b6392778df1bb04c)
 
@@ -42,13 +42,13 @@ Author: Jason Dillaman <dillaman@redhat.com>
 Date:   Wed Oct 21 13:12:48 2015 -0400
 
     librbd: potential assertion failure during cache read
-    
+
     It's possible for a cache read from a clone to trigger a writeback if a
     previous read op determined the object doesn't exist in the clone,
     followed by a cached write to the non-existent clone object, followed
     by another read request to the same object.  This causes the cache to
     flush the pending writeback ops while not holding the owner lock.
-    
+
     Fixes: #13559
     Backport: hammer
     Signed-off-by: Jason Dillaman <dillaman@redhat.com>
@@ -59,7 +59,7 @@ Author: Jason Dillaman <dillaman@redhat.com>
 Date:   Wed Oct 21 13:09:54 2015 -0400
 
     tests: reproduce crash during read-induced CoW
-    
+
     Signed-off-by: Jason Dillaman <dillaman@redhat.com>
     (cherry picked from commit 382219b6bba09156f8cf3d420c6348738e7ed4c6)
 
@@ -69,9 +69,9 @@ Author: Jason Dillaman <dillaman@redhat.com>
 Date:   Thu Oct 22 12:14:42 2015 -0400
 
     Merge pull request #6330 from dachary/wip-13550-hammer
-    
+
     qemu workunit refers to apt-mirror.front.sepia.ceph.com
-    
+
     Reviewed-by: Jason Dillaman <dillaman@redhat.com>
 
 commit 51f3d6a489760dbcb931676396eea92159ca2ad9
@@ -79,8 +79,8 @@ Author: Yuan Zhou <yuan.zhou@intel.com>
 Date:   Fri Jun 19 00:02:20 2015 +0800
 
     qa: Use public qemu repo
-    
+
     This would allow some external tests outside of sepia lab
-    
+
     Signed-off-by: Yuan Zhou <yuan.zhou@intel.com>
     (cherry picked from commit 4731c1e35539c9506ff3fe3141553fad099d0eee)

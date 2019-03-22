@@ -29,7 +29,7 @@ Ceph Block Devices can integrate with the QEMU virtual machine. For details on
 QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
 `QEMU Manual`_. For installation details, see `Installation`_.
 
-.. important:: To use Ceph Block Devices with QEMU, you must have access to a 
+.. important:: To use Ceph Block Devices with QEMU, you must have access to a
    running Ceph cluster.
 
 
@@ -37,7 +37,7 @@ Usage
 =====
 
 The QEMU command line expects you to specify the pool name and image name. You
-may also specify a snapshot name. 
+may also specify a snapshot name.
 
 QEMU will assume that the Ceph configuration file resides in the default
 location (e.g., ``/etc/ceph/$cluster.conf``) and that you are executing
@@ -53,7 +53,7 @@ permissions. Usage takes the following form::
 
 	qemu-img {command} [options] rbd:{pool-name}/{image-name}[@snapshot-name][:option1=value1][:option2=value2...]
 
-For example, specifying the ``id`` and ``conf`` options might look like the following:: 
+For example, specifying the ``id`` and ``conf`` options might look like the following::
 
 	qemu-img {command} [options] rbd:glance-pool/maipo:id=glance:conf=/etc/ceph/ceph.conf
 
@@ -85,7 +85,7 @@ For example::
 Resizing Images with QEMU
 =========================
 
-You can resize a block device image from QEMU. You must specify ``rbd``, 
+You can resize a block device image from QEMU. You must specify ``rbd``,
 the pool name, and the name of the image you wish to resize. You must also
 specify the size of the image. ::
 
@@ -99,7 +99,7 @@ For example::
 Retrieving Image Info with QEMU
 ===============================
 
-You can retrieve block device image information from QEMU. You must 
+You can retrieve block device image information from QEMU. You must
 specify ``rbd``, the pool name, and the name of the image. ::
 
 	qemu-img info rbd:{pool-name}/{image-name}
@@ -199,7 +199,7 @@ Writethrough::
    rbd_cache = true
    rbd_cache_max_dirty = 0
 
-None:: 
+None::
 
    rbd_cache = false
 

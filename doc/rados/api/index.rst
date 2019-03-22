@@ -13,7 +13,7 @@ Ceph, your own interface to Ceph, etc.).
 
 
 .. toctree::
-   :maxdepth: 2 
+   :maxdepth: 2
 
    Introduction to librados <librados-intro>
    librados (C) <librados>

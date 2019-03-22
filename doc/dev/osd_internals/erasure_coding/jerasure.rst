@@ -8,7 +8,7 @@ Introduction
 The parameters interpreted by the jerasure plugin are:
 
 ::
- 
+
   ceph osd erasure-code-profile set myprofile \
      directory=<dir>         \ # plugin directory absolute path
      plugin=jerasure         \ # plugin name (only jerasure)

@@ -76,7 +76,7 @@ After installing Jewel on all your MDS and OSD servers, and restarting
 the services, run the following command:
 
 ::
-    
+
     cephfs-data-scan tmap_upgrade <metadata pool name>
 
 This only needs to be run once, and it is not necessary to

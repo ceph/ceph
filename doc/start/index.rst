@@ -15,10 +15,10 @@ avail yourself of help by getting involved in the Ceph community.
 
    Preflight <quick-start-preflight>
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Step 2: Storage Cluster</h3>
-	
+
 Once you have completed your preflight checklist, you should be able to begin
 deploying a Ceph Storage Cluster.
 
@@ -27,15 +27,15 @@ deploying a Ceph Storage Cluster.
 	Storage Cluster Quick Start <quick-ceph-deploy>
 
 
-.. raw:: html 
+.. raw:: html
 
 	</td><td><h3>Step 3: Ceph Client(s)</h3>
-	
+
 Most Ceph users don't store objects directly in the Ceph Storage Cluster. They typically use at least one of
 Ceph Block Devices, the Ceph Filesystem, and Ceph Object Storage.
 
 .. toctree::
-	
+
    Block Device Quick Start <quick-rbd>
    Filesystem Quick Start <quick-cephfs>
    Object Storage Quick Start <quick-rgw>

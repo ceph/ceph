@@ -118,7 +118,7 @@ version of the algorithm:::
           last_to_prune - first > mon_min_osdmap_epochs AND
           last_to_prune - first > mon_osdmap_full_prune_min AND
           num_pruned < mon_osdmap_full_prune_txsize:
-      
+
       last_pinned = manifest.get_last_pinned()
       new_pinned = last_pinned + prune_interval
       manifest.pin(new_pinned)
@@ -261,7 +261,7 @@ If so, we need to check if this is a pinned map, in which case we don't have
 much to be concerned aside from removing lower epochs from the manifest's
 pinned list. On the other hand, if the map being trimmed to is not a pinned
 map, we will need to rebuild said map and pin it, and only then will we remove
-the pinned maps prior to the map's epoch. 
+the pinned maps prior to the map's epoch.
 
 In this case, we would end up with the following sequence:::
 
