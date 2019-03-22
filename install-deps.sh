@@ -183,11 +183,11 @@ function ensure_decent_gcc_on_rh {
 	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
-scl enable devtoolset-7 bash
+scl enable devtoolset-8 bash
 
 Or add following line to the end of ~/.bashrc to add it permanently:
 
-source scl_source enable devtoolset-7
+source scl_source enable devtoolset-8
 
 see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
 EOF
@@ -343,7 +343,7 @@ else
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 			aarch64)
 			    $SUDO yum -y install centos-release-scl-rh
@@ -353,8 +353,10 @@ else
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
-                    dts_ver=7
+                    $SUDO yum-config-manager \
+			  --enable rhel-server-rhscl-7-rpms \
+			  --enable rhel-7-server-devtools-rpms
+                    dts_ver=8
                 fi
                 ;;
         esac
