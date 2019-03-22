@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms type: async
+        ms bind msgr2: false
+tasks:
+- install:
+    branch: nautilus
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:
