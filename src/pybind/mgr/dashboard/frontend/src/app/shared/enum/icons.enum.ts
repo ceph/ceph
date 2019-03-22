@@ -34,6 +34,9 @@ export enum Icons {
   questionCircle = 'fa fa-question-circle-o',
   check = 'fa fa-check', // Notification check
   show = 'fa fa-eye', // Show
+  paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
+  terminal = 'fa fa-terminal', // Silence Matcher - Value
+  magic = 'fa fa-magic', // Silence Matcher - Regex checkbox
   hourglass = 'fa fa-hourglass-o', // Task
   filledHourglass = 'fa fa-hourglass', // Task
   table = 'fa fa-table', // Table,

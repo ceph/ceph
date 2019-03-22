@@ -25,6 +25,11 @@ describe('URLBuilderService', () => {
     expect(urlBuilder.getCreate()).toBe(`/${urlBuilder.base}/${URLVerbs.CREATE}`);
   });
 
+  it('get Create From URL', () => {
+    const id = 'someId';
+    expect(urlBuilder.getCreateFrom(id)).toBe(`/${urlBuilder.base}/${URLVerbs.CREATE}/${id}`);
+  });
+
   it('get Edit URL with item', () => {
     const item = 'test_pool';
     expect(urlBuilder.getEdit(item)).toBe(`/${urlBuilder.base}/${URLVerbs.EDIT}/${item}`);

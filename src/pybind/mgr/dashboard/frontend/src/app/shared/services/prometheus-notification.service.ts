@@ -4,14 +4,15 @@ import * as _ from 'lodash';
 
 import { PrometheusService } from '../api/prometheus.service';
 import { CdNotificationConfig } from '../models/cd-notification';
-import { PrometheusNotification } from '../models/prometheus-alerts';
+import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PrometheusNotificationService {
-  private notifications: PrometheusNotification[];
+  private notifications: AlertmanagerNotification[];
+  private backendFailure = false;
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -21,12 +22,18 @@ export class PrometheusNotificationService {
   }
 
   refresh() {
+    if (this.backendFailure) {
+      return;
+    }
     this.prometheusService
       .getNotifications(_.last(this.notifications))
-      .subscribe((notifications) => this.handleNotifications(notifications));
+      .subscribe(
+        (notifications) => this.handleNotifications(notifications),
+        () => (this.backendFailure = true)
+      );
   }
 
-  private handleNotifications(notifications: PrometheusNotification[]) {
+  private handleNotifications(notifications: AlertmanagerNotification[]) {
     if (notifications.length === 0) {
       return;
     }
@@ -38,7 +45,7 @@ export class PrometheusNotificationService {
     this.notifications = this.notifications.concat(notifications);
   }
 
-  private formatNotification(notification: PrometheusNotification): CdNotificationConfig[] {
+  private formatNotification(notification: AlertmanagerNotification): CdNotificationConfig[] {
     return this.alertFormatter
       .convertToCustomAlerts(notification.alerts)
       .map((alert) => this.alertFormatter.convertAlertToNotification(alert));
