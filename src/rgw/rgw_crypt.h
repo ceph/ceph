@@ -94,6 +94,8 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
+
+  int process(bufferlist& cipher, size_t part_ofs, size_t size);
 public:
   RGWGetObj_BlockDecrypt(CephContext* cct,
                          RGWGetObj_Filter* next,
