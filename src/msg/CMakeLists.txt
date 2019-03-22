@@ -3,20 +3,7 @@ set(msg_srcs
   Message.cc
   Messenger.cc
   QueueStrategy.cc
-  msg_types.cc
-  simple/Accepter.cc
-  simple/Pipe.cc
-  simple/PipeConnection.cc
-  simple/SimpleMessenger.cc)
-
-if(HAVE_XIO)
-  list(APPEND msg_srcs
-    xio/XioConnection.cc
-    xio/XioMsg.cc
-    xio/XioPool.cc
-    xio/XioMessenger.cc
-    xio/XioPortal.cc)
-endif(HAVE_XIO)
+  msg_types.cc)
 
 list(APPEND msg_srcs
   async/AsyncConnection.cc
