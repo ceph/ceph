@@ -79,10 +79,10 @@ struct Options : Parent {
   int init() {
     CephContext *cct = (CephContext *)io_ctx.cct();
 
-    for (auto &it : *this) {
-      int r = cct->_conf.get_val(std::string(it.first), &it.second.first);
+    for (auto& [k,v] : *this) {
+      int r = cct->_conf.get_val(k, &v.first);
       ceph_assert(r == 0);
-      it.second.second = RBD_CONFIG_SOURCE_CONFIG;
+      v.second = RBD_CONFIG_SOURCE_CONFIG;
     }
 
     std::string last_key = ImageCtx::METADATA_CONF_PREFIX;
@@ -222,7 +222,7 @@ void Config<I>::apply_pool_overrides(librados::IoCtx& io_ctx,
 
   for (auto& [k,v] : opts) {
     if (v.second == RBD_CONFIG_SOURCE_POOL) {
-      r = config->set_val(std::string(k), v.first);
+      r = config->set_val(k, v.first);
       if (r < 0) {
         lderr(cct) << "failed to override pool config " << k << "="
                    << v.first << ": " << cpp_strerror(r) << dendl;
