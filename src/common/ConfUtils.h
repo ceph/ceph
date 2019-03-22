@@ -64,7 +64,7 @@ public:
   void clear();
   int parse_file(const std::string &fname, std::deque<std::string> *errors, std::ostream *warnings);
   int parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors, std::ostream *warnings);
-  int read(const std::string &section, const std::string &key,
+  int read(const std::string &section, const std::string_view key,
 	      std::string &val) const;
 
   const_section_iter_t sections_begin() const;
