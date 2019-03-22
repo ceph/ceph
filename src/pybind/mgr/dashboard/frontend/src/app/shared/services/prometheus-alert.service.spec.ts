@@ -63,7 +63,6 @@ describe('PrometheusAlertService', () => {
       spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
       notificationService = TestBed.get(NotificationService);
-      spyOn(notificationService, 'queueNotifications').and.callThrough();
       spyOn(notificationService, 'show').and.stub();
 
       prometheusService = TestBed.get(PrometheusService);
@@ -86,7 +85,7 @@ describe('PrometheusAlertService', () => {
     it('should notify on alert change', () => {
       alerts = [prometheus.createAlert('alert0', 'suppressed')];
       service.refresh();
-      expect(notificationService.queueNotifications).toHaveBeenCalledWith([
+      expect(notificationService.show).toHaveBeenCalledWith(
         new CdNotificationConfig(
           NotificationType.info,
           'alert0 (suppressed)',
@@ -94,7 +93,7 @@ describe('PrometheusAlertService', () => {
           undefined,
           'Prometheus'
         )
-      ]);
+      );
     });
 
     it('should notify on a new alert', () => {
@@ -133,22 +132,7 @@ describe('PrometheusAlertService', () => {
       service.refresh();
       alerts = [alert1, prometheus.createAlert('alert2')];
       service.refresh();
-      expect(notificationService.queueNotifications).toHaveBeenCalledWith([
-        new CdNotificationConfig(
-          NotificationType.error,
-          'alert2 (active)',
-          'alert2 is active ' + prometheus.createLink('http://alert2'),
-          undefined,
-          'Prometheus'
-        ),
-        new CdNotificationConfig(
-          NotificationType.success,
-          'alert0 (resolved)',
-          'alert0 is active ' + prometheus.createLink('http://alert0'),
-          undefined,
-          'Prometheus'
-        )
-      ]);
+      expect(notificationService.show).toHaveBeenCalledTimes(2);
     });
   });
 });
