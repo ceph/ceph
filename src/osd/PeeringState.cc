@@ -19,7 +19,13 @@ PeeringState::PeeringState(
   PG *pg)
   : state_history(pg),
     machine(this, cct, spgid, dpp, pl, pg, &state_history), cct(cct),
-    spgid(spgid), dpp(dpp), pl(pl), pg(pg), orig_ctx(0) {
+    spgid(spgid),
+    dpp(dpp),
+    pl(pl),
+    pg(pg),
+    orig_ctx(0),
+    info(spgid),
+    pg_log(cct) {
   machine.initiate();
 }
 

@@ -12,6 +12,7 @@
 #include <boost/statechart/event_base.hpp>
 #include <string>
 
+#include "PGLog.h"
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "os/ObjectStore.h"
@@ -988,6 +989,93 @@ public:
   boost::optional<PeeringCtx> rctx;
 
 public:
+  /**
+   * Peering state information
+   */
+  int role = -1;             ///< 0 = primary, 1 = replica, -1=none.
+  uint64_t state = 0;        ///< PG_STATE_*
+
+  pg_shard_t primary;        ///< id/shard of primary
+  pg_shard_t pg_whoami;      ///< my id/shard
+  pg_shard_t up_primary;     ///< id/shard of primary of up set
+  vector<int> up;            ///< crush mapping without temp pgs
+  set<pg_shard_t> upset;     ///< up in set form
+  vector<int> acting;        ///< actual acting set for the current interval
+  set<pg_shard_t> actingset; ///< acting in set form
+
+  /// union of acting, recovery, and backfill targets
+  set<pg_shard_t> acting_recovery_backfill;
+
+  bool send_notify = false; ///< True if a notify needs to be sent to the primary
+
+  bool dirty_info = false;          ///< small info structu on disk out of date
+  bool dirty_big_info = false;      ///< big info structure on disk out of date
+
+  pg_info_t info;                   ///< current pg info
+  pg_info_t last_written_info;      ///< last written info
+  PastIntervals past_intervals;     ///< information about prior pg mappings
+  PGLog  pg_log;                    ///< pg log
+
+  epoch_t last_peering_reset = 0;   ///< epoch of last peering reset
+
+  /// last_update that has committed; ONLY DEFINED WHEN is_active()
+  eversion_t  last_update_ondisk;
+  eversion_t  last_complete_ondisk; ///< last_complete that has committed.
+  eversion_t  last_update_applied;  ///< last_update readable
+  /// last version to which rollback_info trimming has been applied
+  eversion_t  last_rollback_info_trimmed_to_applied;
+
+  /// Counter to determine when pending flushes have completed
+  unsigned flushes_in_progress = 0;
+
+  /**
+   * Primary state
+   */
+  set<pg_shard_t>    stray_set; ///< non-acting osds that have PG data.
+  map<pg_shard_t, pg_info_t>    peer_info; ///< info from peers (stray or prior)
+  map<pg_shard_t, int64_t>    peer_bytes; ///< Peer's num_bytes from peer_info
+  set<pg_shard_t> peer_purged; ///< peers purged
+  map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
+  set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
+  set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+
+  /// features supported by all peers
+  uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  /// features supported by acting set
+  uint64_t acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  /// features supported by up and acting
+  uint64_t upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+
+  /// most recently consumed osdmap's require_osd_version
+  unsigned last_require_osd_release = 0;
+
+  vector<int> want_acting; ///< non-empty while peering needs a new acting set
+
+  // acting_recovery_backfill contains shards that are acting,
+  // async recovery targets, or backfill targets.
+  map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
+
+  /// up: min over last_complete_ondisk, peer_last_complete_ondisk
+  eversion_t  min_last_complete_ondisk;
+  /// point to which the log should be trimmed
+  eversion_t  pg_trim_to;
+
+  set<int> blocked_by; ///< osds we are blocked by (for pg stats)
+
+
+  /// I deleted these strays; ignore racing PGInfo from them
+  set<pg_shard_t> peer_activated;
+
+  set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
+
+  /// osds which might have objects on them which are unfound on the primary
+  set<pg_shard_t> might_have_unfound;
+
+  bool deleting = false;  /// true while in removing or OSD is shutting down
+  atomic<bool> deleted = {false}; /// true once deletion complete
+
+public:
   PeeringState(
     CephContext *cct,
     spg_t spgid,
@@ -1016,4 +1104,9 @@ public:
   const char *get_current_state() const {
     return state_history.get_current_state();
   }
+
+  epoch_t get_last_peering_reset() const {
+    return last_peering_reset;
+  }
+
 };
