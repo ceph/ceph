@@ -59,22 +59,48 @@ class CPlusPlusHandler(logging.Handler):
         self._module._ceph_log(ceph_level, self.format(record))
 
 
-def configure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def configure_logger(module_inst, module_name):
+    """
+    Create and configure the logger with the specified module.
 
-    # Don't filter any logs at the python level, leave it to C++
-    logger.setLevel(logging.DEBUG)
+    A handler will be added to the root logger which will redirect
+    the messages from all loggers (incl. 3rd party libraries) to the
+    Ceph log.
 
-    # FIXME: we should learn the log level from C++ land, and then
-    # avoid calling the C++ level log when we know a message is of
-    # an insufficient level to be ultimately output
-    logger.addHandler(CPlusPlusHandler(module_inst))
+    :param module_inst: The module instance.
+    :type module_inst: instance
+    :param module_name: The module name.
+    :type module_name: str
+    :return: Return the logger with the specified name.
+    """
+    logger = logging.getLogger(module_name)
+    # Don't filter any logs at the python level, leave it to C++.
+    # FIXME: We should learn the log level from C++ land, and then
+    #        avoid calling the C++ level log when we know a message
+    #        is of an insufficient level to be ultimately output.
+    logger.setLevel(logging.DEBUG)  # Don't use NOTSET
+
+    root_logger = logging.getLogger()
+    # Add handler to the root logger, thus this module and all
+    # 3rd party libraries will log their messages to the Ceph log.
+    root_logger.addHandler(CPlusPlusHandler(module_inst))
+    # Set the log level to ``ERROR`` to ensure that we only get
+    # those message from 3rd party libraries (only effective if
+    # they use the default log level ``NOTSET``).
+    # Check https://docs.python.org/3/library/logging.html#logging.Logger.setLevel
+    # for more information about how the effective log level is
+    # determined.
+    root_logger.setLevel(logging.ERROR)
 
     return logger
 
 
-def unconfigure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def unconfigure_logger(module_name=None):
+    """
+    :param module_name: The module name. Defaults to ``None``.
+    :type module_name: str or None
+    """
+    logger = logging.getLogger(module_name)
     rm_handlers = [
         h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
     for h in rm_handlers:
@@ -408,7 +434,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @property
     def log(self):
@@ -499,7 +525,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         # If we're taking over from a standby module, let's make sure
         # its logger was unconfigured before we hook ours up
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
         self._logger = configure_logger(self, module_name)
 
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
@@ -524,7 +550,7 @@ class MgrModule(ceph_module.BaseMgrModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @classmethod
     def _register_commands(cls):
