@@ -325,6 +325,9 @@ COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds", \
 COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
         "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
 	"mds", "rw", FLAG(OBSOLETE))
+COMMAND("mds ok-to-stop name=ids,type=CephString,n=N",
+	"check whether stopping the specified MDS would reduce immediate availability",
+	"mds", "r")
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", FLAG(OBSOLETE))
