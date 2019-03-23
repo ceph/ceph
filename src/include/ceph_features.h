@@ -39,32 +39,29 @@
 /*
  * Notes on deprecation:
  *
- * A *major* release is a release through which all upgrades must pass
- * (e.g., jewel).  For example, no pre-jewel server will ever talk to
- * a post-jewel server (mon, osd, etc).
- *
  * For feature bits used *only* on the server-side:
  *
  *  - In the first phase we indicate that a feature is DEPRECATED as of
  *    a particular release.  This is the first major release X (say,
- *    jewel) that does not depend on its peers advertising the feature.
+ *    mimic) that does not depend on its peers advertising the feature.
  *    That is, it safely assumes its peers all have the feature.  We
  *    indicate this with the DEPRECATED macro.  For example,
  *
- *      DEFINE_CEPH_FEATURE_DEPRECATED( 2, 1, MONCLOCKCHECK, JEWEL)
+ *      DEFINE_CEPH_FEATURE_DEPRECATED( 2, 1, MON_METADATA, MIMIC)
  *
- *    because 10.2.z (jewel) did not care if its peers advertised this
+ *    because 13.2.z (mimic) did not care if its peers advertised this
  *    feature bit.
  *
  *  - In the second phase we stop advertising the the bit and call it
- *    RETIRED.  This can normally be done in the *next* major release
+ *    RETIRED.  This can normally be done 2 major releases
  *    following the one in which we marked the feature DEPRECATED.  In
- *    the above example, for 12.0.z (luminous) we can say:
+ *    the above example, for 15.0.z (octopus) we can say:
  *
- *      DEFINE_CEPH_FEATURE_RETIRED( 2, 1, MONCLOCKCHECK, JEWEL, LUMINOUS)
+ *      DEFINE_CEPH_FEATURE_RETIRED( 2, 1, MON_METADATA, MIMIC, OCTOPUS)
  *
- *  - The bit can be reused in the first post-luminous release, 13.0.z
- *    (m).
+ *  - The bit can be reused in the next release that will never talk to
+ *    a pre-octopus daemon (13 mimic or 14 nautlius) that advertises the
+ *    bit: in this case, the 16.y.z (P-release).
  *
  * This ensures that no two versions who have different meanings for
  * the bit ever speak to each other.
