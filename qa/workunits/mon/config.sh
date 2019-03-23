@@ -13,8 +13,8 @@ ceph config set mon.a debug_asok 22
 ceph config set mon.a debug_asok 22/33
 ceph config get mon.a debug_asok | grep 22
 ceph config set mon.a debug_asok 1/2
-expect_false bin/ceph config set mon.a debug_asok foo
-expect_false bin/ceph config set mon.a debug_asok -10
+expect_false ceph config set mon.a debug_asok foo
+expect_false ceph config set mon.a debug_asok -10
 ceph config rm mon.a debug_asok
 
 ceph config set global log_graylog_port 123
