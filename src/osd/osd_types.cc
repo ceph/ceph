@@ -1146,7 +1146,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
            ("target_size_bytes", pool_opts_t::opt_desc_t(
 	     pool_opts_t::TARGET_SIZE_BYTES, pool_opts_t::INT))
            ("target_size_ratio", pool_opts_t::opt_desc_t(
-	     pool_opts_t::TARGET_SIZE_RATIO, pool_opts_t::DOUBLE));
+	     pool_opts_t::TARGET_SIZE_RATIO, pool_opts_t::DOUBLE))
+           ("pg_autoscale_bias", pool_opts_t::opt_desc_t(
+	     pool_opts_t::PG_AUTOSCALE_BIAS, pool_opts_t::DOUBLE));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
