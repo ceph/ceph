@@ -221,6 +221,18 @@ COMMAND("features", "report of connected features", \
         "mon", "r")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r")
+COMMAND("mon ok-to-stop " \
+	"name=ids,type=CephString,n=N",
+	"check whether mon(s) can be safely stopped without reducing immediate " \
+	"availability",
+	"mon", "r")
+COMMAND("mon ok-to-add-offline",
+	"check whether adding a mon and not starting it would break quorum",
+	"mon", "r")
+COMMAND("mon ok-to-rm " \
+	"name=id,type=CephString",
+	"check whether removing the specified mon would break quorum",
+	"mon", "r")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
 	     FLAG(NOFORWARD))
