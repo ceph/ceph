@@ -204,4 +204,38 @@ function TEST_5_mons_checks() {
     ceph mon ok-to-rm e || return 1
 }
 
+function TEST_0_mds() {
+    local dir=$1
+
+    CEPH_ARGS="$ORIG_CEPH_ARGS --mon-host=$CEPH_MON_A "
+
+    run_mon $dir a --public-addr=$CEPH_MON_A || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_mds $dir a || return 1
+
+    ceph osd pool create meta 1 || return 1
+    ceph osd pool create data 1 || return 1
+    ceph fs new myfs meta data || return 1
+    sleep 5
+
+    ! ceph mds ok-to-stop a || return 1
+    ! ceph mds ok-to-stop a dne || return 1
+    ceph mds ok-to-stop dne || return 1
+
+    run_mds $dir b || return 1
+    sleep 5
+
+    ceph mds ok-to-stop a || return 1
+    ceph mds ok-to-stop b || return 1
+    ! ceph mds ok-to-stop a b || return 1
+    ceph mds ok-to-stop a dne1 dne2 || return 1
+    ceph mds ok-to-stop b dne || return 1
+    ! ceph mds ok-to-stop a b dne || return 1
+    ceph mds ok-to-stop dne1 dne2 || return 1
+
+    kill_daemons $dir KILL mds.a
+}
+
+
 main ok-to-stop "$@"
