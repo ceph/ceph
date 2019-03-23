@@ -361,8 +361,8 @@ scrubbing operations.
 ``osd scrub auto repair``
 
 :Description: Setting this to ``true`` will enable automatic pg repair when errors
-              are found in deep-scrub.  However, if more than ``osd scrub auto repair num errors``
-              errors are found a repair is NOT performed.
+              are found in scrub or deep-scrub.  However, if more than
+              ``osd scrub auto repair num errors`` errors are found a repair is NOT performed.
 :Type: Boolean
 :Default: ``false``
 
