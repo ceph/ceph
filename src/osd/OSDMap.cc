@@ -4666,6 +4666,8 @@ int OSDMap::calc_pg_upmaps(
       for (auto& i : tmp.pg_upmap_items) {
         if (to_skip.count(i.first))
           continue;
+        if (!only_pools.empty() && !only_pools.count(i.first.pool()))
+          continue;
         candidates.push_back(make_pair(i.first, i.second));
       }
       if (aggressive) {
