@@ -574,6 +574,28 @@ function run_mgr() {
         "$@" || return 1
 }
 
+function run_mds() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local data=$dir/$id
+
+    ceph-mds \
+        --id $id \
+        $EXTRA_OPTS \
+	--debug-mds 20 \
+	--debug-objecter 20 \
+        --debug-ms 20 \
+        --chdir= \
+        --mds-data=$data \
+        --log-file=$dir/\$name.log \
+        --admin-socket=$(get_asok_path) \
+        --run-dir=$dir \
+        --pid-file=$dir/\$name.pid \
+        "$@" || return 1
+}
+
 #######################################################################
 
 ##
