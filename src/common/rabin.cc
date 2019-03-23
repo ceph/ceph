@@ -6,9 +6,13 @@
 #include <string.h>
 
 
-uint64_t RabinChunk::gen_rabin_hash(char* chunk_data, uint64_t off) {
+uint64_t RabinChunk::gen_rabin_hash(char* chunk_data, uint64_t off, uint64_t len) {
   uint64_t roll_sum = 0;
-  for (uint64_t i = off; i < window_size; i++) {
+  uint64_t data_len = len;
+  if (data_len == 0) {
+    data_len = window_size;
+  }
+  for (uint64_t i = off; i < data_len; i++) {
     char cur_byte = *(chunk_data + i);
     roll_sum = (roll_sum * rabin_prime + cur_byte ) %  (mod_prime) ;
   }
