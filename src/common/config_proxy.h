@@ -118,21 +118,21 @@ public:
   ConfigValues* operator->() noexcept {
     return &values;
   }
-  int get_val(const std::string& key, char** buf, int len) const {
+  int get_val(const std::string_view key, char** buf, int len) const {
     std::lock_guard l{lock};
     return config.get_val(values, key, buf, len);
   }
-  int get_val(const std::string &key, std::string *val) const {
+  int get_val(const std::string_view key, std::string *val) const {
     std::lock_guard l{lock};
     return config.get_val(values, key, val);
   }
   template<typename T>
-  const T get_val(const std::string& key) const {
+  const T get_val(const std::string_view key) const {
     std::lock_guard l{lock};
     return config.template get_val<T>(values, key);
   }
   template<typename T, typename Callback, typename...Args>
-  auto with_val(const string& key, Callback&& cb, Args&&... args) const {
+  auto with_val(const std::string_view key, Callback&& cb, Args&&... args) const {
     std::lock_guard l{lock};
     return config.template with_val<T>(values, key,
 				       std::forward<Callback>(cb),
@@ -144,7 +144,7 @@ public:
   const decltype(md_config_t::schema)& get_schema() const {
     return config.schema;
   }
-  const Option* get_schema(const std::string& key) const {
+  const Option* get_schema(const std::string_view key) const {
     auto found = config.schema.find(key);
     if (found == config.schema.end()) {
       return nullptr;
@@ -168,7 +168,7 @@ public:
     return config.get_all_sections(sections);
   }
   int get_val_from_conf_file(const std::vector<std::string>& sections,
-			     const std::string& key, std::string& out,
+			     const std::string_view key, std::string& out,
 			     bool emeta) const {
     std::lock_guard l{lock};
     return config.get_val_from_conf_file(values,
@@ -236,7 +236,7 @@ public:
     std::lock_guard l{lock};
     config.config_options(f);
   }
-  int rm_val(const std::string& key) {
+  int rm_val(const std::string_view key) {
     std::lock_guard l{lock};
     return config.rm_val(values, key);
   }
@@ -263,21 +263,21 @@ public:
         map_observer_changes(obs, key, rev_obs);
       }, oss);
   }
-  int set_val(const std::string& key, const std::string& s,
+  int set_val(const std::string_view key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
     std::lock_guard l{lock};
     return config.set_val(values, obs_mgr, key, s, err_ss);
   }
-  void set_val_default(const std::string& key, const std::string& val) {
+  void set_val_default(const std::string_view key, const std::string& val) {
     std::lock_guard l{lock};
     config.set_val_default(values, obs_mgr, key, val);
   }
-  void set_val_or_die(const std::string& key, const std::string& val) {
+  void set_val_or_die(const std::string_view key, const std::string& val) {
     std::lock_guard l{lock};
     config.set_val_or_die(values, obs_mgr, key, val);
   }
   int set_mon_vals(CephContext *cct,
-		   const map<std::string,std::string>& kv,
+		   const std::map<std::string,std::string,std::less<>>& kv,
 		   md_config_t::config_callback config_cb) {
     int ret;
     rev_obs_map_t rev_obs;

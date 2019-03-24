@@ -163,7 +163,7 @@ parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors,
 }
 
 int ConfFile::
-read(const std::string &section, const std::string &key, std::string &val) const
+read(const std::string &section, const std::string_view key, std::string &val) const
 {
   string k(normalize_key_name(key));
 
@@ -250,13 +250,12 @@ trim_whitespace(std::string &str, bool strip_internal)
  * the field names of md_config_t and get a key in normal form.
  */
 std::string ConfFile::
-normalize_key_name(const std::string &key)
+normalize_key_name(std::string_view key)
 {
-  if (key.find_first_of(" \t\r\n\f\v\xa0") == string::npos) {
-    return key;
+  std::string k{key};
+  if (k.find_first_of(" \t\r\n\f\v\xa0") == k.npos) {
+    return k;
   }
-
-  string k(key);
   ConfFile::trim_whitespace(k, true);
   std::replace(k.begin(), k.end(), ' ', '_');
   return k;

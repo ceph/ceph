@@ -21,9 +21,9 @@ namespace {
 
 const uint32_t MAX_KEYS = 64;
 
-typedef std::map<std::string, std::pair<std::string, config_source_t>> Parent;
+typedef std::map<std::string_view, std::pair<std::string, config_source_t>> Parent;
 
-static std::set<std::string> EXCLUDE_OPTIONS {
+static std::set<std::string_view> EXCLUDE_OPTIONS {
     "rbd_auto_exclusive_lock_until_manual_request",
     "rbd_default_format",
     "rbd_default_map_options",
@@ -36,7 +36,7 @@ static std::set<std::string> EXCLUDE_OPTIONS {
     "rbd_validate_pool",
     "rbd_mirror_pool_replayers_refresh_interval"
   };
-static std::set<std::string> EXCLUDE_IMAGE_OPTIONS {
+static std::set<std::string_view> EXCLUDE_IMAGE_OPTIONS {
     "rbd_default_clone_format",
     "rbd_default_data_pool",
     "rbd_default_features",
@@ -79,10 +79,10 @@ struct Options : Parent {
   int init() {
     CephContext *cct = (CephContext *)io_ctx.cct();
 
-    for (auto &it : *this) {
-      int r = cct->_conf.get_val(it.first.c_str(), &it.second.first);
+    for (auto& [k,v] : *this) {
+      int r = cct->_conf.get_val(k, &v.first);
       ceph_assert(r == 0);
-      it.second.second = RBD_CONFIG_SOURCE_CONFIG;
+      v.second = RBD_CONFIG_SOURCE_CONFIG;
     }
 
     std::string last_key = ImageCtx::METADATA_CONF_PREFIX;
@@ -141,8 +141,8 @@ int Config<I>::list(librados::IoCtx& io_ctx,
     return r;
   }
 
-  for (auto &it : opts) {
-    options->push_back({it.first, it.second.first, it.second.second});
+  for (auto& [k,v] : opts) {
+    options->push_back({std::string{k}, v.first, v.second});
   }
 
   return 0;
@@ -200,8 +200,8 @@ int Config<I>::list(I *image_ctx, std::vector<config_option_t> *options) {
     }
   }
 
-  for (auto &it : opts) {
-    options->push_back({it.first, it.second.first, it.second.second});
+  for (auto& [k,v] : opts) {
+    options->push_back({std::string{k}, v.first, v.second});
   }
 
   return 0;
@@ -220,12 +220,12 @@ void Config<I>::apply_pool_overrides(librados::IoCtx& io_ctx,
     return;
   }
 
-  for (auto& pair : opts) {
-    if (pair.second.second == RBD_CONFIG_SOURCE_POOL) {
-      r = config->set_val(pair.first, pair.second.first);
+  for (auto& [k,v] : opts) {
+    if (v.second == RBD_CONFIG_SOURCE_POOL) {
+      r = config->set_val(k, v.first);
       if (r < 0) {
-        lderr(cct) << "failed to override pool config " << pair.first << "="
-                   << pair.second.first << ": " << cpp_strerror(r) << dendl;
+        lderr(cct) << "failed to override pool config " << k << "="
+                   << v.first << ": " << cpp_strerror(r) << dendl;
       }
     }
   }
