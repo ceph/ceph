@@ -1118,7 +1118,8 @@ void Monitor::bootstrap()
   if (monmap->min_mon_release &&
       monmap->min_mon_release + 2 < (int)ceph_release()) {
     derr << "current monmap has min_mon_release "
-	 << ceph_release() << " (" << ceph_release_name(monmap->min_mon_release)
+	 << (int)monmap->min_mon_release
+	 << " (" << ceph_release_name(monmap->min_mon_release)
 	 << ") which is >2 releases older than me " << ceph_release()
 	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
 	 << dendl;
