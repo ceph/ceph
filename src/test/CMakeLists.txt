@@ -469,7 +469,6 @@ endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
-find_package(StdFilesystem)
 if(StdFilesystem_FOUND)
   add_executable(ceph_test_admin_socket_output
     test_admin_socket_output.cc
