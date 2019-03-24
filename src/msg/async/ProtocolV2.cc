@@ -384,13 +384,8 @@ void ProtocolV2::prepare_send_message(uint64_t features,
   ldout(cct, 20) << __func__ << " m=" << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
-  if (m->empty_payload()) {
-    ldout(cct, 20) << __func__ << " encoding features " << features << " " << m
-                   << " " << *m << dendl;
-  } else {
-    ldout(cct, 20) << __func__ << " half-reencoding features " << features
-                   << " " << m << " " << *m << dendl;
-  }
+  ldout(cct, 20) << __func__ << (m->empty_payload() ? " encoding features " : " half-reencoding features ")
+		 << features << " " << m  << " " << *m << dendl;
 
   // encode and copy out of *m
   m->encode(features, 0);
@@ -533,10 +528,13 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
+
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
+#endif
   m->put();
 
   return rc;
@@ -627,8 +625,6 @@ void ProtocolV2::write_event() {
     if (r == 0) {
       uint64_t left = ack_left;
       if (left) {
-        ceph_le64 s;
-        s = in_seq;
         auto ack = AckFrame::Encode(in_seq);
         connection->outcoming_bl.append(ack.get_buffer(session_stream_handlers));
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
@@ -1654,9 +1650,9 @@ CtPtr ProtocolV2::post_client_banner_exchange() {
 }
 
 CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
+  ceph_assert(messenger->auth_client);
   ldout(cct, 20) << __func__ << " peer_type " << (int)connection->peer_type
 		 << " auth_client " << messenger->auth_client << dendl;
-  ceph_assert(messenger->auth_client);
 
   bufferlist bl;
   vector<uint32_t> preferred_modes;
