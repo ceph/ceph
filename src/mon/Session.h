@@ -64,7 +64,7 @@ struct MonSession : public RefCountedObject {
   uint64_t proxy_tid = 0;
 
   string remote_host;                ///< remote host name
-  map<string,string> last_config;    ///< most recently shared config
+  map<std::string,std::string,std::less<>> last_config;    ///< most recently shared config
   bool any_config = false;
 
   MonSession(Connection *c)

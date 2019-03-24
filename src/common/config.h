@@ -89,13 +89,13 @@ public:
   /*
    * Mapping from legacy config option names to class members
    */
-  std::map<std::string, member_ptr_t> legacy_values;
+  std::map<std::string_view, member_ptr_t> legacy_values;
 
   /**
    * The configuration schema, in the form of Option objects describing
    * possible settings.
    */
-  std::map<std::string, const Option&> schema;
+  std::map<std::string_view, const Option&> schema;
 
   /// values from mon that we failed to set
   std::map<std::string,std::string> ignored_mon_values;
@@ -146,18 +146,18 @@ public:
   void _clear_safe_to_start_threads();  // this is only used by the unit test
 
   /// Look up an option in the schema
-  const Option *find_option(const string& name) const;
+  const Option *find_option(const std::string_view name) const;
 
   /// Set a default value
   void set_val_default(ConfigValues& values,
 		       const ConfigTracker& tracker,
-		       const std::string& key, const std::string &val);
+		       const std::string_view key, const std::string &val);
 
   /// Set a values from mon
   int set_mon_vals(CephContext *cct,
       ConfigValues& values,
       const ConfigTracker& tracker,
-      const map<std::string,std::string>& kv,
+      const map<std::string,std::string, std::less<>>& kv,
       config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
@@ -169,21 +169,21 @@ public:
   // Set a configuration value, or crash
   // Metavariables will be expanded.
   void set_val_or_die(ConfigValues& values, const ConfigTracker& tracker,
-		      const std::string &key, const std::string &val);
+		      const std::string_view key, const std::string &val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
   int set_val(ConfigValues& values, const ConfigTracker& tracker,
-	      const std::string &key, const char *val,
+	      const std::string_view key, const char *val,
               std::stringstream *err_ss=nullptr);
   int set_val(ConfigValues& values, const ConfigTracker& tracker,
-	      const std::string &key, const string& s,
+	      const std::string_view key, const std::string& s,
               std::stringstream *err_ss=nullptr) {
     return set_val(values, tracker, key, s.c_str(), err_ss);
   }
 
   /// clear override value
-  int rm_val(ConfigValues& values, const std::string& key);
+  int rm_val(ConfigValues& values, const std::string_view key);
 
   /// get encoded map<string,map<int32_t,string>> of entire config
   void get_config_bl(const ConfigValues& values,
@@ -196,12 +196,11 @@ public:
 
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
-  int get_val(const ConfigValues& values, const std::string &key, char **buf, int len) const;
-  int get_val(const ConfigValues& values, const std::string &key, std::string *val) const;
-  Option::value_t get_val_generic(const ConfigValues& values, const std::string &key) const;
-  template<typename T> const T get_val(const ConfigValues& values, const std::string &key) const;
+  int get_val(const ConfigValues& values, const std::string_view key, char **buf, int len) const;
+  int get_val(const ConfigValues& values, const std::string_view key, std::string *val) const;
+  template<typename T> const T get_val(const ConfigValues& values, const std::string_view key) const;
   template<typename T, typename Callback, typename...Args>
-  auto with_val(const ConfigValues& values, const string& key,
+  auto with_val(const ConfigValues& values, const std::string_view key,
 		Callback&& cb, Args&&... args) const ->
     std::result_of_t<Callback(const T&, Args...)> {
     return std::forward<Callback>(cb)(
@@ -222,7 +221,7 @@ public:
   // Metavariables will be expanded if emeta is true.
   int get_val_from_conf_file(const ConfigValues& values,
 		   const std::vector <std::string> &sections,
-		   std::string const &key, std::string &out, bool emeta) const;
+		   const std::string_view key, std::string &out, bool emeta) const;
 
   /// dump all config values to a stream
   void show_config(const ConfigValues& values, std::ostream& out) const;
@@ -249,10 +248,12 @@ private:
   void validate_schema();
   void validate_default_settings();
 
+  Option::value_t get_val_generic(const ConfigValues& values,
+				  const std::string_view key) const;
   int _get_val_cstr(const ConfigValues& values,
-		    const std::string &key, char **buf, int len) const;
+		    const std::string& key, char **buf, int len) const;
   Option::value_t _get_val(const ConfigValues& values,
-			   const std::string &key,
+			   const std::string_view key,
 			   expand_stack_t *stack=0,
 			   std::ostream *err=0) const;
   Option::value_t _get_val(const ConfigValues& values,
@@ -263,7 +264,7 @@ private:
   Option::value_t _get_val_nometa(const ConfigValues& values,
 				  const Option& o) const;
 
-  int _rm_val(ConfigValues& values, const std::string& key, int level);
+  int _rm_val(ConfigValues& values, const std::string_view key, int level);
 
   void _refresh(ConfigValues& values, const Option& opt);
 
@@ -274,7 +275,7 @@ private:
 			std::vector <std::string> &sections) const;
 
   int _get_val_from_conf_file(const std::vector <std::string> &sections,
-			      const std::string &key, std::string &out) const;
+			      const std::string_view key, std::string &out) const;
 
   int parse_option(ConfigValues& values,
 		   const ConfigTracker& tracker,
@@ -356,7 +357,7 @@ public:
 
 template<typename T>
 const T md_config_t::get_val(const ConfigValues& values,
-			     const std::string &key) const {
+			     const std::string_view key) const {
   return boost::get<T>(this->get_val_generic(values, key));
 }
 
