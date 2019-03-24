@@ -588,14 +588,14 @@ Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Daemon for mirroring RBD images between Ceph clusters, streaming
 changes asynchronously.
 
-%package -n ceph-immutable-object-cache
+%package immutable-object-cache
 Summary:	Ceph daemon for immutable object cache
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
 Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
-%description -n ceph-immutable-object-cache
+%description immutable-object-cache
 Daemon for immutable object cache.
 
 %package -n rbd-nbd
@@ -1754,13 +1754,13 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
-%files -n ceph-immutable-object-cache
+%files immutable-object-cache
 %{_bindir}/ceph-immutable-object-cache
 %{_mandir}/man8/ceph-immutable-object-cache.8*
 %{_unitdir}/ceph-immutable-object-cache@.service
 %{_unitdir}/ceph-immutable-object-cache.target
 
-%post -n ceph-immutable-object-cache
+%post immutable-object-cache
 %if 0%{?suse_version}
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target >/dev/null 2>&1 || :
@@ -1773,7 +1773,7 @@ if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-immutable-object-cache.target >/dev/null 2>&1 || :
 fi
 
-%preun -n ceph-immutable-object-cache
+%preun immutable-object-cache
 %if 0%{?suse_version}
 %service_del_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
 %endif
@@ -1781,7 +1781,7 @@ fi
 %systemd_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
 %endif
 
-%postun -n ceph-immutable-object-cache
+%postun immutable-object-cache
 test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
