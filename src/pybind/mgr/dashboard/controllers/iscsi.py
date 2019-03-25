@@ -16,6 +16,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.rbd import format_bitmask
 from ..exceptions import DashboardException
 from ..tools import TaskManager
 
@@ -365,13 +366,21 @@ class IscsiTarget(RESTController):
                     if img.features() & required_rbd_features != required_rbd_features:
                         raise DashboardException(msg='Image {} cannot be exported using {} '
                                                      'backstore because required features are '
-                                                     'missing'.format(image, backstore),
+                                                     'missing (required features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      required_rbd_features)),
                                                  code='image_missing_required_features',
                                                  component='iscsi')
                     if img.features() & supported_rbd_features != img.features():
                         raise DashboardException(msg='Image {} cannot be exported using {} '
                                                      'backstore because it contains unsupported '
-                                                     'features'.format(image, backstore),
+                                                     'features (supported features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      supported_rbd_features)),
                                                  code='image_contains_unsupported_features',
                                                  component='iscsi')
 
