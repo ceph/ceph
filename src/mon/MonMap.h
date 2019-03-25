@@ -38,8 +38,6 @@ namespace ceph {
   class Formatter;
 }
 
-constexpr uint16_t DEFAULT_WEIGHT = 10;
-
 struct mon_info_t {
   /**
    * monitor name
@@ -58,7 +56,7 @@ struct mon_info_t {
    * the priority of the mon, the lower value the more preferred
    */
   uint16_t priority{0};
-  uint16_t weight{DEFAULT_WEIGHT};
+  uint16_t weight{0};
 
   // <REMOVE ME>
   mon_info_t(const string& n, const entity_addr_t& p_addr, uint16_t p)
@@ -210,7 +208,7 @@ public:
    * @param addr Monitor's public address
    */
   void add(const string &name, const entity_addrvec_t &addrv,
-	   int priority=0, int weight=DEFAULT_WEIGHT) {
+	   uint16_t priority=0, uint16_t weight=0) {
     add(mon_info_t(name, addrv, priority, weight));
   }
 
