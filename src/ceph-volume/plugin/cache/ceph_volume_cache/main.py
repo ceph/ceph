@@ -155,6 +155,7 @@ $> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data 
                 if lv.tags.get('ceph.osd_id', '') == args.osdid:
                     osd_lv_name = lv.name
                     vg_name = lv.vg_name
+                    break
         else:
             osd_lv_name = args.osddata
             vg_name = args.volumegroup
