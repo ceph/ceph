@@ -109,6 +109,7 @@ class PgAutoscaler(MgrModule):
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
                                  'RATIO', 'TARGET RATIO',
+                                 'BIAS',
                                  'PG_NUM',
 #                                 'IDEAL',
                                  'NEW PG_NUM', 'AUTOSCALE'],
@@ -120,6 +121,7 @@ class PgAutoscaler(MgrModule):
             table.align['RAW CAPACITY'] = 'r'
             table.align['RATIO'] = 'r'
             table.align['TARGET RATIO'] = 'r'
+            table.align['BIAS'] = 'r'
             table.align['PG_NUM'] = 'r'
 #            table.align['IDEAL'] = 'r'
             table.align['NEW PG_NUM'] = 'r'
@@ -145,6 +147,7 @@ class PgAutoscaler(MgrModule):
                     mgr_util.format_bytes(p['subtree_capacity'], 6),
                     '%.4f' % p['capacity_ratio'],
                     tr,
+                    p['bias'],
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
@@ -318,6 +321,7 @@ class PgAutoscaler(MgrModule):
                 'pg_num_ideal': int(pool_pg_target),
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
+                'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
                 });
 
         return (ret, root_map, pool_root)
