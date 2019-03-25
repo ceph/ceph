@@ -40,6 +40,17 @@ def add_lvmcache(vgname, osd_lv_name, cache_md_partition, cache_data_partition, 
     _create_lvmcache(vg.name, osd_lv_name, cache_md_lv.name, cache_data_lv.name)
 
 
+def rm_lvmcache(vgname, cache_data_lv):
+    lv = api.get_lv(lv_name=cache_data_lv, vg_name=vgname)
+    vg = api.get_vg(vg_name=vgname)
+    if lv is None:
+        print("Couldn't find LV " + vgname + "/" + cache_data_lv)
+        return
+    api.remove_lv(lv)
+    md_lv = api.get_lv(lv_name=lv.tags['metadata'], vg_name=vgname)
+    api.reduce_vg(vg, lv.tags['partition'], md_lv.tags['partition'])
+
+
 class Cache(object):
 
     help_menu = 'Deploy Cache'
