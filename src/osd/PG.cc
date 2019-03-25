@@ -594,14 +594,13 @@ bool PG::search_for_missing(
       oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
-    (*(ctx->info_map))[from.osd].push_back(
-      make_pair(
+    (*(ctx->info_map))[from.osd].emplace_back(
 	pg_notify_t(
 	  from.shard, pg_whoami.shard,
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  tinfo),
-	past_intervals));
+	past_intervals);
   }
   return found_missing;
 }
@@ -1442,7 +1441,7 @@ void PG::calc_replicated_acting(
       ss << " shard " << acting_cand << " (acting) REJECTED "
 	 << cur_info << std::endl;
     } else {
-      candidate_by_last_update.push_back(make_pair(cur_info.last_update, i));
+      candidate_by_last_update.emplace_back(cur_info.last_update, i);
     }
   }
 
@@ -1488,8 +1487,7 @@ void PG::calc_replicated_acting(
       ss << " shard " << i.first << " (stray) REJECTED " << i.second
          << std::endl;
     } else {
-      candidate_by_last_update.push_back(
-        make_pair(i.second.last_update, i.first.osd));
+      candidate_by_last_update.emplace_back(i.second.last_update, i.first.osd);
     }
   }
 
@@ -1586,7 +1584,7 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     }
     if (static_cast<uint64_t>(approx_missing_objects) >
 	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -1639,7 +1637,7 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     }
     if (static_cast<uint64_t>(approx_missing_objects)  >
 	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -1981,14 +1979,13 @@ void PG::activate(ObjectStore::Transaction& t,
 			    << " to " << info.last_update;
 	if (!pi.is_empty() && activator_map) {
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
-	  (*activator_map)[peer.osd].push_back(
-	    make_pair(
+	  (*activator_map)[peer.osd].emplace_back(
 	      pg_notify_t(
 		peer.shard, pg_whoami.shard,
 		get_osdmap_epoch(),
 		get_osdmap_epoch(),
 		info),
-	      past_intervals));
+	      past_intervals);
 	} else {
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(
@@ -2250,7 +2247,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
       state_set(PG_STATE_PEERED);
     }
 
-    m->pg_list.push_back(make_pair(i, PastIntervals()));
+    m->pg_list.emplace_back(i, PastIntervals());
     osd->send_message_osd_cluster(get_primary().osd, m, get_osdmap_epoch());
 
     // waiters
@@ -3224,9 +3221,9 @@ void PG::_update_calc_stats()
       missing = pg_log.get_missing().num_missing();
       ceph_assert(acting_recovery_backfill.count(pg_whoami));
       if (upset.count(pg_whoami)) {
-        missing_target_objects.insert(make_pair(missing, pg_whoami));
+        missing_target_objects.emplace(missing, pg_whoami);
       } else {
-        acting_source_objects.insert(make_pair(missing, pg_whoami));
+        acting_source_objects.emplace(missing, pg_whoami);
       }
       info.stats.stats.sum.num_objects_missing_on_primary = missing;
       dout(20) << __func__ << " shard " << pg_whoami
@@ -3257,9 +3254,9 @@ void PG::_update_calc_stats()
         }
       }
       if (upset.count(peer.first)) {
-	missing_target_objects.insert(make_pair(missing, peer.first));
+	missing_target_objects.emplace(missing, peer.first);
       } else if (actingset.count(peer.first)) {
-	acting_source_objects.insert(make_pair(missing, peer.first));
+	acting_source_objects.emplace(missing, peer.first);
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
       dout(20) << __func__ << " shard " << peer.first
@@ -3341,7 +3338,7 @@ void PG::_update_calc_stats()
       ceph_assert(target >= missing_target_objects.size());
       unsigned needed = target - missing_target_objects.size();
       if (needed)
-        missing_target_objects.insert(make_pair(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD)));
+        missing_target_objects.emplace(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD));
     } else {
       for (unsigned i = 0 ; i < num_shards; ++i) {
         shard_id_t shard(i);
@@ -3353,7 +3350,7 @@ void PG::_update_calc_stats()
 	  }
 	}
 	if (!found)
-	  missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD,shard)));
+	  missing_target_objects.emplace(num_objects, pg_shard_t(pg_shard_t::NO_OSD,shard));
       }
     }
 
@@ -5632,12 +5629,9 @@ void PG::scrub_compare_maps()
       for (list<pg_shard_t>::const_iterator j = i->second.begin();
 	   j != i->second.end();
 	   ++j) {
-	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
+	good_peers.emplace_back(maps[*j]->objects[i->first], *j);
       }
-      scrubber.authoritative.insert(
-	make_pair(
-	  i->first,
-	  good_peers));
+      scrubber.authoritative.emplace(i->first, good_peers);
     }
 
     for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
@@ -5851,14 +5845,13 @@ void PG::share_pg_info()
       peer->second.history.merge(info.history);
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap_epoch());
-    m->pg_list.push_back(
-      make_pair(
+    m->pg_list.emplace_back(
 	pg_notify_t(
 	  pg_shard.shard, pg_whoami.shard,
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  info),
-	past_intervals));
+	past_intervals);
     osd->send_message_osd_cluster(pg_shard.osd, m, get_osdmap_epoch());
   }
 }
