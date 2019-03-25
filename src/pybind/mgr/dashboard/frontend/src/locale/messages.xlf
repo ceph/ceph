@@ -243,44 +243,8 @@
           <context context-type="linenumber">27</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
-          <context context-type="linenumber">567</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">318</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-form/configuration-form.component.html</context>
-          <context context-type="linenumber">159</context>
-        </context-group>
-        <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
           <context context-type="linenumber">118</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
-          <context context-type="linenumber">520</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">460</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
-          <context context-type="linenumber">107</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">598</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/auth/role-form/role-form.component.html</context>
-          <context context-type="linenumber">85</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
-          <context context-type="linenumber">151</context>
         </context-group>
       </trans-unit><trans-unit id="3fb5709e10166cbc85970cbff103db227dbeb813" datatype="html">
         <source>Select a Language</source>
@@ -391,59 +355,59 @@
         <source>Cancel</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
-          <context context-type="linenumber">55</context>
+          <context context-type="linenumber">52</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component.html</context>
-          <context context-type="linenumber">57</context>
+          <context context-type="linenumber">55</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">37</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
-          <context context-type="linenumber">137</context>
+          <context context-type="linenumber">135</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/confirmation-modal/confirmation-modal.component.html</context>
-          <context context-type="linenumber">21</context>
+          <context context-type="linenumber">19</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
-          <context context-type="linenumber">38</context>
+          <context context-type="linenumber">36</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
-          <context context-type="linenumber">91</context>
+          <context context-type="linenumber">89</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-reweight-modal/osd-reweight-modal.component.html</context>
-          <context context-type="linenumber">34</context>
+          <context context-type="linenumber">32</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
-          <context context-type="linenumber">25</context>
+          <context context-type="linenumber">23</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">42</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
-          <context context-type="linenumber">45</context>
+          <context context-type="linenumber">43</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-restore-modal/rbd-trash-restore-modal.component.html</context>
-          <context context-type="linenumber">44</context>
+          <context context-type="linenumber">42</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
-          <context context-type="linenumber">45</context>
+          <context context-type="linenumber">43</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
-          <context context-type="linenumber">110</context>
+          <context context-type="linenumber">108</context>
         </context-group>
       </trans-unit><trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
         <source>Advanced Settings</source>
@@ -2275,19 +2239,19 @@
         <source>Close</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">330</context>
+          <context context-type="linenumber">328</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-capability-modal/rgw-user-capability-modal.component.html</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">83</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-s3-key-modal/rgw-user-s3-key-modal.component.html</context>
-          <context context-type="linenumber">144</context>
+          <context context-type="linenumber">142</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-subuser-modal/rgw-user-subuser-modal.component.html</context>
-          <context context-type="linenumber">147</context>
+          <context context-type="linenumber">145</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-swift-key-modal/rgw-user-swift-key-modal.component.html</context>
@@ -2295,7 +2259,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-snapshot-form/rbd-snapshot-form.component.html</context>
-          <context context-type="linenumber">50</context>
+          <context context-type="linenumber">48</context>
         </context-group>
       </trans-unit><trans-unit id="feb7520a18f7cda6389712427d0a6e4c38b76000" datatype="html">
         <source><x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool</source>
@@ -3277,19 +3241,19 @@
         <source>You are about to remove &quot;user read / update&quot; permissions from your own user.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
-          <context context-type="linenumber">159</context>
+          <context context-type="linenumber">156</context>
         </context-group>
       </trans-unit><trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
         <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
-          <context context-type="linenumber">161</context>
+          <context context-type="linenumber">158</context>
         </context-group>
       </trans-unit><trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
         <source>Are you sure you want to continue?</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
-          <context context-type="linenumber">163</context>
+          <context context-type="linenumber">160</context>
         </context-group>
       </trans-unit><trans-unit id="471e78026c258073ba687478dc54c35d9041ea42" datatype="html">
         <source>Forbidden</source>
