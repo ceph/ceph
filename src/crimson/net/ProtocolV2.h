@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/execution_stage.hh>
+
 #include "Protocol.h"
 #include "msg/async/frames_v2.h"
 #include "msg/async/crypto_onwire.h"
@@ -143,7 +145,11 @@ class ProtocolV2 : public Protocol {
   seastar::future<> send_reconnect_ok();
 
   // READY
-  seastar::future<> read_message(utime_t throttle_stamp);
+  seastar::future<> read_message(
+    boost::container::static_vector<
+      ceph::bufferlist,ceph::msgr::v2::MAX_NUM_SEGMENTS>&& msg_segments,
+    size_t msg_size,
+    utime_t throttle_stamp);
   void handle_message_ack(seq_num_t seq);
   void execute_ready();
 

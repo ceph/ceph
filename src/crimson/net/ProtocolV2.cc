@@ -1378,99 +1378,96 @@ void ProtocolV2::handle_message_ack(seq_num_t seq) {
   // TODO: lossless policy
 }
 
-seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
+seastar::future<> ProtocolV2::read_message(
+    boost::container::static_vector<
+      ceph::bufferlist,ceph::msgr::v2::MAX_NUM_SEGMENTS>&& msg_segments,
+    size_t msg_size,
+    utime_t throttle_stamp)
 {
-  return read_frame_payload()
-  .then([this, throttle_stamp] {
-    utime_t recv_stamp = ceph_clock_now();
+  utime_t recv_stamp = ceph_clock_now();
 
-    // we need to get the size before std::moving segments data
-    const size_t cur_msg_size = get_current_msg_size();
-    auto msg_frame = MessageFrame::Decode(std::move(rx_segments_data));
-    // XXX: paranoid copy just to avoid oops
-    ceph_msg_header2 current_header = msg_frame.header();
+  auto msg_frame = MessageFrame::Decode(std::move(msg_segments));
+  // XXX: paranoid copy just to avoid oops
+  ceph_msg_header2 current_header = msg_frame.header();
 
-    logger().debug("{} got {} + {} + {} byte message,"
-                   " envelope type={} src={} off={} seq={}",
-                   conn, msg_frame.front_len(), msg_frame.middle_len(),
-                   msg_frame.data_len(), current_header.type, peer_name,
-                   current_header.data_off, current_header.seq);
+  logger().debug("{} got {} + {} + {} byte message,"
+                 " envelope type={} src={} off={} seq={}",
+                 conn, msg_frame.front_len(), msg_frame.middle_len(),
+                 msg_frame.data_len(), current_header.type, peer_name,
+                 current_header.data_off, current_header.seq);
 
-    ceph_msg_header header{current_header.seq,
-                           current_header.tid,
-                           current_header.type,
-                           current_header.priority,
-                           current_header.version,
-                           msg_frame.front_len(),
-                           msg_frame.middle_len(),
-                           msg_frame.data_len(),
-                           current_header.data_off,
-                           peer_name,
-                           current_header.compat_version,
-                           current_header.reserved,
-                           0};
-    ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
+  ceph_msg_header header{current_header.seq,
+                         current_header.tid,
+                         current_header.type,
+                         current_header.priority,
+                         current_header.version,
+                         msg_frame.front_len(),
+                         msg_frame.middle_len(),
+                         msg_frame.data_len(),
+                         current_header.data_off,
+                         peer_name,
+                         current_header.compat_version,
+                         current_header.reserved,
+                         0};
+  ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
 
-    Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
-    if (!message) {
-      logger().warn("{} decode message failed", conn);
-      abort_in_fault();
+  Message *message = decode_message(nullptr, 0, header, footer,
+      msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
+  if (!message) {
+    logger().warn("{} decode message failed", conn);
+    abort_in_fault();
+  }
+
+  // store reservation size in message, so we don't get confused
+  // by messages entering the dispatch queue through other paths.
+  message->set_dispatch_throttle_size(msg_size);
+
+  message->set_throttle_stamp(throttle_stamp);
+  message->set_recv_stamp(recv_stamp);
+  message->set_recv_complete_stamp(ceph_clock_now());
+
+  // check received seq#.  if it is old, drop the message.
+  // note that incoming messages may skip ahead.  this is convenient for the
+  // client side queueing because messages can't be renumbered, but the (kernel)
+  // client will occasionally pull a message out of the sent queue to send
+  // elsewhere.  in that case it doesn't matter if we "got" it or not.
+  uint64_t cur_seq = conn.in_seq;
+  if (message->get_seq() <= cur_seq) {
+    logger().error("{} got old message {} <= {} {} {}, discarding",
+                   conn, message->get_seq(), cur_seq, message, *message);
+    if (HAVE_FEATURE(conn.features, RECONNECT_SEQ) &&
+        conf.ms_die_on_old_message) {
+      ceph_assert(0 == "old msgs despite reconnect_seq feature");
     }
-
-    // store reservation size in message, so we don't get confused
-    // by messages entering the dispatch queue through other paths.
-    message->set_dispatch_throttle_size(cur_msg_size);
-
-    message->set_throttle_stamp(throttle_stamp);
-    message->set_recv_stamp(recv_stamp);
-    message->set_recv_complete_stamp(ceph_clock_now());
-
-    // check received seq#.  if it is old, drop the message.
-    // note that incoming messages may skip ahead.  this is convenient for the
-    // client side queueing because messages can't be renumbered, but the (kernel)
-    // client will occasionally pull a message out of the sent queue to send
-    // elsewhere.  in that case it doesn't matter if we "got" it or not.
-    uint64_t cur_seq = conn.in_seq;
-    if (message->get_seq() <= cur_seq) {
-      logger().error("{} got old message {} <= {} {} {}, discarding",
-                     conn, message->get_seq(), cur_seq, message, *message);
-      if (HAVE_FEATURE(conn.features, RECONNECT_SEQ) &&
-          conf.ms_die_on_old_message) {
-        ceph_assert(0 == "old msgs despite reconnect_seq feature");
-      }
-      return;
-    } else if (message->get_seq() > cur_seq + 1) {
-      logger().error("{} missed message? skipped from seq {} to {}",
-                     conn, cur_seq, message->get_seq());
-      if (conf.ms_die_on_skipped_message) {
-        ceph_assert(0 == "skipped incoming seq");
-      }
+    return seastar::now();
+  } else if (message->get_seq() > cur_seq + 1) {
+    logger().error("{} missed message? skipped from seq {} to {}",
+                   conn, cur_seq, message->get_seq());
+    if (conf.ms_die_on_skipped_message) {
+      ceph_assert(0 == "skipped incoming seq");
     }
+  }
 
-    // note last received message.
-    conn.in_seq = message->get_seq();
-    logger().debug("{} received message m={} seq={} from={} type={} {}",
-                   conn, message, message->get_seq(), message->get_source(),
-                   header.type, *message);
+  // note last received message.
+  conn.in_seq = message->get_seq();
+  logger().debug("{} received message m={} seq={} from={} type={} {}",
+                 conn, message, message->get_seq(), message->get_source(),
+                 header.type, *message);
 
-    if (!conn.policy.lossy) {
-      // ++ack_left;
-    }
-    handle_message_ack(current_header.ack_seq);
+  if (!conn.policy.lossy) {
+    // ++ack_left;
+  }
+  handle_message_ack(current_header.ack_seq);
 
-    // TODO: change MessageRef with seastar::shared_ptr
-    auto msg_ref = MessageRef{message, false};
-    seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-      return dispatcher.ms_dispatch(
-          seastar::static_pointer_cast<SocketConnection>(
-            conn.shared_from_this()),
-          std::move(msg))
-      .handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-        ceph_assert(false);
-      });
-    });
+  // TODO: change MessageRef with seastar::shared_ptr
+  auto msg_ref = MessageRef{message, false};
+  return dispatcher.ms_dispatch(
+      seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this()),
+      std::move(msg_ref))
+  .handle_exception([this] (std::exception_ptr eptr) {
+    logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+    ceph_assert(false);
   });
 }
 
@@ -1508,7 +1505,17 @@ void ProtocolV2::execute_ready()
             }).then([this] {
               // TODO: throttle_dispatch_queue() logic
               utime_t throttle_stamp = ceph_clock_now();
-              return read_message(throttle_stamp);
+              return read_frame_payload()
+              .then([this, throttle_stamp] {
+                static thread_local auto stage = seastar::make_execution_stage(
+                    "read_message", &ProtocolV2::read_message);
+                seastar::with_gate(pending_dispatch, [this, throttle_stamp] {
+                  return stage(this,
+                               std::move(rx_segments_data),
+                               get_current_msg_size(),
+                               std::move(throttle_stamp));
+                });
+              });
             });
           }
           case Tag::ACK:
