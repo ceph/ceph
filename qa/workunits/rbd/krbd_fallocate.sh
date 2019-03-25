@@ -74,7 +74,7 @@ $(printf %x $IMAGE_SIZE)
 EOF
     [[ $(rados -p rbd ls | grep -c rbd_data.$IMAGE_ID) -eq $num_objects_expected ]]
     for ((i = 0; i < $num_objects_expected; i++)); do
-        rados -p rbd stat rbd_data.$IMAGE_ID.$(printf %016x $i) | grep "size $((OBJECT_SIZE / 2))"
+        rados -p rbd stat rbd_data.$IMAGE_ID.$(printf %016x $i) | egrep "(size $((OBJECT_SIZE / 2)))|(size 0)"
     done
 }
 
