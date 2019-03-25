@@ -1,12 +1,9 @@
 #!/bin/bash
 
-# This documents the state of things as of 4.12-rc4.
-#
 # - fallocate -z deallocates because BLKDEV_ZERO_NOUNMAP hint is ignored by
 # krbd
 #
-# - unaligned fallocate -z/-p appear to not deallocate -- see caveat #2 in
-# linux.git commit 6ac56951dc10 ("rbd: implement REQ_OP_WRITE_ZEROES")
+# - big unaligned blkdiscard and fallocate -z/-p leave the objects in place
 
 set -ex
 
@@ -107,7 +104,7 @@ assert_deallocated
 # unaligned blkdev_issue_discard
 allocate
 py_blkdiscard $((OBJECT_SIZE / 2))
-assert_deallocated_unaligned 1
+assert_deallocated_unaligned $NUM_OBJECTS
 
 # unaligned blkdev_issue_zeroout w/ BLKDEV_ZERO_NOUNMAP
 allocate
