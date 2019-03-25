@@ -105,8 +105,6 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
     { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
-    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
-    { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
     { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
     { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
     { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
@@ -147,6 +145,11 @@ rgw_http_errors rgw_http_swift_errors({
 rgw_http_errors rgw_http_sts_errors({
     { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
     { ERR_INVALID_IDENTITY_TOKEN, {400, "InvalidIdentityToken" }},
+});
+
+rgw_http_errors rgw_http_iam_errors({
+    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
+    { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
 });
 
 using namespace ceph::crypto;
@@ -300,6 +303,11 @@ void set_req_state_err(struct rgw_err& err,	/* out */
 
   if (prot_flags & RGW_REST_STS) {
     if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code))
+      return;
+  }
+
+  if (prot_flags & RGW_REST_IAM) {
+    if (search_err(rgw_http_iam_errors, err_no, err.http_ret, err.err_code))
       return;
   }
 
