@@ -17,7 +17,6 @@
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "rgw_rest_sts.h"
-#include "rgw_auth_s3.h"
 
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
@@ -345,13 +344,7 @@ int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
 
 void RGWHandler_REST_STS::rgw_sts_parse_input()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-
-  int ret = 0;
-  bufferlist data;
-  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  string post_body = data.to_str();
-  if (data.length() > 0) {
+  if (post_body.size() > 0) {
     ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
@@ -365,7 +358,6 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
            if (key == "RoleArn") {
             value = url_decode(value);
            }
-           ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
            s->info.args.append(key, value);
          }
        }
@@ -422,7 +414,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
   string req;
   string first;
 
-  s->prot_flags |= RGW_REST_STS;
+  s->prot_flags = RGW_REST_STS;
 
   const char *p, *req_name;
   if (req_name = s->relative_uri.c_str(); *req_name == '?') {
