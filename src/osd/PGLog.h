@@ -1027,6 +1027,9 @@ protected:
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
                        << " olog_can_rollback_to: "
                        << olog_can_rollback_to << dendl;
+    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                       << " original_crt: "
+                       << original_can_rollback_to << dendl;
     /// Distinguish between 4) and 5)
     for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	 i != entries.rend();
