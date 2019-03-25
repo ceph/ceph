@@ -145,6 +145,7 @@ private:
   uint64_t m_flags = 0;
   uint64_t m_op_features = 0;
 
+  librados::IoCtx m_pool_metadata_io_ctx;
   std::string m_last_metadata_key;
   std::map<std::string, bufferlist> m_metadata;
 

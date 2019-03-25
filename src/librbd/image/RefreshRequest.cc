@@ -47,6 +47,8 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, bool acquiring_lock,
     m_on_finish(create_async_context_callback(m_image_ctx, on_finish)),
     m_error_result(0), m_flush_aio(false), m_exclusive_lock(nullptr),
     m_object_map(nullptr), m_journal(nullptr), m_refresh_parent(nullptr) {
+  m_pool_metadata_io_ctx.dup(image_ctx.md_ctx);
+  m_pool_metadata_io_ctx.set_namespace("");
 }
 
 template <typename I>
@@ -553,7 +555,7 @@ void RefreshRequest<I>::send_v2_get_pool_metadata() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_v2_get_pool_metadata>(this);
   m_out_bl.clear();
-  m_image_ctx.md_ctx.aio_operate(RBD_INFO, comp, &op, &m_out_bl);
+  m_pool_metadata_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_out_bl);
   comp->release();
 }
 
