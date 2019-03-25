@@ -43,7 +43,8 @@ class StoreTool
 public:
   StoreTool(const std::string& type,
 	    const std::string& path,
-	    bool need_open_db=true);
+	    bool need_open_db = true,
+	    bool need_stats = false);
   int load_bluestore(const std::string& path, bool need_open_db);
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
@@ -74,4 +75,6 @@ public:
 		     const std::string& start,
 		     const std::string& end);
   int destructive_repair();
+
+  int print_stats() const;
 };

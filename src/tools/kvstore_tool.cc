@@ -10,9 +10,18 @@
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
-StoreTool::StoreTool(const string& type, const string& path, bool need_open_db)
+StoreTool::StoreTool(const string& type,
+		     const string& path,
+		     bool need_open_db,
+		     bool need_stats)
   : store_path(path)
 {
+
+  if (need_stats) {
+    g_conf()->rocksdb_perf = true;
+    g_conf()->rocksdb_collect_compaction_stats = true;
+  }
+
   if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
     if (load_bluestore(path, need_open_db) != 0)
@@ -198,6 +207,25 @@ void StoreTool::print_summary(const uint64_t total_keys, const uint64_t total_si
   std::cout << "  from '" << store_path << "' to '" << other_path << "'"
             << std::endl;
   std::cout << "  duration " << duration << " seconds" << std::endl;
+}
+
+int StoreTool::print_stats() const
+{
+  ostringstream ostr;
+  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  int ret = -1;
+  if (g_conf()->rocksdb_perf) {
+    db->get_statistics(f);
+    ostr << "db_statistics ";
+    f->flush(ostr);
+    ret = 0;
+  } else {
+    ostr << "db_statistics not enabled";
+    f->flush(ostr);
+  }
+  std::cout <<  ostr.str() << std::endl;
+  delete f;
+  return ret;
 }
 
 int StoreTool::copy_store_to(const string& type, const string& other_path,
