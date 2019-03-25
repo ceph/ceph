@@ -427,8 +427,7 @@ Description: debugging symbols for rbd-fuse
 
 Package: ceph-immutable-object-cache
 Architecture: linux-any
-Depends: ceph-common (= ${binary:Version}),
-         librados2 (= ${binary:Version}),
+Depends: librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: Ceph daemon for immutable object cache
