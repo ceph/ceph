@@ -466,7 +466,7 @@ int MonMap::init_with_ips(const std::string& ips,
     name = prefix;
     name += n;
     if (addrs[i].v.size() == 1) {
-      _add_ambiguous_addr(name, addrs[i].front(), 0, DEFAULT_WEIGHT, for_mkfs);
+      _add_ambiguous_addr(name, addrs[i].front(), 0, 0, for_mkfs);
     } else {
       // they specified an addrvec, so let's assume they also specified
       // the addr *type* and *port*.  (we could possibly improve this?)
@@ -501,7 +501,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     string name = prefix;
     name += n;
     if (addrs[i].v.size() == 1) {
-      _add_ambiguous_addr(name, addrs[i].front(), 0, DEFAULT_WEIGHT, false);
+      _add_ambiguous_addr(name, addrs[i].front(), 0, 0, false);
     } else {
       add(name, addrs[i], 0);
     }
