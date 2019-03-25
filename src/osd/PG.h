@@ -904,7 +904,7 @@ protected:
       if (item->is_delete())
 	return;
       auto mliter =
-	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
+	missing_loc.emplace(hoid, set<pg_shard_t>()).first;
       ceph_assert(info.last_backfill.is_max());
       ceph_assert(info.last_update >= item->need);
       if (!missing.is_missing(hoid))
@@ -1054,7 +1054,7 @@ public:
     void send_notify(pg_shard_t to,
 		     const pg_notify_t &info, const PastIntervals &pi) {
       ceph_assert(notify_list);
-      (*notify_list)[to.osd].push_back(make_pair(info, pi));
+      (*notify_list)[to.osd].emplace_back(info, pi);
     }
   };
 protected:
