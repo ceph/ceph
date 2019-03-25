@@ -486,10 +486,12 @@ std::string get_device_id(const std::string& devname,
     // sometimes, ID_MODEL is "LVM ..." but ID_MODEL_ENC is correct (but
     // encoded with \x20 for space).
     if (id_model.substr(0, 7) == "LVM PV ") {
-      std::string enc = udev_device_get_property_value(dev, "ID_MODEL_ENC");
-      enc = _decode_model_enc(enc);
-      if (enc.size()) {
-	id_model = enc;
+      const char *enc = udev_device_get_property_value(dev, "ID_MODEL_ENC");
+      if (enc) {
+	id_model = _decode_model_enc(enc);
+      } else {
+	// ignore ID_MODEL then
+	id_model.clear();
       }
     }
   }
