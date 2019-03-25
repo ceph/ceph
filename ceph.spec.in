@@ -586,7 +586,6 @@ Summary:	Ceph daemon for immutable object cache
 Group:		System/Filesystems
 %endif
 Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
-Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description immutable-object-cache
 Daemon for immutable object cache.
 
