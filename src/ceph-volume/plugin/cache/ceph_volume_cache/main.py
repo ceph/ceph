@@ -43,26 +43,33 @@ def _create_cache_lvs(vg_name, md_partition, data_partition):
     md_lv_size = md_partition_size - disk.Size(gb=1)
     data_lv_size = data_partition_size - disk.Size(gb=1)
 
+    # TODO: update tags
     cache_md_lv = api.create_lv('cache_metadata', vg_name, extents=None,
-        size=str(md_lv_size._b) + 'B', tags=None, uuid_name=True, pv=md_partition)
-    cache_md_lv.set_tag('cachetype', 'metadata')
-    cache_md_lv.set_tag('partition', md_partition)
+        size=str(md_lv_size._b) + 'B', tags=None, uuid_name=False, pv=md_partition)
+    cache_md_lv.set_tag('ceph.cachetype', 'metadata')
+    cache_md_lv.set_tag('ceph.partition', md_partition)
     cache_data_lv = api.create_lv('cache_data', vg_name, extents=None,
-        size=str(data_lv_size._b) + 'B', tags=None, uuid_name=True, pv=data_partition)
-    cache_data_lv.set_tag('cachetype', 'data')
-    cache_md_lv.set_tag('partition', data_partition)
-    cache_md_lv.set_tag('metadata', cache_md_lv.name)
+        size=str(data_lv_size._b) + 'B', tags=None, uuid_name=False, pv=data_partition)
+    cache_data_lv.set_tag('ceph.cachetype', 'data')
+    cache_data_lv.set_tag('ceph.partition', data_partition)
+    # TODO: this tags is probably not needed, we can get it using '_cmeta'
+    cache_md_lv.set_tag('ceph.metadata', cache_md_lv.name)
 
     return cache_md_lv, cache_data_lv
 
 
 def _create_lvmcache(vg_name, osd_lv_name, cache_metadata_lv_name, cache_data_lv_name):
+    osd_lv = api.get_lv(lv_name=osd_lv_name, vg_name=vg_name)
     # TODO: test that cache data is greater than metadata
     api.create_lvmcache_pool(vg_name, cache_data_lv_name, cache_metadata_lv_name)
-    cachelv = api.create_lvmcache(vg_name, cache_data_lv_name, osd_lv_name)
+    api.create_lvmcache(vg_name, cache_data_lv_name, osd_lv_name)
+
+    osd_lv.set_tag('ceph.cache_lv', cache_data_lv_name)
     api.set_lvmcache_caching_mode('writeback', vg_name, osd_lv_name)
 
-    return cachelv
+    _cache_data_lv_name = '[' + cache_data_lv_name + ']'
+    cache_lv = api.get_lv(lv_name=_cache_data_lv_name, vg_name=vg_name)
+    return cache_lv
 
 
 def add_lvmcache(vgname, osd_lv_name, md_partition, cache_data_partition):
@@ -80,6 +87,26 @@ def add_lvmcache(vgname, osd_lv_name, md_partition, cache_data_partition):
     return cachelv
 
 
+def rm_lvmcache(vgname, osd_lv_name):
+    osd_lv = api.get_lv(lv_name=osd_lv_name, vg_name=vgname)
+    if osd_lv.tags['ceph.cache_lv'] is None or len(osd_lv.tags['ceph.cache_lv']) == 0:
+        print('Can\'t find cache data lv')
+        return
+    vg = api.get_vg(vg_name=vgname)
+    cache_lv_name = osd_lv.tags['ceph.cache_lv']
+
+    # get the partitions before removing the LVs
+    data_lv_name = '[' + osd_lv.tags['ceph.cache_lv'] + '_cdata]'
+    meta_lv_name = '[' + osd_lv.tags['ceph.cache_lv'] + '_cmeta]'
+    data_lv = api.get_lv(lv_name=data_lv_name, vg_name=vgname)
+    meta_lv = api.get_lv(lv_name=meta_lv_name, vg_name=vgname)
+    data_partition = data_lv.tags['ceph.partition']
+    md_partition = meta_lv.tags['ceph.partition']
+
+    api.remove_lv(vgname + '/' + cache_lv_name)
+    api.reduce_vg(vg, [data_partition, md_partition])
+
+
 class Cache(object):
 
     help_menu = 'Deploy Cache'
@@ -91,6 +118,10 @@ $> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data 
 or:
 
 $> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data partition> --osdid <osd id>
+
+Remove cache:
+
+$> ceph-volume cache rm --osdid <id>
     """
     name = 'cache'
 
@@ -160,11 +191,16 @@ $> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data 
             osd_lv_name = args.osddata
             vg_name = args.volumegroup
 
-        add_lvmcache(
-            vg_name,
-            osd_lv_name,
-            args.cachemetadata,
-            args.cachedata)
+        # TODO make sure the OSD exists (ie is on this node)
+        if self.argv[0] == 'add':
+            add_lvmcache(
+                vg_name,
+                osd_lv_name,
+                args.cachemetadata,
+                args.cachedata)
+        elif self.argv[0] == 'rm':
+            # TODO verify that the OSD has a cache
+            rm_lvmcache(vg_name, osd_lv_name)
 
 
 if __name__ == '__main__':
