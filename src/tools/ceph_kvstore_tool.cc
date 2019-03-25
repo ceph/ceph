@@ -47,6 +47,7 @@ void usage(const char *pname)
     << "  compact-prefix <prefix>\n"
     << "  compact-range <prefix> <start> <end>\n"
     << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
+    << "  stats\n"
     << std::endl;
 }
 
@@ -97,7 +98,8 @@ int main(int argc, const char *argv[])
   }
 
   bool need_open_db = (cmd != "destructive-repair");
-  StoreTool st(type, path, need_open_db);
+  bool need_stats = (cmd == "stats");
+  StoreTool st(type, path, need_open_db, need_stats);
 
   if (cmd == "destructive-repair") {
     int ret = st.destructive_repair();
@@ -343,6 +345,8 @@ int main(int argc, const char *argv[])
     string start(url_unescape(argv[5]));
     string end(url_unescape(argv[6]));
     st.compact_range(prefix, start, end);
+  } else if (cmd == "stats") {
+    st.print_stats();
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;
