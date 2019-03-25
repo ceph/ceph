@@ -269,6 +269,7 @@ class PgAutoscaler(MgrModule):
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
             pool_logical_used = pool_stats[pool_id]['bytes_used']
+            bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
@@ -282,16 +283,17 @@ class PgAutoscaler(MgrModule):
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
-            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate
+            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate * bias
 
             final_pg_target = max(p['options'].get('pg_num_min', PG_NUM_MIN),
                                   nearest_power_of_two(pool_pg_target))
 
-            self.log.info("Pool '{0}' root_id {1} using {2} of space, "
-                          "pg target {3} quantized to {4} (current {5})".format(
+            self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
+                          "pg target {4} quantized to {5} (current {6})".format(
                               p['pool_name'],
                               root_id,
                               final_ratio,
+                              bias,
                               pool_pg_target,
                               final_pg_target,
                               p['pg_num_target']
