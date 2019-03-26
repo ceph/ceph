@@ -398,8 +398,9 @@ public:
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
-  void reg_next_scrub();
-  void unreg_next_scrub();
+
+  void reg_next_scrub() override;
+  void unreg_next_scrub() override;
 
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
@@ -924,6 +925,8 @@ protected:
 
 public:
   bool dne() { return info.dne(); }
+
+  virtual void send_cluster_message(int osd, Message *m, epoch_t epoch);
 
 protected:
   bool need_up_thru; ///< Flag indicating that this pg needs up through published
@@ -1979,7 +1982,9 @@ protected:
   void start_flush(ObjectStore::Transaction *t);
   void set_last_peering_reset();
 
-  void update_history(const pg_history_t& history);
+  void update_history(const pg_history_t& history) {
+    recovery_state.update_history(history);
+  }
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);

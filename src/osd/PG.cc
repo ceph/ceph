@@ -31,7 +31,6 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGNotify.h"
 // #include "messages/MOSDPGLog.h"
-#include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
@@ -2385,7 +2384,7 @@ void PG::_finish_recovery(Context *c)
   if (c == finish_sync_event) {
     dout(10) << "_finish_recovery" << dendl;
     finish_sync_event = 0;
-    purge_strays();
+    recovery_state.purge_strays();
 
     publish_stats_to_osd();
 
@@ -2872,53 +2871,6 @@ void PG::cancel_recovery()
   clear_recovery_state();
 }
 
-
-void PG::purge_strays()
-{
-  if (is_premerge()) {
-    dout(10) << "purge_strays " << stray_set << " but premerge, doing nothing"
-	     << dendl;
-    return;
-  }
-  if (cct->_conf.get_val<bool>("osd_debug_no_purge_strays")) {
-    return;
-  }
-  dout(10) << "purge_strays " << stray_set << dendl;
-  
-  bool removed = false;
-  for (set<pg_shard_t>::iterator p = stray_set.begin();
-       p != stray_set.end();
-       ++p) {
-    ceph_assert(!is_acting_recovery_backfill(*p));
-    if (get_osdmap()->is_up(p->osd)) {
-      dout(10) << "sending PGRemove to osd." << *p << dendl;
-      vector<spg_t> to_remove;
-      to_remove.push_back(spg_t(info.pgid.pgid, p->shard));
-      MOSDPGRemove *m = new MOSDPGRemove(
-	get_osdmap_epoch(),
-	to_remove);
-      osd->send_message_osd_cluster(p->osd, m, get_osdmap_epoch());
-    } else {
-      dout(10) << "not sending PGRemove to down osd." << *p << dendl;
-    }
-    peer_missing.erase(*p);
-    peer_info.erase(*p);
-    peer_purged.insert(*p);
-    removed = true;
-  }
-
-  // if we removed anyone, update peers (which include peer_info)
-  if (removed)
-    recovery_state.update_heartbeat_peers();
-
-  stray_set.clear();
-
-  // clear _requested maps; we may have to peer() again if we discover
-  // (more) stray content
-  peer_log_requested.clear();
-  peer_missing_requested.clear();
-}
-
 void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
 {
   std::lock_guard l(heartbeat_peer_lock);
@@ -2928,6 +2880,11 @@ void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
        ++i) {
     probe_targets.insert(i->osd);
   }
+}
+
+void PG::send_cluster_message(int target, Message *m, epoch_t epoch)
+{
+  osd->send_message_osd_cluster(target, m, epoch);
 }
 
 void PG::clear_probe_targets()
@@ -5816,21 +5773,6 @@ void PG::merge_new_log_entries(
       peer_missing,
       peer_info);
   }
-}
-
-void PG::update_history(const pg_history_t& new_history)
-{
-  unreg_next_scrub();
-  if (info.history.merge(new_history)) {
-    dout(20) << __func__ << " advanced history from " << new_history << dendl;
-    dirty_info = true;
-    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
-      dout(20) << __func__ << " clearing past_intervals" << dendl;
-      past_intervals.clear();
-      dirty_big_info = true;
-    }
-  }
-  reg_next_scrub();
 }
 
 void PG::fulfill_info(
