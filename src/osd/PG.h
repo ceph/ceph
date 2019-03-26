@@ -1609,6 +1609,16 @@ protected:
   uint64_t get_num_unfound() const {
     return missing_loc.num_unfound();
   }
+  bool all_missing_unfound() const {
+    const auto& missing = pg_log.get_missing();
+    if (!missing.have_missing())
+      return false;
+    for (auto& m : missing.get_items()) {
+      if (!missing_loc.is_unfound(m.first))
+        return false;
+    }
+    return true;
+  }
 
   virtual void check_local() = 0;
 
