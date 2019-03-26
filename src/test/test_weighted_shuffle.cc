@@ -27,7 +27,7 @@ TEST(WeightedShuffle, Basic) {
   // verify that the probability that the nth choice is selected as the first
   // one is the nth weight divided by the sum of all weights
   const auto total_weight = std::accumulate(weights.begin(), weights.end(), 0);
-  constexpr float epsilon = 0.01;
+  constexpr float epsilon = 0.02;
   for (unsigned i = 0; i < choices.size(); i++) {
     const auto& f = frequency[choices[i]];
     const auto& w = weights[i];
