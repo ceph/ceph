@@ -76,6 +76,7 @@ std::ostream& operator<<(std::ostream& os,
 
 typedef std::vector<OSDPerfMetricSubKeyDescriptor> OSDPerfMetricKeyDescriptor;
 
+namespace ceph {
 template<>
 struct denc_traits<OSDPerfMetricKeyDescriptor> {
   static constexpr bool supported = true;
@@ -125,6 +126,7 @@ struct denc_traits<OSDPerfMetricKeyDescriptor> {
     }
   }
 };
+}
 
 typedef std::pair<uint64_t,uint64_t> PerformanceCounter;
 typedef std::vector<PerformanceCounter> PerformanceCounters;
@@ -196,6 +198,7 @@ std::ostream& operator<<(std::ostream& os,
 
 typedef std::vector<PerformanceCounterDescriptor> PerformanceCounterDescriptors;
 
+namespace ceph {
 template<>
 struct denc_traits<PerformanceCounterDescriptors> {
   static constexpr bool supported = true;
@@ -233,6 +236,7 @@ struct denc_traits<PerformanceCounterDescriptors> {
     }
   }
 };
+}
 
 struct OSDPerfMetricLimit {
   PerformanceCounterDescriptor order_by;

@@ -112,6 +112,7 @@ ostream& operator<<(ostream& out, const bluestore_pextent_t& o);
 
 typedef mempool::bluestore_cache_other::vector<bluestore_pextent_t> PExtentVector;
 
+namespace ceph {
 template<>
 struct denc_traits<PExtentVector> {
   static constexpr bool supported = true;
@@ -144,6 +145,7 @@ struct denc_traits<PExtentVector> {
     }
   }
 };
+}
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {

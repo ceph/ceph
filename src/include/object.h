@@ -126,6 +126,7 @@ struct snapid_t {
 inline void encode(snapid_t i, bufferlist &bl) { encode(i.val, bl); }
 inline void decode(snapid_t &i, bufferlist::const_iterator &p) { decode(i.val, p); }
 
+namespace ceph {
 template<>
 struct denc_traits<snapid_t> {
   static constexpr bool supported = true;
@@ -142,6 +143,7 @@ struct denc_traits<snapid_t> {
     denc(o.val, p);
   }
 };
+}
 
 inline ostream& operator<<(ostream& out, const snapid_t& s) {
   if (s == CEPH_NOSNAP)

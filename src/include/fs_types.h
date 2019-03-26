@@ -29,6 +29,7 @@ struct inodeno_t {
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
 
+namespace ceph {
 template<>
 struct denc_traits<inodeno_t> {
   static constexpr bool supported = true;
@@ -45,6 +46,7 @@ struct denc_traits<inodeno_t> {
     denc(o.val, p);
   }
 };
+}
 
 inline ostream& operator<<(ostream& out, const inodeno_t& ino) {
   return out << hex << "0x" << ino.val << dec;

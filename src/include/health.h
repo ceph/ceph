@@ -26,6 +26,7 @@ inline void decode(health_status_t& hs, bufferlist::const_iterator& p) {
   decode(v, p);
   hs = health_status_t(v);
 }
+namespace ceph {
 template<>
 struct denc_traits<health_status_t> {
   static constexpr bool supported = true;
@@ -53,6 +54,7 @@ struct denc_traits<health_status_t> {
     v = health_status_t(tmp);
   }
 };
+}
 
 inline std::ostream& operator<<(std::ostream &oss, const health_status_t status) {
   switch (status) {
