@@ -5,6 +5,7 @@ overrides:
         ms type: async
         ms bind msgr2: true
         ms bind msgr1: false
+        mon warn on msgr2 not enabled: false
 tasks:
 - install:
     branch: nautilus
