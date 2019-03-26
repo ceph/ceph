@@ -1,6 +1,8 @@
 #ifndef FS_CEPH_FRAG_H
 #define FS_CEPH_FRAG_H
 
+#include "int_types.h"
+
 /*
  * "Frags" are a way to describe a subset of a 32-bit number space,
  * using a mask and a value to match against that mask.  Any given frag
