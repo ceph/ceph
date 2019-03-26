@@ -1,14 +1,8 @@
 import { NgModule } from '@angular/core';
-import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
+import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from '@angular/router';
 
 import * as _ from 'lodash';
 
-import { IscsiTargetFormComponent } from './ceph/block/iscsi-target-form/iscsi-target-form.component';
-import { IscsiTargetListComponent } from './ceph/block/iscsi-target-list/iscsi-target-list.component';
-import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
-import { OverviewComponent as RbdMirroringComponent } from './ceph/block/mirroring/overview/overview.component';
-import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
-import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
@@ -25,20 +19,8 @@ import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
-import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
-import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
-import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
-import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
-import { RgwBucketListComponent } from './ceph/rgw/rgw-bucket-list/rgw-bucket-list.component';
-import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-list.component';
-import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
-import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
-import { RoleFormComponent } from './core/auth/role-form/role-form.component';
-import { RoleListComponent } from './core/auth/role-list/role-list.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
-import { UserFormComponent } from './core/auth/user-form/user-form.component';
-import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
@@ -98,12 +80,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/OSDs' },
-    children: [
-      {
-        path: '',
-        component: OsdListComponent
-      }
-    ]
+    children: [{ path: '', component: OsdListComponent }]
   },
   {
     path: 'configuration',
@@ -169,11 +146,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Pools' },
-    children: [
-      { path: '', component: PoolListComponent },
-      { path: 'add', component: PoolFormComponent, data: { breadcrumbs: 'Add' } },
-      { path: 'edit/:name', component: PoolFormComponent, data: { breadcrumbs: 'Edit' } }
-    ]
+    loadChildren: './ceph/pool/pool.module#RoutedPoolModule'
   },
   // Block
   {
@@ -181,71 +154,7 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService],
     canActivate: [AuthGuardService],
     data: { breadcrumbs: true, text: 'Block', path: null },
-    children: [
-      {
-        path: '',
-        redirectTo: 'rbd',
-        pathMatch: 'full'
-      },
-      {
-        path: 'rbd',
-        canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'Images' },
-        children: [
-          { path: '', component: RbdImagesComponent },
-          { path: 'add', component: RbdFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Edit' } },
-          {
-            path: 'clone/:pool/:name/:snap',
-            component: RbdFormComponent,
-            data: { breadcrumbs: 'Clone' }
-          },
-          { path: 'copy/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Copy' } },
-          {
-            path: 'copy/:pool/:name/:snap',
-            component: RbdFormComponent,
-            data: { breadcrumbs: 'Copy' }
-          }
-        ]
-      },
-      {
-        path: 'mirroring',
-        component: RbdMirroringComponent,
-        canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'Mirroring' }
-      },
-      // iSCSI
-      {
-        path: 'iscsi',
-        canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'iSCSI' },
-        children: [
-          {
-            path: '',
-            redirectTo: 'overview',
-            pathMatch: 'full'
-          },
-          {
-            path: 'overview',
-            data: { breadcrumbs: 'Overview' },
-            children: [{ path: '', component: IscsiComponent }]
-          },
-          {
-            path: 'targets',
-            data: { breadcrumbs: 'Targets' },
-            children: [
-              { path: '', component: IscsiTargetListComponent },
-              { path: 'add', component: IscsiTargetFormComponent, data: { breadcrumbs: 'Add' } },
-              {
-                path: 'edit/:target_iqn',
-                component: IscsiTargetFormComponent,
-                data: { breadcrumbs: 'Edit' }
-              }
-            ]
-          }
-        ]
-      }
-    ]
+    loadChildren: './ceph/block/block.module#RoutedBlockModule'
   },
   // Filesystems
   {
@@ -255,12 +164,6 @@ const routes: Routes = [
     data: { breadcrumbs: 'Filesystems' }
   },
   // Object Gateway
-  {
-    path: 'rgw/501/:message',
-    component: Rgw501Component,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Object Gateway' }
-  },
   {
     path: 'rgw',
     canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService, AuthGuardService],
@@ -273,27 +176,7 @@ const routes: Routes = [
       text: 'Object Gateway',
       path: null
     },
-    children: [
-      { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Daemons' } },
-      {
-        path: 'user',
-        data: { breadcrumbs: 'Users' },
-        children: [
-          { path: '', component: RgwUserListComponent },
-          { path: 'add', component: RgwUserFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:uid', component: RgwUserFormComponent, data: { breadcrumbs: 'Edit' } }
-        ]
-      },
-      {
-        path: 'bucket',
-        data: { breadcrumbs: 'Buckets' },
-        children: [
-          { path: '', component: RgwBucketListComponent },
-          { path: 'add', component: RgwBucketFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:bid', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
-        ]
-      }
-    ]
+    loadChildren: './ceph/rgw/rgw.module#RoutedRgwModule'
   },
   // Dashboard Settings
   {
@@ -301,31 +184,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'User management', path: null },
-    children: [
-      {
-        path: '',
-        redirectTo: 'users',
-        pathMatch: 'full'
-      },
-      {
-        path: 'users',
-        data: { breadcrumbs: 'Users' },
-        children: [
-          { path: '', component: UserListComponent },
-          { path: 'add', component: UserFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:username', component: UserFormComponent, data: { breadcrumbs: 'Edit' } }
-        ]
-      },
-      {
-        path: 'roles',
-        data: { breadcrumbs: 'Roles' },
-        children: [
-          { path: '', component: RoleListComponent },
-          { path: 'add', component: RoleFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:name', component: RoleFormComponent, data: { breadcrumbs: 'Edit' } }
-        ]
-      }
-    ]
+    loadChildren: './core/auth/auth.module#RoutedAuthModule'
   },
   // NFS
   {
@@ -366,7 +225,12 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes, { useHash: true })],
+  imports: [
+    RouterModule.forRoot(routes, {
+      useHash: true,
+      preloadingStrategy: PreloadAllModules
+    })
+  ],
   exports: [RouterModule],
   providers: [StartCaseBreadcrumbsResolver, PerformanceCounterBreadcrumbsResolver]
 })

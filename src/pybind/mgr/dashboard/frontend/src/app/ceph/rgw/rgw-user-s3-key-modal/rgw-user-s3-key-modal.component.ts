@@ -1,9 +1,11 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -24,8 +26,16 @@ export class RgwUserS3KeyModalComponent {
   formGroup: CdFormGroup;
   viewing = true;
   userCandidates: string[] = [];
+  resource: string;
+  action: string;
 
-  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public bsModalRef: BsModalRef,
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('S3 Key');
     this.createForm();
     this.listenToChanges();
   }
@@ -57,6 +67,7 @@ export class RgwUserS3KeyModalComponent {
    * @param {boolean} viewing
    */
   setViewing(viewing: boolean = true) {
+    this.action = this.actionLabels.SHOW;
     this.viewing = viewing;
   }
 
