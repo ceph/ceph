@@ -12,6 +12,8 @@
  * 
  */
 
+#include <algorithm>
+#include <iterator>
 #include <random>
 
 #include "include/scope_guard.h"
@@ -1602,14 +1604,8 @@ int MonConnection::handle_auth_bad_method(
   auto p = std::find(auth_supported.begin(), auth_supported.end(),
 		     old_auth_method);
   assert(p != auth_supported.end());
-
-  while (p != auth_supported.end()) {
-    ++p;
-    if (std::find(allowed_methods.begin(), allowed_methods.end(), *p) !=
-	allowed_methods.end()) {
-      break;
-    }
-  }
+  p = std::find_first_of(std::next(p), auth_supported.end(),
+			 allowed_methods.begin(), allowed_methods.end());
   if (p == auth_supported.end()) {
     lderr(cct) << __func__ << " server allowed_methods " << allowed_methods
 	       << " but i only support " << auth_supported << dendl;
