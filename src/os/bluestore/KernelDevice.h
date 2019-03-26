@@ -45,7 +45,7 @@ class KernelDevice : public BlockDevice {
   std::atomic<bool> io_since_flush = {false};
   ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
 
-  aio_queue_t aio_queue;
+  std::unique_ptr<io_queue_t> io_queue;
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;

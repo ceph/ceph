@@ -93,7 +93,19 @@ typedef boost::intrusive::list<
     boost::intrusive::list_member_hook<>,
     &aio_t::queue_item> > aio_list_t;
 
-struct aio_queue_t {
+struct io_queue_t {
+  typedef list<aio_t>::iterator aio_iter;
+
+  virtual ~io_queue_t() {};
+
+  virtual int init(std::vector<int> &fds) = 0;
+  virtual void shutdown() = 0;
+  virtual int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
+			   void *priv, int *retries) = 0;
+  virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
+};
+
+struct aio_queue_t : public io_queue_t {
   int max_iodepth;
 #if defined(HAVE_LIBAIO)
   io_context_t ctx;
@@ -101,17 +113,16 @@ struct aio_queue_t {
   int ctx;
 #endif
 
-  typedef list<aio_t>::iterator aio_iter;
-
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),
       ctx(0) {
   }
-  ~aio_queue_t() {
+  ~aio_queue_t() final {
     ceph_assert(ctx == 0);
   }
 
-  int init() {
+  int init(std::vector<int> &fds) final {
+    (void)fds;
     ceph_assert(ctx == 0);
 #if defined(HAVE_LIBAIO)
     int r = io_setup(max_iodepth, &ctx);
@@ -130,7 +141,7 @@ struct aio_queue_t {
       return 0;
 #endif
   }
-  void shutdown() {
+  void shutdown() final {
     if (ctx) {
 #if defined(HAVE_LIBAIO)
       int r = io_destroy(ctx);
@@ -142,7 +153,7 @@ struct aio_queue_t {
     }
   }
 
-  int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size, 
-		   void *priv, int *retries);
-  int get_next_completed(int timeout_ms, aio_t **paio, int max);
+  int submit_batch(aio_iter begin, aio_iter end, uint16_t aios_size,
+		   void *priv, int *retries) final;
+  int get_next_completed(int timeout_ms, aio_t **paio, int max) final;
 };

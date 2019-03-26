@@ -42,7 +42,6 @@
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
-    aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
@@ -54,6 +53,9 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
 {
   fd_directs.resize(WRITE_LIFE_MAX, -1);
   fd_buffereds.resize(WRITE_LIFE_MAX, -1);
+
+  unsigned int iodepth = cct->_conf->bdev_aio_max_queue_depth;
+  io_queue = std::unique_ptr<io_queue_t>(new aio_queue_t(iodepth));
 }
 
 int KernelDevice::_lock()
@@ -414,7 +416,7 @@ int KernelDevice::_aio_start()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
-    int r = aio_queue.init();
+    int r = io_queue->init(fd_directs);
     if (r < 0) {
       if (r == -EAGAIN) {
 	derr << __func__ << " io_setup(2) failed with EAGAIN; "
@@ -436,7 +438,7 @@ void KernelDevice::_aio_stop()
     aio_stop = true;
     aio_thread.join();
     aio_stop = false;
-    aio_queue.shutdown();
+    io_queue->shutdown();
   }
 }
 
@@ -496,7 +498,7 @@ void KernelDevice::_aio_thread()
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
     aio_t *aio[max];
-    int r = aio_queue.get_next_completed(cct->_conf->bdev_aio_poll_ms,
+    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
@@ -761,7 +763,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  r = aio_queue.submit_batch(ioc->running_aios.begin(), e,
+  r = io_queue->submit_batch(ioc->running_aios.begin(), e,
 			     pending, priv, &retries);
 
   if (retries)
