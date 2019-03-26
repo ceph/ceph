@@ -103,13 +103,6 @@ int main(int argc, char* argv[])
           reference_wrapper<ceph::net::Messenger>(client_msgr.local()),
           reference_wrapper<ceph::net::Messenger>(hb_front_msgr.local()),
           reference_wrapper<ceph::net::Messenger>(hb_back_msgr.local())).get();
-        if (config.count("mkfs")) {
-          osd.invoke_on(0, &OSD::mkfs,
-                        local_conf().get_val<uuid_d>("fsid"))
-            .then([] { seastar::engine().exit(0); }).get();
-        } else {
-          osd.invoke_on(0, &OSD::start).get();
-        }
         seastar::engine().at_exit([&] {
           return osd.stop();
         });
@@ -125,6 +118,14 @@ int main(int argc, char* argv[])
         seastar::engine().at_exit([] {
           return sharded_conf().stop();
         });
+
+        if (config.count("mkfs")) {
+          osd.invoke_on(0, &OSD::mkfs,
+                        local_conf().get_val<uuid_d>("fsid"))
+            .then([] { seastar::engine().exit(0); }).get();
+        } else {
+          osd.invoke_on(0, &OSD::start).get();
+        }
       });
     });
   } catch (...) {
