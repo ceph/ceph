@@ -15,12 +15,12 @@ enum health_status_t {
   HEALTH_OK = 2,
 };
 
-inline void encode(health_status_t hs, bufferlist& bl) {
+inline void encode(health_status_t hs, ceph::buffer::list& bl) {
   using ceph::encode;
   uint8_t v = hs;
   encode(v, bl);
 }
-inline void decode(health_status_t& hs, bufferlist::const_iterator& p) {
+inline void decode(health_status_t& hs, ceph::buffer::list::const_iterator& p) {
   using ceph::decode;
   uint8_t v;
   decode(v, p);
@@ -39,18 +39,21 @@ struct denc_traits<health_status_t> {
   static void encode(const health_status_t& v,
 		     buffer::list::contiguous_appender& p,
 		     uint64_t f=0) {
-    ::denc((uint8_t)v, p);
+    using ceph::denc;
+    denc((uint8_t)v, p);
   }
   static void decode(health_status_t& v, buffer::ptr::const_iterator& p,
 		     uint64_t f=0) {
     uint8_t tmp;
-    ::denc(tmp, p);
+    using ceph::denc;
+    denc(tmp, p);
     v = health_status_t(tmp);
   }
   static void decode(health_status_t& v, buffer::list::const_iterator& p,
 		     uint64_t f=0) {
     uint8_t tmp;
-    ::denc(tmp, p);
+    using ceph::denc;
+    denc(tmp, p);
     v = health_status_t(tmp);
   }
 };

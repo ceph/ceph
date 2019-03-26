@@ -336,31 +336,31 @@ class interval_set {
   }
 
   void bound_encode(size_t& p) const {
-    denc_traits<Map>::bound_encode(m, p);
+    ceph::denc_traits<Map>::bound_encode(m, p);
   }
-  void encode(bufferlist::contiguous_appender& p) const {
-    denc(m, p);
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
+    ceph::denc(m, p);
   }
-  void decode(bufferptr::const_iterator& p) {
-    denc(m, p);
+  void decode(ceph::buffer::ptr::const_iterator& p) {
+    ceph::denc(m, p);
     _size = 0;
     for (const auto& i : m) {
       _size += i.second;
     }
   }
-  void decode(bufferlist::iterator& p) {
-    denc(m, p);
+  void decode(ceph::buffer::list::iterator& p) {
+    ceph::denc(m, p);
     _size = 0;
     for (const auto& i : m) {
       _size += i.second;
     }
   }
 
-  void encode_nohead(bufferlist::contiguous_appender& p) const {
-    denc_traits<Map>::encode_nohead(m, p);
+  void encode_nohead(ceph::buffer::list::contiguous_appender& p) const {
+    ceph::denc_traits<Map>::encode_nohead(m, p);
   }
-  void decode_nohead(int n, bufferptr::const_iterator& p) {
-    denc_traits<Map>::decode_nohead(n, m, p);
+  void decode_nohead(int n, ceph::buffer::ptr::const_iterator& p) {
+    ceph::denc_traits<Map>::decode_nohead(n, m, p);
     _size = 0;
     for (const auto& i : m) {
       _size += i.second;
@@ -732,6 +732,7 @@ private:
 
 // declare traits explicitly because (1) it's templatized, and (2) we
 // want to include _nohead variants.
+namespace ceph {
 template<typename T, typename Map>
 struct denc_traits<interval_set<T,Map>> {
   static constexpr bool supported = true;
@@ -762,6 +763,7 @@ struct denc_traits<interval_set<T,Map>> {
     v.decode_nohead(n, p);
   }
 };
+}
 
 
 template<class T, typename Map>

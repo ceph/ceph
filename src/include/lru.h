@@ -17,10 +17,9 @@
 #ifndef CEPH_LRU_H
 #define CEPH_LRU_H
 
-#include <math.h>
-#include <stdint.h>
+#include <cmath>
+#include <cstdint>
 
-#include "common/config.h"
 #include "xlist.h"
 
 class LRUObject {

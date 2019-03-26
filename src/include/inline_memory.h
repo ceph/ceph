@@ -14,15 +14,19 @@
 #ifndef CEPH_INLINE_MEMORY_H
 #define CEPH_INLINE_MEMORY_H
 
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+
 #if defined(__GNUC__)
 
 // optimize for the common case, which is very small copies
 static inline void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
-				       size_t inline_len)
+					size_t inline_len)
   __attribute__((always_inline));
 
 void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
-			 size_t inline_len)
+			  size_t inline_len)
 {
   if (l > inline_len) {
     return memcpy(dest, src, l);
