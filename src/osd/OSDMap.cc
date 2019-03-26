@@ -4354,15 +4354,16 @@ int OSDMap::calc_pg_upmaps(
   map<int,float> osd_weight;
   for (auto& i : pools) {
     if (!only_pools.empty() && !only_pools.count(i.first))
-	continue;
+      continue;
     for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
-	pg_t pg(ps, i.first);
-	vector<int> up;
-	tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
-	for (auto osd : up) {
-	  if (osd != CRUSH_ITEM_NONE)
-	    pgs_by_osd[osd].insert(pg);
-	}
+      pg_t pg(ps, i.first);
+      vector<int> up;
+      tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+      ldout(cct, 20) << __func__ << " " << pg << " up " << up << dendl;
+      for (auto osd : up) {
+        if (osd != CRUSH_ITEM_NONE)
+	  pgs_by_osd[osd].insert(pg);
+      }
     }
     total_pgs += i.second.get_size() * i.second.get_pg_num();
 
@@ -4371,7 +4372,10 @@ int OSDMap::calc_pg_upmaps(
 				      i.second.get_type(),
 				      i.second.get_size());
     tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
-    ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
+    ldout(cct,20) << __func__ << " pool " << i.first
+                  << " ruleno " << ruleno
+                  << " weight-map " << pmap
+                  << dendl;
     for (auto p : pmap) {
       auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
       if (adjusted_weight == 0) {
@@ -4665,6 +4669,8 @@ int OSDMap::calc_pg_upmaps(
       candidates.reserve(tmp.pg_upmap_items.size());
       for (auto& i : tmp.pg_upmap_items) {
         if (to_skip.count(i.first))
+          continue;
+        if (!only_pools.empty() && !only_pools.count(i.first.pool()))
           continue;
         candidates.push_back(make_pair(i.first, i.second));
       }
