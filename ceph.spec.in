@@ -1070,7 +1070,7 @@ integrated with the Ceph Manager Dashboard web UI.
 %build
 
 %if 0%{?rhel} == 7
-. /opt/rh/devtoolset-7/enable
+. /opt/rh/devtoolset-8/enable
 %endif
 
 %if 0%{with cephfs_java}
