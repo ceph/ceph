@@ -2363,11 +2363,12 @@ public:
                                   RGWObjVersionTracker *objv_tracker,
                                   ceph::real_time *pmtime,
                                   map<string, bufferlist> *pattrs) {
+    bufferlist bl;
     RGWSI_MBSObj_GetParams params = {
       .pmtime = pmtime,
       .pattrs = pattrs,
+      .pbl = &bl;
     };
-    bufferlist bl;
     int ret = meta_be->get_entry(ctx, params,
                                  objv_tracker);
     if (ret < 0) {
@@ -2394,9 +2395,8 @@ public:
       .pattrs = pattrs,
     };
     ceph::encode(be, params.bl);
-    int ret = meta_be->put(ctx, params,
-                           objv_tracker,
-                           APPLY_ALWAYS);
+    int ret = meta_be->put_entry(ctx, params,
+                                 objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -2411,9 +2411,8 @@ public:
     RGWSI_MBSObj_RemoveParams params = {
       .mtime = mtime,
     };
-    int ret = meta_be->remove(ctx, params,
-                              objv_tracker,
-                              APPLY_ALWAYS);
+    int ret = meta_be->do_remove(ctx, params,
+                                 objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -2839,17 +2838,83 @@ pubic:
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
+  int read_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
+                                 string& entry,
+                                 RGWBucketCompleteInfo *bi,
+                                 ceph::real_time *pmtime,
+                                 map<string, bufferlist> *pattrs) {
+    RGWObjVersionTracker objv_tracker,
+    bufferlist bl;
+    RGWSI_MBSObj_GetParams params = {
+      .pmtime = pmtime,
+      .pattrs = pattrs,
+      .pbl = &bl;
+    };
+    int ret = meta_be->get_entry(ctx, params,
+                                 &objv_tracker);
+    if (ret < 0) {
+      return ret;
+    }
+
+    try {
+      auto iter = bl.cbegin();
+      ceph::decode(*be, iter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+
+    bi->info.objv_tracker = std::move(objv_tracker);
+
+    return 0;
+  }
+
+  int store_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
+                                  string& entry,
+                                  const RGWBucketInfo& bi,
+                                  RGWObjVersionTracker *objv_tracker,
+                                  const ceph::real_time& mtime,
+                                  map<string, bufferlist> *pattrs) {
+    RGWSI_MBSObj_PutParams params = {
+      .mtime = mtime,
+      .pattrs = pattrs,
+    };
+    ceph::encode(be, params.bl);
+    int ret = meta_be->put_entry(ctx, params,
+                                 objv_tracker);
+    if (ret < 0) {
+      return ret;
+    }
+
+    return 0;
+  }
+
+  int remove_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
+                                   string& entry,
+                                   RGWObjVersionTracker *objv_tracker,
+                                   const ceph::real_time& mtime) {
+    RGWSI_MBSObj_RemoveParams params = {
+      .mtime = mtime,
+    };
+    int ret = meta_be->do_remove(ctx, params,
+                                 objv_tracker);
+    if (ret < 0) {
+      return ret;
+    }
+
+    return 0;
+  }
+
 
 public:
   string get_type() override { return "bucket.instance"; }
 
-  int get(RGWRados *store, string& oid, RGWMetadataObject **obj) override {
+  int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWBucketCompleteInfo bci;
 
     real_time mtime;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+    map<string, bufferlist> attrs;
 
-    int ret = store->get_bucket_instance_info(obj_ctx, oid, bci.info, &mtime, &bci.attrs);
+    int ret = read_bucket_instance_entry(ctx, entry, &bci, &mtime, &attrs);
     if (ret < 0)
       return ret;
 
@@ -2860,20 +2925,17 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_type) override {
-    RGWBucketCompleteInfo bci, old_bci;
-    try {
-      decode_json_obj(bci, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
+  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override {
+    RGWBucketInstanceMetadataObject *obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
+
+    auto& be = obj->get_bucket_info();
 
     real_time orig_mtime;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-    int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
-            &orig_mtime, &old_bci.attrs);
+    int ret = read_bucket_instance_entry(ctx, entry, old_bci.info,
+                                         &orig_mtime, &old_bci.attrs);
     bool exists = (ret != -ENOENT);
     if (ret < 0 && exists)
       return ret;
@@ -2891,9 +2953,9 @@ public:
       bci.info.bucket.name = bucket_name;
       bci.info.bucket.bucket_id = bucket_instance;
       bci.info.bucket.tenant = tenant_name;
-      ret = store->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+      ret = svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;
       }
       bci.info.index_type = rule_info.index_type;
@@ -2941,7 +3003,7 @@ public:
     bci.info.objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
     bci.info.objv_tracker.write_version = objv_tracker.write_version;
 
-    ret = store->put_bucket_instance_info(bci.info, false, mtime, &bci.attrs);
+    ret = store_bucket_instance_entry(bci.info, false, mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
@@ -2959,17 +3021,14 @@ public:
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry,
-	     RGWObjVersionTracker& objv_tracker) override {
-    RGWBucketInfo info;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    RGWBucketCompleteInfo bci;
 
-    int ret = store->get_bucket_instance_info(obj_ctx, entry, info, NULL, NULL);
+    int ret = read_bucket_instance_entry(ctx, entry, bci, nullptr, nullptr);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return rgw_bucket_instance_remove_entry(store, entry,
-					    &info.objv_tracker);
+    return remove_bucket_instance_entry(ctx, entry, &bci->info.objv_tracker);
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
@@ -3038,8 +3097,8 @@ public:
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 public:
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
-    ldout(store->ctx(), 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    ldout(cct, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
     return 0;
   }
 };

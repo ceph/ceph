@@ -771,4 +771,9 @@ class RGWMetadataManager;
 
 extern void rgw_user_init(RGWRados *store);
 
+class RGWBucketMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
 #endif
