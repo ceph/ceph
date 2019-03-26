@@ -115,8 +115,9 @@ def get_cmake_variables(*names):
 
 if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
      and os.path.exists(os.path.join(MYPDIR, "bin/init-ceph")):
-    src_path, asan_lib_path = \
-        get_cmake_variables("ceph_SOURCE_DIR", "ASAN_LIBRARY")
+    src_path, build_type, with_seastar, with_asan, asan_lib_path = \
+        get_cmake_variables("ceph_SOURCE_DIR", "CMAKE_BUILD_TYPE",
+                            "WITH_SEASTAR", "WITH_ASAN", "ASAN_LIBRARY")
     if src_path is None:
         # Huh, maybe we're not really in a cmake environment?
         pass
@@ -128,8 +129,10 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",
                                       get_pythonlib_dir())
-
-        respawn_in_path(lib_path, pybind_path, pythonlib_path, asan_lib_path)
+        if with_seastar and build_type == 'Debug':
+            with_asan = True
+        respawn_in_path(lib_path, pybind_path, pythonlib_path,
+                        asan_lib_path if with_asan else None)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
             os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
