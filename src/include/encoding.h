@@ -1334,7 +1334,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   decode(struct_v, bl);						\
   decode(struct_compat, bl);						\
   if (v < struct_compat)						\
-    throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
+    throw ::ceph::buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   __u32 struct_len;							\
   decode(struct_len, bl);						\
   if (struct_len > bl.get_remaining())					\
@@ -1352,10 +1352,10 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     __u8 struct_compat;							\
     decode(struct_compat, bl);					\
     if (v < struct_compat)						\
-      throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   } else if (skip_v) {							\
     if (bl.get_remaining() < skip_v)					\
-      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+      throw ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     bl.advance(skip_v);							\
   }									\
   unsigned struct_end = 0;						\
@@ -1363,7 +1363,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     __u32 struct_len;							\
     decode(struct_len, bl);						\
     if (struct_len > bl.get_remaining())				\
-      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     struct_end = bl.get_off() + struct_len;				\
   }									\
   do {
@@ -1394,7 +1394,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     __u8 struct_compat;							\
     decode(struct_compat, bl);						\
     if (v < struct_compat)						\
-      throw buffer::malformed_input(DECODE_ERR_OLDVERSION(		\
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_OLDVERSION(	\
 	__PRETTY_FUNCTION__, v, struct_compat));			\
   }									\
   unsigned struct_end = 0;						\
@@ -1402,7 +1402,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     __u32 struct_len;							\
     decode(struct_len, bl);						\
     if (struct_len > bl.get_remaining())				\
-      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     struct_end = bl.get_off() + struct_len;				\
   }									\
   do {
@@ -1439,7 +1439,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   } while (false);							\
   if (struct_end) {							\
     if (bl.get_off() > struct_end)					\
-      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     if (bl.get_off() < struct_end)					\
       bl.advance(struct_end - bl.get_off());				\
   }
@@ -1455,9 +1455,9 @@ inline ssize_t decode_file(int fd, std::string &str)
   bufferlist bl;
   __u32 len = 0;
   bl.read_fd(fd, sizeof(len));
-  decode(len, bl);                                                                                                  
+  decode(len, bl);
   bl.read_fd(fd, len);
-  decode(str, bl);                                                                                                  
+  decode(str, bl);
   return bl.length();
 }
 

@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 //  (C) Copyright Howard Hinnant
 //  (C) Copyright 2010-2011 Vicente J. Botet Escriba
 //  Use, modification and distribution are subject to the Boost Software License,
@@ -19,7 +20,8 @@
 #ifndef BOOST_CHRONO_IO_TIME_POINT_IO_H
 #define BOOST_CHRONO_IO_TIME_POINT_IO_H
 
-#include <time.h>
+#include <cstdint>
+#include <ctime>
 
 static int32_t is_leap(int32_t year) {
   if(year % 400 == 0)
@@ -51,7 +53,7 @@ static int32_t days_from_1jan(int32_t year,int32_t month,int32_t day) {
   return days[is_leap(year)][month-1] + day - 1;
 }
 
-static  time_t internal_timegm(tm const *t) {
+inline time_t internal_timegm(tm const *t) {
   int year = t->tm_year + 1900;
   int month = t->tm_mon;
   if(month > 11)

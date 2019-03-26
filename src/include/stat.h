@@ -2,6 +2,7 @@
 #define CEPH_STAT_H
 
 #include <acconfig.h>
+#include <stdint.h>
 
 #include <sys/stat.h>
 

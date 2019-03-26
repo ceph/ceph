@@ -22,22 +22,26 @@
  *
  */
 
+#include <iostream>
 #include <map>
+#include <utility>
+
+#include "fs_types.h"
 
 //typedef int T;
 
 template <class T>
 struct _rangeset_base {
-  map<T,T> ranges;  // pair(first,last) (inclusive, e.g. [first,last])
-                    
-  typedef typename map<T,T>::iterator mapit;
+  std::map<T,T> ranges;  // pair(first,last) (inclusive, e.g. [first,last])
+
+  typedef typename std::map<T,T>::iterator mapit;
 
   // get iterator for range including val.  or ranges.end().
   mapit get_range_for(T val) {
     mapit it = ranges.lower_bound(val);
     if (it == ranges.end()) {
       // search backwards
-      typename map<T,T>::reverse_iterator it = ranges.rbegin();
+      typename std::map<T,T>::reverse_iterator it = ranges.rbegin();
       if (it == ranges.rend()) return ranges.end();
       if (it->first <= val && it->second >= val)
         return ranges.find(it->first);
@@ -60,15 +64,16 @@ class rangeset_iterator :
 {
   //typedef typename map<T,T>::iterator mapit;
 
-  map<T,T> ranges;
-  typename map<T,T>::iterator it;
+  std::map<T,T> ranges;
+  typename std::map<T,T>::iterator it;
   T current;
 
 public:
   // cons
   rangeset_iterator() {}
 
-  rangeset_iterator(typename map<T,T>::iterator& it, map<T,T>& ranges) {
+  rangeset_iterator(typename std::map<T,T>::iterator& it,
+		    std::map<T,T>& ranges) {
     this->ranges = ranges;
     this->it = it;
     if (this->it != ranges.end())
@@ -103,7 +108,7 @@ public:
 template <class T>
 class rangeset
 {
-  typedef typename map<T,T>::iterator map_iterator;
+  typedef typename std::map<T,T>::iterator map_iterator;
 
   _rangeset_base<T> theset;
   inodeno_t _size;
@@ -133,7 +138,7 @@ public:
   }
 
   void map_insert(T v1, T v2) {
-    theset.ranges.insert(pair<T,T>(v1,v2));
+    theset.ranges.insert(std::pair<T,T>(v1,v2));
     _size += v2 - v1+1;
   }
 
@@ -169,14 +174,14 @@ public:
 
     if (right != theset.ranges.end()) {
       // add to right range
-      theset.ranges.insert(pair<T,T>(val, right->second));
+      theset.ranges.insert(std::pair<T,T>(val, right->second));
       theset.ranges.erase(val+1);
       _size++;
       return;
     }
 
     // new range
-    theset.ranges.insert(pair<T,T>(val,val));
+    theset.ranges.insert(std::pair<T,T>(val,val));
     _size++;
     return;
   }
@@ -215,10 +220,10 @@ public:
 
     // beginning
     if (val == it->first) {
-      theset.ranges.insert(pair<T,T>(val+1, it->second));
+      theset.ranges.insert(std::pair<T,T>(val+1, it->second));
       theset.ranges.erase(it);
       _size--;
-      return;      
+      return;
     }
 
     // end
@@ -229,18 +234,18 @@ public:
     }
 
     // middle split
-    theset.ranges.insert(pair<T,T>(it->first, val-1));
-    theset.ranges.insert(pair<T,T>(val+1, it->second));
+    theset.ranges.insert(std::pair<T,T>(it->first, val-1));
+    theset.ranges.insert(std::pair<T,T>(val+1, it->second));
     theset.ranges.erase(it);
     _size--;
     return;
   }
 
   void dump() {
-    for (typename map<T,T>::iterator it = theset.ranges.begin();
+    for (auto it = theset.ranges.begin();
          it != theset.ranges.end();
          it++) {
-      cout << " " << it->first << "-" << it->second << endl;
+      std::cout << " " << it->first << "-" << it->second << std::endl;
     }
   }
 
