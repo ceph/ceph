@@ -4,6 +4,8 @@ import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@ang
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
@@ -25,8 +27,16 @@ export class RgwUserSubuserModalComponent {
   formGroup: CdFormGroup;
   editing = true;
   subusers: RgwUserSubuser[] = [];
+  resource: string;
+  action: string;
 
-  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public bsModalRef: BsModalRef,
+    private i18n: I18n,
+    private actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('Subuser');
     this.createForm();
     this.listenToChanges();
   }
@@ -96,6 +106,7 @@ export class RgwUserSubuserModalComponent {
    */
   setEditing(editing: boolean = true) {
     this.editing = editing;
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
 
   /**

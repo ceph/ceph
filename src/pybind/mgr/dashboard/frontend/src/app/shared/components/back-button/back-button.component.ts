@@ -1,7 +1,7 @@
 import { Location } from '@angular/common';
 import { Component, Input } from '@angular/core';
 
-import { I18n } from '@ngx-translate/i18n-polyfill';
+import { ActionLabelsI18n } from '../../constants/app.constants';
 
 @Component({
   selector: 'cd-back-button',
@@ -9,8 +9,8 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
   styleUrls: ['./back-button.component.scss']
 })
 export class BackButtonComponent {
-  constructor(private location: Location, private i18n: I18n) {}
+  constructor(private location: Location, private actionLabels: ActionLabelsI18n) {}
 
-  @Input() name: string = this.i18n('Back');
+  @Input() name: string = this.actionLabels.CANCEL;
   @Input() back: Function = () => this.location.back();
 }

@@ -9,6 +9,7 @@ import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -42,14 +43,19 @@ export class RoleFormComponent implements OnInit {
   roleFormMode = RoleFormMode;
   mode: RoleFormMode;
 
+  action: string;
+  resource: string;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
     private roleService: RoleService,
     private scopeService: ScopeService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
+    this.resource = this.i18n('role');
     this.createForm();
     this.listenToChanges();
   }
@@ -109,6 +115,9 @@ export class RoleFormComponent implements OnInit {
     ];
     if (this.router.url.startsWith('/user-management/roles/edit')) {
       this.mode = this.roleFormMode.editing;
+      this.action = this.actionLabels.EDIT;
+    } else {
+      this.action = this.actionLabels.CREATE;
     }
     if (this.mode === this.roleFormMode.editing) {
       this.initEdit();

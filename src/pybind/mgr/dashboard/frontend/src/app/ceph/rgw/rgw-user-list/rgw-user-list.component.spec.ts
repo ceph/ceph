@@ -11,6 +11,7 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
+import { ActionLabels } from '../../../shared/constants/app.constants';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserListComponent } from './rgw-user-list.component';
@@ -52,8 +53,8 @@ describe('RgwUserListComponent', () => {
       );
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Add'
+        single: ActionLabels.EDIT,
+        empty: ActionLabels.CREATE
       };
     });
 
@@ -111,7 +112,7 @@ describe('RgwUserListComponent', () => {
       });
 
       it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
+        scenario.empty = ActionLabels.EDIT;
         permissionHelper.testScenarios(scenario);
       });
 
@@ -130,7 +131,7 @@ describe('RgwUserListComponent', () => {
       });
 
       it(`shows always 'Add' as main action`, () => {
-        scenario.single = 'Add';
+        scenario.single = ActionLabels.CREATE;
         permissionHelper.testScenarios(scenario);
       });
 
@@ -146,7 +147,7 @@ describe('RgwUserListComponent', () => {
       });
 
       it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
+        scenario.empty = ActionLabels.EDIT;
         permissionHelper.testScenarios(scenario);
       });
 

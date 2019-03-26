@@ -11,6 +11,7 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
+import { ActionLabels } from '../../../shared/constants/app.constants';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwBucketDetailsComponent } from '../rgw-bucket-details/rgw-bucket-details.component';
@@ -58,8 +59,8 @@ describe('RgwBucketListComponent', () => {
       );
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Add'
+        single: ActionLabels.EDIT,
+        empty: ActionLabels.CREATE
       };
     });
 
@@ -117,7 +118,7 @@ describe('RgwBucketListComponent', () => {
       });
 
       it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
+        scenario.empty = ActionLabels.EDIT;
         permissionHelper.testScenarios(scenario);
       });
 
@@ -136,7 +137,7 @@ describe('RgwBucketListComponent', () => {
       });
 
       it(`shows always 'Add' as main action`, () => {
-        scenario.single = 'Add';
+        scenario.single = ActionLabels.CREATE;
         permissionHelper.testScenarios(scenario);
       });
 
@@ -152,7 +153,7 @@ describe('RgwBucketListComponent', () => {
       });
 
       it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
+        scenario.empty = ActionLabels.EDIT;
         permissionHelper.testScenarios(scenario);
       });
 
