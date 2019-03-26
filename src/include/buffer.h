@@ -410,6 +410,7 @@ namespace buffer CEPH_BUFFER_API {
       }
 
       void advance(int o);
+      void advance(unsigned int o);
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
@@ -456,6 +457,7 @@ namespace buffer CEPH_BUFFER_API {
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
 
       void advance(int o);
+      void advance(unsigned int o);
       void seek(unsigned o);
       using iterator_impl<false>::operator*;
       char operator*();

@@ -1195,6 +1195,29 @@ public:
   }
 
   template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::advance(unsigned int o)
+  {
+    const unsigned int max_adv = std::numeric_limits<unsigned int>::max();
+    assert(o <= max_adv - p_off);
+    assert(o <= max_adv - off);
+    p_off += o;
+    while (p_off > 0) {
+      if (p == ls->end())
+        throw end_of_buffer();
+      if (p_off >= p->length()) {
+        // skip this buffer
+        p_off -= p->length();
+        p++;
+      } else {
+        // somewhere in this buffer!
+        break;
+      }
+    }
+    off += o;
+    return;
+  }
+
+  template<bool is_const>
   void buffer::list::iterator_impl<is_const>::seek(unsigned o)
   {
     p = ls->begin();
@@ -1394,6 +1417,11 @@ public:
   {}
 
   void buffer::list::iterator::advance(int o)
+  {
+    buffer::list::iterator_impl<false>::advance(o);
+  }
+
+  void buffer::list::iterator::advance(unsigned int o)
   {
     buffer::list::iterator_impl<false>::advance(o);
   }
