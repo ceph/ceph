@@ -1702,6 +1702,11 @@ public:
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
+    // this flag indicates that we are scrubbing post repair to verify everything is fixed
+    bool check_repair;
+    // this flag indicates that if a regular scrub detects errors <= osd_scrub_auto_repair_num_errors,
+    // we should deep scrub in order to auto repair
+    bool deep_scrub_on_error;
 
     // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<pg_shard_t>> missing;
@@ -1814,6 +1819,8 @@ public:
       must_deep_scrub = false;
       must_repair = false;
       auto_repair = false;
+      check_repair = false;
+      deep_scrub_on_error = false;
 
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();
@@ -1872,7 +1879,7 @@ protected:
   bool scrub_process_inconsistent();
   bool ops_blocked_by_scrub() const;
   void scrub_finish();
-  void scrub_clear_state();
+  void scrub_clear_state(bool keep_repair = false);
   void _scan_snaps(ScrubMap &map);
   void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const vector<ghobject_t> &rollback_obs);
@@ -2932,7 +2939,7 @@ protected:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-  int get_state() const { return state; }
+  uint64_t get_state() const { return state; }
   bool is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }
@@ -2950,6 +2957,7 @@ protected:
   }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
+  bool is_repair() const { return state_test(PG_STATE_REPAIR); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 

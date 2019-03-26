@@ -2380,7 +2380,7 @@ void PGMap::get_health_checks(
 
   // Specialized state printer that takes account of inversion of
   // ACTIVE, CLEAN checks.
-  auto state_name = [](const uint32_t &state) {
+  auto state_name = [](const uint64_t &state) {
     // Special cases for the states that are inverted checks
     if (state == PG_STATE_CLEAN) {
       return std::string("unclean");

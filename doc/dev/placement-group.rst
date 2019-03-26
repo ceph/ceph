@@ -186,6 +186,9 @@ User-visible PG States
 *forced_backfill*
   the PG has been marked for highest priority backfill
 
+*failed_repair*
+  an attempt to repair the PG has failed.  Manual intervention is required.
+
 
 OMAP STATISTICS
 ===============
