@@ -1,7 +1,11 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 #ifndef __CEPH_FEATURES
 #define __CEPH_FEATURES
 
-#include "sys/types.h"
+#include <cstdint>
+
+#include <sys/types.h>
 
 /*
  * Each time we reclaim bits for reuse we need to specify another
@@ -13,14 +17,14 @@
 #define CEPH_FEATURE_INCARNATION_3 ((1ull<<57)|(1ull<<28)) // SERVER_MIMIC
 
 #define DEFINE_CEPH_FEATURE(bit, incarnation, name)			\
-	const static uint64_t CEPH_FEATURE_##name = (1ULL<<bit);		\
-	const static uint64_t CEPH_FEATUREMASK_##name =			\
-		(1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
+  const inline std::uint64_t CEPH_FEATURE_##name = (1ULL<<bit);		\
+  const inline std::uint64_t CEPH_FEATUREMASK_##name =			\
+							  (1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
 
 // this bit is ignored but still advertised by release *when*
 #define DEFINE_CEPH_FEATURE_DEPRECATED(bit, incarnation, name, when) \
-	const static uint64_t DEPRECATED_CEPH_FEATURE_##name = (1ULL<<bit); \
-	const static uint64_t DEPRECATED_CEPH_FEATUREMASK_##name =		\
+  const inline std::uint64_t DEPRECATED_CEPH_FEATURE_##name = (1ULL<<bit); \
+  const inline std::uint64_t DEPRECATED_CEPH_FEATUREMASK_##name =	\
 		(1ULL<<bit | CEPH_FEATURE_INCARNATION_##incarnation);
 
 // this bit is ignored by release *unused* and not advertised by
@@ -269,10 +273,10 @@ DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facin
  */
 #define CEPH_STATIC_ASSERT(x) (void)(sizeof(int[((x)==0) ? -1 : 0]))
 
-static inline void ____build_time_check_for_reserved_bits(void) {
-	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
-			    (CEPH_FEATURE_RESERVED |
-			     DEPRECATED_CEPH_FEATURE_RESERVED_BROKEN)) == 0);
+inline void ____build_time_check_for_reserved_bits(void) {
+  CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
+		      (CEPH_FEATURE_RESERVED |
+		       DEPRECATED_CEPH_FEATURE_RESERVED_BROKEN)) == 0);
 }
 
 #endif
