@@ -1221,7 +1221,7 @@ struct client_metadata_t {
 WRITE_CLASS_ENCODER(client_metadata_t)
 
 /*
- * session_info_t
+ * session_info_t - durable part of a Session
  */
 struct session_info_t {
   entity_inst_t inst;
