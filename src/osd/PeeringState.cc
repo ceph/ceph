@@ -7,6 +7,7 @@
 #include "PG.h"
 #include "OSD.h"
 
+#include "messages/MOSDPGRemove.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
@@ -131,6 +132,68 @@ PeeringState::PeeringState(
   machine.initiate();
 }
 
+void PeeringState::update_history(const pg_history_t& new_history)
+{
+  pl->unreg_next_scrub();
+  if (info.history.merge(new_history)) {
+    psdout(20) << __func__ << " advanced history from " << new_history << dendl;
+    dirty_info = true;
+    if (info.history.last_epoch_clean >= info.history.same_interval_since) {
+      psdout(20) << __func__ << " clearing past_intervals" << dendl;
+      past_intervals.clear();
+      dirty_big_info = true;
+    }
+  }
+  pl->reg_next_scrub();
+}
+
+void PeeringState::purge_strays()
+{
+  if (is_premerge()) {
+    psdout(10) << "purge_strays " << stray_set << " but premerge, doing nothing"
+	       << dendl;
+    return;
+  }
+  if (cct->_conf.get_val<bool>("osd_debug_no_purge_strays")) {
+    return;
+  }
+  psdout(10) << "purge_strays " << stray_set << dendl;
+
+  bool removed = false;
+  for (set<pg_shard_t>::iterator p = stray_set.begin();
+       p != stray_set.end();
+       ++p) {
+    ceph_assert(!is_acting_recovery_backfill(*p));
+    if (get_osdmap()->is_up(p->osd)) {
+      dout(10) << "sending PGRemove to osd." << *p << dendl;
+      vector<spg_t> to_remove;
+      to_remove.push_back(spg_t(info.pgid.pgid, p->shard));
+      MOSDPGRemove *m = new MOSDPGRemove(
+	get_osdmap_epoch(),
+	to_remove);
+      pl->send_cluster_message(p->osd, m, get_osdmap_epoch());
+    } else {
+      dout(10) << "not sending PGRemove to down osd." << *p << dendl;
+    }
+    peer_missing.erase(*p);
+    peer_info.erase(*p);
+    peer_purged.insert(*p);
+    removed = true;
+  }
+
+  // if we removed anyone, update peers (which include peer_info)
+  if (removed)
+    update_heartbeat_peers();
+
+  stray_set.clear();
+
+  // clear _requested maps; we may have to peer() again if we discover
+  // (more) stray content
+  peer_log_requested.clear();
+  peer_missing_requested.clear();
+}
+
+
 bool PeeringState::proc_replica_info(
   pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
 {
@@ -151,14 +214,14 @@ bool PeeringState::proc_replica_info(
   peer_info[from] = oinfo;
   might_have_unfound.insert(from);
 
-  pg->update_history(oinfo.history);
+  update_history(oinfo.history);
 
   // stray?
   if (!is_up(from) && !is_acting(from)) {
     dout(10) << " osd." << from << " has stray content: " << oinfo << dendl;
     stray_set.insert(from);
     if (is_clean()) {
-      pg->purge_strays();
+      purge_strays();
     }
   }
 

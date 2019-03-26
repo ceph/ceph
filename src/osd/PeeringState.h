@@ -65,6 +65,11 @@ public:
     virtual void update_store_with_options(const pool_opts_t &opts) = 0;
     virtual void update_heartbeat_peers(set<int> peers) = 0;
 
+    virtual void reg_next_scrub() = 0;
+    virtual void unreg_next_scrub() = 0;
+
+    virtual void send_cluster_message(int osd, Message *m, epoch_t epoch) = 0;
+
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
@@ -1140,6 +1145,8 @@ public:
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
+  void purge_strays();
+  void update_history(const pg_history_t& new_history);
 
 public:
   PeeringState(
