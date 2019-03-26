@@ -1609,6 +1609,8 @@ int MonConnection::handle_auth_bad_method(
 
   while (p != auth_supported.end()) {
     ++p;
+    if (p == auth_supported.end())
+      break;
     if (std::find(allowed_methods.begin(), allowed_methods.end(), *p) !=
 	allowed_methods.end()) {
       break;
