@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "pg.h"
 
 #include <functional>
@@ -9,6 +12,8 @@
 #include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
 
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
@@ -18,9 +23,12 @@
 
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_store.h"
+#include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 
+#include "pg_backend.h"
 #include "recovery_events.h"
 #include "recovery_state.h"
 
@@ -43,7 +51,7 @@ PG::PG(spg_t pgid,
        pg_shard_t pg_shard,
        pg_pool_t&& pool,
        std::string&& name,
-       ec_profile_t&& ec_profile,
+       std::unique_ptr<PGBackend> backend,
        cached_map_t osdmap,
        ceph::net::Messenger& msgr)
   : pgid{pgid},
@@ -51,6 +59,7 @@ PG::PG(spg_t pgid,
     pool{std::move(pool)},
     recovery_state{*this},
     info{pgid},
+    backend{std::move(backend)},
     osdmap{osdmap},
     msgr{msgr}
 {
@@ -166,6 +175,10 @@ void PG::set_state(uint64_t mask)
   info.stats.last_change = now;
   if (mask & PG_STATE_ACTIVE) {
     info.stats.last_became_active = now;
+    if (active_promise) {
+      std::move(active_promise)->set_value();
+      active_promise.reset();
+    }
   }
   if (mask & (PG_STATE_ACTIVE | PG_STATE_PEERED) &&
       test_state(PG_STATE_ACTIVE | PG_STATE_PEERED)) {
@@ -942,4 +955,83 @@ seastar::future<> PG::share_pg_info()
                                         past_intervals)});
       return send_to_osd(peer.osd, m, get_osdmap_epoch());
     });
+}
+
+seastar::future<> PG::wait_for_active()
+{
+  logger().info("wait_for_active: {}", pg_state_string(info.stats.state));
+  if (test_state(PG_STATE_ACTIVE)) {
+    return seastar::now();
+  } else {
+    if (!active_promise) {
+      active_promise = seastar::shared_promise<>();
+    }
+    return active_promise->get_shared_future();
+  }
+}
+
+seastar::future<>
+PG::do_osd_op(const object_info_t& oi, OSDOp* osd_op)
+{
+  switch (const auto& op = osd_op->op; op.op) {
+  case CEPH_OSD_OP_SYNC_READ:
+    [[fallthrough]];
+  case CEPH_OSD_OP_READ:
+    return backend->read(oi,
+                         op.extent.offset,
+                         op.extent.length,
+                         op.extent.truncate_size,
+                         op.extent.truncate_seq,
+                         op.flags).then([osd_op](bufferlist bl) {
+      osd_op->rval = bl.length();
+      osd_op->outdata = std::move(bl);
+      return seastar::now();
+    });
+  default:
+    return seastar::now();
+  }
+}
+
+seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
+{
+  // todo: issue requests in parallel if they don't write,
+  // with writes being basically a synchronization barrier
+  return seastar::do_with(std::move(m), [this](auto& m) {
+    return seastar::do_for_each(begin(m->ops), end(m->ops),
+                                [m,this](OSDOp& osd_op) {
+      const auto oid = (m->get_snapid() == CEPH_SNAPDIR ?
+                        m->get_hobj().get_head() :
+                        m->get_hobj());
+      return backend->get_object(oid).then([&osd_op,this](auto oi) {
+        return do_osd_op(oi, &osd_op);
+      }).handle_exception_type([&osd_op](const object_not_found&) {
+        osd_op.rval = -ENOENT;
+        throw;
+      });
+    }).then([=] {
+      auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
+                                             0, false);
+      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    }).handle_exception_type([=](const object_not_found& dne) {
+      auto reply = make_message<MOSDOpReply>(m.get(), -ENOENT, get_osdmap_epoch(),
+                                             0, false);
+      reply->set_enoent_reply_versions(info.last_update,
+                                       info.last_user_version);
+      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+    });
+  });
+}
+
+seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
+                                Ref<MOSDOp> m)
+{
+  return wait_for_active().then([conn, m, this] {
+    if (m->finish_decode()) {
+      m->clear_payload();
+    }
+    return do_osd_ops(m);
+  }).then([conn](Ref<MOSDOpReply> reply) {
+    return conn->send(reply);
+  });
 }

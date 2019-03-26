@@ -21,6 +21,7 @@
 #include "osd/osd_types.h"
 
 class MOSDMap;
+class MOSDOp;
 class OSDMap;
 class OSDMeta;
 class PG;
@@ -130,6 +131,8 @@ private:
 
   seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_osd_op(ceph::net::ConnectionRef conn,
+				  Ref<MOSDOp> m);
   seastar::future<> handle_pg_log(ceph::net::ConnectionRef conn,
 				  Ref<MOSDPGLog> m);
   seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
