@@ -1,0 +1,18 @@
+<div class="row">
+  <div class="col-xs-5 col-sm-2 refresh-selector">
+    <label class="control-label col-xs-5 col-sm-5" 
+           for="refreshInterval">
+      <span i18n>Refresh</span>
+    </label>
+    <div class="col-xs-7 col-sm-7">
+      <select id="refreshInterval" 
+              name="refreshInterval" 
+              class="form-control" 
+              (change)="changeRefreshInterval($event.target.value)"
+              [(ngModel)]="selectedInterval">
+        <option *ngFor="let key of intervalKeys" 
+                [value]="intervalList[key]">{{ key }}</option>
+      </select>
+    </div>
+  </div>
+</div>
