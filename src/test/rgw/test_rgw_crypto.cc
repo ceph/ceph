@@ -68,12 +68,14 @@ public:
 
 
 class BlockCryptNone: public BlockCrypt {
+  size_t block_size = 256;
 public:
   BlockCryptNone(){};
+  BlockCryptNone(size_t sz) : block_size(sz) {}
   virtual ~BlockCryptNone(){};
   size_t get_block_size() override
   {
-    return 256;
+    return block_size;
   }
   bool encrypt(bufferlist& input,
                        off_t in_ofs,
