@@ -12,24 +12,10 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 """
 
 
-# Not very elegant, probably needs to be replaced or at least moved to util
-def strToSize(s):
-    n = float(s[:-1])
-    if s[-1].lower() == 't':
-        return disk.Size(tb=n)
-    if s[-1].lower() == 'g':
-        return disk.Size(gb=n)
-    if s[-1].lower() == 'm':
-        return disk.Size(mb=n)
-    if s[-1].lower() == 'k':
-        return disk.Size(kb=n)
-    return None
-
-
 # partition sizes in GB
-def _create_cache_lvs(vg_name, md_partition, data_partition):
-    md_partition_size = strToSize(disk.lsblk(md_partition)['SIZE'])
-    data_partition_size = strToSize(disk.lsblk(data_partition)['SIZE'])
+def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
+    md_partition_size = disk.size_from_human_readable(disk.lsblk(md_partition)['SIZE'])
+    data_partition_size = disk.size_from_human_readable(disk.lsblk(data_partition)['SIZE'])
 
     if not md_partition_size >= disk.Size(gb=2):
         print('Metadata partition is too small')
@@ -72,7 +58,7 @@ def _create_lvmcache(vg_name, osd_lv_name, cache_metadata_lv_name, cache_data_lv
     return cache_lv
 
 
-def add_lvmcache(vgname, osd_lv_name, md_partition, cache_data_partition):
+def add_lvmcache(vgname, osd_lv_name, md_partition, cache_data_partition, osdid):
     """
     High-level function to be called. Expects the user or orchestrator to have
     partitioned the disk used for caching.
@@ -186,10 +172,18 @@ $> ceph-volume cache rm --osdid <id>
                 if lv.tags.get('ceph.osd_id', '') == args.osdid:
                     osd_lv_name = lv.name
                     vg_name = lv.vg_name
+                    osdid = args.osdid
                     break
         else:
             osd_lv_name = args.osddata
             vg_name = args.volumegroup
+            lvs = api.Volumes()
+            for lv in lvs:
+                if lv.name == args.osddata:
+                    osd_lv_name = lv.name
+                    vg_name = lv.vg_name
+                    osdid = lv.tags.get('ceph.osd_id', None)
+                    break
 
         # TODO make sure the OSD exists (ie is on this node)
         if self.argv[0] == 'add':
@@ -197,7 +191,8 @@ $> ceph-volume cache rm --osdid <id>
                 vg_name,
                 osd_lv_name,
                 args.cachemetadata,
-                args.cachedata)
+                args.cachedata,
+                osdid)
         elif self.argv[0] == 'rm':
             # TODO verify that the OSD has a cache
             rm_lvmcache(vg_name, osd_lv_name)
