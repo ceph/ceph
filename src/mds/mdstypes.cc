@@ -542,8 +542,8 @@ void session_info_t::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("used_inos");
-  for (interval_set<inodeno_t>::const_iterator p = prealloc_inos.begin();
-       p != prealloc_inos.end();
+  for (interval_set<inodeno_t>::const_iterator p = used_inos.begin();
+       p != used_inos.end();
        ++p) {
     f->open_object_section("ino_range");
     f->dump_unsigned("start", p.get_start());
