@@ -1193,9 +1193,8 @@ COMMAND("config log name=num,type=CephInt,req=False",
 	"Show recent history of config changes",
 	"config", "r")
 COMMAND("config reset " \
-	"name=num,type=CephInt,range=0,req=False",
-	"Revert configuration to a historical version specified by <num>, "
-        "or simply revert to last version",
+	"name=num,type=CephInt,range=0",
+	"Revert configuration to a historical version specified by <num>",
 	"config", "rw")
 COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",

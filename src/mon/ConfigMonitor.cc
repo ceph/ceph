@@ -521,12 +521,10 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     goto update;
   } else if (prefix == "config reset") {
-    int64_t num = -1;
-    cmd_getval(g_ceph_context, cmdmap, "num", num);
-    int64_t revert_to = num;
-    if (revert_to < 0) // revert to last version
-      revert_to = version - 1;
-    if (revert_to > (int64_t)version) {
+    int64_t revert_to = -1;
+    cmd_getval(g_ceph_context, cmdmap, "num", revert_to);
+    if (revert_to < 0 ||
+        revert_to > (int64_t)version) {
       err = -EINVAL;
       ss << "must specify a valid historical version to revert to; "
          << "see 'ceph config log' for a list of avialable configuration "
