@@ -15,6 +15,10 @@
 #ifndef CEPH_ELIST_H
 #define CEPH_ELIST_H
 
+#include <cstdlib>
+
+#include "ceph_assert.h"
+
 /*
  * elist: embedded list.
  *
@@ -33,7 +37,7 @@ class elist {
 public:
   struct item {
     item *_prev, *_next;
-    
+
     item(T i=0) : _prev(this), _next(this) {}
     ~item() { 
       ceph_assert(!is_on_list());
@@ -42,7 +46,7 @@ public:
     item(const item& other) = delete;
     const item& operator= (const item& right) = delete;
 
-    
+
     bool empty() const { return _prev == this; }
     bool is_on_list() const { return !empty(); }
 

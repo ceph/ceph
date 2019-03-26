@@ -15,12 +15,11 @@
 #ifndef CEPH_FRAG_H
 #define CEPH_FRAG_H
 
-#include <boost/container/small_vector.hpp>
-
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
 
-#include <stdint.h>
-#include <stdio.h>
+#include <boost/container/small_vector.hpp>
 
 #include "buffer.h"
 #include "compact_map.h"
@@ -90,7 +89,7 @@ public:
 
   // constructors
   void from_unsigned(unsigned e) { _enc = e; }
-  
+
   // accessors
   unsigned value() const { return ceph_frag_value(_enc); }
   unsigned bits() const { return ceph_frag_bits(_enc); }
@@ -151,12 +150,12 @@ public:
     return false;
   }
 
-  void encode(bufferlist& bl) const {
-    encode_raw(_enc, bl);
+  void encode(ceph::buffer::list& bl) const {
+    ceph::encode_raw(_enc, bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     __u32 v;
-    decode_raw(v, p);
+    ceph::decode_raw(v, p);
     _enc = v;
   }
 
@@ -170,13 +169,13 @@ inline std::ostream& operator<<(std::ostream& out, const frag_t& hb)
   unsigned num = hb.bits();
   if (num) {
     unsigned val = hb.value();
-    for (unsigned bit = 23; num; num--, bit--) 
+    for (unsigned bit = 23; num; num--, bit--)
       out << ((val & (1<<bit)) ? '1':'0');
   }
   return out << '*';
 }
 
-inline void encode(const frag_t &f, bufferlist& bl) { f.encode(bl); }
+inline void encode(const frag_t &f, ceph::buffer::list& bl) { f.encode(bl); }
 inline void decode(frag_t &f, bufferlist::const_iterator& p) { f.decode(p); }
 
 using frag_vec_t = boost::container::small_vector<frag_t, 4>;
@@ -458,15 +457,15 @@ public:
   }
 
   // encoding
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(_splits, bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     decode(_splits, p);
   }
-  void encode_nohead(bufferlist& bl) const {
+  void encode_nohead(ceph::buffer::list& bl) const {
     using ceph::encode;
     for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
 	 p != _splits.end();
@@ -475,7 +474,7 @@ public:
       encode(p->second, bl);
     }
   }
-  void decode_nohead(int n, bufferlist::const_iterator& p) {
+  void decode_nohead(int n, ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     _splits.clear();
     while (n-- > 0) {
@@ -508,7 +507,7 @@ public:
     out << ")";
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->open_array_section("splits");
     for (compact_map<frag_t,int32_t>::const_iterator p = _splits.begin();
          p != _splits.end();

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,25 +7,28 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
 #ifndef CEPH_DISTRIBUTION_H
 #define CEPH_DISTRIBUTION_H
 
+#include <cstdlib>
 #include <vector>
 
+#include "ceph_assert.h"
+
 class Distribution {
-  vector<float> p;
-  vector<int> v;
+  std::vector<float> p;
+  std::vector<int> v;
 
  public:
-  //Distribution() { 
+  //Distribution() {
   //}
-  
+
   unsigned get_width() {
     return p.size();
   }
@@ -42,10 +45,10 @@ class Distribution {
   void random() {
     float sum = 0.0;
     for (unsigned i=0; i<p.size(); i++) {
-      p[i] = (float)(rand() % 10000);
+      p[i] = (float)(std::rand() % 10000);
       sum += p[i];
     }
-    for (unsigned i=0; i<p.size(); i++) 
+    for (unsigned i=0; i<p.size(); i++)
       p[i] /= sum;
   }
 
