@@ -17,10 +17,10 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_partition_size = disk.size_from_human_readable(disk.lsblk(md_partition)['SIZE'])
     data_partition_size = disk.size_from_human_readable(disk.lsblk(data_partition)['SIZE'])
 
-    if not md_partition_size >= disk.Size(gb=2):
+    if md_partition_size < disk.Size(gb=2):
         print('Metadata partition is too small')
         return
-    if not data_partition_size >= disk.Size(gb=2):
+    if data_partition_size < disk.Size(gb=2):
         print('Data partition is too small')
         return
 
@@ -29,17 +29,22 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_lv_size = md_partition_size - disk.Size(gb=1)
     data_lv_size = data_partition_size - disk.Size(gb=1)
 
-    # TODO: update tags
-    cache_md_lv = api.create_lv('cache_metadata', vg_name, extents=None,
-        size=str(md_lv_size._b) + 'B', tags=None, uuid_name=False, pv=md_partition)
-    cache_md_lv.set_tag('ceph.cachetype', 'metadata')
+    # TODO: update these new LVs' tags (ceph.cluster_fsid, etc.)
+    cache_md_lv = api.create_lv(
+        'cache_md_osd.' + osdid,
+        vg_name,
+        size=str(md_lv_size._b) + 'B',
+        pv=md_partition)
+    cache_md_lv.set_tag('ceph.type', 'cache_metadata')
     cache_md_lv.set_tag('ceph.partition', md_partition)
-    cache_data_lv = api.create_lv('cache_data', vg_name, extents=None,
-        size=str(data_lv_size._b) + 'B', tags=None, uuid_name=False, pv=data_partition)
-    cache_data_lv.set_tag('ceph.cachetype', 'data')
+
+    cache_data_lv = api.create_lv(
+        'cache_osd.' + osdid,
+        vg_name,
+        size=str(data_lv_size._b) + 'B',
+        pv=data_partition)
+    cache_data_lv.set_tag('ceph.type', 'cache_data')
     cache_data_lv.set_tag('ceph.partition', data_partition)
-    # TODO: this tags is probably not needed, we can get it using '_cmeta'
-    cache_md_lv.set_tag('ceph.metadata', cache_md_lv.name)
 
     return cache_md_lv, cache_data_lv
 
@@ -67,15 +72,21 @@ def add_lvmcache(vgname, osd_lv_name, md_partition, cache_data_partition, osdid)
     vg = api.get_vg(vg_name=vgname)
     # TODO don't fail if the LVs are already part of the vg
     api.extend_vg(vg, [md_partition, cache_data_partition])
-    cache_md_lv, cache_data_lv = _create_cache_lvs(vg.name, md_partition, cache_data_partition)
-    cachelv = _create_lvmcache(vg.name, osd_lv_name, cache_md_lv.name, cache_data_lv.name)
+    cache_md_lv, cache_data_lv = _create_cache_lvs(
+        vg.name,
+        md_partition,
+        cache_data_partition,
+        osdid
+    )
+    cachelv = _create_lvmcache(vg.name, osd_lv_name, cache_md_lv.name,
+        cache_data_lv.name)
 
     return cachelv
 
 
 def rm_lvmcache(vgname, osd_lv_name):
     osd_lv = api.get_lv(lv_name=osd_lv_name, vg_name=vgname)
-    if osd_lv.tags['ceph.cache_lv'] is None or len(osd_lv.tags['ceph.cache_lv']) == 0:
+    if not osd_lv or not osd_lv.tags['ceph.cache_lv']:
         print('Can\'t find cache data lv')
         return
     vg = api.get_vg(vg_name=vgname)
@@ -91,6 +102,8 @@ def rm_lvmcache(vgname, osd_lv_name):
 
     api.remove_lv(vgname + '/' + cache_lv_name)
     api.reduce_vg(vg, [data_partition, md_partition])
+
+    osd_lv.clear_tag('ceph.cache_lv')
 
 
 class Cache(object):
@@ -111,13 +124,10 @@ $> ceph-volume cache rm --osdid <id>
     """
     name = 'cache'
 
-    def __init__(self, argv=None):
+    def __init__(self, argv=sys.argv):
         self.mapper = {
         }
-        if argv is None:
-            self.argv = sys.argv
-        else:
-            self.argv = argv
+        self.argv = argv
 
     
     def help(self):
