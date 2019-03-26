@@ -381,6 +381,7 @@ void osd_stat_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
   f->dump_int("num_snap_trimming", num_snap_trimming);
+  f->dump_int("num_shards_repaired", num_shards_repaired);
   f->open_object_section("op_queue_age_hist");
   op_queue_age_hist.dump(f);
   f->close_section();
@@ -394,7 +395,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(10, 2, bl);
+  ENCODE_START(11, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -425,6 +426,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(statfs, bl);
   ///////////////////////////////////
   encode(os_alerts, bl);
+  encode(num_shards_repaired, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -432,7 +434,7 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(10, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -487,6 +489,11 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
   } else {
     os_alerts.clear();
   }
+  if (struct_v >= 11) {
+    decode(num_shards_repaired, bl);
+  } else {
+    num_shards_repaired = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -501,6 +508,7 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
+  o.back()->num_shards_repaired = 101;
   o.back()->os_alerts[0].emplace(
     "some alert", "some alert details");
   o.back()->os_alerts[1].emplace(
@@ -976,6 +984,8 @@ std::string pg_state_string(uint64_t state)
     oss << "snaptrim_wait+";
   if (state & PG_STATE_SNAPTRIM_ERROR)
     oss << "snaptrim_error+";
+  if (state & PG_STATE_FAILED_REPAIR)
+    oss << "failed_repair+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1047,6 +1057,8 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_SNAPTRIM_ERROR;
   else if (state == "creating")
     type = PG_STATE_CREATING;
+  else if (state == "failed_repair")
+    type = PG_STATE_FAILED_REPAIR;
   else if (state == "unknown")
     type = 0;
   else
@@ -2225,11 +2237,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_manifest", num_objects_manifest);
   f->dump_int("num_omap_bytes", num_omap_bytes);
   f->dump_int("num_omap_keys", num_omap_keys);
+  f->dump_int("num_objects_repaired", num_objects_repaired);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(19, 14, bl);
+  ENCODE_START(20, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -2272,6 +2285,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   encode(num_objects_manifest, bl);
   encode(num_omap_bytes, bl);
   encode(num_omap_keys, bl);
+  encode(num_objects_repaired, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -2279,7 +2293,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(19, bl);  // make sure to also update fast decode below
+  DECODE_START(20, bl);  // make sure to also update fast decode below
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 19) {  // this must match newest decode version
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
@@ -2336,6 +2350,9 @@ void object_stat_sum_t::decode(bufferlist::const_iterator& bl)
       decode(num_omap_bytes, bl);
       decode(num_omap_keys, bl);
     }
+    if (struct_v >= 20) {
+      decode(num_objects_repaired, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2379,6 +2396,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_objects_manifest = 2;
   a.num_omap_bytes = 20000;
   a.num_omap_keys = 200;
+  a.num_objects_repaired = 300;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -2423,6 +2441,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_manifest += o.num_objects_manifest;
   num_omap_bytes += o.num_omap_bytes;
   num_omap_keys += o.num_omap_keys;
+  num_objects_repaired += o.num_objects_repaired;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2466,6 +2485,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_manifest -= o.num_objects_manifest;
   num_omap_bytes -= o.num_omap_bytes;
   num_omap_keys -= o.num_omap_keys;
+  num_objects_repaired -= o.num_objects_repaired;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2509,7 +2529,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_large_omap_objects == r.num_large_omap_objects &&
     l.num_objects_manifest == r.num_objects_manifest &&
     l.num_omap_bytes == r.num_omap_bytes &&
-    l.num_omap_keys == r.num_omap_keys;
+    l.num_omap_keys == r.num_omap_keys &&
+    l.num_objects_repaired == r.num_objects_repaired;
 }
 
 // -- object_stat_collection_t --
