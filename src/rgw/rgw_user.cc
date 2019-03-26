@@ -33,7 +33,6 @@
 
 
 
-static RGWMetadataHandler *user_meta_handler = NULL;
 extern void op_type_to_str(uint32_t mask, char *buf, int len);
 
 /**
@@ -140,13 +139,37 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_store_user_info(RGWRados *store,
+int rgw_store_user_info(RGWSI_User *user_svc,
                         RGWUserInfo& info,
                         RGWUserInfo *old_info,
                         RGWObjVersionTracker *objv_tracker,
                         real_time mtime,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
+{
+  RGWSysObjectCtx obj_ctx = svc.sysobj->init_obj_ctx();
+  auto user = user_svc->user(obj_ctx, info.user);
+
+  return user.set_op()
+    .set_exclusive(exclusive)
+    .set_mtime(mtime)
+    .set_attrs(pattrs)
+    .set_old_info(pattrs)
+    .set_objv_tracker(objv_tracker)
+    .exec();
+}
+
+
+}
+
+static int do_store_user_info(RGWSI_MetaBackend *meta_be,
+                              RGWSI_MetaBackend::Context *ctx,
+                              RGWUserInfo& info,
+                              RGWUserInfo *old_info,
+                              RGWObjVersionTracker *objv_tracker,
+                              real_time mtime,
+                              bool exclusive,
+                              map<string, bufferlist> *pattrs)
 {
   int ret;
   RGWObjVersionTracker ot;
@@ -171,7 +194,7 @@ int rgw_store_user_info(RGWRados *store,
     RGWAccessKey& k = iter->second;
     /* check if swift mapping exists */
     RGWUserInfo inf;
-    int r = rgw_get_user_info_by_swift(store, k.id, inf);
+    int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
     if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
       ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
         << ") already mapped to another user (" << info.user_id << ")" << dendl;
@@ -187,7 +210,7 @@ int rgw_store_user_info(RGWRados *store,
       RGWAccessKey& k = iter->second;
       if (old_info && old_info->access_keys.count(iter->first) != 0)
         continue;
-      int r = rgw_get_user_info_by_access_key(store, k.id, inf);
+      int r = do_get_user_info_by_access_key(meta_be, ctx, k.id, inf);
       if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
         ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
         return -EEXIST;
@@ -208,7 +231,7 @@ int rgw_store_user_info(RGWRados *store,
   string key;
   info.user_id.to_str(key);
 
-  ret = store->meta_mgr->put_entry(user_meta_handler, key, data_bl, exclusive, &ot, mtime, pattrs);
+  ret = meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
   if (ret < 0)
     return ret;
 
@@ -321,32 +344,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
                              rgw_cache_entry_info * const cache_info,
                              map<string, bufferlist> * const pattrs)
 {
-  bufferlist bl;
-  RGWUID user_id;
-
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  string oid = uid.to_str();
-  int ret = rgw_get_system_obj(obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, null_yield, pattrs, cache_info);
-  if (ret < 0) {
-    return ret;
-  }
-
-  auto iter = bl.cbegin();
-  try {
-    decode(user_id, iter);
-    if (user_id.user_id.compare(uid) != 0) {
-      lderr(store->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << uid << dendl;
-      return -EIO;
-    }
-    if (!iter.end()) {
-      decode(info, iter);
-    }
-  } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
-    return -EIO;
-  }
-
-  return 0;
+#warning FIXME
 }
 
 /**
@@ -2796,18 +2794,68 @@ public:
 };
 
 class RGWUserMetadataHandler : public RGWMetadataHandler {
+  int read_user_info_entry(RGWSI_MetaBackend::Context *ctx,
+                           string& entry,
+                           RGWUserInfo& info,
+                           RGWObjVersionTracker * const objv_tracker,
+                           real_time * const pmtime,
+                           rgw_cache_entry_info * const cache_info,
+                           map<string, bufferlist> * const pattrs) {
+    bufferlist bl;
+    RGWUID user_id;
+
+    RGWSI_MBSObj_GetParams params = {
+      .pmtime = pmtime,
+      .pattrs = pattrs,
+      .pbl = &bl;
+      .y = null_yield;
+    };
+    int ret = meta_be->get_entry(ctx, params, objv_tracker);
+    if (ret < 0) {
+      return ret;
+    }
+
+    auto iter = bl.cbegin();
+    try {
+      decode(user_id, iter);
+      if (user_id.user_id.to_str().compare(entry) != 0) {
+        lderr(meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id.to_str() << " != " << entry << dendl;
+        return -EIO;
+      }
+      if (!iter.end()) {
+        decode(info, iter);
+      }
+    } catch (buffer::error& err) {
+      ldout(meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+      return -EIO;
+    }
+
+    return 0;
+  }
+
+  int store_user_info_entry(RGWSI_MetaBackend::Context *ctx,
+                            string& entry,
+                            RGWUserInfo& info,
+                            RGWUserInfo *old_info,
+                            RGWObjVersionTracker *objv_tracker,
+                            real_time& mtime,
+                            bool exclusive,
+                            map<string, bufferlist> *pattrs) {
+    return do_store_user_info(this, ctx, info, old_info,
+                              objv_tracker,
+                              mtime, exclusive, pattrs);
+  }
+
 public:
   string get_type() override { return "user"; }
 
-  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override {
+  int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWUserCompleteInfo uci;
     RGWObjVersionTracker objv_tracker;
     real_time mtime;
 
-    rgw_user uid(entry);
-
-    int ret = rgw_get_user_info_by_uid(store, uid, uci.info, &objv_tracker,
-                                       &mtime, NULL, &uci.attrs);
+    int ret = read_user_info_entry(ctx, entry, uci.info, &objv_tracker,
+                                   &mtime, nullpt, &uci.attrs);
     if (ret < 0) {
       return ret;
     }
@@ -2818,26 +2866,20 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_mode) override {
+  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override {
+    RGWUserInstanceMetadataObject *obj = static_cast<RGWUserInstanceMetadataObject *>(_obj);
     RGWUserCompleteInfo uci;
-
-    try {
-      decode_json_obj(uci, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
 
     map<string, bufferlist> *pattrs = NULL;
     if (uci.has_attrs) {
       pattrs = &uci.attrs;
     }
 
-    rgw_user uid(entry);
-
     RGWUserInfo old_info;
     real_time orig_mtime;
-    int ret = rgw_get_user_info_by_uid(store, uid, old_info, &objv_tracker, &orig_mtime);
+    int ret = read_user_info_entry(ctx, entry, old_info, &objv_tracker, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -2848,7 +2890,7 @@ public:
       return STATUS_NO_APPLY;
     }
 
-    ret = rgw_store_user_info(store, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
+    ret = store_user_info_entry(ctx, entry, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
     if (ret < 0) {
       return ret;
     }
@@ -2940,10 +2982,11 @@ public:
   }
 };
 
+RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc() {
+  return new RGWUserMetadataHandler;
+}
+
 void rgw_user_init(RGWRados *store)
 {
   uinfo_cache.init(store->svc.cache);
-
-  user_meta_handler = new RGWUserMetadataHandler;
-  store->meta_mgr->register_handler(user_meta_handler);
 }
