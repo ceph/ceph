@@ -14065,6 +14065,11 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     dout(20) << __func__ << " skip (dirty) " << obc->obs.oi << dendl;
     return false;
   }
+  // This is already checked by agent_work() which passes after_flush = false
+  if (after_flush && range_intersects_scrub(soid, soid.get_head())) {
+      dout(20) << __func__ << " skip (scrubbing) " << obc->obs.oi << dendl;
+      return false;
+  }
   if (!obc->obs.oi.watchers.empty()) {
     dout(20) << __func__ << " skip (watchers) " << obc->obs.oi << dendl;
     return false;
