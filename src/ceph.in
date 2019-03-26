@@ -102,7 +102,11 @@ def get_cmake_variables(*names):
         # parse lines like "WITH_ASAN:BOOL=ON"
         for name in names:
             if line.startswith("{}:".format(name)):
-                vars[name] = line.split("=")[1].strip()
+                type_value = line.split(":")[1].strip()
+                t, v = type_value.split("=")
+                if t == 'BOOL':
+                    v = v.upper() in ('TRUE', '1', 'Y', 'YES', 'ON')
+                vars[name] = v
                 break
         if all(vars.values()):
             break
