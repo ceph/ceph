@@ -16,7 +16,8 @@
 
 #ifndef CEPH_CEPH_STATX_H
 #define CEPH_CEPH_STATX_H
-#include <stdint.h>
+#include <cstdint>
+#include <sys/stat.h>
 
 #ifdef __cplusplus
 extern "C" {
