@@ -1705,6 +1705,15 @@ class Validation(DeepSea):
             'ceph_version_sanity.sh',
             )
 
+    def iscsi_smoke_test(self, **kwargs):
+        igw_host = self.role_type_present("igw")
+        if igw_host:
+            remote = self.remotes[igw_host]
+            self.scripts.run(
+                remote,
+                'iscsi_smoke_test.sh',
+                )
+
     def rados_striper(self, **kwargs):
         """
         Verify that rados does not has the --striper option
