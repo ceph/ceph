@@ -547,7 +547,7 @@ class Module(MgrModule):
                 did += 1
             if to_mark_out:
                 self.mark_out_etc(to_mark_out)
-        for warning, ls in health_warnings.iteritems():
+        for warning, ls in iteritems(health_warnings):
             n = len(ls)
             if n:
                 checks[warning] = {
