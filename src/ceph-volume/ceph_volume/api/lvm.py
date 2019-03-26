@@ -588,6 +588,7 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False, 
         }
 
     # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
+    # TODO: do we need to add cache_metadata and cache data to this dict?
     type_path_tag = {
         'journal': 'ceph.journal_device',
         'data': 'ceph.data_device',
@@ -1195,6 +1196,12 @@ class Volume(object):
         for k, v in self.tags.items():
             tag = "%s=%s" % (k, v)
             process.run(['lvchange', '--deltag', tag, self.lv_path])
+
+    def clear_tag(self, key):
+        if self.tags.get(key):
+            current_value = self.tags[key]
+            tag = "%s=%s" % (key, current_value)
+            process.call(['lvchange', '--deltag', tag, self.lv_api['lv_path']])
 
     def set_tags(self, tags):
         """
