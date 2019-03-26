@@ -1,6 +1,8 @@
 #ifndef CEPH_HASH_H
 #define CEPH_HASH_H
 
+#include <cstdlib>
+#include <cstdint>
 #include "acconfig.h"
 
 // Robert Jenkins' function for mixing 32-bit values
@@ -23,7 +25,7 @@
 
 template <class _Key> struct rjhash { };
 
-inline uint64_t rjhash64(uint64_t key) {
+inline std::uint64_t rjhash64(std::uint64_t key) {
   key = (~key) + (key << 21); // key = (key << 21) - key - 1;
   key = key ^ (key >> 24);
   key = (key + (key << 3)) + (key << 8); // key * 265
@@ -34,7 +36,7 @@ inline uint64_t rjhash64(uint64_t key) {
   return key;
 }
 
-inline uint32_t rjhash32(uint32_t a) {
+inline std::uint32_t rjhash32(std::uint32_t a) {
   a = (a+0x7ed55d16) + (a<<12);
   a = (a^0xc761c23c) ^ (a>>19);
   a = (a+0x165667b1) + (a<<5);
@@ -45,14 +47,14 @@ inline uint32_t rjhash32(uint32_t a) {
 }
 
 
-template<> struct rjhash<uint32_t> {
-  inline size_t operator()(const uint32_t x) const {
+template<> struct rjhash<std::uint32_t> {
+  inline std::size_t operator()(const std::uint32_t x) const {
     return rjhash32(x);
   }
 };
 
-template<> struct rjhash<uint64_t> {
-  inline size_t operator()(const uint64_t x) const {
+template<> struct rjhash<std::uint64_t> {
+  inline std::size_t operator()(const std::uint64_t x) const {
     return rjhash64(x);
   }
 };

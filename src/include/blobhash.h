@@ -14,6 +14,7 @@
 #ifndef CEPH_BLOBHASH_H
 #define CEPH_BLOBHASH_H
 
+#include <cstdint>
 #include "hash.h"
 
 /*
@@ -24,17 +25,17 @@
 
 class blobhash {
 public:
-  uint32_t operator()(const char *p, unsigned len) {
+  std::uint32_t operator()(const char *p, unsigned len) {
     static rjhash<uint32_t> H;
-    uint32_t acc = 0;
+    std::uint32_t acc = 0;
     while (len >= sizeof(acc)) {
-      acc ^= *(uint32_t*)p;
-      p += sizeof(uint32_t);
-      len -= sizeof(uint32_t);
+      acc ^= *(std::uint32_t*)p;
+      p += sizeof(std::uint32_t);
+      len -= sizeof(std::uint32_t);
     }
     int sh = 0;
     while (len) {
-      acc ^= (uint32_t)*p << sh;
+      acc ^= (std::uint32_t)*p << sh;
       sh += 8;
       len--;
       p++;
