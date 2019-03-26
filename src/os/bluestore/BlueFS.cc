@@ -305,7 +305,8 @@ void BlueFS::dump_block_extents(ostream& out)
         << " : own 0x" << block_all[i]
         << " = 0x" << owned
         << " : using 0x" << owned - free
-        << std::dec << "\n";
+	<< std::dec << "(" << byte_u_t(owned - free) << ")"
+        << "\n";
   }
 }
 
