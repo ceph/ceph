@@ -11,6 +11,7 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -76,6 +77,8 @@ export class IscsiTargetFormComponent implements OnInit {
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
   USER_REGEX = /[\w\.:@_-]{8,64}/;
   PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  action: string;
+  resource: string;
 
   constructor(
     private iscsiService: IscsiService,
@@ -84,8 +87,11 @@ export class IscsiTargetFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private i18n: I18n,
-    private taskWrapper: TaskWrapperService
-  ) {}
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('target');
+  }
 
   ngOnInit() {
     const promises: any[] = [
@@ -102,6 +108,7 @@ export class IscsiTargetFormComponent implements OnInit {
         promises.push(this.iscsiService.getTarget(this.target_iqn));
       });
     }
+    this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
 
     forkJoin(promises).subscribe((data: any[]) => {
       // iscsiService.listTargets
