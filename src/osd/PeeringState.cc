@@ -395,6 +395,33 @@ void PeeringState::complete_flush()
   }
 }
 
+void PeeringState::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
+{
+  bool changed = false;
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+      !lastmap->test_flag(CEPH_OSDMAP_FULL)) {
+    psdout(10) << " cluster was marked full in "
+	       << osdmap->get_epoch() << dendl;
+    changed = true;
+  }
+  const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
+  if (!pi) {
+    return; // pool deleted
+  }
+  if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
+    const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
+    if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
+      psdout(10) << " pool was marked full in " << osdmap->get_epoch() << dendl;
+      changed = true;
+    }
+  }
+  if (changed) {
+    info.history.last_epoch_marked_full = osdmap->get_epoch();
+    dirty_info = true;
+  }
+}
+
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
@@ -474,7 +501,7 @@ boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
   PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Started advmap" << dendl;
-  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
+  ps->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (pg->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
@@ -534,7 +561,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
   PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Reset advmap" << dendl;
 
-  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
+  ps->check_full_transition(advmap.lastmap, advmap.osdmap);
 
   if (pg->should_restart_peering(
 	advmap.up_primary,
