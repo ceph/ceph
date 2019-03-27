@@ -1366,11 +1366,14 @@ bool DaemonServer::_handle_command(
 	  return;
 	}
 	int num_active_clean = 0;
+        bool any_degraded_pgs = false;
 	for (auto& p : pg_map.num_pg_by_state) {
 	  unsigned want = PG_STATE_ACTIVE|PG_STATE_CLEAN;
 	  if ((p.first & want) == want) {
 	    num_active_clean += p.second;
 	  }
+          if (p.first & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED))
+            any_degraded_pgs = true;
 	}
 	for (auto osd : osds) {
 	  if (!osdmap.exists(osd)) {
@@ -1395,7 +1398,36 @@ bool DaemonServer::_handle_command(
 	      stored_pgs.insert(osd);
 	      continue;
 	    }
-	  }
+            if (osdmap.is_down(osd) &&
+                osdmap.is_out(osd) &&
+                any_degraded_pgs) {
+              // sadly we totally lost pgmap-related track for down and out osds
+              // so if there is any degraded pgs, we need to fake-mark osd up&in
+              // and continue to check if the degradedness is actually caused by
+              // this osd
+              OSDMap tmpmap;
+              tmpmap.deepish_copy_from(osdmap);
+              tmpmap.set_state(osd, CEPH_OSD_EXISTS | CEPH_OSD_UP);
+              auto old_weight = osdmap.get_xinfo(osd).old_weight;
+              auto new_weight = old_weight ? old_weight : CEPH_OSD_IN;
+              tmpmap.set_weight(osd, new_weight);
+              for (auto &i : pg_map.pg_stat) {
+                auto& pg = i.first;
+                auto state = i.second.state;
+                if (state & (PG_STATE_DEGRADED | PG_STATE_UNDERSIZED)) {
+                  vector<int> up;
+                  int up_primary;
+                  tmpmap.pg_to_raw_up(pg, &up, &up_primary);
+                  if (std::find(up.begin(), up.end(), osd) != up.end()) {
+                    stored_pgs.insert(osd);
+                    break;
+                  }
+                }
+              }
+              if (stored_pgs.count(osd))
+                continue;
+	    }
+          }
 	  safe_to_destroy.insert(osd);
 	}
       });
