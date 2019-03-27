@@ -9,6 +9,26 @@ describe('DimlessPipe', () => {
     expect(pipe).toBeTruthy();
   });
 
+  it('transforms 1230.4567 with default decimals (4)', () => {
+    const value = 1234.5678;
+    expect(pipe.transform(value)).toBe('1.2346k');
+  });
+
+  it('transforms 1230.4567 with 0 decimals', () => {
+    const value = 1234.5678;
+    expect(pipe.transform(value, 0)).toBe('1k');
+  });
+
+  it('transforms 1230.4567 with 1 decimal', () => {
+    const value = 1234.5678;
+    expect(pipe.transform(value, 1)).toBe('1.2k');
+  });
+
+  it('transforms 55.01 with 1 decimal', () => {
+    const value = 55.01;
+    expect(pipe.transform(value, 1)).toBe('55');
+  });
+
   it('transforms 1000^0', () => {
     const value = Math.pow(1000, 0);
     expect(pipe.transform(value)).toBe('1');
