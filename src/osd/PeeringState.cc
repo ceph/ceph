@@ -735,6 +735,67 @@ void PeeringState::clear_primary_state()
   pl->clear_primary_state();
 }
 
+/// return [start,end) bounds for required past_intervals
+static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
+  const pg_info_t &info,
+  epoch_t oldest_map) {
+  epoch_t start = std::max(
+    info.history.last_epoch_clean ? info.history.last_epoch_clean :
+    info.history.epoch_pool_created,
+    oldest_map);
+  epoch_t end = std::max(
+    info.history.same_interval_since,
+    info.history.epoch_pool_created);
+  return make_pair(start, end);
+}
+
+
+void PeeringState::check_past_interval_bounds() const
+{
+  auto rpib = get_required_past_interval_bounds(
+    info,
+    pl->oldest_stored_osdmap());
+  if (rpib.first >= rpib.second) {
+    if (!past_intervals.empty()) {
+      pl->get_clog().error() << info.pgid << " required past_interval bounds are"
+			     << " empty [" << rpib << ") but past_intervals is not: "
+			     << past_intervals;
+      derr << info.pgid << " required past_interval bounds are"
+	   << " empty [" << rpib << ") but past_intervals is not: "
+	   << past_intervals << dendl;
+    }
+  } else {
+    if (past_intervals.empty()) {
+      pl->get_clog().error() << info.pgid << " required past_interval bounds are"
+			     << " not empty [" << rpib << ") but past_intervals "
+			     << past_intervals << " is empty";
+      derr << info.pgid << " required past_interval bounds are"
+	   << " not empty [" << rpib << ") but past_intervals "
+	   << past_intervals << " is empty" << dendl;
+      ceph_assert(!past_intervals.empty());
+    }
+
+    auto apib = past_intervals.get_bounds();
+    if (apib.first > rpib.first) {
+      pl->get_clog().error() << info.pgid << " past_intervals [" << apib
+			     << ") start interval does not contain the required"
+			     << " bound [" << rpib << ") start";
+      derr << info.pgid << " past_intervals [" << apib
+	   << ") start interval does not contain the required"
+	   << " bound [" << rpib << ") start" << dendl;
+      ceph_abort_msg("past_interval start interval mismatch");
+    }
+    if (apib.second != rpib.second) {
+      pl->get_clog().error() << info.pgid << " past_interal bound [" << apib
+			     << ") end does not match required [" << rpib
+			     << ") end";
+      derr << info.pgid << " past_interal bound [" << apib
+	   << ") end does not match required [" << rpib
+	   << ") end" << dendl;
+      ceph_abort_msg("past_interval end mismatch");
+    }
+  }
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -871,7 +932,6 @@ PeeringState::Reset::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 {
   PeeringState *ps = context< PeeringMachine >().state;
-  PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Reset advmap" << dendl;
 
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
@@ -892,7 +952,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
       context< PeeringMachine >().get_cur_transaction());
   }
   ps->remove_down_peer_info(advmap.osdmap);
-  pg->check_past_interval_bounds();
+  ps->check_past_interval_bounds();
   return discard_event();
 }
 
@@ -2796,8 +2856,9 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
 
+  PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
-  pg->check_past_interval_bounds();
+  ps->check_past_interval_bounds();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
   ceph_assert(pg->blocked_by.empty());
