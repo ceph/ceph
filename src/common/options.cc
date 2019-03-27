@@ -6990,6 +6990,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("whether to enable caching (writeback unless rbd_cache_max_dirty is 0)"),
 
+    Option("rbd_cache_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"writethrough", "writeback", "writearound"})
+    .set_default("writeback")
+    .set_description("cache policy for handling writes."),
+
     Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("whether to make writeback caching writethrough until "
