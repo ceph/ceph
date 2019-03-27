@@ -74,6 +74,22 @@ function TEST_config_track() {
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) log reopen || return 1
 }
 
+function TEST_default_adjustment() {
+    a=$(ceph-osd --no-mon-config --show-config-value rgw_torrent_origin)
+    b=$(ceph-osd --no-mon-config --show-config-value rgw_torrent_origin --default-rgw-torrent-origin default)
+    c=$(ceph-osd --no-mon-config --show-config-value rgw_torrent_origin --default-rgw-torrent-origin arg)
+    [ "$a" != "default" ] || return 1
+    [ "$b" = "default" ] || return 1
+    [ "$c" = "arg" ] || return 1
+
+    a=$(ceph-osd --no-mon-config --show-config-value log_to_file)
+    b=$(ceph-osd --no-mon-config --show-config-value log_to_file --default-log-to-file=false)
+    c=$(ceph-osd --no-mon-config --show-config-value log_to_file --default-log-to-file=false --log-to-file)
+    [ "$a" = "true" ] || return 1
+    [ "$b" = "false" ] || return 1
+    [ "$c" = "true" ] || return 1
+}
+
 main osd-config "$@"
 
 # Local Variables:
