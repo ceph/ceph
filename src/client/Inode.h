@@ -188,7 +188,6 @@ struct Inode {
   // about the dir (if this is one!)
   Dir       *dir;     // if i'm a dir.
   fragtree_t dirfragtree;
-  set<int>  dir_contacts;
   uint64_t dir_release_count, dir_ordered_count;
   bool dir_hashed, dir_replicated;
 
