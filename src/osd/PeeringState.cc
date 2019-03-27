@@ -168,7 +168,6 @@ void PeeringState::check_recovery_sources(const OSDMapRef& osdmap)
 
 void PeeringState::update_history(const pg_history_t& new_history)
 {
-  pl->unreg_next_scrub();
   if (info.history.merge(new_history)) {
     psdout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
@@ -178,7 +177,7 @@ void PeeringState::update_history(const pg_history_t& new_history)
       dirty_big_info = true;
     }
   }
-  pl->reg_next_scrub();
+  pl->on_info_history_change();
 }
 
 void PeeringState::purge_strays()
@@ -470,7 +469,6 @@ void PeeringState::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
-  pl->unreg_next_scrub();
   if (is_primary()) {
     pl->clear_ready_to_merge();
   }
@@ -573,7 +571,7 @@ void PeeringState::start_peering_interval(
   }
 
   pl->on_new_interval();
-  pl->reg_next_scrub();
+  pl->on_info_history_change();
 
   psdout(1) << __func__ << " up " << oldup << " -> " << up
 	    << ", acting " << oldacting << " -> " << acting
@@ -1082,14 +1080,11 @@ boost::statechart::result PeeringState::Primary::react(
 boost::statechart::result PeeringState::Primary::react(
   const RequestScrub& evt)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  if (pg->is_primary()) {
-    pg->unreg_next_scrub();
-    pg->scrubber.must_scrub = true;
-    pg->scrubber.must_deep_scrub = evt.deep || evt.repair;
-    pg->scrubber.must_repair = evt.repair;
-    pg->reg_next_scrub();
-    ldout(pg->cct,10) << "marking for scrub" << dendl;
+  PeeringListener *pl = context< PeeringMachine >().pl;
+  PeeringState *ps = context< PeeringMachine >().state;
+  if (ps->is_primary()) {
+    pl->scrub_requested(evt.deep, evt.repair);
+    psdout(10) << "marking for scrub" << dendl;
   }
   return discard_event();
 }
@@ -2685,9 +2680,8 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->unreg_next_scrub();
     pg->info = msg->info;
-    pg->reg_next_scrub();
+    pg->on_info_history_change();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
 

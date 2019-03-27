@@ -66,8 +66,8 @@ public:
       ObjectStore::Transaction &t) = 0;
     virtual void update_heartbeat_peers(set<int> peers) = 0;
 
-    virtual void reg_next_scrub() = 0;
-    virtual void unreg_next_scrub() = 0;
+    virtual void on_info_history_change() = 0;
+    virtual void scrub_requested(bool deep, bool repair) = 0;
 
     virtual void send_cluster_message(int osd, Message *m, epoch_t epoch) = 0;
 
