@@ -421,6 +421,7 @@ public:
   void clear_primary_state() override;
 
   epoch_t oldest_stored_osdmap() override;
+  LogChannel &get_clog() override;
 
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
@@ -947,20 +948,6 @@ protected:
 
   void try_mark_clean();  ///< mark an active pg clean
 
-  /// return [start,end) bounds for required past_intervals
-  static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
-    const pg_info_t &info,
-    epoch_t oldest_map) {
-    epoch_t start = std::max(
-      info.history.last_epoch_clean ? info.history.last_epoch_clean :
-       info.history.epoch_pool_created,
-      oldest_map);
-    epoch_t end = std::max(
-      info.history.same_interval_since,
-      info.history.epoch_pool_created);
-    return make_pair(start, end);
-  }
-  void check_past_interval_bounds() const;
   PastIntervals::PriorSet build_prior();
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);

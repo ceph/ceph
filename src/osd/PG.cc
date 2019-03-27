@@ -576,54 +576,6 @@ bool PG::needs_backfill() const
   return false;
 }
 
-
-void PG::check_past_interval_bounds() const
-{
-  auto rpib = get_required_past_interval_bounds(
-    info,
-    osd->get_superblock().oldest_map);
-  if (rpib.first >= rpib.second) {
-    if (!past_intervals.empty()) {
-      osd->clog->error() << info.pgid << " required past_interval bounds are"
-			 << " empty [" << rpib << ") but past_intervals is not: "
-			 << past_intervals;
-      derr << info.pgid << " required past_interval bounds are"
-	   << " empty [" << rpib << ") but past_intervals is not: "
-	   << past_intervals << dendl;
-    }
-  } else {
-    if (past_intervals.empty()) {
-      osd->clog->error() << info.pgid << " required past_interval bounds are"
-			 << " not empty [" << rpib << ") but past_intervals "
-			 << past_intervals << " is empty";
-      derr << info.pgid << " required past_interval bounds are"
-	   << " not empty [" << rpib << ") but past_intervals "
-	   << past_intervals << " is empty" << dendl;
-      ceph_assert(!past_intervals.empty());
-    }
-
-    auto apib = past_intervals.get_bounds();
-    if (apib.first > rpib.first) {
-      osd->clog->error() << info.pgid << " past_intervals [" << apib
-			 << ") start interval does not contain the required"
-			 << " bound [" << rpib << ") start";
-      derr << info.pgid << " past_intervals [" << apib
-	   << ") start interval does not contain the required"
-	   << " bound [" << rpib << ") start" << dendl;
-      ceph_abort_msg("past_interval start interval mismatch");
-    }
-    if (apib.second != rpib.second) {
-      osd->clog->error() << info.pgid << " past_interal bound [" << apib
-			 << ") end does not match required [" << rpib
-			 << ") end";
-      derr << info.pgid << " past_interal bound [" << apib
-	   << ") end does not match required [" << rpib
-	   << ") end" << dendl;
-      ceph_abort_msg("past_interval end mismatch");
-    }
-  }
-}
-
 bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
 {
   epoch_t up_thru = osdmap->get_up_thru(osd->whoami);
@@ -1469,7 +1421,7 @@ void PG::build_might_have_unfound()
 
   dout(10) << __func__ << dendl;
 
-  check_past_interval_bounds();
+  recovery_state.check_past_interval_bounds();
 
   might_have_unfound = past_intervals.get_might_have_unfound(
     pg_whoami,
@@ -4112,6 +4064,10 @@ void PG::on_new_interval() {
 
 epoch_t PG::oldest_stored_osdmap() {
   return osd->get_superblock().oldest_map;
+}
+
+LogChannel &PG::get_clog() {
+  return *(osd->clog);
 }
 
 void PG::do_replica_scrub_map(OpRequestRef op)
