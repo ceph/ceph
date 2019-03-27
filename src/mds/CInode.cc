@@ -3268,24 +3268,6 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
   return false;
 }
 
-void CInode::replicate_relax_locks()
-{
-  //dout(10) << " relaxing locks on " << *this << dendl;
-  ceph_assert(is_auth());
-  ceph_assert(!is_replicated());
-  
-  authlock.replicate_relax();
-  linklock.replicate_relax();
-  dirfragtreelock.replicate_relax();
-  filelock.replicate_relax();
-  xattrlock.replicate_relax();
-  snaplock.replicate_relax();
-  nestlock.replicate_relax();
-  flocklock.replicate_relax();
-  policylock.replicate_relax();
-}
-
-
 
 // =============================================
 
