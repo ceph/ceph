@@ -226,6 +226,7 @@ protected:
   set<pg_shard_t> &might_have_unfound;
   bool &deleting;
   atomic<bool> &deleted;
+  MissingLoc &missing_loc;
 
 public:
   // -- members --
@@ -594,10 +595,6 @@ protected:
   ghobject_t    pgmeta_oid;
 
   // ------------------
-  // MissingLoc
-
-  MissingLoc missing_loc;
-  
   interval_set<snapid_t> snap_trimq;
 
   /* You should not use these items without taking their respective queue locks
@@ -1134,7 +1131,6 @@ protected:
   void cancel_recovery();
   void clear_recovery_state();
   virtual void _clear_recovery_state() = 0;
-  virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
   void start_recovery_op(const hobject_t& soid);
   void finish_recovery_op(const hobject_t& soid, bool dequeue=false);
 

@@ -12400,34 +12400,7 @@ void PrimaryLogPG::cancel_pull(const hobject_t &soid)
 
 void PrimaryLogPG::check_recovery_sources(const OSDMapRef& osdmap)
 {
-  /*
-   * check that any peers we are planning to (or currently) pulling
-   * objects from are dealt with.
-   */
-  missing_loc.check_recovery_sources(osdmap);
   pgbackend->check_recovery_sources(osdmap);
-
-  for (set<pg_shard_t>::iterator i = peer_log_requested.begin();
-       i != peer_log_requested.end();
-       ) {
-    if (!osdmap->is_up(i->osd)) {
-      dout(10) << "peer_log_requested removing " << *i << dendl;
-      peer_log_requested.erase(i++);
-    } else {
-      ++i;
-    }
-  }
-
-  for (set<pg_shard_t>::iterator i = peer_missing_requested.begin();
-       i != peer_missing_requested.end();
-       ) {
-    if (!osdmap->is_up(i->osd)) {
-      dout(10) << "peer_missing_requested removing " << *i << dendl;
-      peer_missing_requested.erase(i++);
-    } else {
-      ++i;
-    }
-  }
 }
 
 bool PrimaryLogPG::start_recovery_ops(

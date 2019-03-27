@@ -71,6 +71,7 @@ public:
 
     virtual void send_cluster_message(int osd, Message *m, epoch_t epoch) = 0;
 
+    virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
@@ -1136,6 +1137,8 @@ public:
   bool deleting = false;  /// true while in removing or OSD is shutting down
   atomic<bool> deleted = {false}; /// true once deletion complete
 
+  MissingLoc missing_loc; ///< information about missing objects
+
   void update_osdmap_ref(OSDMapRef newmap) {
     osdmap_ref = std::move(newmap);
   }
@@ -1148,6 +1151,7 @@ public:
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void purge_strays();
   void update_history(const pg_history_t& new_history);
+  void check_recovery_sources(const OSDMapRef& map);
 
 public:
   PeeringState(
