@@ -101,7 +101,7 @@ public:
     } else {
       ack_level = std::atoi(str_ack_level.c_str());
       if (ack_level < 100 || ack_level >= 600) {
-        throw configuration_error("HTTP: invalid http-ack-level " + str_ack_level);
+        throw configuration_error("HTTP/S: invalid http-ack-level " + str_ack_level);
       }
     }
 
@@ -113,7 +113,7 @@ public:
     } else if (str_verify_ssl == "false") {
       verify_ssl = false;
     } else {
-        throw configuration_error("HTTP: verify-ssl must be true/false, not: " + str_verify_ssl);
+        throw configuration_error("HTTP/S: verify-ssl must be true/false, not: " + str_verify_ssl);
     }
   }
 
@@ -126,7 +126,7 @@ public:
   }
 
   std::string to_str() const override {
-    std::string str("HTTP Endpoint");
+    std::string str("HTTP/S Endpoint");
     str += "\nURI: " + endpoint;
     str += "\nAck Level: " + str_ack_level;
     str += (verify_ssl ? "\nverify SSL" : "\ndon't verify SSL");
@@ -254,10 +254,11 @@ private:
 public:
   RGWPubSubAMQPEndpoint(const std::string& _endpoint,
       const std::string& _topic,
-      const RGWHTTPArgs& args) : 
+      const RGWHTTPArgs& args,
+      CephContext* cct) : 
         endpoint(_endpoint), 
         topic(_topic), 
-        conn(amqp::connect(endpoint, get_exchange(args))) {
+        conn(amqp::connect(endpoint, get_exchange(args), cct)) {
     bool exists;
     // get ack level
     str_ack_level = args.get("amqp-ack-level", &exists);
@@ -332,7 +333,8 @@ const std::string& RGWPubSubEndpoint::get_schema(const std::string& endpoint) {
 
 RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
     const std::string& topic, 
-    const RGWHTTPArgs& args) {
+    const RGWHTTPArgs& args,
+    CephContext* cct) {
   const auto& schema = get_schema(endpoint);
   if (schema == WEBHOOK_SCHEMA) {
     return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
@@ -344,7 +346,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       version = AMQP_0_9_1;
     }
     if (version == AMQP_0_9_1) {
-      return Ptr(new RGWPubSubAMQPEndpoint(endpoint, topic, args));
+      return Ptr(new RGWPubSubAMQPEndpoint(endpoint, topic, args, cct));
     } else if (version == AMQP_1_0) {
       throw configuration_error("amqp v1.0 not supported");
       return nullptr;

@@ -11,6 +11,7 @@
 class RGWDataSyncEnv;
 class RGWCoroutine;
 class RGWHTTPArgs;
+class CephContext;
 struct rgw_pubsub_event;
 struct rgw_pubsub_s3_record;
 
@@ -29,7 +30,7 @@ public:
   // factory method for the actual notification endpoint
   // derived class specific arguments are passed in http args format
   // may throw a configuration_error if creation fails
-  static Ptr create(const std::string& endpoint, const std::string& topic, const RGWHTTPArgs& args);
+  static Ptr create(const std::string& endpoint, const std::string& topic, const RGWHTTPArgs& args, CephContext *cct=nullptr);
  
   // this method is used in order to send notification (Ceph specific) and wait for completion 
   // in async manner via a coroutine

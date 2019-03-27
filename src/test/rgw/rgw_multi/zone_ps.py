@@ -34,7 +34,7 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
 NO_HTTP_BODY = ''
 
 
-def make_request(conn, method, resource, parameters=None, sign_parameters=False):
+def make_request(conn, method, resource, parameters=None, sign_parameters=False, extra_parameters=None):
     """generic request sending to pubsub radogw
     should cover: topics, notificatios and subscriptions
     """
@@ -44,6 +44,8 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False)
         # remove 'None' from keys with no values
         url_params = url_params.replace('=None', '')
         url_params = '?' + url_params
+    if extra_parameters is not None:
+        url_params = url_params + '&' + extra_parameters
     string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
     string_to_sign = method + '\n\n\n' + string_date + '\n' + resource
     if sign_parameters:
@@ -67,20 +69,27 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False)
 
 class PSTopic:
     """class to set/get/delete a topic
-    PUT /topics/<topic name>
+    PUT /topics/<topic name>[?push-endpoint=<endpoint>&[<arg1>=<value1>...]]
     GET /topics/<topic name>
     DELETE /topics/<topic name>
     """
-    def __init__(self, conn, topic_name):
+    def __init__(self, conn, topic_name, endpoint=None, endpoint_args=None):
         self.conn = conn
         assert topic_name.strip()
         self.resource = '/topics/'+topic_name
+        if endpoint is not None:
+            self.parameters = {'push-endpoint': endpoint}
+            self.extra_parameters = endpoint_args
+        else:
+            self.parameters = None
+            self.extra_parameters = None
 
-    def send_request(self, method, get_list=False):
+    def send_request(self, method, get_list=False, parameters=None, extra_parameters=None):
         """send request to radosgw"""
         if get_list:
             return make_request(self.conn, method, '/topics')
-        return make_request(self.conn, method, self.resource)
+        return make_request(self.conn, method, self.resource, 
+                            parameters=parameters, extra_parameters=extra_parameters)
 
     def get_config(self):
         """get topic info"""
@@ -88,7 +97,7 @@ class PSTopic:
 
     def set_config(self):
         """set topic"""
-        return self.send_request('PUT')
+        return self.send_request('PUT', parameters=self.parameters, extra_parameters=self.extra_parameters)
 
     def del_config(self):
         """delete topic"""
@@ -154,7 +163,8 @@ class PSNotificationS3:
 
     def send_request(self, method, parameters=None):
         """send request to radosgw"""
-        return make_request(self.conn, method, self.resource, parameters, sign_parameters=True)
+        return make_request(self.conn, method, self.resource,
+                            parameters=parameters, sign_parameters=True)
 
     def get_config(self, all_notifications=True):
         """get notification info"""
@@ -196,22 +206,29 @@ class PSNotificationS3:
 
 class PSSubscription:
     """class to set/get/delete a subscription:
-    PUT /subscriptions/<sub-name>?topic=<topic-name>
+    PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>&[<arg1>=<value1>...]]
     GET /subscriptions/<sub-name>
     DELETE /subscriptions/<sub-name>
     also to get list of events, and ack them:
     GET /subscriptions/<sub-name>?events[&max-entries=<max-entries>][&marker=<marker>]
     POST /subscriptions/<sub-name>?ack&event-id=<event-id>
     """
-    def __init__(self, conn, sub_name, topic_name):
+    def __init__(self, conn, sub_name, topic_name, endpoint=None, endpoint_args=None):
         self.conn = conn
         assert topic_name.strip()
         self.resource = '/subscriptions/'+sub_name
-        self.parameters = {'topic': topic_name}
+        if endpoint is not None:
+            self.parameters = {'topic': topic_name, 'push-endpoint': endpoint}
+            self.extra_parameters = endpoint_args
+        else:
+            self.parameters = {'topic': topic_name}
+            self.extra_parameters = None
 
-    def send_request(self, method, parameters=None):
+    def send_request(self, method, parameters=None, extra_parameters=None):
         """send request to radosgw"""
-        return make_request(self.conn, method, self.resource, parameters)
+        return make_request(self.conn, method, self.resource, 
+                            parameters=parameters,
+                            extra_parameters=extra_parameters)
 
     def get_config(self):
         """get subscription info"""
@@ -219,7 +236,7 @@ class PSSubscription:
 
     def set_config(self):
         """set subscription"""
-        return self.send_request('PUT', self.parameters)
+        return self.send_request('PUT', parameters=self.parameters, extra_parameters=self.extra_parameters)
 
     def del_config(self, topic=False):
         """delete subscription"""

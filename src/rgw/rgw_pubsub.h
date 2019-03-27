@@ -23,7 +23,7 @@ class XMLObj;
       </S3Key>
     </Filter>
     <Id>notification1</Id>
-    <Topic>arn:aws:sns:::[<endpoint-type>:<endpoint-name>]:topic1</Topic>
+    <Topic>arn:aws:sns:<region>:<account>:[<endpoint-type>:<endpoint-name>]:<topic></Topic>
     <Event>s3:ObjectCreated:*</Event>
     <Event>s3:ObjectRemoved:*</Event>
   </TopicConfiguration>
@@ -32,16 +32,10 @@ class XMLObj;
 struct rgw_pubsub_s3_notification {
   // notification id
   std::string id;
-  // type of endpoint (http, amqp etc.)
-  // empty of no endpoint is set
-  std::string endpoint_type;
-  // id of endpoint (usually URI)
-  // empty of no endpoint is set
-  std::string endpoint_id;
-  // topic
-  std::string topic;
   // types of events
   std::list<std::string> events;
+  // topic ARN
+  std::string topic_arn;
 
   bool decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
@@ -230,10 +224,11 @@ struct rgw_pubsub_event {
 WRITE_CLASS_ENCODER(rgw_pubsub_event)
 
 struct rgw_pubsub_sub_dest {
-  string bucket_name;
-  string oid_prefix;
-  string push_endpoint;
-  string push_endpoint_args;
+  rgw_pubsub_sub_dest() : bucket_name(""), oid_prefix(""), push_endpoint(""), push_endpoint_args("") {}
+  std::string bucket_name;
+  std::string oid_prefix;
+  std::string push_endpoint;
+  std::string push_endpoint_args;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
@@ -259,6 +254,7 @@ struct rgw_pubsub_sub_dest {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_sub_dest)
 
+
 struct rgw_pubsub_sub_config {
   rgw_user user;
   std::string name;
@@ -277,7 +273,7 @@ struct rgw_pubsub_sub_config {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(user, bl);
     decode(name, bl);
     decode(topic, bl);
@@ -294,19 +290,27 @@ WRITE_CLASS_ENCODER(rgw_pubsub_sub_config)
 
 struct rgw_pubsub_topic {
   rgw_user user;
-  string name;
+  std::string name;
+  rgw_pubsub_sub_dest dest;
+  std::string arn;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(user, bl);
     encode(name, bl);
+    encode(dest, bl);
+    encode(arn, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(user, bl);
     decode(name, bl);
+    if (struct_v >= 2) {
+      decode(dest, bl);
+      decode(arn, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -406,7 +410,18 @@ struct rgw_pubsub_user_topics {
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_user_topics)
 
-static string pubsub_user_oid_prefix = "pubsub.user.";
+static std::string pubsub_user_oid_prefix = "pubsub.user.";
+
+// generate a topic ARN string
+// no endpoint (pull mode only): arn:s3:sns:<region>:<account>:<topic>
+// with endpoint               : arn:s3:sns:<region>:<account>:<endpoint-type>:<endpoint>:<topic>
+std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
+    const std::string& topic_name, 
+    const std::string& zonegroup_name,
+    const std::string& user_name);
+
+// extract the name of the topic from the string representation of the topic ARN
+std::string topic_name_from_arn(const std::string& topic_arn);
 
 class RGWUserPubSub
 {
@@ -554,6 +569,7 @@ public:
   int get_user_topics(rgw_pubsub_user_topics *result);
   int get_topic(const string& name, rgw_pubsub_topic_subs *result);
   int create_topic(const string& name);
+  int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn);
   int remove_topic(const string& name);
 };
 

@@ -7,6 +7,8 @@
 #include <functional>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
+class CephContext;
+
 namespace rgw::amqp {
 // forward declaration of connection object
 struct connection_t;
@@ -22,7 +24,7 @@ void intrusive_ptr_release(const connection_t* p);
 typedef std::function<void(int)> reply_callback_t;
 
 // connect to an amqp endpoint
-connection_ptr_t connect(const std::string& url, const std::string& exchange);
+connection_ptr_t connect(const std::string& url, const std::string& exchange, CephContext* cct);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,
