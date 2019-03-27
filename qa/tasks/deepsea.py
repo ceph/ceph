@@ -1050,8 +1050,10 @@ class Orch(DeepSea):
         global reboot_tries
         orch_type, orch_spec = orch_tuple
         if orch_type == 'orch':
+            cli = False
             pass
         elif orch_type == 'stage':
+            cli = self.deepsea_cli
             orch_spec = 'ceph.stage.{}'.format(orch_spec)
         else:
             raise ConfigError(
@@ -1059,7 +1061,7 @@ class Orch(DeepSea):
                 "Unrecognized orchestration type ->{}<-".format(orch_type)
                 )
         cmd_str = None
-        if self.deepsea_cli:
+        if cli:
             cmd_str = (
                 'timeout 60m deepsea '
                 '--log-file=/var/log/salt/deepsea.log '
