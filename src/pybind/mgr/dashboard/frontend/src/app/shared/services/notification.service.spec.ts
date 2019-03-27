@@ -107,6 +107,16 @@ describe('NotificationService', () => {
     expect(notification.message).toBe(undefined);
   }));
 
+  it('should be able to stop notifyTask from notifying', fakeAsync(() => {
+    const task = _.assign(new FinishedTask(), {
+      success: true
+    });
+    const timeoutId = service.notifyTask(task, true);
+    service.cancel(timeoutId);
+    tick(100);
+    expect(service['dataSource'].getValue().length).toBe(0);
+  }));
+
   it('should show a error task notification', fakeAsync(() => {
     const task = _.assign(
       new FinishedTask('rbd/create', {
