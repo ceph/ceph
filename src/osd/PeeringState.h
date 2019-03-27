@@ -64,7 +64,6 @@ public:
       bool dirty_big_info,
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
-    virtual void update_store_with_options(const pool_opts_t &opts) = 0;
     virtual void update_heartbeat_peers(set<int> peers) = 0;
 
     virtual void reg_next_scrub() = 0;

@@ -417,6 +417,10 @@ public:
   void on_role_change() override;
   virtual void plpg_on_role_change() = 0;
 
+  void on_pool_change() override;
+  virtual void plpg_on_pool_change() = 0;
+
+
   void clear_publish_stats() override;
   void clear_primary_state() override;
 
@@ -1515,8 +1519,6 @@ public:
     bool dirty_big_info,
     bool need_update_epoch,
     map<string,bufferlist> *km);
-
-  void update_store_with_options(const pool_opts_t &opts) override;
 
   static int _prepare_write_info(
     CephContext* cct,
