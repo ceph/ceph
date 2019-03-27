@@ -443,6 +443,11 @@ void OSDService::start_shutdown()
     std::lock_guard l(sleep_lock);
     sleep_timer.shutdown();
   }
+
+  {
+    std::lock_guard l(recovery_request_lock);
+    recovery_request_timer.shutdown();
+  }
 }
 
 void OSDService::shutdown_reserver()
@@ -462,11 +467,6 @@ void OSDService::shutdown()
   for (auto f : objecter_finishers) {
     f->wait_for_empty();
     f->stop();
-  }
-
-  {
-    std::lock_guard l(recovery_request_lock);
-    recovery_request_timer.shutdown();
   }
 
   osdmap = OSDMapRef();
