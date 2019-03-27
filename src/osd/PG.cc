@@ -4504,14 +4504,31 @@ void PG::reg_next_scrub()
 					       must);
   dout(10) << __func__ << " pg " << pg_id << " register next scrub, scrub time "
       << scrubber.scrub_reg_stamp << ", must = " << (int)must << dendl;
+  scrub_registered = true;
 }
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary()) {
+  if (scrub_registered) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
     scrubber.scrub_reg_stamp = utime_t();
+    scrub_registered = false;
   }
+}
+
+void PG::on_info_history_change()
+{
+  unreg_next_scrub();
+  reg_next_scrub();
+}
+
+void PG::scrub_requested(bool deep, bool repair)
+{
+  unreg_next_scrub();
+  scrubber.must_scrub = true;
+  scrubber.must_deep_scrub = deep || repair;
+  scrubber.must_repair = repair;
+  reg_next_scrub();
 }
 
 void PG::do_replica_scrub_map(OpRequestRef op)
@@ -6081,7 +6098,6 @@ void PG::merge_new_log_entries(
 
 void PG::update_history(const pg_history_t& new_history)
 {
-  unreg_next_scrub();
   if (info.history.merge(new_history)) {
     dout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
@@ -6091,7 +6107,7 @@ void PG::update_history(const pg_history_t& new_history)
       dirty_big_info = true;
     }
   }
-  reg_next_scrub();
+  on_info_history_change();
 }
 
 void PG::fulfill_info(
@@ -6295,8 +6311,6 @@ void PG::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
-  unreg_next_scrub();
-
   if (is_primary()) {
     osd->clear_ready_to_merge(this);
   }
@@ -6488,7 +6502,7 @@ void PG::on_new_interval()
 {
   const OSDMapRef osdmap = get_osdmap();
 
-  reg_next_scrub();
+  on_info_history_change();
 
   // initialize features
   acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -7398,11 +7412,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_primary()) {
-    pg->unreg_next_scrub();
-    pg->scrubber.must_scrub = true;
-    pg->scrubber.must_deep_scrub = evt.deep || evt.repair;
-    pg->scrubber.must_repair = evt.repair;
-    pg->reg_next_scrub();
+    pg->scrub_requested(evt.deep, evt.repair);
     ldout(pg->cct,10) << "marking for scrub" << dendl;
   }
   return discard_event();
@@ -8973,9 +8983,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->unreg_next_scrub();
     pg->info = msg->info;
-    pg->reg_next_scrub();
+    pg->on_info_history_change();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
 
