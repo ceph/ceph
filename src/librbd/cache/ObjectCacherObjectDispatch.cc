@@ -7,7 +7,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/LibrbdWriteback.h"
+#include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
@@ -95,7 +95,7 @@ void ObjectCacherObjectDispatch<I>::init() {
 
   m_cache_lock.Lock();
   ldout(cct, 5) << "enabling caching..." << dendl;
-  m_writeback_handler = new LibrbdWriteback(m_image_ctx, m_cache_lock);
+  m_writeback_handler = new ObjectCacherWriteback(m_image_ctx, m_cache_lock);
 
   uint64_t init_max_dirty = m_image_ctx->cache_max_dirty;
   if (m_image_ctx->cache_writethrough_until_flush) {
