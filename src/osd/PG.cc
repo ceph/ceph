@@ -5806,9 +5806,10 @@ void PG::scrub_finish()
     } else if (scrubber.shallow_errors || scrubber.deep_errors) {
       // We have errors but nothing can be fixed, so there is no repair
       // possible.
-      state_set(PG_STATE_FAILED_REPAIR); }
+      state_set(PG_STATE_FAILED_REPAIR);
       dout(10) << __func__ << " " << (scrubber.shallow_errors + scrubber.deep_errors)
 	       << " error(s) present with no repair possible" << dendl;
+    }
   }
   if (deep_scrub) {
     if ((scrubber.shallow_errors == 0) && (scrubber.deep_errors == 0))
