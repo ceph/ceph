@@ -1721,7 +1721,7 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
   temp_seq(0),
   snap_trimmer_machine(this)
 { 
-  missing_loc.set_backend_predicates(
+  recovery_state.set_backend_predicates(
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
@@ -12187,9 +12187,10 @@ void PrimaryLogPG::on_activate()
   agent_setup();
 }
 
-void PrimaryLogPG::_on_new_interval()
+void PrimaryLogPG::plpg_on_new_interval()
 {
   dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
+
   if (!pg_log.get_missing().may_include_deletes &&
       get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
     pg_log.rebuild_missing_set_with_deletes(osd->store, ch, info);
@@ -12307,7 +12308,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   ceph_assert(objects_blocked_on_degraded_snap.empty());
 }
 
-void PrimaryLogPG::on_role_change()
+void PrimaryLogPG::plpg_on_role_change()
 {
   dout(10) << __func__ << dendl;
   if (get_role() != 0 && hit_set) {
