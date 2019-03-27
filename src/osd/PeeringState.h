@@ -20,6 +20,7 @@
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
+#include "common/LogClient.h"
 
 class PG;
 
@@ -97,6 +98,7 @@ public:
     virtual void on_new_interval() = 0;
 
     virtual epoch_t oldest_stored_osdmap() = 0;
+    virtual LogChannel &get_clog() = 0;
 
     virtual ~PeeringListener() {}
   };
@@ -1193,6 +1195,7 @@ public:
     int new_up_primary,
     int new_acting_primary);
   void clear_primary_state();
+  void check_past_interval_bounds() const;
 
 public:
   PeeringState(
