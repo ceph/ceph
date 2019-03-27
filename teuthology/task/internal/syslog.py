@@ -138,6 +138,8 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'ceph-crash',
                     run.Raw('|'),
+                    'egrep', '-v', '\\btcmu-runner\\b.*\\bINFO\\b',
+                    run.Raw('|'),
                     'head', '-n', '1',
                 ],
                 stdout=StringIO(),
