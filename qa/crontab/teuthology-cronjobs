@@ -208,6 +208,9 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 
 
 ## upgrades suites for on nautilus
+
+25 01 * * *  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/nautilus-p2p -k distro -e $CEPH_QA_EMAIL
+
 ## !!!! three suites below MUST use --suite-branch hammer, krakel, jewel, luminous (see https://tracker.ceph.com/issues/24021)
 ## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5" - test ONLY supported distro
 ## to run on ovh use ~/rhel_only_on_ovh.yaml, we will run on smithi nodes
