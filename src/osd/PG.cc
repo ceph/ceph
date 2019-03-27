@@ -4028,14 +4028,31 @@ void PG::reg_next_scrub()
 					       must);
   dout(10) << __func__ << " pg " << pg_id << " register next scrub, scrub time "
       << scrubber.scrub_reg_stamp << ", must = " << (int)must << dendl;
+  scrub_registered = true;
 }
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary()) {
+  if (scrub_registered) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
     scrubber.scrub_reg_stamp = utime_t();
+    scrub_registered = false;
   }
+}
+
+void PG::on_info_history_change()
+{
+  unreg_next_scrub();
+  reg_next_scrub();
+}
+
+void PG::scrub_requested(bool deep, bool repair)
+{
+  unreg_next_scrub();
+  scrubber.must_scrub = true;
+  scrubber.must_deep_scrub = deep || repair;
+  scrubber.must_repair = repair;
+  reg_next_scrub();
 }
 
 void PG::clear_ready_to_merge() {

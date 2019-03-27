@@ -403,8 +403,8 @@ public:
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
 
-  void reg_next_scrub() override;
-  void unreg_next_scrub() override;
+  void reg_next_scrub();
+  void unreg_next_scrub();
 
   void clear_ready_to_merge() override;
 
@@ -420,6 +420,9 @@ public:
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
+  void on_info_history_change() override;
+
+  void scrub_requested(bool deep, bool repair) override;
 
   void clear_publish_stats() override;
   void clear_primary_state() override;
@@ -617,6 +620,7 @@ protected:
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
+  bool scrub_registered = false;
   bool scrub_queued;
   bool recovery_queued;
 
