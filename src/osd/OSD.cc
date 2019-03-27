@@ -253,7 +253,7 @@ OSDService::OSDService(OSD *osd) :
   reserver_finisher(cct),
   local_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
-  remote_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
+  remote_reserver(cct, &reserver_finisher, cct->_conf->osd_max_remote_backfills?cct->_conf->osd_max_remote_backfills:cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
   snap_reserver(cct, &reserver_finisher,
@@ -9826,6 +9826,7 @@ const char** OSD::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
     "osd_max_backfills",
+    "osd_max_remote_backfills",
     "osd_min_recovery_priority",
     "osd_max_trimming_pgs",
     "osd_op_complaint_time",
@@ -9865,7 +9866,10 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   Mutex::Locker l(osd_lock);
   if (changed.count("osd_max_backfills")) {
     service.local_reserver.set_max(cct->_conf->osd_max_backfills);
-    service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
+    service.remote_reserver.set_max(cct->_conf->osd_max_remote_backfills?cct->_conf->osd_max_remote_backfills:cct->_conf->osd_max_backfills);
+  }
+  if (changed.count("osd_max_remote_backfills")) {
+    service.remote_reserver.set_max(cct->_conf->osd_max_remote_backfills?cct->_conf->osd_max_remote_backfills:cct->_conf->osd_max_backfills);
   }
   if (changed.count("osd_min_recovery_priority")) {
     service.local_reserver.set_min_priority(cct->_conf->osd_min_recovery_priority);

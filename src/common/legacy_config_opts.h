@@ -516,6 +516,9 @@ OPTION(osd_check_max_object_name_len_on_startup, OPT_BOOL)
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64)
 
+// Maximum number of backfills to a single osd (default 0, means the same value as osd_max_backfills)
+OPTION(osd_max_remote_backfills, OPT_U64)
+
 // Minimum recovery priority (255 = max, smaller = lower)
 OPTION(osd_min_recovery_priority, OPT_INT)
 

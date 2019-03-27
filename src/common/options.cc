@@ -2280,6 +2280,11 @@ std::vector<Option> get_global_options() {
     .set_description("Maximum number of concurrent local and remote backfills or recoveries per OSD ")
     .set_long_description("There can be osd_max_backfills local reservations AND the same remote reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary in recovery and 1 shard of another recovering PG."),
 
+    Option("osd_max_remote_backfills", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Maximum number of concurrent remote backfills or recoveries per OSD(0 means the same value as osd_max_backfills)")
+    .set_long_description("There can be osd_max_remote_backfills remote reservations per OSD. So a value of 1 lets this OSD participate as 1 shard of another recovering PG."),
+
     Option("osd_min_recovery_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Minimum priority below which recovery is not performed")
