@@ -421,6 +421,36 @@ void PeeringState::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
   }
 }
 
+bool PG::should_restart_peering(
+  int newupprimary,
+  int newactingprimary,
+  const vector<int>& newup,
+  const vector<int>& newacting,
+  OSDMapRef lastmap,
+  OSDMapRef osdmap)
+{
+  if (PastIntervals::is_new_interval(
+	primary.osd,
+	newactingprimary,
+	acting,
+	newacting,
+	up_primary.osd,
+	newupprimary,
+	up,
+	newup,
+	osdmap.get(),
+	lastmap.get(),
+	info.pgid.pgid)) {
+    dout(20) << "new interval newup " << newup
+	     << " newacting " << newacting << dendl;
+    return true;
+  }
+  if (!lastmap->is_up(osd->whoami) && osdmap->is_up(osd->whoami)) {
+    dout(10) << __func__ << " osd transitioned from down -> up" << dendl;
+    return true;
+  }
+  return false;
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -502,7 +532,7 @@ boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
   PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Started advmap" << dendl;
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
-  if (pg->should_restart_peering(
+  if (ps->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
 	advmap.newup,
@@ -563,7 +593,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
 
-  if (pg->should_restart_peering(
+  if (ps->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
 	advmap.newup,
@@ -1785,7 +1815,7 @@ PeeringState::Active::Active(my_context ctx)
 boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 {
   PG *pg = context< PeeringMachine >().pg;
-  if (pg->should_restart_peering(
+  if (ps->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
 	advmap.newup,
