@@ -78,17 +78,13 @@ private:
     Context *on_ready;
     Context *on_safe;
     std::set<int> filters;
-    bool writeback_cache_enabled;
     C_AioModifyComplete(Replay *replay, Context *on_ready,
-                        Context *on_safe, std::set<int> &&filters,
-                        bool writeback_cache_enabled)
+                        Context *on_safe, std::set<int> &&filters)
       : replay(replay), on_ready(on_ready), on_safe(on_safe),
-        filters(std::move(filters)),
-        writeback_cache_enabled(writeback_cache_enabled) {
+        filters(std::move(filters)) {
     }
     void finish(int r) override {
-      replay->handle_aio_modify_complete(on_ready, on_safe, r, filters,
-                                         writeback_cache_enabled);
+      replay->handle_aio_modify_complete(on_ready, on_safe, r, filters);
     }
   };
 
@@ -181,8 +177,7 @@ private:
                     Context *on_safe);
 
   void handle_aio_modify_complete(Context *on_ready, Context *on_safe,
-                                  int r, std::set<int> &filters,
-                                  bool writeback_cache_enabled);
+                                  int r, std::set<int> &filters);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 

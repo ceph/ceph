@@ -23,11 +23,15 @@ namespace cache {
 template <typename ImageCtxT = ImageCtx>
 class ObjectCacherObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new ObjectCacherObjectDispatch(image_ctx);
+  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx,
+                                            size_t max_dirty,
+                                            bool writethrough_until_flush) {
+    return new ObjectCacherObjectDispatch(image_ctx, max_dirty,
+                                          writethrough_until_flush);
   }
 
-  ObjectCacherObjectDispatch(ImageCtxT* image_ctx);
+  ObjectCacherObjectDispatch(ImageCtxT* image_ctx, size_t max_dirty,
+                             bool writethrough_until_flush);
   ~ObjectCacherObjectDispatch() override;
 
   io::ObjectDispatchLayer get_object_dispatch_layer() const override {
@@ -93,6 +97,8 @@ private:
   struct C_InvalidateCache;
 
   ImageCtxT* m_image_ctx;
+  size_t m_max_dirty;
+  bool m_writethrough_until_flush;
 
   Mutex m_cache_lock;
   ObjectCacher *m_object_cacher = nullptr;

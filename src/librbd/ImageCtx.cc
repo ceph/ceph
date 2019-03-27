@@ -790,8 +790,6 @@ public:
     bool skip_partial_discard = true;
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
-    ASSIGN_OPTION(cache_writethrough_until_flush, bool);
-    ASSIGN_OPTION(cache_max_dirty, Option::size_t);
     ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
     ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
     ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
@@ -898,10 +896,6 @@ public:
     ceph_assert(policy != nullptr);
     delete journal_policy;
     journal_policy = policy;
-  }
-
-  bool ImageCtx::is_writeback_cache_enabled() const {
-    return (cache && cache_max_dirty > 0);
   }
 
   void ImageCtx::get_thread_pool_instance(CephContext *cct,
