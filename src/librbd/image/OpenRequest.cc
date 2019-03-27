@@ -524,7 +524,12 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  auto cache = cache::ObjectCacherObjectDispatch<I>::create(m_image_ctx);
+  size_t max_dirty = m_image_ctx->config.template get_val<Option::size_t>(
+    "rbd_cache_max_dirty");
+  auto writethrough_until_flush = m_image_ctx->config.template get_val<bool>(
+    "rbd_cache_writethrough_until_flush");
+  auto cache = cache::ObjectCacherObjectDispatch<I>::create(
+    m_image_ctx, max_dirty, writethrough_until_flush);
   cache->init();
 
   // readahead requires the cache

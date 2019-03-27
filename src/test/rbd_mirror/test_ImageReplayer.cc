@@ -241,6 +241,8 @@ public:
     std::string master_client_id = "";
     std::string mirror_client_id = m_local_mirror_uuid;
 
+    m_replayer->flush();
+
     C_SaferCond cond;
     uint64_t minimum_set;
     uint64_t active_set;
@@ -387,7 +389,7 @@ public:
   int64_t m_remote_pool_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
-  rbd::mirror::ImageReplayer<> *m_replayer;
+  rbd::mirror::ImageReplayer<> *m_replayer = nullptr;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
   char m_test_data[TEST_IO_SIZE + 1];

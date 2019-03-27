@@ -74,8 +74,9 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
 
 template <typename I>
 ObjectCacherObjectDispatch<I>::ObjectCacherObjectDispatch(
-    I* image_ctx)
-  : m_image_ctx(image_ctx),
+    I* image_ctx, size_t max_dirty, bool writethrough_until_flush)
+  : m_image_ctx(image_ctx), m_max_dirty(max_dirty),
+    m_writethrough_until_flush(writethrough_until_flush),
     m_cache_lock(util::unique_lock_name(
       "librbd::cache::ObjectCacherObjectDispatch::cache_lock", this)) {
 }
@@ -97,8 +98,8 @@ void ObjectCacherObjectDispatch<I>::init() {
   ldout(cct, 5) << "enabling caching..." << dendl;
   m_writeback_handler = new ObjectCacherWriteback(m_image_ctx, m_cache_lock);
 
-  uint64_t init_max_dirty = m_image_ctx->cache_max_dirty;
-  if (m_image_ctx->cache_writethrough_until_flush) {
+  auto init_max_dirty = m_max_dirty;
+  if (m_writethrough_until_flush) {
     init_max_dirty = 0;
   }
 
@@ -356,12 +357,12 @@ bool ObjectCacherObjectDispatch<I>::flush(
                                                       on_dispatched);
 
   m_cache_lock.Lock();
-  if (flush_source == io::FLUSH_SOURCE_USER && !m_user_flushed &&
-      m_image_ctx->cache_writethrough_until_flush &&
-      m_image_ctx->cache_max_dirty > 0) {
+  if (flush_source == io::FLUSH_SOURCE_USER && !m_user_flushed) {
     m_user_flushed = true;
-    m_object_cacher->set_max_dirty(m_image_ctx->cache_max_dirty);
-    ldout(cct, 5) << "saw first user flush, enabling writeback" << dendl;
+    if (m_writethrough_until_flush && m_max_dirty > 0) {
+      m_object_cacher->set_max_dirty(m_max_dirty);
+      ldout(cct, 5) << "saw first user flush, enabling writeback" << dendl;
+    }
   }
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
