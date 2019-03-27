@@ -348,7 +348,6 @@ void PeeringState::advance_map(
   handle_event(evt, rctx);
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
-    pl->update_store_with_options(pool.info.opts);
   }
   last_require_osd_release = osdmap->require_osd_release;
 }
