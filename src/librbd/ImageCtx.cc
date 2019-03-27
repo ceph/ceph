@@ -24,7 +24,6 @@
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
-#include "librbd/LibrbdWriteback.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/io/AioCompletion.h"
