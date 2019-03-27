@@ -5735,31 +5735,6 @@ void PG::fulfill_query(const MQuery& query, PeeringCtx *rctx)
   }
 }
 
-void PG::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
-{
-  bool changed = false;
-  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
-      !lastmap->test_flag(CEPH_OSDMAP_FULL)) {
-    dout(10) << " cluster was marked full in " << osdmap->get_epoch() << dendl;
-    changed = true;
-  }
-  const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
-  if (!pi) {
-    return; // pool deleted
-  }
-  if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
-    const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
-    if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
-      dout(10) << " pool was marked full in " << osdmap->get_epoch() << dendl;
-      changed = true;
-    }
-  }
-  if (changed) {
-    info.history.last_epoch_marked_full = osdmap->get_epoch();
-    dirty_info = true;
-  }
-}
-
 bool PG::should_restart_peering(
   int newupprimary,
   int newactingprimary,
