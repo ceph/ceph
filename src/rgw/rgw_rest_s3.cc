@@ -536,10 +536,10 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("Entry");
     formatter->dump_string("Category", uiter->first);
-    formatter->dump_int("BytesSent", usage.bytes_sent);
-    formatter->dump_int("BytesReceived", usage.bytes_received);
-    formatter->dump_int("Ops", usage.ops);
-    formatter->dump_int("SuccessfulOps", usage.successful_ops);
+    formatter->dump_unsigned("BytesSent", usage.bytes_sent);
+    formatter->dump_unsigned("BytesReceived", usage.bytes_received);
+    formatter->dump_unsigned("Ops", usage.ops);
+    formatter->dump_unsigned("SuccessfulOps", usage.successful_ops);
     formatter->close_section(); // Entry
   }
   formatter->close_section(); // Category
@@ -623,10 +623,10 @@ void RGWGetUsage_ObjStore_S3::send_response()
        rgw_usage_data total_usage;
        entry.sum(total_usage, categories);
        formatter->open_object_section("Total");
-       formatter->dump_int("BytesSent", total_usage.bytes_sent);
-       formatter->dump_int("BytesReceived", total_usage.bytes_received);
-       formatter->dump_int("Ops", total_usage.ops);
-       formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
+       formatter->dump_unsigned("BytesSent", total_usage.bytes_sent);
+       formatter->dump_unsigned("BytesReceived", total_usage.bytes_received);
+       formatter->dump_unsigned("Ops", total_usage.ops);
+       formatter->dump_unsigned("SuccessfulOps", total_usage.successful_ops);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }

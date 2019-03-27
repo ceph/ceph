@@ -119,10 +119,10 @@ int RGWUsage::show(RGWRados *store, const rgw_user& uid, const string& bucket_na
       rgw_usage_data total_usage;
       entry.sum(total_usage, *categories);
       formatter->open_object_section("total");
-      formatter->dump_int("bytes_sent", total_usage.bytes_sent);
-      formatter->dump_int("bytes_received", total_usage.bytes_received);
-      formatter->dump_int("ops", total_usage.ops);
-      formatter->dump_int("successful_ops", total_usage.successful_ops);
+      formatter->dump_unsigned("bytes_sent", total_usage.bytes_sent);
+      formatter->dump_unsigned("bytes_received", total_usage.bytes_received);
+      formatter->dump_unsigned("ops", total_usage.ops);
+      formatter->dump_unsigned("successful_ops", total_usage.successful_ops);
       formatter->close_section(); // total
 
       formatter->close_section(); // user
