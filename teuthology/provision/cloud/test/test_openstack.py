@@ -185,9 +185,10 @@ class TestOpenStackProvider(TestOpenStackBase):
 
     def test_networks(self):
         obj = cloud.get_provider('my_provider')
-        self.mocks['m_ex_list_networks'].return_value = ['net0', 'net1']
+        nets = [get_fake_obj(attributes=dict(name=i)) for i in ['net0', 'net1']]
+        self.mocks['m_ex_list_networks'].return_value = nets
         assert not hasattr(obj, '_networks')
-        assert obj.networks == ['net0', 'net1']
+        assert [i.name for i in obj.networks] == [i.name for i in nets]
         assert hasattr(obj, '_networks')
         self.mocks['m_ex_list_networks'].side_effect = AttributeError
         obj = cloud.get_provider('my_provider')

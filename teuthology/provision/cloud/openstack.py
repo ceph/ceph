@@ -83,22 +83,41 @@ class OpenStackProvider(Provider):
     @property
     def sizes(self):
         if not hasattr(self, '_sizes'):
+            allow_sizes = self.conf.get('allow_sizes', '.*')
+            if isinstance(allow_sizes, basestring):
+                allow_sizes = [allow_sizes]
+            allow_re = [re.compile(x) for x in allow_sizes]
             # By default, exclude instance types meant for Windows
             exclude_sizes = self.conf.get('exclude_sizes', 'win-.*')
+            if isinstance(exclude_sizes, basestring):
+                exclude_sizes = [exclude_sizes]
+            exclude_re = [re.compile(x) for x in exclude_sizes]
             sizes = retry(self.driver.list_sizes)
-            if exclude_sizes:
-                sizes = filter(
-                    lambda s: not re.match(exclude_sizes, s.name),
-                    sizes
-                )
-            self._sizes = sizes
+            self._sizes = filter(
+                lambda s:
+                    any(x.match(s.name) for x in allow_re)
+                    and not
+                    all(x.match(s.name) for x in exclude_re),
+                sizes
+            )
         return self._sizes
 
     @property
     def networks(self):
         if not hasattr(self, '_networks'):
+            allow_networks = self.conf.get('allow_networks', '.*')
+            if isinstance(allow_networks, basestring):
+                allow_networks=[allow_networks]
+            networks_re = [re.compile(x) for x in allow_networks]
             try:
-                self._networks = retry(self.driver.ex_list_networks)
+                networks = retry(self.driver.ex_list_networks)
+                if networks:
+                    self._networks = filter(
+                        lambda s: any(x.match(s.name) for x in networks_re),
+                        networks
+                    )
+                else:
+                    self._networks = list()
             except AttributeError:
                 log.warn("Unable to list networks for %s", self.driver)
                 self._networks = list()
