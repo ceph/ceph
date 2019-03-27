@@ -253,6 +253,8 @@ public:
     return recovery_state.get_osdmap()->get_epoch();
   }
 
+  PerfCounters &get_peering_perf() override;
+
   void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
     handle.suspend_tp_timeout();
     lock();
