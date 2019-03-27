@@ -2,13 +2,23 @@ import { Component, ViewContainerRef } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { ToastsManager } from 'ng2-toastr';
+import { TooltipConfig } from 'ngx-bootstrap/tooltip';
 
 import { AuthStorageService } from './shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-root',
   templateUrl: './app.component.html',
-  styleUrls: ['./app.component.scss']
+  styleUrls: ['./app.component.scss'],
+  providers: [
+    {
+      provide: TooltipConfig,
+      useFactory: (): TooltipConfig =>
+        Object.assign(new TooltipConfig(), {
+          container: 'body'
+        })
+    }
+  ]
 })
 export class AppComponent {
   title = 'cd';
