@@ -1,6 +1,6 @@
 roles:
         - [client.salt_master, mon.a, mgr.x, osd.0, mds.0, ganesha.0]
-        - [client.0]
+        - [ganeshaclient.0]
 tasks:
         - deepsea.create_pools:
                 cephfs:
@@ -10,6 +10,4 @@ tasks:
                 client.salt_master:
                         - 'ceph -s'
         - deepsea.validation:
-        - deepsea.health_ok:
-                commands:
-                        - health-ok.sh --client-nodes=1 --mds --min-nodes=2 --nfs-ganesha
+                ganesha_smoke_test:

@@ -1042,16 +1042,6 @@ class Orch(DeepSea):
             cmd += " 2>/dev/null"
         self.master_remote.run(args=cmd)
 
-    def _nfs_ganesha_no_root_squash(self):
-        self.log.info("NFS-Ganesha set No_root_squash")
-        ganeshaj2 = '/srv/salt/ceph/ganesha/files/ganesha.conf.j2'
-        cmd = [
-            "sudo", "sed", "-i",
-            '/Access_Type = RW;/a \tSquash = No_root_squash;',
-            ganeshaj2,
-            ]
-        self.master_remote.run(args=cmd)
-
     def _run_orch(self, orch_tuple):
         """Run an orchestration. Dump journalctl on error."""
         global reboot_tries
@@ -1184,8 +1174,6 @@ class Orch(DeepSea):
         Run Stage 4
         """
         stage = 4
-        if self.role_type_present("ganesha"):
-            self._nfs_ganesha_no_root_squash()
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
         self.__maybe_cat_ganesha_conf()
@@ -1694,6 +1682,29 @@ class Validation(DeepSea):
             self.master_remote,
             'ceph_version_sanity.sh',
             )
+
+    def ganesha_smoke_test(self, **kwargs):
+        client_host = self.role_type_present("ganeshaclient")
+        rgw = self.role_type_present("rgw")
+        mds = self.role_type_present("mds")
+        args = []
+        if mds:
+            args += ['--mds']
+        if rgw:
+            args += ['--rgw']
+        if not args:
+            raise ConfigError(self.err_prefix +
+                              "ganesha_smoke_test needs an rgw or mds role, but neither was given")
+        if client_host:
+            remote = self.remotes[client_host]
+            self.scripts.run(
+                remote,
+                'ganesha_smoke_test.sh',
+                args=args,
+                )
+        else:
+            raise ConfigError(self.err_prefix +
+                              "ganesha_smoke_test needs a client role, but none was given")
 
     def iscsi_smoke_test(self, **kwargs):
         igw_host = self.role_type_present("igw")

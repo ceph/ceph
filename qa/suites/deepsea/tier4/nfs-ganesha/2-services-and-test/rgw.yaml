@@ -1,6 +1,6 @@
 roles:
         - [client.salt_master, mon.a, mgr.x, osd.0, rgw.0, ganesha.0]
-        - [client.0]
+        - [ganeshaclient.0]
 tasks:
         - deepsea.orch:
                 stage: 4
@@ -8,6 +8,4 @@ tasks:
                 client.salt_master:
                         - 'ceph -s'
         - deepsea.validation:
-        - deepsea.health_ok:
-                commands:
-                        - health-ok.sh --client-nodes=1 --rgw --min-nodes=2 --nfs-ganesha
+                ganesha_smoke_test:
