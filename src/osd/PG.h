@@ -172,6 +172,7 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend class NamedState;
   friend class PeeringState;
 
+protected:
   PeeringState recovery_state;
 public:
   using PeeringCtx = PeeringState::PeeringCtx;
@@ -203,7 +204,6 @@ protected:
   eversion_t &last_complete_ondisk;
   eversion_t &last_update_applied;
   eversion_t &last_rollback_info_trimmed_to_applied;
-  unsigned &flushes_in_progress;
   set<pg_shard_t> &stray_set;
   map<pg_shard_t, pg_info_t> &peer_info;
   map<pg_shard_t, int64_t> &peer_bytes;
@@ -1656,7 +1656,7 @@ protected:
     boost::optional<eversion_t> trim_to,
     boost::optional<eversion_t> roll_forward_to);
 
-  void reset_interval_flush();
+  bool try_flush_or_schedule_async() override;
   void start_peering_interval(
     const OSDMapRef lastmap,
     const vector<int>& newup, int up_primary,
@@ -1664,8 +1664,8 @@ protected:
     ObjectStore::Transaction *t);
   void on_new_interval();
   virtual void _on_new_interval() = 0;
-  void start_flush(ObjectStore::Transaction *t);
-  void set_last_peering_reset();
+  void start_flush_on_transaction(
+    ObjectStore::Transaction *t) override;
 
   void update_history(const pg_history_t& history) {
     recovery_state.update_history(history);

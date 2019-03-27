@@ -372,6 +372,28 @@ void PeeringState::activate_map(PeeringCtx *rctx)
   write_if_dirty(*rctx->transaction);
 }
 
+void PeeringState::set_last_peering_reset()
+{
+  psdout(20) << "set_last_peering_reset " << get_osdmap_epoch() << dendl;
+  if (last_peering_reset != get_osdmap_epoch()) {
+    dout(10) << "Clearing blocked outgoing recovery messages" << dendl;
+    clear_blocked_outgoing();
+    if (!pl->try_flush_or_schedule_async()) {
+      psdout(10) << "Beginning to block outgoing recovery messages" << dendl;
+      begin_block_outgoing();
+    } else {
+      psdout(10) << "Not blocking outgoing recovery messages" << dendl;
+    }
+  }
+}
+
+void PeeringState::complete_flush()
+{
+  flushes_in_progress--;
+  if (flushes_in_progress == 0) {
+    pl->on_flushed();
+  }
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -401,10 +423,9 @@ PeeringState::Initial::Initial(my_context ctx)
 boost::statechart::result PeeringState::Initial::react(const MNotifyRec& notify)
 {
   PeeringState *ps = context< PeeringMachine >().state;
-  PG *pg = context< PeeringMachine >().pg;
   ps->proc_replica_info(
     notify.from, notify.notify.info, notify.notify.epoch_sent);
-  pg->set_last_peering_reset();
+  ps->set_last_peering_reset();
   return transit< Primary >();
 }
 
@@ -444,7 +465,7 @@ boost::statechart::result
 PeeringState::Started::react(const IntervalFlush&)
 {
   psdout(10) << "Ending blocked outgoing recovery messages" << dendl;
-  context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
+  context< PeeringMachine >().state->end_block_outgoing();
   return discard_event();
 }
 
@@ -493,17 +514,17 @@ PeeringState::Reset::Reset(my_context ctx)
     NamedState(context< PeeringMachine >().state_history, "Reset")
 {
   context< PeeringMachine >().log_enter(state_name);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringState *ps = context< PeeringMachine >().state;
 
-  pg->flushes_in_progress = 0;
-  pg->set_last_peering_reset();
+  ps->flushes_in_progress = 0;
+  ps->set_last_peering_reset();
 }
 
 boost::statechart::result
 PeeringState::Reset::react(const IntervalFlush&)
 {
   psdout(10) << "Ending blocked outgoing recovery messages" << dendl;
-  context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
+  context< PeeringMachine >().state->end_block_outgoing();
   return discard_event();
 }
 
@@ -1699,13 +1720,14 @@ PeeringState::Active::Active(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
 
+  PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
 
   ceph_assert(!pg->backfill_reserving);
   ceph_assert(!pg->backfill_reserved);
   ceph_assert(pg->is_primary());
   psdout(10) << "In Active, about to call activate" << dendl;
-  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
+  ps->start_flush(context< PeeringMachine >().get_cur_transaction());
   pg->activate(*context< PeeringMachine >().get_cur_transaction(),
 	       pg->get_osdmap_epoch(),
 	       *context< PeeringMachine >().get_query_map(),
@@ -2048,6 +2070,7 @@ boost::statechart::result PeeringState::Active::react(const QueryState& q)
 
 boost::statechart::result PeeringState::Active::react(const AllReplicasActivated &evt)
 {
+  PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
   pg_t pgid = context< PeeringMachine >().spgid.pgid;
 
@@ -2092,7 +2115,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   pg->check_local();
 
   // waiters
-  if (pg->flushes_in_progress == 0) {
+  if (ps->flushes_in_progress == 0) {
     pg->requeue_ops(pg->waiting_for_peered);
   } else if (!pg->waiting_for_peered.empty()) {
     psdout(10) << __func__ << " flushes in progress, moving "
@@ -2136,8 +2159,8 @@ PeeringState::ReplicaActive::ReplicaActive(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< PeeringMachine >().pg;
-  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
+  PeeringState *ps = context< PeeringMachine >().state;
+  ps->start_flush(context< PeeringMachine >().get_cur_transaction());
 }
 
 
@@ -2232,6 +2255,7 @@ PeeringState::Stray::Stray(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
 
+  PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->is_peered());
   ceph_assert(!pg->is_peering());
@@ -2241,7 +2265,7 @@ PeeringState::Stray::Stray(my_context ctx)
     ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
     post_event(DeleteStart());
   } else {
-    pg->start_flush(context< PeeringMachine >().get_cur_transaction());
+    ps->start_flush(context< PeeringMachine >().get_cur_transaction());
   }
 }
 
@@ -2658,6 +2682,7 @@ boost::statechart::result PeeringState::GetLog::react(const MLogRec& logevt)
 
 boost::statechart::result PeeringState::GetLog::react(const GotLog&)
 {
+  PeeringState *ps = context< PeeringMachine >().state;
   PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "leaving GetLog" << dendl;
   if (msg) {
@@ -2666,7 +2691,7 @@ boost::statechart::result PeeringState::GetLog::react(const GotLog&)
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
-  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
+  ps->start_flush(context< PeeringMachine >().get_cur_transaction());
   return transit< GetMissing >();
 }
 
