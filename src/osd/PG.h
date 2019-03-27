@@ -421,6 +421,10 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
+  void on_info_history_change();
+
+  void scrub_requested(bool deep, bool repair);
+
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
   }
@@ -944,6 +948,7 @@ protected:
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
+  bool scrub_registered = false;
   bool scrub_queued;
   bool recovery_queued;
 
