@@ -79,12 +79,25 @@ public:
 
     virtual PerfCounters &get_peering_perf() = 0;
 
+    virtual void clear_ready_to_merge() = 0;
+
+    virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
+    virtual void clear_want_pg_temp() = 0;
+
+    virtual void clear_publish_stats() = 0;
+
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
+    virtual void check_blacklisted_watchers() = 0;
+    virtual void clear_primary_state() = 0;
+
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
     virtual void on_activate() = 0;
-    virtual void check_blacklisted_watchers() = 0;
+    virtual void on_new_interval() = 0;
+
+    virtual epoch_t oldest_stored_osdmap() = 0;
+
     virtual ~PeeringListener() {}
   };
 
@@ -1168,7 +1181,18 @@ public:
     const vector<int>& newacting,
     OSDMapRef lastmap,
     OSDMapRef osdmap);
-
+  void start_peering_interval(
+    const OSDMapRef lastmap,
+    const vector<int>& newup, int up_primary,
+    const vector<int>& newacting, int acting_primary,
+    ObjectStore::Transaction *t);
+  void on_new_interval();
+  void init_primary_up_acting(
+    const vector<int> &newup,
+    const vector<int> &newacting,
+    int new_up_primary,
+    int new_acting_primary);
+  void clear_primary_state();
 
 public:
   PeeringState(
@@ -1179,6 +1203,12 @@ public:
     DoutPrefixProvider *dpp,
     PeeringListener *pl,
     PG *pg);
+
+  void set_backend_predicates(
+    IsPGReadablePredicate *is_readable,
+    IsPGRecoverablePredicate *is_recoverable) {
+    missing_loc.set_backend_predicates(is_readable, is_recoverable);
+  }
 
   // MissingLoc::MappingInfo
   const set<pg_shard_t> &get_upset() const override {
@@ -1291,6 +1321,9 @@ public:
     return deleted || e < get_last_peering_reset();
   }
 
+  void set_role(int r) {
+    role = r;
+  }
   int get_role() const {
     return role;
   }

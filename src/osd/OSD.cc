@@ -4742,7 +4742,7 @@ void OSD::build_initial_pg_history(
       osdmap.get(),
       lastmap.get(),
       pgid.pgid,
-      &min_size_predicate,
+      min_size_predicate,
       pi,
       &debug);
     if (new_interval) {

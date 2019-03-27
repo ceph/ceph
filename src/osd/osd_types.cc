@@ -3850,7 +3850,7 @@ bool PastIntervals::check_new_interval(
   const OSDMap *osdmap,
   const OSDMap *lastmap,
   pg_t pgid,
-  IsPGRecoverablePredicate *could_have_gone_active,
+  IsPGRecoverablePredicate &could_have_gone_active,
   PastIntervals *past_intervals,
   std::ostream *out)
 {
@@ -3935,7 +3935,7 @@ bool PastIntervals::check_new_interval(
     if (num_acting &&
 	i.primary != -1 &&
 	num_acting >= old_pg_pool.min_size &&
-        (*could_have_gone_active)(old_acting_shards)) {
+        could_have_gone_active(old_acting_shards)) {
       if (out)
 	*out << __func__ << " " << i
 	     << " up_thru " << lastmap->get_up_thru(i.primary)

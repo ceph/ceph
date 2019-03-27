@@ -370,6 +370,10 @@ void PeeringState::activate_map(PeeringCtx *rctx)
 	      << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
   write_if_dirty(*rctx->transaction);
+
+  if (get_osdmap()->check_new_blacklist_entries()) {
+    pl->check_blacklisted_watchers();
+  }
 }
 
 void PeeringState::set_last_peering_reset()
@@ -421,7 +425,7 @@ void PeeringState::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
   }
 }
 
-bool PG::should_restart_peering(
+bool PeeringState::should_restart_peering(
   int newupprimary,
   int newactingprimary,
   const vector<int>& newup,
@@ -445,12 +449,292 @@ bool PG::should_restart_peering(
 	     << " newacting " << newacting << dendl;
     return true;
   }
-  if (!lastmap->is_up(osd->whoami) && osdmap->is_up(osd->whoami)) {
-    dout(10) << __func__ << " osd transitioned from down -> up" << dendl;
+  if (!lastmap->is_up(pg_whoami.osd) && osdmap->is_up(pg_whoami.osd)) {
+    psdout(10) << __func__ << " osd transitioned from down -> up"
+	       << dendl;
     return true;
   }
   return false;
 }
+
+/* Called before initializing peering during advance_map */
+void PeeringState::start_peering_interval(
+  const OSDMapRef lastmap,
+  const vector<int>& newup, int new_up_primary,
+  const vector<int>& newacting, int new_acting_primary,
+  ObjectStore::Transaction *t)
+{
+  const OSDMapRef osdmap = get_osdmap();
+
+  set_last_peering_reset();
+
+  vector<int> oldacting, oldup;
+  int oldrole = get_role();
+
+  pl->unreg_next_scrub();
+  if (is_primary()) {
+    pl->clear_ready_to_merge();
+  }
+
+
+  pg_shard_t old_acting_primary = get_primary();
+  pg_shard_t old_up_primary = up_primary;
+  bool was_old_primary = is_primary();
+  bool was_old_replica = is_replica();
+
+  acting.swap(oldacting);
+  up.swap(oldup);
+  init_primary_up_acting(
+    newup,
+    newacting,
+    new_up_primary,
+    new_acting_primary);
+
+  if (info.stats.up != up ||
+      info.stats.acting != acting ||
+      info.stats.up_primary != new_up_primary ||
+      info.stats.acting_primary != new_acting_primary) {
+    info.stats.up = up;
+    info.stats.up_primary = new_up_primary;
+    info.stats.acting = acting;
+    info.stats.acting_primary = new_acting_primary;
+    info.stats.mapping_epoch = osdmap->get_epoch();
+  }
+
+  pl->clear_publish_stats();
+
+  // This will now be remapped during a backfill in cases
+  // that it would not have been before.
+  if (up != acting)
+    state_set(PG_STATE_REMAPPED);
+  else
+    state_clear(PG_STATE_REMAPPED);
+
+  int role = osdmap->calc_pg_role(pg_whoami.osd, acting, acting.size());
+  if (pool.info.is_replicated() || role == pg_whoami.shard)
+    set_role(role);
+  else
+    set_role(-1);
+
+  // did acting, up, primary|acker change?
+  if (!lastmap) {
+    psdout(10) << " no lastmap" << dendl;
+    dirty_info = true;
+    dirty_big_info = true;
+    info.history.same_interval_since = osdmap->get_epoch();
+  } else {
+    std::stringstream debug;
+    ceph_assert(info.history.same_interval_since != 0);
+    bool new_interval = PastIntervals::check_new_interval(
+      old_acting_primary.osd,
+      new_acting_primary,
+      oldacting, newacting,
+      old_up_primary.osd,
+      new_up_primary,
+      oldup, newup,
+      info.history.same_interval_since,
+      info.history.last_epoch_clean,
+      osdmap.get(),
+      lastmap.get(),
+      info.pgid.pgid,
+      missing_loc.get_recoverable_predicate(),
+      &past_intervals,
+      &debug);
+    psdout(10) << __func__ << ": check_new_interval output: "
+	       << debug.str() << dendl;
+    if (new_interval) {
+      if (osdmap->get_epoch() == pl->oldest_stored_osdmap() &&
+	  info.history.last_epoch_clean < osdmap->get_epoch()) {
+	psdout(10) << " map gap, clearing past_intervals and faking" << dendl;
+	// our information is incomplete and useless; someone else was clean
+	// after everything we know if osdmaps were trimmed.
+	past_intervals.clear();
+      } else {
+	psdout(10) << " noting past " << past_intervals << dendl;
+      }
+      dirty_info = true;
+      dirty_big_info = true;
+      info.history.same_interval_since = osdmap->get_epoch();
+      if (osdmap->have_pg_pool(info.pgid.pgid.pool()) &&
+	  info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
+				  osdmap->get_pg_num(info.pgid.pgid.pool()),
+				  nullptr)) {
+	info.history.last_epoch_split = osdmap->get_epoch();
+      }
+    }
+  }
+
+  if (old_up_primary != up_primary ||
+      oldup != up) {
+    info.history.same_up_since = osdmap->get_epoch();
+  }
+  // this comparison includes primary rank via pg_shard_t
+  if (old_acting_primary != get_primary()) {
+    info.history.same_primary_since = osdmap->get_epoch();
+  }
+
+  pl->on_new_interval();
+  pl->reg_next_scrub();
+
+  psdout(1) << __func__ << " up " << oldup << " -> " << up
+	    << ", acting " << oldacting << " -> " << acting
+	    << ", acting_primary " << old_acting_primary << " -> "
+	    << new_acting_primary
+	    << ", up_primary " << old_up_primary << " -> " << new_up_primary
+	    << ", role " << oldrole << " -> " << role
+	    << ", features acting " << acting_features
+	    << " upacting " << upacting_features
+	    << dendl;
+
+  // deactivate.
+  state_clear(PG_STATE_ACTIVE);
+  state_clear(PG_STATE_PEERED);
+  state_clear(PG_STATE_PREMERGE);
+  state_clear(PG_STATE_DOWN);
+  state_clear(PG_STATE_RECOVERY_WAIT);
+  state_clear(PG_STATE_RECOVERY_TOOFULL);
+  state_clear(PG_STATE_RECOVERING);
+
+  peer_purged.clear();
+  acting_recovery_backfill.clear();
+
+  // reset primary/replica state?
+  if (was_old_primary || is_primary()) {
+    pl->clear_want_pg_temp();
+  } else if (was_old_replica || is_replica()) {
+    pl->clear_want_pg_temp();
+  }
+  clear_primary_state();
+
+  pl->on_change(t);
+
+  ceph_assert(!deleting);
+
+  // should we tell the primary we are here?
+  send_notify = !is_primary();
+
+  if (role != oldrole ||
+      was_old_primary != is_primary()) {
+    // did primary change?
+    if (was_old_primary != is_primary()) {
+      state_clear(PG_STATE_CLEAN);
+    }
+
+    pl->on_role_change();
+  } else {
+    // no role change.
+    // did primary change?
+    if (get_primary() != old_acting_primary) {
+      psdout(10) << oldacting << " -> " << acting
+	       << ", acting primary "
+	       << old_acting_primary << " -> " << get_primary()
+	       << dendl;
+    } else {
+      // primary is the same.
+      if (is_primary()) {
+	// i am (still) primary. but my replica set changed.
+	state_clear(PG_STATE_CLEAN);
+
+	psdout(10) << oldacting << " -> " << acting
+		 << ", replicas changed" << dendl;
+      }
+    }
+  }
+
+  if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
+    psdout(10) << " acting empty, but i am up[0], clearing pg_temp" << dendl;
+    pl->queue_want_pg_temp(acting);
+  }
+}
+
+void PeeringState::on_new_interval()
+{
+  const OSDMapRef osdmap = get_osdmap();
+
+  // initialize features
+  acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
+    uint64_t f = osdmap->get_xinfo(*p).features;
+    acting_features &= f;
+    upacting_features &= f;
+  }
+  for (vector<int>::iterator p = up.begin(); p != up.end(); ++p) {
+    if (*p == CRUSH_ITEM_NONE)
+      continue;
+    upacting_features &= osdmap->get_xinfo(*p).features;
+  }
+
+  pl->on_new_interval();
+}
+
+void PeeringState::init_primary_up_acting(
+  const vector<int> &newup,
+  const vector<int> &newacting,
+  int new_up_primary,
+  int new_acting_primary) {
+  actingset.clear();
+  acting = newacting;
+  for (uint8_t i = 0; i < acting.size(); ++i) {
+    if (acting[i] != CRUSH_ITEM_NONE)
+      actingset.insert(
+	pg_shard_t(
+	  acting[i],
+	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+  }
+  upset.clear();
+  up = newup;
+  for (uint8_t i = 0; i < up.size(); ++i) {
+    if (up[i] != CRUSH_ITEM_NONE)
+      upset.insert(
+	pg_shard_t(
+	  up[i],
+	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+  }
+  if (!pool.info.is_erasure()) {
+    up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
+    primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
+    return;
+  }
+  up_primary = pg_shard_t();
+  primary = pg_shard_t();
+  for (uint8_t i = 0; i < up.size(); ++i) {
+    if (up[i] == new_up_primary) {
+      up_primary = pg_shard_t(up[i], shard_id_t(i));
+      break;
+    }
+  }
+  for (uint8_t i = 0; i < acting.size(); ++i) {
+    if (acting[i] == new_acting_primary) {
+      primary = pg_shard_t(acting[i], shard_id_t(i));
+      break;
+    }
+  }
+  ceph_assert(up_primary.osd == new_up_primary);
+  ceph_assert(primary.osd == new_acting_primary);
+}
+
+void PeeringState::clear_primary_state()
+{
+  psdout(10) << "clear_primary_state" << dendl;
+
+  // clear peering state
+  stray_set.clear();
+  peer_log_requested.clear();
+  peer_missing_requested.clear();
+  peer_info.clear();
+  peer_bytes.clear();
+  peer_missing.clear();
+  peer_last_complete_ondisk.clear();
+  peer_activated.clear();
+  min_last_complete_ondisk = eversion_t();
+  pg_trim_to = eversion_t();
+  might_have_unfound.clear();
+  pl->clear_primary_state();
+}
+
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -529,7 +813,6 @@ PeeringState::Started::react(const IntervalFlush&)
 boost::statechart::result PeeringState::Started::react(const AdvMap& advmap)
 {
   PeeringState *ps = context< PeeringMachine >().state;
-  PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Started advmap" << dendl;
   ps->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (ps->should_restart_peering(
@@ -602,7 +885,7 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 	advmap.osdmap)) {
     psdout(10) << "should restart peering, calling start_peering_interval again"
 		       << dendl;
-    pg->start_peering_interval(
+    ps->start_peering_interval(
       advmap.lastmap,
       advmap.newup, advmap.up_primary,
       advmap.newacting, advmap.acting_primary,
@@ -778,7 +1061,7 @@ void PeeringState::Primary::exit()
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_primary_latency, dur);
-  pg->clear_primary_state();
+  pl->clear_primary_state();
   pg->state_clear(PG_STATE_CREATING);
 }
 
@@ -1815,6 +2098,7 @@ PeeringState::Active::Active(my_context ctx)
 boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 {
   PG *pg = context< PeeringMachine >().pg;
+  PeeringState *ps = context< PeeringMachine >().state;
   if (ps->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
