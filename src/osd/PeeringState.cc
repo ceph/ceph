@@ -431,16 +431,16 @@ boost::statechart::result PeeringState::Initial::react(const MNotifyRec& notify)
 
 boost::statechart::result PeeringState::Initial::react(const MInfoRec& i)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ceph_assert(!pg->is_primary());
+  PeeringState *ps = context< PeeringMachine >().state;
+  ceph_assert(!ps->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
 boost::statechart::result PeeringState::Initial::react(const MLogRec& i)
 {
-  PG *pg = context< PeeringMachine >().pg;
-  ceph_assert(!pg->is_primary());
+  PeeringState *ps = context< PeeringMachine >().state;
+  ceph_assert(!ps->is_primary());
   post_event(i);
   return transit< Stray >();
 }
@@ -448,9 +448,9 @@ boost::statechart::result PeeringState::Initial::react(const MLogRec& i)
 void PeeringState::Initial::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_initial_latency, dur);
+  pl->get_peering_perf().tinc(rs_initial_latency, dur);
 }
 
 /*------Started-------*/
@@ -503,9 +503,9 @@ boost::statechart::result PeeringState::Started::react(const QueryState& q)
 void PeeringState::Started::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_started_latency, dur);
+  pl->get_peering_perf().tinc(rs_started_latency, dur);
 }
 
 /*--------Reset---------*/
@@ -589,9 +589,9 @@ boost::statechart::result PeeringState::Reset::react(const QueryState& q)
 void PeeringState::Reset::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_reset_latency, dur);
+  pl->get_peering_perf().tinc(rs_reset_latency, dur);
 }
 
 /*-------Start---------*/
@@ -614,9 +614,9 @@ PeeringState::Start::Start(my_context ctx)
 void PeeringState::Start::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_start_latency, dur);
+  pl->get_peering_perf().tinc(rs_start_latency, dur);
 }
 
 /*---------Primary--------*/
@@ -716,10 +716,11 @@ boost::statechart::result PeeringState::Primary::react(
 void PeeringState::Primary::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
+  pl->get_peering_perf().tinc(rs_primary_latency, dur);
   pg->clear_primary_state();
   pg->state_clear(PG_STATE_CREATING);
 }
@@ -809,6 +810,7 @@ boost::statechart::result PeeringState::Peering::react(const QueryState& q)
 
 void PeeringState::Peering::exit()
 {
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   psdout(10) << "Leaving Peering" << dendl;
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -816,7 +818,7 @@ void PeeringState::Peering::exit()
   pg->clear_probe_targets();
 
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_peering_latency, dur);
+  pl->get_peering_perf().tinc(rs_peering_latency, dur);
 }
 
 
@@ -924,13 +926,14 @@ PeeringState::Backfilling::react(const RemoteReservationRevoked &)
 void PeeringState::Backfilling::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_BACKFILLING);
   pg->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
+  pl->get_peering_perf().tinc(rs_backfilling_latency, dur);
 }
 
 /*--WaitRemoteBackfillReserved--*/
@@ -981,9 +984,9 @@ PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &ev
 void PeeringState::WaitRemoteBackfillReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitremotebackfillreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitremotebackfillreserved_latency, dur);
 }
 
 void PeeringState::WaitRemoteBackfillReserved::retry()
@@ -1055,9 +1058,9 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
 void PeeringState::WaitLocalBackfillReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitlocalbackfillreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitlocalbackfillreserved_latency, dur);
 }
 
 /*----NotBackfilling------*/
@@ -1086,10 +1089,11 @@ PeeringState::NotBackfilling::react(const RemoteReservationRejected &evt)
 void PeeringState::NotBackfilling::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_BACKFILL_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
+  pl->get_peering_perf().tinc(rs_notbackfilling_latency, dur);
 }
 
 /*----NotRecovering------*/
@@ -1105,10 +1109,11 @@ PeeringState::NotRecovering::NotRecovering(my_context ctx)
 void PeeringState::NotRecovering::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
+  pl->get_peering_perf().tinc(rs_notrecovering_latency, dur);
 }
 
 /*---RepNotRecovering----*/
@@ -1131,9 +1136,9 @@ PeeringState::RepNotRecovering::react(const RejectRemoteReservation &evt)
 void PeeringState::RepNotRecovering::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_repnotrecovering_latency, dur);
+  pl->get_peering_perf().tinc(rs_repnotrecovering_latency, dur);
 }
 
 /*---RepWaitRecoveryReserved--*/
@@ -1171,9 +1176,9 @@ PeeringState::RepWaitRecoveryReserved::react(
 void PeeringState::RepWaitRecoveryReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_repwaitrecoveryreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_repwaitrecoveryreserved_latency, dur);
 }
 
 /*-RepWaitBackfillReserved*/
@@ -1304,9 +1309,9 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
 void PeeringState::RepWaitBackfillReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_repwaitbackfillreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_repwaitbackfillreserved_latency, dur);
 }
 
 boost::statechart::result
@@ -1410,11 +1415,12 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
 void PeeringState::RepRecovering::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_reprecovering_latency, dur);
+  pl->get_peering_perf().tinc(rs_reprecovering_latency, dur);
 }
 
 /*------Activating--------*/
@@ -1428,9 +1434,9 @@ PeeringState::Activating::Activating(my_context ctx)
 void PeeringState::Activating::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_activating_latency, dur);
+  pl->get_peering_perf().tinc(rs_activating_latency, dur);
 }
 
 PeeringState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
@@ -1473,9 +1479,9 @@ PeeringState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
 void PeeringState::WaitLocalRecoveryReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitlocalrecoveryreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitlocalrecoveryreserved_latency, dur);
 }
 
 PeeringState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
@@ -1514,9 +1520,9 @@ PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &ev
 void PeeringState::WaitRemoteRecoveryReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitremoterecoveryreserved_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitremoterecoveryreserved_latency, dur);
 }
 
 PeeringState::Recovering::Recovering(my_context ctx)
@@ -1613,10 +1619,11 @@ PeeringState::Recovering::react(const UnfoundRecovery &evt)
 void PeeringState::Recovering::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->state_clear(PG_STATE_RECOVERING);
-  pg->osd->recoverystate_perf->tinc(rs_recovering_latency, dur);
+  pl->get_peering_perf().tinc(rs_recovering_latency, dur);
 }
 
 PeeringState::Recovered::Recovered(my_context ctx)
@@ -1657,9 +1664,9 @@ PeeringState::Recovered::Recovered(my_context ctx)
 void PeeringState::Recovered::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_recovered_latency, dur);
+  pl->get_peering_perf().tinc(rs_recovered_latency, dur);
 }
 
 PeeringState::Clean::Clean(my_context ctx)
@@ -1682,10 +1689,11 @@ PeeringState::Clean::Clean(my_context ctx)
 void PeeringState::Clean::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_CLEAN);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
+  pl->get_peering_perf().tinc(rs_clean_latency, dur);
 }
 
 template <typename T>
@@ -2134,6 +2142,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 void PeeringState::Active::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
@@ -2148,7 +2157,7 @@ void PeeringState::Active::exit()
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
+  pl->get_peering_perf().tinc(rs_active_latency, dur);
   pg->agent_stop();
 }
 
@@ -2241,11 +2250,12 @@ boost::statechart::result PeeringState::ReplicaActive::react(const QueryState& q
 void PeeringState::ReplicaActive::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_replicaactive_latency, dur);
+  pl->get_peering_perf().tinc(rs_replicaactive_latency, dur);
 }
 
 /*-------Stray---*/
@@ -2345,9 +2355,9 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
 void PeeringState::Stray::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_stray_latency, dur);
+  pl->get_peering_perf().tinc(rs_stray_latency, dur);
 }
 
 
@@ -2577,9 +2587,10 @@ boost::statechart::result PeeringState::GetInfo::react(const QueryState& q)
 void PeeringState::GetInfo::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
+  pl->get_peering_perf().tinc(rs_getinfo_latency, dur);
   pg->blocked_by.clear();
 }
 
@@ -2708,9 +2719,10 @@ boost::statechart::result PeeringState::GetLog::react(const QueryState& q)
 void PeeringState::GetLog::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
+  pl->get_peering_perf().tinc(rs_getlog_latency, dur);
   pg->blocked_by.clear();
 }
 
@@ -2769,9 +2781,9 @@ boost::statechart::result PeeringState::WaitActingChange::react(const QueryState
 void PeeringState::WaitActingChange::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitactingchange_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitactingchange_latency, dur);
 }
 
 /*------Down--------*/
@@ -2794,11 +2806,12 @@ PeeringState::Down::Down(my_context ctx)
 void PeeringState::Down::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_DOWN);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_down_latency, dur);
+  pl->get_peering_perf().tinc(rs_down_latency, dur);
 
   pg->blocked_by.clear();
 }
@@ -2894,11 +2907,12 @@ boost::statechart::result PeeringState::Incomplete::react(
 void PeeringState::Incomplete::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_INCOMPLETE);
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
+  pl->get_peering_perf().tinc(rs_incomplete_latency, dur);
 
   pg->blocked_by.clear();
 }
@@ -3041,9 +3055,10 @@ boost::statechart::result PeeringState::GetMissing::react(const QueryState& q)
 void PeeringState::GetMissing::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringListener *pl = context< PeeringMachine >().pl;
   PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
+  pl->get_peering_perf().tinc(rs_getmissing_latency, dur);
   pg->blocked_by.clear();
 }
 
@@ -3086,9 +3101,9 @@ boost::statechart::result PeeringState::WaitUpThru::react(const QueryState& q)
 void PeeringState::WaitUpThru::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   utime_t dur = ceph_clock_now() - enter_time;
-  pg->osd->recoverystate_perf->tinc(rs_waitupthru_latency, dur);
+  pl->get_peering_perf().tinc(rs_waitupthru_latency, dur);
 }
 
 /*----PeeringState::PeeringMachine Methods-----*/

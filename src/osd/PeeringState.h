@@ -77,6 +77,8 @@ public:
       ObjectStore::Transaction *t) = 0;
     virtual void on_flushed() = 0;
 
+    virtual PerfCounters &get_peering_perf() = 0;
+
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
