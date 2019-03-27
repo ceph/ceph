@@ -687,11 +687,11 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
   // would've returned a 411 before reaching, but we're just doing this to make
   // sure we don't have invalid access
   ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size + 100),
-	    range_t(obj_size - 4096, obj_size + 4095));
+            range_t(obj_size - 4096, obj_size - 1));
   ASSERT_EQ(fixup_range(&decrypt, obj_size, obj_size + 1),
-   	    range_t(obj_size, obj_size + 4095));
+            range_t(obj_size - 1, obj_size - 1));
   ASSERT_EQ(fixup_range(&decrypt, obj_size+1, obj_size + 100),
-   	    range_t(obj_size, obj_size + 4095));
+            range_t(obj_size - 1, obj_size - 1));
 
 }
 

@@ -673,23 +673,22 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
     }
     //in_ofs is inside block i
     size_t j = 0;
-    while (j<parts_len.size() && (in_end >= (off_t)parts_len[j])) {
+    while (j<(parts_len.size() - 1) && (in_end >= (off_t)parts_len[j])) {
       in_end -= parts_len[j];
       j++;
     }
-    //in_end is inside block j
+    //in_end is inside part j, OR j is the last part
 
-    size_t rounded_end;
-    rounded_end = ( in_end & ~(block_size - 1) ) + (block_size - 1);
-    if (rounded_end + 1 >= parts_len[j]) {
+    size_t rounded_end = ( in_end & ~(block_size - 1) ) + (block_size - 1);
+    if (rounded_end > parts_len[j]) {
       rounded_end = parts_len[j] - 1;
     }
 
     enc_begin_skip = in_ofs & (block_size - 1);
     ofs = bl_ofs - enc_begin_skip;
     end = bl_end;
-    bl_ofs = bl_ofs - enc_begin_skip;
     bl_end += rounded_end - in_end;
+    bl_ofs = std::min(bl_ofs - enc_begin_skip, bl_end);
   }
   else
   {
