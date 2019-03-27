@@ -18,8 +18,9 @@
 class RGWPSCreateTopicOp : public RGWDefaultResponseOp {
 protected:
   std::unique_ptr<RGWUserPubSub> ups;
-  string topic_name;
-  string bucket_name;
+  std::string topic_name;
+  rgw_pubsub_sub_dest dest;
+  std::string topic_arn;
   
   virtual int get_params() = 0;
 
@@ -45,19 +46,47 @@ void RGWPSCreateTopicOp::execute()
   }
 
   ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
-  op_ret = ups->create_topic(topic_name);
+  op_ret = ups->create_topic(topic_name, dest, topic_arn);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic, ret=" << op_ret << dendl;
     return;
   }
 }
 
-// command: PUT /topics/<topic-name>
+// command: PUT /topics/<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]
 class RGWPSCreateTopic_ObjStore_S3 : public RGWPSCreateTopicOp {
 public:
   int get_params() override {
+    
     topic_name = s->object.name;
+
+    dest.push_endpoint = s->info.args.get("push-endpoint");
+    dest.push_endpoint_args = s->info.args.get_str();
+    // dest object only stores endpoint info
+    // bucket to store events/records will be set only when subscription is created
+    dest.bucket_name = "";
+    dest.oid_prefix = "";
+    // the ARN will be sent in the reply
+    topic_arn = dest_to_topic_arn(dest, topic_name, s->zonegroup_name, s->account_name);
     return 0;
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    {
+      Formatter::ObjectSection section(*s->formatter, "result");
+      encode_json("arn", topic_arn, s->formatter);
+    }
+    rgw_flush_formatter_and_reset(s, s->formatter);
   }
 };
 
@@ -110,7 +139,7 @@ public:
   }
 };
 
-// get topic information (including subscriptions)
+// get topic information
 class RGWPSGetTopicOp : public RGWOp {
 protected:
   std::string topic_name;
@@ -142,7 +171,7 @@ void RGWPSGetTopicOp::execute()
   ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
   op_ret = ups->get_topic(topic_name, &result);
   if (op_ret < 0) {
-    ldout(s->cct, 1) << "failed to get topic, ret=" << op_ret << dendl;
+    ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
 }
@@ -375,12 +404,7 @@ public:
       return;
     }
 
-    {
-      Formatter::ObjectSection section(*s->formatter, "result");
-      encode_json("topic", result.topic, s->formatter);
-      encode_json("push_endpoint", result.dest.push_endpoint, s->formatter);
-      encode_json("args", result.dest.push_endpoint_args, s->formatter);
-    }
+    encode_json("result", result, s->formatter);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
 };
@@ -464,7 +488,7 @@ void RGWPSAckSubEventOp::execute()
   if (op_ret < 0) {
     return;
   }
-  ups = make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
   auto sub = ups->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(event_id);
   if (op_ret < 0) {
@@ -683,7 +707,6 @@ public:
 
 
 // command (ceph specific): PUT /notification/bucket/<bucket name>?topic=<topic name>
-// ("topic" has to be created beforehand)
 class RGWPSCreateNotif_ObjStore_Ceph : public RGWPSCreateNotifOp {
 private:
   std::string topic_name;
@@ -707,7 +730,6 @@ private:
 public:
   const char* name() const override { return "pubsub_notification_create"; }
   void execute() override;
-  ~RGWPSCreateNotif_ObjStore_Ceph() = default;
 };
 
 void RGWPSCreateNotif_ObjStore_Ceph::execute()
@@ -723,6 +745,7 @@ void RGWPSCreateNotif_ObjStore_Ceph::execute()
 }
 
 namespace {
+// conversion functions between S3 and GCP style event names
 std::string s3_to_gcp_event(const std::string& event) {
   if (event == "s3:ObjectCreated:*") {
     return "OBJECT_CREATE";
@@ -754,32 +777,13 @@ std::string unique_to_topic(const std::string& unique_topic, const std::string& 
   }
   return unique_topic.substr(notification.length() + 1);
 }
-
 }
 
 // command (S3 compliant): PUT /<bucket name>?notification
 // a "topic", a "notification" and a subscription will be auto-generated
-// actual configuration is XML encoded in the body of the message, with following schema example:
-// <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-//   <TopicConfiguration>
-//     <Filter>
-//       <S3Key>
-//         <FilterRule>
-//           <Name>suffix</Name>
-//           <Value>jpg</Value>
-//         </FilterRule>
-//       </S3Key>
-//     </Filter>
-//     <Id>notification1</Id>
-//     <Topic>arn:aws:sns:::<endpoint-type>:<endpoint-name>:topic1</Topic>
-//     <Event>s3:ObjectCreated:*</Event>
-//     <Event>s3:ObjectRemoved:*</Event>
-//   </TopicConfiguration>
-// </NotificationConfiguration>
+// actual configuration is XML encoded in the body of the message
 class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
-
   rgw_pubsub_s3_notifications configurations;
-
 
   int get_params_from_body() {
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -838,7 +842,6 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
 public:
   const char* name() const override { return "pubsub_notification_create_s3"; }
   void execute() override;
-  ~RGWPSCreateNotif_ObjStore_S3() = default;
 };
 
 void RGWPSCreateNotif_ObjStore_S3::execute() {
@@ -860,55 +863,64 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       op_ret = -EINVAL;
       return;
     }
-    if (c.topic.empty()) {
-      ldout(s->cct, 1) << "missing topic name" << dendl;
+    if (c.topic_arn.empty()) {
+      ldout(s->cct, 1) << "missing topic ARN" << dendl;
       op_ret = -EINVAL;
       return;
     }
+
+    const auto topic_name = topic_name_from_arn(c.topic_arn);
+    if (topic_name.empty()) {
+      ldout(s->cct, 1) << "topic ARN has invalid format:" << c.topic_arn << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    // get topic information. destination information is stored in the topic
+    rgw_pubsub_topic_subs topic_info;  
+    op_ret = ups->get_topic(topic_name, &topic_info);
+    if (op_ret < 0) {
+      ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
+      return;
+    }
+    // make sure that full topic configuration match
+    // TODO: use ARN match function
+    
     // create unique topic name. this has 2 reasons:
     // (1) topics cannot be shared between different S3 notifications because they hold the filter information
     // (2) make topic clneaup easier, when notification is removed
-    const auto topic_name = topic_to_unique(c.topic, sub_name);
-    // get endpoint configuration according to type:
-    // no endpoint (pull mode only):  arn:s3:sns:::<topic>
-    // TODO: HTTP/S endpoint:         arn:s3:sns:::webhook:<endpoint-name>:<topic>
-    // TODO: AMQP endpoint:           arn:s3:sns:::amqp:<endpoint-name>:<topic>
-    if (!c.endpoint_type.empty()) {
-      ldout(s->cct, 1) << "endpoint type '" << c.endpoint_type << 
-        "' not supported in notification creation request" << dendl;
-      op_ret = -EINVAL;
-      return;
-    }
-    // generate the topic
-    op_ret = ups->create_topic(topic_name);
+    const auto unique_topic_name = topic_to_unique(topic_name, sub_name);
+    // generate the internal topic, no need to store destination info
+    // ARN is cached to make the "GET" method faster
+    op_ret = ups->create_topic(unique_topic_name, rgw_pubsub_sub_dest(), topic_info.topic.arn);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to auto-generate topic '" << topic_name << 
+      ldout(s->cct, 1) << "failed to auto-generate topic '" << unique_topic_name << 
         "', ret=" << op_ret << dendl;
       return;
     }
     // generate the notification
     EventTypeList events;
     std::transform(c.events.begin(), c.events.end(), std::inserter(events, events.begin()), s3_to_gcp_event);
-    op_ret = b->create_notification(topic_name, events);
+    op_ret = b->create_notification(unique_topic_name, events);
     if (op_ret < 0) {
-      ldout(s->cct, 1) << "failed to auto-generate notification on topic '" << topic_name <<
+      ldout(s->cct, 1) << "failed to auto-generate notification on topic '" << unique_topic_name <<
         "', ret=" << op_ret << dendl;
       // rollback generated topic (ignore return value)
-      ups->remove_topic(topic_name);
+      ups->remove_topic(unique_topic_name);
       return;
     }
     
-    rgw_pubsub_sub_dest dest;
-    dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
+    rgw_pubsub_sub_dest dest = topic_info.topic.dest;
+    dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + unique_topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
     auto sub = ups->get_sub(sub_name);
-    op_ret = sub->subscribe(topic_name, dest, c.id);
+    op_ret = sub->subscribe(unique_topic_name, dest, c.id);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to auto-generate subscription '" << sub_name << "', ret=" << op_ret << dendl;
       // rollback generated notification (ignore return value)
-      b->remove_notification(topic_name);
+      b->remove_notification(unique_topic_name);
       // rollback generated topic (ignore return value)
-      ups->remove_topic(topic_name);
+      ups->remove_topic(unique_topic_name);
       return;
     }
   }
@@ -1020,17 +1032,17 @@ private:
       }
       return;
     }
-    const auto& topic_name = sub_conf.topic;
-    op_ret = sub->unsubscribe(topic_name);
+    const auto& sub_topic_name = sub_conf.topic;
+    op_ret = sub->unsubscribe(sub_topic_name);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to remove auto-generated subscription, ret=" << op_ret << dendl;
       return;
     }
-    op_ret = b->remove_notification(topic_name);
+    op_ret = b->remove_notification(sub_topic_name);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to remove auto-generated notification, ret=" << op_ret << dendl;
     }
-    op_ret = ups->remove_topic(topic_name);
+    op_ret = ups->remove_topic(sub_topic_name);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to remove auto-generated topic, ret=" << op_ret << dendl;
     }
@@ -1131,12 +1143,10 @@ public:
     if (op_ret < 0) {
       return;
     }
-
     encode_json("result", result, s->formatter);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
   const char* name() const override { return "pubsub_notifications_list"; }
-  ~RGWPSListNotifs_ObjStore_Ceph() = default;
 };
 
 void RGWPSListNotifs_ObjStore_Ceph::execute()
@@ -1171,7 +1181,9 @@ private:
     return 0;
   }
 
-  void add_notification_to_list(const rgw_pubsub_sub_config& sub_conf, const EventTypeList& events);  
+  void add_notification_to_list(const rgw_pubsub_sub_config& sub_conf, 
+      const EventTypeList& events,
+      const std::string& topic_arn);  
 
 public:
   void execute() override;
@@ -1191,13 +1203,13 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::add_notification_to_list(const rgw_pubsub_sub_config& sub_conf, const EventTypeList& events) { 
+void RGWPSListNotifs_ObjStore_S3::add_notification_to_list(const rgw_pubsub_sub_config& sub_conf, 
+    const EventTypeList& events, 
+    const std::string& topic_arn) { 
     rgw_pubsub_s3_notification notification;
     notification.id = sub_conf.s3_id;
-    notification.topic = unique_to_topic(sub_conf.topic, sub_conf.s3_id);
+    notification.topic_arn = topic_arn,
     std::transform(events.begin(), events.end(), std::back_inserter(notification.events), gcp_to_s3_event);
-    notification.endpoint_id = sub_conf.dest.push_endpoint;
-    notification.endpoint_type =  RGWPubSubEndpoint::get_schema(sub_conf.dest.push_endpoint);
     notifications.list.push_back(notification);
 }
 
@@ -1231,7 +1243,7 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
       op_ret = -ENOENT;
       return;
     }
-    add_notification_to_list(sub_conf, topic_it->second.events);
+    add_notification_to_list(sub_conf, topic_it->second.events, topic_it->second.topic.arn);
     return;
   }
   // get info on all s3 notifications of the bucket
@@ -1243,6 +1255,7 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
     rgw_pubsub_topic_subs topic_subs;
     ups->get_topic(topic.first, &topic_subs);
     const auto& events = topic.second.events;
+    const auto& topic_arn = topic.second.topic.arn;
     // loop through all subscriptions
     for (const auto& topic_sub_name : topic_subs.subs) {
       // get info of a specific notification
@@ -1257,7 +1270,7 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
         // not an s3 notification
         continue;
       }
-      add_notification_to_list(sub_conf, events);
+      add_notification_to_list(sub_conf, events, topic_arn);
     }
   }
 }

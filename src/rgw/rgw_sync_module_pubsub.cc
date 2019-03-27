@@ -85,12 +85,13 @@ struct PSSubConfig {
     data_bucket_name = uc.dest.bucket_name;
     data_oid_prefix = uc.dest.oid_prefix;
     s3_id = uc.s3_id;
-    if (push_endpoint_name != "") {
+    if (!push_endpoint_name.empty()) {
       push_endpoint_args = uc.dest.push_endpoint_args;
       try {
-        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args), cct);
+        ldout(cct, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
-          ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
+          ldout(cct, 1) << "ERROR: failed to create push endpoint: " 
             << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
@@ -119,7 +120,8 @@ struct PSSubConfig {
     if (!push_endpoint_name.empty()) {
       push_endpoint_args = config["push_endpoint_args"];
       try {
-        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args), cct);
+        ldout(cct, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
         ldout(cct, 1) << "ERROR: failed to create push endpoint: " 
           << push_endpoint_name << " due to: " << e.what() << dendl;
@@ -437,10 +439,10 @@ static void make_s3_record_ref(CephContext *cct, const rgw_bucket& bucket,
   r->eventSource = "aws:s3";
   r->eventTime = mtime;
   r->eventName = event_name;
-  r->userIdentity = "";         // not supported yet
-  r->sourceIPAddress = "";      // not supported yet
-  r->x_amz_request_id = "";     // not supported yet
-  r->x_amz_id_2 = "";           // not supported yet
+  r->userIdentity = "";         // user that triggered the change: not supported yet
+  r->sourceIPAddress = "";      // IP address of client that triggered the change: not supported yet
+  r->x_amz_request_id = "";     // request ID of the original change: not supported yet
+  r->x_amz_id_2 = "";           // RGW on which the change was made: not supported yet
   r->s3SchemaVersion = "1.0";
   // configurationId is filled from subscription configuration
   r->bucket_name = bucket.name;

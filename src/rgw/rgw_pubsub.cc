@@ -7,6 +7,7 @@
 #include "rgw_tools.h"
 #include "rgw_xml.h"
 #include "rgw_arn.h"
+#include "rgw_pubsub_push.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -14,35 +15,7 @@ bool rgw_pubsub_s3_notification::decode_xml(XMLObj *obj) {
   const auto throw_if_missing = true;
   RGWXMLDecoder::decode_xml("Id", id, obj, throw_if_missing);
   
-  std::string str_arn;
-  RGWXMLDecoder::decode_xml("Topic", str_arn, obj, throw_if_missing);
-
-  // parse ARN. allow wildcards 
-  const auto arn = rgw::ARN::parse(str_arn, true);
-  if (arn == boost::none || arn->resource.empty()) {
-    throw RGWXMLDecoder::err("topic ARN parsing failed. ARN = '" + str_arn + "'");
-  }
-
-  // partition and service are expected to be "aws" and "sns"
-  // but there is no need to validate ARN them
-  
-  const auto arn_resource = rgw::ARNResource::parse(arn->resource);
-  if (arn_resource == boost::none || arn_resource->resource.empty()) {
-    throw RGWXMLDecoder::err("topic ARN resource parsing failed. ARNResource = '" + arn->resource + "'");
-  }
-
-  if (!arn_resource->resource_type.empty()) {
-    // endpoint exists
-    endpoint_type = arn_resource->resource_type;
-    endpoint_id = arn_resource->resource;
-    if (arn_resource->qualifier.empty()) {
-      throw RGWXMLDecoder::err("topic ARN resource parsing failed. missing qualifier for endpoint");
-    }
-    topic = arn_resource->qualifier;
-  } else {
-    // only topic
-    topic = arn_resource->resource;
-  }
+  RGWXMLDecoder::decode_xml("Topic", topic_arn, obj, throw_if_missing);
 
   do_decode_xml_obj(events, "Event", obj);
   if (events.empty()) {
@@ -55,23 +28,7 @@ bool rgw_pubsub_s3_notification::decode_xml(XMLObj *obj) {
 
 void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
   ::encode_xml("Id", id, f);
-  rgw::ARN arn;
-  arn.partition = rgw::Partition::aws;
-  arn.service = rgw::Service::sns;
-  //TODO: 
-  //arn.region = 
-  //arn.account =
-  rgw::ARNResource arn_resource;
-  if (endpoint_type.empty()) {
-    arn_resource.resource = topic;
-  } else {
-    arn_resource.resource_type = endpoint_type;
-    arn_resource.resource = endpoint_id;
-    arn_resource.qualifier = topic;
-  }
-
-  arn.resource = to_string(arn_resource);
-  ::encode_xml("Topic", to_string(arn).c_str(), f);
+  ::encode_xml("Topic", topic_arn.c_str(), f);
   for (const auto& event : events) {
     ::encode_xml("Event", event, f);
   }
@@ -154,6 +111,8 @@ void rgw_pubsub_topic::dump(Formatter *f) const
 {
   encode_json("user", user, f);
   encode_json("name", name, f);
+  encode_json("dest", dest, f);
+  encode_json("arn", arn, f);
 }
 
 void rgw_pubsub_topic_filter::dump(Formatter *f) const
@@ -189,6 +148,7 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("bucket_name", bucket_name, f);
   encode_json("oid_prefix", oid_prefix, f);
   encode_json("push_endpoint", push_endpoint, f);
+  encode_json("push_endpoint_args", push_endpoint_args, f);
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const
@@ -198,6 +158,40 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("topic", topic, f);
   encode_json("dest", dest, f);
   encode_json("s3_id", s3_id, f);
+}
+
+std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
+    const std::string& topic_name, 
+    const std::string& zonegroup_name,
+    const std::string& user_name) {
+  rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name, user_name, "");
+  rgw::ARNResource arn_resource;
+  const auto endpoint_type = RGWPubSubEndpoint::get_schema(dest.push_endpoint);
+  if (endpoint_type.empty()) {
+    arn_resource.resource = topic_name;
+  } else {
+    // add endpoint info as resource
+    arn_resource.resource_type = endpoint_type;
+    arn_resource.resource = dest.push_endpoint;
+    arn_resource.qualifier = topic_name;
+  }
+  arn.resource = arn_resource.to_string();
+  return arn.to_string();
+}
+
+std::string topic_name_from_arn(const std::string& topic_arn) {
+  const auto arn = rgw::ARN::parse(topic_arn);
+  if (!arn || arn->resource.empty()) {
+    return "";
+  }
+  const auto arn_resource = rgw::ARNResource::parse(arn->resource);
+  if (!arn_resource) {
+    return "";
+  }
+  if (arn_resource->resource_type.empty()) {
+    return arn_resource->resource;
+  }
+  return arn_resource->qualifier;
 }
 
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
@@ -344,8 +338,11 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
   return 0;
 }
 
-int RGWUserPubSub::create_topic(const string& name)
-{
+int RGWUserPubSub::create_topic(const string& name) {
+  return create_topic(name, rgw_pubsub_sub_dest(), "");
+}
+
+int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn) {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_user_topics topics;
 
@@ -358,6 +355,8 @@ int RGWUserPubSub::create_topic(const string& name)
   rgw_pubsub_topic_subs& new_topic = topics.topics[name];
   new_topic.topic.user = user;
   new_topic.topic.name = name;
+  new_topic.topic.dest = dest;
+  new_topic.topic.arn = arn;
 
   ret = write_user_topics(topics, &objv_tracker);
   if (ret < 0) {
@@ -459,13 +458,13 @@ int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest
 
   ret = ps->write_user_topics(topics, &user_objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
 
   ret = write_sub(sub_conf, nullptr);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
@@ -481,7 +480,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
     rgw_pubsub_sub_config sub_conf;
     int ret = read_sub(&sub_conf, &sobjv_tracker);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
+      ldout(store->ctx(), 1) << "ERROR: failed to read subscription info: ret=" << ret << dendl;
       return ret;
     }
     topic = sub_conf.topic;
@@ -492,7 +491,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 
   int ret = ps->read_user_topics(&topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
   }
 
   if (ret >= 0) {
@@ -504,7 +503,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 
       ret = ps->write_user_topics(topics, &objv_tracker);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+        ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
         return ret;
       }
     }
@@ -512,7 +511,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 
   ret = remove_sub(&sobjv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to delete subscription info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
