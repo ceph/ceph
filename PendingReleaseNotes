@@ -20,3 +20,9 @@
   write IOs are completed prior to completing. The
   librbd cache policy can be controlled via a new
   "rbd_cache_policy" configuration option.
+
+* librbd now includes a simple IO scheduler which attempts to
+  batch together multiple IOs against the same backing RBD
+  data block object. The librbd IO scheduler policy can be
+  controlled via a new "rbd_io_scheduler" configuration
+  option.
