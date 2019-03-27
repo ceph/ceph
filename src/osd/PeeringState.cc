@@ -128,8 +128,42 @@ PeeringState::PeeringState(
     osdmap_ref(curmap),
     pool(_pool),
     info(spgid),
-    pg_log(cct) {
+    pg_log(cct),
+    missing_loc(spgid, this, dpp, cct)
+{
   machine.initiate();
+}
+
+void PeeringState::check_recovery_sources(const OSDMapRef& osdmap)
+{
+  /*
+   * check that any peers we are planning to (or currently) pulling
+   * objects from are dealt with.
+   */
+  missing_loc.check_recovery_sources(osdmap);
+  pl->check_recovery_sources(osdmap);
+
+  for (set<pg_shard_t>::iterator i = peer_log_requested.begin();
+       i != peer_log_requested.end();
+       ) {
+    if (!osdmap->is_up(i->osd)) {
+      dout(10) << "peer_log_requested removing " << *i << dendl;
+      peer_log_requested.erase(i++);
+    } else {
+      ++i;
+    }
+  }
+
+  for (set<pg_shard_t>::iterator i = peer_missing_requested.begin();
+       i != peer_missing_requested.end();
+       ) {
+    if (!osdmap->is_up(i->osd)) {
+      dout(10) << "peer_missing_requested removing " << *i << dendl;
+      peer_missing_requested.erase(i++);
+    } else {
+      ++i;
+    }
+  }
 }
 
 void PeeringState::update_history(const pg_history_t& new_history)
@@ -254,7 +288,8 @@ void PeeringState::remove_down_peer_info(const OSDMapRef &osdmap)
   // if we removed anyone, update peers (which include peer_info)
   if (removed)
     update_heartbeat_peers();
-  pg->check_recovery_sources(osdmap);
+
+  check_recovery_sources(osdmap);
 }
 
 void PeeringState::update_heartbeat_peers()
