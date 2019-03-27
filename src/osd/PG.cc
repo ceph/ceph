@@ -6155,12 +6155,13 @@ void PG::handle_query_state(Formatter *f)
   recovery_state.handle_event(q, 0);
 }
 
-void PG::update_store_with_options(const pool_opts_t &opts)
+void PG::on_pool_change()
 {
-  auto r = osd->store->set_collection_opts(ch, opts);
+  auto r = osd->store->set_collection_opts(ch, pool.info.opts);
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
+  plpg_on_pool_change();
 }
 
 void PG::C_DeleteMore::complete(int r) {
