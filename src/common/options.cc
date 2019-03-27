@@ -7295,7 +7295,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
 
     Option("rbd_io_scheduler", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("none")
+    .set_default("simple")
     .set_enum_allowed({"none", "simple"})
     .set_description("RBD IO scheduler"),
 
