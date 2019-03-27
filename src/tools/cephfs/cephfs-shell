@@ -319,7 +319,7 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
-        self.poutput('Unrecognized command: %s' % line)
+        self.poutput('Unrecognized command')
 
     def set_prompt(self):
         self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX +
@@ -390,9 +390,9 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    class MkdirModeAction(argparse.Action):
+    class ModeAction(argparse.Action):
         def __init__(self, option_strings, dest, nargs=None, **kwargs):
-            if nargs is not None:
+            if nargs is not None and nargs is not '?':
                 raise ValueError("more than one modes not allowed")
             super().__init__(option_strings, dest, **kwargs)
 
@@ -420,7 +420,7 @@ class CephFSShell(Cmd):
                               help='Name of new_directory.',
                               nargs='+')
     mkdir_parser.add_argument('-m', '--mode', type=str,
-                              action=MkdirModeAction,
+                              action=ModeAction,
                               help='Sets the access mode for the new directory.')
     mkdir_parser.add_argument('-p', '--parent', action='store_true',
                               help='Create parent directories as necessary. \
@@ -479,14 +479,18 @@ exists.')
                     root_src_dir += '/' + p.pop(0)
 
         if root_dst_dir == '.':
-            root_dst_dir = root_src_dir.rsplit('/', 1)[1]
-            if root_dst_dir == "":
-                root_dst_dir = root_src_dir.rsplit('/', 1)[0]
-                a = root_dst_dir.rsplit('/', 1)
-                if len(a) > 1:
-                    root_dst_dir = a[1]
-                else:
-                    root_dst_dir = a[0]
+            if args.local_path != '-':
+                root_dst_dir = root_src_dir.rsplit('/', 1)[1]
+                if root_dst_dir == "":
+                    root_dst_dir = root_src_dir.rsplit('/', 1)[0]
+                    a = root_dst_dir.rsplit('/', 1)
+                    if len(a) > 1:
+                        root_dst_dir = a[1]
+                    else:
+                        root_dst_dir = a[0]
+            else:
+                self.poutput("error: no filename specified for destination")
+                return
 
         if root_dst_dir[-1] != '/':
             root_dst_dir += '/'
@@ -505,6 +509,8 @@ exists.')
                     if is_file_exists(self, dst_file):
                         self.poutput("%s: file exists! use --force to overwrite" % dst_file)
                         return
+            if args.local_path == '-':
+                root_src_dir = '-'
             copy_from_local(self, root_src_dir, root_dst_dir)
         else:
             for src_dir, dirs, files in os.walk(root_src_dir):
@@ -562,6 +568,9 @@ exists.')
         if args.remote_path == '.':
             root_src_dir = cephfs.getcwd().decode('utf-8')
         if args.local_path == '-':
+            if args.remote_path == '.' or args.remote_path == './':
+                self.poutput("error: no remote file name specified")
+                return
             copy_to_local(self, root_src_dir, '-')
         elif is_file_exists(self, args.remote_path):
             copy_to_local(self, root_src_dir,
@@ -661,7 +670,7 @@ exists.')
             flag = 0
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
-                    to_bytes(dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
+                    to_bytes(dir_name + '/' + item.d_name)).st_size)
             if args.reverse:
                 items = reversed(items)
             for item in items:
@@ -777,7 +786,10 @@ sub-directories, files')
         """
         Rename a file or Move a file from source path to the destination
         """
-        cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+        try:
+            cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+        except:
+            self.poutput("error: need a file name to move to")
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -823,7 +835,8 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     chmod_parser = argparse.ArgumentParser(description='Create Directory.')
-    chmod_parser.add_argument('mode', type=int, help='Mode')
+    chmod_parser.add_argument('mode', type=str, action=ModeAction,
+                              help='Mode (in octal)')
     chmod_parser.add_argument('file_name', type=str, help='Name of the file')
 
     @with_argparser(chmod_parser)
@@ -831,7 +844,8 @@ sub-directories, files')
         """
         Change permission of a file
         """
-        cephfs.chmod(args.file_name, args.mode)
+        mode = int(args.mode, base=8)
+        cephfs.chmod(args.file_name, mode)
 
     def complete_cat(self, text, line, begidx, endidx):
         """
@@ -853,18 +867,19 @@ sub-directories, files')
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
     umask_parser.add_argument(
-        'mode', help='Mode', action='store', nargs='?', default='')
+        'mode', help='Mode', action=ModeAction, nargs='?', default='')
 
     @with_argparser(umask_parser)
     def do_umask(self, args):
         """
         Set Umask value.
         """
+        o_mode = 0
         if args.mode == '':
             self.poutput(self.umask.zfill(4))
         else:
-            mode = int(args.mode, 8)
-            self.umask = str(oct(cephfs.umask(mode))[2:])
+            o_mode = int(args.mode, base=8)
+            self.umask = str(oct(cephfs.umask(o_mode))[2:])
 
     def complete_write(self, text, line, begidx, endidx):
         """
