@@ -1636,11 +1636,6 @@ protected:
 
   bool op_has_sufficient_caps(OpRequestRef& op);
 
-
-  // recovery bits
-  void take_waiters();
-
-
   // abstract bits
   friend class FlushState;
 

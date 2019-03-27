@@ -5973,12 +5973,6 @@ bool PG::can_discard_request(OpRequestRef& op)
   return true;
 }
 
-void PG::take_waiters()
-{
-  dout(10) << "take_waiters" << dendl;
-  requeue_map_waiters();
-}
-
 void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx *rctx)
 {
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
@@ -6069,6 +6063,8 @@ void PG::handle_activate_map(PeeringCtx *rctx)
   dout(10) << __func__ << ": " << get_osdmap()->get_epoch()
 	   << dendl;
   recovery_state.activate_map(rctx);
+
+  requeue_map_waiters();
 }
 
 void PG::handle_initialize(PeeringCtx *rctx)
