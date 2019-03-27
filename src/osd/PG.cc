@@ -303,6 +303,10 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
   }
   return out;
 }
+
+PerfCounters &PG::get_peering_perf() {
+  return *(osd->recoverystate_perf);
+}
   
 /********* PG **********/
 
