@@ -77,6 +77,25 @@ public:
       ObjectStore::Transaction *t) = 0;
     virtual void on_flushed() = 0;
 
+    // Recovery
+    virtual void schedule_event_after(
+      PGPeeringEventRef event,
+      float delay) = 0;
+    virtual void request_local_background_io_reservation(
+      unsigned priority,
+      PGPeeringEventRef on_grant,
+      PGPeeringEventRef on_preempt) = 0;
+    virtual void update_local_background_io_priority(
+      unsigned priority) = 0;
+    virtual void cancel_local_background_io_reservation() = 0;
+
+    virtual void request_remote_recovery_reservation(
+      unsigned priority,
+      PGPeeringEventRef on_grant,
+      PGPeeringEventRef on_preempt) = 0;
+    virtual void cancel_remote_recovery_reservation() = 0;
+
+
     virtual PerfCounters &get_peering_perf() = 0;
 
     virtual void clear_ready_to_merge() = 0;
@@ -1161,6 +1180,9 @@ public:
 
   MissingLoc missing_loc; ///< information about missing objects
 
+  bool backfill_reserved = false;
+  bool backfill_reserving = false;
+
   void update_osdmap_ref(OSDMapRef newmap) {
     osdmap_ref = std::move(newmap);
   }
@@ -1196,6 +1218,17 @@ public:
     int new_acting_primary);
   void clear_primary_state();
   void check_past_interval_bounds() const;
+  bool set_force_recovery(bool b);
+  bool set_force_backfill(bool b);
+
+  /// clip calculated priority to reasonable range
+  inline int clamp_recovery_priority(int priority);
+  /// get log recovery reservation priority
+  unsigned get_recovery_priority();
+  /// get backfill reservation priority
+  unsigned get_backfill_priority();
+  /// get priority for pg deletion
+  unsigned get_delete_priority();
 
 public:
   PeeringState(
@@ -1369,6 +1402,18 @@ public:
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
+
+  bool is_forced_recovery_or_backfill() const {
+    return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+  }
+
+  bool is_backfill_reserved() const {
+    return backfill_reserved;
+  }
+
+  bool is_backfill_reserving() const {
+    return backfill_reserving;
+  }
 
   // Flush control interface
 private:

@@ -430,11 +430,27 @@ public:
   epoch_t oldest_stored_osdmap() override;
   LogChannel &get_clog() override;
 
+  void schedule_event_after(
+    PGPeeringEventRef event,
+    float delay) override;
+  void request_local_background_io_reservation(
+    unsigned priority,
+    PGPeeringEventRef on_grant,
+    PGPeeringEventRef on_preempt) override;
+  void update_local_background_io_priority(
+    unsigned priority) override;
+  void cancel_local_background_io_reservation() override;
+
+  void request_remote_recovery_reservation(
+    unsigned priority,
+    PGPeeringEventRef on_grant,
+    PGPeeringEventRef on_preempt) override;
+  void cancel_remote_recovery_reservation() override;
+
+
   bool is_forced_recovery_or_backfill() const {
-    return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+    return recovery_state.is_forced_recovery_or_backfill();
   }
-  bool set_force_recovery(bool b);
-  bool set_force_backfill(bool b);
 
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
@@ -738,7 +754,6 @@ public:
 protected:
   BackfillInterval backfill_info;
   map<pg_shard_t, BackfillInterval> peer_backfill_info;
-  bool backfill_reserved;
   bool backfill_reserving;
 
   // The primary's num_bytes and local num_bytes for this pg, only valid
@@ -944,15 +959,6 @@ protected:
 
   bool needs_recovery() const;
   bool needs_backfill() const;
-
-  /// clip calculated priority to reasonable range
-  inline int clamp_recovery_priority(int priority);
-  /// get log recovery reservation priority
-  unsigned get_recovery_priority();
-  /// get backfill reservation priority
-  unsigned get_backfill_priority();
-  /// get priority for pg deletion
-  unsigned get_delete_priority();
 
   void try_mark_clean();  ///< mark an active pg clean
 
@@ -1425,25 +1431,23 @@ protected:
   void handle_scrub_reserve_release(OpRequestRef op);
 
   void reject_reservation();
-  void schedule_backfill_retry(float retry);
-  void schedule_recovery_retry(float retry);
 
   // -- recovery state --
 
-  template <class EVT>
   struct QueuePeeringEvt : Context {
     PGRef pg;
-    epoch_t epoch;
-    EVT evt;
+    PGPeeringEventRef evt;
+
+    template <class EVT>
     QueuePeeringEvt(PG *pg, epoch_t epoch, EVT evt) :
-      pg(pg), epoch(epoch), evt(evt) {}
+      pg(pg), evt(std::make_shared<PGPeeringEvent>(epoch, epoch, evt)) {}
+
+    QueuePeeringEvt(PG *pg, PGPeeringEventRef evt) :
+      pg(pg), evt(std::move(evt)) {}
+
     void finish(int r) override {
       pg->lock();
-      pg->queue_peering_event(PGPeeringEventRef(
-				new PGPeeringEvent(
-				  epoch,
-				  epoch,
-				  evt)));
+      pg->queue_peering_event(std::move(evt));
       pg->unlock();
     }
   };
