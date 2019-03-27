@@ -71,12 +71,17 @@ public:
 
     virtual void send_cluster_message(int osd, Message *m, epoch_t epoch) = 0;
 
+    // Flush state
+    virtual bool try_flush_or_schedule_async() = 0;
+    virtual void start_flush_on_transaction(
+      ObjectStore::Transaction *t) = 0;
+    virtual void on_flushed() = 0;
+
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
     virtual void on_activate() = 0;
-    virtual void on_flushed() = 0;
     virtual void check_blacklisted_watchers() = 0;
     virtual ~PeeringListener() {}
   };
@@ -1152,6 +1157,7 @@ public:
   void purge_strays();
   void update_history(const pg_history_t& new_history);
   void check_recovery_sources(const OSDMapRef& map);
+  void set_last_peering_reset();
 
 public:
   PeeringState(
@@ -1317,4 +1323,15 @@ public:
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
+  // Flush control interface
+private:
+  void start_flush(ObjectStore::Transaction *t) {
+    flushes_in_progress++;
+    pl->start_flush_on_transaction(t);
+  }
+public:
+  bool needs_flush() const {
+    return flushes_in_progress > 0;
+  }
+  void complete_flush();
 };

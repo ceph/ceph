@@ -1835,16 +1835,14 @@ void PrimaryLogPG::do_request(
     }
   }
 
-  if (flushes_in_progress > 0) {
-    dout(20) << flushes_in_progress
-	     << " flushes_in_progress pending "
-	     << "waiting for flush on " << op << dendl;
+  if (recovery_state.needs_flush()) {
+    dout(20) << "waiting for flush on " << op << dendl;
     waiting_for_flush.push_back(op);
     op->mark_delayed("waiting for flush");
     return;
   }
 
-  ceph_assert(is_peered() && flushes_in_progress == 0);
+  ceph_assert(is_peered() && !recovery_state.needs_flush());
   if (pgbackend->handle_message(op))
     return;
 
@@ -12047,11 +12045,7 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
 
 void PrimaryLogPG::on_flushed()
 {
-  ceph_assert(flushes_in_progress > 0);
-  flushes_in_progress--;
-  if (flushes_in_progress == 0) {
-    requeue_ops(waiting_for_flush);
-  }
+  requeue_ops(waiting_for_flush);
   if (!is_peered() || !is_primary()) {
     pair<hobject_t, ObjectContextRef> i;
     while (object_contexts.get_next(i.first, &i)) {

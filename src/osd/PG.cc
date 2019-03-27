@@ -208,7 +208,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   last_complete_ondisk(recovery_state.last_complete_ondisk),
   last_update_applied(recovery_state.last_update_applied),
   last_rollback_info_trimmed_to_applied(recovery_state.last_rollback_info_trimmed_to_applied),
-  flushes_in_progress(recovery_state.flushes_in_progress),
   stray_set(recovery_state.stray_set),
   peer_info(recovery_state.peer_info),
   peer_bytes(recovery_state.peer_bytes),
@@ -1916,7 +1915,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     osd->send_message_osd_cluster(get_primary().osd, m, get_osdmap_epoch());
 
     // waiters
-    if (flushes_in_progress == 0) {
+    if (recovery_state.needs_flush() == 0) {
       requeue_ops(waiting_for_peered);
     } else if (!waiting_for_peered.empty()) {
       dout(10) << __func__ << " flushes in progress, moving "
@@ -5800,51 +5799,39 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
   return false;
 }
 
-void PG::set_last_peering_reset()
-{
-  dout(20) << "set_last_peering_reset " << get_osdmap_epoch() << dendl;
-  if (last_peering_reset != get_osdmap_epoch()) {
-    last_peering_reset = get_osdmap_epoch();
-    reset_interval_flush();
-  }
-}
-
 struct FlushState {
   PGRef pg;
   epoch_t epoch;
   FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
     pg->lock();
-    if (!pg->pg_has_reset_since(epoch))
-      pg->on_flushed();
+    if (!pg->pg_has_reset_since(epoch)) {
+      pg->recovery_state.complete_flush();
+    }
     pg->unlock();
   }
 };
 typedef std::shared_ptr<FlushState> FlushStateRef;
 
-void PG::start_flush(ObjectStore::Transaction *t)
+void PG::start_flush_on_transaction(ObjectStore::Transaction *t)
 {
   // flush in progress ops
   FlushStateRef flush_trigger (std::make_shared<FlushState>(
                                this, get_osdmap_epoch()));
-  flushes_in_progress++;
   t->register_on_applied(new ContainerContext<FlushStateRef>(flush_trigger));
   t->register_on_commit(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
-void PG::reset_interval_flush()
+bool PG::try_flush_or_schedule_async()
 {
-  dout(10) << "Clearing blocked outgoing recovery messages" << dendl;
-  recovery_state.clear_blocked_outgoing();
   
   Context *c = new QueuePeeringEvt<PeeringState::PeeringState::IntervalFlush>(
     this, get_osdmap_epoch(), PeeringState::IntervalFlush());
   if (!ch->flush_commit(c)) {
-    dout(10) << "Beginning to block outgoing recovery messages" << dendl;
-    recovery_state.begin_block_outgoing();
+    return false;
   } else {
-    dout(10) << "Not blocking outgoing recovery messages" << dendl;
     delete c;
+    return true;
   }
 }
 
@@ -5857,7 +5844,7 @@ void PG::start_peering_interval(
 {
   const OSDMapRef osdmap = get_osdmap();
 
-  set_last_peering_reset();
+  recovery_state.set_last_peering_reset();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
