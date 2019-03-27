@@ -673,6 +673,28 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned)
 
 }
 
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+
+  decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
+
+  // the ranges below would be mostly unreachable in current code as rgw
+  // would've returned a 411 before reaching, but we're just doing this to make
+  // sure we don't have invalid access
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size + 100),
+	    range_t(obj_size - 4096, obj_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size, obj_size + 1),
+   	    range_t(obj_size, obj_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size+1, obj_size + 100),
+   	    range_t(obj_size, obj_size + 4095));
+
+}
+
 TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 {
   //create some input for encryption
