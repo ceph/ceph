@@ -1161,6 +1161,14 @@ public:
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();
   void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
+  bool should_restart_peering(
+    int newupprimary,
+    int newactingprimary,
+    const vector<int>& newup,
+    const vector<int>& newacting,
+    OSDMapRef lastmap,
+    OSDMapRef osdmap);
+
 
 public:
   PeeringState(

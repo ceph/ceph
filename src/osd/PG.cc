@@ -5735,37 +5735,6 @@ void PG::fulfill_query(const MQuery& query, PeeringCtx *rctx)
   }
 }
 
-bool PG::should_restart_peering(
-  int newupprimary,
-  int newactingprimary,
-  const vector<int>& newup,
-  const vector<int>& newacting,
-  OSDMapRef lastmap,
-  OSDMapRef osdmap)
-{
-  if (PastIntervals::is_new_interval(
-	primary.osd,
-	newactingprimary,
-	acting,
-	newacting,
-	up_primary.osd,
-	newupprimary,
-	up,
-	newup,
-	osdmap.get(),
-	lastmap.get(),
-	info.pgid.pgid)) {
-    dout(20) << "new interval newup " << newup
-	     << " newacting " << newacting << dendl;
-    return true;
-  }
-  if (!lastmap->is_up(osd->whoami) && osdmap->is_up(osd->whoami)) {
-    dout(10) << __func__ << " osd transitioned from down -> up" << dendl;
-    return true;
-  }
-  return false;
-}
-
 bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
   if (last_peering_reset > reply_epoch ||
