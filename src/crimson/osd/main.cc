@@ -23,38 +23,46 @@ void usage(const char* prog) {
   generic_server_usage();
 }
 
-auto partition_args(seastar::app_template& app, int argc, char* argv[])
+auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_end)
 {
   namespace bpo = boost::program_options;
   // collect all options consumed by seastar::app_template
-  auto parsed = bpo::command_line_parser(argc, argv)
+  auto parsed = bpo::command_line_parser(std::distance(argv_begin, argv_end),
+                                         argv_begin)
     .options(app.get_options_description()).allow_unregistered().run();
-  const auto unknown_args = bpo::collect_unrecognized(parsed.options,
-                                                      bpo::include_positional);
+  auto unknown_args = bpo::collect_unrecognized(parsed.options,
+                                                bpo::include_positional);
   std::vector<const char*> ceph_args, app_args;
-  bool consume_next_arg = false;
-  std::partition_copy(
-    argv, argv + argc,
-    std::back_inserter(ceph_args),
-    std::back_inserter(app_args),
-    [begin=unknown_args.begin(),
-     end=unknown_args.end(),
-     &consume_next_arg](const char* arg) {
-      if (std::find(begin, end, arg) != end) {
-        return true;
-      } else if (std::strcmp(arg, "-c") == 0) {
-        // ceph_argparse_early_args() and
-        // seastar::smp::get_options_description() use "-c" for different
-        // options. and ceph wins
-        consume_next_arg = true;
-        return true;
-      } else if (consume_next_arg) {
-        consume_next_arg = false;
-        return true;
-      } else {
-        return false;
+  // ceph_argparse_early_args() and
+  // seastar::smp::get_options_description() use "-c" for different
+  // options. and ceph wins
+  auto consume_conf_arg = [&](char** argv) {
+    if (std::strcmp(*argv, "-c") == 0) {
+      ceph_args.push_back(*argv++);
+      if (argv != argv_end) {
+        ceph_args.push_back(*argv++);
       }
-    });
+    }
+    return argv;
+  };
+  auto unknown = unknown_args.begin();
+  auto consume_ceph_arg = [&](char** argv) {
+    while (unknown != unknown_args.end() && argv != argv_end &&
+           *unknown == *argv) {
+      ++unknown;
+      ceph_args.push_back(*argv++);
+    }
+    return argv;
+  };
+  for (auto argv = argv_begin; argv != argv_end;) {
+    if (auto next_arg = consume_conf_arg(argv); next_arg != argv) {
+      argv = next_arg;
+    } else if (auto next_arg = consume_ceph_arg(argv); next_arg != argv) {
+      argv = next_arg;
+    } else {
+      app_args.push_back(*argv++);
+    }
+  }
   return make_pair(std::move(ceph_args), std::move(app_args));
 }
 
@@ -64,7 +72,7 @@ int main(int argc, char* argv[])
   app.add_options()
     ("mkfs", "create a [new] data directory");
 
-  auto [ceph_args, app_args] = partition_args(app, argc, argv);
+  auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
   if (ceph_argparse_need_usage(ceph_args)) {
     usage(argv[0]);
     return EXIT_SUCCESS;
