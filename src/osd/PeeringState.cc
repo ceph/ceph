@@ -1086,16 +1086,15 @@ boost::statechart::result PeeringState::Reset::react(const AdvMap& advmap)
 boost::statechart::result PeeringState::Reset::react(const ActMap&)
 {
   PeeringState *ps = context< PeeringMachine >().state;
-  PG *pg = context< PeeringMachine >().pg;
-  if (pg->should_send_notify() && pg->get_primary().osd >= 0) {
+  if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      pg->get_primary(),
+      ps->get_primary(),
       pg_notify_t(
-	pg->get_primary().shard, pg->pg_whoami.shard,
-	pg->get_osdmap_epoch(),
-	pg->get_osdmap_epoch(),
-	pg->info),
-      pg->past_intervals);
+	ps->get_primary().shard, ps->pg_whoami.shard,
+	ps->get_osdmap_epoch(),
+	ps->get_osdmap_epoch(),
+	ps->info),
+      ps->past_intervals);
   }
 
   ps->update_heartbeat_peers();
@@ -1127,8 +1126,8 @@ PeeringState::Start::Start(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< PeeringMachine >().pg;
-  if (pg->is_primary()) {
+  PeeringState *ps = context< PeeringMachine >().state;
+  if (ps->is_primary()) {
     psdout(1) << "transitioning to Primary" << dendl;
     post_event(MakePrimary());
   } else { //is_stray
@@ -1151,26 +1150,26 @@ PeeringState::Primary::Primary(my_context ctx)
     NamedState(context< PeeringMachine >().state_history, "Started/Primary")
 {
   context< PeeringMachine >().log_enter(state_name);
-  PG *pg = context< PeeringMachine >().pg;
-  ceph_assert(pg->want_acting.empty());
+  PeeringState *ps = context< PeeringMachine >().state;
+  ceph_assert(ps->want_acting.empty());
 
   // set CREATING bit until we have peered for the first time.
-  if (pg->info.history.last_epoch_started == 0) {
-    pg->state_set(PG_STATE_CREATING);
+  if (ps->info.history.last_epoch_started == 0) {
+    ps->state_set(PG_STATE_CREATING);
     // use the history timestamp, which ultimately comes from the
     // monitor in the create case.
-    utime_t t = pg->info.history.last_scrub_stamp;
-    pg->info.stats.last_fresh = t;
-    pg->info.stats.last_active = t;
-    pg->info.stats.last_change = t;
-    pg->info.stats.last_peered = t;
-    pg->info.stats.last_clean = t;
-    pg->info.stats.last_unstale = t;
-    pg->info.stats.last_undegraded = t;
-    pg->info.stats.last_fullsized = t;
-    pg->info.stats.last_scrub_stamp = t;
-    pg->info.stats.last_deep_scrub_stamp = t;
-    pg->info.stats.last_clean_scrub_stamp = t;
+    utime_t t = ps->info.history.last_scrub_stamp;
+    ps->info.stats.last_fresh = t;
+    ps->info.stats.last_active = t;
+    ps->info.stats.last_change = t;
+    ps->info.stats.last_peered = t;
+    ps->info.stats.last_clean = t;
+    ps->info.stats.last_unstale = t;
+    ps->info.stats.last_undegraded = t;
+    ps->info.stats.last_fullsized = t;
+    ps->info.stats.last_scrub_stamp = t;
+    ps->info.stats.last_deep_scrub_stamp = t;
+    ps->info.stats.last_clean_scrub_stamp = t;
   }
 }
 
@@ -1185,9 +1184,9 @@ boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 
 boost::statechart::result PeeringState::Primary::react(const ActMap&)
 {
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringListener *pl = context< PeeringMachine >().pl;
   psdout(7) << "handle ActMap primary" << dendl;
-  pg->publish_stats_to_osd();
+  pl->publish_stats_to_osd();
   return discard_event();
 }
 
@@ -1238,13 +1237,13 @@ boost::statechart::result PeeringState::Primary::react(
 void PeeringState::Primary::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
+  PeeringState *ps = context< PeeringMachine >().state;
   PeeringListener *pl = context< PeeringMachine >().pl;
-  PG *pg = context< PeeringMachine >().pg;
-  pg->want_acting.clear();
+  ps->want_acting.clear();
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_primary_latency, dur);
   pl->clear_primary_state();
-  pg->state_clear(PG_STATE_CREATING);
+  ps->state_clear(PG_STATE_CREATING);
 }
 
 /*---------Peering--------*/
