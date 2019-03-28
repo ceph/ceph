@@ -82,7 +82,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj> sysobj;
   std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
-  std::unique_ptr<RGWSI_User> bucket;
+  std::unique_ptr<RGWSI_User> user;
 
   RGWServices_Def();
   ~RGWServices_Def();

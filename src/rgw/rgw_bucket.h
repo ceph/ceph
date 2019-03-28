@@ -66,8 +66,10 @@ struct RGWBucketCompleteInfo {
 
 class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
+  map<string, bufferlist> attrs;
 public:
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m) : ep(_ep) {
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m, map<string, bufferlist>&& _attrs) :
+    ep(_ep), attrs(std::move(_attrs)) {
     objv = v;
     mtime = m;
   }
@@ -77,6 +79,10 @@ public:
   }
 
   RGWBucketEntryPoint& get_ep() {
+    return ep;
+  }
+
+  RGWBucketEntryPoint& get_attrs() {
     return ep;
   }
 };
