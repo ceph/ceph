@@ -5,6 +5,6 @@ rgw-final-workload:
   full_sequential:
   - swift:
       client.1:
-        force-branch: ceph-master
+        force-branch: ceph-nautilus
         rgw_server: client.1
   - print: "**** done swift 4-final-workload"
