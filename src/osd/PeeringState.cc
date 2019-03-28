@@ -729,6 +729,9 @@ void PeeringState::clear_primary_state()
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
+  need_up_thru = false;
+  missing_loc.clear();
+  pg_log.reset_recovery_pointers();
   pl->clear_primary_state();
 }
 
@@ -923,6 +926,79 @@ bool PeeringState::set_force_backfill(bool b)
   }
   return did;
 }
+
+bool PeeringState::adjust_need_up_thru(const OSDMapRef osdmap)
+{
+  epoch_t up_thru = osdmap->get_up_thru(pg_whoami.osd);
+  if (need_up_thru &&
+      up_thru >= info.history.same_interval_since) {
+    psdout(10) << "adjust_need_up_thru now "
+	       << up_thru << ", need_up_thru now false" << dendl;
+    need_up_thru = false;
+    return true;
+  }
+  return false;
+}
+
+PastIntervals::PriorSet PeeringState::build_prior()
+{
+  if (1) {
+    // sanity check
+    for (map<pg_shard_t,pg_info_t>::iterator it = peer_info.begin();
+	 it != peer_info.end();
+	 ++it) {
+      ceph_assert(info.history.last_epoch_started >=
+		  it->second.history.last_epoch_started);
+    }
+  }
+
+  const OSDMap &osdmap = *get_osdmap();
+  PastIntervals::PriorSet prior = past_intervals.get_prior_set(
+    pool.info.is_erasure(),
+    info.history.last_epoch_started,
+    &missing_loc.get_recoverable_predicate(),
+    [&](epoch_t start, int osd, epoch_t *lost_at) {
+      const osd_info_t *pinfo = 0;
+      if (osdmap.exists(osd)) {
+	pinfo = &osdmap.get_info(osd);
+	if (lost_at)
+	  *lost_at = pinfo->lost_at;
+      }
+
+      if (osdmap.is_up(osd)) {
+	return PastIntervals::UP;
+      } else if (!pinfo) {
+	return PastIntervals::DNE;
+      } else if (pinfo->lost_at > start) {
+	return PastIntervals::LOST;
+      } else {
+	return PastIntervals::DOWN;
+      }
+    },
+    up,
+    acting,
+    dpp);
+
+  if (prior.pg_down) {
+    state_set(PG_STATE_DOWN);
+  }
+
+  if (get_osdmap()->get_up_thru(pg_whoami.osd) <
+      info.history.same_interval_since) {
+    psdout(10) << "up_thru " << get_osdmap()->get_up_thru(pg_whoami.osd)
+	       << " < same_since " << info.history.same_interval_since
+	       << ", must notify monitor" << dendl;
+    need_up_thru = true;
+  } else {
+    psdout(10) << "up_thru " << get_osdmap()->get_up_thru(pg_whoami.osd)
+	       << " >= same_since " << info.history.same_interval_since
+	       << ", all is well" << dendl;
+    need_up_thru = false;
+  }
+  pl->set_probe_targets(prior.probe);
+  return prior;
+}
+
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -1253,25 +1329,25 @@ PeeringState::Peering::Peering(my_context ctx)
     history_les_bound(false)
 {
   context< PeeringMachine >().log_enter(state_name);
+  PeeringState *ps = context< PeeringMachine >().state;
 
-  PG *pg = context< PeeringMachine >().pg;
-  ceph_assert(!pg->is_peered());
-  ceph_assert(!pg->is_peering());
-  ceph_assert(pg->is_primary());
-  pg->state_set(PG_STATE_PEERING);
+  ceph_assert(!ps->is_peered());
+  ceph_assert(!ps->is_peering());
+  ceph_assert(ps->is_primary());
+  ps->state_set(PG_STATE_PEERING);
 }
 
 boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
 {
-  PG *pg = context< PeeringMachine >().pg;
+  PeeringState *ps = context< PeeringMachine >().state;
   psdout(10) << "Peering advmap" << dendl;
-  if (prior_set.affected_by_map(*(advmap.osdmap), pg)) {
+  if (prior_set.affected_by_map(*(advmap.osdmap), ps->dpp)) {
     psdout(1) << "Peering, affected_by_map, going to Reset" << dendl;
     post_event(advmap);
     return transit< Reset >();
   }
 
-  pg->adjust_need_up_thru(advmap.osdmap);
+  ps->adjust_need_up_thru(advmap.osdmap);
 
   return forward_event();
 }
@@ -3016,9 +3092,9 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
   ps->check_past_interval_bounds();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
-  ceph_assert(pg->blocked_by.empty());
+  ceph_assert(ps->blocked_by.empty());
 
-  prior_set = pg->build_prior();
+  prior_set = ps->build_prior();
 
   pg->reset_min_peer_features();
   get_infos();
@@ -3084,7 +3160,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
     PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
     if (old_start < pg->info.history.last_epoch_started) {
       psdout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
-      prior_set = pg->build_prior();
+      prior_set = ps->build_prior();
 
       // filter out any osds that got dropped from the probe set from
       // peer_info_requested.  this is less expensive than restarting

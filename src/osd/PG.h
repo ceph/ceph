@@ -220,6 +220,7 @@ protected:
   eversion_t &min_last_complete_ondisk;
   eversion_t &pg_trim_to;
   set<int> &blocked_by;
+  bool &need_up_thru;
   set<pg_shard_t> &peer_activated;
   set<pg_shard_t> &backfill_targets;
   set<pg_shard_t> &async_recovery_targets;
@@ -285,7 +286,7 @@ public:
     return info.history;
   }
   bool get_need_up_thru() const {
-    return need_up_thru;
+    return recovery_state.get_need_up_thru();
   }
   epoch_t get_same_interval_since() const {
     return info.history.same_interval_since;
@@ -652,15 +653,13 @@ public:
   virtual void send_cluster_message(int osd, Message *m, epoch_t epoch);
 
 protected:
-  bool need_up_thru; ///< Flag indicating that this pg needs up through published
-
   epoch_t get_last_peering_reset() const {
     return last_peering_reset;
   }
 
   /* heartbeat peers */
-  void set_probe_targets(const set<pg_shard_t> &probe_set);
-  void clear_probe_targets();
+  void set_probe_targets(const set<pg_shard_t> &probe_set) override;
+  void clear_probe_targets() override;
 
   Mutex heartbeat_peer_lock;
   set<int> heartbeat_peers;
@@ -961,10 +960,6 @@ protected:
   bool needs_backfill() const;
 
   void try_mark_clean();  ///< mark an active pg clean
-
-  PastIntervals::PriorSet build_prior();
-
-  bool adjust_need_up_thru(const OSDMapRef osdmap);
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
   virtual void dump_recovery_info(Formatter *f) const = 0;

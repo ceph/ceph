@@ -224,6 +224,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   min_last_complete_ondisk(recovery_state.min_last_complete_ondisk),
   pg_trim_to(recovery_state.pg_trim_to),
   blocked_by(recovery_state.blocked_by),
+  need_up_thru(recovery_state.need_up_thru),
   peer_activated(recovery_state.peer_activated),
   backfill_targets(recovery_state.backfill_targets),
   async_recovery_targets(recovery_state.async_recovery_targets),
@@ -251,7 +252,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_queued(false),
   recovery_queued(false),
   recovery_ops_active(0),
-  need_up_thru(false),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
   backfill_reserving(false),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
@@ -575,18 +575,6 @@ bool PG::needs_backfill() const
   return false;
 }
 
-bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
-{
-  epoch_t up_thru = osdmap->get_up_thru(osd->whoami);
-  if (need_up_thru &&
-      up_thru >= info.history.same_interval_since) {
-    dout(10) << "adjust_need_up_thru now " << up_thru << ", need_up_thru now false" << dendl;
-    need_up_thru = false;
-    return true;
-  }
-  return false;
-}
-
 /*
  * Returns true unless there is a non-lost OSD in might_have_unfound.
  */
@@ -617,72 +605,11 @@ bool PG::all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const
   return true;
 }
 
-PastIntervals::PriorSet PG::build_prior()
-{
-  if (1) {
-    // sanity check
-    for (map<pg_shard_t,pg_info_t>::iterator it = peer_info.begin();
-	 it != peer_info.end();
-	 ++it) {
-      ceph_assert(info.history.last_epoch_started >= it->second.history.last_epoch_started);
-    }
-  }
-
-  const OSDMap &osdmap = *get_osdmap();
-  PastIntervals::PriorSet prior = past_intervals.get_prior_set(
-    pool.info.is_erasure(),
-    info.history.last_epoch_started,
-    get_pgbackend()->get_is_recoverable_predicate(),
-    [&](epoch_t start, int osd, epoch_t *lost_at) {
-      const osd_info_t *pinfo = 0;
-      if (osdmap.exists(osd)) {
-	pinfo = &osdmap.get_info(osd);
-	if (lost_at)
-	  *lost_at = pinfo->lost_at;
-      }
-
-      if (osdmap.is_up(osd)) {
-	return PastIntervals::UP;
-      } else if (!pinfo) {
-	return PastIntervals::DNE;
-      } else if (pinfo->lost_at > start) {
-	return PastIntervals::LOST;
-      } else {
-	return PastIntervals::DOWN;
-      }
-    },
-    up,
-    acting,
-    this);
-				 
-  if (prior.pg_down) {
-    state_set(PG_STATE_DOWN);
-  }
-
-  if (get_osdmap()->get_up_thru(osd->whoami) < info.history.same_interval_since) {
-    dout(10) << "up_thru " << get_osdmap()->get_up_thru(osd->whoami)
-	     << " < same_since " << info.history.same_interval_since
-	     << ", must notify monitor" << dendl;
-    need_up_thru = true;
-  } else {
-    dout(10) << "up_thru " << get_osdmap()->get_up_thru(osd->whoami)
-	     << " >= same_since " << info.history.same_interval_since
-	     << ", all is well" << dendl;
-    need_up_thru = false;
-  }
-  set_probe_targets(prior.probe);
-  return prior;
-}
-
 void PG::clear_primary_state()
 {
-  need_up_thru = false;
-  projected_log = PGLog::IndexedLog();
   last_update_ondisk = eversion_t();
 
-  missing_loc.clear();
-
-  pg_log.reset_recovery_pointers();
+  projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
