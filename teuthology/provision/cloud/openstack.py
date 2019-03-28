@@ -359,6 +359,7 @@ class OpenStackProvisioner(base.Provisioner):
                 'git',
                 'wget',
                 'python',
+                'ntp',
             ],
             runcmd=[
                 # Remove the user's password so that console logins are
