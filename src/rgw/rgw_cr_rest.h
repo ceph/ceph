@@ -15,6 +15,8 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   param_vec_t params;
   T *result;
 
+  param_vec_t extra_headers;
+public:
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
 
 public:
@@ -25,13 +27,24 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
+ RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager, const string& _path,
+                          rgw_http_param_pair *params,
+                          std::map <std::string, std::string> *hdrs,
+                          T *_result)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    path(_path), params(make_param_list(params)),
+    result(_result), extra_headers(make_param_list(hdrs))
+    {}
+
+
   ~RGWReadRESTResourceCR() override {
     request_cleanup();
   }
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
-        new RGWRESTReadResource(conn, path, params, NULL, http_manager));
+        new RGWRESTReadResource(conn, path, params, &extra_headers, http_manager));
 
     op->set_user_info((void *)stack);
 
@@ -67,15 +80,17 @@ public:
   }
 };
 
-template <class S, class T>
+template <class S, class T, class E = int>
 class RGWSendRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string method;
   string path;
   param_vec_t params;
+  param_vec_t headers;
   T *result;
-  S input;
+  E *err_result;
+  bufferlist input_bl;
 
   boost::intrusive_ptr<RGWRESTSendResource> http_op;
 
@@ -83,11 +98,18 @@ public:
   RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _method, const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
+                        rgw_http_param_pair *_params, map<string, string> *_attrs,
+                        S& _input, T *_result, E *_err_result = nullptr)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      method(_method), path(_path), params(make_param_list(_params)), result(_result),
-      input(_input)
-  {}
+      method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)),
+      result(_result), err_result(_err_result) {
+    JSONFormatter jf;
+    encode_json("data", _input, &jf);
+    std::stringstream ss;
+    jf.flush(ss);
+    //bufferlist bl;
+    this->input_bl.append(ss.str());
+  }
 
   ~RGWSendRESTResourceCR() override {
     request_cleanup();
@@ -95,18 +117,11 @@ public:
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
-        new RGWRESTSendResource(conn, method, path, params, NULL, http_manager));
+        new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
     op->set_user_info((void *)stack);
 
-    JSONFormatter jf;
-    encode_json("data", input, &jf);
-    std::stringstream ss;
-    jf.flush(ss);
-    bufferlist bl;
-    bl.append(ss.str());
-
-    int ret = op->aio_send(bl);
+    int ret = op->aio_send(input_bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
@@ -118,8 +133,8 @@ public:
 
   int request_complete() override {
     int ret;
-    if (result) {
-      ret = http_op->wait(result);
+    if (result || err_result) {
+      ret = http_op->wait(result, err_result);
     } else {
       bufferlist bl;
       ret = http_op->wait_bl(&bl);
@@ -145,28 +160,42 @@ public:
   }
 };
 
-template <class S, class T>
-class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+template <class S, class T, class E = int>
+class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T, E> {
 public:
   RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
-    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                        rgw_http_param_pair *_params, S& _input,
+                        T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
                             "POST", _path,
-                            _params, _input, _result) {}
+                            _params, nullptr, _input, _result, _err_result) {}
 };
 
-template <class S, class T>
-class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+template <class S, class T, class E = int>
+class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T, E> {
 public:
   RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
-    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
-                            "PUT", _path,
-                            _params, _input, _result) {}
+                        rgw_http_param_pair *_params, S& _input,
+                        T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
+                                  "PUT", _path,
+                                  _params, nullptr, _input,
+                                  _result, _err_result) {}
+
+  RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager,
+                       const string& _path,
+                       rgw_http_param_pair *_params,
+                       map <string, string> *_attrs,
+                       S& _input, T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
+                                  "PUT", _path,
+                                  _params, _attrs, _input,
+                                  _result, _err_result) {}
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {

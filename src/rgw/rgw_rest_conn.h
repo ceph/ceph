@@ -49,6 +49,18 @@ inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
   return params;
 }
 
+inline param_vec_t make_param_list(const map<string, string> *pp)
+{
+  param_vec_t params;
+  if (!pp) {
+    return params;
+  }
+  for (auto iter : *pp) {
+    params.emplace_back(make_pair(iter.first, iter.second));
+  }
+  return params;
+}
+
 class RGWRESTConn
 {
   CephContext *cct;
@@ -304,8 +316,8 @@ public:
     return req.get_user_info();
   }
 
-  template <class T>
-  int decode_resource(T *dest);
+  template <class T, class E>
+  int decode_resource(T *dest, E *err_result);
 
   int send(bufferlist& bl);
 
@@ -332,17 +344,25 @@ public:
     return 0;
   }
 
-  template <class T>
-  int wait(T *dest);
+  template <class T, class E>
+  int wait(T *dest, E *err_result = nullptr);
 };
 
-template <class T>
-int RGWRESTSendResource::decode_resource(T *dest)
+template <class T, class E>
+int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
 {
   int ret = req.get_status();
   if (ret < 0) {
+    if (err_result) {
+      parse_decode_json(cct, *err_result, bl);
+    }
     return ret;
   }
+
+  if (!dest) {
+    return 0;
+  }
+
   ret = parse_decode_json(cct, *dest, bl);
   if (ret < 0) {
     return ret;
@@ -350,15 +370,17 @@ int RGWRESTSendResource::decode_resource(T *dest)
   return 0;
 }
 
-template <class T>
-int RGWRESTSendResource::wait(T *dest)
-{
+template <class T, class E>
+int RGWRESTSendResource::wait(T *dest, E *err_result){
   int ret = req.wait();
   if (ret < 0) {
+    if (err_result) {
+      parse_decode_json(cct, *err_result, bl);
+    }
     return ret;
   }
 
-  ret = decode_resource(dest);
+  ret = decode_resource(dest, err_result);
   if (ret < 0) {
     return ret;
   }
