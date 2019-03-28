@@ -491,6 +491,8 @@ Operations
 :Default: ``5``
 
 
+.. _dmclock-qos:
+
 QoS Based on mClock
 -------------------
 
