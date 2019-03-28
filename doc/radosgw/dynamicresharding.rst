@@ -150,20 +150,21 @@ Troubleshooting
 ===============
 
 Clusters prior to Luminous 12.2.11 and Mimic 13.2.5 left behind stale bucket
-instance entries that weren't automatically cleaned up. The issue also affected
-LifeCycle policies which weren't applied to resharded buckets anymore. Both of
+instance entries, which were not automatically cleaned up. The issue also affected
+LifeCycle policies, which were not applied to resharded buckets anymore. Both of
 these issues can be worked around using a couple of radosgw-admin commands.
 
-Stale Instance Management
+Stale instance management
 -------------------------
+
+List the stale instances in a cluster that are ready to be cleaned up.
 
 ::
 
    # radosgw-admin reshard stale-instances list
 
-This lists the stale instances in a cluster that are ready to be cleaned up.
-Please note that the cleanup of these instances should be done only on a single
-site cluster. The cleanup can be done by the following command:
+Clean up the stale instances in a cluster. Note: cleanup of these
+instances should only be done on a single site cluster.
 
 ::
 
@@ -173,11 +174,13 @@ site cluster. The cleanup can be done by the following command:
 Lifecycle fixes
 ---------------
 
-For clusters which had resharded instances, it is highly likely that the old
-lifecycle processes would've flagged and deleted lifecycle processing as the
+For clusters that had resharded instances, it is highly likely that the old
+lifecycle processes would have flagged and deleted lifecycle processing as the
 bucket instance changed during a reshard. While this is fixed for newer clusters
-(from 13.2.6 and 12.2.12), older buckets which had lifecycle policies and
-would've undergone reshard will have to be manually fixed by issuing the following command
+(from Mimic 13.2.6 and Luminous 12.2.12), older buckets that had lifecycle policies and
+that have undergone resharding will have to be manually fixed.
+
+The command to do so is:
 
 ::
 
@@ -185,4 +188,4 @@ would've undergone reshard will have to be manually fixed by issuing the followi
 
 
 As a convenience wrapper, if the ``--bucket`` argument is dropped then this
-command will try and fix LC policies for all the buckets in the cluster.
+command will try and fix lifecycle policies for all the buckets in the cluster.
