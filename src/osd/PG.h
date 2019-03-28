@@ -940,7 +940,7 @@ protected:
   void _update_calc_stats();
   void _update_blocked_by();
   friend class TestOpsSocketHook;
-  void publish_stats_to_osd();
+  void publish_stats_to_osd() override;
 
   bool needs_recovery() const;
   bool needs_backfill() const;
