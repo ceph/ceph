@@ -54,11 +54,41 @@ protected:
   RGWSI_MetaBackend_Handle be_handle{0};
   RGWSI_MetaBackend::ModuleRef be_module;
 
+  class Put {
+  protected:
+    RGWSI_MetaBackend::Context *ctx;
+    string& entry;
+    RGWMetadataObject *obj;
+    RGWObjVersionTracker& objv_tracker;
+    RGWMDLogSyncType apply_type;
+  public:
+    Put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
+        RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) : ctx(_ctx), entry(_entry),
+                                                                     obj(_obj), objv_tracker(_objv_tracker),
+                                                                     apply_type(_type) {}
+    virtual ~Put() {}
+
+    virtual int put_pre() {
+      return 0;
+    }
+    virtual int put() {
+      return 0;
+    }
+    virtual int put_post() {
+      return 0;
+    }
+    virtual int finalize() {
+      return 0;
+    }
+  };
+
   virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) = 0;
   virtual int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
                      RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+  virtual int do_put(Put *put_op);
   virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
+  virtual Put *alloc_put_op() = 0;
   virtual int init_module() = 0;
 
 public:
@@ -156,6 +186,19 @@ public:
   int get_log_shard_id(const string& section, const string& key, int *shard_id);
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
+};
+
+class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler::Put
+{
+public:
+  RGWMetadataHandlerPut_SObj(RGWSI_MetaBackend::Context *ctx, string& entry,
+                             RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                             RGWMDLogSyncType type) : Put(ctx, entry, obj, objv_tracker, type) {}
+  ~RGWMetadataHandlerPut_SObj() {}
+
+  int put() override;
+
+  virtual int put_checked(RGWMetadataObject *_old_obj);
 };
 
 

@@ -159,121 +159,6 @@ int rgw_store_user_info(RGWSI_User *user_svc,
     .exec();
 }
 
-
-}
-
-static int do_store_user_info(RGWSI_MetaBackend *meta_be,
-                              RGWSI_MetaBackend::Context *ctx,
-                              RGWUserInfo& info,
-                              RGWUserInfo *old_info,
-                              RGWObjVersionTracker *objv_tracker,
-                              real_time mtime,
-                              bool exclusive,
-                              map<string, bufferlist> *pattrs)
-{
-  int ret;
-  RGWObjVersionTracker ot;
-
-  if (objv_tracker) {
-    ot = *objv_tracker;
-  }
-
-  if (ot.write_version.tag.empty()) {
-    if (ot.read_version.tag.empty()) {
-      ot.generate_new_write_ver(store->ctx());
-    } else {
-      ot.write_version = ot.read_version;
-      ot.write_version.ver++;
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator iter;
-  for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
-    if (old_info && old_info->swift_keys.count(iter->first) != 0)
-      continue;
-    RGWAccessKey& k = iter->second;
-    /* check if swift mapping exists */
-    RGWUserInfo inf;
-    int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
-    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
-        << ") already mapped to another user (" << info.user_id << ")" << dendl;
-      return -EEXIST;
-    }
-  }
-
-  if (!info.access_keys.empty()) {
-    /* check if access keys already exist */
-    RGWUserInfo inf;
-    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
-    for (; iter != info.access_keys.end(); ++iter) {
-      RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
-        continue;
-      int r = do_get_user_info_by_access_key(meta_be, ctx, k.id, inf);
-      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-        ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
-        return -EEXIST;
-      }
-    }
-  }
-
-  RGWUID ui;
-  ui.user_id = info.user_id;
-
-  bufferlist link_bl;
-  encode(ui, link_bl);
-
-  bufferlist data_bl;
-  encode(ui, data_bl);
-  encode(info, data_bl);
-
-  string key;
-  info.user_id.to_str(key);
-
-  ret = meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
-  if (ret < 0)
-    return ret;
-
-  if (!info.user_email.empty()) {
-    if (!old_info ||
-        old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
-                               link_bl, exclusive, NULL, real_time());
-      if (ret < 0)
-        return ret;
-    }
-  }
-
-  if (!info.access_keys.empty()) {
-    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
-    for (; iter != info.access_keys.end(); ++iter) {
-      RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
-	continue;
-
-      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
-                               link_bl, exclusive, NULL, real_time());
-      if (ret < 0)
-        return ret;
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator siter;
-  for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
-    RGWAccessKey& k = siter->second;
-    if (old_info && old_info->swift_keys.count(siter->first) != 0)
-      continue;
-
-    ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,
-                             link_bl, exclusive, NULL, real_time());
-    if (ret < 0)
-      return ret;
-  }
-
-  return ret;
-}
-
 struct user_info_entry {
   RGWUserInfo info;
   RGWObjVersionTracker objv_tracker;
@@ -2759,40 +2644,6 @@ int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-struct RGWUserCompleteInfo {
-  RGWUserInfo info;
-  map<string, bufferlist> attrs;
-  bool has_attrs;
-
-  RGWUserCompleteInfo()
-    : has_attrs(false)
-  {}
-
-  void dump(Formatter * const f) const {
-    info.dump(f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    decode_json_obj(info, obj);
-    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
-
-class RGWUserMetadataObject : public RGWMetadataObject {
-  RGWUserCompleteInfo uci;
-public:
-  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, real_time m)
-      : uci(_uci) {
-    objv = v;
-    mtime = m;
-  }
-
-  void dump(Formatter *f) const override {
-    uci.dump(f);
-  }
-};
-
 class RGWUserMetadataHandler : public RGWMetadataHandler {
   int read_user_info_entry(RGWSI_MetaBackend::Context *ctx,
                            string& entry,
@@ -2867,28 +2718,22 @@ public:
   }
 
   int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
-             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-             RGWMDLogSyncType type) override {
-    RGWUserInstanceMetadataObject *obj = static_cast<RGWUserInstanceMetadataObject *>(_obj);
-    RGWUserCompleteInfo uci;
+             RGWMetadataObject *obj,
+             RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override;
+  int do_put_checked(RGWSI_MetaBackend::Context *ctx, string& entry,
+                     RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+                     RGWMetadataObject *_old_obj) override {
+    RGWUserMetadataObject *obj = static_cast<RGWUserMetadataObject *>(_obj);
+    RGWUserMetadataObject *old_obj = static_cast<RGWUserMetadataObject *>(_old_obj);
+    RGWUserCompleteInfo& uci = obj->get_uci();
 
-    map<string, bufferlist> *pattrs = NULL;
+    map<string, bufferlist> *pattrs = nullptr;
     if (uci.has_attrs) {
       pattrs = &uci.attrs;
     }
 
-    RGWUserInfo old_info;
-    real_time orig_mtime;
-    int ret = read_user_info_entry(ctx, entry, old_info, &objv_tracker, &orig_mtime);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
-
-    // are we actually going to perform this put, or is it too old?
-    bool exists = (ret != -ENOENT);
-    if (!check_versions(exists, objv_tracker.read_version, orig_mtime,
-			objv_tracker.write_version, mtime, sync_mode)) {
-      return STATUS_NO_APPLY;
-    }
+    RGWUserInfo *pold_info = (old_obj ? &old_obj->info : nullptr);
 
     ret = store_user_info_entry(ctx, entry, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
     if (ret < 0) {
@@ -2981,6 +2826,51 @@ public:
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }
 };
+
+class RGWMetadataHandlerPut_User : public RGWMetadataHanderPut_SObj
+{
+  RGWUserMetadataHandler *handler;
+  RGWUserEntryMetadataObject *obj;
+public:
+  RGWMetadataHandlerPut_User(RGWUserMetadataHandler *_handler,
+                                       RGWSI_MetaBackend::Context *ctx, string& entry,
+                                       RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+                                       RGWMDLogSyncType type) : RGWMetadataHanderPut_SObj(ctx, entry, obj, objv_tracker, type),
+                                                                handler(_handler) {
+    obj = static_cast<RGWUserMetadataObject *>(_obj);
+  }
+
+  int put_checked(RGWMetadataObject *_old_obj) override;
+};
+
+int RGWUserMetaHandler::do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+                               RGWMetadataObject *obj,
+                               RGWObjVersionTracker& objv_tracker,
+                               RGWMDLogSyncType type)
+{
+  RGWMetadataHandlerPut_User op(this, ctx, entry, obj, objv_tracker, type);
+  return do_put(&op);
+}
+
+int RGWMetadataHandlerPut_User::put_checked(RGWMetadataObject *_old_obj)
+{
+  RGWUserMetadataObject *old_obj = static_cast<RGWUserMetadataObject *>(_old_obj);
+  RGWUserCompleteInfo& uci = obj->get_uci();
+
+  map<string, bufferlist> *pattrs = nullptr;
+  if (uci.has_attrs) {
+    pattrs = &uci.attrs;
+  }
+
+  RGWUserInfo *pold_info = (old_obj ? &old_obj->info : nullptr);
+
+  ret = store_user_info_entry(ctx, entry, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return STATUS_APPLIED;
+}
 
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc() {
   return new RGWUserMetadataHandler;

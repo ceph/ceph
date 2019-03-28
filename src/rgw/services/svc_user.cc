@@ -96,17 +96,17 @@ int RGWSI_User::User::SetOp::exec()
   return 0;
 }
 
-int RGWSI_User::read_user_info(const rgw_user& user,
-                               RGWUserInfo *info,
-                               real_time *pmtime,
-                               RGWObjVersionTracker *objv_tracker,
-                               map<string, bufferlist> *pattrs,
-                               rgw_cache_entry_info *cache_info)
+int RGWSI_User::read_user_info_meta(RGWSI_MetaBackend::Context *ctx,
+                                    string& entry,
+                                    RGWUserInfo& info,
+                                    RGWObjVersionTracker * const objv_tracker,
+                                    real_time * const pmtime,
+                                    rgw_cache_entry_info * const cache_info,
+                                    map<string, bufferlist> * const pattrs)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  string key = User::get_meta_key(user);
   RGWSI_MBSObj_GetParams params = {
     .pmtime = pmtime,
     .pattrs = pattrs,
@@ -120,19 +120,302 @@ int RGWSI_User::read_user_info(const rgw_user& user,
   auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
-    if (user_id.user_id.compare(user) != 0) {
-      lderr(store->ctx())  << "ERROR: " << __func__ << "(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
+    if (user_id.user_id.to_str().compare(entry) != 0) {
+      lderr(meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id.to_str() << " != " << entry << dendl;
       return -EIO;
     }
     if (!iter.end()) {
       decode(info, iter);
     }
   } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    ldout(meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
 
   return 0;
+}
+
+int RGWSI_User::read_user_info(const rgw_user& user,
+                               RGWUserInfo *info,
+                               real_time *pmtime,
+                               map<string, bufferlist> *pattrs,
+                               RGWObjVersionTracker *objv_tracker,
+                               rgw_cache_entry_info *cache_info)
+{
+#warning cache?
+  string key = User::get_meta_key(user);
+  RGWUserMetadataObject *meta;
+  int ret = user_meta_handler->get(key, (RGWMetadataObject **)&meta);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto& uci = meta->get_uci();
+
+  if (info) {
+    *info = std::move(uci.info);
+  }
+
+  if (pmtime) {
+    *pmtime = meta->get_mtime();
+  }
+
+  if (objv_tracker) {
+    objv_tracker->read_version = meta->get_version();
+  }
+
+  delete meta;
+
+  return 0;
+}
+
+class RGWMetaPut_User
+{
+  RGWSI_MetaBackend::Context *ctx;
+  string& entry;
+  RGWUserInfo& info;
+  RGWUserInfo *old_info;
+  RGWObjVersionTracker *objv_tracker;
+  real_time& mtime;
+  bool exclusive;
+  map<string, bufferlist> *pattrs;
+  
+  RGWMetaPut_User(RGWSI_MetaBackend::Context *ctx,
+                  string& entry,
+                  RGWUserInfo& info,
+                  RGWUserInfo *old_info,
+                  RGWObjVersionTracker *objv_tracker,
+                  real_time& mtime,
+                  bool exclusive,
+                  map<string, bufferlist> *pattrs) :
+    ctx(ctx), entry(entry),
+    info(info), old_info(old_info),
+    objv_tracker(objv_tracker), mtime(mtime),
+    exclusive(exclusive), pattrs(patts) {}
+
+  int prepare() {
+    int ret;
+    RGWObjVersionTracker ot;
+
+    if (objv_tracker) {
+      ot = *objv_tracker;
+    }
+
+    if (ot.write_version.tag.empty()) {
+      if (ot.read_version.tag.empty()) {
+        ot.generate_new_write_ver(store->ctx());
+      } else {
+        ot.write_version = ot.read_version;
+        ot.write_version.ver++;
+      }
+    }
+
+    map<string, RGWAccessKey>::iterator iter;
+    for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
+      if (old_info && old_info->swift_keys.count(iter->first) != 0)
+        continue;
+      RGWAccessKey& k = iter->second;
+      /* check if swift mapping exists */
+      RGWUserInfo inf;
+      int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
+      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+        ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
+          << ") already mapped to another user (" << info.user_id << ")" << dendl;
+        return -EEXIST;
+      }
+    }
+
+    if (!info.access_keys.empty()) {
+      /* check if access keys already exist */
+      RGWUserInfo inf;
+      map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+      for (; iter != info.access_keys.end(); ++iter) {
+        RGWAccessKey& k = iter->second;
+        if (old_info && old_info->access_keys.count(iter->first) != 0)
+          continue;
+        int r = do_get_user_info_by_access_key(meta_be, ctx, k.id, inf);
+        if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+          ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
+          return -EEXIST;
+        }
+      }
+    }
+
+    return 0;
+  }
+
+  int put() {
+    RGWUID ui;
+    ui.user_id = info.user_id;
+
+    bufferlist link_bl;
+    encode(ui, link_bl);
+
+    bufferlist data_bl;
+    encode(ui, data_bl);
+    encode(info, data_bl);
+
+    string key;
+    info.user_id.to_str(key);
+
+    ret = svc.meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
+  int complete() {
+    if (!info.user_email.empty()) {
+      if (!old_info ||
+          old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
+        ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
+                                 link_bl, exclusive, NULL, real_time());
+        if (ret < 0)
+          return ret;
+      }
+    }
+
+    if (!info.access_keys.empty()) {
+      map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+      for (; iter != info.access_keys.end(); ++iter) {
+        RGWAccessKey& k = iter->second;
+        if (old_info && old_info->access_keys.count(iter->first) != 0)
+          continue;
+
+        ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
+                                 link_bl, exclusive, NULL, real_time());
+        if (ret < 0)
+          return ret;
+      }
+    }
+
+    map<string, RGWAccessKey>::iterator siter;
+    for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
+      RGWAccessKey& k = siter->second;
+      if (old_info && old_info->swift_keys.count(siter->first) != 0)
+        continue;
+
+      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,
+                               link_bl, exclusive, NULL, real_time());
+      if (ret < 0)
+        return ret;
+    }
+
+    return 0;
+  }
+};
+
+int RGWSI_User::store_user_info_meta(RGWSI_MetaBackend::Context *ctx,
+                                     string& entry,
+                                     RGWUserInfo& info,
+                                     RGWUserInfo *old_info,
+                                     RGWObjVersionTracker *objv_tracker,
+                                     real_time& mtime,
+                                     bool exclusive,
+                                     map<string, bufferlist> *pattrs)
+{
+  int ret;
+  RGWObjVersionTracker ot;
+
+  if (objv_tracker) {
+    ot = *objv_tracker;
+  }
+
+  if (ot.write_version.tag.empty()) {
+    if (ot.read_version.tag.empty()) {
+      ot.generate_new_write_ver(store->ctx());
+    } else {
+      ot.write_version = ot.read_version;
+      ot.write_version.ver++;
+    }
+  }
+
+  map<string, RGWAccessKey>::iterator iter;
+  for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
+    if (old_info && old_info->swift_keys.count(iter->first) != 0)
+      continue;
+    RGWAccessKey& k = iter->second;
+    /* check if swift mapping exists */
+    RGWUserInfo inf;
+    int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
+    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+      ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
+        << ") already mapped to another user (" << info.user_id << ")" << dendl;
+      return -EEXIST;
+    }
+  }
+
+  if (!info.access_keys.empty()) {
+    /* check if access keys already exist */
+    RGWUserInfo inf;
+    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+    for (; iter != info.access_keys.end(); ++iter) {
+      RGWAccessKey& k = iter->second;
+      if (old_info && old_info->access_keys.count(iter->first) != 0)
+        continue;
+      int r = do_get_user_info_by_access_key(meta_be, ctx, k.id, inf);
+      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+        ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
+        return -EEXIST;
+      }
+    }
+  }
+
+  RGWUID ui;
+  ui.user_id = info.user_id;
+
+  bufferlist link_bl;
+  encode(ui, link_bl);
+
+  bufferlist data_bl;
+  encode(ui, data_bl);
+  encode(info, data_bl);
+
+  string key;
+  info.user_id.to_str(key);
+
+  ret = svc.meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
+  if (ret < 0)
+    return ret;
+
+  if (!info.user_email.empty()) {
+    if (!old_info ||
+        old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
+      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
+                               link_bl, exclusive, NULL, real_time());
+      if (ret < 0)
+        return ret;
+    }
+  }
+
+  if (!info.access_keys.empty()) {
+    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
+    for (; iter != info.access_keys.end(); ++iter) {
+      RGWAccessKey& k = iter->second;
+      if (old_info && old_info->access_keys.count(iter->first) != 0)
+	continue;
+
+      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
+                               link_bl, exclusive, NULL, real_time());
+      if (ret < 0)
+        return ret;
+    }
+  }
+
+  map<string, RGWAccessKey>::iterator siter;
+  for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
+    RGWAccessKey& k = siter->second;
+    if (old_info && old_info->swift_keys.count(siter->first) != 0)
+      continue;
+
+    ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,
+                             link_bl, exclusive, NULL, real_time());
+    if (ret < 0)
+      return ret;
+  }
+
+  return ret;
 }
 
 int RGWSI_User::store_user_info(RGWUserInfo& user_info, bool exclusive,
@@ -144,7 +427,7 @@ int RGWSI_User::store_user_info(RGWUserInfo& user_info, bool exclusive,
   auto apply_type = (exclusive ? APPLY_EXCLUSIVE : APPLY_ALWAYS);
   RGWUserCompleteInfo bci{user_info, attrs};
   RGWUserMetadataObject mdo(bci, objv_tracker->write_version, mtime);
-  return user_meta_handler->mutate(entry, &mdo, *objv_tracker, apply_type);
+  return user_meta_handler->put(entry, &mdo, *objv_tracker, apply_type);
 }
 
 int RGWSI_User::remove_user_info(const rgw_user& user,
