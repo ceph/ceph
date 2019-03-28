@@ -695,37 +695,33 @@ def get_vg(vg_name=None, vg_tags=None):
     return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
-def create_lvmcache_pool(vg_name, cache_data_lv_name, cache_metadata_lv_name):
-    pool_data = vg_name + '/' + cache_data_lv_name
-    pool_md = vg_name + '/' + cache_metadata_lv_name
+def create_lvmcache_pool(vg_name, data_lv, metadata_lv):
     process.run([
         'lvconvert',
         '--yes',
         '--poolmetadataspare', 'n',
         '--type', 'cache-pool',
-        '--poolmetadata', pool_md, pool_data,
+        '--poolmetadata', metadata_lv.lv_path, data_lv.lv_path,
     ])
 
 
-def create_lvmcache(vg_name, data_lv_name, osd_lv_name):
-    pool_data = vg_name + '/' + data_lv_name
-    osd_data = vg_name + '/' + osd_lv_name
+def create_lvmcache(vg_name, cache_lv, origin_lv):
     process.run([
         'lvconvert',
         '--yes',
         '--type', 'cache',
-        '--cachepool', pool_data, osd_data
+        '--cachepool', cache_lv.lv_path, origin_lv.lv_path
     ])
 
 
-def set_lvmcache_caching_mode(caching_mode, vg_name, osd_lv_name):
+def set_lvmcache_caching_mode(caching_mode, vg_name, origin_lv):
     if caching_mode not in ['writeback', 'writethrough']:
+        print('Unknown caching mode: ' + caching_mode)
         return
 
-    osd_data = vg_name + '/' + osd_lv_name
     process.run([
         'lvchange',
-        '--cachemode', caching_mode, osd_data
+        '--cachemode', caching_mode, origin_lv.lv_path
     ])
 
 
