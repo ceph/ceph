@@ -71,7 +71,7 @@ function usage () {
     exit 1
 }
 
-[[ $1 != ?(-)+([0-9]) ]] && usage
+[[ $1 =~ ^[0-9]+$ ]] || usage
 issue=$1
 echo "Backport issue: $issue"
 
