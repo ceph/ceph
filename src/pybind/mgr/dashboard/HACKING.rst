@@ -140,6 +140,12 @@ Start all frontend e2e tests by running::
 
   $ ./run-frontend-e2e-tests.sh
 
+Report:
+  After running the tests you can find the corresponding report as well as screenshots
+  of failed test cases by opening the following file in your browser:
+
+    src/pybind/mgr/dashboard/frontend/.protractor-report/index.html
+
 Device:
   You can force the script to use a specific device with the ``-d`` flag::
 
