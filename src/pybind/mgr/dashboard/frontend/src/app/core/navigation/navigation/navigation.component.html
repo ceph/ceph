@@ -25,98 +25,39 @@
        id="bs-example-navbar-collapse-1"
        [collapse]="isCollapsed">
     <ul class="nav navbar-nav navbar-primary">
-
-      <!-- Dashboard -->
-      <li routerLinkActive="active"
-          class="tc_menuitem tc_menuitem_dashboard">
-        <a routerLink="/dashboard">
-          <i class="fa fa-heartbeat fa-fw"
-             [ngStyle]="summaryData?.health_status | healthColor"></i>
-          <span i18n>Dashboard</span>
-        </a>
+      <li>
+        <a><span class="fa fa-heartbeat fa-fw"
+            [ngStyle]="summaryData?.health_status | healthColor"></span></a>
       </li>
 
-      <!-- Cluster -->
-      <li dropdown
-          routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_cluster"
-          *ngIf="permissions.hosts.read || permissions.monitor.read || permissions.osd.read || permissions.configOpt.read">
-        <a dropdownToggle
-           class="dropdown-toggle"
-           data-toggle="dropdown">
-          <ng-container i18n>Cluster</ng-container>
-          <span class="caret"></span>
-        </a>
-        <ul *dropdownMenu
-            class="dropdown-menu">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_hosts"
-              *ngIf="permissions.hosts.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/hosts">Hosts</a>
+      <ng-container *ngFor="let item of menuEntries">
+        <ng-container *ngIf="item.children; else nosubitems">
+          <li routerLinkActive="active" dropdown class="dropdown"
+              *ngIf="(item.enable !== undefined ? enabledFeature[item.enable] : true ) && (item.perm !== undefined ? item.perm : true)">
+            <a dropdownToggle class="dropdown-toggle" data-toggle="dropdown">
+              {{item.name}}
+              <span class="caret"></span>
+            </a>
+            <ul class="dropdown-menu">
+              <li *ngFor="let subitem of item.children" routerLinkActive="active">
+                <a [routerLink]="subitem.link" class="dropdown-item">
+                  {{subitem.name}}
+                </a>
+              </li>
+            </ul>
           </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_monitor"
-              *ngIf="permissions.monitor.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/monitor/">Monitors</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_hosts"
-              *ngIf="permissions.osd.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/osd">OSDs</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_configuration"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/configuration">Configuration</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_crush"
-              *ngIf="permissions.hosts.read && permissions.osd.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/crush-map">CRUSH map</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_modules"
-              *ngIf="permissions.configOpt.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/mgr-modules">Manager modules</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_log"
-              *ngIf="permissions.log.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/logs">Logs</a>
-          </li>
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_prometheus"
-              *ngIf="prometheusConfigured && permissions.prometheus.read">
-            <a i18n
-               routerLink="/alerts">Alerts</a>
-          </li>
-        </ul>
-      </li>
+        </ng-container>
 
-      <!-- Pools -->
-      <li routerLinkActive="active"
-          class="tc_menuitem tc_menuitem_pool"
-          *ngIf="permissions.pool.read">
-        <a i18n
-           routerLink="/pool">Pools</a>
-      </li>
+        <ng-template #nosubitems>
+          <li routerLinkActive="active"
+              *ngIf="(item.enable !== undefined ? enabledFeature[item.enable] : true ) && (item.perm !== undefined ? item.perm : true)">
+            <a [routerLink]="item.link">{{item.name}}</a>
+          </li>
+        </ng-template>
+      </ng-container>
 
       <!-- Block -->
-      <li dropdown
+      <!--<li dropdown
           routerLinkActive="active"
           class="dropdown tc_menuitem tc_menuitem_block"
           *ngIf="
@@ -158,7 +99,7 @@
                routerLink="/block/iscsi">iSCSI</a>
           </li>
         </ul>
-      </li>
+      </li>-->
 
       <!-- NFS -->
       <li routerLinkActive="active"
