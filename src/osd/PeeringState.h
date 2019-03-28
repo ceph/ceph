@@ -95,6 +95,9 @@ public:
       PGPeeringEventRef on_preempt) = 0;
     virtual void cancel_remote_recovery_reservation() = 0;
 
+    // HB
+    virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
+    virtual void clear_probe_targets() = 0;
 
     virtual PerfCounters &get_peering_perf() = 0;
 
@@ -1165,6 +1168,7 @@ public:
 
   set<int> blocked_by; ///< osds we are blocked by (for pg stats)
 
+  bool need_up_thru = false; ///< true if osdmap with updated up_thru needed
 
   /// I deleted these strays; ignore racing PGInfo from them
   set<pg_shard_t> peer_activated;
@@ -1229,6 +1233,9 @@ public:
   unsigned get_backfill_priority();
   /// get priority for pg deletion
   unsigned get_delete_priority();
+
+  bool adjust_need_up_thru(const OSDMapRef osdmap);
+  PastIntervals::PriorSet build_prior();
 
 public:
   PeeringState(
@@ -1402,6 +1409,10 @@ public:
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
+
+  bool get_need_up_thru() const {
+    return need_up_thru;
+  }
 
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
