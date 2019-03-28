@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
+import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
@@ -15,11 +15,11 @@ import { IscsiComponent } from './iscsi.component';
 describe('IscsiComponent', () => {
   let component: IscsiComponent;
   let fixture: ComponentFixture<IscsiComponent>;
-  let tcmuIscsiService: TcmuIscsiService;
+  let iscsiService: IscsiService;
   let tcmuiscsiData;
 
   const fakeService = {
-    tcmuiscsi: () => {
+    overview: () => {
       return new Promise(function() {
         return;
       });
@@ -36,7 +36,7 @@ describe('IscsiComponent', () => {
       FormatterService,
       RelativeDatePipe,
       ListPipe,
-      { provide: TcmuIscsiService, useValue: fakeService },
+      { provide: IscsiService, useValue: fakeService },
       i18nProviders
     ]
   });
@@ -44,12 +44,12 @@ describe('IscsiComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);
     component = fixture.componentInstance;
-    tcmuIscsiService = TestBed.get(TcmuIscsiService);
+    iscsiService = TestBed.get(IscsiService);
     fixture.detectChanges();
     tcmuiscsiData = {
       images: []
     };
-    spyOn(tcmuIscsiService, 'tcmuiscsi').and.callFake(() => of(tcmuiscsiData));
+    spyOn(iscsiService, 'overview').and.callFake(() => of(tcmuiscsiData));
   });
 
   it('should create', () => {
