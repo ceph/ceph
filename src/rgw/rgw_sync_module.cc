@@ -35,8 +35,8 @@ int RGWCallStatRemoteObjCR::operate() {
       return set_cr_error(retcode);
     }
     ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
-      << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-      << " attrs=" << attrs << dendl;
+                             << " b=" << bucket_info.bucket << " k=" << key
+                             << " size=" << size << " mtime=" << mtime << dendl;
     yield {
       RGWStatRemoteObjCBCR *cb = allocate_callback();
       if (cb) {
