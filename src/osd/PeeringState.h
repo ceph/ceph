@@ -84,6 +84,7 @@ public:
     virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
     virtual void clear_want_pg_temp() = 0;
 
+    virtual void publish_stats_to_osd() = 0;
     virtual void clear_publish_stats() = 0;
 
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;

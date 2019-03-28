@@ -6096,6 +6096,28 @@ void PG::handle_query_state(Formatter *f)
   dout(10) << "handle_query_state" << dendl;
   PeeringState::QueryState q(f);
   recovery_state.handle_event(q, 0);
+
+  if (is_primary() && is_active()) {
+    f->open_object_section("scrub");
+    f->dump_stream("scrubber.epoch_start") << scrubber.epoch_start;
+    f->dump_bool("scrubber.active", scrubber.active);
+    f->dump_string("scrubber.state", PG::Scrubber::state_string(scrubber.state));
+    f->dump_stream("scrubber.start") << scrubber.start;
+    f->dump_stream("scrubber.end") << scrubber.end;
+    f->dump_stream("scrubber.max_end") << scrubber.max_end;
+    f->dump_stream("scrubber.subset_last_update") << scrubber.subset_last_update;
+    f->dump_bool("scrubber.deep", scrubber.deep);
+    {
+      f->open_array_section("scrubber.waiting_on_whom");
+      for (set<pg_shard_t>::iterator p = scrubber.waiting_on_whom.begin();
+	   p != scrubber.waiting_on_whom.end();
+	   ++p) {
+	f->dump_stream("shard") << *p;
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void PG::on_pool_change()
