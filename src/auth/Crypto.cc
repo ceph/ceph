@@ -291,8 +291,9 @@ public:
     keyItem.type = siBuffer;
     keyItem.data = (unsigned char*)secret.c_str();
     keyItem.len = secret.length();
-    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			    &keyItem, NULL);
+    using ceph::crypto::PK11_ImportSymKey_FIPS;
+    key = PK11_ImportSymKey_FIPS(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
+				 &keyItem, NULL);
     if (!key) {
       err << "cannot convert AES key for NSS: " << PR_GetError();
       return -1;
