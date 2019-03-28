@@ -2443,28 +2443,6 @@ boost::statechart::result PeeringState::Active::react(const QueryState& q)
     q.f->close_section();
   }
 
-  {
-    q.f->open_object_section("scrub");
-    q.f->dump_stream("scrubber.epoch_start") << pg->scrubber.epoch_start;
-    q.f->dump_bool("scrubber.active", pg->scrubber.active);
-    q.f->dump_string("scrubber.state", PG::Scrubber::state_string(pg->scrubber.state));
-    q.f->dump_stream("scrubber.start") << pg->scrubber.start;
-    q.f->dump_stream("scrubber.end") << pg->scrubber.end;
-    q.f->dump_stream("scrubber.max_end") << pg->scrubber.max_end;
-    q.f->dump_stream("scrubber.subset_last_update") << pg->scrubber.subset_last_update;
-    q.f->dump_bool("scrubber.deep", pg->scrubber.deep);
-    {
-      q.f->open_array_section("scrubber.waiting_on_whom");
-      for (set<pg_shard_t>::iterator p = pg->scrubber.waiting_on_whom.begin();
-	   p != pg->scrubber.waiting_on_whom.end();
-	   ++p) {
-	q.f->dump_stream("shard") << *p;
-      }
-      q.f->close_section();
-    }
-    q.f->close_section();
-  }
-
   q.f->close_section();
   return forward_event();
 }
