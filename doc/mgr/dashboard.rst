@@ -324,7 +324,7 @@ If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
 certificate, then we need to configure the dashboard to avoid SSL certificate
 verification when accessing ceph-iscsi API.
 
-To disable API SSL verification run the following commmand::
+To disable API SSL verification run the following command::
 
     $ ceph dashboard set-iscsi-api-ssl-verification false
 
