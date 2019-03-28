@@ -389,6 +389,73 @@ int RGWMetadataHandler::init(RGWMetadataManager *manager)
   return manager->register_handler(this, &meta_be, &be_handle);
 }
 
+int RGWMetadataHandlerPut_SObj::put(RGWSI_MetaBackend::Context *ctx, string& entry,
+                                    RGWMetadataObject *obj,
+                                    RGWObjVersionTracker& objv_tracker,
+                                    RGWMDLogSyncType apply_type) {
+  RGWMetadataObject *old_obj{nullptr};
+#warning what about attrs?
+  map<string, bufferlist> attrs;
+  int ret = do_get(ctx, entry, &old_obj);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+
+  std::unique_ptr<RGWMetadataObject> oo(old_obj);
+
+  auto old_ver = (!old_obj : ? old_obj->get_version());
+  auto old_mtime = (!old_obj : ? old_obj->get_mtime());
+
+  // are we actually going to perform this put, or is it too old?
+  bool exists = (ret != -ENOENT);
+  if (!check_versions(exists, old_ver, old_mtime,
+                      objv_tracker.write_version, obj->get_mtime(),
+                      apply_type)) {
+    return STATUS_NO_APPLY;
+  }
+
+  objv_tracker.read_version = old_ver; /* maintain the obj version we just read */
+
+  return put_checked(old_obj);
+}
+
+int RGWMetadataHandlerPut_SObj::put_checked(RGWMetadataObject *_old_obj)
+{
+  RGWSI_MBSObj_PutParams params = {
+    .mtime = mtime,
+    .pattrs = pattrs,
+  };
+  ceph::encode(be, params.bl);
+  int ret = meta_be->put_entry(ctx, params,
+                               objv_tracker);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWMetadataHandler::do_put(Put *put_op)
+{
+  int r = put_op->put_pre();
+  if (r != 0) { /* r can also be STATUS_NO_APPLY */
+    return r;
+  }
+
+  r = put_op->put();
+  if (r != 0) {
+    return r;
+  }
+
+  r = put_op->post();
+  if (r != 0) }  /* e.g., -error or STATUS_APPLIED */
+    return r;
+  }
+
+  return 0;
+}
+}
+
 int RGWMetadataHandler::get(string& entry, RGWMetadataObject **obj)
 {
   RGWSI_Meta_Ctx ctx;

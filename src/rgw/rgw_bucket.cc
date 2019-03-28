@@ -2443,7 +2443,7 @@ public:
     if (ret < 0)
       return ret;
 
-    RGWBucketEntryMetadataObject *mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime);
+    RGWBucketEntryMetadataObject *mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime, attrs);
 
     *obj = mdo;
 
@@ -2451,49 +2451,9 @@ public:
   }
 
   int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
-             RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-             RGWMDLogSyncType type) override {
-    RGWBucketEntryMetadataObject *obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
-
-    auto& be = obj->get_be();
-
-    RGWBucketEntryPoint old_be;
-    try {
-      decode_json_obj(be, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
-
-    RGWObjVersionTracker old_ot;
-
-    map<string, bufferlist> attrs;
-    int ret = read_bucket_entrypoint_info(ctx, entry, &old_be, &old_ot, &orig_mtime, &attrs);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
-
-    // are we actually going to perform this put, or is it too old?
-    bool exists = (ret != -ENOENT);
-    if (!check_versions(exists, old_ot.read_version, orig_mtime,
-			objv_tracker.write_version, obj->get_mtime(), sync_type)) {
-      return STATUS_NO_APPLY;
-    }
-
-    objv_tracker.read_version = old_ot.read_version; /* maintain the obj version we just read */
-
-    ret = store_bucket_entrypoint_info(entry, be, false, objv_tracker, obj->get_mtime(), &attrs);
-    if (ret < 0)
-      return ret;
-
-    /* link bucket */
-    if (be.linked) {
-      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
-    } else {
-      ret = rgw_unlink_bucket(store, be.owner, be.bucket.tenant,
-                              be.bucket.name, false);
-    }
-
-    return ret;
-  }
+             RGWMetadataObject *obj,
+             RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override;
 
   struct list_keys_info {
     RGWRados *store;
@@ -2587,6 +2547,64 @@ public:
   }
 };
 
+class RGWMetadataHandlerPut_Bucket : public RGWMetadataHanderPut_SObj
+{
+  RGWBucketMetadataHandler *handler;
+  RGWBucketEntryMetadataObject *obj;
+public:
+  RGWMetadataHandlerPut_Bucket(RGWBucketMetadataHandler *_handler,
+                               RGWSI_MetaBackend::Context *ctx, string& entry,
+                               RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+                               RGWMDLogSyncType type) : RGWMetadataHanderPut_SObj(ctx, entry, obj, objv_tracker, type),
+                                                        handler(_handler) {
+    obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
+  }
+  ~RGWMetadataHandlerPut_Bucket() {}
+
+  int put_checked(RGWMetadataObject *_old_obj) override;
+  int put_post() override;
+};
+
+int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+             RGWMetadataObject *obj,
+             RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type)
+{
+  RGWMetadataHandlerPut_Bucket op(this, ctx, entry, obj, objv_tracker, type);
+  return do_put(&op);
+}
+
+int RGWMetadataHandlerPut_Bucket::put_checked(RGWMetadataObject *_old_obj)
+{
+  RGWBucketEntryMetadataObject *old_obj = static_cast<RGWBucketEntryMetadataObject *>(_old_obj);
+
+  auto& be = obj->get_be();
+
+  map<string, bufferlist> *pattrs = (old_obj ? &old_obj->get_attrs() : nullptr);
+
+  ret = handler->store_bucket_entrypoint_info(entry, be, false, objv_tracker,
+                                              obj->get_mtime(), &old_obj->get_attrs());
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWMetadataHandlerPut_Bucket::put_post()
+{
+  auto& be = obj->get_be();
+
+  /* link bucket */
+  if (be.linked) {
+    ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
+  } else {
+    ret = rgw_unlink_bucket(store, be.owner, be.bucket.tenant,
+                            be.bucket.name, false);
+  }
+
+  return ret;
+}
+
 void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
 
    char md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2650,7 +2668,7 @@ WRITE_CLASS_ENCODER(archive_meta_info)
 
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+  int do_remove(RGWMetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
     ldout(store->ctx(), 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
@@ -2661,9 +2679,8 @@ public:
     /* read original entrypoint */
 
     RGWBucketEntryPoint be;
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     map<string, bufferlist> attrs;
-    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, &attrs);
+    int ret = read_bucket_entrypoint_info(ctx, entry, be, &objv_tracker, &mtime, &attrs);
     if (ret < 0) {
         return ret;
     }
@@ -2759,12 +2776,14 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
-          real_time mtime, JSONObj *obj, RGWMDLogSyncType sync_type) override {
+  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+             RGWMetadataObject *obj,
+             RGWObjVersionTracker& objv_tracker,
+             RGWMDLogSyncType type) override {
     if (entry.find("-deleted-") != string::npos) {
       RGWObjVersionTracker ot;
       RGWMetadataObject *robj;
-      int ret = get(store, entry, &robj);
+      int ret = do_get(ctx, entry, &robj);
       if (ret != -ENOENT) {
         if (ret < 0) {
           return ret;
@@ -2772,15 +2791,15 @@ public:
         ot.read_version = robj->get_version();
         delete robj;
 
-        ret = remove(store, entry, ot);
+        ret = do_remove(ctx, entry, ot);
         if (ret < 0) {
           return ret;
         }
       }
     }
 
-    return RGWBucketMetadataHandler::put(store, entry, objv_tracker,
-                                         mtime, obj, sync_type);
+    return RGWBucketMetadataHandler::do_put(ctx, entry, objv_tracker,
+                                            mtime, obj, sync_type);
   }
 
 };
@@ -2927,94 +2946,7 @@ public:
 
   int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-             RGWMDLogSyncType type) override {
-    RGWBucketInstanceMetadataObject *obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
-
-    auto& be = obj->get_bucket_info();
-
-    real_time orig_mtime;
-
-    int ret = read_bucket_instance_entry(ctx, entry, old_bci.info,
-                                         &orig_mtime, &old_bci.attrs);
-    bool exists = (ret != -ENOENT);
-    if (ret < 0 && exists)
-      return ret;
-
-    if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
-      /* a new bucket, we need to select a new bucket placement for it */
-      auto key(entry);
-      rgw_bucket_instance_oid_to_key(key);
-      string tenant_name;
-      string bucket_name;
-      string bucket_instance;
-      parse_bucket(key, &tenant_name, &bucket_name, &bucket_instance);
-
-      RGWZonePlacementInfo rule_info;
-      bci.info.bucket.name = bucket_name;
-      bci.info.bucket.bucket_id = bucket_instance;
-      bci.info.bucket.tenant = tenant_name;
-      ret = svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
-      if (ret < 0) {
-        ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
-        return ret;
-      }
-      bci.info.index_type = rule_info.index_type;
-    } else {
-      /* existing bucket, keep its placement */
-      bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
-      bci.info.placement_rule = old_bci.info.placement_rule;
-    }
-
-    if (exists && old_bci.info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {
-      int shards_num = bci.info.num_shards? bci.info.num_shards : 1;
-      int shard_id = bci.info.num_shards? 0 : -1;
-
-      if (!bci.info.datasync_flag_enabled()) {
-      ret = store->stop_bi_log_entries(bci.info, -1);
-        if (ret < 0) {
-	   lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
-	   return ret;
-        }
-      } else {
-        ret = store->resync_bi_log_entries(bci.info, -1);
-        if (ret < 0) {
-	   lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
-	   return ret;
-        }
-      }
-
-      for (int i = 0; i < shards_num; ++i, ++shard_id) {
-        ret = store->data_log->add_entry(bci.info.bucket, shard_id);
-        if (ret < 0) {
-	   lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-	   return ret;
-        }
-      }
-    }
-
-    // are we actually going to perform this put, or is it too old?
-    if (!check_versions(exist, old_bci.info.objv_tracker.read_version, orig_mtime,
-			objv_tracker.write_version, mtime, sync_type)) {
-      objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
-      return STATUS_NO_APPLY;
-    }
-
-    /* record the read version (if any), store the new version */
-    bci.info.objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
-    bci.info.objv_tracker.write_version = objv_tracker.write_version;
-
-    ret = store_bucket_instance_entry(bci.info, false, mtime, &bci.attrs);
-    if (ret < 0)
-      return ret;
-
-    objv_tracker = bci.info.objv_tracker;
-
-    ret = store->init_bucket_index(bci.info, bci.info.num_shards);
-    if (ret < 0)
-      return ret;
-
-    return STATUS_APPLIED;
-  }
+             RGWMetadataObject *_old_obj) override;
 
   struct list_keys_info {
     RGWRados *store;
@@ -3093,6 +3025,120 @@ public:
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }
 };
+
+class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHanderPut_SObj
+{
+  RGWBucketInstanceMetadataHandler *handler;
+  RGWBucketInstanceMetadataObject *obj;
+public:
+  RGWMetadataHandlerPut_BucketInstance(RGWBucketInstanceMetadataHandler *_handler,
+                                       RGWSI_MetaBackend::Context *ctx, string& entry,
+                                       RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
+                                       RGWMDLogSyncType type) : RGWMetadataHanderPut_SObj(ctx, entry, obj, objv_tracker, type),
+                                                                handler(_handler) {
+    obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
+  }
+
+  int put_pre() override;
+  int put_checked(RGWMetadataObject *_old_obj) override;
+  int put_post() override;
+};
+
+int RGWBucketInstanceMetadatHandler::do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+                                            RGWMetadataObject *obj,
+                                            RGWObjVersionTracker& objv_tracker,
+                                            RGWMDLogSyncType type) override
+{
+  RGWMetadataHandlerPut_BucketInstance put_op(this, ctx, entry, obj,
+                                              objv_tracker, type);
+  return do_put(&op);
+}
+
+int RGWMetadataHandlerPut_BucketInstance::put_pre()
+{
+  RGWBucketInstanceMetadataObject *old_obj = static_cast<RGWBucketInstanceMetadataObject *>(_old_obj);
+
+  RGWBucketCompleteInfo *old_bci = (old_obj ? &old_obj->get_bci() : nullptr);
+
+  bool exists = (!!old_obj);
+
+  if (!exists || old_bci->info.bucket.bucket_id != bci->info.bucket.bucket_id) {
+    /* a new bucket, we need to select a new bucket placement for it */
+    auto key(entry);
+    rgw_bucket_instance_oid_to_key(key);
+    string tenant_name;
+    string bucket_name;
+    string bucket_instance;
+    parse_bucket(key, &tenant_name, &bucket_name, &bucket_instance);
+
+    RGWZonePlacementInfo rule_info;
+    bci.info.bucket.name = bucket_name;
+    bci.info.bucket.bucket_id = bucket_instance;
+    bci.info.bucket.tenant = tenant_name;
+    ret = svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+      return ret;
+    }
+    bci.info.index_type = rule_info.index_type;
+  } else {
+    /* existing bucket, keep its placement */
+    bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
+    bci.info.placement_rule = old_bci->info.placement_rule;
+  }
+
+  if (exists && old_bci->info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {
+    int shards_num = bci.info.num_shards? bci.info.num_shards : 1;
+    int shard_id = bci.info.num_shards? 0 : -1;
+
+    if (!bci.info.datasync_flag_enabled()) {
+      ret = store->stop_bi_log_entries(bci.info, -1);
+      if (ret < 0) {
+        lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
+        return ret;
+      }
+    } else {
+      ret = store->resync_bi_log_entries(bci.info, -1);
+      if (ret < 0) {
+        lderr(store->ctx()) << "ERROR: failed writing bilog" << dendl;
+        return ret;
+      }
+    }
+
+    for (int i = 0; i < shards_num; ++i, ++shard_id) {
+      ret = store->data_log->add_entry(bci.info.bucket, shard_id);
+      if (ret < 0) {
+        lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+        return ret;
+      }
+    }
+  }
+
+  /* record the read version (if any), store the new version */
+  bci.info.objv_tracker.read_version = objv_tracker.read_version;
+  bci.info.objv_tracker.write_version = objv_tracker.write_version;
+
+  return 0;
+}
+
+int RGWMetadataHandlerPut_BucketInstance::put_checked(RGWMetadataObject *_old_obj) {
+  ret = store_bucket_instance_entry(bci.info, false, mtime, &bci.attrs);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWMetadataHandlerPut_BucketInstance::put_post()
+{
+  objv_tracker = bci.info.objv_tracker;
+
+  ret = store->init_bucket_index(bci.info, bci.info.num_shards);
+  if (ret < 0)
+    return ret;
+
+  return STATUS_APPLIED;
+}
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 public:

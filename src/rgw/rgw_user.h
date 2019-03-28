@@ -16,6 +16,7 @@
 
 #include "common/Formatter.h"
 #include "rgw_formats.h"
+#include "rgw_metadata.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -767,13 +768,50 @@ public:
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
-class RGWMetadataManager;
+struct RGWUserCompleteInfo {
+  RGWUserInfo info;
+  map<string, bufferlist> attrs;
+  bool has_attrs;
 
-extern void rgw_user_init(RGWRados *store);
+  RGWUserCompleteInfo()
+    : has_attrs(false)
+  {}
 
-class RGWBucketMetaHandlerAllocator {
+  void dump(Formatter * const f) const {
+    info.dump(f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    decode_json_obj(info, obj);
+    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
+
+class RGWUserMetadataObject : public RGWMetadataObject {
+  RGWUserCompleteInfo uci;
+public:
+  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, real_time m)
+      : uci(_uci) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const override {
+    uci.dump(f);
+  }
+
+  RGWUserCompleteInfo& get_uci() {
+    return uci;
+  }
+};
+
+class RGWUserMetaHandlerAllocator {
 public:
   static RGWMetadataHandler *alloc();
 };
+
+void rgw_user_init(RGWRados *store);
+
 
 #endif
