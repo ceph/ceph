@@ -99,7 +99,7 @@ def task(ctx, config):
     time.sleep(60)
 
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
-                     'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'])
+                     'https://github.com/red-hat-storage/ceph-qe-scripts.git'])
 
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesha-rgw-v2'])
 
