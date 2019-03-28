@@ -67,19 +67,23 @@ def ship_utilities(ctx, config):
     filenames = []
 
     log.info('Shipping valgrind.supp...')
-    with file(
-        os.path.join(os.path.dirname(__file__), 'valgrind.supp'),
-        'rb'
-            ) as f:
-        fn = os.path.join(testdir, 'valgrind.supp')
-        filenames.append(fn)
-        for rem in ctx.cluster.remotes.iterkeys():
-            teuthology.sudo_write_file(
-                remote=rem,
-                path=fn,
-                data=f,
-                )
-            f.seek(0)
+    assert 'suite_path' in ctx.config
+    try:
+        with file(
+            os.path.join(ctx.config['suite_path'], 'valgrind.supp'),
+            'rb'
+                ) as f:
+            fn = os.path.join(testdir, 'valgrind.supp')
+            filenames.append(fn)
+            for rem in ctx.cluster.remotes.iterkeys():
+                teuthology.sudo_write_file(
+                    remote=rem,
+                    path=fn,
+                    data=f,
+                    )
+                f.seek(0)
+    except IOError as e:
+        log.info('Cannot ship supression file for valgrind: %s...', e.strerror)
 
     FILES = ['daemon-helper', 'adjust-ulimits']
     destdir = '/usr/bin'
