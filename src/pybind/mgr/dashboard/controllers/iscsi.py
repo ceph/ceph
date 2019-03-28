@@ -16,6 +16,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.rbd import format_bitmask
 from ..exceptions import DashboardException
 from ..tools import TaskManager
 
@@ -350,14 +351,39 @@ class IscsiTarget(RESTController):
         for disk in disks:
             pool = disk['pool']
             image = disk['image']
-            IscsiTarget._validate_image_exists(pool, image)
+            backstore = disk['backstore']
+            required_rbd_features = settings['required_rbd_features'][backstore]
+            supported_rbd_features = settings['supported_rbd_features'][backstore]
+            IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
+                                        supported_rbd_features)
 
     @staticmethod
-    def _validate_image_exists(pool, image):
+    def _validate_image(pool, image, backstore, required_rbd_features, supported_rbd_features):
         try:
             ioctx = mgr.rados.open_ioctx(pool)
             try:
-                rbd.Image(ioctx, image)
+                with rbd.Image(ioctx, image) as img:
+                    if img.features() & required_rbd_features != required_rbd_features:
+                        raise DashboardException(msg='Image {} cannot be exported using {} '
+                                                     'backstore because required features are '
+                                                     'missing (required features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      required_rbd_features)),
+                                                 code='image_missing_required_features',
+                                                 component='iscsi')
+                    if img.features() & supported_rbd_features != img.features():
+                        raise DashboardException(msg='Image {} cannot be exported using {} '
+                                                     'backstore because it contains unsupported '
+                                                     'features (supported features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      supported_rbd_features)),
+                                                 code='image_contains_unsupported_features',
+                                                 component='iscsi')
+
             except rbd.ImageNotFound:
                 raise DashboardException(msg='Image {} does not exist'.format(image),
                                          code='image_does_not_exist',

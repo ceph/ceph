@@ -31,6 +31,8 @@ export class IscsiTargetFormComponent implements OnInit {
   disk_default_controls: any;
   backstores: string[];
   default_backstore: string;
+  supported_rbd_features: any;
+  required_rbd_features: any;
 
   isEdit = false;
   target_iqn: string;
@@ -109,14 +111,34 @@ export class IscsiTargetFormComponent implements OnInit {
         .map((image) => `${image.pool}/${image.image}`)
         .value();
 
+      // iscsiService.settings()
+      this.minimum_gateways = data[3].config.minimum_gateways;
+      this.target_default_controls = data[3].target_default_controls;
+      this.disk_default_controls = data[3].disk_default_controls;
+      this.backstores = data[3].backstores;
+      this.default_backstore = data[3].default_backstore;
+      this.supported_rbd_features = data[3].supported_rbd_features;
+      this.required_rbd_features = data[3].required_rbd_features;
+
       // rbdService.list()
       this.imagesAll = _(data[1])
         .flatMap((pool) => pool.value)
-        .map((image) => `${image.pool_name}/${image.name}`)
-        .filter((image) => usedImages.indexOf(image) === -1)
+        .filter((image) => {
+          const imageId = `${image.pool_name}/${image.name}`;
+          if (usedImages.indexOf(imageId) !== -1) {
+            return false;
+          }
+          const validBackstores = this.getValidBackstores(image);
+          if (validBackstores.length === 0) {
+            return false;
+          }
+          return true;
+        })
         .value();
 
-      this.imagesSelections = this.imagesAll.map((image) => new SelectOption(false, image, ''));
+      this.imagesSelections = this.imagesAll.map(
+        (image) => new SelectOption(false, `${image.pool_name}/${image.name}`, '')
+      );
 
       // iscsiService.portals()
       const portals: SelectOption[] = [];
@@ -126,13 +148,6 @@ export class IscsiTargetFormComponent implements OnInit {
         });
       });
       this.portalsSelections = [...portals];
-
-      // iscsiService.settings()
-      this.minimum_gateways = data[3].config.minimum_gateways;
-      this.target_default_controls = data[3].target_default_controls;
-      this.disk_default_controls = data[3].disk_default_controls;
-      this.backstores = data[3].backstores;
-      this.default_backstore = data[3].default_backstore;
 
       this.createForm();
 
@@ -273,15 +288,31 @@ export class IscsiTargetFormComponent implements OnInit {
     });
   }
 
+  getDefaultBackstore(imageId) {
+    let result = this.default_backstore;
+    const image = this.getImageById(imageId);
+    if (!this.validFeatures(image, this.default_backstore)) {
+      this.backstores.forEach((backstore) => {
+        if (backstore !== this.default_backstore) {
+          if (this.validFeatures(image, backstore)) {
+            result = backstore;
+          }
+        }
+      });
+    }
+    return result;
+  }
+
   onImageSelection($event) {
     const option = $event.option;
 
     if (option.selected) {
       if (!this.imagesSettings[option.name]) {
+        const defaultBackstore = this.getDefaultBackstore(option.name);
         this.imagesSettings[option.name] = {
-          backstore: this.default_backstore
+          backstore: defaultBackstore
         };
-        this.imagesSettings[option.name][this.default_backstore] = {};
+        this.imagesSettings[option.name][defaultBackstore] = {};
       }
 
       _.forEach(this.imagesInitiatorSelections, (selections, i) => {
@@ -628,11 +659,30 @@ export class IscsiTargetFormComponent implements OnInit {
       imagesSettings: this.imagesSettings,
       image: image,
       disk_default_controls: this.disk_default_controls,
-      backstores: this.backstores
+      backstores: this.getValidBackstores(this.getImageById(image))
     };
 
     this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {
       initialState
     });
+  }
+
+  validFeatures(image, backstore) {
+    const imageFeatures = image.features;
+    const requiredFeatures = this.required_rbd_features[backstore];
+    const supportedFeatures = this.supported_rbd_features[backstore];
+    // tslint:disable-next-line:no-bitwise
+    const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
+    // tslint:disable-next-line:no-bitwise
+    const validSupportedFeatures = (imageFeatures & supportedFeatures) === imageFeatures;
+    return validRequiredFeatures && validSupportedFeatures;
+  }
+
+  getImageById(imageId) {
+    return this.imagesAll.find((image) => imageId === `${image.pool_name}/${image.name}`);
+  }
+
+  getValidBackstores(image) {
+    return this.backstores.filter((backstore) => this.validFeatures(image, backstore));
   }
 }
