@@ -100,11 +100,12 @@ public:
 
   bool upgrade_format() {
     // upgraded from old filesystem
+    ceph_assert(is_active());
     ceph_assert(last_snap > 0);
     bool upgraded = false;
     if (get_version() == 0) {
       // version 0 confuses snapclient code
-      reset_state();
+      reset();
       upgraded = true;
     }
     if (snaprealm_v2_since == CEPH_NOSNAP) {
