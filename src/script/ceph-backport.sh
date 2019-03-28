@@ -37,7 +37,13 @@
 # redmine_user_id=[your_redmine_user_id]
 # github_token=[your_github_personal_access_token]
 # github_user=[your_github_username]
-# 
+#
+# you can also optionally add the remote repo's name in this file, like
+#
+# github_repo=[your_github_repo_name]
+#
+# If you don't add it, it will default to "origin".
+#
 # Obviously, since this file contains secrets, you should protect it from
 # exposure using all available means (restricted file privileges, encrypted
 # filesystem, etc.). Without correct values for these four variables, this
@@ -56,6 +62,7 @@ test "$redmine_key"     || failed_required_variable_check redmine_key
 test "$redmine_user_id" || failed_required_variable_check redmine_user_id
 test "$github_token"    || failed_required_variable_check github_token
 test "$github_user"     || failed_required_variable_check github_user
+: "${github_repo:=origin}"
 
 function usage () {
     echo "Usage:"
@@ -123,7 +130,8 @@ fi
 title=$(curl --silent 'http://tracker.ceph.com/issues/'$issue.json?key=$redmine_key | jq .issue.subject | tr -d '\\"')
 echo "Issue title: $title" 
 
-git push -u origin wip-$issue-$milestone
+git push -u $github_repo wip-$issue-$milestone
+
 number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':wip-'$issue-$milestone'","base":"'$target_branch'","body":"http://tracker.ceph.com/issues/'$issue'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq .number)
 echo "Opened pull request $number"
 
