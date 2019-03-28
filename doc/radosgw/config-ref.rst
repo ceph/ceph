@@ -979,8 +979,9 @@ implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
               experimental flag set
 
 
-The options below are to tune the experimental dmclock scheduler. op_class for
-the flags below is one of admin, auth, metadata or data
+The options below are to tune the experimental dmclock scheduler. For some
+further reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
+one of admin, auth, metadata or data.
 
 ``rgw_dmclock_<op_class>_res``
 
