@@ -431,7 +431,10 @@ iscsi_target_response = {
             'members': ['iqn.1994-05.com.redhat:rh7-client2']
         }
     ],
-    'target_controls': {}
+    'target_controls': {},
+    'info': {
+        'num_sessions': 0
+    }
 }
 
 
@@ -635,3 +638,8 @@ class IscsiClientMock(object):
 
     def update_targetauth(self, target_iqn, action):
         self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')
+
+    def get_targetinfo(self, _):
+        return {
+            'num_sessions': 0
+        }
