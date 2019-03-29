@@ -92,7 +92,8 @@ private:
   ZTracer::Trace m_trace;
 
   State m_state;
-  bool m_flatten;
+  bool m_deep_copy = false;
+  bool m_flatten = false;
   ceph::bufferlist m_copyup_data;
   std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
   unsigned m_pending_copyups = 0;

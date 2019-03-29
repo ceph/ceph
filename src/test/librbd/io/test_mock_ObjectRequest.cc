@@ -180,13 +180,13 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     }
   }
 
-  void expect_aio_read(MockImageRequest& mock_image_request,
+  void expect_aio_read(MockTestImageCtx &mock_image_ctx,
+                       MockImageRequest& mock_image_request,
                        Extents&& extents, int r) {
     EXPECT_CALL(mock_image_request, aio_read(_, extents))
-      .WillOnce(WithArg<0>(Invoke([r](AioCompletion* aio_comp) {
+      .WillOnce(WithArg<0>(Invoke([&mock_image_ctx, r](AioCompletion* aio_comp) {
                              aio_comp->set_request_count(1);
-                             aio_comp->add_request();
-                             aio_comp->complete_request(r);
+                             mock_image_ctx.image_ctx->op_work_queue->queue(new C_AioRequest(aio_comp), r);
                            })));
   }
 
@@ -430,7 +430,7 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   MockImageRequest mock_image_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_request, {{0, 4096}}, 0);
+  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, 0);
 
   bufferlist bl;
   ExtentMap extent_map;
@@ -478,7 +478,7 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   MockImageRequest mock_image_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_request, {{0, 4096}}, -EPERM);
+  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, -EPERM);
 
   bufferlist bl;
   ExtentMap extent_map;
@@ -526,7 +526,7 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   MockImageRequest mock_image_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_aio_read(mock_image_request, {{0, 4096}}, 0);
+  expect_aio_read(mock_image_ctx, mock_image_request, {{0, 4096}}, 0);
 
   MockCopyupRequest mock_copyup_request;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
