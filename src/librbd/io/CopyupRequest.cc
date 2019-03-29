@@ -32,11 +32,11 @@ namespace io {
 
 namespace {
 
-class UpdateObjectMap : public C_AsyncObjectThrottle<> {
+class C_UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
-  UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
-                  uint64_t object_no, const std::vector<uint64_t> *snap_ids,
-                  const ZTracer::Trace &trace, size_t snap_id_idx)
+  C_UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
+                    uint64_t object_no, const std::vector<uint64_t> *snap_ids,
+                    const ZTracer::Trace &trace, size_t snap_id_idx)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no),
       m_snap_ids(*snap_ids), m_trace(trace), m_snap_id_idx(snap_id_idx)
   {
@@ -88,7 +88,7 @@ CopyupRequest<I>::CopyupRequest(I *ictx, const std::string &oid,
   : m_ictx(util::get_image_ctx(ictx)), m_oid(oid), m_object_no(objectno),
     m_image_extents(image_extents),
     m_trace(util::create_trace(*m_ictx, "copy-up", parent_trace)),
-    m_state(STATE_READ_FROM_PARENT), m_lock("CopyupRequest", false, false)
+    m_lock("CopyupRequest", false, false)
 {
   m_async_op.start_op(*m_ictx);
 }
@@ -103,190 +103,45 @@ template <typename I>
 void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req) {
   ceph_assert(m_ictx->copyup_list_lock.is_locked());
 
-  ldout(m_ictx->cct, 20) << req << dendl;
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "object_request=" << req << dendl;
   m_pending_requests.push_back(req);
 }
 
 template <typename I>
-void CopyupRequest<I>::complete_requests(int r) {
-  // already removed from copyup list
-  while (!m_pending_requests.empty()) {
-    auto it = m_pending_requests.begin();
-    auto req = *it;
-    ldout(m_ictx->cct, 20) << "completing request " << req << dendl;
-    req->handle_copyup(r);
-    m_pending_requests.erase(it);
-  }
+void CopyupRequest<I>::send() {
+  read_from_parent();
 }
 
 template <typename I>
-bool CopyupRequest<I>::send_copyup() {
-  ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
-  m_state = STATE_COPYUP;
-
-  m_ictx->snap_lock.get_read();
-  ::SnapContext snapc = m_ictx->snapc;
-  m_ictx->snap_lock.put_read();
-
-  std::vector<librados::snap_t> snaps;
-
-  bool copy_on_read = m_pending_requests.empty();
-  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_data.is_zero();
-  if (m_copyup_data.is_zero()) {
-    m_copyup_data.clear();
-  }
-
-  Mutex::Locker locker(m_lock);
-  int r;
-  if (copy_on_read || deep_copyup) {
-    librados::ObjectWriteOperation copyup_op;
-    copyup_op.exec("rbd", "copyup", m_copyup_data);
-    ObjectRequest<I>::add_write_hint(*m_ictx, &copyup_op);
-
-    // send only the copyup request with a blank snapshot context so that
-    // all snapshots are detected from the parent for this object.  If
-    // this is a CoW request, a second request will be created for the
-    // actual modification.
-    m_pending_copyups++;
-    ldout(m_ictx->cct, 20) << "copyup with empty snapshot context" << dendl;
-
-    librados::AioCompletion *comp = util::create_rados_callback(this);
-    r = m_ictx->data_ctx.aio_operate(
-      m_oid, comp, &copyup_op, 0, snaps,
-      (m_trace.valid() ? m_trace.get_info() : nullptr));
-    ceph_assert(r == 0);
-    comp->release();
-  }
-
-  if (!copy_on_read) {
-    librados::ObjectWriteOperation write_op;
-    if (!deep_copyup) {
-      write_op.exec("rbd", "copyup", m_copyup_data);
-      ObjectRequest<I>::add_write_hint(*m_ictx, &write_op);
-    }
-
-    // merge all pending write ops into this single RADOS op
-    for (auto req : m_pending_requests) {
-      ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
-      req->add_copyup_ops(&write_op);
-    }
-
-    // compare-and-write doesn't add any write ops (copyup+cmpext+write
-    // can't be executed in the same RADOS op because, unless the object
-    // was already present in the clone, cmpext wouldn't see it)
-    if (!write_op.size()) {
-      return false;
-    }
-
-    m_pending_copyups++;
-    ldout(m_ictx->cct, 20) << (!deep_copyup && write_op.size() > 2 ?
-                               "copyup + ops" : !deep_copyup ?
-                                                "copyup" : "ops")
-                           << " with current snapshot context" << dendl;
-
-    snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-    librados::AioCompletion *comp = util::create_rados_callback(this);
-    r = m_ictx->data_ctx.aio_operate(
-      m_oid, comp, &write_op, snapc.seq, snaps,
-      (m_trace.valid() ? m_trace.get_info() : nullptr));
-    ceph_assert(r == 0);
-    comp->release();
-  }
-  return false;
-}
-
-template <typename I>
-bool CopyupRequest<I>::is_copyup_required() {
-  bool copy_on_read = m_pending_requests.empty();
-  if (copy_on_read) {
-    // always force a copyup if CoR enabled
-    return true;
-  }
-
-  if (!m_copyup_data.is_zero()) {
-    return true;
-  }
-
-  for (auto req : m_pending_requests) {
-    if (!req->is_empty_write_op()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-template <typename I>
-bool CopyupRequest<I>::is_update_object_map_required(int r) {
-  if (r < 0) {
-    return false;
-  }
-
-  RWLock::RLocker owner_locker(m_ictx->owner_lock);
-  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-  if (m_ictx->object_map == nullptr) {
-    return false;
-  }
-
-  if (!is_deep_copy()) {
-    return false;
-  }
-
-  auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
-  ceph_assert(it != m_ictx->migration_info.snap_map.end());
-  return it->second[0] != CEPH_NOSNAP;
-}
-
-template <typename I>
-bool CopyupRequest<I>::is_deep_copy() const {
-  ceph_assert(m_ictx->snap_lock.is_locked());
-
-  return !m_ictx->migration_info.empty();
-}
-
-template <typename I>
-void CopyupRequest<I>::send()
-{
-  m_state = STATE_READ_FROM_PARENT;
-
+void CopyupRequest<I>::read_from_parent() {
   m_ictx->snap_lock.get_read();
   m_ictx->parent_lock.get_read();
+
   if (m_ictx->parent == nullptr) {
     ldout(m_ictx->cct, 5) << "parent detached" << dendl;
     m_ictx->parent_lock.put_read();
     m_ictx->snap_lock.put_read();
 
-    m_ictx->op_work_queue->queue(util::create_context_callback(this), -ENOENT);
+    m_ictx->op_work_queue->queue(
+      util::create_context_callback<
+        CopyupRequest<I>, &CopyupRequest<I>::handle_read_from_parent>(this),
+      -ENOENT);
     return;
-  }
-
-  if (is_deep_copy()) {
-    m_ictx->copyup_list_lock.Lock();
-    m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
-    m_ictx->copyup_list_lock.Unlock();
-
-    m_deep_copy = true;
-    auto req = deep_copy::ObjectCopyRequest<I>::create(
-      m_ictx->parent, m_ictx, m_ictx->migration_info.snap_map, m_object_no,
-      m_flatten, util::create_context_callback(this));
-
-    ldout(m_ictx->cct, 20) << "deep copy object req " << req
-                           << ", object_no " << m_object_no
-                           << ", flatten " << m_flatten
-                           << dendl;
-    req->send();
-
-    m_ictx->parent_lock.put_read();
-    m_ictx->snap_lock.put_read();
+  } else if (is_deep_copy()) {
+    // will release locks
+    deep_copy();
     return;
   }
 
   m_deep_copy = false;
-  auto comp = AioCompletion::create_and_start(
-    this, m_ictx, AIO_TYPE_READ);
+  auto comp = AioCompletion::create_and_start<
+    CopyupRequest<I>,
+    &CopyupRequest<I>::handle_read_from_parent>(this, m_ictx, AIO_TYPE_READ);
 
-  ldout(m_ictx->cct, 20) << "completion " << comp
-                         << ", oid " << m_oid
-                         << ", extents " << m_image_extents
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "completion=" << comp << ", "
+                         << "extents=" << m_image_extents
                          << dendl;
   ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
                            ReadResult{&m_copyup_data}, 0, m_trace);
@@ -296,122 +151,112 @@ void CopyupRequest<I>::send()
 }
 
 template <typename I>
-void CopyupRequest<I>::complete(int r)
-{
-  if (should_complete(&r)) {
-    complete_requests(r);
-    delete this;
-  }
-}
+void CopyupRequest<I>::handle_read_from_parent(int r) {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << dendl;
 
-template <typename I>
-bool CopyupRequest<I>::should_complete(int *r) {
-  CephContext *cct = m_ictx->cct;
-  ldout(cct, 20) << "oid " << m_oid
-                 << ", r " << *r << dendl;
+  m_ictx->copyup_list_lock.Lock();
+  m_copyup_required = is_copyup_required();
+  remove_from_list();
 
-  unsigned pending_copyups;
-  switch (m_state) {
-  case STATE_READ_FROM_PARENT:
-    ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
-
-    m_ictx->copyup_list_lock.Lock();
-    if (*r == -ENOENT && m_deep_copy && !m_flatten && is_copyup_required()) {
-      ldout(cct, 5) << "restart deep copy with flatten" << dendl;
-      m_ictx->copyup_list_lock.Unlock();
-
-      send();
-      return false;
-    }
-
-    remove_from_list(m_ictx->copyup_list_lock);
+  if (r < 0 && r != -ENOENT) {
     m_ictx->copyup_list_lock.Unlock();
 
-    if (*r >= 0 || *r == -ENOENT) {
-      if (!is_copyup_required() && !is_update_object_map_required(*r)) {
-        if (*r == -ENOENT && m_deep_copy) {
-          *r = 0;
-        }
-        ldout(cct, 20) << "skipping" << dendl;
-        return true;
-      }
-      return send_object_map_head();
-    }
-    break;
-
-  case STATE_OBJECT_MAP_HEAD:
-    ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    if (*r < 0) {
-      lderr(cct) << "failed to update head object map: " << cpp_strerror(*r)
-                 << dendl;
-      break;
-    }
-
-    return send_object_map();
-
-  case STATE_OBJECT_MAP:
-    ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    if (*r < 0) {
-      lderr(cct) << "failed to update object map: " << cpp_strerror(*r)
-                 << dendl;
-      break;
-    }
-
-    if (!is_copyup_required()) {
-      ldout(cct, 20) << "skipping copyup" << dendl;
-      return true;
-    }
-    return send_copyup();
-
-  case STATE_COPYUP:
-    {
-      Mutex::Locker locker(m_lock);
-      ceph_assert(m_pending_copyups > 0);
-      pending_copyups = --m_pending_copyups;
-    }
-    ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
-                   << dendl;
-    if (*r == -ENOENT) {
-      // hide the -ENOENT error if this is the last op
-      if (pending_copyups == 0) {
-        *r = 0;
-        complete_requests(0);
-      }
-    } else if (*r < 0) {
-      complete_requests(*r);
-    }
-    return (pending_copyups == 0);
-
-  default:
-    lderr(cct) << "invalid state: " << m_state << dendl;
-    ceph_abort();
-    break;
+    lderr(m_ictx->cct) << "error reading from parent: " << cpp_strerror(r)
+                       << dendl;
+    finish(r);
+    return;
   }
-  return (*r < 0);
+
+  if (!m_copyup_required) {
+    m_ictx->copyup_list_lock.Unlock();
+
+    ldout(m_ictx->cct, 20) << "no-op, skipping" << dendl;
+    finish(0);
+    return;
+  }
+  m_ictx->copyup_list_lock.Unlock();
+
+  update_object_map_head();
 }
 
 template <typename I>
-void CopyupRequest<I>::remove_from_list() {
-  Mutex::Locker l(m_ictx->copyup_list_lock);
+void CopyupRequest<I>::deep_copy() {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+  ceph_assert(m_ictx->parent_lock.is_locked());
+  ceph_assert(m_ictx->parent != nullptr);
 
-  remove_from_list(m_ictx->copyup_list_lock);
+  m_ictx->copyup_list_lock.Lock();
+  m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
+  m_ictx->copyup_list_lock.Unlock();
+
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "flatten=" << m_flatten << dendl;
+
+  m_deep_copy = true;
+  auto ctx = util::create_context_callback<
+    CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
+  auto req = deep_copy::ObjectCopyRequest<I>::create(
+      m_ictx->parent, m_ictx, m_ictx->migration_info.snap_map, m_object_no,
+      m_flatten, ctx);
+
+  req->send();
+  m_ictx->parent_lock.put_read();
+  m_ictx->snap_lock.put_read();
 }
 
 template <typename I>
-void CopyupRequest<I>::remove_from_list(Mutex &lock) {
-  ceph_assert(m_ictx->copyup_list_lock.is_locked());
+void CopyupRequest<I>::handle_deep_copy(int r) {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << dendl;
 
-  auto it = m_ictx->copyup_list.find(m_object_no);
-  ceph_assert(it != m_ictx->copyup_list.end());
-  m_ictx->copyup_list.erase(it);
+  m_ictx->snap_lock.get_read();
+  m_ictx->copyup_list_lock.Lock();
+  m_copyup_required = is_copyup_required();
+  if (r == -ENOENT && !m_flatten && m_copyup_required) {
+    m_ictx->copyup_list_lock.Unlock();
+    m_ictx->snap_lock.put_read();
+
+    ldout(m_ictx->cct, 10) << "restart deep-copy with flatten" << dendl;
+    send();
+    return;
+  }
+
+  remove_from_list();
+
+  if (r < 0 && r != -ENOENT) {
+    m_ictx->copyup_list_lock.Unlock();
+    m_ictx->snap_lock.put_read();
+
+    lderr(m_ictx->cct) << "error encountered during deep-copy: "
+                       << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_copyup_required && !is_update_object_map_required(r)) {
+    m_ictx->copyup_list_lock.Unlock();
+    m_ictx->snap_lock.put_read();
+
+    if (r == -ENOENT) {
+      r = 0;
+    }
+
+    ldout(m_ictx->cct, 20) << "skipping" << dendl;
+    finish(r);
+    return;
+  }
+
+  m_ictx->copyup_list_lock.Unlock();
+  m_ictx->snap_lock.put_read();
+
+  update_object_map_head();
 }
 
 template <typename I>
-bool CopyupRequest<I>::send_object_map_head() {
-  CephContext *cct = m_ictx->cct;
-  ldout(cct, 20) << dendl;
-
-  m_state = STATE_OBJECT_MAP_HEAD;
+void CopyupRequest<I>::update_object_map_head() {
+  auto cct = m_ictx->cct;
+  ldout(cct, 20) << "oid=" << m_oid << dendl;
 
   {
     RWLock::RLocker owner_locker(m_ictx->owner_lock);
@@ -423,7 +268,7 @@ bool CopyupRequest<I>::send_object_map_head() {
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
 
       if (!m_ictx->snaps.empty()) {
-        if (is_deep_copy()) {
+        if (m_deep_copy) {
           // don't copy ids for the snaps updated by object deep copy or
           // that don't overlap
           std::set<uint64_t> deep_copied;
@@ -470,7 +315,9 @@ bool CopyupRequest<I>::send_object_map_head() {
         object_map_locker.unlock();
         snap_locker.unlock();
         owner_locker.unlock();
-        return send_object_map();
+
+        update_object_maps();
+        return;
       }
 
       bool may_update = false;
@@ -491,40 +338,266 @@ bool CopyupRequest<I>::send_object_map_head() {
       }
 
       if (may_update && (new_state != current_state) &&
-          m_ictx->object_map->aio_update<CopyupRequest>(
+          m_ictx->object_map->aio_update<
+              CopyupRequest<I>,
+              &CopyupRequest<I>::handle_update_object_map_head>(
             CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
             false, this)) {
-        return false;
+        return;
       }
     }
   }
 
-  return send_object_map();
+  update_object_maps();
 }
 
 template <typename I>
-bool CopyupRequest<I>::send_object_map() {
-  // avoid possible recursive lock attempts
+void CopyupRequest<I>::handle_update_object_map_head(int r) {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_ictx->cct) << "failed to update head object map: "
+                       << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  update_object_maps();
+}
+
+template <typename I>
+void CopyupRequest<I>::update_object_maps() {
   if (m_snap_ids.empty()) {
     // no object map update required
-    return send_copyup();
-  } else {
-    // update object maps for HEAD and all existing snapshots
-    ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
-    m_state = STATE_OBJECT_MAP;
+    copyup();
+    return;
+  }
 
-    RWLock::RLocker owner_locker(m_ictx->owner_lock);
-    AsyncObjectThrottle<>::ContextFactory context_factory(
-      boost::lambda::bind(boost::lambda::new_ptr<UpdateObjectMap>(),
-      boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
-      boost::lambda::_2));
-    AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
-      NULL, *m_ictx, context_factory, util::create_context_callback(this),
-      NULL, 0, m_snap_ids.size());
-    throttle->start_ops(
-      m_ictx->config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
+  // update object maps for HEAD and all existing snapshots
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << dendl;
+
+  RWLock::RLocker owner_locker(m_ictx->owner_lock);
+  AsyncObjectThrottle<>::ContextFactory context_factory(
+    boost::lambda::bind(boost::lambda::new_ptr<C_UpdateObjectMap>(),
+    boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
+    boost::lambda::_2));
+  auto ctx = util::create_context_callback<
+    CopyupRequest<I>, &CopyupRequest<I>::handle_update_object_maps>(this);
+  auto throttle = new AsyncObjectThrottle<>(
+    nullptr, *m_ictx, context_factory, ctx, nullptr, 0, m_snap_ids.size());
+  throttle->start_ops(
+    m_ictx->config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
+}
+
+template <typename I>
+void CopyupRequest<I>::handle_update_object_maps(int r) {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_ictx->cct) << "failed to update object map: " << cpp_strerror(r)
+                       << dendl;
+
+    finish(r);
+    return;
+  }
+
+  m_ictx->copyup_list_lock.Lock();
+  if (!m_copyup_required) {
+    m_ictx->copyup_list_lock.Unlock();
+
+    ldout(m_ictx->cct, 20) << "skipping copyup" << dendl;
+    finish(0);
+    return;
+  }
+  m_ictx->copyup_list_lock.Unlock();
+
+  copyup();
+}
+
+template <typename I>
+void CopyupRequest<I>::copyup() {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << dendl;
+
+  m_ictx->snap_lock.get_read();
+  ::SnapContext snapc = m_ictx->snapc;
+  m_ictx->snap_lock.put_read();
+
+  std::vector<librados::snap_t> snaps;
+
+  bool copy_on_read = m_pending_requests.empty();
+  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_data.is_zero();
+  if (m_copyup_data.is_zero()) {
+    m_copyup_data.clear();
+  }
+
+  Mutex::Locker locker(m_lock);
+  int r;
+  if (copy_on_read || deep_copyup) {
+    librados::ObjectWriteOperation copyup_op;
+    copyup_op.exec("rbd", "copyup", m_copyup_data);
+    ObjectRequest<I>::add_write_hint(*m_ictx, &copyup_op);
+
+    // send only the copyup request with a blank snapshot context so that
+    // all snapshots are detected from the parent for this object.  If
+    // this is a CoW request, a second request will be created for the
+    // actual modification.
+    m_pending_copyups++;
+    ldout(m_ictx->cct, 20) << "copyup with empty snapshot context" << dendl;
+
+    auto comp = util::create_rados_callback<
+      CopyupRequest<I>, &CopyupRequest<I>::handle_copyup>(this);
+    r = m_ictx->data_ctx.aio_operate(
+      m_oid, comp, &copyup_op, 0, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
+    ceph_assert(r == 0);
+    comp->release();
+  }
+
+  if (!copy_on_read) {
+    librados::ObjectWriteOperation write_op;
+    if (!deep_copyup) {
+      write_op.exec("rbd", "copyup", m_copyup_data);
+      ObjectRequest<I>::add_write_hint(*m_ictx, &write_op);
+    }
+
+    // merge all pending write ops into this single RADOS op
+    for (auto req : m_pending_requests) {
+      ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
+      req->add_copyup_ops(&write_op);
+    }
+
+    // compare-and-write doesn't add any write ops (copyup+cmpext+write
+    // can't be executed in the same RADOS op because, unless the object
+    // was already present in the clone, cmpext wouldn't see it)
+    if (!write_op.size()) {
+      return;
+    }
+
+    m_pending_copyups++;
+    ldout(m_ictx->cct, 20) << (!deep_copyup && write_op.size() > 2 ?
+                               "copyup + ops" : !deep_copyup ?
+                                                "copyup" : "ops")
+                           << " with current snapshot context" << dendl;
+
+    snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
+    auto comp = util::create_rados_callback<
+      CopyupRequest<I>, &CopyupRequest<I>::handle_copyup>(this);
+    r = m_ictx->data_ctx.aio_operate(
+      m_oid, comp, &write_op, snapc.seq, snaps,
+      (m_trace.valid() ? m_trace.get_info() : nullptr));
+    ceph_assert(r == 0);
+    comp->release();
+  }
+}
+
+template <typename I>
+void CopyupRequest<I>::handle_copyup(int r) {
+  unsigned pending_copyups;
+  {
+    Mutex::Locker locker(m_lock);
+    ceph_assert(m_pending_copyups > 0);
+    pending_copyups = --m_pending_copyups;
+  }
+
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << ", "
+                         << "pending=" << pending_copyups << dendl;
+
+  if (r == -ENOENT) {
+    if (pending_copyups == 0) {
+      // hide the -ENOENT error if this is the last op
+      r = 0;
+    }
+  } else if (r < 0) {
+    lderr(m_ictx->cct) << "failed to copyup object: "
+                       << cpp_strerror(r) << dendl;
+    complete_requests(r);
+  }
+
+  if (pending_copyups == 0) {
+    finish(r);
+  }
+}
+
+template <typename I>
+void CopyupRequest<I>::finish(int r) {
+  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
+                         << "r=" << r << dendl;
+
+  complete_requests(r);
+  delete this;
+}
+
+template <typename I>
+void CopyupRequest<I>::complete_requests(int r) {
+  // already removed from copyup list
+  while (!m_pending_requests.empty()) {
+    auto it = m_pending_requests.begin();
+    auto req = *it;
+    ldout(m_ictx->cct, 20) << "completing request " << req << dendl;
+    req->handle_copyup(r);
+    m_pending_requests.erase(it);
+  }
+}
+
+template <typename I>
+void CopyupRequest<I>::remove_from_list() {
+  assert(m_ictx->copyup_list_lock.is_locked());
+
+  auto it = m_ictx->copyup_list.find(m_object_no);
+  ceph_assert(it != m_ictx->copyup_list.end());
+  m_ictx->copyup_list.erase(it);
+}
+
+template <typename I>
+bool CopyupRequest<I>::is_copyup_required() {
+  ceph_assert(m_ictx->copyup_list_lock.is_locked());
+
+  bool copy_on_read = m_pending_requests.empty();
+  if (copy_on_read) {
+    // always force a copyup if CoR enabled
+    return true;
+  }
+
+  if (!m_copyup_data.is_zero()) {
+    return true;
+  }
+
+  for (auto req : m_pending_requests) {
+    if (!req->is_empty_write_op()) {
+      return true;
+    }
   }
   return false;
+}
+
+template <typename I>
+bool CopyupRequest<I>::is_deep_copy() const {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+  return !m_ictx->migration_info.empty();
+}
+
+template <typename I>
+bool CopyupRequest<I>::is_update_object_map_required(int r) {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+
+  if (r < 0) {
+    return false;
+  }
+
+  if (m_ictx->object_map == nullptr) {
+    return false;
+  }
+
+  if (!is_deep_copy()) {
+    return false;
+  }
+
+  auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
+  ceph_assert(it != m_ictx->migration_info.snap_map.end());
+  return it->second[0] != CEPH_NOSNAP;
 }
 
 } // namespace io
