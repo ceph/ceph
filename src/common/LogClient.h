@@ -38,15 +38,15 @@ namespace logging {
 }
 
 int parse_log_client_options(CephContext *cct,
-			     map<string,string> &log_to_monitors,
-			     map<string,string> &log_to_syslog,
-			     map<string,string> &log_channels,
-			     map<string,string> &log_prios,
-			     map<string,string> &log_to_graylog,
-			     map<string,string> &log_to_graylog_host,
-			     map<string,string> &log_to_graylog_port,
+			     std::map<std::string,std::string> &log_to_monitors,
+			     std::map<std::string,std::string> &log_to_syslog,
+			     std::map<std::string,std::string> &log_channels,
+			     std::map<std::string,std::string> &log_prios,
+			     std::map<std::string,std::string> &log_to_graylog,
+			     std::map<std::string,std::string> &log_to_graylog_host,
+			     std::map<std::string,std::string> &log_to_graylog_port,
 			     uuid_d &fsid,
-			     string &host);
+			     std::string &host);
 
 class LogClientTemp
 {
@@ -64,7 +64,7 @@ public:
 private:
   clog_type type;
   LogChannel &parent;
-  stringstream ss;
+  std::stringstream ss;
 };
 
 /** Manage where we output to and at which priority
@@ -169,22 +169,22 @@ public:
     return (graylog != nullptr);
   }
 
-  typedef shared_ptr<LogChannel> Ref;
+  typedef std::shared_ptr<LogChannel> Ref;
 
   /**
-   * update config values from parsed k/v map for each config option
+   * update config values from parsed k/v std::map for each config option
    *
    * Pick out the relevant value based on our channel.
    */
-  void update_config(map<string,string> &log_to_monitors,
-		     map<string,string> &log_to_syslog,
-		     map<string,string> &log_channels,
-		     map<string,string> &log_prios,
-		     map<string,string> &log_to_graylog,
-		     map<string,string> &log_to_graylog_host,
-		     map<string,string> &log_to_graylog_port,
+  void update_config(std::map<std::string,std::string> &log_to_monitors,
+		     std::map<std::string,std::string> &log_to_syslog,
+		     std::map<std::string,std::string> &log_channels,
+		     std::map<std::string,std::string> &log_prios,
+		     std::map<std::string,std::string> &log_to_graylog,
+		     std::map<std::string,std::string> &log_to_graylog_host,
+		     std::map<std::string,std::string> &log_to_graylog_port,
 		     uuid_d &fsid,
-		     string &host);
+		     std::string &host);
 
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
@@ -198,7 +198,7 @@ private:
   std::string syslog_facility;
   bool log_to_syslog;
   bool log_to_monitors;
-  shared_ptr<ceph::logging::Graylog> graylog;
+  std::shared_ptr<ceph::logging::Graylog> graylog;
 
 
   friend class LogClientTemp;
