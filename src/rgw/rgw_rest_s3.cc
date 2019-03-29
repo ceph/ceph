@@ -704,10 +704,7 @@ int RGWListBucket_ObjStore_S3::get_params()
 
 int RGWListBucket_ObjStore_S3v2::get_params()
 {
-  //RGWListBucket_ObjStore_S3::get_params();
-
-
-  //if(s->info.args.get("ContinuationToken").empty()) return 0;
+  
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
   startAfter = s->info.args.get("start-after");
@@ -729,8 +726,7 @@ int RGWListBucket_ObjStore_S3v2::get_params()
    s->info.args.get_bool("fetch-owner", &fetchOwner, false); 
    if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
 
-   //fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
-  //if(fetchOwner ==true) dump_owner(s, s->user->user_id, s->user->display_name);
+   
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
     const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");

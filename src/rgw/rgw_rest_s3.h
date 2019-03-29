@@ -107,7 +107,7 @@ public:
 };
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
-  bool objs_container;
+protected:  bool objs_container;
 public:
   RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
@@ -119,11 +119,10 @@ public:
   void send_versioned_response();
 };
 
-class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore {
-  bool objs_container, fetchOwner;
+class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
+  bool fetchOwner;
 public:
-  RGWListBucket_ObjStore_S3v2() : objs_container(false), fetchOwner(false) {
-    default_max = 1000;
+  RGWListBucket_ObjStore_S3v2() :  fetchOwner(false) {
   }
   ~RGWListBucket_ObjStore_S3v2() override {}
 
