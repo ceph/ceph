@@ -116,9 +116,11 @@ public:
 
   int bind(const entity_addr_t& bind_addr) override;
   int rebind(const std::set<int>& avoid_ports) override;
+  int bindv(const entity_addrvec_t& bind_addrs) override;
+
   int client_bind(const entity_addr_t& bind_addr) override;
 
-  int bindv(const entity_addrvec_t& bind_addrs) override;
+  int client_reset() override;
 
   bool should_use_msgr2() override;
 

@@ -503,6 +503,24 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   did_bind = true;
 }
 
+int AsyncMessenger::client_reset()
+{
+  mark_down_all();
+
+  std::scoped_lock l{lock};
+  // adjust the nonce; we want our entity_addr_t to be truly unique.
+  nonce += 1000000;
+  ldout(cct, 10) << __func__ << " new nonce " << nonce << dendl;
+
+  entity_addrvec_t newaddrs = *my_addrs;
+  for (auto& a : newaddrs.v) {
+    a.set_nonce(nonce);
+  }
+  set_myaddrs(newaddrs);
+  _init_local_connection();
+  return 0;
+}
+
 int AsyncMessenger::start()
 {
   std::scoped_lock l{lock};
