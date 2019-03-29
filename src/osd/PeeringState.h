@@ -131,6 +131,11 @@ public:
     virtual void on_backfill_canceled() = 0;
     virtual void on_recovery_reserved() = 0;
 
+    // recovery space accounting
+    virtual bool try_reserve_recovery_space(
+      int64_t primary_num_bytes, int64_t local_num_bytes) = 0;
+    virtual void unreserve_recovery_space() = 0;
+
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
 
@@ -1248,6 +1253,8 @@ public:
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
   PastIntervals::PriorSet build_prior();
+
+  void reject_reservation();
 
 public:
   PeeringState(
