@@ -338,17 +338,17 @@ class interval_set {
   void bound_encode(size_t& p) const {
     denc_traits<Map>::bound_encode(m, p);
   }
-  void encode(bufferlist::contiguous_appender& p) const {
+  void encode(ceph::buffer::list::contiguous_appender& p) const {
     denc(m, p);
   }
-  void decode(bufferptr::const_iterator& p) {
+  void decode(ceph::buffer::ptr::const_iterator& p) {
     denc(m, p);
     _size = 0;
     for (const auto& i : m) {
       _size += i.second;
     }
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(ceph::buffer::list::iterator& p) {
     denc(m, p);
     _size = 0;
     for (const auto& i : m) {
@@ -356,10 +356,10 @@ class interval_set {
     }
   }
 
-  void encode_nohead(bufferlist::contiguous_appender& p) const {
+  void encode_nohead(ceph::buffer::list::contiguous_appender& p) const {
     denc_traits<Map>::encode_nohead(m, p);
   }
-  void decode_nohead(int n, bufferptr::const_iterator& p) {
+  void decode_nohead(int n, ceph::buffer::ptr::const_iterator& p) {
     denc_traits<Map>::decode_nohead(n, m, p);
     _size = 0;
     for (const auto& i : m) {
@@ -742,23 +742,23 @@ struct denc_traits<interval_set<T,Map>> {
     v.bound_encode(p);
   }
   static void encode(const interval_set<T,Map>& v,
-		     bufferlist::contiguous_appender& p) {
+		     ceph::buffer::list::contiguous_appender& p) {
     v.encode(p);
   }
-  static void decode(interval_set<T,Map>& v, bufferptr::const_iterator& p) {
+  static void decode(interval_set<T,Map>& v, ceph::buffer::ptr::const_iterator& p) {
     v.decode(p);
   }
   template<typename U=T>
     static typename std::enable_if<sizeof(U) && !need_contiguous>::type
-    decode(interval_set<T,Map>& v, bufferlist::iterator& p) {
+  decode(interval_set<T,Map>& v, ceph::buffer::list::iterator& p) {
     v.decode(p);
   }
   static void encode_nohead(const interval_set<T,Map>& v,
-			    bufferlist::contiguous_appender& p) {
+			    ceph::buffer::list::contiguous_appender& p) {
     v.encode_nohead(p);
   }
   static void decode_nohead(size_t n, interval_set<T,Map>& v,
-			    bufferptr::const_iterator& p) {
+			    ceph::buffer::ptr::const_iterator& p) {
     v.decode_nohead(n, p);
   }
 };
