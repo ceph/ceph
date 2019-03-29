@@ -40,7 +40,7 @@ namespace ceph {
 
     ~ErasureCode() override {}
 
-    int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+    int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
     const ErasureCodeProfile &get_profile() const override {
       return _profile;
