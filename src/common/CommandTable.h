@@ -24,9 +24,9 @@ class CommandOp
   ceph_tid_t tid;
 
   std::vector<std::string> cmd;
-  bufferlist    inbl;
+  ceph::buffer::list    inbl;
   Context      *on_finish;
-  bufferlist   *outbl;
+  ceph::buffer::list   *outbl;
   std::string  *outs;
 
   MCommand::ref get_message(const uuid_d &fsid) const
