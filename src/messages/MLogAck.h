@@ -15,6 +15,14 @@
 #ifndef CEPH_MLOGACK_H
 #define CEPH_MLOGACK_H
 
+#include <iostream>
+#include <string>
+#include <string_view>
+
+#include "include/uuid.h"
+
+#include "msg/Message.h"
+
 class MLogAck : public MessageInstance<MLogAck> {
 public:
   friend factory;
@@ -30,7 +38,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "log_ack"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "log(last " << last << ")";
   }
 
