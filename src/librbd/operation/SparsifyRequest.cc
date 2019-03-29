@@ -5,6 +5,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/err.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -18,6 +19,58 @@
 
 namespace librbd {
 namespace operation {
+
+namespace {
+
+bool may_be_trimmed(const std::map<uint64_t,uint64_t> &extent_map,
+                    const bufferlist &bl, size_t sparse_size,
+                    uint64_t *new_end_ptr) {
+  if (extent_map.empty()) {
+    *new_end_ptr = 0;
+    return true;
+  }
+
+  uint64_t end = extent_map.rbegin()->first + extent_map.rbegin()->second;
+  uint64_t new_end = end;
+  uint64_t bl_off = bl.length();
+
+  for (auto it = extent_map.rbegin(); it != extent_map.rend(); it++) {
+    auto off = it->first;
+    auto len = it->second;
+
+    new_end = p2roundup<uint64_t>(off + len, sparse_size);
+
+    uint64_t extent_left = len;
+    uint64_t sub_len = len % sparse_size;
+    if (sub_len == 0) {
+      sub_len = sparse_size;
+    }
+    while (extent_left > 0) {
+      ceph_assert(bl_off >= sub_len);
+      bl_off -= sub_len;
+      bufferlist sub_bl;
+      sub_bl.substr_of(bl, bl_off, sub_len);
+      if (!sub_bl.is_zero()) {
+        break;
+      }
+      new_end -= sparse_size;
+      extent_left -= sub_len;
+      sub_len = sparse_size;
+    }
+    if (extent_left > 0) {
+      break;
+    }
+  }
+
+  if (new_end < end) {
+    *new_end_ptr = new_end;
+    return true;
+  }
+
+  return false;
+}
+
+} // anonymous namespace
 
 using util::create_context_callback;
 using util::create_rados_callback;
@@ -35,21 +88,24 @@ public:
    *
    * <start>
    *    |
-   *    v                    (object map disabled)
-   * SPARSIFY -----------------------\
-   *    |                            |
-   *    | (object map enabled)       |
-   *    v                            |
-   * PRE UPDATE OBJECT MAP           |
-   *    |                            |
-   *    v                            |
-   * CHECK EXISTS                    |
-   *    |                            |
-   *    v                            |
-   * POST UPDATE OBJECT MAP          |
-   *    |                            |
-   *    v                            |
-   * <finish> <----------------------/
+   *    v      (not supported)
+   * SPARSIFY * * * * * * * * * * * * > READ < * * * * * * * * * * (concurrent
+   *    |                                 |                      *  update is
+   *    |  (object map disabled)          | (can trim)           *  detected)
+   *    |------------------------\        V                      *
+   *    |                        |      PRE UPDATE OBJECT MAP    *
+   *    | (object map enabled)   |        |         (if needed)  *
+   *    v                        |        V                      *
+   * PRE UPDATE OBJECT MAP       |      TRIM * * * * * * * * * * *
+   *    |                        |        |
+   *    v                        |        V
+   * CHECK EXISTS                |      POST UPDATE OBJECT MAP
+   *    |                        |        |          (if needed)
+   *    v                        |        |
+   * POST UPDATE OBJECT MAP      |        |
+   *    |                        |        |
+   *    v                        |        |
+   * <finish> <------------------/<-------/
    *
    * @endverbatim
    *
@@ -112,12 +168,20 @@ public:
   void handle_sparsify(int r) {
     ldout(m_cct, 20) << "r=" << r << dendl;
 
-    if (r < 0 && r != -ENOENT) {
-      lderr(m_cct) << "failed to sparsify: " << cpp_strerror(r) << dendl;
+    if (r == -EOPNOTSUPP) {
+      m_trying_trim = true;
+      send_read();
+      return;
     }
 
     if (r == -ENOENT) {
-      this->complete(0);
+      finish_op(0);
+      return;
+    }
+
+    if (r < 0) {
+      lderr(m_cct) << "failed to sparsify: " << cpp_strerror(r) << dendl;
+      finish_op(r);
       return;
     }
 
@@ -125,34 +189,41 @@ public:
   }
 
   void send_pre_update_object_map() {
-    I *image_ctx = &this->m_image_ctx;
+    I &image_ctx = this->m_image_ctx;
 
-    if (!m_remove_empty || !image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-      this->complete(0);
+    if (m_trying_trim) {
+      if (!m_remove_empty || m_new_end != 0 ||
+          !image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+        send_trim();
+        return;
+      }
+    } else if (!m_remove_empty ||
+               !image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+      finish_op(0);
       return;
     }
 
     ldout(m_cct, 20) << dendl;
 
-    image_ctx->owner_lock.get_read();
-    image_ctx->snap_lock.get_read();
-    if (image_ctx->object_map == nullptr) {
+    image_ctx.owner_lock.get_read();
+    image_ctx.snap_lock.get_read();
+    if (image_ctx.object_map == nullptr) {
       // possible that exclusive lock was lost in background
       lderr(m_cct) << "object map is not initialized" << dendl;
 
-      image_ctx->snap_lock.put_read();
-      image_ctx->owner_lock.put_read();
-      this->complete(-EINVAL);
+      image_ctx.snap_lock.put_read();
+      image_ctx.owner_lock.put_read();
+      finish_op(-EINVAL);
       return;
     }
 
     int r;
-    m_finish_op_ctx = image_ctx->exclusive_lock->start_op(&r);
+    m_finish_op_ctx = image_ctx.exclusive_lock->start_op(&r);
     if (m_finish_op_ctx == nullptr) {
       lderr(m_cct) << "lost exclusive lock" << dendl;
-      image_ctx->snap_lock.put_read();
-      image_ctx->owner_lock.put_read();
-      this->complete(r);
+      image_ctx.snap_lock.put_read();
+      image_ctx.owner_lock.put_read();
+      finish_op(r);
       return;
     }
 
@@ -160,17 +231,17 @@ public:
       C_SparsifyObject<I>,
       &C_SparsifyObject<I>::handle_pre_update_object_map>(this);
 
-    image_ctx->object_map_lock.get_write();
-    bool sent = image_ctx->object_map->template aio_update<
+    image_ctx.object_map_lock.get_write();
+    bool sent = image_ctx.object_map->template aio_update<
       Context, &Context::complete>(CEPH_NOSNAP, m_object_no, OBJECT_PENDING,
                                    OBJECT_EXISTS, {}, false, ctx);
 
     // NOTE: state machine might complete before we reach here
-    image_ctx->object_map_lock.put_write();
-    image_ctx->snap_lock.put_read();
-    image_ctx->owner_lock.put_read();
+    image_ctx.object_map_lock.put_write();
+    image_ctx.snap_lock.put_read();
+    image_ctx.owner_lock.put_read();
     if (!sent) {
-      ctx->complete(0);
+      finish_op(0);
     }
   }
 
@@ -184,7 +255,11 @@ public:
       return;
     }
 
-    send_check_exists();
+    if (m_trying_trim) {
+      send_trim();
+    } else {
+      send_check_exists();
+    }
   }
 
   void send_check_exists() {
@@ -194,10 +269,10 @@ public:
 
     librados::ObjectReadOperation op;
     op.stat(NULL, NULL, NULL);
-    m_out_bl.clear();
+    m_bl.clear();
     auto comp = create_rados_callback<
       C_SparsifyObject, &C_SparsifyObject::handle_check_exists>(this);
-    int r = image_ctx.data_ctx.aio_operate(m_oid, comp, &op, &m_out_bl);
+    int r = image_ctx.data_ctx.aio_operate(m_oid, comp, &op, &m_bl);
     ceph_assert(r == 0);
     comp->release();
   }
@@ -216,6 +291,8 @@ public:
 
   void send_post_update_object_map(bool exists) {
     I &image_ctx = this->m_image_ctx;
+
+    ldout(m_cct, 20) << dendl;
 
     auto ctx = create_context_callback<
       C_SparsifyObject<I>,
@@ -253,10 +330,100 @@ public:
     finish_op(0);
   }
 
+  void send_read() {
+    I &image_ctx = this->m_image_ctx;
+
+    ldout(m_cct, 20) << dendl;
+
+    librados::ObjectReadOperation op;
+    m_bl.clear();
+    op.sparse_read(0, image_ctx.layout.object_size, &m_extent_map, &m_bl,
+                   nullptr);
+    auto comp = create_rados_callback<
+      C_SparsifyObject, &C_SparsifyObject::handle_read>(this);
+    int r = image_ctx.data_ctx.aio_operate(m_oid, comp, &op, &m_bl);
+    ceph_assert(r == 0);
+    comp->release();
+  }
+
+  void handle_read(int r) {
+    ldout(m_cct, 20) << "r=" << r << dendl;
+
+    if (r < 0) {
+      if (r == -ENOENT) {
+        r = 0;
+      } else {
+        lderr(m_cct) << "failed to read object: " << cpp_strerror(r) << dendl;
+      }
+      finish_op(r);
+      return;
+    }
+
+    if (!may_be_trimmed(m_extent_map, m_bl, m_sparse_size, &m_new_end)) {
+      finish_op(0);
+      return;
+    }
+
+    send_pre_update_object_map();
+  }
+
+  void send_trim() {
+    I &image_ctx = this->m_image_ctx;
+
+    ldout(m_cct, 20) << dendl;
+
+    ceph_assert(m_new_end < image_ctx.layout.object_size);
+
+    librados::ObjectWriteOperation op;
+    m_bl.clear();
+    m_bl.append_zero(image_ctx.layout.object_size - m_new_end);
+    op.cmpext(m_new_end, m_bl, nullptr);
+    if (m_new_end == 0 && m_remove_empty) {
+      op.remove();
+    } else {
+      op.truncate(m_new_end);
+    }
+
+    auto comp = create_rados_callback<
+      C_SparsifyObject, &C_SparsifyObject::handle_trim>(this);
+    int r = image_ctx.data_ctx.aio_operate(m_oid, comp, &op);
+    ceph_assert(r == 0);
+    comp->release();
+  }
+
+  void handle_trim(int r) {
+    I &image_ctx = this->m_image_ctx;
+
+    ldout(m_cct, 20) << "r=" << r << dendl;
+
+    if (r <= -MAX_ERRNO) {
+      m_finish_op_ctx->complete(0);
+      m_finish_op_ctx = nullptr;
+      send_read();
+      return;
+    }
+
+    if (r < 0 && r != -ENOENT) {
+      lderr(m_cct) << "failed to trim: " << cpp_strerror(r) << dendl;
+      finish_op(r);
+      return;
+    }
+
+    if (!m_remove_empty || m_new_end != 0 ||
+        !image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+      finish_op(0);
+      return;
+    }
+
+    send_post_update_object_map(false);
+  }
+
   void finish_op(int r) {
     ldout(m_cct, 20) << "r=" << r << dendl;
 
-    m_finish_op_ctx->complete(0);
+    if (m_finish_op_ctx != nullptr) {
+      m_finish_op_ctx->complete(0);
+    }
     this->complete(r);
   }
 
@@ -267,7 +434,10 @@ private:
   std::string m_oid;
 
   bool m_remove_empty = false;
-  bufferlist m_out_bl;
+  bool m_trying_trim = false;
+  bufferlist m_bl;
+  std::map<uint64_t,uint64_t> m_extent_map;
+  uint64_t m_new_end = 0;
   Context *m_finish_op_ctx = nullptr;
 };
 
