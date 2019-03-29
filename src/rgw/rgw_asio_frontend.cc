@@ -330,6 +330,8 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
         auto port_str = input.substr(addr_end + 2);
         endpoint.port(parse_port(port_str.data(), ec));
       }
+    } else {
+      endpoint.port(default_port);
     }
     auto addr = input.substr(addr_begin, addr_end - addr_begin);
     endpoint.address(boost::asio::ip::make_address_v6(addr, ec));
@@ -341,6 +343,8 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
       if (ec) {
         return endpoint;
       }
+    } else {
+      endpoint.port(default_port);
     }
     auto addr = input.substr(0, colon);
     endpoint.address(boost::asio::ip::make_address_v4(addr, ec));
