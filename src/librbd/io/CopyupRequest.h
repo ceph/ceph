@@ -14,7 +14,6 @@
 
 #include <string>
 #include <vector>
-#include <atomic>
 
 namespace ZTracer { struct Trace; }
 
@@ -24,7 +23,6 @@ struct ImageCtx;
 
 namespace io {
 
-struct AioCompletion;
 template <typename I> class AbstractObjectWriteRequest;
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -44,8 +42,6 @@ public:
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
 
   void send();
-
-  void complete(int r);
 
 private:
   /**
@@ -78,12 +74,8 @@ private:
    * an object map update isn't required. The _COPYUP state is skipped if
    * no data was read from the parent *and* there are no additional ops.
    */
-  enum State {
-    STATE_READ_FROM_PARENT,
-    STATE_OBJECT_MAP_HEAD, // only update the HEAD revision
-    STATE_OBJECT_MAP,      // update HEAD+snaps (if any)
-    STATE_COPYUP
-  };
+
+  typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> PendingRequests;
 
   ImageCtx *m_ictx;
   std::string m_oid;
@@ -91,11 +83,12 @@ private:
   Extents m_image_extents;
   ZTracer::Trace m_trace;
 
-  State m_state;
   bool m_deep_copy = false;
   bool m_flatten = false;
+  bool m_copyup_required = true;
+
   ceph::bufferlist m_copyup_data;
-  std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
+  PendingRequests m_pending_requests;
   unsigned m_pending_copyups = 0;
 
   AsyncOperation m_async_op;
@@ -104,19 +97,30 @@ private:
 
   Mutex m_lock;
 
+  void read_from_parent();
+  void handle_read_from_parent(int r);
+
+  void deep_copy();
+  void handle_deep_copy(int r);
+
+  void update_object_map_head();
+  void handle_update_object_map_head(int r);
+
+  void update_object_maps();
+  void handle_update_object_maps(int r);
+
+  void copyup();
+  void handle_copyup(int r);
+
+  void finish(int r);
   void complete_requests(int r);
 
-  bool should_complete(int *r);
-
   void remove_from_list();
-  void remove_from_list(Mutex &lock);
 
-  bool send_object_map_head();
-  bool send_object_map();
-  bool send_copyup();
   bool is_copyup_required();
   bool is_update_object_map_required(int r);
   bool is_deep_copy() const;
+
 };
 
 } // namespace io
