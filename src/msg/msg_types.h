@@ -30,8 +30,8 @@ namespace ceph {
   class Formatter;
 }
 
-extern ostream& operator<<(ostream& out, const sockaddr_storage &ss);
-extern ostream& operator<<(ostream& out, const sockaddr *sa);
+std::ostream& operator<<(std::ostream& out, const sockaddr_storage &ss);
+std::ostream& operator<<(std::ostream& out, const sockaddr *sa);
 
 typedef uint8_t entity_type_t;
 
@@ -77,11 +77,11 @@ public:
   bool is_mgr() const { return type() == TYPE_MGR; }
 
   operator ceph_entity_name() const {
-    ceph_entity_name n = { _type, init_le64(_num) };
+    ceph_entity_name n = { _type, {init_le64(_num)} };
     return n;
   }
 
-  bool parse(const string& s) {
+  bool parse(const std::string& s) {
     const char *start = s.c_str();
     char *end;
     bool got = parse(start, &end);
@@ -118,9 +118,9 @@ public:
     denc(v._type, p);
     denc(v._num, p);
   }
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(list<entity_name_t*>& o);
+  static void generate_test_instances(std::list<entity_name_t*>& o);
 };
 WRITE_CLASS_DENC(entity_name_t)
 
@@ -157,15 +157,15 @@ struct ceph_sockaddr_storage {
   __le16 ss_family;
   __u8 __ss_padding[128 - sizeof(__le16)];
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     struct ceph_sockaddr_storage ss = *this;
     ss.ss_family = htons(ss.ss_family);
-    ::encode_raw(ss, bl);
+    ceph::encode_raw(ss, bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     struct ceph_sockaddr_storage ss;
-    ::decode_raw(ss, bl);
+    ceph::decode_raw(ss, bl);
     ss.ss_family = ntohs(ss.ss_family);
     *this = ss;
   }
@@ -175,11 +175,11 @@ WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 /*
  * encode sockaddr.ss_family as network byte order
  */
-static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
+static inline void encode(const sockaddr_storage& a, ceph::buffer::list& bl) {
 #if defined(__linux__)
   struct sockaddr_storage ss = a;
   ss.ss_family = htons(ss.ss_family);
-  ::encode_raw(ss, bl);
+  ceph::encode_raw(ss, bl);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
   auto src = (unsigned char const *)&a;
@@ -199,9 +199,10 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   encode(ss, bl);
 #endif
 }
-static inline void decode(sockaddr_storage& a, bufferlist::const_iterator& bl) {
+static inline void decode(sockaddr_storage& a,
+			  ceph::buffer::list::const_iterator& bl) {
 #if defined(__linux__)
-  ::decode_raw(a, bl);
+  ceph::decode_raw(a, bl);
   a.ss_family = ntohs(a.ss_family);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
@@ -434,14 +435,14 @@ struct entity_addr_t {
   std::string ip_only_to_str() const;
 
   std::string get_legacy_str() const {
-    ostringstream ss;
+    std::ostringstream ss;
     ss << get_sockaddr() << "/" << get_nonce();
     return ss.str();
   }
 
   bool parse(const char *s, const char **end = 0, int type=0);
 
-  void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
+  void decode_legacy_addr_after_marker(ceph::buffer::list::const_iterator& bl)
   {
     using ceph::decode;
     __u8 marker;
@@ -463,7 +464,7 @@ struct entity_addr_t {
   // Apparently on BSD there is also an ss_len that we need to handle; this requires
   // broader study
 
-  void encode(bufferlist& bl, uint64_t features) const {
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
     if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
       encode((__u32)0, bl);
@@ -501,7 +502,7 @@ struct entity_addr_t {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 marker;
     decode(marker, bl);
@@ -510,7 +511,7 @@ struct entity_addr_t {
       return;
     }
     if (marker != 1)
-      throw buffer::malformed_input("entity_addr_t marker != 1");
+      throw ceph::buffer::malformed_input("entity_addr_t marker != 1");
     DECODE_START(1, bl);
     decode(type, bl);
     decode(nonce, bl);
@@ -532,11 +533,11 @@ struct entity_addr_t {
       bl.copy(elen, u.sa.sa_data);
 #else
       if (elen < sizeof(u.sa.sa_family)) {
-	throw buffer::malformed_input("elen smaller than family len");
+	throw ceph::buffer::malformed_input("elen smaller than family len");
       }
       bl.copy(sizeof(u.sa.sa_family), (char*)&u.sa.sa_family);
       if (elen > get_sockaddr_len()) {
-	throw buffer::malformed_input("elen exceeds sockaddr len");
+	throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
       }
       elen -= sizeof(u.sa.sa_family);
       bl.copy(elen, u.sa.sa_data);
@@ -545,13 +546,13 @@ struct entity_addr_t {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
+  void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(list<entity_addr_t*>& o);
+  static void generate_test_instances(std::list<entity_addr_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
-ostream& operator<<(ostream& out, const entity_addr_t &addr);
+std::ostream& operator<<(std::ostream& out, const entity_addr_t &addr);
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }
@@ -561,18 +562,16 @@ inline bool operator>(const entity_addr_t& a, const entity_addr_t& b) { return m
 inline bool operator>=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) >= 0; }
 
 namespace std {
-  template<> struct hash< entity_addr_t >
-  {
-    size_t operator()( const entity_addr_t& x ) const
-    {
-      static blobhash H;
-      return H((const char*)&x, sizeof(x));
-    }
-  };
+template<> struct hash<entity_addr_t> {
+  size_t operator()( const entity_addr_t& x ) const {
+    static blobhash H;
+    return H((const char*)&x, sizeof(x));
+  }
+};
 } // namespace std
 
 struct entity_addrvec_t {
-  vector<entity_addr_t> v;
+  std::vector<entity_addr_t> v;
 
   entity_addrvec_t() {}
   explicit entity_addrvec_t(const entity_addr_t& a) : v({ a }) {}
@@ -621,7 +620,7 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
-  string get_legacy_str() const {
+  std::string get_legacy_str() const {
     return legacy_or_front_addr().get_legacy_str();
   }
 
@@ -644,21 +643,21 @@ struct entity_addrvec_t {
 
   bool parse(const char *s, const char **end = 0);
 
-  void get_ports(set<int> *ports) const {
+  void get_ports(std::set<int> *ports) const {
     for (auto& a : v) {
       ports->insert(a.get_port());
     }
   }
-  set<int> get_ports() const {
-    set<int> r;
+  std::set<int> get_ports() const {
+    std::set<int> r;
     get_ports(&r);
     return r;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<entity_addrvec_t*>& ls);
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<entity_addrvec_t*>& ls);
 
   bool legacy_equals(const entity_addrvec_t& o) const {
     if (v == o.v) {
@@ -702,7 +701,7 @@ struct entity_addrvec_t {
     return false;
   }
 
-  friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
+  friend std::ostream& operator<<(std::ostream& out, const entity_addrvec_t& av) {
     if (av.v.empty()) {
       return out;
     } else if (av.v.size() == 1) {
@@ -725,18 +724,16 @@ struct entity_addrvec_t {
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 
 namespace std {
-  template<> struct hash< entity_addrvec_t >
-  {
-    size_t operator()( const entity_addrvec_t& x ) const
-    {
-      static blobhash H;
-      size_t r = 0;
-      for (auto& i : x.v) {
-	r += H((const char*)&i, sizeof(i));
-      }
-      return r;
+template<> struct hash<entity_addrvec_t> {
+  size_t operator()( const entity_addrvec_t& x) const {
+    static blobhash H;
+    size_t r = 0;
+    for (auto& i : x.v) {
+      r += H((const char*)&i, sizeof(i));
     }
-  };
+    return r;
+  }
+};
 } // namespace std
 
 /*
@@ -755,19 +752,19 @@ struct entity_inst_t {
     return i;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const {
+  void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
     encode(name, bl);
     encode(addr, bl, features);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(name, bl);
     decode(addr, bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<entity_inst_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<entity_inst_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_inst_t)
 
@@ -800,11 +797,11 @@ namespace std {
 } // namespace std
 
 
-inline ostream& operator<<(ostream& out, const entity_inst_t &i)
+inline std::ostream& operator<<(std::ostream& out, const entity_inst_t &i)
 {
   return out << i.name << " " << i.addr;
 }
-inline ostream& operator<<(ostream& out, const ceph_entity_inst &i)
+inline std::ostream& operator<<(std::ostream& out, const ceph_entity_inst &i)
 {
   entity_inst_t n = i;
   return out << n;
