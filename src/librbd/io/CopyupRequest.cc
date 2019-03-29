@@ -6,7 +6,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Mutex.h"
-
+#include "common/WorkQueue.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -101,12 +101,15 @@ CopyupRequest<I>::~CopyupRequest() {
 
 template <typename I>
 void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req) {
+  ceph_assert(m_ictx->copyup_list_lock.is_locked());
+
   ldout(m_ictx->cct, 20) << req << dendl;
   m_pending_requests.push_back(req);
 }
 
 template <typename I>
 void CopyupRequest<I>::complete_requests(int r) {
+  // already removed from copyup list
   while (!m_pending_requests.empty()) {
     auto it = m_pending_requests.begin();
     auto req = *it;
@@ -235,6 +238,8 @@ bool CopyupRequest<I>::is_update_object_map_required(int r) {
 
 template <typename I>
 bool CopyupRequest<I>::is_deep_copy() const {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+
   return !m_ictx->migration_info.empty();
 }
 
@@ -243,20 +248,40 @@ void CopyupRequest<I>::send()
 {
   m_state = STATE_READ_FROM_PARENT;
 
+  m_ictx->snap_lock.get_read();
+  m_ictx->parent_lock.get_read();
+  if (m_ictx->parent == nullptr) {
+    ldout(m_ictx->cct, 5) << "parent detached" << dendl;
+    m_ictx->parent_lock.put_read();
+    m_ictx->snap_lock.put_read();
+
+    m_ictx->op_work_queue->queue(util::create_context_callback(this), -ENOENT);
+    return;
+  }
+
   if (is_deep_copy()) {
+    m_ictx->copyup_list_lock.Lock();
     m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
+    m_ictx->copyup_list_lock.Unlock();
+
+    m_deep_copy = true;
     auto req = deep_copy::ObjectCopyRequest<I>::create(
-        m_ictx->parent, m_ictx, m_ictx->migration_info.snap_map, m_object_no,
-        m_flatten, util::create_context_callback(this));
+      m_ictx->parent, m_ictx, m_ictx->migration_info.snap_map, m_object_no,
+      m_flatten, util::create_context_callback(this));
+
     ldout(m_ictx->cct, 20) << "deep copy object req " << req
                            << ", object_no " << m_object_no
                            << ", flatten " << m_flatten
                            << dendl;
     req->send();
+
+    m_ictx->parent_lock.put_read();
+    m_ictx->snap_lock.put_read();
     return;
   }
 
-  AioCompletion *comp = AioCompletion::create_and_start(
+  m_deep_copy = false;
+  auto comp = AioCompletion::create_and_start(
     this, m_ictx, AIO_TYPE_READ);
 
   ldout(m_ictx->cct, 20) << "completion " << comp
@@ -265,6 +290,9 @@ void CopyupRequest<I>::send()
                          << dendl;
   ImageRequest<>::aio_read(m_ictx->parent, comp, std::move(m_image_extents),
                            ReadResult{&m_copyup_data}, 0, m_trace);
+
+  m_ictx->parent_lock.put_read();
+  m_ictx->snap_lock.put_read();
 }
 
 template <typename I>
@@ -286,24 +314,27 @@ bool CopyupRequest<I>::should_complete(int *r) {
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
+
     m_ictx->copyup_list_lock.Lock();
-    if (*r == -ENOENT && is_deep_copy() && !m_flatten && is_copyup_required()) {
+    if (*r == -ENOENT && m_deep_copy && !m_flatten && is_copyup_required()) {
       ldout(cct, 5) << "restart deep copy with flatten" << dendl;
       m_ictx->copyup_list_lock.Unlock();
+
       send();
       return false;
     }
+
     remove_from_list(m_ictx->copyup_list_lock);
     m_ictx->copyup_list_lock.Unlock();
+
     if (*r >= 0 || *r == -ENOENT) {
       if (!is_copyup_required() && !is_update_object_map_required(*r)) {
-        if (*r == -ENOENT && is_deep_copy()) {
+        if (*r == -ENOENT && m_deep_copy) {
           *r = 0;
         }
         ldout(cct, 20) << "skipping" << dendl;
         return true;
       }
-
       return send_object_map_head();
     }
     break;
