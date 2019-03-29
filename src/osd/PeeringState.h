@@ -1453,6 +1453,20 @@ public:
     return info;
   }
 
+  bool needs_recovery() const;
+  bool needs_backfill() const;
+  bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
+  bool all_missing_unfound() const {
+    const auto& missing = pg_log.get_missing();
+    if (!missing.have_missing())
+      return false;
+    for (auto& m : missing.get_items()) {
+      if (!missing_loc.is_unfound(m.first))
+        return false;
+    }
+    return true;
+  }
+
   // Flush control interface
 private:
   void start_flush(ObjectStore::Transaction *t) {
