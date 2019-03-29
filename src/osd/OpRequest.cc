@@ -23,6 +23,13 @@
 #define tracepoint(...)
 #endif
 
+using std::ostream;
+using std::set;
+using std::string;
+using std::stringstream;
+
+using ceph::Formatter;
+
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),
   rmw_flags(0), request(req),
