@@ -5,7 +5,7 @@ overrides:
   install:
     ceph:
       flavor: notcmalloc
-      debuginfo: true
+      #debuginfo: true
   ceph:
     conf:
       global:
