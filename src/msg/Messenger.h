@@ -83,7 +83,7 @@ protected:
   safe_item_history<entity_addrvec_t> my_addrs;
 
   int default_send_priority;
-  /// set to true once the Messenger has started, and set to false on shutdown
+  /// std::set to true once the Messenger has started, and std::set to false on shutdown
   bool started;
   uint32_t magic;
   int socket_priority;
@@ -138,12 +138,12 @@ public:
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
    * @param features bits for the local connection
-   * @param cflags general set of flags to configure transport resources
+   * @param cflags general std::set of flags to configure transport resources
    */
   static Messenger *create(CephContext *cct,
-                           const string &type,
+                           const std::string &type,
                            entity_name_t name,
-			   string lname,
+			   std::string lname,
                            uint64_t nonce,
 			   uint64_t cflags);
 
@@ -160,7 +160,7 @@ public:
    * @param cct context
    * @param lname logical name of the messenger in this process (e.g., "client")
    */
-  static Messenger *create_client_messenger(CephContext *cct, string lname);
+  static Messenger *create_client_messenger(CephContext *cct, std::string lname);
 
   /**
    * @defgroup Accessors
@@ -198,7 +198,7 @@ public:
 
 
   /**
-   * set messenger's instance
+   * std::set messenger's instance
    */
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
@@ -212,7 +212,7 @@ public:
 
 protected:
   /**
-   * set messenger's address
+   * std::set messenger's address
    */
   virtual void set_myaddrs(const entity_addrvec_t& a) {
     my_addrs = a;
@@ -227,16 +227,16 @@ public:
   }
 
   /**
-   * Set the name of the local entity. The name is reported to others and
+   * std::Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.
    *
-   * @param m The name to set.
+   * @param m The name to std::set.
    */
   void set_myname(const entity_name_t& m) { my_name = m; }
 
   /**
-   * Set the unknown address components for this Messenger.
+   * std::Set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by
    * binding, but another Messenger on the same interface has already learned
    * its full address. This function does not fill in known address elements,
@@ -246,7 +246,7 @@ public:
    */
   virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
   /**
-   * Set the address for this Messenger. This is useful if the Messenger
+   * std::Set the address for this Messenger. This is useful if the Messenger
    * binds to a specific address but advertises a different address on the
    * the network.
    *
@@ -276,7 +276,7 @@ public:
    * @{
    */
   /**
-   * Set the cluster protocol in use by this daemon.
+   * std::Set the cluster protocol in use by this daemon.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
@@ -284,7 +284,7 @@ public:
    */
   virtual void set_cluster_protocol(int p) = 0;
   /**
-   * Set a policy which is applied to all peers who do not have a type-specific
+   * std::Set a policy which is applied to all peers who do not have a type-specific
    * Policy.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
@@ -293,7 +293,7 @@ public:
    */
   virtual void set_default_policy(Policy p) = 0;
   /**
-   * Set a policy which is applied to all peers of the given type.
+   * std::Set a policy which is applied to all peers of the given type.
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
@@ -302,7 +302,7 @@ public:
    */
   virtual void set_policy(int type, Policy p) = 0;
   /**
-   * Set the Policy associated with a type of peer.
+   * std::Set the Policy associated with a type of peer.
    *
    * This can be called either on initial setup, or after connections
    * are already established.  However, the policies for existing
@@ -320,7 +320,7 @@ public:
    */
   virtual Policy get_default_policy() = 0;
   /**
-   * Set Throttlers applied to all Messages from the given type of peer
+   * std::Set Throttlers applied to all Messages from the given type of peer
    *
    * This is an init-time function and cannot be called after calling
    * start() or bind().
@@ -333,7 +333,7 @@ public:
    */
   virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
-   * Set the default send priority
+   * std::Set the default send priority
    *
    * This is an init-time function and must be called *before* calling
    * start().
@@ -345,7 +345,7 @@ public:
     default_send_priority = p;
   }
   /**
-   * Set the priority(SO_PRIORITY) for all packets to be sent on this socket.
+   * std::Set the priority(SO_PRIORITY) for all packets to be sent on this socket.
    *
    * Linux uses this value to order the networking queues: packets with a higher
    * priority may be processed first depending on the selected device queueing
@@ -416,7 +416,7 @@ public:
    *
    * @param avoid_ports Additional port to avoid binding to.
    */
-  virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
+  virtual int rebind(const std::set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
    * Bind the 'client' Messenger to a specific address.Messenger will bind
    * the address before connect to others when option ms_bind_before_connect
@@ -445,7 +445,7 @@ public:
    * Perform any resource allocation, thread startup, etc
    * that is required before attempting to connect to other
    * Messengers or transmit messages.
-   * Once this function completes, started shall be set to true.
+   * Once this function completes, started shall be std::set to true.
    *
    * @return 0 on success; -errno on failure.
    */
@@ -819,7 +819,7 @@ public:
    */
   bool ms_deliver_verify_authorizer(
     Connection *con, int peer_type,
-    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+    int protocol, ceph::buffer::list& authorizer, ceph::buffer::list& authorizer_reply,
     bool& isvalid,
     CryptoKey& session_key,
     std::string *connection_secret,
