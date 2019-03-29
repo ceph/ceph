@@ -4036,32 +4036,94 @@ void PG::handle_scrub_reserve_release(OpRequestRef op)
   clear_scrub_reserved();
 }
 
+// Compute pending backfill data
+static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t local_bytes)
+{
+  lgeneric_dout(cct, 20) << __func__ << " Adjust local usage "
+			 << (local_bytes >> 10) << "KiB"
+			 << " primary usage " << (bf_bytes >> 10)
+			 << "KiB" << dendl;
+
+  return std::max((int64_t)0, bf_bytes - local_bytes);
+}
+
+
 // We can zero the value of primary num_bytes as just an atomic.
 // However, setting above zero reserves space for backfill and requires
 // the OSDService::stat_lock which protects all OSD usage
-void PG::set_reserved_num_bytes(int64_t primary, int64_t local) {
-  ceph_assert(osd->stat_lock.is_locked_by_me());
-  primary_num_bytes.store(primary);
-  local_num_bytes.store(local);
-  return;
+bool PG::try_reserve_recovery_space(
+  int64_t primary_bytes, int64_t local_bytes) {
+  // Use tentative_bacfill_full() to make sure enough
+  // space is available to handle target bytes from primary.
+
+  // TODO: If we passed num_objects from primary we could account for
+  // an estimate of the metadata overhead.
+
+  // TODO: If we had compressed_allocated and compressed_original from primary
+  // we could compute compression ratio and adjust accordingly.
+
+  // XXX: There is no way to get omap overhead and this would only apply
+  // to whatever possibly different partition that is storing the database.
+
+  // update_osd_stat() from heartbeat will do this on a new
+  // statfs using ps->primary_bytes.
+  uint64_t pending_adjustment = 0;
+  if (primary_bytes) {
+    // For erasure coded pool overestimate by a full stripe per object
+    // because we don't know how each objected rounded to the nearest stripe
+    if (pool.info.is_erasure()) {
+      primary_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
+      primary_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
+	info.stats.stats.sum.num_objects;
+      local_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
+      local_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
+	info.stats.stats.sum.num_objects;
+    }
+    pending_adjustment = pending_backfill(
+      cct,
+      primary_bytes,
+      local_bytes);
+    dout(10) << __func__ << " primary_bytes " << (primary_bytes >> 10)
+	     << "KiB"
+	     << " local " << (local_bytes >> 10) << "KiB"
+	     << " pending_adjustments " << (pending_adjustment >> 10) << "KiB"
+	     << dendl;
+  }
+
+  // This lock protects not only the stats OSDService but also setting the
+  // pg primary_bytes.  That's why we don't immediately unlock
+  Mutex::Locker l(osd->stat_lock);
+  osd_stat_t cur_stat = osd->osd_stat;
+  if (cct->_conf->osd_debug_reject_backfill_probability > 0 &&
+      (rand()%1000 < (cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
+    dout(10) << "backfill reservation rejected: failure injection"
+	     << dendl;
+    return false;
+  } else if (!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+      osd->tentative_backfill_full(this, pending_adjustment, cur_stat)) {
+    dout(10) << "backfill reservation rejected: backfill full"
+	     << dendl;
+    return false;
+  } else {
+    // Don't reserve space if skipped reservation check, this is used
+    // to test the other backfill full check AND in case a corruption
+    // of num_bytes requires ignoring that value and trying the
+    // backfill anyway.
+    if (primary_bytes &&
+	!cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
+      primary_num_bytes.store(primary_bytes);
+      local_num_bytes.store(local_bytes);
+    } else {
+      unreserve_recovery_space();
+    }
+    return true;
+  }
 }
 
-void PG::clear_reserved_num_bytes() {
+void PG::unreserve_recovery_space() {
   primary_num_bytes.store(0);
   local_num_bytes.store(0);
   return;
-}
-
-void PG::reject_reservation()
-{
-  clear_reserved_num_bytes();
-  osd->send_message_osd_cluster(
-    primary.osd,
-    new MBackfillReserve(
-      MBackfillReserve::REJECT,
-      spg_t(info.pgid.pgid, primary.shard),
-      get_osdmap_epoch()),
-    get_osdmap_epoch());
 }
 
 void PG::clear_scrub_reserved()

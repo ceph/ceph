@@ -789,8 +789,8 @@ public:
     return primary_num_bytes.load() > 0;
   }
 
-  void set_reserved_num_bytes(int64_t primary, int64_t local);
-  void clear_reserved_num_bytes();
+  bool try_reserve_recovery_space(int64_t primary, int64_t local) override;
+  void unreserve_recovery_space() override;
 
   // If num_bytes are inconsistent and local_num- goes negative
   // it's ok, because it would then be ignored.
@@ -1426,8 +1426,6 @@ protected:
   void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from);
   void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from);
   void handle_scrub_reserve_release(OpRequestRef op);
-
-  void reject_reservation();
 
   // -- recovery state --
 

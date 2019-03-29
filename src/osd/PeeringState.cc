@@ -1089,6 +1089,20 @@ bool PeeringState::all_unfound_are_queried_or_lost(
 }
 
 
+void PeeringState::reject_reservation()
+{
+  pl->unreserve_recovery_space();
+  pl->send_cluster_message(
+    primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::REJECT,
+      spg_t(info.pgid.pgid, primary.shard),
+      get_osdmap_epoch()),
+    get_osdmap_epoch());
+}
+
+
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
@@ -1834,7 +1848,7 @@ boost::statechart::result
 PeeringState::RepNotRecovering::react(const RejectRemoteReservation &evt)
 {
   DECLARE_LOCALS
-  pg->reject_reservation();
+  ps->reject_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }
@@ -1874,7 +1888,7 @@ PeeringState::RepWaitRecoveryReserved::react(
   const RemoteReservationCanceled &evt)
 {
   DECLARE_LOCALS
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
 
   pl->cancel_remote_recovery_reservation();
   return transit<RepNotRecovering>();
@@ -1896,77 +1910,16 @@ PeeringState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 }
 
-// Compute pending backfill data
-static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t local_bytes)
-{
-    lgeneric_dout(cct, 20) << __func__ << " Adjust local usage " << (local_bytes >> 10) << "KiB"
-		               << " primary usage " << (bf_bytes >> 10) << "KiB" << dendl;
-    return std::max((int64_t)0, bf_bytes - local_bytes);
-}
-
 boost::statechart::result
 PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
 
   DECLARE_LOCALS
-  // Use tentative_bacfill_full() to make sure enough
-  // space is available to handle target bytes from primary.
 
-  // TODO: If we passed num_objects from primary we could account for
-  // an estimate of the metadata overhead.
-
-  // TODO: If we had compressed_allocated and compressed_original from primary
-  // we could compute compression ratio and adjust accordingly.
-
-  // XXX: There is no way to get omap overhead and this would only apply
-  // to whatever possibly different partition that is storing the database.
-
-  // update_osd_stat() from heartbeat will do this on a new
-  // statfs using ps->primary_num_bytes.
-  uint64_t pending_adjustment = 0;
-  int64_t primary_num_bytes = evt.primary_num_bytes;
-  int64_t local_num_bytes = evt.local_num_bytes;
-  if (primary_num_bytes) {
-    // For erasure coded pool overestimate by a full stripe per object
-    // because we don't know how each objected rounded to the nearest stripe
-    if (ps->pool.info.is_erasure()) {
-      primary_num_bytes /= (int)pg->get_pgbackend()->get_ec_data_chunk_count();
-      primary_num_bytes += pg->get_pgbackend()->get_ec_stripe_chunk_size() * ps->info.stats.stats.sum.num_objects;
-      local_num_bytes /= (int)pg->get_pgbackend()->get_ec_data_chunk_count();
-      local_num_bytes += pg->get_pgbackend()->get_ec_stripe_chunk_size() * ps->info.stats.stats.sum.num_objects;
-    }
-    pending_adjustment = pending_backfill(
-      context< PeeringMachine >().cct,
-      primary_num_bytes,
-      local_num_bytes);
-    psdout(10) << __func__ << " primary_num_bytes " << (primary_num_bytes >> 10) << "KiB"
-                       << " local " << (local_num_bytes >> 10) << "KiB"
-                       << " pending_adjustments " << (pending_adjustment >> 10) << "KiB"
-                       << dendl;
-  }
-  // This lock protects not only the stats OSDService but also setting the pg primary_num_bytes
-  // That's why we don't immediately unlock
-  Mutex::Locker l(pg->osd->stat_lock);
-  osd_stat_t cur_stat = pg->osd->osd_stat;
-  if (ps->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (ps->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
-    psdout(10) << "backfill reservation rejected: failure injection"
-		       << dendl;
-    post_event(RejectRemoteReservation());
-  } else if (!ps->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-      pg->osd->tentative_backfill_full(pg, pending_adjustment, cur_stat)) {
-    psdout(10) << "backfill reservation rejected: backfill full"
-		       << dendl;
+  if (!pl->try_reserve_recovery_space(
+	evt.primary_num_bytes, evt.local_num_bytes)) {
     post_event(RejectRemoteReservation());
   } else {
-    // Don't reserve space if skipped reservation check, this is used
-    // to test the other backfill full check AND in case a corruption
-    // of num_bytes requires ignoring that value and trying the
-    // backfill anyway.
-    if (primary_num_bytes && !ps->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation)
-      pg->set_reserved_num_bytes(primary_num_bytes, local_num_bytes);
-    else
-      pg->clear_reserved_num_bytes();
     // Use un-ec-adjusted bytes for stats.
     ps->info.stats.stats.sum.num_bytes = evt.local_num_bytes;
 
@@ -2046,7 +1999,7 @@ PeeringState::RepWaitBackfillReserved::react(
   const RejectRemoteReservation &evt)
 {
   DECLARE_LOCALS
-  pg->reject_reservation();
+  ps->reject_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }
@@ -2056,7 +2009,7 @@ PeeringState::RepWaitBackfillReserved::react(
   const RemoteReservationRejected &evt)
 {
   DECLARE_LOCALS
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
 
   pl->cancel_remote_recovery_reservation();
   return transit<RepNotRecovering>();
@@ -2067,7 +2020,7 @@ PeeringState::RepWaitBackfillReserved::react(
   const RemoteReservationCanceled &evt)
 {
   DECLARE_LOCALS
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
 
   pl->cancel_remote_recovery_reservation();
   return transit<RepNotRecovering>();
@@ -2087,7 +2040,7 @@ PeeringState::RepRecovering::react(const RemoteRecoveryPreempted &)
   DECLARE_LOCALS
 
 
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
     new MRecoveryReserve(
@@ -2104,7 +2057,7 @@ PeeringState::RepRecovering::react(const BackfillTooFull &)
   DECLARE_LOCALS
 
 
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
     new MBackfillReserve(
@@ -2121,7 +2074,7 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
   DECLARE_LOCALS
 
 
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
   pl->send_cluster_message(
     ps->primary.osd,
     new MBackfillReserve(
@@ -2136,7 +2089,7 @@ void PeeringState::RepRecovering::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
 
   pl->cancel_remote_recovery_reservation();
   utime_t dur = ceph_clock_now() - enter_time;
@@ -2869,7 +2822,7 @@ void PeeringState::ReplicaActive::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS
-  pg->clear_reserved_num_bytes();
+  pl->unreserve_recovery_space();
 
   pl->cancel_remote_recovery_reservation();
   utime_t dur = ceph_clock_now() - enter_time;
