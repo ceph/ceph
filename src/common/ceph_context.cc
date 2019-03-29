@@ -297,7 +297,8 @@ public:
     }
 
     // file
-    if (changed.count("log_file")) {
+    if (changed.count("log_file") ||
+	changed.count("log_to_file")) {
       if (conf->log_to_file) {
 	log->set_log_file(conf->log_file);
       } else {
@@ -634,7 +635,6 @@ CephContext::CephContext(uint32_t module_type_,
     crush_location(this)
 {
   _log = new ceph::logging::Log(&_conf->subsys);
-  _log->start();
 
   _log_obs = new LogObs(_log);
   _conf.add_observer(_log_obs);

@@ -106,6 +106,9 @@ void Log::set_log_stderr_prefix(std::string_view p)
 void Log::reopen_log_file()
 {
   std::scoped_lock lock(m_flush_mutex);
+  if (!is_started()) {
+    return;
+  }
   m_flush_mutex_holder = pthread_self();
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
@@ -181,7 +184,8 @@ void Log::submit_entry(Entry&& e)
     *(volatile int *)(0) = 0xdead;
 
   // wait for flush to catch up
-  while (m_new.size() > m_max_new) {
+  while (is_started() &&
+	 m_new.size() > m_max_new) {
     if (m_stop) break; // force addition
     m_cond_loggers.wait(lock);
   }
@@ -402,6 +406,7 @@ void Log::stop()
 
 void *Log::entry()
 {
+  reopen_log_file();
   {
     std::unique_lock lock(m_queue_mutex);
     m_queue_mutex_holder = pthread_self();
