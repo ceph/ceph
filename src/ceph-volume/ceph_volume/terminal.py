@@ -1,3 +1,4 @@
+import codecs
 import logging
 import sys
 
@@ -80,10 +81,32 @@ yellow_arrow = yellow('--> ')
 class _Write(object):
 
     def __init__(self, _writer=None, prefix='', suffix='', flush=False):
-        self._writer = _writer or sys.stdout
+        if _writer is None:
+            _writer = sys.stdout
+        self._writer = _Write._unicode_output_stream(_writer)
+        if _writer is sys.stdout:
+            sys.stdout = self._writer
         self.suffix = suffix
         self.prefix = prefix
         self.flush = flush
+
+    @staticmethod
+    def _unicode_output_stream(stream):
+        # wrapper for given stream, so it can write unicode without throwing
+        # exception
+        # sys.stdout.encoding is None if !isatty
+        encoding = stream.encoding or ''
+        if encoding.upper() in ('UTF-8', 'UTF8'):
+            # already using unicode encoding, nothing to do
+            return stream
+        encoding = encoding or 'UTF-8'
+        if sys.version_info >= (3, 0):
+            # try to use whatever writer class the stream was
+            return stream.__class__(stream.buffer, encoding, 'replace',
+                                    stream.newlines, stream.line_buffering)
+        else:
+            # in python2, stdout is but a "file"
+            return codecs.getwriter(encoding)(stream, 'replace')
 
     def bold(self, string):
         self.write(bold(string))
