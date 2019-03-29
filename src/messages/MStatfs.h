@@ -43,7 +43,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "statfs"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "statfs(" << get_tid() << " pool "
         << (data_pool ? *data_pool : -1) << " v" << version << ")";
   }
@@ -55,6 +55,7 @@ public:
     encode(data_pool, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
