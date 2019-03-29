@@ -15169,11 +15169,6 @@ void PrimaryLogPG::_scrub_finish()
     object_contexts.clear();
 }
 
-bool PrimaryLogPG::check_osdmap_full(const set<pg_shard_t> &missing_on)
-{
-    return osd->check_osdmap_full(missing_on);
-}
-
 int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ctx)
 {
   OpRequestRef op = ctx->op;

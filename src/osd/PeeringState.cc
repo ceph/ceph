@@ -2121,7 +2121,7 @@ PeeringState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ct
 
   // Make sure all nodes that part of the recovery aren't full
   if (!ps->cct->_conf->osd_debug_skip_full_check_in_recovery &&
-      ps->pg->osd->check_osdmap_full(ps->acting_recovery_backfill)) {
+      ps->get_osdmap()->check_full(ps->acting_recovery_backfill)) {
     post_event(RecoveryTooFull());
     return;
   }
