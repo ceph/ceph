@@ -2417,91 +2417,13 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
   psdout(10) << "Active advmap" << dendl;
   bool need_publish = false;
 
-  if (advmap.osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
-    const auto& new_removed_snaps = advmap.osdmap->get_new_removed_snaps();
-    auto i = new_removed_snaps.find(ps->info.pgid.pool());
-    if (i != new_removed_snaps.end()) {
-      bool bad = false;
-      for (auto j : i->second) {
-	if (pg->snap_trimq.intersects(j.first, j.second)) {
-	  decltype(pg->snap_trimq) added, overlap;
-	  added.insert(j.first, j.second);
-	  overlap.intersection_of(pg->snap_trimq, added);
-	  if (ps->last_require_osd_release < CEPH_RELEASE_MIMIC) {
-	    lderr(ps->cct) << __func__ << " removed_snaps already contains "
-			   << overlap << ", but this is the first mimic+ osdmap,"
-			   << " so it's expected" << dendl;
-	  } else {
-	    lderr(ps->cct) << __func__ << " removed_snaps already contains "
-			   << overlap << dendl;
-	    bad = true;
-	  }
-	  pg->snap_trimq.union_of(added);
-	} else {
-	  pg->snap_trimq.insert(j.first, j.second);
-	}
-      }
-      if (ps->last_require_osd_release < CEPH_RELEASE_MIMIC) {
-	// at upgrade, we report *all* previously removed snaps as removed in
-	// the first mimic epoch.  remove the ones we previously divined were
-	// removed (and subsequently purged) from the trimq.
-	lderr(ps->cct) << __func__ << " first mimic map, filtering purged_snaps"
-		       << " from new removed_snaps" << dendl;
-	pg->snap_trimq.subtract(ps->info.purged_snaps);
-      }
-      ldout(ps->cct,10) << __func__ << " new removed_snaps " << i->second
-			<< ", snap_trimq now " << pg->snap_trimq << dendl;
-      ceph_assert(!bad || !ps->cct->_conf->osd_debug_verify_cached_snaps);
-      ps->dirty_info = true;
-      ps->dirty_big_info = true;
-    }
-
-    const auto& new_purged_snaps = advmap.osdmap->get_new_purged_snaps();
-    auto j = new_purged_snaps.find(ps->info.pgid.pool());
-    if (j != new_purged_snaps.end()) {
-      bool bad = false;
-      for (auto k : j->second) {
-	if (!ps->info.purged_snaps.contains(k.first, k.second)) {
-	  decltype(ps->info.purged_snaps) rm, overlap;
-	  rm.insert(k.first, k.second);
-	  overlap.intersection_of(ps->info.purged_snaps, rm);
-	  lderr(ps->cct) << __func__ << " purged_snaps does not contain "
-			 << rm << ", only " << overlap << dendl;
-	  ps->info.purged_snaps.subtract(overlap);
-	  // This can currently happen in the normal (if unlikely) course of
-	  // events.  Because adding snaps to purged_snaps does not increase
-	  // the pg version or add a pg log entry, we don't reliably propagate
-	  // purged_snaps additions to other OSDs.
-	  // One example:
-	  //  - purge S
-	  //  - primary and replicas update purged_snaps
-	  //  - no object updates
-	  //  - pg mapping changes, new primary on different node
-	  //  - new primary pg version == eversion_t(), so info is not
-	  //    propagated.
-	  //bad = true;
-	} else {
-	  ps->info.purged_snaps.erase(k.first, k.second);
-	}
-      }
-      ldout(ps->cct,10) << __func__ << " new purged_snaps " << j->second
-			<< ", now " << ps->info.purged_snaps << dendl;
-      ceph_assert(!bad || !ps->cct->_conf->osd_debug_verify_cached_snaps);
-      ps->dirty_info = true;
-      ps->dirty_big_info = true;
-    }
-    if (ps->dirty_big_info) {
-      // share updated purged_snaps to mgr/mon so that we (a) stop reporting
-      // purged snaps and (b) perhaps share more snaps that we have purged
-      // but didn't fit in pg_stat_t.
-      need_publish = true;
-      pg->share_pg_info();
-    }
-  } else if (!ps->pool.newly_removed_snaps.empty()) {
-    pg->snap_trimq.union_of(ps->pool.newly_removed_snaps);
-    psdout(10) << *pg << " snap_trimq now " << pg->snap_trimq << dendl;
-    ps->dirty_info = true;
-    ps->dirty_big_info = true;
+  pl->on_active_advmap(advmap.osdmap);
+  if (ps->dirty_big_info) {
+    // share updated purged_snaps to mgr/mon so that we (a) stop reporting
+    // purged snaps and (b) perhaps share more snaps that we have purged
+    // but didn't fit in pg_stat_t.
+    need_publish = true;
+    pg->share_pg_info();
   }
 
   for (size_t i = 0; i < ps->want_acting.size(); i++) {
@@ -2514,9 +2436,9 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
 
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
-  if (advmap.lastmap->get_pg_size(context< PeeringMachine >().spgid.pgid) !=
-      ps->get_osdmap()->get_pg_size(context< PeeringMachine >().spgid.pgid)) {
-    if (ps->get_osdmap()->get_pg_size(context< PeeringMachine >().spgid.pgid) <=
+  if (advmap.lastmap->get_pg_size(ps->info.pgid.pgid) !=
+      ps->get_osdmap()->get_pg_size(ps->info.pgid.pgid)) {
+    if (ps->get_osdmap()->get_pg_size(ps->info.pgid.pgid) <=
 	ps->actingset.size()) {
       ps->state_clear(PG_STATE_UNDERSIZED);
     } else {
@@ -2545,13 +2467,12 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   psdout(10) << "Active: handling ActMap" << dendl;
   ceph_assert(ps->is_primary());
 
+  pl->on_active_actmap();
+
   if (pg->have_unfound()) {
     // object may have become unfound
     pg->discover_all_missing(*context< PeeringMachine >().get_query_map());
   }
-
-  if (ps->cct->_conf->osd_check_for_log_corruption)
-    pg->check_log_for_corruption(pg->osd->store);
 
   uint64_t unfound = ps->missing_loc.num_unfound();
   if (unfound > 0 &&
@@ -2566,17 +2487,6 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
                              << unfound << " objects unfound and apparently lost";
   }
 
-  if (ps->is_active()) {
-    psdout(10) << "Active: kicking snap trim" << dendl;
-    pg->kick_snap_trim();
-  }
-
-  if (ps->is_peered() &&
-      !ps->is_clean() &&
-      !ps->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
-      (!ps->get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) || ps->is_degraded())) {
-    pg->queue_recovery();
-  }
   return forward_event();
 }
 

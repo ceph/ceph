@@ -3865,6 +3865,108 @@ void PG::cancel_remote_recovery_reservation() {
     pg_id);
 }
 
+void PG::on_active_advmap(const OSDMapRef &osdmap)
+{
+  if (osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
+    const auto& new_removed_snaps = osdmap->get_new_removed_snaps();
+    auto i = new_removed_snaps.find(get_pgid().pool());
+    if (i != new_removed_snaps.end()) {
+      bool bad = false;
+      for (auto j : i->second) {
+	if (snap_trimq.intersects(j.first, j.second)) {
+	  decltype(snap_trimq) added, overlap;
+	  added.insert(j.first, j.second);
+	  overlap.intersection_of(snap_trimq, added);
+	  if (recovery_state.get_last_require_osd_release() < CEPH_RELEASE_MIMIC) {
+	    derr << __func__ << " removed_snaps already contains "
+		 << overlap << ", but this is the first mimic+ osdmap,"
+		 << " so it's expected" << dendl;
+	  } else {
+	    derr << __func__ << " removed_snaps already contains "
+		 << overlap << dendl;
+	    bad = true;
+	  }
+	  snap_trimq.union_of(added);
+	} else {
+	  snap_trimq.insert(j.first, j.second);
+	}
+      }
+      if (recovery_state.get_last_require_osd_release() < CEPH_RELEASE_MIMIC) {
+	// at upgrade, we report *all* previously removed snaps as removed in
+	// the first mimic epoch.  remove the ones we previously divined were
+	// removed (and subsequently purged) from the trimq.
+	derr << __func__ << " first mimic map, filtering purged_snaps"
+	     << " from new removed_snaps" << dendl;
+	snap_trimq.subtract(recovery_state.get_info().purged_snaps);
+      }
+      dout(10) << __func__ << " new removed_snaps " << i->second
+	       << ", snap_trimq now " << snap_trimq << dendl;
+      ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+    }
+
+    const auto& new_purged_snaps = osdmap->get_new_purged_snaps();
+    auto j = new_purged_snaps.find(get_pgid().pgid.pool());
+    if (j != new_purged_snaps.end()) {
+      bool bad = false;
+      for (auto k : j->second) {
+	if (!recovery_state.get_info().purged_snaps.contains(k.first, k.second)) {
+	  interval_set<snapid_t> rm, overlap;
+	  rm.insert(k.first, k.second);
+	  overlap.intersection_of(recovery_state.get_info().purged_snaps, rm);
+	  derr << __func__ << " purged_snaps does not contain "
+	       << rm << ", only " << overlap << dendl;
+	  recovery_state.adjust_purged_snaps(
+	    [&overlap](auto &purged_snaps) {
+	      purged_snaps.subtract(overlap);
+	    });
+	  // This can currently happen in the normal (if unlikely) course of
+	  // events.  Because adding snaps to purged_snaps does not increase
+	  // the pg version or add a pg log entry, we don't reliably propagate
+	  // purged_snaps additions to other OSDs.
+	  // One example:
+	  //  - purge S
+	  //  - primary and replicas update purged_snaps
+	  //  - no object updates
+	  //  - pg mapping changes, new primary on different node
+	  //  - new primary pg version == eversion_t(), so info is not
+	  //    propagated.
+	  //bad = true;
+	} else {
+	  recovery_state.adjust_purged_snaps(
+	    [&k](auto &purged_snaps) {
+	      purged_snaps.erase(k.first, k.second);
+	    });
+	}
+      }
+      dout(10) << __func__ << " new purged_snaps " << j->second
+	       << ", now " << recovery_state.get_info().purged_snaps << dendl;
+      ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+    }
+  } else if (!pool.newly_removed_snaps.empty()) {
+    snap_trimq.union_of(pool.newly_removed_snaps);
+    dout(10) << " snap_trimq now " << snap_trimq << dendl;
+  }
+}
+
+void PG::on_active_actmap()
+{
+  if (cct->_conf->osd_check_for_log_corruption)
+    check_log_for_corruption(osd->store);
+
+
+  if (recovery_state.is_active()) {
+    dout(10) << "Active: kicking snap trim" << dendl;
+    kick_snap_trim();
+  }
+
+  if (recovery_state.is_peered() &&
+      !recovery_state.is_clean() &&
+      !recovery_state.get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
+      (!recovery_state.get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) ||
+       recovery_state.is_degraded())) {
+    queue_recovery();
+  }
+}
 void PG::do_replica_scrub_map(OpRequestRef op)
 {
   const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());

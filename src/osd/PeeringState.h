@@ -119,6 +119,10 @@ public:
     virtual void on_activate() = 0;
     virtual void on_new_interval() = 0;
 
+
+    // active map notifications
+    virtual void on_active_actmap() = 0;
+    virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
 
@@ -1329,6 +1333,13 @@ public:
     last_persisted_osdmap = 0;
   }
 
+  template <typename Func>
+  void adjust_purged_snaps(Func f) {
+    f(info.purged_snaps);
+    dirty_info = true;
+    dirty_big_info = true;
+  }
+
   bool is_deleting() const {
     return deleting;
   }
@@ -1424,6 +1435,14 @@ public:
 
   bool is_backfill_reserving() const {
     return backfill_reserving;
+  }
+
+  unsigned get_last_require_osd_release() const {
+    return last_require_osd_release;
+  }
+
+  const pg_info_t &get_info() const {
+    return info;
   }
 
   // Flush control interface
