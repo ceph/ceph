@@ -34,11 +34,12 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "mon_subscribe_ack"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(interval, p);
     decode(fsid, p);
