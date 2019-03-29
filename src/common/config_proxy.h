@@ -138,7 +138,7 @@ public:
 				       std::forward<Callback>(cb),
 				       std::forward<Args>(args)...);
   }
-  void config_options(Formatter *f) const {
+  void config_options(ceph::Formatter *f) const {
     config.config_options(f);
   }
   const decltype(md_config_t::schema)& get_schema() const {
@@ -152,10 +152,10 @@ public:
       return &found->second;
     }
   }
-  const Option *find_option(const string& name) const {
+  const Option *find_option(const std::string& name) const {
     return config.find_option(name);
   }
-  void diff(Formatter *f, const std::string& name=string{}) const {
+  void diff(ceph::Formatter *f, const std::string& name = {}) const {
     std::lock_guard l{lock};
     return config.diff(values, f, name);
   }
@@ -228,11 +228,11 @@ public:
     std::lock_guard l{lock};
     config.show_config(values, out);
   }
-  void show_config(Formatter *f) {
+  void show_config(ceph::Formatter *f) {
     std::lock_guard l{lock};
     config.show_config(values, f);
   }
-  void config_options(Formatter *f) {
+  void config_options(ceph::Formatter *f) {
     std::lock_guard l{lock};
     config.config_options(f);
   }
@@ -330,12 +330,12 @@ public:
     config.do_argv_commands(values);
   }
   void get_config_bl(uint64_t have_version,
-		     bufferlist *bl,
+		     ceph::buffer::list *bl,
 		     uint64_t *got_version) {
     std::lock_guard l{lock};
     config.get_config_bl(values, have_version, bl, got_version);
   }
-  void get_defaults_bl(bufferlist *bl) {
+  void get_defaults_bl(ceph::buffer::list *bl) {
     std::lock_guard l{lock};
     config.get_defaults_bl(values, bl);
   }
