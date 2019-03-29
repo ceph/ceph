@@ -397,6 +397,9 @@ int AsioFrontend::init()
     }
     listeners.emplace_back(context);
     listeners.back().endpoint.port(port);
+
+    listeners.emplace_back(context);
+    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
   }
 
   auto endpoints = config.equal_range("endpoint");
@@ -417,13 +420,31 @@ int AsioFrontend::init()
     }
   }
   
+
+  bool socket_bound = false;
   // start listeners
   for (auto& l : listeners) {
     l.acceptor.open(l.endpoint.protocol(), ec);
     if (ec) {
+      if (ec == boost::asio::error::address_family_not_supported) {
+	ldout(ctx(), 0) << "WARNING: cannot open socket for endpoint=" << l.endpoint
+			<< ", " << ec.message() << dendl;
+	continue;
+      }
+
       lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
       return -ec.value();
     }
+
+    if (l.endpoint.protocol() == tcp::v6()) {
+      l.acceptor.set_option(boost::asio::ip::v6_only(true), ec);
+      if (ec) {
+        lderr(ctx()) << "failed to set v6_only socket option: "
+		     << ec.message() << dendl;
+	return -ec.value();
+      }
+    }
+
     l.acceptor.set_option(tcp::acceptor::reuse_address(true));
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
@@ -431,6 +452,7 @@ int AsioFrontend::init()
           << ": " << ec.message() << dendl;
       return -ec.value();
     }
+
     l.acceptor.listen(boost::asio::socket_base::max_connections);
     l.acceptor.async_accept(l.socket,
                             [this, &l] (boost::system::error_code ec) {
@@ -438,7 +460,13 @@ int AsioFrontend::init()
                             });
 
     ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
+    socket_bound = true;
   }
+  if (!socket_bound) {
+    lderr(ctx()) << "Unable to listen at any endpoints" << dendl;
+    return -EINVAL;
+  }
+
   return drop_privileges(ctx());
 }
 
@@ -502,6 +530,10 @@ int AsioFrontend::init_ssl()
     }
     listeners.emplace_back(context);
     listeners.back().endpoint.port(port);
+    listeners.back().use_ssl = true;
+
+    listeners.emplace_back(context);
+    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
     listeners.back().use_ssl = true;
   }
 
