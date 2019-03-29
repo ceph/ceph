@@ -351,8 +351,7 @@ describe('IscsiTargetFormComponent', () => {
       expect(req.request.body).toEqual({
         clients: [
           {
-            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
-            cdIsInGroup: false,
+            auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
             client_iqn: 'iqn.initiator',
             luns: []
           }
@@ -380,8 +379,7 @@ describe('IscsiTargetFormComponent', () => {
       expect(req.request.body).toEqual({
         clients: [
           {
-            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
-            cdIsInGroup: false,
+            auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
             client_iqn: 'iqn.initiator',
             luns: []
           }
