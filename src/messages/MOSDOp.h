@@ -16,10 +16,11 @@
 #ifndef CEPH_MOSDOP_H
 #define CEPH_MOSDOP_H
 
+#include <atomic>
+
 #include "MOSDFastDispatchOp.h"
 #include "include/ceph_features.h"
 #include "common/hobject.h"
-#include <atomic>
 
 /*
  * OSD op
@@ -47,18 +48,18 @@ private:
 
   hobject_t hobj;
   spg_t pgid;
-  bufferlist::const_iterator p;
+  ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   // Transition from true -> false without locks being held
   // Can never see final_decode_needed == false and partial_decode_needed == true
-  atomic<bool> partial_decode_needed;
-  atomic<bool> final_decode_needed;
+  std::atomic<bool> partial_decode_needed;
+  std::atomic<bool> final_decode_needed;
   //
 public:
-  vector<OSDOp> ops;
+  std::vector<OSDOp> ops;
 private:
   snapid_t snap_seq;
-  vector<snapid_t> snaps;
+  std::vector<snapid_t> snaps;
 
   uint64_t features;
   bool bdata_encode;
@@ -71,7 +72,7 @@ public:
   void set_snapid(const snapid_t& s) {
     hobj.snap = s;
   }
-  void set_snaps(const vector<snapid_t>& i) {
+  void set_snaps(const std::vector<snapid_t>& i) {
     snaps = i;
   }
   void set_snap_seq(const snapid_t& s) { snap_seq = s; }
@@ -147,7 +148,7 @@ public:
     ceph_assert(!final_decode_needed);
     return snap_seq;
   }
-  const vector<snapid_t> &get_snaps() const {
+  const std::vector<snapid_t> &get_snaps() const {
     ceph_assert(!final_decode_needed);
     return snaps;
   }
@@ -208,12 +209,12 @@ public:
     osd_op.op.extent.length = len;
     ops.push_back(osd_op);
   }
-  void write(uint64_t off, uint64_t len, bufferlist& bl) {
+  void write(uint64_t off, uint64_t len, ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITE, off, len);
     data.claim(bl);
     header.data_off = off;
   }
-  void writefull(bufferlist& bl) {
+  void writefull(ceph::buffer::list& bl) {
     add_simple_op(CEPH_OSD_OP_WRITEFULL, 0, bl.length());
     data.claim(bl);
     header.data_off = 0;
@@ -303,8 +304,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < ops.size(); i++)
 	encode(ops[i].op, payload);
 
-      encode_nohead(hobj.oid.name, payload);
-      encode_nohead(snaps, payload);
+      ceph::encode_nohead(hobj.oid.name, payload);
+      ceph::encode_nohead(snaps, payload);
     } else if ((features & CEPH_FEATURE_NEW_OSDOP_ENCODING) == 0) {
       header.version = 6;
       encode(client_inc, payload);
@@ -393,6 +394,7 @@ struct ceph_osd_request_head {
   }
 
   void decode_payload() override {
+    using ceph::decode;
     ceph_assert(partial_decode_needed && final_decode_needed);
     p = std::cbegin(payload);
 
@@ -419,7 +421,7 @@ struct ceph_osd_request_head {
       decode(client_inc, p);
 
       old_pg_t opgid;
-      ::decode_raw(opgid, p);
+      ceph::decode_raw(opgid, p);
       pgid.pgid = opgid;
 
       __u32 su;
@@ -445,8 +447,8 @@ struct ceph_osd_request_head {
       for (unsigned i = 0; i < num_ops; i++)
 	decode(ops[i].op, p);
 
-      decode_nohead(oid_len, hobj.oid.name, p);
-      decode_nohead(num_snaps, snaps, p);
+      ceph::decode_nohead(oid_len, hobj.oid.name, p);
+      ceph::decode_nohead(num_snaps, snaps, p);
 
       // recalculate pgid hash value
       pgid.pgid.set_ps(ceph_str_hash(CEPH_STR_HASH_RJENKINS,
@@ -478,7 +480,7 @@ struct ceph_osd_request_head {
 
       if (header.version < 3) {
 	old_pg_t opgid;
-	::decode_raw(opgid, p);
+	ceph::decode_raw(opgid, p);
 	pgid.pgid = opgid;
       } else {
 	decode(pgid.pgid, p);
@@ -531,6 +533,7 @@ struct ceph_osd_request_head {
   }
 
   bool finish_decode() {
+    using ceph::decode;
     ceph_assert(!partial_decode_needed); // partial decoding required
     if (!final_decode_needed)
       return false; // Message is already final decoded
@@ -572,7 +575,7 @@ struct ceph_osd_request_head {
   }
 
   std::string_view get_type_name() const override { return "osd_op"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_op(";
     if (!partial_decode_needed) {
       out << get_reqid() << ' ';
