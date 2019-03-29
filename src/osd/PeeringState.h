@@ -113,16 +113,24 @@ public:
     virtual void check_blacklisted_watchers() = 0;
     virtual void clear_primary_state() = 0;
 
+    // Event notification
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
     virtual void on_activate() = 0;
     virtual void on_new_interval() = 0;
 
+    virtual void on_active_exit() = 0;
 
     // active map notifications
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
+
+    // recovery reservation notifications
+    virtual void on_backfill_reserved() = 0;
+    virtual void on_backfill_canceled() = 0;
+    virtual void on_recovery_reserved() = 0;
+
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
 

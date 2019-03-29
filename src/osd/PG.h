@@ -448,9 +448,14 @@ public:
     PGPeeringEventRef on_preempt) override;
   void cancel_remote_recovery_reservation() override;
 
+  void on_active_exit() override;
 
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
+
+  void on_backfill_reserved() override;
+  void on_backfill_canceled() override;
+  void on_recovery_reserved() override;
 
   bool is_forced_recovery_or_backfill() const {
     return recovery_state.is_forced_recovery_or_backfill();
