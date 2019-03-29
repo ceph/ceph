@@ -26,7 +26,7 @@ struct PGCreateInfo {
 class PGPeeringEvent {
   epoch_t epoch_sent;
   epoch_t epoch_requested;
-  string desc;
+  std::string desc;
 public:
   boost::intrusive_ptr< const boost::statechart::event_base > evt;
   bool requires_pg;
@@ -44,7 +44,7 @@ public:
       evt(evt_.intrusive_from_this()),
       requires_pg(req),
       create_info(ci) {
-    stringstream out;
+    std::stringstream out;
     out << "epoch_sent: " << epoch_sent
 	<< " epoch_requested: " << epoch_requested << " ";
     evt_.print(&out);
@@ -62,7 +62,7 @@ public:
   const boost::statechart::event_base &get_event() {
     return *evt;
   }
-  const string& get_desc() {
+  const std::string& get_desc() {
     return desc;
   }
 };
@@ -100,7 +100,7 @@ struct MNotifyRec : boost::statechart::event< MNotifyRec > {
     : pgid(p), from(from), notify(notify), features(f), past_intervals(pi) {}
   void print(std::ostream *out) const {
     *out << "MNotifyRec " << pgid << " from " << from << " notify: " << notify
-	 << " features: 0x" << hex << features << dec
+	 << " features: 0x" << std::hex << features << std::dec
 	 << " " << past_intervals;
   }
 };
