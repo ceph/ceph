@@ -85,7 +85,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }
-  void inner_print(ostream& out) const override {
+  void inner_print(std::ostream& out) const override {
     // NOTE: log is not const, but operator<< doesn't touch fields
     // swapped out by OSD code.
     out << "log " << log
@@ -109,6 +109,7 @@ public:
     encode(from, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(info, p);
