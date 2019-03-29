@@ -449,6 +449,9 @@ public:
   void cancel_remote_recovery_reservation() override;
 
 
+  void on_active_actmap() override;
+  void on_active_advmap(const OSDMapRef &osdmap) override;
+
   bool is_forced_recovery_or_backfill() const {
     return recovery_state.is_forced_recovery_or_backfill();
   }
