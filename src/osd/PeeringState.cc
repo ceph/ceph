@@ -1436,7 +1436,7 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
 
   DECLARE_LOCALS
   ps->backfill_reserved = true;
-  pg->queue_recovery();
+  pl->on_backfill_reserved();
   ps->state_clear(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
   ps->state_set(PG_STATE_BACKFILLING);
@@ -1465,10 +1465,7 @@ void PeeringState::Backfilling::cancel_backfill()
 {
   DECLARE_LOCALS
   backfill_release_reservations();
-  if (!pg->waiting_on_backfill.empty()) {
-    pg->waiting_on_backfill.clear();
-    pg->finish_recovery_op(hobject_t::get_max());
-  }
+  pl->on_backfill_canceled();
 }
 
 boost::statechart::result
@@ -1546,7 +1543,6 @@ void PeeringState::Backfilling::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS
   ps->backfill_reserved = false;
-  pg->backfill_reserving = false;
   ps->state_clear(PG_STATE_BACKFILLING);
   ps->state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
   utime_t dur = ceph_clock_now() - enter_time;
@@ -2175,9 +2171,9 @@ PeeringState::Recovering::Recovering(my_context ctx)
   ps->state_clear(PG_STATE_RECOVERY_WAIT);
   ps->state_clear(PG_STATE_RECOVERY_TOOFULL);
   ps->state_set(PG_STATE_RECOVERING);
+  pl->on_recovery_reserved();
   ceph_assert(!ps->state_test(PG_STATE_ACTIVATING));
   pl->publish_stats_to_osd();
-  pg->queue_recovery();
 }
 
 void PeeringState::Recovering::release_reservations(bool cancel)
@@ -2668,7 +2664,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
     pg->waiting_for_flush.swap(pg->waiting_for_peered);
   }
 
-  pg->on_activate();
+  pl->on_activate();
 
   return discard_event();
 }
@@ -2683,7 +2679,6 @@ void PeeringState::Active::exit()
 
   ps->blocked_by.clear();
   ps->backfill_reserved = false;
-  pg->backfill_reserving = false;
   ps->state_clear(PG_STATE_ACTIVATING);
   ps->state_clear(PG_STATE_DEGRADED);
   ps->state_clear(PG_STATE_UNDERSIZED);
@@ -2693,7 +2688,7 @@ void PeeringState::Active::exit()
   ps->state_clear(PG_STATE_RECOVERY_TOOFULL);
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_active_latency, dur);
-  pg->agent_stop();
+  pl->on_active_exit();
 }
 
 /*------ReplicaActive-----*/

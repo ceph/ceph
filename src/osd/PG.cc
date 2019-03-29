@@ -3865,6 +3865,12 @@ void PG::cancel_remote_recovery_reservation() {
     pg_id);
 }
 
+void PG::on_active_exit()
+{
+  backfill_reserving = false;
+  agent_stop();
+}
+
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
   if (osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
@@ -3967,6 +3973,27 @@ void PG::on_active_actmap()
     queue_recovery();
   }
 }
+
+void PG::on_backfill_reserved()
+{
+  backfill_reserving = false;
+  queue_recovery();
+}
+
+void PG::on_backfill_canceled()
+{
+  if (!waiting_on_backfill.empty()) {
+    waiting_on_backfill.clear();
+    finish_recovery_op(hobject_t::get_max());
+  }
+}
+
+void PG::on_recovery_reserved()
+{
+  queue_recovery();
+}
+
+
 void PG::do_replica_scrub_map(OpRequestRef op)
 {
   const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());
