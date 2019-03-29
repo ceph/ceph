@@ -1091,7 +1091,7 @@ int PrimaryLogPG::do_command(
       return 0;  // make command idempotent
     }
 
-    if (!all_unfound_are_queried_or_lost(get_osdmap())) {
+    if (!recovery_state.all_unfound_are_queried_or_lost(get_osdmap())) {
       ss << "pg has " << unfound
 	 << " unfound objects but we haven't probed all sources, not marking lost";
       return -EINVAL;
@@ -12431,7 +12431,8 @@ bool PrimaryLogPG::start_recovery_ops(
   }
 
   if (!missing.have_missing() || // Primary does not have missing
-      all_missing_unfound()) { // or all of the missing objects are unfound.
+      // or all of the missing objects are unfound.
+      recovery_state.all_missing_unfound()) {
     // Recover the replicas.
     started = recover_replicas(max, handle, &recovery_started);
   }
