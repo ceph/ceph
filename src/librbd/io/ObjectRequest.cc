@@ -266,38 +266,42 @@ template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
 
-  uint64_t object_overlap = 0;
+  image_ctx->snap_lock.get_read();
+  image_ctx->parent_lock.get_read();
+
+  // calculate reverse mapping onto the image
   Extents parent_extents;
-  {
-    RWLock::RLocker snap_locker(image_ctx->snap_lock);
-    RWLock::RLocker parent_locker(image_ctx->parent_lock);
+  Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
+                          this->m_object_no, this->m_object_off,
+                          this->m_object_len, parent_extents);
 
-    // calculate reverse mapping onto the image
-    Striper::extent_to_file(image_ctx->cct, &image_ctx->layout,
-                            this->m_object_no, this->m_object_off,
-                            this->m_object_len, parent_extents);
-
-    uint64_t parent_overlap = 0;
-    int r = image_ctx->get_parent_overlap(this->m_snap_id, &parent_overlap);
-    if (r == 0) {
-      object_overlap = image_ctx->prune_parent_extents(parent_extents,
-                                                       parent_overlap);
-    }
+  uint64_t parent_overlap = 0;
+  uint64_t object_overlap = 0;
+  int r = image_ctx->get_parent_overlap(this->m_snap_id, &parent_overlap);
+  if (r == 0) {
+    object_overlap = image_ctx->prune_parent_extents(parent_extents,
+                                                     parent_overlap);
   }
 
   if (object_overlap == 0) {
+    image_ctx->parent_lock.put_read();
+    image_ctx->snap_lock.put_read();
+
     this->finish(-ENOENT);
     return;
   }
 
   ldout(image_ctx->cct, 20) << dendl;
 
-  AioCompletion *parent_completion = AioCompletion::create_and_start<
+  auto parent_completion = AioCompletion::create_and_start<
     ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_parent>(
       this, util::get_image_ctx(image_ctx->parent), AIO_TYPE_READ);
   ImageRequest<I>::aio_read(image_ctx->parent, parent_completion,
                             std::move(parent_extents), ReadResult{m_read_data},
                             0, this->m_trace);
+
+  image_ctx->parent_lock.put_read();
+  image_ctx->snap_lock.put_read();
 }
 
 template <typename I>
@@ -384,6 +388,12 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
   }
 
   compute_parent_info();
+
+  ictx->snap_lock.get_read();
+  if (!ictx->migration_info.empty()) {
+    m_guarding_migration_write = true;
+  }
+  ictx->snap_lock.put_read();
 }
 
 template <typename I>
@@ -498,8 +508,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
   librados::ObjectWriteOperation write;
   if (m_copyup_enabled) {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
-    if (!image_ctx->migration_info.empty()) {
-      m_guarding_migration_write = true;
+    if (m_guarding_migration_write) {
       cls_client::assert_snapc_seq(
         &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
@@ -533,11 +542,14 @@ void AbstractObjectWriteRequest<I>::handle_write_object(int r) {
       return;
     }
   } else if (r == -ERANGE && m_guarding_migration_write) {
-    if (!image_ctx->migration_info.empty()) {
+    image_ctx->snap_lock.get_read();
+    m_guarding_migration_write = !image_ctx->migration_info.empty();
+    image_ctx->snap_lock.put_read();
+
+    if (m_guarding_migration_write) {
       copyup();
     } else {
       ldout(image_ctx->cct, 10) << "migration parent gone, restart io" << dendl;
-      m_guarding_migration_write = false;
       compute_parent_info();
       write_object();
     }
