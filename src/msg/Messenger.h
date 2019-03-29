@@ -416,6 +416,8 @@ public:
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
 
+  virtual int bindv(const entity_addrvec_t& addrs);
+
   /**
    * This function performs a full restart of the Messenger component,
    * whatever that means.  Other entities who connect to this
@@ -432,10 +434,15 @@ public:
    * is true.
    * @param bind_addr The address to bind to.
    * @return 0 on success, or -1 on error, or -errno if
+   * we can be more specific about the failure.
    */
   virtual int client_bind(const entity_addr_t& bind_addr) = 0;
 
-  virtual int bindv(const entity_addrvec_t& addrs);
+  /**
+   * reset the 'client' Messenger. Mark all the existing Connections down
+   * and update 'nonce'.
+   */
+  virtual int client_reset() = 0;
 
 
   virtual bool should_use_msgr2() {
