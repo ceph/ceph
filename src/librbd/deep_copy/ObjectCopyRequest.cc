@@ -59,7 +59,6 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
   ldout(m_cct, 20) << "dst_oid=" << m_dst_oid << dendl;
 
   compute_src_object_extents();
-  compute_dst_object_may_exist();
 }
 
 template <typename I>
@@ -280,6 +279,7 @@ void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
     merge_write_ops();
   }
 
+  compute_dst_object_may_exist();
   compute_zero_ops();
 
   if (m_write_ops.empty()) {
