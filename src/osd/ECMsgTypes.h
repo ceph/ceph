@@ -31,8 +31,8 @@ struct ECSubWrite {
   eversion_t trim_to;
   eversion_t roll_forward_to;
   vector<pg_log_entry_t> log_entries;
-  set<hobject_t> temp_added;
-  set<hobject_t> temp_removed;
+  std::set<hobject_t> temp_added;
+  std::set<hobject_t> temp_removed;
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
   bool backfill_or_async_recovery = false;
   ECSubWrite() : tid(0) {}
@@ -48,8 +48,8 @@ struct ECSubWrite {
     eversion_t roll_forward_to,
     vector<pg_log_entry_t> log_entries,
     boost::optional<pg_hit_set_history_t> updated_hit_set_history,
-    const set<hobject_t> &temp_added,
-    const set<hobject_t> &temp_removed,
+    const std::set<hobject_t> &temp_added,
+    const std::set<hobject_t> &temp_removed,
     bool backfill_or_async_recovery)
     : from(from), tid(tid), reqid(reqid),
       soid(soid), stats(stats), t(t),
@@ -77,10 +77,10 @@ struct ECSubWrite {
     updated_hit_set_history = other.updated_hit_set_history;
     backfill_or_async_recovery = other.backfill_or_async_recovery;
   }
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ECSubWrite*>& o);
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ECSubWrite*>& o);
 private:
   // no outside copying -- slow
   ECSubWrite(ECSubWrite& other);
@@ -95,36 +95,36 @@ struct ECSubWriteReply {
   bool committed;
   bool applied;
   ECSubWriteReply() : tid(0), committed(false), applied(false) {}
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ECSubWriteReply*>& o);
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ECSubWriteReply*>& o);
 };
 WRITE_CLASS_ENCODER(ECSubWriteReply)
 
 struct ECSubRead {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
-  set<hobject_t> attrs_to_read;
-  map<hobject_t, vector<pair<int, int>>> subchunks;
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ECSubRead*>& o);
+  std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >> to_read;
+  std::set<hobject_t> attrs_to_read;
+  std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ECSubRead*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 
 struct ECSubReadReply {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<pair<uint64_t, bufferlist> >> buffers_read;
-  map<hobject_t, map<string, bufferlist>> attrs_read;
-  map<hobject_t, int> errors;
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ECSubReadReply*>& o);
+  std::map<hobject_t, std::list<std::pair<uint64_t, ceph::buffer::list> >> buffers_read;
+  std::map<hobject_t, std::map<string, ceph::buffer::list>> attrs_read;
+  std::map<hobject_t, int> errors;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ECSubReadReply*>& o);
 };
 WRITE_CLASS_ENCODER(ECSubReadReply)
 
