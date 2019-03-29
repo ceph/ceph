@@ -65,7 +65,7 @@ public:
     DENC_FINISH(p);
   }
 
-  friend ostream& operator<<(ostream& out, const DaemonHealthMetric& m) {
+  friend std::ostream& operator<<(std::ostream& out, const DaemonHealthMetric& m) {
     return out << daemon_metric_name(m.get_type()) << "("
 	       << m.get_n() << "|(" << m.get_n1() << "," << m.get_n2() << "))";
   }
