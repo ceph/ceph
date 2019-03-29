@@ -25,11 +25,11 @@ public:
   friend factory;
 
   uuid_d fsid;
-  map<pg_t, pg_stat_t> pg_stat;
+  std::map<pg_t, pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
-  map<int64_t, store_statfs_t> pool_stat;
+  std::map<int64_t, store_statfs_t> pool_stat;
   epoch_t epoch = 0;
-  
+
   MPGStats() : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MPGStats(const uuid_d& f, epoch_t e)
     : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION),
@@ -42,7 +42,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "pg_stats"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }
 
@@ -57,6 +57,7 @@ public:
     encode(pool_stat, payload, features);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
