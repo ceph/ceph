@@ -980,16 +980,6 @@ float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
   return ((float)new_stat.statfs.get_used()) / ((float)new_stat.statfs.total);
 }
 
-bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
-{
-  OSDMapRef osdmap = get_osdmap();
-  for (auto shard : missing_on) {
-    if (osdmap->get_state(shard.osd) & CEPH_OSD_FULL)
-      return true;
-  }
-  return false;
-}
-
 void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch)
 {
   OSDMapRef next_map = get_nextmap_reserved();
