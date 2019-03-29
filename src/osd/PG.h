@@ -964,10 +964,14 @@ protected:
   friend class TestOpsSocketHook;
   void publish_stats_to_osd() override;
 
-  bool needs_recovery() const;
-  bool needs_backfill() const;
-
   void try_mark_clean();  ///< mark an active pg clean
+
+  bool needs_recovery() const {
+    return recovery_state.needs_recovery();
+  }
+  bool needs_backfill() const {
+    return recovery_state.needs_backfill();
+  }
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
   virtual void dump_recovery_info(Formatter *f) const = 0;
@@ -1112,16 +1116,6 @@ protected:
   }
   uint64_t get_num_unfound() const {
     return missing_loc.num_unfound();
-  }
-  bool all_missing_unfound() const {
-    const auto& missing = pg_log.get_missing();
-    if (!missing.have_missing())
-      return false;
-    for (auto& m : missing.get_items()) {
-      if (!missing_loc.is_unfound(m.first))
-        return false;
-    }
-    return true;
   }
 
   virtual void check_local() = 0;

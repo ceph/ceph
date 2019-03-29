@@ -999,6 +999,95 @@ PastIntervals::PriorSet PeeringState::build_prior()
   return prior;
 }
 
+bool PeeringState::needs_recovery() const
+{
+  ceph_assert(is_primary());
+
+  auto &missing = pg_log.get_missing();
+
+  if (missing.num_missing()) {
+    dout(10) << __func__ << " primary has " << missing.num_missing()
+      << " missing" << dendl;
+    return true;
+  }
+
+  ceph_assert(!acting_recovery_backfill.empty());
+  set<pg_shard_t>::const_iterator end = acting_recovery_backfill.end();
+  set<pg_shard_t>::const_iterator a = acting_recovery_backfill.begin();
+  for (; a != end; ++a) {
+    if (*a == get_primary()) continue;
+    pg_shard_t peer = *a;
+    map<pg_shard_t, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
+    if (pm == peer_missing.end()) {
+      psdout(10) << __func__ << " osd." << peer << " doesn't have missing set"
+		 << dendl;
+      continue;
+    }
+    if (pm->second.num_missing()) {
+      psdout(10) << __func__ << " osd." << peer << " has "
+		 << pm->second.num_missing() << " missing" << dendl;
+      return true;
+    }
+  }
+
+  psdout(10) << __func__ << " is recovered" << dendl;
+  return false;
+}
+
+bool PeeringState::needs_backfill() const
+{
+  ceph_assert(is_primary());
+
+  // We can assume that only possible osds that need backfill
+  // are on the backfill_targets vector nodes.
+  set<pg_shard_t>::const_iterator end = backfill_targets.end();
+  set<pg_shard_t>::const_iterator a = backfill_targets.begin();
+  for (; a != end; ++a) {
+    pg_shard_t peer = *a;
+    map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
+    if (!pi->second.last_backfill.is_max()) {
+      psdout(10) << __func__ << " osd." << peer
+		 << " has last_backfill " << pi->second.last_backfill << dendl;
+      return true;
+    }
+  }
+
+  dout(10) << __func__ << " does not need backfill" << dendl;
+  return false;
+}
+
+/*
+ * Returns true unless there is a non-lost OSD in might_have_unfound.
+ */
+bool PeeringState::all_unfound_are_queried_or_lost(
+  const OSDMapRef osdmap) const
+{
+  ceph_assert(is_primary());
+
+  set<pg_shard_t>::const_iterator peer = might_have_unfound.begin();
+  set<pg_shard_t>::const_iterator mend = might_have_unfound.end();
+  for (; peer != mend; ++peer) {
+    if (peer_missing.count(*peer))
+      continue;
+    map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(*peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne()))
+      continue;
+    if (!osdmap->exists(peer->osd))
+      continue;
+    const osd_info_t &osd_info(osdmap->get_info(peer->osd));
+    if (osd_info.lost_at <= osd_info.up_from) {
+      // If there is even one OSD in might_have_unfound that isn't lost, we
+      // still might retrieve our unfound.
+      return false;
+    }
+  }
+  psdout(10) << "all_unfound_are_queried_or_lost all of might_have_unfound "
+	     << might_have_unfound
+	     << " have been queried or are marked lost" << dendl;
+  return true;
+}
+
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -1530,7 +1619,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevoked &)
   DECLARE_LOCALS
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   cancel_backfill();
-  if (pg->needs_backfill()) {
+  if (ps->needs_backfill()) {
     return transit<WaitLocalBackfillReserved>();
   } else {
     // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
@@ -2276,7 +2365,7 @@ PeeringState::Recovered::Recovered(my_context ctx)
 
   DECLARE_LOCALS
 
-  ceph_assert(!pg->needs_recovery());
+  ceph_assert(!ps->needs_recovery());
 
   // if we finished backfill, all acting are active; recheck if
   // DEGRADED | UNDERSIZED is appropriate.
@@ -2472,7 +2561,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
 
   uint64_t unfound = ps->missing_loc.num_unfound();
   if (unfound > 0 &&
-      pg->all_unfound_are_queried_or_lost(ps->get_osdmap())) {
+      ps->all_unfound_are_queried_or_lost(ps->get_osdmap())) {
     if (ps->cct->_conf->osd_auto_mark_unfound_lost) {
       pl->get_clog().error() << context< PeeringMachine >().spgid.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically "
