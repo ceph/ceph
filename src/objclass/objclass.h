@@ -73,29 +73,28 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
-
 class PGLSFilter {
   CephContext* cct;
 protected:
-  string xattr;
+  std::string xattr;
 public:
   PGLSFilter();
   virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) = 0;
+  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data,
+                      ceph::buffer::list& outdata) = 0;
 
   /**
    * Arguments passed from the RADOS client.  Implementations must
    * handle any encoding errors, and return an appropriate error code,
    * or 0 on valid input.
    */
-  virtual int init(bufferlist::const_iterator &params) = 0;
+  virtual int init(ceph::buffer::list::const_iterator &params) = 0;
 
   /**
    * xattr key, or empty string.  If non-empty, this xattr will be fetched
    * and the value passed into ::filter
    */
-   virtual string& get_xattr() { return xattr; }
+  virtual std::string& get_xattr() { return xattr; }
 
   /**
    * If true, objects without the named xattr (if xattr name is not empty)
@@ -115,34 +114,36 @@ extern int cls_register_cxx_filter(cls_handle_t hclass,
 
 extern int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mtime);
 extern int cls_cxx_read2(cls_method_context_t hctx, int ofs, int len,
-                         bufferlist *bl, uint32_t op_flags);
+                         ceph::buffer::list *bl, uint32_t op_flags);
 extern int cls_cxx_write2(cls_method_context_t hctx, int ofs, int len,
-                          bufferlist *bl, uint32_t op_flags);
-extern int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *bl);
-extern int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrset);
-extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *bl);
+                          ceph::buffer::list *bl, uint32_t op_flags);
+extern int cls_cxx_write_full(cls_method_context_t hctx, ceph::buffer::list *bl);
+extern int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<std::string,
+			     ceph::buffer::list> *attrset);
+extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
+			   ceph::buffer::list *bl);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
-                                    std::map<string, bufferlist> *vals,
+                                    std::map<std::string, ceph::buffer::list> *vals,
                                     bool *more);
 extern int cls_cxx_map_get_keys(cls_method_context_t hctx,
-                                const string &start_after,
+                                const std::string &start_after,
                                 uint64_t max_to_get,
-                                std::set<string> *keys,
+                                std::set<std::string> *keys,
                                 bool *more);
 extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
-                                const string &start_after,
-                                const string &filter_prefix,
+                                const std::string& start_after,
+                                const std::string& filter_prefix,
                                 uint64_t max_to_get,
-                                std::map<string, bufferlist> *vals,
+                                std::map<std::string, ceph::buffer::list> *vals,
                                 bool *more);
-extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
+extern int cls_cxx_map_read_header(cls_method_context_t hctx, ceph::buffer::list *outbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
-                                const std::map<string, bufferlist> *map);
-extern int cls_cxx_map_write_header(cls_method_context_t hctx, bufferlist *inbl);
-extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const string &key);
-extern int cls_cxx_map_update(cls_method_context_t hctx, bufferlist *inbl);
+                                const std::map<std::string, ceph::buffer::list> *map);
+extern int cls_cxx_map_write_header(cls_method_context_t hctx, ceph::buffer::list *inbl);
+extern int cls_cxx_map_remove_key(cls_method_context_t hctx, const std::string &key);
+extern int cls_cxx_map_update(cls_method_context_t hctx, ceph::buffer::list *inbl);
 
 extern int cls_cxx_list_watchers(cls_method_context_t hctx,
 				 obj_list_watch_response_t *watchers);
@@ -159,7 +160,7 @@ extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 extern int8_t cls_get_required_osd_release(cls_method_context_t hctx);
 
 /* helpers */
-extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);
+extern void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s);
 
 extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 
@@ -170,9 +171,9 @@ extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 #define CEPH_OSD_TMAP_RM 'r'
 
 int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
-                   bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
+                   ceph::buffer::list *write_inbl, uint32_t op_flags, ceph::buffer::list *set_inbl,
 		   int set_len);
-bool cls_has_chunk(cls_method_context_t hctx, string fp_oid);
+bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
 
 #endif
 
