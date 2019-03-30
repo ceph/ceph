@@ -3046,10 +3046,8 @@ PeeringState::Clean::Clean(my_context ctx)
   if (ps->info.last_complete != ps->info.last_update) {
     ceph_abort();
   }
-  Context *c = pg->finish_recovery();
-  context< PeeringMachine >().get_cur_transaction()->register_on_commit(c);
-
-  pg->try_mark_clean();
+  context< PeeringMachine >().get_cur_transaction()->register_on_commit(
+    pl->on_clean());
 }
 
 void PeeringState::Clean::exit()

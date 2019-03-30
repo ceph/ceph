@@ -119,6 +119,7 @@ public:
     virtual void on_change(ObjectStore::Transaction *t) = 0;
     virtual void on_activate() = 0;
     virtual void on_new_interval() = 0;
+    virtual Context *on_clean() = 0;
 
     virtual void on_active_exit() = 0;
 
