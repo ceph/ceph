@@ -458,6 +458,15 @@ public:
     try_mark_clean();
     return finish_recovery();
   }
+
+  void on_activate(interval_set<snapid_t> snaps) override {
+    ceph_assert(scrubber.callbacks.empty());
+    ceph_assert(callbacks_for_degraded_object.empty());
+    snap_trimq = snaps;
+    release_pg_backoffs();
+    projected_last_update = info.last_update;
+  }
+
   void on_activate_committed() override;
 
   void on_active_actmap() override;
