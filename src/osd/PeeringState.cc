@@ -3890,20 +3890,6 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   pg->share_pg_info();
   pl->publish_stats_to_osd();
 
-  pg->check_local();
-
-  // waiters
-  if (ps->flushes_in_progress == 0) {
-    pg->requeue_ops(pg->waiting_for_peered);
-  } else if (!pg->waiting_for_peered.empty()) {
-    psdout(10) << __func__ << " flushes in progress, moving "
-		       << pg->waiting_for_peered.size()
-		       << " items to waiting_for_flush"
-		       << dendl;
-    ceph_assert(pg->waiting_for_flush.empty());
-    pg->waiting_for_flush.swap(pg->waiting_for_peered);
-  }
-
   pl->on_activate_complete();
 
   return discard_event();

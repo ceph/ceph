@@ -12138,6 +12138,20 @@ void PrimaryLogPG::on_shutdown()
 
 void PrimaryLogPG::on_activate_complete()
 {
+  check_local();
+  // waiters
+  if (!recovery_state.needs_flush()) {
+    requeue_ops(waiting_for_peered);
+  } else if (!waiting_for_peered.empty()) {
+    dout(10) << __func__ << " flushes in progress, moving "
+	     << waiting_for_peered.size()
+	     << " items to waiting_for_flush"
+	     << dendl;
+    ceph_assert(waiting_for_flush.empty());
+    waiting_for_flush.swap(waiting_for_peered);
+  }
+
+
   // all clean?
   if (needs_recovery()) {
     dout(10) << "activate not all replicas are up-to-date, queueing recovery" << dendl;
