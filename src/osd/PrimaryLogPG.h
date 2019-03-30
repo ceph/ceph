@@ -1863,7 +1863,7 @@ public:
   void plpg_on_new_interval() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction *t) override;
-  void on_activate() override;
+  void on_activate_complete() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction *t) override;
   void on_shutdown() override;
