@@ -3788,7 +3788,8 @@ int CrushWrapper::_choose_type_stack(
   const vector<int>& orig,
   vector<int>::const_iterator& i,
   set<int>& used,
-  vector<int> *pw) const
+  vector<int> *pw,
+  int root_bucket) const
 {
   vector<int> w = *pw;
   vector<int> o;
@@ -3798,7 +3799,7 @@ int CrushWrapper::_choose_type_stack(
 		 << " at " << *i
 		 << " pw " << *pw
 		 << dendl;
-
+  ceph_assert(root_bucket < 0);
   vector<int> cumulative_fanout(stack.size());
   int f = 1;
   for (int j = (int)stack.size() - 1; j >= 0; --j) {
@@ -3826,6 +3827,10 @@ int CrushWrapper::_choose_type_stack(
       item = get_parent_of_type(item, type);
       ldout(cct, 10) << __func__ << " underfull " << osd << " type " << type
 		     << " is " << item << dendl;
+      if (!subtree_contains(root_bucket, item)) {
+        ldout(cct, 20) << __func__ << " not in root subtree " << root_bucket << dendl;
+        continue;
+      }
       underfull_buckets[j].insert(item);
     }
   }
@@ -3986,7 +3991,7 @@ int CrushWrapper::try_remap_rule(
   set<int> used;
 
   vector<pair<int,int>> type_stack;  // (type, fan-out)
-
+  int root_bucket = 0;
   for (unsigned step = 0; step < rule->len; ++step) {
     const crush_rule_step *curstep = &rule->steps[step];
     ldout(cct, 10) << __func__ << " step " << step << " w " << w << dendl;
@@ -3997,6 +4002,7 @@ int CrushWrapper::try_remap_rule(
 	   map->buckets[-1-curstep->arg1])) {
 	w.clear();
 	w.push_back(curstep->arg1);
+	root_bucket = curstep->arg1;
 	ldout(cct, 10) << __func__ << " take " << w << dendl;
       } else {
 	ldout(cct, 1) << " bad take value " << curstep->arg1 << dendl;
@@ -4014,7 +4020,7 @@ int CrushWrapper::try_remap_rule(
         if (type > 0)
 	  type_stack.push_back(make_pair(0, 1));
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
-				   i, used, &w);
+				   i, used, &w, root_bucket);
 	if (r < 0)
 	  return r;
 	type_stack.clear();
@@ -4036,7 +4042,7 @@ int CrushWrapper::try_remap_rule(
       ldout(cct, 10) << " emit " << w << dendl;
       if (!type_stack.empty()) {
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
-				   i, used, &w);
+				   i, used, &w, root_bucket);
 	if (r < 0)
 	  return r;
 	type_stack.clear();
