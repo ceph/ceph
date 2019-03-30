@@ -1797,8 +1797,6 @@ void PeeringState::activate(
   PeeringCtx *ctx)
 {
   ceph_assert(!is_peered());
-  // ceph_assert(scrubber.callbacks.empty()); TODOSAM
-  // ceph_assert(callbacks_for_degraded_object.empty()); TODOSAM
 
   // twiddle pg state
   state_clear(PG_STATE_DOWN);
@@ -1847,39 +1845,6 @@ void PeeringState::activate(
 	get_osdmap_epoch(),
 	activation_epoch)));
 
-  if (is_primary()) {
-    // initialize snap_trimq
-    if (get_osdmap()->require_osd_release < CEPH_RELEASE_MIMIC) {
-      psdout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " cached_removed_snaps " << pool.cached_removed_snaps
-		 << dendl;
-      pg->snap_trimq = pool.cached_removed_snaps;
-    } else {
-      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
-      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
-      pg->snap_trimq.clear();
-      if (p != removed_snaps_queue.end()) {
-	dout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " removed_snaps " << p->second
-		 << dendl;
-	for (auto q : p->second) {
-	  pg->snap_trimq.insert(q.first, q.second);
-	}
-      }
-    }
-    interval_set<snapid_t> purged;
-    purged.intersection_of(pg->snap_trimq, info.purged_snaps);
-    pg->snap_trimq.subtract(purged);
-
-    if (get_osdmap()->require_osd_release >= CEPH_RELEASE_MIMIC) {
-      // adjust purged_snaps: PG may have been inactive while snaps were pruned
-      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
-      // reflect only those snaps that we thought were pruned and were still in
-      // the queue.
-      info.purged_snaps.swap(purged);
-    }
-  }
-
   // init complete pointer
   if (missing.num_missing() == 0) {
     psdout(10) << "activate - no missing, moving last_complete " << info.last_complete
@@ -1895,8 +1860,38 @@ void PeeringState::activate(
 
   pg->log_weirdness();
 
-  // if primary..
   if (is_primary()) {
+    // initialize snap_trimq
+    interval_set<snapid_t> to_trim;
+    if (get_osdmap()->require_osd_release < CEPH_RELEASE_MIMIC) {
+      psdout(20) << "activate - purged_snaps " << info.purged_snaps
+		 << " cached_removed_snaps " << pool.cached_removed_snaps
+		 << dendl;
+      to_trim = pool.cached_removed_snaps;
+    } else {
+      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
+      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
+      if (p != removed_snaps_queue.end()) {
+	dout(20) << "activate - purged_snaps " << info.purged_snaps
+		 << " removed_snaps " << p->second
+		 << dendl;
+	for (auto q : p->second) {
+	  to_trim.insert(q.first, q.second);
+	}
+      }
+    }
+    interval_set<snapid_t> purged;
+    purged.intersection_of(to_trim, info.purged_snaps);
+    to_trim.subtract(purged);
+
+    if (get_osdmap()->require_osd_release >= CEPH_RELEASE_MIMIC) {
+      // adjust purged_snaps: PG may have been inactive while snaps were pruned
+      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
+      // reflect only those snaps that we thought were pruned and were still in
+      // the queue.
+      info.purged_snaps.swap(purged);
+    }
+
     ceph_assert(ctx);
     // start up replicas
 
@@ -2113,6 +2108,7 @@ void PeeringState::activate(
 
       // Always call now so _update_calc_stats() will be accurate
       pg->discover_all_missing(query_map);
+
     }
 
     // num_objects_degraded if calculated should reflect this too, unless no
@@ -2122,8 +2118,7 @@ void PeeringState::activate(
     }
 
     state_set(PG_STATE_ACTIVATING);
-    pg->release_pg_backoffs();
-    pg->projected_last_update = info.last_update;
+    pl->on_activate(std::move(to_trim));
   }
   if (acting.size() >= pool.info.min_size) {
     PG::PGLogEntryHandler handler{pg, &t};
@@ -3753,7 +3748,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
     pg->waiting_for_flush.swap(pg->waiting_for_peered);
   }
 
-  pl->on_activate();
+  pl->on_activate_complete();
 
   return discard_event();
 }

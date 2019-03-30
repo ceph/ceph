@@ -12136,7 +12136,7 @@ void PrimaryLogPG::on_shutdown()
   }
 }
 
-void PrimaryLogPG::on_activate()
+void PrimaryLogPG::on_activate_complete()
 {
   // all clean?
   if (needs_recovery()) {
