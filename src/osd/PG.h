@@ -450,6 +450,11 @@ public:
 
   void on_active_exit() override;
 
+  Context *on_clean() override {
+    try_mark_clean();
+    return finish_recovery();
+  }
+
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
 
