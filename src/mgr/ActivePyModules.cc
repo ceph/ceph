@@ -593,10 +593,7 @@ void ActivePyModules::set_store(const std::string &module_name,
   
   Command set_cmd;
   {
-    PyThreadState *tstate = PyEval_SaveThread();
     std::lock_guard l(lock);
-    PyEval_RestoreThread(tstate);
-
     if (val) {
       store_cache[global_key] = *val;
     } else {
