@@ -1160,9 +1160,9 @@ class Volume(object):
         """
         Removes all tags from the Logical Volume.
         """
-        for k, v in self.tags.items():
-            tag = "%s=%s" % (k, v)
-            process.run(['lvchange', '--deltag', tag, self.lv_path])
+        for k in list(self.tags):
+            self.clear_tag(k)
+
 
     def set_tags(self, tags):
         """
@@ -1178,22 +1178,22 @@ class Volume(object):
         """
         for k, v in tags.items():
             self.set_tag(k, v)
-        # after setting all the tags, refresh them for the current object, use the
-        # lv_* identifiers to filter because those shouldn't change
-        lv_object = get_lv(lv_name=self.lv_name, lv_path=self.lv_path)
-        self.tags = lv_object.tags
 
-    def set_tag(self, key, value):
-        """
-        Set the key/value pair as an LVM tag. Does not "refresh" the values of
-        the current object for its tags. Meant to be a "fire and forget" type
-        of modification.
-        """
-        # remove it first if it exists
+
+    def clear_tag(self, key):
         if self.tags.get(key):
             current_value = self.tags[key]
             tag = "%s=%s" % (key, current_value)
-            process.call(['lvchange', '--deltag', tag, self.lv_api['lv_path']])
+            process.call(['lvchange', '--deltag', tag, self.lv_path])
+            del self.tags[key]
+
+
+    def set_tag(self, key, value):
+        """
+        Set the key/value pair as an LVM tag.
+        """
+        # remove it first if it exists
+        self.clear_tag(key)
 
         process.call(
             [
