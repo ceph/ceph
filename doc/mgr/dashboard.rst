@@ -316,12 +316,18 @@ The default value is 45 seconds.
 Enabling iSCSI Management
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Ceph Dashboard can manage iSCSI targets using the REST API provided
-by the `rbd-target-api` service of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_
-project. Please make sure that it's installed and enabled on the iSCSI gateways.
+The Ceph Dashboard can manage iSCSI targets using the REST API provided by the
+`rbd-target-api` service of the :ref:`ceph-iscsi`. Please make sure that it's
+installed and enabled on the iSCSI gateways.
+
+.. note::
+  The iSCSI management functionality of Ceph Dashboard depends on the latest
+  version 3 of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_ project.
+  Make sure that your operating system provides the correct version, otherwise
+  the dashboard won't enable the managemement features.
 
 If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
-certificate, then we need to configure the dashboard to avoid SSL certificate
+certificate, then you need to configure the dashboard to avoid SSL certificate
 verification when accessing ceph-iscsi API.
 
 To disable API SSL verification run the following commmand::
