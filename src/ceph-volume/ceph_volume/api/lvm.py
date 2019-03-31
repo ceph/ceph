@@ -306,14 +306,14 @@ def get_api_lvs():
 
     Command and delimited output should look like::
 
-        $ lvs --noheadings --readonly --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+        $ lvs --noheadings --readonly --separator=';' -a -o lv_tags,lv_path,lv_name,vg_name
           ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
     fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields],
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
         verbose_on_failure=False
     )
     return _output_parser(stdout, fields)
