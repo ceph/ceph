@@ -1,3 +1,5 @@
+.. _configuring-ceph:
+
 ==================
  Configuring Ceph
 ==================
