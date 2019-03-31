@@ -687,6 +687,26 @@ def human_readable_size(size):
         suffix=suffixes[suffix_index])
 
 
+def size_from_human_readable(s):
+    """
+    Takes a human readable string and converts into a Size. If no unit is
+    passed, bytes is assumed.
+    """
+    s = s.replace(' ', '')
+    if s[-1].isdigit():
+        return Size(b=float(s))
+    n = float(s[:-1])
+    if s[-1].lower() == 't':
+        return Size(tb=n)
+    if s[-1].lower() == 'g':
+        return Size(gb=n)
+    if s[-1].lower() == 'm':
+        return Size(mb=n)
+    if s[-1].lower() == 'k':
+        return Size(kb=n)
+    return None
+
+
 def get_partitions_facts(sys_block_path):
     partition_metadata = {}
     for folder in os.listdir(sys_block_path):
