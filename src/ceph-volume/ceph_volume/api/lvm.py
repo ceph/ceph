@@ -464,6 +464,29 @@ def extend_vg(vg, devices):
     return vg
 
 
+def reduce_vg(vg, devices):
+    """
+    Reduce a Volume Group. Command looks like::
+
+        vgreduce --force --yes group_name [device, ...]
+
+    :param vg: A VolumeGroup object
+    :param devices: A list of devices to remove from the VG. Optionally, a
+                    single device (as a string) can be used.
+    """
+    if not isinstance(devices, list):
+        devices = [devices]
+    process.run([
+        'vgreduce',
+        '--force',
+        '--yes',
+        vg.name] + devices
+    )
+
+    vg = get_vg(vg_name=vg.name)
+    return vg
+
+
 def remove_vg(vg_name):
     """
     Removes a volume group.
