@@ -562,7 +562,7 @@ def remove_lv(lv):
     return True
 
 
-def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
+def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False, pv=None):
     """
     Create a Logical Volume in a Volume Group. Command looks like::
 
@@ -596,31 +596,34 @@ def create_lv(name, group, extents=None, size=None, tags=None, uuid_name=False):
         'lockbox': 'ceph.lockbox_device',  # XXX might not ever need this lockbox sorcery
     }
     if size:
-        process.run([
+        command = [
             'lvcreate',
             '--yes',
             '-L',
             '%s' % size,
             '-n', name, group
-        ])
+        ]
     elif extents:
-        process.run([
+        command = [
             'lvcreate',
             '--yes',
             '-l',
             '%s' % extents,
             '-n', name, group
-        ])
+        ]
     # create the lv with all the space available, this is needed because the
     # system call is different for LVM
     else:
-        process.run([
+        command = [
             'lvcreate',
             '--yes',
             '-l',
             '100%FREE',
             '-n', name, group
-        ])
+        ]
+    if pv:
+        command.append(pv)
+    process.run(command)
 
     lv = get_lv(lv_name=name, vg_name=group)
     lv.set_tags(tags)
