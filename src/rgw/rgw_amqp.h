@@ -23,8 +23,14 @@ void intrusive_ptr_release(const connection_t* p);
 // indicating the result, and not to return anything
 typedef std::function<void(int)> reply_callback_t;
 
+// initialize the amqp manager
+bool init(CephContext* cct);
+
+// shutdown the amqp manager
+void shutdown();
+
 // connect to an amqp endpoint
-connection_ptr_t connect(const std::string& url, const std::string& exchange, CephContext* cct);
+connection_ptr_t connect(const std::string& url, const std::string& exchange);
 
 // publish a message over a connection that was already created
 int publish(connection_ptr_t& conn,

@@ -258,7 +258,7 @@ public:
       CephContext* cct) : 
         endpoint(_endpoint), 
         topic(_topic), 
-        conn(amqp::connect(endpoint, get_exchange(args), cct)) {
+        conn(amqp::connect(endpoint, get_exchange(args))) {
     bool exists;
     // get ack level
     str_ack_level = args.get("amqp-ack-level", &exists);
