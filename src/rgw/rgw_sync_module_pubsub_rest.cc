@@ -780,7 +780,7 @@ std::string unique_to_topic(const std::string& unique_topic, const std::string& 
 }
 
 // command (S3 compliant): PUT /<bucket name>?notification
-// a "topic", a "notification" and a subscription will be auto-generated
+// a "notification" and a subscription will be auto-generated
 // actual configuration is XML encoded in the body of the message
 class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
   rgw_pubsub_s3_notifications configurations;

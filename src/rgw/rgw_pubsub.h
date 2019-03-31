@@ -97,7 +97,7 @@ struct rgw_pubsub_s3_record {
   std::string eventVersion;
   // aws:s3
   std::string eventSource;
-  // zone?
+  // zonegroup
   std::string awsRegion;
   // time of the request
   ceph::real_time eventTime;
@@ -123,11 +123,11 @@ struct rgw_pubsub_s3_record {
   std::string bucket_arn;
   // object key
   std::string object_key;
-  // object size
+  // object size (not implemented)
   uint64_t object_size;
   // object etag
   std::string object_etag;
-  // object version id bucket is versioned (not implemented)
+  // object version id bucket is versioned
   std::string object_versionId;
   // hexadecimal value used to determine event order for specific key
   std::string object_sequencer;
