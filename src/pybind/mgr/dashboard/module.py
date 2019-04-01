@@ -449,7 +449,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
                     </head>
                     <body>
                         No active ceph-mgr instance is currently running
-                        the dashboard.  A failover may be in progress.
+                        the dashboard. A failover may be in progress.
                         Retrying in {delay} seconds...
                     </body>
                 </html>
