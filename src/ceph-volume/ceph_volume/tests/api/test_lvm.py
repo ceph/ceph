@@ -618,6 +618,30 @@ class TestExtendVG(object):
         assert fake_run.calls[0]['args'][0] == expected
 
 
+class TestReduceVG(object):
+
+    def setup(self):
+        self.foo_volume = api.VolumeGroup(vg_name='foo', lv_tags='')
+
+    def test_uses_single_device_in_list(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.reduce_vg(self.foo_volume, ['/dev/sda'])
+        expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_single_device(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.reduce_vg(self.foo_volume, '/dev/sda')
+        expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda']
+        assert fake_run.calls[0]['args'][0] == expected
+
+    def test_uses_multiple_devices(self, monkeypatch, fake_run):
+        monkeypatch.setattr(api, 'get_vg', lambda **kw: True)
+        api.reduce_vg(self.foo_volume, ['/dev/sda', '/dev/sdb'])
+        expected = ['vgreduce', '--force', '--yes', 'foo', '/dev/sda', '/dev/sdb']
+        assert fake_run.calls[0]['args'][0] == expected
+
+
 class TestCreateVG(object):
 
     def setup(self):
