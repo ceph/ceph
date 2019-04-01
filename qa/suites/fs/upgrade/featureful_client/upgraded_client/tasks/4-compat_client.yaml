@@ -6,7 +6,7 @@ tasks:
 - exec:
     mon.a:
       - ceph fs dump --format=json-pretty
-      - ceph fs set cephfs min_compat_client mimic
+      - ceph fs set cephfs min_compat_client nautilus
 - fs.clients_evicted:
     clients:
       client.0: False

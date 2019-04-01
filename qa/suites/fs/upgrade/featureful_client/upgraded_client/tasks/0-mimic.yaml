@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/luminous latest
+   install ceph/mimic latest
 tasks:
 - install:
-    branch: luminous
+    branch: mimic
     exclude_packages:
       - librados3
       - ceph-mgr-dashboard
@@ -12,7 +12,7 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-ssh
     extra_packages: ['librados2']
-- print: "**** done installing luminous"
+- print: "**** done installing mimic"
 - ceph:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
@@ -36,6 +36,6 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd require-osd-release luminous
-      - ceph osd set-require-min-compat-client luminous
+      - ceph osd require-osd-release mimic
+      - ceph osd set-require-min-compat-client mimic
 - print: "**** done ceph"
