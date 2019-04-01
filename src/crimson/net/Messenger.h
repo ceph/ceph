@@ -111,6 +111,10 @@ class Messenger {
 
   virtual void print(ostream& out) const = 0;
 
+  virtual SocketPolicy get_policy(entity_type_t peer_type) const = 0;
+
+  virtual SocketPolicy get_default_policy() const = 0;
+
   virtual void set_default_policy(const SocketPolicy& p) = 0;
 
   virtual void set_policy(entity_type_t peer_type, const SocketPolicy& p) = 0;

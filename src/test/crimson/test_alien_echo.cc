@@ -162,6 +162,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
           [addr, count](auto& server) mutable {
             std::cout << "server listening at " << addr << std::endl;
             // bind the server
+            server.msgr.set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
             server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &server.byte_throttler);
             server.msgr.set_auth_client(&server.dummy_auth);
@@ -186,6 +187,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         return seastar::do_with(seastar_pingpong::Client{*msgr},
           [addr, count](auto& client) {
             std::cout << "client sending to " << addr << std::endl;
+            client.msgr.set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
             client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &client.byte_throttler);
             client.msgr.set_auth_client(&client.dummy_auth);

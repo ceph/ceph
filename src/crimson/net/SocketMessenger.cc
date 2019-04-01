@@ -215,6 +215,16 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
   return set_myaddrs(entity_addrvec_t{addr});
 }
 
+SocketPolicy SocketMessenger::get_policy(entity_type_t peer_type) const
+{
+  return policy_set.get(peer_type);
+}
+
+SocketPolicy SocketMessenger::get_default_policy() const
+{
+  return policy_set.get_default();
+}
+
 void SocketMessenger::set_default_policy(const SocketPolicy& p)
 {
   policy_set.set_default(p);
