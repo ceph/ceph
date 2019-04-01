@@ -19,6 +19,9 @@ class Context;
 class RWLock;
 
 namespace librbd {
+
+namespace io { class AsyncOperation; }
+
 namespace deep_copy {
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -160,6 +163,8 @@ private:
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
   std::map<librados::snap_t, bool> m_dst_object_may_exist;
   bufferlist m_read_from_parent_data;
+
+  io::AsyncOperation* m_src_async_op = nullptr;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
