@@ -35,11 +35,17 @@ public:
 private:
   int open_shards() {
     for (auto& s_it: sharding_schema) {
-      for (size_t i = 0; i < s_it.second; i++) {
-        std::string name = s_it.first + "-" + to_string(i);
-        auto cf_handle = db->column_family_handle(name);
-        dout(0) << "Column family '" << name << "' handle: " << (void*)cf_handle.priv << " " << dendl;
+      if (s_it.second == 0) {
+        auto cf_handle = db->column_family_handle("default");
         shards[s_it.first].push_back(cf_handle);
+        dout(0) << "Column family '" << s_it.first << "' handle: " << (void*)cf_handle.priv << " " << dendl;
+      } else {
+        for (size_t i = 0; i < s_it.second; i++) {
+          std::string name = s_it.first + "-" + to_string(i);
+          auto cf_handle = db->column_family_handle(name);
+          dout(0) << "Column family '" << name << "' handle: " << (void*)cf_handle.priv << " " << dendl;
+          shards[s_it.first].push_back(cf_handle);
+        }
       }
     }
     return 0;
@@ -555,6 +561,10 @@ public:
     return std::make_shared<WholeSpaceIteratorMerged_Impl>(*this);
   }
   Iterator get_iterator(const std::string &prefix) override {
+    auto shards_it = shards.find(prefix);
+    if (shards_it == shards.end()) {
+      return db->get_iterator(prefix);
+    }
     return std::make_shared<PrefixIteratorImpl>(
       prefix,
       get_wholespace_iterator());
@@ -679,9 +689,13 @@ public:
                          std::shared_ptr<MergeOperator> mop) override {
     auto it = sharding_schema.find(prefix);
     if (it != sharding_schema.end()) {
-      for (size_t i = 0; i < it->second; i++) {
-        std::string cf_name = prefix + "-" + to_string(i);
-        db->set_merge_operator(cf_name, mop);
+      if (it->second == 0) {
+        db->set_merge_operator(prefix, mop);
+      } else {
+        for (size_t i = 0; i < it->second; i++) {
+          std::string cf_name = prefix + "-" + to_string(i);
+          db->set_merge_operator(cf_name, mop);
+        }
       }
       return 0;
     }
