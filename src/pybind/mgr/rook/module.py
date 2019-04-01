@@ -134,6 +134,25 @@ def deferred_read(f):
     return wrapper
 
 
+class RookEnv(object):
+    def __init__(self):
+        # POD_NAMESPACE already exist for Rook 0.9
+        pod_namespace = os.environ.get('POD_NAMESPACE', 'rook-ceph')
+        self.cluster_ns = os.environ.get('ROOK_CLUSTER_NS', pod_namespace)
+
+        # ROOK_CLUSTER_NAME was a previously used env var name.
+        rook_cluster_name = os.environ.get('ROOK_CLUSTER_NAME', pod_namespace)
+        # ROOK_CEPH_CLUSTER_CRD_NAME is new is Rook 1.0
+        self.cluster_name = os.environ.get('ROOK_CEPH_CLUSTER_CRD_NAME', rook_cluster_name)
+
+        self.operator_ns = os.environ.get('ROOK_OPERATOR_NAMESPACE', "rook-ceph-system")
+        self.crd_version = os.environ.get('ROOK_CEPH_CLUSTER_CRD_VERSION', 'v1')
+        self.api_name = "ceph.rook.io/" + self.crd_version
+
+    def api_version_match(self):
+        return self.crd_version == 'v1'
+
+
 class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     MODULE_OPTIONS = [
         # TODO: configure k8s API addr instead of assuming local
@@ -190,19 +209,20 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @staticmethod
     def can_run():
-        if kubernetes_imported:
-            return True, ""
-        else:
+        if not kubernetes_imported:
             return False, "`kubernetes` python module not found"
+        if not RookEnv().api_version_match():
+            return False, "Rook version unsupported."
+        return True, ''
 
     def available(self):
         if not kubernetes_imported:
             return False, "`kubernetes` python module not found"
-        elif not self._in_cluster_name:
+        elif not self._rook_env.cluster_ns:
             return False, "ceph-mgr not running in Rook cluster"
 
         try:
-            self.k8s.list_namespaced_pod(self.rook_cluster.cluster_name)
+            self.k8s.list_namespaced_pod(self._rook_env.cluster_name)
         except ApiException as e:
             return False, "Cannot reach Kubernetes API: {}".format(e)
         else:
@@ -214,6 +234,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._initialized = threading.Event()
         self._k8s = None
         self._rook_cluster = None
+        self._rook_env = RookEnv()
 
         self._shutdown = threading.Event()
 
@@ -227,35 +248,23 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @property
     def rook_cluster(self):
+        # type: () -> RookCluster
         self._initialized.wait()
         return self._rook_cluster
-
-    @property
-    def _in_cluster_name(self):
-        """
-        Check if we appear to be running inside a Kubernetes/Rook
-        cluster
-
-        :return: str
-        """
-        if 'POD_NAMESPACE' in os.environ:
-            return os.environ['POD_NAMESPACE']
-        if 'ROOK_CLUSTER_NAME' in os.environ:
-            return os.environ['ROOK_CLUSTER_NAME']
 
     def serve(self):
         # For deployed clusters, we should always be running inside
         # a Rook cluster.  For development convenience, also support
         # running outside (reading ~/.kube config)
 
-        if self._in_cluster_name:
+        if self._rook_env.cluster_name:
             config.load_incluster_config()
-            cluster_name = self._in_cluster_name
+            cluster_name = self._rook_env.cluster_name
         else:
             self.log.warning("DEVELOPMENT ONLY: Reading kube config from ~")
             config.load_kube_config()
 
-            cluster_name = "rook"
+            cluster_name = "rook-ceph"
 
             # So that I can do port forwarding from my workstation - jcsp
             from kubernetes.client import configuration
@@ -275,7 +284,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._rook_cluster = RookCluster(
             self._k8s,
-            cluster_name)
+            self._rook_env)
 
         self._initialized.set()
 
@@ -334,11 +343,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
-    def describe_service(self, service_type, service_id, nodename):
+    def describe_service(self, service_type=None, service_id=None, node_name=None):
 
         assert service_type in ("mds", "osd", "mgr", "mon", "nfs", None), service_type + " unsupported"
 
-        pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
+        pods = self.rook_cluster.describe_pods(service_type, service_id, node_name)
 
         result = []
         for p in pods:
@@ -436,8 +445,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         def is_complete():
             # Find OSD pods on this host
             pod_osd_ids = set()
-            pods = self._k8s.list_namespaced_pod("rook-ceph",
-                                                 label_selector="rook_cluster=rook-ceph,app=rook-ceph-osd",
+            pods = self._k8s.list_namespaced_pod(self._rook_env.cluster_ns,
+                                                 label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
                                                  field_selector="spec.nodeName={0}".format(
                                                      drive_group.hosts(all_hosts)[0]
                                                  )).items
