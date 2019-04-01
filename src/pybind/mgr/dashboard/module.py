@@ -27,6 +27,7 @@ import socket
 import cherrypy
 import jinja2
 import urlparse
+from distutils.version import StrictVersion
 
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
@@ -45,6 +46,20 @@ log = logging.getLogger("dashboard")
 # How many cluster log lines shall we hold onto in our
 # python module for the convenience of the GUI?
 LOG_BUFFER_SIZE = 30
+
+# When the CherryPy server in 3.2.2 (and later) starts it attempts to verify
+# that the ports its listening on are in fact bound. When using the any address
+# "::" it tries both ipv4 and ipv6, and in some environments (e.g. kubernetes)
+# ipv6 isn't yet configured / supported and CherryPy throws an uncaught
+# exception.
+if cherrypy is not None:
+    v = StrictVersion(cherrypy.__version__)
+    # the issue was fixed in 3.2.3. it's present in 3.2.2 (current version on
+    # centos:7) and back to at least 3.0.0.
+    if StrictVersion("3.1.2") <= v < StrictVersion("3.2.3"):
+        # https://github.com/cherrypy/cherrypy/issues/1100
+        from cherrypy.process import servers
+        servers.wait_for_occupied_port = lambda host, port: None
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
 def os_exit_noop(*args, **kwargs):
