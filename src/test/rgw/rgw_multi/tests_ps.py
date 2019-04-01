@@ -81,14 +81,16 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                     break
         if not key_found:
             err = 'no ' + ('deletion' if deletions else 'creation') + ' event found for key: ' + str(key)
-            log.error(records)
+            for record in records:
+                log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
             assert False, err
 
     if not len(records) == len(keys):
         err = 'superfluous records are found'
-        log.debug(err)
+        log.warning(err)
         if exact_match:
-            log.error(records)
+            for record in records:
+                log.error(str(record['s3']['bucket']['name']) + ',' + str(record['s3']['object']['key']))
             assert False, err
 
 
@@ -190,9 +192,7 @@ def test_ps_s3_notification_low_level():
 
     # cleanup
     topic_conf.del_config()
-    # delete the keys
-    for key in bucket.list():
-        key.delete()
+    # delete the bucket
     zones[0].delete_bucket(bucket_name)
 
 
@@ -305,9 +305,7 @@ def test_ps_s3_notification():
 
     # cleanup
     topic_conf.del_config()
-    # delete the keys
-    for key in bucket.list():
-        key.delete()
+    # delete the bucket
     zones[0].delete_bucket(bucket_name)
 
 
@@ -1039,3 +1037,70 @@ def test_ps_s3_push_amqp():
     s3_notification_conf.del_config()
     topic_conf.del_config()
     zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_delete_bucket():
+    """ test notification status upon bucket deletion """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    # create topic
+    topic_name = bucket_name + TOPIC_SUFFIX
+    topic_arn = 'arn:aws:sns:::' + topic_name
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
+    response, status = topic_conf.set_config()
+    assert_equal(status/100, 2)
+    parsed_result = json.loads(response)
+    assert_equal(parsed_result['arn'], topic_arn)
+    # create one s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
+                                             notification_name, topic_arn, ['s3:ObjectCreated:*'])
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+   
+    # create non-s3 notification
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       topic_name)
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for bucket sync
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+    keys = list(bucket.list())
+    # delete objects from the bucket
+    for key in bucket.list():
+        key.delete()
+    # wait for bucket sync
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    # wait for meta sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+
+    # get the events from the auto-generated subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, notification_name,
+                              topic_name)
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    # TODO: set exact_match to true
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+
+    # s3 notification is deleted with bucket
+    _, status = s3_notification_conf.get_config(all_notifications=False)
+    assert_equal(status, 404)
+    # non-s3 notification is deleted with bucket
+    _, status = notification_conf.get_config()
+    assert_equal(status, 404)
+    # cleanup
+    sub_conf.del_config()
+    topic_conf.del_config()
