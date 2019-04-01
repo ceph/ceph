@@ -19,15 +19,13 @@ public:
   virtual ~AuthServer() {}
 
   // Get authentication methods and connection modes for the given peer type
-  virtual void get_supported_auth_methods(
-    int peer_type,
-    std::vector<uint32_t> *methods,
-    std::vector<uint32_t> *modes = nullptr) {
-    // auth_registry.get_supported_methods(peer_type, methods, modes);
-    *methods = { CEPH_AUTH_NONE };
-    if (modes != nullptr) {
-      *modes = { CEPH_CON_MODE_CRC };
-    }
+  virtual std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+  get_supported_auth_methods(
+    int peer_type) {
+    // std::vector<uint32_t> methods;
+    // std::vector<uint32_t> modes;
+    // auth_registry.get_supported_methods(peer_type, &methods, &modes);
+    return {{CEPH_AUTH_NONE}, {CEPH_AUTH_NONE}};
   }
 
   // Get support connection modes for the given peer type and auth method
