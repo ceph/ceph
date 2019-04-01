@@ -857,9 +857,10 @@ class GaneshaConf(object):
 
     @classmethod
     def format_path(cls, path):
-        path = path.strip()
-        if len(path) > 1 and path[-1] == '/':
-            path = path[:-1]
+        if path is not None:
+            path = path.strip()
+            if len(path) > 1 and path[-1] == '/':
+                path = path[:-1]
         return path
 
     def validate(self, export):
