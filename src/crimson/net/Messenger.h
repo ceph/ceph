@@ -37,10 +37,8 @@ class Messenger {
   entity_addrvec_t my_addrs;
   uint32_t global_seq = 0;
   uint32_t crc_flags = 0;
-
- public:
-  ceph::auth::AuthClient *auth_client = 0;
-  ceph::auth::AuthServer *auth_server = 0;
+  ceph::auth::AuthClient* auth_client = nullptr;
+  ceph::auth::AuthServer* auth_server = nullptr;
 
  public:
   Messenger(const entity_name_t& name)
@@ -97,9 +95,11 @@ class Messenger {
     crc_flags |= MSG_CRC_HEADER;
   }
 
+  ceph::auth::AuthClient* get_auth_client() const { return auth_client; }
   void set_auth_client(ceph::auth::AuthClient *ac) {
     auth_client = ac;
   }
+  ceph::auth::AuthServer* get_auth_server() const { return auth_server; }
   void set_auth_server(ceph::auth::AuthServer *as) {
     auth_server = as;
   }

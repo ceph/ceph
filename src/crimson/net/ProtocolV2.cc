@@ -464,8 +464,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
                         "allowed methods={}, allowed modes={}",
                         conn, bad_method.method(), cpp_strerror(bad_method.result()),
                         bad_method.allowed_methods(), bad_method.allowed_modes());
-          ceph_assert(messenger.auth_client);
-          int r = messenger.auth_client->handle_auth_bad_method(
+          ceph_assert(messenger.get_auth_client());
+          int r = messenger.get_auth_client()->handle_auth_bad_method(
               conn.shared_from_this(), auth_meta,
               bad_method.method(), bad_method.result(),
               bad_method.allowed_methods(), bad_method.allowed_modes());
@@ -483,9 +483,9 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           auto auth_more = AuthReplyMoreFrame::Decode(rx_segments_data.back());
           logger().debug("{} auth reply more len={}",
                          conn, auth_more.auth_payload().length());
-          ceph_assert(messenger.auth_client);
+          ceph_assert(messenger.get_auth_client());
           ceph::bufferlist reply;
-          int r = messenger.auth_client->handle_auth_reply_more(
+          int r = messenger.get_auth_client()->handle_auth_reply_more(
                conn.shared_from_this(), auth_meta, auth_more.auth_payload(), &reply);
           if (r < 0) {
             logger().error("{} auth_client handle_auth_reply_more returned {}",
@@ -502,8 +502,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
         .then([this] {
           // handle_auth_done() logic
           auto auth_done = AuthDoneFrame::Decode(rx_segments_data.back());
-          ceph_assert(messenger.auth_client);
-          int r = messenger.auth_client->handle_auth_done(
+          ceph_assert(messenger.get_auth_client());
+          int r = messenger.get_auth_client()->handle_auth_done(
               conn.shared_from_this(), auth_meta,
               auth_done.global_id(),
               auth_done.con_mode(),
@@ -530,11 +530,11 @@ seastar::future<> ProtocolV2::handle_auth_reply()
 seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods)
 {
   // send_auth_request() logic
-  ceph_assert(messenger.auth_client);
+  ceph_assert(messenger.get_auth_client());
 
   bufferlist bl;
   vector<uint32_t> preferred_modes;
-  int r = messenger.auth_client->get_auth_request(
+  int r = messenger.get_auth_client()->get_auth_request(
       conn.shared_from_this(), auth_meta, &auth_meta->auth_method,
       &preferred_modes, &bl);
   if (r < 0) {
@@ -810,10 +810,8 @@ seastar::future<> ProtocolV2::_auth_bad_method(int r)
 {
   // _auth_bad_method() logic
   ceph_assert(r < 0);
-  std::vector<uint32_t> allowed_methods;
-  std::vector<uint32_t> allowed_modes;
-  messenger.auth_server->get_supported_auth_methods(
-      conn.get_peer_type(), &allowed_methods, &allowed_modes);
+  auto [allowed_methods, allowed_modes] =
+      messenger.get_auth_server()->get_supported_auth_methods(conn.get_peer_type());
   logger().warn("{} send AuthBadMethod(auth_method={}, r={}, "
                 "allowed_methods={}, allowed_modes={})",
                 conn, auth_meta->auth_method, cpp_strerror(r),
@@ -829,9 +827,9 @@ seastar::future<> ProtocolV2::_auth_bad_method(int r)
 seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
 {
   // _handle_auth_request() logic
-  ceph_assert(messenger.auth_server);
+  ceph_assert(messenger.get_auth_server());
   bufferlist reply;
-  int r = messenger.auth_server->handle_auth_request(
+  int r = messenger.get_auth_server()->handle_auth_request(
       conn.shared_from_this(), auth_meta,
       more, auth_meta->auth_method, auth_payload,
       &reply);
@@ -887,7 +885,7 @@ seastar::future<> ProtocolV2::server_auth()
                    conn, request.method(), request.preferred_modes(),
                    request.auth_payload().length());
     auth_meta->auth_method = request.method();
-    auth_meta->con_mode = messenger.auth_server->pick_con_mode(
+    auth_meta->con_mode = messenger.get_auth_server()->pick_con_mode(
         conn.get_peer_type(), auth_meta->auth_method,
         request.preferred_modes());
     if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
