@@ -85,6 +85,7 @@ static seastar::future<> run(unsigned rounds,
           return fut.then([&server, addr](ceph::net::Messenger *messenger) {
               return server.container().invoke_on_all([messenger](auto& server) {
                   server.msgr = messenger->get_local_shard();
+                  server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
                   server.msgr->set_auth_client(&server.dummy_auth);
                   server.msgr->set_auth_server(&server.dummy_auth);
                 }).then([messenger, addr] {
@@ -185,6 +186,7 @@ static seastar::future<> run(unsigned rounds,
             return ceph::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
             .then([&client] (ceph::net::Messenger *messenger) {
               client.msgr = messenger;
+              client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
               client.msgr->set_auth_client(&client.dummy_auth);
               client.msgr->set_auth_server(&client.dummy_auth);
               return client.msgr->start(&client);

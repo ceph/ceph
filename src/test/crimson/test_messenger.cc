@@ -62,6 +62,7 @@ static seastar::future<> test_echo(unsigned rounds,
         return fut.then([this, addr](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
+                server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
                 server.msgr->set_auth_client(&server.dummy_auth);
                 server.msgr->set_auth_server(&server.dummy_auth);
               }).then([messenger, addr] {
@@ -151,6 +152,7 @@ static seastar::future<> test_echo(unsigned rounds,
           .then([this](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
+                client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
                 client.msgr->set_auth_client(&client.dummy_auth);
                 client.msgr->set_auth_server(&client.dummy_auth);
               }).then([this, messenger] {
@@ -332,6 +334,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
           .then([this, addr](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
+                server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
                 server.msgr->set_auth_client(&server.dummy_auth);
                 server.msgr->set_auth_server(&server.dummy_auth);
               }).then([messenger, addr] {
@@ -363,6 +366,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
           .then([this](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
+                client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
                 client.msgr->set_auth_client(&client.dummy_auth);
                 client.msgr->set_auth_server(&client.dummy_auth);
               }).then([this, messenger] {

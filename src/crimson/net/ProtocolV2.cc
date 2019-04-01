@@ -72,8 +72,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
   conn.peer_type = _peer_type;
-  // TODO: lossless policy
-  conn.policy = SocketPolicy::lossy_client(0);
+  conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   execute_connecting();
@@ -1192,8 +1191,7 @@ void ProtocolV2::execute_accepting()
           ceph_assert(conn.get_peer_type() == -1);
           conn.peer_type = _peer_type;
 
-          // TODO: lossless policy
-          conn.policy = SocketPolicy::stateless_server(0);
+          conn.policy = messenger.get_policy(_peer_type);
           logger().debug("{} accept of host type {}, lossy={} server={} standby={} resetcheck={}",
                          conn, (int)_peer_type,
                          conn.policy.lossy, conn.policy.server,
