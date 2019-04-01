@@ -62,7 +62,7 @@ namespace ceph::net {
 ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(2, dispatcher, conn, messenger) {}
+  : Protocol(proto_t::v2, dispatcher, conn), messenger{messenger} {}
 
 ProtocolV2::~ProtocolV2() {}
 
@@ -1013,9 +1013,10 @@ seastar::future<bool> ProtocolV2::server_connect()
     SocketConnectionRef existing = messenger.lookup_conn(conn.peer_addr);
 
     if (existing) {
-      if (existing->protocol->proto_type != 2) {
+      if (existing->protocol->proto_type != proto_t::v2) {
         logger().warn("{} existing {} proto version is {}, close",
-                      conn, *existing, existing->protocol->proto_type);
+                      conn, *existing,
+                      static_cast<int>(existing->protocol->proto_type));
         // should unregister the existing from msgr atomically
         existing->close();
       } else {
@@ -1104,9 +1105,11 @@ seastar::future<bool> ProtocolV2::server_reconnect()
       return send_reset(true);
     }
 
-    if (existing->protocol->proto_type != 2) {
+    if (existing->protocol->proto_type != proto_t::v2) {
       logger().warn("{} server_reconnect: existing {} proto version is {},"
-                    "close existing and resetting client.", conn, *existing);
+                    "close existing and resetting client.",
+                    conn, *existing,
+                    static_cast<int>(existing->protocol->proto_type));
       existing->close();
       return send_reset(true);
     }

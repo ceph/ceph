@@ -143,7 +143,7 @@ namespace ceph::net {
 ProtocolV1::ProtocolV1(Dispatcher& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(1, dispatcher, conn), messenger{messenger} {}
+  : Protocol(proto_t::v1, dispatcher, conn), messenger{messenger} {}
 
 ProtocolV1::~ProtocolV1() {}
 
@@ -515,9 +515,10 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
         return send_connect_reply(tag, std::move(authorizer_reply));
       }
       if (auto existing = messenger.lookup_conn(conn.peer_addr); existing) {
-        if (existing->protocol->proto_type != 1) {
+        if (existing->protocol->proto_type != proto_t::v1) {
           logger().warn("{} existing {} proto version is {} not 1, close existing",
-                        conn, *existing, existing->protocol->proto_type);
+                        conn, *existing,
+                        static_cast<int>(existing->protocol->proto_type));
           existing->close();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));

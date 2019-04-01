@@ -13,6 +13,12 @@ namespace ceph::net {
 
 class Protocol {
  public:
+  enum class proto_t {
+    none,
+    v1,
+    v2
+  };
+
   Protocol(Protocol&&) = delete;
   virtual ~Protocol();
 
@@ -32,7 +38,7 @@ class Protocol {
                             const entity_addr_t& peer_addr) = 0;
 
  protected:
-  Protocol(int type,
+  Protocol(proto_t type,
            Dispatcher& dispatcher,
            SocketConnection& conn);
 
@@ -46,7 +52,7 @@ class Protocol {
   virtual seastar::future<> do_keepalive_ack() = 0;
 
  public:
-  const int proto_type;
+  const proto_t proto_type;
 
  protected:
   Dispatcher &dispatcher;
