@@ -17,7 +17,7 @@ namespace {
 
 namespace ceph::net {
 
-Protocol::Protocol(int type,
+Protocol::Protocol(proto_t type,
                    Dispatcher& dispatcher,
                    SocketConnection& conn)
   : proto_type(type),
