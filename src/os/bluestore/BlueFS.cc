@@ -215,19 +215,15 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
           << " want 0x" << std::hex << want << std::dec << dendl;
   ceph_assert(id < alloc.size());
   ceph_assert(alloc[id]);
-  int r = alloc[id]->reserve(want);
-  ceph_assert(r == 0); // caller shouldn't ask for more than they can get
+
   int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
 				    extents);
   assert(got != 0);
-  if (got < (int64_t)want) {
-    alloc[id]->unreserve(want - std::max<int64_t>(0, got));
-    if (got < 0) {
-      derr << __func__ << " failed to allocate space to return to bluestore"
-	<< dendl;
-      alloc[id]->dump();
-      return got;
-    }
+  if (got < 0) {
+    derr << __func__ << " failed to allocate space to return to bluestore"
+      << dendl;
+    alloc[id]->dump();
+    return got;
   }
 
   for (auto& p : *extents) {
@@ -236,7 +232,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   }
 
   flush_bdev();
-  r = _flush_and_sync_log(l);
+  int r = _flush_and_sync_log(l);
   ceph_assert(r == 0);
 
   logger->inc(l_bluefs_reclaim_bytes, got);
@@ -1993,15 +1989,10 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
 
   uint64_t left = round_up_to(len, min_alloc_size);
-  int r = -ENOSPC;
   int64_t alloc_len = 0;
   PExtentVector extents;
   
   if (alloc[id]) {
-    r = alloc[id]->reserve(left);
-  }
-  
-  if (r == 0) {
     uint64_t hint = 0;
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
@@ -2009,14 +2000,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
   }
-  if (r < 0 || (alloc_len < (int64_t)left)) {
-    if (r == 0) {
-      interval_set<uint64_t> to_release;
-      alloc[id]->unreserve(left - alloc_len);
-      for (auto& p : extents) {
-        to_release.insert(p.offset, p.length);
-      }
-      alloc[id]->release(to_release);
+  if (alloc_len < (int64_t)left) {
+    if (alloc_len != 0) {
+      alloc[id]->release(extents);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {

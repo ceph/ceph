@@ -28,10 +28,10 @@ if(WITH_BLUESTORE)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
+    bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
-    bluestore/BitMapAllocator.cc
-    bluestore/BitAllocator.cc
+    bluestore/BitmapAllocator.cc
   )
 endif(WITH_BLUESTORE)
 
