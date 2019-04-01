@@ -79,9 +79,9 @@
                       [form]="formGroup">
       <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
     </cd-submit-button>
-    <button class="btn btn-sm btn-default"
-            type="button"
-            (click)="bsModalRef.hide()"
-            i18n>Close</button>
+    <cd-back-button [back]="bsModalRef.hide"
+                    name="Close"
+                    i18n-name>
+    </cd-back-button>
   </div>
 </form>
