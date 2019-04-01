@@ -3707,6 +3707,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
+    Option("bluestore_fsck_read_bytes_cap", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64_M)
+    .set_description("Maximum bytes read at once by deep fsck"),
+
     Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_safe()
