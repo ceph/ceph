@@ -166,6 +166,9 @@ public:
   void set_no_exclusive_lock() {
     lock_exclusive = false;
   }
+  bool is_shared() const {
+    return lock_exclusive == false;
+  }
   
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }

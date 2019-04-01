@@ -586,6 +586,19 @@ int BlueFS::_open_super()
   if (r < 0)
     return r;
 
+  if (bdev[BDEV_DB]->is_shared() && bl.is_zero()) {
+    // This check tries to verify we aren't wrongly looking for superblock
+    // on BDEV_SLOW. This may happen when e.g. the "block.db" has vanished
+    // but ::mkfs() had put superblock on separated BDEV_DB.
+    // This mechanism is imperfect as it relies on zapping of the reserved
+    // space on BDEV_SLOW by deployment tools.
+    // XXX: try_decode (or anything free of asserts) instead?
+    derr << __func__
+         << " superblock is entirely zeroed. Missing block.db symlink?"
+         << dendl;
+    return -EIO;
+  }
+
   auto p = bl.cbegin();
   decode(super, p);
   {
