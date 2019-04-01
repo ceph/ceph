@@ -534,15 +534,15 @@ struct ObjectOperation {
 	  obj_list_watch_response_t resp;
 	  decode(resp, p);
 	  if (pwatchers) {
-	    for (auto i = resp.entries.begin(); i != resp.entries.end(); ++i) {
+	    for (const auto& watch_item : resp.entries) {
 	      obj_watch_t ow;
-	      std::string sa = i->addr.get_legacy_str();
+	      std::string sa = watch_item.addr.get_legacy_str();
 	      strncpy(ow.addr, sa.c_str(), sizeof(ow.addr) - 1);
 	      ow.addr[sizeof(ow.addr) - 1] = '\0';
-	      ow.watcher_id = i->name.num();
-	      ow.cookie = i->cookie;
-	      ow.timeout_seconds = i->timeout_seconds;
-	      pwatchers->push_back(ow);
+	      ow.watcher_id = watch_item.name.num();
+	      ow.cookie = watch_item.cookie;
+	      ow.timeout_seconds = watch_item.timeout_seconds;
+	      pwatchers->push_back(std::move(ow));
 	    }
 	  }
 	}
