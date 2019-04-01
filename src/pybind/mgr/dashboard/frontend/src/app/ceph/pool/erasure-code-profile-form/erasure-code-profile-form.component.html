@@ -324,9 +324,9 @@
     <cd-submit-button (submitAction)="onSubmit()"
                       [form]="frm"
                       i18n>Add</cd-submit-button>
-    <button class="btn btn-sm btn-default"
-            type="button"
-            (click)="bsModalRef.hide()"
-            i18n>Close</button>
+    <cd-back-button [back]="bsModalRef.hide"
+                    name="Close"
+                    i18n-name>
+    </cd-back-button>
   </div>
 </form>
