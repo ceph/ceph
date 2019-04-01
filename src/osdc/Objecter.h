@@ -537,7 +537,8 @@ struct ObjectOperation {
 	    for (auto i = resp.entries.begin(); i != resp.entries.end(); ++i) {
 	      obj_watch_t ow;
 	      std::string sa = i->addr.get_legacy_str();
-	      strncpy(ow.addr, sa.c_str(), 256);
+	      strncpy(ow.addr, sa.c_str(), sizeof(ow.addr) - 1);
+	      ow.addr[sizeof(ow.addr) - 1] = '\0';
 	      ow.watcher_id = i->name.num();
 	      ow.cookie = i->cookie;
 	      ow.timeout_seconds = i->timeout_seconds;
