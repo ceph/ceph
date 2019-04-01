@@ -186,23 +186,19 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 }
 
 int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
-			   AllocExtentVector *extents)
+			   PExtentVector *extents)
 {
   std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
           << " want 0x" << std::hex << want << std::dec << dendl;
   assert(id < alloc.size());
   assert(alloc[id]);
-  int r = alloc[id]->reserve(want);
-  assert(r == 0); // caller shouldn't ask for more than they can get
+
   int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
 				    extents);
-  if (got < (int64_t)want) {
-    alloc[id]->unreserve(want - MAX(0, got));
-  }
-  if (got <= 0) {
+  if (got < 0) {
     derr << __func__ << " failed to allocate space to return to bluestore"
-	 << dendl;
+      << dendl;
     alloc[id]->dump();
     return got;
   }
@@ -214,7 +210,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   }
 
   flush_bdev();
-  r = _flush_and_sync_log(l);
+  int r = _flush_and_sync_log(l);
   assert(r == 0);
 
   if (logger)
@@ -1406,6 +1402,9 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     return 0;
   }
 
+  vector<interval_set<uint64_t>> to_release(pending_release.size());
+  to_release.swap(pending_release);
+
   uint64_t seq = log_t.seq = ++log_seq;
   assert(want_seq == 0 || want_seq <= seq);
   log_t.uuid = super.uuid;
@@ -1498,6 +1497,14 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
              << " already >= out seq " << seq
              << ", we lost a race against another log flush, done" << dendl;
   }
+
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    if (!to_release[i].empty()) {
+      /* OK, now we have the guarantee alloc[i] won't be null. */
+      alloc[i]->release(to_release[i]);
+    }
+  }
+
   _update_logger_stats();
 
   return 0;
@@ -1852,15 +1859,10 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
 
   uint64_t left = ROUND_UP_TO(len, min_alloc_size);
-  int r = -ENOSPC;
   int64_t alloc_len = 0;
-  AllocExtentVector extents;
+  PExtentVector extents;
   
   if (alloc[id]) {
-    r = alloc[id]->reserve(left);
-  }
-  
-  if (r == 0) {
     uint64_t hint = 0;
     if (!node->extents.empty() && node->extents.back().bdev == id) {
       hint = node->extents.back().end();
@@ -1868,12 +1870,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
   }
-  if (r < 0 || (alloc_len < (int64_t)left)) {
-    if (r == 0) {
-      alloc[id]->unreserve(left - alloc_len);
-      for (auto& p : extents) {
-        alloc[id]->release(p.offset, p.length);
-      }
+  if (alloc_len < (int64_t)left) {
+    if (alloc_len != 0) {
+      alloc[id]->release(extents);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
@@ -1933,15 +1932,9 @@ void BlueFS::sync_metadata()
   }
   dout(10) << __func__ << dendl;
   utime_t start = ceph_clock_now();
-  vector<interval_set<uint64_t>> to_release(pending_release.size());
-  to_release.swap(pending_release);
   flush_bdev(); // FIXME?
   _flush_and_sync_log(l);
-  for (unsigned i = 0; i < to_release.size(); ++i) {
-    for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
-      alloc[i]->release(p.get_start(), p.get_len());
-    }
-  }
+  dout(10) << __func__ << " done in " << (ceph_clock_now() - start) << dendl;
 
   if (_should_compact_log()) {
     if (cct->_conf->bluefs_compact_log_sync) {

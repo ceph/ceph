@@ -66,92 +66,27 @@ WRITE_CLASS_DENC(bluestore_cnode_t)
 
 ostream& operator<<(ostream& out, const bluestore_cnode_t& l);
 
-class AllocExtent;
-typedef mempool::bluestore_alloc::vector<AllocExtent> AllocExtentVector;
-class AllocExtent {
-public:
-  uint64_t offset;
-  uint32_t length;
-
-  AllocExtent() { 
-    offset = 0;
-    length = 0;
-  }
-
-  AllocExtent(int64_t off, int32_t len) : offset(off), length(len) { }
-  uint64_t end() const {
-    return offset + length;
-  }
-  bool operator==(const AllocExtent& other) const {
-    return offset == other.offset && length == other.length;
-  }
-};
-
-inline static ostream& operator<<(ostream& out, const AllocExtent& e) {
-  return out << "0x" << std::hex << e.offset << "~" << e.length << std::dec;
-}
-
-class ExtentList {
-  AllocExtentVector *m_extents;
-  int64_t m_block_size;
-  int64_t m_max_blocks;
-
-public:
-  void init(AllocExtentVector *extents, int64_t block_size,
-	    uint64_t max_alloc_size) {
-    m_extents = extents;
-    m_block_size = block_size;
-    m_max_blocks = max_alloc_size / block_size;
-    assert(m_extents->empty());
-  }
-
-  ExtentList(AllocExtentVector *extents, int64_t block_size) {
-    init(extents, block_size, 0);
-  }
-
-  ExtentList(AllocExtentVector *extents, int64_t block_size,
-	     uint64_t max_alloc_size) {
-    init(extents, block_size, max_alloc_size);
-  }
-
-  void reset() {
-    m_extents->clear();
-  }
-
-  void add_extents(int64_t start, int64_t count);
-
-  AllocExtentVector *get_extents() {
-    return m_extents;
-  }
-
-  std::pair<int64_t, int64_t> get_nth_extent(int index) {
-      return std::make_pair
-            ((*m_extents)[index].offset / m_block_size,
-             (*m_extents)[index].length / m_block_size);
-  }
-
-  int64_t get_extent_count() {
-    return m_extents->size();
-  }
-};
-
-
 /// pextent: physical extent
-struct bluestore_pextent_t : public AllocExtent {
-  const static uint64_t INVALID_OFFSET = ~0ull;
+struct bluestore_pextent_t {
+  static const uint64_t INVALID_OFFSET = ~0ull;
 
-  bluestore_pextent_t() : AllocExtent() {}
-  bluestore_pextent_t(uint64_t o, uint64_t l) : AllocExtent(o, l) {}
-  bluestore_pextent_t(const AllocExtent &ext) :
-    AllocExtent(ext.offset, ext.length) { }
+  uint64_t offset = 0;
+  uint32_t length = 0;
 
-  bluestore_pextent_t& operator=(const AllocExtent &ext) {
-    offset = ext.offset;
-    length = ext.length;
-    return *this;
-  }
+  bluestore_pextent_t() {}
+  bluestore_pextent_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
+  bluestore_pextent_t(const bluestore_pextent_t &ext) :
+    offset(ext.offset), length(ext.length) {}
+
   bool is_valid() const {
     return offset != INVALID_OFFSET;
+  }
+  uint64_t end() const {
+    return offset != INVALID_OFFSET ? offset + length : INVALID_OFFSET;
+  }
+
+  bool operator==(const bluestore_pextent_t& other) const {
+    return offset == other.offset && length == other.length;
   }
 
   DENC(bluestore_pextent_t, v, p) {
@@ -200,7 +135,6 @@ struct denc_traits<PExtentVector> {
     }
   }
 };
-
 
 /// extent_map: a map of reference counted extents
 struct bluestore_extent_ref_map_t {
@@ -890,7 +824,7 @@ public:
   }
 
   void split(uint32_t blob_offset, bluestore_blob_t& rb);
-  void allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs);
+  void allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
 
   /// updates blob's pextents container and return unused pextents eligible

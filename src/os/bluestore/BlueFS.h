@@ -403,7 +403,7 @@ public:
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,
-		     AllocExtentVector *extents);
+		     PExtentVector *extents);
 
   void flush(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);

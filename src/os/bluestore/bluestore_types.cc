@@ -17,28 +17,6 @@
 #include "common/Checksummer.h"
 #include "include/stringify.h"
 
-void ExtentList::add_extents(int64_t start, int64_t count) {
-  AllocExtent *last_extent = NULL;
-  bool can_merge = false;
-
-  if (!m_extents->empty()) {
-    last_extent = &(m_extents->back());
-    uint64_t last_offset = last_extent->end() / m_block_size;
-    uint32_t last_length = last_extent->length / m_block_size;
-    if ((last_offset == (uint64_t) start) &&
-        (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
-      can_merge = true;
-    }
-  }
-
-  if (can_merge) {
-    last_extent->length += (count * m_block_size);
-  } else {
-    m_extents->emplace_back(AllocExtent(start * m_block_size,
-					count * m_block_size));
-  }
-}
-
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
@@ -767,7 +745,7 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     return 0;
 }
 
-void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExtentVector& allocs)
+void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs)
 {
   if (extents.size() == 0) {
     // if blob is compressed then logical length to be already configured
@@ -779,6 +757,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const AllocExt
     if (b_off) {
       extents.emplace_back(
         bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, b_off));
+
     }
     uint32_t new_len = b_off;
     for (auto& a : allocs) {
@@ -859,7 +838,8 @@ struct vecbuilder {
   void flush() {
     if (invalid) {
       v.emplace_back(bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET,
-	invalid));
+        invalid));
+
       invalid = 0;
     }
   }
@@ -869,7 +849,7 @@ struct vecbuilder {
     }
     else {
       flush();
-      v.emplace_back(bluestore_pextent_t(offset, length));
+      v.emplace_back(offset, length);
     }
   }
 };
