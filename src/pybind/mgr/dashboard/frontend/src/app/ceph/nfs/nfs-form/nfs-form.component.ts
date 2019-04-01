@@ -174,7 +174,7 @@ export class NfsFormComponent implements OnInit {
       access_type: new FormControl('RW', {
         validators: [Validators.required]
       }),
-      squash: new FormControl('None', {
+      squash: new FormControl('', {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
