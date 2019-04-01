@@ -5609,6 +5609,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 
   RGWObjectCtx obj_ctx(store);
 
+  bucket_info.objv_tracker.clear();
   int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
   if (ret < 0) {
     return ret;
@@ -10334,7 +10335,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
       return r;
     }
     invalidate_bs();
-  }
+  } // for loop
 
   if (r < 0) {
     return r;
@@ -11302,7 +11303,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
     obj = *pobj;
     obj.bucket.update_bucket_id(new_bucket_id);
     pobj = &obj;
-  }
+  } // for loop
 
   if (r < 0) {
     return r;
