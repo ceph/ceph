@@ -20,6 +20,10 @@
 #include <time.h>
 #include <errno.h>
 
+#if defined(WITH_SEASTAR)
+#include <seastar/core/lowres_clock.hh>
+#endif
+
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
@@ -76,6 +80,15 @@ public:
             ceph::converts_to_timespec_v<Clock>>* = nullptr>
   explicit utime_t(const std::chrono::time_point<Clock>& t)
     : utime_t(Clock::to_timespec(t)) {} // forward to timespec ctor
+
+#if defined(WITH_SEASTAR)
+  explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
+    tv.tv_sec = std::time_t(std::chrono::duration_cast<std::chrono::seconds>(
+        t.time_since_epoch()).count());
+    tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        t.time_since_epoch() % std::chrono::seconds(1)).count();
+  }
+#endif
 
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);

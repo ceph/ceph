@@ -3,6 +3,8 @@
 
 #include "ProtocolV2.h"
 
+#include <seastar/core/lowres_clock.hh>
+
 #include "include/msgr.h"
 #include "include/random.h"
 
@@ -1387,7 +1389,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 {
   return read_frame_payload()
   .then([this, throttle_stamp] {
-    utime_t recv_stamp = ceph_clock_now();
+    utime_t recv_stamp{seastar::lowres_system_clock::now()};
 
     // we need to get the size before std::moving segments data
     const size_t cur_msg_size = get_current_msg_size();
@@ -1429,7 +1431,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     message->set_throttle_stamp(throttle_stamp);
     message->set_recv_stamp(recv_stamp);
-    message->set_recv_complete_stamp(ceph_clock_now());
+    message->set_recv_complete_stamp(utime_t{seastar::lowres_system_clock::now()});
 
     // check received seq#.  if it is old, drop the message.
     // note that incoming messages may skip ahead.  this is convenient for the
@@ -1512,7 +1514,7 @@ void ProtocolV2::execute_ready()
               return conn.policy.throttler_bytes->get(cur_msg_size);
             }).then([this] {
               // TODO: throttle_dispatch_queue() logic
-              utime_t throttle_stamp = ceph_clock_now();
+              utime_t throttle_stamp{seastar::lowres_system_clock::now()};
               return read_message(throttle_stamp);
             });
           }
@@ -1531,7 +1533,7 @@ void ProtocolV2::execute_ready()
               last_keepalive_ack_to_send = keepalive_frame.timestamp();
               logger().debug("{} got KEEPALIVE2 {}",
                              conn, last_keepalive_ack_to_send);
-              conn.last_keepalive = ceph_clock_now();
+              conn.last_keepalive = utime_t{seastar::lowres_system_clock::now()};
               notify_keepalive_ack();
             });
           case Tag::KEEPALIVE2_ACK:
