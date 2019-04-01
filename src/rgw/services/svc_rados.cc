@@ -157,11 +157,10 @@ int RGWSI_RADOS::Obj::unwatch(uint64_t handle)
   return ref.ioctx.unwatch2(handle);
 }
 
-int RGWSI_RADOS::Obj::notify(bufferlist& bl,
-                             uint64_t timeout_ms,
-                             bufferlist *pbl)
+int RGWSI_RADOS::Obj::notify(bufferlist& bl, uint64_t timeout_ms,
+                             bufferlist *pbl, optional_yield y)
 {
-  return ref.ioctx.notify2(ref.obj.oid, bl, timeout_ms, pbl);
+  return rgw_rados_notify(ref.ioctx, ref.obj.oid, bl, timeout_ms, pbl, y);
 }
 
 void RGWSI_RADOS::Obj::notify_ack(uint64_t notify_id,
