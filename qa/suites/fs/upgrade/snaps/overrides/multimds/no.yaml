@@ -1,3 +1,0 @@
-overrides:
-  ceph:
-    max_mds: 1
