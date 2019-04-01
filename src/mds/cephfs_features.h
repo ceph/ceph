@@ -15,8 +15,12 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
-// Please add feature bits for later ceph releases and update
-// Server::update_required_client_features().
+// When adding a new release, please update the "current" release below, add a
+// feature bit for that release, add that feature bit to CEPHFS_FEATURES_ALL,
+// and update Server::update_required_client_features(). This feature bit
+// is used to indicate that operator only wants clients from that release or
+// later to mount CephFS.
+#define CEPHFS_CURRENT_RELEASE  CEPH_RELEASE_OCTOPUS
 
 // The first 5 bits are reserved for old ceph releases.
 #define CEPHFS_FEATURE_JEWEL		5
