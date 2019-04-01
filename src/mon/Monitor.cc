@@ -2046,7 +2046,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       return;
     }
 
-    unsigned need = monmap->size() / 2 + 1;
+    unsigned need = monmap->min_quorum_size();
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
@@ -3715,7 +3715,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 	wouldbe.erase(n);
       }
     }
-    if (wouldbe.size() < monmap->size() / 2 + 1) {
+    if (wouldbe.size() < monmap->min_quorum_size()) {
       r = -EBUSY;
       rs = "not enough monitors would be available (" + stringify(wouldbe) +
 	") after stopping mons " + stringify(ids);
@@ -3725,7 +3725,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     rs = "quorum should be preserved (" + stringify(wouldbe) +
       ") after stopping " + stringify(ids);
   } else if (prefix == "mon ok-to-add-offline") {
-    if (quorum.size() < (monmap->size() + 1) / 2 + 1) {
+    if (quorum.size() < monmap->min_quorum_size(monmap->size() + 1)) {
       rs = "adding a monitor may break quorum (until that monitor starts)";
       r = -EBUSY;
       goto out;
@@ -3746,7 +3746,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     int rank = monmap->get_rank(id);
     if (quorum.count(rank) &&
-	quorum.size() - 1 < (monmap->size() - 1) / 2 + 1) {
+	quorum.size() - 1 < monmap->min_quorum_size(monmap->size() - 1)) {
       r = -EBUSY;
       rs = "removing mon." + id + " would break quorum";
       goto out;
