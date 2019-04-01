@@ -11,8 +11,6 @@ ceph:
   - python-ceph
   - libcephfs2
   - libcephfs-dev
-  - libcephfs-java
-  - libcephfs-jni
   - librados2
   - librbd1
   - rbd-fuse
@@ -40,8 +38,6 @@ ceph:
   - ceph
   - ceph-mgr
   - ceph-fuse
-  - cephfs-java
-  - libcephfs_jni1
   - libcephfs2
   - libcephfs-devel
   - librados2
