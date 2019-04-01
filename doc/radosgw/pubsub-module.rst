@@ -211,6 +211,8 @@ Create a Notification
 
 This will create a publisher for a specific bucket into a topic, and a subscription
 for pushing/pulling events.
+The subscription's name will have the same as the notification Id, and could be used later to fetch
+and ack events with the subscription API.
 
 ::
 
@@ -235,7 +237,7 @@ Request parameters are encoded in XML in the body of the request, with the follo
 Delete Notification
 ```````````````````
 
-Delete a specific, or all S3-compliant notifications from a bucket. Associated subscriptions will also be deleted.
+Delete a specific, or all, S3-compliant notifications from a bucket. Associated subscription will also be deleted.
 
 ::
 
@@ -245,7 +247,12 @@ Request parameters:
 
 - notification-id: name of the notification (if not provided, all S3-compliant notifications on the bucket are deleted)
 
-Note that this is an extension to the S3 notification API
+Notes:
+
+- This is an extension to the S3 notification API
+- When the bucket is deleted, any notification defined on it is also deleted. 
+  In this case, the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access), 
+  and will have to be deleted explicitly with the subscription deletion API
 
 Get/List Notifications
 ``````````````````````
@@ -277,6 +284,7 @@ Response is XML formatted:
 - Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*``. Note that multiple ``Event`` tags may be used
 
 Notes:
+
 - Getting information on a specific notification is an extension to the S3 notification API
 - When multiple notifications are fetched from the bucket, multiple ``NotificationConfiguration`` tags will be used
 
@@ -309,6 +317,8 @@ Delete publisher from a specific bucket into a specific topic.
 Request parameters:
 
 - topic-name: name of topic
+
+Note that when the bucket is deleted, any notification defined on it is also deleted
 
 List Notifications
 ``````````````````
