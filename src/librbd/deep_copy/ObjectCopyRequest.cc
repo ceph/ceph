@@ -8,6 +8,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "osdc/Striper.h"
@@ -50,6 +51,9 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
     m_snap_map(snap_map), m_dst_object_number(dst_object_number),
     m_flatten(flatten), m_on_finish(on_finish) {
   ceph_assert(!m_snap_map.empty());
+
+  m_src_async_op = new io::AsyncOperation();
+  m_src_async_op->start_op(*util::get_image_ctx(m_src_image_ctx));
 
   m_src_io_ctx.dup(m_src_image_ctx->data_ctx);
   m_dst_io_ctx.dup(m_dst_image_ctx->data_ctx);
@@ -958,6 +962,9 @@ void ObjectCopyRequest<I>::finish(int r) {
 
   // ensure IoCtxs are closed prior to proceeding
   auto on_finish = m_on_finish;
+
+  m_src_async_op->finish_op();
+  delete m_src_async_op;
   delete this;
 
   on_finish->complete(r);
