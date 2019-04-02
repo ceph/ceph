@@ -946,6 +946,13 @@ osd_stat_t OSDService::set_osd_stat(vector<int>& hb_peers,
   return osd_stat;
 }
 
+void OSDService::inc_osd_stat_repaired()
+{
+  std::lock_guard l(stat_lock);
+  osd_stat.num_shards_repaired++;
+  return;
+}
+
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {

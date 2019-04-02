@@ -963,6 +963,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_SNAPTRIM_ERROR     (1ULL << 29) // error stopped trimming snaps
 #define PG_STATE_FORCED_RECOVERY    (1ULL << 30) // force recovery of this pg before any other
 #define PG_STATE_FORCED_BACKFILL    (1ULL << 31) // force backfill of this pg before any other
+#define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const vector<int32_t> &a);
@@ -1775,6 +1776,7 @@ struct object_stat_sum_t {
   int64_t num_objects_manifest = 0;
   int64_t num_omap_bytes = 0;
   int64_t num_omap_keys = 0;
+  int64_t num_objects_repaired = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1847,6 +1849,7 @@ struct object_stat_sum_t {
     FLOOR(num_evict_mode_full);
     FLOOR(num_objects_pinned);
     FLOOR(num_legacy_snapsets);
+    FLOOR(num_objects_repaired);
 #undef FLOOR
   }
 
@@ -1883,6 +1886,7 @@ struct object_stat_sum_t {
     SPLIT(num_objects_manifest);
     SPLIT(num_omap_bytes);
     SPLIT(num_omap_keys);
+    SPLIT(num_objects_repaired);
     SPLIT_PRESERVE_NONZERO(num_shallow_scrub_errors);
     SPLIT_PRESERVE_NONZERO(num_deep_scrub_errors);
     for (unsigned i = 0; i < out.size(); ++i) {
@@ -1947,6 +1951,7 @@ struct object_stat_sum_t {
         sizeof(num_objects_manifest) +
         sizeof(num_omap_bytes) +
         sizeof(num_omap_keys) +
+        sizeof(num_objects_repaired) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
@@ -2319,6 +2324,7 @@ struct osd_stat_t {
   store_statfs_t statfs;
   vector<int> hb_peers;
   int32_t snap_trim_queue_len, num_snap_trimming;
+  uint64_t num_shards_repaired;
 
   pow2_hist_t op_queue_age_hist;
 
@@ -2330,12 +2336,14 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
-  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0) {}
+  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
+       num_shards_repaired(0)	{}
 
  void add(const osd_stat_t& o) {
     statfs.add(o.statfs);
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
+    num_shards_repaired += o.num_shards_repaired;
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
@@ -2350,6 +2358,7 @@ struct osd_stat_t {
     statfs.sub(o.statfs);
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
+    num_shards_repaired -= o.num_shards_repaired;
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
@@ -2374,6 +2383,7 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.statfs == r.statfs &&
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
+    l.num_shards_repaired == r.num_shards_repaired &&
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
     l.os_perf_stat == r.os_perf_stat &&
