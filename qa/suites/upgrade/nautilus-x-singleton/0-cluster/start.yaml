@@ -24,12 +24,12 @@ roles:
   - osd.2
   - osd.3
 - - mon.b
+  - mgr.y
   - osd.4
   - osd.5
   - osd.6
   - osd.7
 - - mon.c
-  - mgr.y
   - osd.8
   - osd.9
   - osd.10
