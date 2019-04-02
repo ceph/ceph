@@ -568,6 +568,14 @@ class TestCreateLV(object):
         expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group']
         assert capture.calls[0]['args'][0] == expected
 
+    def test_with_pv(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        monkeypatch.setattr(api, 'get_lv', lambda *a, **kw: self.foo_volume)
+        api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'}, pv='/path')
+        expected = ['lvcreate', '--yes', '-L', '5G', '-n', 'foo', 'foo_group', '/path']
+        assert capture.calls[0]['args'][0] == expected
+
     def test_calls_to_set_type_tag(self, monkeypatch, capture):
         monkeypatch.setattr(process, 'run', capture)
         monkeypatch.setattr(process, 'call', capture)
