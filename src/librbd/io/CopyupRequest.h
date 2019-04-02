@@ -78,7 +78,7 @@ private:
 
   typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> WriteRequests;
 
-  ImageCtx *m_ictx;
+  ImageCtxT *m_image_ctx;
   std::string m_oid;
   uint64_t m_object_no;
   Extents m_image_extents;

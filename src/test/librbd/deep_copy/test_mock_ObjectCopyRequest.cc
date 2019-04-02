@@ -64,7 +64,7 @@ ImageRequest<MockTestImageCtx> *ImageRequest<MockTestImageCtx>::s_instance = nul
 #include "librbd/deep_copy/ObjectCopyRequest.cc"
 template class librbd::deep_copy::ObjectCopyRequest<librbd::MockTestImageCtx>;
 
-bool operator==(const SnapContext& rhs, const SnapContext& lhs) {
+static bool operator==(const SnapContext& rhs, const SnapContext& lhs) {
   return (rhs.seq == lhs.seq && rhs.snaps == lhs.snaps);
 }
 
