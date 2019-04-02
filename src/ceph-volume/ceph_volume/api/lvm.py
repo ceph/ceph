@@ -1201,6 +1201,7 @@ class Volume(object):
                 '--addtag', '%s=%s' % (key, value), self.lv_path
             ]
         )
+        self.tags[key] = value
 
 
 class PVolume(object):
