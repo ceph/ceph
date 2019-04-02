@@ -301,7 +301,7 @@ public:
     auto p = pools.find(pgid.pool());
     ceph_assert(p != pools.end());
     ceph_assert(pgid.ps() < p->second.pg_num);
-    vector<int> acting;
+    std::vector<int> acting;
     p->second.get(pgid.ps(), nullptr, nullptr, &acting, acting_primary);
     if (p->second.erasure) {
       for (uint8_t i = 0; i < acting.size(); ++i) {

@@ -15,6 +15,10 @@
 #include "HitSet.h"
 #include "common/Formatter.h"
 
+using std::ostream;
+using std::list;
+using ceph::Formatter;
+
 // -- HitSet --
 
 HitSet::HitSet(const HitSet::Params& params)
@@ -42,7 +46,7 @@ HitSet::HitSet(const HitSet::Params& params)
   }
 }
 
-void HitSet::encode(bufferlist &bl) const
+void HitSet::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
   encode(sealed, bl);
@@ -55,7 +59,7 @@ void HitSet::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void HitSet::decode(bufferlist::const_iterator& bl)
+void HitSet::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START(1, bl);
   decode(sealed, bl);
@@ -75,7 +79,7 @@ void HitSet::decode(bufferlist::const_iterator& bl)
     impl.reset(NULL);
     break;
   default:
-    throw buffer::malformed_input("unrecognized HitMap type");
+    throw ceph::buffer::malformed_input("unrecognized HitMap type");
   }
   if (impl)
     impl->decode(bl);
@@ -113,7 +117,7 @@ HitSet::Params::Params(const Params& o) noexcept
     create_impl(o.get_type());
     // it's annoying to write virtual operator= methods; use encode/decode
     // instead.
-    bufferlist bl;
+    ceph::buffer::list bl;
     o.impl->encode(bl);
     auto p = bl.cbegin();
     impl->decode(p);
@@ -126,7 +130,7 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
   if (o.impl) {
     // it's annoying to write virtual operator= methods; use encode/decode
     // instead.
-    bufferlist bl;
+    ceph::buffer::list bl;
     o.impl->encode(bl);
     auto p = bl.cbegin();
     impl->decode(p);
@@ -134,7 +138,7 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
   return *this;
 }
 
-void HitSet::Params::encode(bufferlist &bl) const
+void HitSet::Params::encode(ceph::buffer::list &bl) const
 {
   ENCODE_START(1, 1, bl);
   if (impl) {
@@ -167,13 +171,13 @@ bool HitSet::Params::create_impl(impl_type_t type)
   return true;
 }
 
-void HitSet::Params::decode(bufferlist::const_iterator& bl)
+void HitSet::Params::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START(1, bl);
   __u8 type;
   decode(type, bl);
   if (!create_impl((impl_type_t)type))
-    throw buffer::malformed_input("unrecognized HitMap type");
+    throw ceph::buffer::malformed_input("unrecognized HitMap type");
   if (impl)
     impl->decode(bl);
   DECODE_FINISH(bl);

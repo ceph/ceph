@@ -79,8 +79,8 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 
   CompressorRef cs_impl = NULL;
   std::stringstream ss;
-  PluginRegistry *reg = cct->get_plugin_registry();
-  CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", type));
+  auto reg = cct->get_plugin_registry();
+  auto factory = dynamic_cast<ceph::CompressionPlugin*>(reg->get_with_load("compressor", type));
   if (factory == NULL) {
     lderr(cct) << __func__ << " cannot load compressor of type " << type << dendl;
     return NULL;

@@ -1,7 +1,10 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
 #ifndef CEPH_PAXOSSERVICEMESSAGE_H
 #define CEPH_PAXOSSERVICEMESSAGE_H
 
 #include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "mon/Session.h"
 
 class PaxosServiceMessage : public MessageSubType<PaxosServiceMessage> {
@@ -13,7 +16,7 @@ public:
   // track which epoch the leader received a forwarded request in, so we can
   // discard forwarded requests appropriately on election boundaries.
   epoch_t rx_election_epoch;
-  
+
   PaxosServiceMessage()
     : MessageSubType(MSG_PAXOS),
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
@@ -33,7 +36,8 @@ public:
     encode(deprecated_session_mon_tid, payload);
   }
 
-  void paxos_decode(bufferlist::const_iterator& p ) {
+  void paxos_decode(ceph::buffer::list::const_iterator& p ) {
+    using ceph::decode;
     decode(version, p);
     decode(deprecated_session_mon, p);
     decode(deprecated_session_mon_tid, p);

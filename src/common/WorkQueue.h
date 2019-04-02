@@ -56,13 +56,13 @@ public:
   class TPHandle {
     friend class ThreadPool;
     CephContext *cct;
-    heartbeat_handle_d *hb;
+    ceph::heartbeat_handle_d *hb;
     ceph::coarse_mono_clock::rep grace;
     ceph::coarse_mono_clock::rep suicide_grace;
   public:
     TPHandle(
       CephContext *cct,
-      heartbeat_handle_d *hb,
+      ceph::heartbeat_handle_d *hb,
       time_t grace,
       time_t suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
@@ -656,11 +656,11 @@ public:
     BaseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
     virtual ~BaseShardedWQ() {}
 
-    virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
+    virtual void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
     virtual void stop_return_waiting_threads() = 0;
     virtual bool is_shard_empty(uint32_t thread_index) = 0;
-  };      
+  };
 
   template <typename T>
   class ShardedWQ: public BaseShardedWQ {

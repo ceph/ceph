@@ -25,7 +25,7 @@ public:
   friend factory;
 
   errorcode32_t r;
-  string rs;
+  std::string rs;
   
   MCommandReply()
     : MessageInstance(MSG_COMMAND_REPLY) {}
@@ -41,7 +41,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "command_reply"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
@@ -51,6 +51,7 @@ public:
     encode(rs, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(r, p);
     decode(rs, p);

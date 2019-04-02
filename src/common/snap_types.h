@@ -5,13 +5,13 @@
 #include "include/fs_types.h"
 
 namespace ceph {
-
 class Formatter;
 }
+
 struct SnapRealmInfo {
   mutable ceph_mds_snap_realm h;
-  vector<snapid_t> my_snaps;
-  vector<snapid_t> prior_parent_snaps;  // before parent_since
+  std::vector<snapid_t> my_snaps;
+  std::vector<snapid_t> prior_parent_snaps;  // before parent_since
 
   SnapRealmInfo() {
     memset(&h, 0, sizeof(h));
@@ -30,20 +30,20 @@ struct SnapRealmInfo {
   snapid_t parent_since() const { return snapid_t(h.parent_since); }
   snapid_t created() const { return snapid_t(h.created); }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<SnapRealmInfo*>& o);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<SnapRealmInfo*>& o);
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
 
 struct SnapContext {
   snapid_t seq;            // 'time' stamp
-  vector<snapid_t> snaps;  // existent snaps, in descending order
+  std::vector<snapid_t> snaps;  // existent snaps, in descending order
 
   SnapContext() {}
-  SnapContext(snapid_t s, const vector<snapid_t>& v) : seq(s), snaps(v) {}    
+  SnapContext(snapid_t s, const std::vector<snapid_t>& v) : seq(s), snaps(v) {}    
 
   bool is_valid() const;
 
@@ -53,22 +53,22 @@ struct SnapContext {
   }
   bool empty() { return seq == 0; }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(seq, bl);
     encode(snaps, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(seq, bl);
     decode(snaps, bl);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<SnapContext*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<SnapContext*>& o);
 };
 WRITE_CLASS_ENCODER(SnapContext)
 
-inline ostream& operator<<(ostream& out, const SnapContext& snapc) {
+inline std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
   return out << snapc.seq << "=" << snapc.snaps;
 }
 

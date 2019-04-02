@@ -36,33 +36,32 @@ public:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
-  string hostname;
-  map<string, ceph_mon_subscribe_item> what;
-  
+  std::string hostname;
+  std::map<std::string, ceph_mon_subscribe_item> what;
+
   MMonSubscribe() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MMonSubscribe() override {}
 
-public:  
+public:
   void sub_want(const char *w, version_t start, unsigned flags) {
     what[w].start = start;
     what[w].flags = flags;
   }
 
   std::string_view get_type_name() const override { return "mon_subscribe"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_subscribe(" << what << ")";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     if (header.version < 2) {
-      map<string, ceph_mon_subscribe_item_old> oldwhat;
+      std::map<std::string, ceph_mon_subscribe_item_old> oldwhat;
       decode(oldwhat, p);
       what.clear();
-      for (map<string, ceph_mon_subscribe_item_old>::iterator q = oldwhat.begin();
-	   q != oldwhat.end();
-	   q++) {
+      for (auto q = oldwhat.begin(); q != oldwhat.end(); q++) {
 	if (q->second.have)
 	  what[q->first].start = q->second.have + 1;
 	else
@@ -82,10 +81,8 @@ public:
     using ceph::encode;
     if ((features & CEPH_FEATURE_SUBSCRIBE2) == 0) {
       header.version = 0;
-      map<string, ceph_mon_subscribe_item_old> oldwhat;
-      for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
-	   q != what.end();
-	   q++) {
+      std::map<std::string, ceph_mon_subscribe_item_old> oldwhat;
+      for (auto q = what.begin(); q != what.end(); q++) {
 	if (q->second.start)
 	  // warning: start=1 -> have=0, which was ambiguous
 	  oldwhat[q->first].have = q->second.start - 1;

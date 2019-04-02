@@ -37,7 +37,7 @@
 
 // -----------------------------------------------------------------------------
 
-static ostream&
+static std::ostream&
 _tc_prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeIsaTableCache: ";
@@ -284,7 +284,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 
   // we store a new table to the cache
 
-  bufferptr cachetable;
+  ceph::buffer::ptr cachetable;
 
   Mutex::Locker lock(codec_tables_guard);
 
@@ -302,7 +302,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 
     if ((int) cachetable.length() != (k * (m + k)*32)) {
       // we need to replace this with a different size buffer
-      cachetable = buffer::create(k * (m + k)*32);
+      cachetable = ceph::buffer::create(k * (m + k)*32);
     }
 
     // remove from map
@@ -316,7 +316,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
   } else {
     dout(12) << "[ store table  ] = " << signature << dendl;
     // allocate a new buffer
-    cachetable = buffer::create(k * (m + k)*32);
+    cachetable = ceph::buffer::create(k * (m + k)*32);
     decode_tbls_lru->push_front(signature);
     (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
     dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
