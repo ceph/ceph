@@ -30,11 +30,13 @@
           <!-- bool -->
           <div class="col-sm-7"
                *ngIf="moduleOption.value.type === 'bool'">
-            <div class="checkbox checkbox-primary">
+            <div class="custom-control custom-checkbox">
               <input id="{{ moduleOption.value.name }}"
                      type="checkbox"
+                     class="custom-control-input"
                      formControlName="{{ moduleOption.value.name }}">
-              <label for="{{ moduleOption.value.name }}"></label>
+              <label class="custom-control-label"
+                     for="{{ moduleOption.value.name }}"></label>
             </div>
           </div>
 

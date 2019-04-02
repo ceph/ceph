@@ -67,7 +67,6 @@
     "@auth0/angular-jwt": "2.1.0",
     "@ngx-translate/i18n-polyfill": "1.0.0",
     "@swimlane/ngx-datatable": "14.0.0",
-    "awesome-bootstrap-checkbox": "1.0.1",
     "bootstrap": "4.3.1",
     "chart.js": "2.7.3",
     "core-js": "2.6.5",
