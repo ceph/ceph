@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   swift api tests for rgw
+tasks:
+- rgw:
+    client.0:
+- print: "**** done rgw 9-workload"
+- swift:
+    client.0:
+      rgw_server: client.0
+- print: "**** done swift 9-workload"
