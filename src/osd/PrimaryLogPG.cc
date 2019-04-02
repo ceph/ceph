@@ -10488,7 +10488,7 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
     }
 
     publish_stats_to_osd();
-    calc_min_last_complete_ondisk();
+    recovery_state.calc_min_last_complete_ondisk();
 
     dout(10) << " removing " << *repop << dendl;
     ceph_assert(!repop_queue.empty());
@@ -11619,7 +11619,7 @@ void PrimaryLogPG::_committed_pushed_object(
 	    last_complete_ondisk),
 	  get_osdmap_epoch());
       } else {
-	calc_min_last_complete_ondisk();
+	recovery_state.calc_min_last_complete_ondisk();
       }
     }
 
