@@ -7,9 +7,11 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
+import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {
@@ -27,7 +29,7 @@ describe('IscsiComponent', () => {
   };
 
   configureTestBed({
-    imports: [],
+    imports: [SharedModule],
     declarations: [IscsiComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
@@ -35,6 +37,7 @@ describe('IscsiComponent', () => {
       DimlessPipe,
       FormatterService,
       RelativeDatePipe,
+      IscsiBackstorePipe,
       ListPipe,
       { provide: IscsiService, useValue: fakeService },
       i18nProviders

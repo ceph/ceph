@@ -4,7 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
+import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 
 @Component({
   selector: 'cd-iscsi',
@@ -29,7 +29,7 @@ export class IscsiComponent implements OnInit {
   constructor(
     private iscsiService: IscsiService,
     private dimlessPipe: DimlessPipe,
-    private relativeDatePipe: RelativeDatePipe,
+    private iscsiBackstorePipe: IscsiBackstorePipe,
     private i18n: I18n
   ) {}
 
@@ -60,7 +60,8 @@ export class IscsiComponent implements OnInit {
       },
       {
         name: this.i18n('Backstore'),
-        prop: 'backstore'
+        prop: 'backstore',
+        pipe: this.iscsiBackstorePipe
       },
       {
         name: this.i18n('Read Bytes'),

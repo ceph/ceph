@@ -2849,7 +2849,7 @@
         <source>Backstore</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
-          <context context-type="linenumber">17</context>
+          <context context-type="linenumber">16</context>
         </context-group>
       </trans-unit><trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
         <source>Confirm</source>
@@ -2925,8 +2925,8 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">106</context>
         </context-group>
-      </trans-unit><trans-unit id="6c1c7f516d021abaf155aab1e9c2fe96e2c4ff40" datatype="html">
-        <source>Backstore: <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore }}"/>. </source>
+      </trans-unit><trans-unit id="9aff25be088f0efe3eaaf62edf2bff41cc41a617" datatype="html">
+        <source>Backstore: <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">147</context>
