@@ -1398,15 +1398,6 @@ protected:
   bool delete_needs_sleep = false;
 
 protected:
-  void reset_min_peer_features() {
-    peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
-  }
-  uint64_t get_min_peer_features() const { return peer_features; }
-  void apply_peer_features(uint64_t f) { peer_features &= f; }
-
-  uint64_t get_min_acting_features() const { return acting_features; }
-  uint64_t get_min_upacting_features() const { return upacting_features; }
-
   bool hard_limit_pglog() const {
     return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
   }
