@@ -1,7 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { ToastModule, ToastsManager } from 'ng2-toastr';
+import { ToastrModule, ToastrService } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import {
@@ -33,12 +33,12 @@ describe('PrometheusNotificationService', () => {
   };
 
   configureTestBed({
-    imports: [ToastModule.forRoot(), SharedModule, HttpClientTestingModule],
+    imports: [ToastrModule.forRoot(), SharedModule, HttpClientTestingModule],
     providers: [
       PrometheusNotificationService,
       PrometheusAlertFormatter,
       i18nProviders,
-      { provide: ToastsManager, useValue: toastFakeService }
+      { provide: ToastrService, useValue: toastFakeService }
     ]
   });
 

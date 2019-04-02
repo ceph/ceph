@@ -5,7 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 
 import { By } from '@angular/platform-browser';
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
@@ -26,7 +26,7 @@ describe('RbdFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       SharedModule,
       TooltipModule
     ],
