@@ -480,6 +480,11 @@ public:
     return recovery_state.is_forced_recovery_or_backfill();
   }
 
+  PGLog::LogEntryHandlerRef get_log_handler(
+    ObjectStore::Transaction *t) override {
+    return std::make_unique<PG::PGLogEntryHandler>(this, t);
+  }
+
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
@@ -1018,10 +1023,6 @@ protected:
 
   virtual void calc_trim_to_aggressive() = 0;
 
-  void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
-			pg_missing_t& omissing, pg_shard_t from);
-  void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-		       pg_missing_t& omissing, pg_shard_t from);
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
     PG *pg;
     ObjectStore::Transaction *t;
@@ -1053,12 +1054,6 @@ protected:
     ObjectStore::Transaction *t, const hobject_t &soid);
   void remove_snap_mapped_object(
     ObjectStore::Transaction& t, const hobject_t& soid);
-  void merge_log(
-    ObjectStore::Transaction& t, pg_info_t &oinfo,
-    pg_log_t &olog, pg_shard_t from);
-  void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
-
-  void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
     return recovery_state.have_unfound();

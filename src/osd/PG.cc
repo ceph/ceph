@@ -309,64 +309,6 @@ PerfCounters &PG::get_peering_perf() {
   
 /********* PG **********/
 
-void PG::proc_master_log(
-  ObjectStore::Transaction& t, pg_info_t &oinfo,
-  pg_log_t &olog, pg_missing_t& omissing, pg_shard_t from)
-{
-  dout(10) << "proc_master_log for osd." << from << ": "
-	   << olog << " " << omissing << dendl;
-  ceph_assert(!is_peered() && is_primary());
-
-  // merge log into our own log to build master log.  no need to
-  // make any adjustments to their missing map; we are taking their
-  // log to be authoritative (i.e., their entries are by definitely
-  // non-divergent).
-  merge_log(t, oinfo, olog, from);
-  peer_info[from] = oinfo;
-  dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
-  might_have_unfound.insert(from);
-
-  // See doc/dev/osd_internals/last_epoch_started
-  if (oinfo.last_epoch_started > info.last_epoch_started) {
-    info.last_epoch_started = oinfo.last_epoch_started;
-    dirty_info = true;
-  }
-  if (oinfo.last_interval_started > info.last_interval_started) {
-    info.last_interval_started = oinfo.last_interval_started;
-    dirty_info = true;
-  }
-  update_history(oinfo.history);
-  ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
-	 info.last_epoch_started >= info.history.last_epoch_started);
-
-  peer_missing[from].claim(omissing);
-}
-    
-void PG::proc_replica_log(
-  pg_info_t &oinfo,
-  const pg_log_t &olog,
-  pg_missing_t& omissing,
-  pg_shard_t from)
-{
-  dout(10) << "proc_replica_log for osd." << from << ": "
-	   << oinfo << " " << olog << " " << omissing << dendl;
-
-  pg_log.proc_replica_log(oinfo, olog, omissing, from);
-
-  peer_info[from] = oinfo;
-  dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
-  might_have_unfound.insert(from);
-
-  for (map<hobject_t, pg_missing_item>::const_iterator i =
-	 omissing.get_items().begin();
-       i != omissing.get_items().end();
-       ++i) {
-    dout(20) << " after missing " << i->first << " need " << i->second.need
-	     << " have " << i->second.have << dendl;
-  }
-  peer_missing[from].claim(omissing);
-}
-
 void PG::remove_snap_mapped_object(
   ObjectStore::Transaction &t, const hobject_t &soid)
 {
@@ -407,21 +349,6 @@ void PG::update_object_snap_mapping(
     soid,
     snaps,
     &_t);
-}
-
-void PG::merge_log(
-  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, pg_shard_t from)
-{
-  PGLogEntryHandler rollbacker{this, &t};
-  pg_log.merge_log(
-    oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
-}
-
-void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
-{
-  PGLogEntryHandler rollbacker{this, &t};
-  pg_log.rewind_divergent_log(
-    newhead, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
 /******* PG ***********/
@@ -4398,27 +4325,6 @@ bool PG::try_flush_or_schedule_async()
   } else {
     delete c;
     return true;
-  }
-}
-
-void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
-{
-  ceph_assert(!is_primary());
-
-  update_history(oinfo.history);
-  if (!info.stats.stats_invalid && info.stats.stats.sum.num_scrub_errors) {
-    info.stats.stats.sum.num_scrub_errors = 0;
-    info.stats.stats.sum.num_shallow_scrub_errors = 0;
-    info.stats.stats.sum.num_deep_scrub_errors = 0;
-    dirty_info = true;
-  }
-
-  if (!(info.purged_snaps == oinfo.purged_snaps)) {
-    dout(10) << __func__ << " updating purged_snaps to " << oinfo.purged_snaps
-	     << dendl;
-    info.purged_snaps = oinfo.purged_snaps;
-    dirty_info = true;
-    dirty_big_info = true;
   }
 }
 
