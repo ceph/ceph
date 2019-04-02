@@ -133,7 +133,7 @@ seastar::future<bufferlist> CyanStore::read(CollectionRef c,
                                             size_t len,
                                             uint32_t op_flags)
 {
-  logger().info("{} {} {} {}~{}",
+  logger().debug("{} {} {} {}~{}",
                 __func__, c->cid, oid, offset, len);
   if (!c->exists) {
     throw std::runtime_error(fmt::format("collection does not exist: {}", c->cid));
@@ -160,7 +160,7 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                                                      const ghobject_t& oid,
                                                      std::string_view name)
 {
-  logger().info("{} {} {}",
+  logger().debug("{} {} {}",
                 __func__, c->cid, oid);
   auto o = c->get_object(oid);
   if (!o) {
@@ -177,7 +177,7 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
 seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
                                                          const ghobject_t& oid)
 {
-  logger().info("{} {} {}",
+  logger().debug("{} {} {}",
                 __func__, c->cid, oid);
   auto o = c->get_object(oid);
   if (!o) {
@@ -191,7 +191,7 @@ CyanStore::omap_get_values(CollectionRef c,
                            const ghobject_t& oid,
                            std::vector<std::string>&& keys)
 {
-  logger().info("{} {} {}",
+  logger().debug("{} {} {}",
                 __func__, c->cid, oid);
   auto o = c->get_object(oid);
   if (!o) {
@@ -249,7 +249,7 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
                        uint64_t offset, size_t len, const bufferlist& bl,
                        uint32_t fadvise_flags)
 {
-  logger().info("{} {} {} {} ~ {}",
+  logger().debug("{} {} {} {} ~ {}",
                 __func__, cid, oid, offset, len);
   assert(len == bl.length());
 
