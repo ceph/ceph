@@ -9,3 +9,4 @@ tasks:
         - rbd/cli_generic.sh
         - rbd/journal.sh
         - rbd/map-unmap.sh
+        - rbd/qemu-img.sh
