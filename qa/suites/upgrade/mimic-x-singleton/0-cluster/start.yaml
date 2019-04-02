@@ -17,7 +17,6 @@ overrides:
         debug mds: 20
 roles:
 - - mon.a
-  - mgr.x
   - mds.a
   - osd.0
   - osd.1
@@ -29,6 +28,7 @@ roles:
   - osd.6
   - osd.7
 - - mon.c
+  - mgr.x
   - mgr.y
   - osd.8
   - osd.9
