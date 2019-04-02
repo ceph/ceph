@@ -16,16 +16,16 @@
             {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
           <div class="form-group"
                [ngClass]="{':invalid': deletionForm.showError('confirmation', formDir)}">
-            <div class="form-check abc-checkbox abc-checkbox-primary">
-              <input class="form-check-input"
-                     type="checkbox"
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
                      name="confirmation"
                      id="confirmation"
                      formControlName="confirmation"
                      autofocus>
-              <label class="form-check-label"
-                     i18n
-                     for="confirmation">Yes, I am sure.</label>
+              <label class="custom-control-label"
+                     for="confirmation"
+                     i18n>Yes, I am sure.</label>
             </div>
           </div>
         </div>

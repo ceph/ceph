@@ -62,14 +62,14 @@
             class="dropdown-menu px-3">
           <li *ngFor="let column of columns">
 
-            <div class="form-check abc-checkbox abc-checkbox-primary">
-              <input class="form-check-input"
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
                      type="checkbox"
                      (change)="toggleColumn($event)"
                      [name]="column.prop"
                      [id]="column.prop"
                      [checked]="!column.isHidden">
-              <label class="form-check-label"
+              <label class="custom-control-label"
                      [for]="column.prop">{{ column.name }}</label>
             </div>
           </li>

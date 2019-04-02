@@ -103,7 +103,7 @@
               <span class="form-text text-muted"
                     *ngIf="externalPgChange"
                     i18n>The current PGs settings were calculated for you, you
-                    should make sure the values suit your needs before submit.</span>
+                should make sure the values suit your needs before submit.</span>
             </div>
           </div>
 
@@ -267,12 +267,12 @@
             <label i18n
                    class="col-form-label col-sm-3">Flags</label>
             <div class="col-sm-9">
-              <div class="form-check abc-checkbox abc-checkbox-primary">
-                <input class="form-check-input"
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
                        id="ec-overwrites"
-                       type="checkbox"
                        formControlName="ecOverwrites">
-                <label class="form-check-label"
+                <label class="custom-control-label"
                        for="ec-overwrites"
                        i18n>EC Overwrites</label>
               </div>
@@ -298,53 +298,53 @@
           </div>
         </div>
 
-          <!-- Compression -->
-          <div *ngIf="info.is_all_bluestore"
-               formGroupName="compression">
-            <legend i18n>Compression</legend>
+        <!-- Compression -->
+        <div *ngIf="info.is_all_bluestore"
+             formGroupName="compression">
+          <legend i18n>Compression</legend>
 
-            <!-- Compression Mode -->
-            <div class="form-group row">
+          <!-- Compression Mode -->
+          <div class="form-group row">
+            <label i18n
+                   class="col-form-label col-sm-3"
+                   for="mode">Mode</label>
+            <div class="col-sm-9">
+              <select class="form-control"
+                      id="mode"
+                      name="mode"
+                      formControlName="mode">
+                <option *ngFor="let mode of info.compression_modes"
+                        [value]="mode">
+                  {{ mode }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div *ngIf="hasCompressionEnabled()">
+            <!-- Compression algorithm selection -->
+            <div class="form-group row"
+                 [ngClass]="{':invalid': form.showError('algorithm', formDir)}">
               <label i18n
                      class="col-form-label col-sm-3"
-                     for="mode">Mode</label>
+                     for="algorithm">Algorithm</label>
               <div class="col-sm-9">
                 <select class="form-control"
-                        id="mode"
-                        name="mode"
-                        formControlName="mode">
-                  <option *ngFor="let mode of info.compression_modes"
-                          [value]="mode">
-                    {{ mode }}
+                        id="algorithm"
+                        name="algorithm"
+                        formControlName="algorithm">
+                  <option *ngIf="!info.compression_algorithms"
+                          ngValue=""
+                          i18n>Loading...</option>
+                  <option *ngIf="info.compression_algorithms && info.compression_algorithms.length === 0"
+                          i18n
+                          ngValue="">-- No erasure compression algorithm available --</option>
+                  <option *ngFor="let algorithm of info.compression_algorithms"
+                          [value]="algorithm">
+                    {{ algorithm }}
                   </option>
                 </select>
               </div>
             </div>
-            <div *ngIf="hasCompressionEnabled()">
-              <!-- Compression algorithm selection -->
-              <div class="form-group row"
-                   [ngClass]="{':invalid': form.showError('algorithm', formDir)}">
-                <label i18n
-                       class="col-form-label col-sm-3"
-                       for="algorithm">Algorithm</label>
-                <div class="col-sm-9">
-                  <select class="form-control"
-                          id="algorithm"
-                          name="algorithm"
-                          formControlName="algorithm">
-                    <option *ngIf="!info.compression_algorithms"
-                            ngValue=""
-                            i18n>Loading...</option>
-                    <option *ngIf="info.compression_algorithms && info.compression_algorithms.length === 0"
-                            i18n
-                            ngValue="">-- No erasure compression algorithm available --</option>
-                    <option *ngFor="let algorithm of info.compression_algorithms"
-                            [value]="algorithm">
-                      {{ algorithm }}
-                    </option>
-                  </select>
-                </div>
-              </div>
 
               <!-- Compression min blob size -->
               <div class="form-group row"
@@ -369,59 +369,59 @@
                   <span class="form-text text-muted"
                         *ngIf="form.showError('minBlobSize', formDir, 'maximum')"
                         i18n>Value should be less than the maximum blob size</span>
-                </div>
               </div>
-
-              <!-- Compression max blob size -->
-              <div class="form-group row"
-                   [ngClass]="{':invalid': form.showError('maxBlobSize', formDir)}">
-                <label i18n
-                       class="col-form-label col-sm-3"
-                       for="maxBlobSize">Maximum blob size</label>
-                <div class="col-sm-9">
-                  <input id="maxBlobSize"
-                         type="text"
-                         min="0"
-                         formControlName="maxBlobSize"
-                         class="form-control"
-                         i18n-placeholder
-                         placeholder="e.g., 512KiB"
-                         defaultUnit="KiB"
-                         cdDimlessBinary>
-                  <span class="form-text text-muted"
-                        *ngIf="form.showError('maxBlobSize', formDir, 'min')"
-                        i18n>Value should be greater than 0</span>
-                  <span class="form-text text-muted"
-                        *ngIf="form.showError('maxBlobSize', formDir, 'minimum')"
-                        i18n>Value should be greater than the minimum blob size</span>
-                </div>
-              </div>
-
-              <!-- Compression ratio -->
-              <div class="form-group row"
-                   [ngClass]="{':invalid': form.showError('ratio', formDir)}">
-                <label i18n
-                       class="col-form-label col-sm-3"
-                       for="ratio">Ratio</label>
-                <div class="col-sm-9">
-                  <input id="ratio"
-                         name="ratio"
-                         formControlName="ratio"
-                         type="number"
-                         min="0"
-                         max="1"
-                         step="0.1"
-                         class="form-control"
-                         i18n-placeholder
-                         placeholder="Compression ratio">
-                  <span class="form-text text-muted"
-                        *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')"
-                        i18n>Value should be between 0.0 and 1.0</span>
-                </div>
-              </div>
-
             </div>
+
+            <!-- Compression max blob size -->
+            <div class="form-group row"
+                 [ngClass]="{':invalid': form.showError('maxBlobSize', formDir)}">
+              <label i18n
+                     class="col-form-label col-sm-3"
+                     for="maxBlobSize">Maximum blob size</label>
+              <div class="col-sm-9">
+                <input id="maxBlobSize"
+                       type="text"
+                       min="0"
+                       formControlName="maxBlobSize"
+                       class="form-control"
+                       i18n-placeholder
+                       placeholder="e.g., 512KiB"
+                       defaultUnit="KiB"
+                       cdDimlessBinary>
+                <span class="form-text text-muted"
+                      *ngIf="form.showError('maxBlobSize', formDir, 'min')"
+                      i18n>Value should be greater than 0</span>
+                <span class="form-text text-muted"
+                      *ngIf="form.showError('maxBlobSize', formDir, 'minimum')"
+                      i18n>Value should be greater than the minimum blob size</span>
+              </div>
+            </div>
+
+            <!-- Compression ratio -->
+            <div class="form-group row"
+                 [ngClass]="{':invalid': form.showError('ratio', formDir)}">
+              <label i18n
+                     class="col-form-label col-sm-3"
+                     for="ratio">Ratio</label>
+              <div class="col-sm-9">
+                <input id="ratio"
+                       name="ratio"
+                       formControlName="ratio"
+                       type="number"
+                       min="0"
+                       max="1"
+                       step="0.1"
+                       class="form-control"
+                       i18n-placeholder
+                       placeholder="Compression ratio">
+                <span class="form-text text-muted"
+                      *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')"
+                      i18n>Value should be between 0.0 and 1.0</span>
+              </div>
+            </div>
+
           </div>
+        </div>
 
         <!-- Quotas -->
         <div>
