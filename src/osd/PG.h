@@ -999,7 +999,6 @@ protected:
   }
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
-  virtual void dump_recovery_info(Formatter *f) const = 0;
 
   void calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
