@@ -3098,6 +3098,14 @@ int RGWRunBucketSyncCoroutine::operate()
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
         yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+        if (retcode == -ENOENT) {
+          ldout(sync_env->cct, 0) << "bucket sync disabled" << dendl;
+          lease_cr->abort(); // deleted lease object, abort/wakeup instead of unlock
+          lease_cr->wakeup();
+          lease_cr.reset();
+          drain_all();
+          return set_cr_done();
+        }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: init sync on " << bucket_shard_str{bs}
               << " failed, retcode=" << retcode << dendl;
@@ -3450,6 +3458,14 @@ int DataLogTrimCR::operate()
     return set_cr_done();
   }
   return 0;
+}
+
+RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards,
+                                            std::vector<std::string>& markers)
+{
+  return new DataLogTrimCR(store, http, num_shards, markers);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {
