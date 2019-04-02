@@ -6796,6 +6796,23 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   return 0;
 }
 
+int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info,
+                                const rgw_obj& obj)
+{
+  bucket = bucket_info.bucket;
+
+  int ret = store->open_bucket_index_shard(bucket_info, index_ctx,
+                                           obj.get_hash_object(), &bucket_obj,
+                                           &shard_id);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
+    return ret;
+  }
+  ldout(store->ctx(), 20) << " bucket index object: " << bucket_obj << dendl;
+
+  return 0;
+}
+
 int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info, int sid)
 {
   bucket = bucket_info.bucket;
@@ -7563,6 +7580,15 @@ public:
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+
+      // filter out olh attributes
+      auto iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
+      while (iter != src_attrs.end()) {
+        if (!boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PREFIX)) {
+          break;
+        }
+        iter = src_attrs.erase(iter);
+      }
     }
 
     if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
@@ -11412,6 +11438,61 @@ int RGWRados::bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObj
   return 0;
 }
 
+// a multisite sync bug resulted in the OLH head attributes being overwritten by
+// the attributes from another zone, causing link_olh() to fail endlessly due to
+// olh_tag mismatch. this attempts to detect this case and reconstruct the OLH
+// attributes from the bucket index. see http://tracker.ceph.com/issues/37792
+int RGWRados::repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
+                         const rgw_obj& obj)
+{
+  // fetch the current olh entry from the bucket index
+  rgw_bucket_olh_entry olh;
+  int r = bi_get_olh(bucket_info, obj, &olh);
+  if (r < 0) {
+    ldout(cct, 0) << "repair_olh failed to read olh entry for " << obj << dendl;
+    return r;
+  }
+  if (olh.tag == state->olh_tag.to_str()) { // mismatch already resolved?
+    return 0;
+  }
+
+  ldout(cct, 4) << "repair_olh setting olh_tag=" << olh.tag
+      << " key=" << olh.key << " delete_marker=" << olh.delete_marker << dendl;
+
+  // rewrite OLH_ID_TAG and OLH_INFO from current olh
+  ObjectWriteOperation op;
+  // assert this is the same olh tag we think we're fixing
+  bucket_index_guard_olh_op(*state, op);
+  // preserve existing mtime
+  struct timespec mtime_ts = ceph::real_clock::to_timespec(state->mtime);
+  op.mtime2(&mtime_ts);
+  {
+    bufferlist bl;
+    bl.append(olh.tag.c_str(), olh.tag.size());
+    op.setxattr(RGW_ATTR_OLH_ID_TAG, bl);
+  }
+  {
+    RGWOLHInfo info;
+    info.target = rgw_obj(bucket_info.bucket, olh.key);
+    info.removed = olh.delete_marker;
+    bufferlist bl;
+    encode(info, bl);
+    op.setxattr(RGW_ATTR_OLH_INFO, bl);
+  }
+  rgw_rados_ref ref;
+  r = get_obj_head_ref(bucket_info, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 0) << "repair_olh failed to write olh attributes with "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RGWRados::bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver)
 {
   rgw_rados_ref ref;
@@ -11673,6 +11754,12 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const r
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
+        // the bucket index rejected the link_olh() due to olh tag mismatch;
+        // attempt to reconstruct olh head attributes based on the bucket index
+        int r2 = repair_olh(state, bucket_info, olh_obj);
+        if (r2 < 0 && r2 != -ECANCELED) {
+          return r2;
+        }
         continue;
       }
       return ret;
@@ -12955,16 +13042,11 @@ int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent)
+int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                              rgw_bucket_dir_entry *dirent)
 {
-  rgw_rados_ref ref;
-  int r = get_obj_head_ref(bucket_info, obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-
   rgw_cls_bi_entry bi_entry;
-  r = bi_get(obj.bucket, obj, InstanceIdx, &bi_entry);
+  int r = bi_get(bucket_info, obj, InstanceIdx, &bi_entry);
   if (r < 0 && r != -ENOENT) {
     ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
@@ -12982,10 +13064,33 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rg
   return 0;
 }
 
-int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry)
+int RGWRados::bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                         rgw_bucket_olh_entry *olh)
+{
+  rgw_cls_bi_entry bi_entry;
+  int r = bi_get(bucket_info, obj, OLHIdx, &bi_entry);
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
+  }
+  if (r < 0) {
+    return r;
+  }
+  auto iter = bi_entry.data.begin();
+  try {
+    decode(*olh, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode bi_entry()" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWRados::bi_get(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                     BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
   BucketShard bs(this);
-  int ret = bs.init(bucket, obj, nullptr /* no RGWBucketInfo */);
+  int ret = bs.init(bucket_info, obj);
   if (ret < 0) {
     ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
@@ -12993,11 +13098,7 @@ int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, r
 
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   
-  ret = cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
 }
 
 void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry)

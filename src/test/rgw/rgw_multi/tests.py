@@ -751,6 +751,44 @@ def test_suspended_delete_marker_full_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_version_suspended_incremental_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone = zonegroup_conns.rw_zones[0]
+
+    # create a non-versioned bucket
+    bucket = zone.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # upload an initial object
+    key1 = new_key(zone, bucket, 'obj')
+    key1.set_contents_from_string('')
+    log.debug('created initial version id=%s', key1.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # enable versioning
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # re-upload the object as a new version
+    key2 = new_key(zone, bucket, 'obj')
+    key2.set_contents_from_string('')
+    log.debug('created new version id=%s', key2.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+    # suspend versioning
+    bucket.configure_versioning(False)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # re-upload the object as a 'null' version
+    key3 = new_key(zone, bucket, 'obj')
+    key3.set_contents_from_string('')
+    log.debug('created null version id=%s', key3.version_id)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
     for _, bucket in zone_bucket:

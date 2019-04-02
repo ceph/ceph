@@ -2710,6 +2710,7 @@ public:
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj, RGWBucketInfo* out);
     int init(const rgw_bucket& _bucket, int sid, RGWBucketInfo* out);
+    int init(const RGWBucketInfo& bucket_info, const rgw_obj& obj);
     int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
@@ -3384,6 +3385,8 @@ public:
   int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
+  int repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
+                 const rgw_obj& obj);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
                           uint64_t olh_epoch, rgw_zone_set *zones_trace = nullptr);
 
@@ -3550,8 +3553,9 @@ public:
   int stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id);
   int get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id, map<int, string>& max_marker);
 
-  int bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent);
-  int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
+  int bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent);
+  int bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh);
+  int bi_get(const RGWBucketInfo& bucket_info, const rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
   void bi_put(librados::ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(BucketShard& bs, rgw_cls_bi_entry& entry);
   int bi_put(rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry);

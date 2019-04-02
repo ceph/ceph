@@ -5624,7 +5624,7 @@ next:
 
     rgw_cls_bi_entry entry;
 
-    ret = store->bi_get(bucket, obj, bi_index_type, &entry);
+    ret = store->bi_get(bucket_info, obj, bi_index_type, &entry);
     if (ret < 0) {
       cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
