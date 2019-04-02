@@ -5,11 +5,13 @@
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/snap_types.h"
 #include "librados/AioCompletionImpl.h"
+#include "log/Log.h"
 #include "test/librados_test_stub/TestClassHandler.h"
 #include "test/librados_test_stub/TestIoCtxImpl.h"
 #include "test/librados_test_stub/TestRadosClient.h"
@@ -104,6 +106,7 @@ librados::TestRadosClient *create_rados_client() {
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
   cct->_conf.parse_env(cct->get_module_type());
   cct->_conf.apply_changes(nullptr);
+  cct->_log->start();
 
   auto rados_client =
     librados_test_stub::get_cluster()->create_rados_client(cct);
