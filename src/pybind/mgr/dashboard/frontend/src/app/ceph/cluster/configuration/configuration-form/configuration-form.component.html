@@ -99,12 +99,12 @@
             <div class="form-group row"
                  *ngIf="type === 'bool'">
               <div class="offset-sm-3 col-sm-9">
-                <div class="form-check abc-checkbox abc-checkbox-primary">
-                  <input class="form-check-input"
+                <div class="custom-control custom-checkbox">
+                  <input type="checkbox"
+                         class="custom-control-input"
                          [id]="section"
-                         type="checkbox"
                          [formControlName]="section">
-                  <label class="form-check-label"
+                  <label class="custom-control-label"
                          [for]="section">{{ section }}
                   </label>
                 </div>
