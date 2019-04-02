@@ -2277,8 +2277,8 @@ void PeeringState::activate(
     pl->on_activate(std::move(to_trim));
   }
   if (acting.size() >= pool.info.min_size) {
-    PG::PGLogEntryHandler handler{pg, &t};
-    pg_log.roll_forward(&handler);
+    PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+    pg_log.roll_forward(rollbacker.get());
   }
 }
 
@@ -2310,6 +2310,109 @@ void PeeringState::share_pg_info()
     pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
   }
 }
+
+void PeeringState::merge_log(
+  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
+  pg_shard_t from)
+{
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+  pg_log.merge_log(
+    oinfo, olog, from, info, rollbacker.get(), dirty_info, dirty_big_info);
+}
+
+void PeeringState::rewind_divergent_log(
+  ObjectStore::Transaction& t, eversion_t newhead)
+{
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+  pg_log.rewind_divergent_log(
+    newhead, info, rollbacker.get(), dirty_info, dirty_big_info);
+}
+
+
+void PeeringState::proc_primary_info(
+  ObjectStore::Transaction &t, const pg_info_t &oinfo)
+{
+  ceph_assert(!is_primary());
+
+  update_history(oinfo.history);
+  if (!info.stats.stats_invalid && info.stats.stats.sum.num_scrub_errors) {
+    info.stats.stats.sum.num_scrub_errors = 0;
+    info.stats.stats.sum.num_shallow_scrub_errors = 0;
+    info.stats.stats.sum.num_deep_scrub_errors = 0;
+    dirty_info = true;
+  }
+
+  if (!(info.purged_snaps == oinfo.purged_snaps)) {
+    psdout(10) << __func__ << " updating purged_snaps to "
+	       << oinfo.purged_snaps
+	       << dendl;
+    info.purged_snaps = oinfo.purged_snaps;
+    dirty_info = true;
+    dirty_big_info = true;
+  }
+}
+
+void PeeringState::proc_master_log(
+  ObjectStore::Transaction& t, pg_info_t &oinfo,
+  pg_log_t &olog, pg_missing_t& omissing, pg_shard_t from)
+{
+  psdout(10) << "proc_master_log for osd." << from << ": "
+	     << olog << " " << omissing << dendl;
+  ceph_assert(!is_peered() && is_primary());
+
+  // merge log into our own log to build master log.  no need to
+  // make any adjustments to their missing map; we are taking their
+  // log to be authoritative (i.e., their entries are by definitely
+  // non-divergent).
+  merge_log(t, oinfo, olog, from);
+  peer_info[from] = oinfo;
+  psdout(10) << " peer osd." << from << " now " << oinfo
+	     << " " << omissing << dendl;
+  might_have_unfound.insert(from);
+
+  // See doc/dev/osd_internals/last_epoch_started
+  if (oinfo.last_epoch_started > info.last_epoch_started) {
+    info.last_epoch_started = oinfo.last_epoch_started;
+    dirty_info = true;
+  }
+  if (oinfo.last_interval_started > info.last_interval_started) {
+    info.last_interval_started = oinfo.last_interval_started;
+    dirty_info = true;
+  }
+  update_history(oinfo.history);
+  ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	 info.last_epoch_started >= info.history.last_epoch_started);
+
+  peer_missing[from].claim(omissing);
+}
+
+void PeeringState::proc_replica_log(
+  pg_info_t &oinfo,
+  const pg_log_t &olog,
+  pg_missing_t& omissing,
+  pg_shard_t from)
+{
+  psdout(10) << "proc_replica_log for osd." << from << ": "
+	     << oinfo << " " << olog << " " << omissing << dendl;
+
+  pg_log.proc_replica_log(oinfo, olog, omissing, from);
+
+  peer_info[from] = oinfo;
+  psdout(10) << " peer osd." << from << " now "
+	     << oinfo << " " << omissing << dendl;
+  might_have_unfound.insert(from);
+
+  for (map<hobject_t, pg_missing_item>::const_iterator i =
+	 omissing.get_items().begin();
+       i != omissing.get_items().end();
+       ++i) {
+    psdout(20) << " after missing " << i->first
+	       << " need " << i->second.need
+	       << " have " << i->second.have << dendl;
+  }
+  peer_missing[from].claim(omissing);
+}
+
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -3802,7 +3905,7 @@ boost::statechart::result PeeringState::Active::react(const MLogRec& logevt)
   DECLARE_LOCALS
   psdout(10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
-  pg->proc_replica_log(
+  ps->proc_replica_log(
     logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
   bool got_missing = ps->search_for_missing(
     ps->peer_info[logevt.from],
@@ -4030,7 +4133,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
 boost::statechart::result PeeringState::ReplicaActive::react(const MInfoRec& infoevt)
 {
   DECLARE_LOCALS
-  pg->proc_primary_info(*context<PeeringMachine>().get_cur_transaction(),
+  ps->proc_primary_info(*context<PeeringMachine>().get_cur_transaction(),
 			infoevt.info);
   return discard_event();
 }
@@ -4040,7 +4143,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   DECLARE_LOCALS
   psdout(10) << "received log from " << logevt.from << dendl;
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
-  pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
+  ps->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
 
   return discard_event();
@@ -4134,12 +4237,12 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     ps->dirty_info = true;
     ps->dirty_big_info = true;  // maybe.
 
-    PG::PGLogEntryHandler rollbacker{pg, t};
-    ps->pg_log.reset_backfill_claim_log(msg->log, &rollbacker);
+    PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
+    ps->pg_log.reset_backfill_claim_log(msg->log, rollbacker.get());
 
     ps->pg_log.reset_backfill();
   } else {
-    pg->merge_log(*t, msg->info, msg->log, logevt.from);
+    ps->merge_log(*t, msg->info, msg->log, logevt.from);
   }
 
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
@@ -4156,7 +4259,7 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
   if (ps->info.last_update > infoevt.info.last_update) {
     // rewind divergent log entries
     ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
-    pg->rewind_divergent_log(*t, infoevt.info.last_update);
+    ps->rewind_divergent_log(*t, infoevt.info.last_update);
     ps->info.stats = infoevt.info.stats;
     ps->info.hit_set = infoevt.info.hit_set;
   }
@@ -4541,7 +4644,7 @@ boost::statechart::result PeeringState::GetLog::react(const GotLog&)
   psdout(10) << "leaving GetLog" << dendl;
   if (msg) {
     psdout(10) << "processing master log" << dendl;
-    pg->proc_master_log(*context<PeeringMachine>().get_cur_transaction(),
+    ps->proc_master_log(*context<PeeringMachine>().get_cur_transaction(),
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
@@ -4853,7 +4956,7 @@ boost::statechart::result PeeringState::GetMissing::react(const MLogRec& logevt)
   DECLARE_LOCALS
 
   peer_missing_requested.erase(logevt.from);
-  pg->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+  ps->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
 
   if (peer_missing_requested.empty()) {
     if (ps->need_up_thru) {
