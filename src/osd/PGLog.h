@@ -59,6 +59,7 @@ struct PGLog : DoutPrefixProvider {
       version_t v) = 0;
     virtual ~LogEntryHandler() {}
   };
+  using LogEntryHandlerRef = unique_ptr<LogEntryHandler>;
 
 public:
   /**
