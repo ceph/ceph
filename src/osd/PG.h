@@ -1009,25 +1009,6 @@ protected:
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
 
-  void calc_min_last_complete_ondisk() {
-    eversion_t min = last_complete_ondisk;
-    ceph_assert(!acting_recovery_backfill.empty());
-    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	 i != acting_recovery_backfill.end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      if (peer_last_complete_ondisk.count(*i) == 0)
-	return;   // we don't have complete info
-      eversion_t a = peer_last_complete_ondisk[*i];
-      if (a < min)
-	min = a;
-    }
-    if (min == min_last_complete_ondisk)
-      return;
-    min_last_complete_ondisk = min;
-    return;
-  }
-
   virtual void calc_trim_to() = 0;
 
   virtual void calc_trim_to_aggressive() = 0;
