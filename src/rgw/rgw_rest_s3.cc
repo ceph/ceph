@@ -4079,7 +4079,7 @@ std::mutex rgw::auth::s3::LDAPEngine::mtx;
 void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
 {
   if (! cct->_conf->rgw_s3_auth_use_ldap ||
-      ! cct->_conf->rgw_ldap_uri.empty()) {
+      cct->_conf->rgw_ldap_uri.empty()) {
     return;
   }
 
