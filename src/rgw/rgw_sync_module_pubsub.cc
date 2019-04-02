@@ -15,6 +15,9 @@
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+#include "rgw_amqp.h"
+#endif
 
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/yield.hpp>
@@ -1532,6 +1535,17 @@ RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFor
   } else {
     effective_conf.decode_json(&p);
   }
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  if (!rgw::amqp::init(cct)) {
+    ldout(cct, 1) << "ERROR: failed to initialize AMQP server in pubsub sync module" << dendl;
+  }
+#endif
+}
+
+RGWPSSyncModuleInstance::~RGWPSSyncModuleInstance() {
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  rgw::amqp::shutdown();
+#endif
 }
 
 RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler()
