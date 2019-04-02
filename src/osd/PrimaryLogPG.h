@@ -1062,11 +1062,6 @@ protected:
   map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const override {
-    f->open_array_section("backfill_targets");
-    for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
-        p != backfill_targets.end(); ++p)
-      f->dump_stream("replica") << *p;
-    f->close_section();
     f->open_array_section("waiting_on_backfill");
     for (set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
         p != waiting_on_backfill.end(); ++p)

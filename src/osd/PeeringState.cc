@@ -4065,7 +4065,12 @@ boost::statechart::result PeeringState::Active::react(const QueryState& q)
   }
   {
     q.f->open_object_section("recovery_progress");
-    pg->dump_recovery_info(q.f);
+    q.f->open_array_section("backfill_targets");
+    for (set<pg_shard_t>::const_iterator p = ps->backfill_targets.begin();
+	 p != ps->backfill_targets.end(); ++p)
+      q.f->dump_stream("replica") << *p;
+    q.f->close_section();
+    pl->dump_recovery_info(q.f);
     q.f->close_section();
   }
 

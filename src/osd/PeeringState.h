@@ -152,6 +152,8 @@ public:
     virtual PGLog::LogEntryHandlerRef get_log_handler(
       ObjectStore::Transaction *t) = 0;
 
+    virtual void dump_recovery_info(Formatter *f) const = 0;
+
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
 
