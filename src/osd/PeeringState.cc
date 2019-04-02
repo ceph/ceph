@@ -135,6 +135,55 @@ PeeringState::PeeringState(
   machine.initiate();
 }
 
+void PeeringState::start_handle(PeeringCtx *new_ctx) {
+  ceph_assert(!rctx);
+  ceph_assert(!orig_ctx);
+  orig_ctx = new_ctx;
+  if (new_ctx) {
+    if (messages_pending_flush) {
+      rctx = PeeringCtx(*messages_pending_flush, *new_ctx);
+    } else {
+      rctx = *new_ctx;
+    }
+    rctx->start_time = ceph_clock_now();
+  }
+}
+
+void PeeringState::begin_block_outgoing() {
+  ceph_assert(!messages_pending_flush);
+  ceph_assert(orig_ctx);
+  ceph_assert(rctx);
+  messages_pending_flush = BufferedRecoveryMessages();
+  rctx = PeeringCtx(*messages_pending_flush, *orig_ctx);
+}
+
+void PeeringState::clear_blocked_outgoing() {
+  ceph_assert(orig_ctx);
+  ceph_assert(rctx);
+  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
+}
+
+void PeeringState::end_block_outgoing() {
+  ceph_assert(messages_pending_flush);
+  ceph_assert(orig_ctx);
+  ceph_assert(rctx);
+
+  rctx = PeeringCtx(*orig_ctx);
+  rctx->accept_buffered_messages(*messages_pending_flush);
+  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
+}
+
+void PeeringState::end_handle() {
+  if (rctx) {
+    utime_t dur = ceph_clock_now() - rctx->start_time;
+    machine.event_time += dur;
+  }
+
+  machine.event_count++;
+  rctx = boost::optional<PeeringCtx>();
+  orig_ctx = NULL;
+}
+
 void PeeringState::check_recovery_sources(const OSDMapRef& osdmap)
 {
   /*
@@ -5120,7 +5169,7 @@ void PeeringState::WaitUpThru::exit()
 
 /*----PeeringState::PeeringMachine Methods-----*/
 #undef dout_prefix
-#define dout_prefix pg->gen_prefix(*_dout)
+#define dout_prefix dpp->gen_prefix(*_dout)
 
 void PeeringState::PeeringMachine::log_enter(const char *state_name)
 {
@@ -5140,56 +5189,3 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
   event_time = utime_t();
 }
 
-
-/*---------------------------------------------------*/
-#undef dout_prefix
-#define dout_prefix ((debug_pg ? debug_pg->gen_prefix(*_dout) : *_dout) << " PriorSet: ")
-
-void PeeringState::start_handle(PeeringCtx *new_ctx) {
-  ceph_assert(!rctx);
-  ceph_assert(!orig_ctx);
-  orig_ctx = new_ctx;
-  if (new_ctx) {
-    if (messages_pending_flush) {
-      rctx = PeeringCtx(*messages_pending_flush, *new_ctx);
-    } else {
-      rctx = *new_ctx;
-    }
-    rctx->start_time = ceph_clock_now();
-  }
-}
-
-void PeeringState::begin_block_outgoing() {
-  ceph_assert(!messages_pending_flush);
-  ceph_assert(orig_ctx);
-  ceph_assert(rctx);
-  messages_pending_flush = BufferedRecoveryMessages();
-  rctx = PeeringCtx(*messages_pending_flush, *orig_ctx);
-}
-
-void PeeringState::clear_blocked_outgoing() {
-  ceph_assert(orig_ctx);
-  ceph_assert(rctx);
-  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
-}
-
-void PeeringState::end_block_outgoing() {
-  ceph_assert(messages_pending_flush);
-  ceph_assert(orig_ctx);
-  ceph_assert(rctx);
-
-  rctx = PeeringCtx(*orig_ctx);
-  rctx->accept_buffered_messages(*messages_pending_flush);
-  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
-}
-
-void PeeringState::end_handle() {
-  if (rctx) {
-    utime_t dur = ceph_clock_now() - rctx->start_time;
-    machine.event_time += dur;
-  }
-
-  machine.event_count++;
-  rctx = boost::optional<PeeringCtx>();
-  orig_ctx = NULL;
-}
