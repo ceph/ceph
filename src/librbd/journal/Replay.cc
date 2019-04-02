@@ -1176,7 +1176,7 @@ bool Replay<I>::clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp) {
     // it wouldn't have been recorded in the journal
     ldout(cct, 5) << ": no-op IO event beyond image size" << dendl;
     aio_comp->get();
-    aio_comp->unblock();
+    aio_comp->set_request_count(0);
     aio_comp->put();
     return true;
   }
