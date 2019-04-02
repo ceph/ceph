@@ -4753,7 +4753,7 @@ void PG::C_DeleteMore::complete(int r) {
   delete this;
 }
 
-void PG::_delete_some(ObjectStore::Transaction *t)
+void PG::do_delete_work(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
 

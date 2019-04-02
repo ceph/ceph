@@ -129,6 +129,10 @@ public:
 
     virtual void on_active_exit() = 0;
 
+    // PG deletion
+    virtual void on_removal(ObjectStore::Transaction *t) = 0;
+    virtual void do_delete_work(ObjectStore::Transaction *t) = 0;
+
     // active map notifications
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
