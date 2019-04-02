@@ -485,6 +485,8 @@ public:
     return std::make_unique<PG::PGLogEntryHandler>(this, t);
   }
 
+  void do_delete_work(ObjectStore::Transaction *t) override;
+
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
@@ -548,8 +550,6 @@ public:
   virtual void agent_delay() = 0;
   virtual void agent_clear() = 0;
   virtual void agent_choose_mode_restart() = 0;
-
-  virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
   struct C_DeleteMore : public Context {
     PGRef pg;

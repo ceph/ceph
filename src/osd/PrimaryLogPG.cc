@@ -12069,6 +12069,8 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
   pg_log.roll_forward(&rollbacker);
 
   on_shutdown();
+
+  t->register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
 }
 
 void PrimaryLogPG::clear_async_reads()
