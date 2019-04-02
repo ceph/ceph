@@ -594,6 +594,87 @@ class TestCreateLV(object):
         assert len(result) == 40
 
 
+class TestTags(object):
+
+    def setup(self):
+        self.foo_volume_clean = api.Volume(lv_name='foo_clean', lv_path='/pathclean',
+            vg_name='foo_group',
+            lv_tags='')
+        self.foo_volume = api.Volume(lv_name='foo', lv_path='/path',
+            vg_name='foo_group',
+            lv_tags='ceph.foo0=bar0,ceph.foo1=bar1,ceph.foo2=bar2')
+
+    def test_set_tag(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        self.foo_volume_clean.set_tag('foo', 'bar')
+        expected = ['lvchange', '--addtag', 'foo=bar', '/pathclean']
+        assert capture.calls[0]['args'][0] == expected
+        assert self.foo_volume_clean.tags == {'foo': 'bar'}
+
+    def test_set_clear_tag(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        self.foo_volume_clean.set_tag('foo', 'bar')
+        assert self.foo_volume_clean.tags == {'foo': 'bar'}
+        self.foo_volume_clean.clear_tag('foo')
+        expected = ['lvchange', '--deltag', 'foo=bar', '/pathclean']
+        assert self.foo_volume_clean.tags == {}
+        assert capture.calls[1]['args'][0] == expected
+
+    def test_set_tags(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        tags = {'ceph.foo0': 'bar0', 'ceph.foo1': 'bar1', 'ceph.foo2': 'bar2'}
+        assert self.foo_volume.tags == tags
+
+        tags = {'ceph.foo0': 'bar0', 'ceph.foo1': 'baz1', 'ceph.foo2': 'baz2'}
+        self.foo_volume.set_tags(tags)
+        assert self.foo_volume.tags == tags
+
+        self.foo_volume.set_tag('ceph.foo1', 'other1')
+        tags['ceph.foo1'] = 'other1'
+        assert self.foo_volume.tags == tags
+
+        expected = [
+            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/path'],
+            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/path'],
+            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/path'],
+            ['lvchange', '--addtag', 'ceph.foo1=baz1', '/path'],
+            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/path'],
+            ['lvchange', '--addtag', 'ceph.foo2=baz2', '/path'],
+            ['lvchange', '--deltag', 'ceph.foo1=baz1', '/path'],
+            ['lvchange', '--addtag', 'ceph.foo1=other1', '/path'],
+        ]
+        # The order isn't guaranted
+        for call in capture.calls:
+            assert call['args'][0] in expected
+        assert len(capture.calls) == len(expected)
+
+    def test_clear_tags(self, monkeypatch, capture):
+        monkeypatch.setattr(process, 'run', capture)
+        monkeypatch.setattr(process, 'call', capture)
+        tags = {'ceph.foo0': 'bar0', 'ceph.foo1': 'bar1', 'ceph.foo2': 'bar2'}
+
+        self.foo_volume_clean.set_tags(tags)
+        assert self.foo_volume_clean.tags == tags
+        self.foo_volume_clean.clear_tags()
+        assert self.foo_volume_clean.tags == {}
+
+        expected = [
+            ['lvchange', '--addtag', 'ceph.foo0=bar0', '/pathclean'],
+            ['lvchange', '--addtag', 'ceph.foo1=bar1', '/pathclean'],
+            ['lvchange', '--addtag', 'ceph.foo2=bar2', '/pathclean'],
+            ['lvchange', '--deltag', 'ceph.foo0=bar0', '/pathclean'],
+            ['lvchange', '--deltag', 'ceph.foo1=bar1', '/pathclean'],
+            ['lvchange', '--deltag', 'ceph.foo2=bar2', '/pathclean'],
+        ]
+        # The order isn't guaranted
+        for call in capture.calls:
+            assert call['args'][0] in expected
+        assert len(capture.calls) == len(expected)
+
+
 class TestExtendVG(object):
 
     def setup(self):
