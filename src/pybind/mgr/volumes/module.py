@@ -131,7 +131,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         r, outb, outs = self.mon_command({
             'prefix': 'osd pool create',
             'pool': mdp_name,
-            'pg_num': 8
+            'pg_num': 16,
+            'pg_num_min': 16,
         })
         if r != 0:
             return r, outb, outs
