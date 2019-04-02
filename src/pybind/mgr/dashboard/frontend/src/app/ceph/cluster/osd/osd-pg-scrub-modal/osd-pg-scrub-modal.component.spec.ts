@@ -4,8 +4,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
@@ -27,7 +27,7 @@ describe('OsdPgScrubModalComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     declarations: [OsdPgScrubModalComponent],
     providers: [BsModalRef, i18nProviders]

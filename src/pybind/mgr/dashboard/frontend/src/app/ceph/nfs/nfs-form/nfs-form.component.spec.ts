@@ -4,8 +4,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TypeaheadModule } from 'ngx-bootstrap/typeahead';
+import { ToastrModule } from 'ngx-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -28,7 +28,7 @@ describe('NfsFormComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         SharedModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         TypeaheadModule.forRoot()
       ],
       providers: [

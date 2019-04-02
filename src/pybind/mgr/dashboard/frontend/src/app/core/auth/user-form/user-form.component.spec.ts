@@ -5,8 +5,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -47,7 +47,7 @@ describe('UserFormComponent', () => {
         HttpClientTestingModule,
         ReactiveFormsModule,
         ComponentsModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         SharedModule
       ],
       declarations: [UserFormComponent, FakeComponent],

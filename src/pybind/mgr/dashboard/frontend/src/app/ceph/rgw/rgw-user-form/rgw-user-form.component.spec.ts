@@ -4,8 +4,8 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -29,7 +29,7 @@ describe('RgwUserFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     providers: [BsModalService, i18nProviders]
   });

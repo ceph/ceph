@@ -1,8 +1,8 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { PopoverModule } from 'ngx-bootstrap/popover';
+import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PrometheusService } from '../../../shared/api/prometheus.service';
@@ -21,7 +21,7 @@ describe('NotificationsComponent', () => {
       HttpClientTestingModule,
       PopoverModule.forRoot(),
       SharedModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     declarations: [NotificationsComponent],
     providers: i18nProviders
