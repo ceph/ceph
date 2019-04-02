@@ -1053,9 +1053,19 @@ void PG::set_probe_targets(const set<pg_shard_t> &probe_set)
   }
 }
 
-void PG::send_cluster_message(int target, Message *m, epoch_t epoch)
+void PG::send_cluster_message(
+  int target, Message *m,
+  epoch_t epoch, bool share_map_update=false)
 {
-  osd->send_message_osd_cluster(target, m, epoch);
+  ConnectionRef con = osd->get_con_osd_cluster(
+    target, get_osdmap_epoch());
+  if (!con)
+    return;
+
+  if (share_map_update) {
+    osd->share_map_peer(target, con.get(), get_osdmap());
+  }
+  osd->send_message_osd_cluster(m, con.get());
 }
 
 void PG::clear_probe_targets()
@@ -4181,77 +4191,6 @@ void PG::merge_new_log_entries(
       pg_log.get_missing(),
       peer_missing,
       peer_info);
-  }
-}
-
-void PG::fulfill_info(
-  pg_shard_t from, const pg_query_t &query,
-  pair<pg_shard_t, pg_info_t> &notify_info)
-{
-  ceph_assert(from == primary);
-  ceph_assert(query.type == pg_query_t::INFO);
-
-  // info
-  dout(10) << "sending info" << dendl;
-  notify_info = make_pair(from, info);
-}
-
-void PG::fulfill_log(
-  pg_shard_t from, const pg_query_t &query, epoch_t query_epoch)
-{
-  dout(10) << "log request from " << from << dendl;
-  ceph_assert(from == primary);
-  ceph_assert(query.type != pg_query_t::INFO);
-  ConnectionRef con = osd->get_con_osd_cluster(
-    from.osd, get_osdmap_epoch());
-  if (!con) return;
-
-  MOSDPGLog *mlog = new MOSDPGLog(
-    from.shard, pg_whoami.shard,
-    get_osdmap_epoch(),
-    info, query_epoch);
-  mlog->missing = pg_log.get_missing();
-
-  // primary -> other, when building master log
-  if (query.type == pg_query_t::LOG) {
-    dout(10) << " sending info+missing+log since " << query.since
-	     << dendl;
-    if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
-      osd->clog->error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
-			<< " when my log.tail is " << pg_log.get_tail()
-			<< ", sending full log instead";
-      mlog->log = pg_log.get_log();           // primary should not have requested this!!
-    } else
-      mlog->log.copy_after(pg_log.get_log(), query.since);
-  }
-  else if (query.type == pg_query_t::FULLLOG) {
-    dout(10) << " sending info+missing+full log" << dendl;
-    mlog->log = pg_log.get_log();
-  }
-
-  dout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
-
-  osd->share_map_peer(from.osd, con.get(), get_osdmap());
-  osd->send_message_osd_cluster(mlog, con.get());
-}
-
-void PG::fulfill_query(const MQuery& query, PeeringCtx *rctx)
-{
-  if (query.query.type == pg_query_t::INFO) {
-    pair<pg_shard_t, pg_info_t> notify_info;
-    update_history(query.query.history);
-    fulfill_info(query.from, query.query, notify_info);
-    rctx->send_notify(
-      notify_info.first,
-      pg_notify_t(
-	notify_info.first.shard, pg_whoami.shard,
-	query.query_epoch,
-	get_osdmap_epoch(),
-	notify_info.second),
-      past_intervals);
-  } else {
-    update_history(query.query.history);
-    fulfill_log(query.from, query.query, query.query_epoch);
   }
 }
 

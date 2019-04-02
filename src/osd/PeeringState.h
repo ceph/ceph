@@ -69,7 +69,8 @@ public:
     virtual void on_info_history_change() = 0;
     virtual void scrub_requested(bool deep, bool repair) = 0;
 
-    virtual void send_cluster_message(int osd, Message *m, epoch_t epoch) = 0;
+    virtual void send_cluster_message(
+      int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
 
     // Flush state
     virtual bool try_flush_or_schedule_async() = 0;
@@ -1357,6 +1358,13 @@ public:
 		       pg_shard_t from);
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
+
+  void fulfill_info(
+    pg_shard_t from, const pg_query_t &query,
+    pair<pg_shard_t, pg_info_t> &notify_info);
+  void fulfill_log(
+    pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
+  void fulfill_query(const MQuery& q, PeeringCtx *rctx);
 
 public:
   PeeringState(

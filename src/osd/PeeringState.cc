@@ -2413,6 +2413,73 @@ void PeeringState::proc_replica_log(
   peer_missing[from].claim(omissing);
 }
 
+void PeeringState::fulfill_info(
+  pg_shard_t from, const pg_query_t &query,
+  pair<pg_shard_t, pg_info_t> &notify_info)
+{
+  ceph_assert(from == primary);
+  ceph_assert(query.type == pg_query_t::INFO);
+
+  // info
+  psdout(10) << "sending info" << dendl;
+  notify_info = make_pair(from, info);
+}
+
+void PeeringState::fulfill_log(
+  pg_shard_t from, const pg_query_t &query, epoch_t query_epoch)
+{
+  psdout(10) << "log request from " << from << dendl;
+  ceph_assert(from == primary);
+  ceph_assert(query.type != pg_query_t::INFO);
+
+  MOSDPGLog *mlog = new MOSDPGLog(
+    from.shard, pg_whoami.shard,
+    get_osdmap_epoch(),
+    info, query_epoch);
+  mlog->missing = pg_log.get_missing();
+
+  // primary -> other, when building master log
+  if (query.type == pg_query_t::LOG) {
+    psdout(10) << " sending info+missing+log since " << query.since
+	       << dendl;
+    if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
+      pl->get_clog().error() << info.pgid << " got broken pg_query_t::LOG since "
+			     << query.since
+			     << " when my log.tail is " << pg_log.get_tail()
+			     << ", sending full log instead";
+      mlog->log = pg_log.get_log();           // primary should not have requested this!!
+    } else
+      mlog->log.copy_after(pg_log.get_log(), query.since);
+  }
+  else if (query.type == pg_query_t::FULLLOG) {
+    psdout(10) << " sending info+missing+full log" << dendl;
+    mlog->log = pg_log.get_log();
+  }
+
+  psdout(10) << " sending " << mlog->log << " " << mlog->missing << dendl;
+
+  pl->send_cluster_message(from.osd, mlog, get_osdmap_epoch(), true);
+}
+
+void PeeringState::fulfill_query(const MQuery& query, PeeringCtx *rctx)
+{
+  if (query.query.type == pg_query_t::INFO) {
+    pair<pg_shard_t, pg_info_t> notify_info;
+    update_history(query.query.history);
+    fulfill_info(query.from, query.query, notify_info);
+    rctx->send_notify(
+      notify_info.first,
+      pg_notify_t(
+	notify_info.first.shard, pg_whoami.shard,
+	query.query_epoch,
+	get_osdmap_epoch(),
+	notify_info.second),
+      past_intervals);
+  } else {
+    update_history(query.query.history);
+    fulfill_log(query.from, query.query, query.query_epoch);
+  }
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -4178,7 +4245,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   const MQuery& query)
 {
   DECLARE_LOCALS
-  pg->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
+  ps->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
   return discard_event();
 }
 
@@ -4274,7 +4341,7 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
 boost::statechart::result PeeringState::Stray::react(const MQuery& query)
 {
   DECLARE_LOCALS
-  pg->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
+  ps->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
   return discard_event();
 }
 
