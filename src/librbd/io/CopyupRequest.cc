@@ -35,37 +35,54 @@ namespace {
 class C_UpdateObjectMap : public C_AsyncObjectThrottle<> {
 public:
   C_UpdateObjectMap(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
-                    uint64_t object_no, const std::vector<uint64_t> *snap_ids,
+                    uint64_t object_no, uint8_t head_object_map_state,
+                    const std::vector<uint64_t> *snap_ids,
                     const ZTracer::Trace &trace, size_t snap_id_idx)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no),
-      m_snap_ids(*snap_ids), m_trace(trace), m_snap_id_idx(snap_id_idx)
+      m_head_object_map_state(head_object_map_state), m_snap_ids(*snap_ids),
+      m_trace(trace), m_snap_id_idx(snap_id_idx)
   {
   }
 
   int send() override {
-    uint64_t snap_id = m_snap_ids[m_snap_id_idx];
-    if (snap_id == CEPH_NOSNAP) {
-      RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-      RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-      ceph_assert(m_image_ctx.exclusive_lock->is_lock_owner());
-      ceph_assert(m_image_ctx.object_map != nullptr);
-      bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, false, this);
-      return (sent ? 0 : 1);
+    ceph_assert(m_image_ctx.owner_lock.is_locked());
+    if (m_image_ctx.exclusive_lock == nullptr) {
+      return 1;
     }
-
-    uint8_t state = OBJECT_EXISTS;
-    if (m_image_ctx.test_features(RBD_FEATURE_FAST_DIFF) &&
-        m_snap_id_idx + 1 < m_snap_ids.size()) {
-      state = OBJECT_EXISTS_CLEAN;
-    }
+    ceph_assert(m_image_ctx.exclusive_lock->is_lock_owner());
 
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
     if (m_image_ctx.object_map == nullptr) {
       return 1;
     }
 
+    uint64_t snap_id = m_snap_ids[m_snap_id_idx];
+    if (snap_id == CEPH_NOSNAP) {
+      return update_head();
+    } else {
+      return update_snapshot(snap_id);
+    }
+  }
+
+  int update_head() {
+    RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+    bool sent = m_image_ctx.object_map->aio_update<Context>(
+      CEPH_NOSNAP, m_object_no, m_head_object_map_state, {}, m_trace, false,
+      this);
+    return (sent ? 0 : 1);
+  }
+
+  int update_snapshot(uint64_t snap_id) {
+    uint8_t state = OBJECT_EXISTS;
+    if (m_image_ctx.test_features(RBD_FEATURE_FAST_DIFF,
+                                  m_image_ctx.snap_lock) &&
+        m_snap_id_idx > 0) {
+      // first snapshot should be exists+dirty since it contains
+      // the copyup data -- later snapshots inherit the data.
+      state = OBJECT_EXISTS_CLEAN;
+    }
+
+    RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
     bool sent = m_image_ctx.object_map->aio_update<Context>(
       snap_id, m_object_no, state, {}, m_trace, true, this);
     ceph_assert(sent);
@@ -74,6 +91,7 @@ public:
 
 private:
   uint64_t m_object_no;
+  uint8_t m_head_object_map_state;
   const std::vector<uint64_t> &m_snap_ids;
   const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
@@ -177,7 +195,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   }
   m_ictx->copyup_list_lock.Unlock();
 
-  update_object_map_head();
+  update_object_maps();
 }
 
 template <typename I>
@@ -250,138 +268,60 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
   m_ictx->copyup_list_lock.Unlock();
   m_ictx->snap_lock.put_read();
 
-  update_object_map_head();
-}
-
-template <typename I>
-void CopyupRequest<I>::update_object_map_head() {
-  auto cct = m_ictx->cct;
-  ldout(cct, 20) << "oid=" << m_oid << dendl;
-
-  {
-    RWLock::RLocker owner_locker(m_ictx->owner_lock);
-    RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    if (m_ictx->object_map != nullptr) {
-      bool copy_on_read = m_pending_requests.empty();
-      ceph_assert(m_ictx->exclusive_lock->is_lock_owner());
-
-      RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-
-      if (!m_ictx->snaps.empty()) {
-        if (m_deep_copy) {
-          // don't copy ids for the snaps updated by object deep copy or
-          // that don't overlap
-          std::set<uint64_t> deep_copied;
-          for (auto &it : m_ictx->migration_info.snap_map) {
-            if (it.first != CEPH_NOSNAP) {
-              deep_copied.insert(it.second.front());
-            }
-          }
-          std::copy_if(m_ictx->snaps.begin(), m_ictx->snaps.end(),
-                       std::back_inserter(m_snap_ids),
-                       [this, cct, &deep_copied](uint64_t snap_id) {
-                         if (deep_copied.count(snap_id)) {
-                           return false;
-                         }
-                         RWLock::RLocker parent_locker(m_ictx->parent_lock);
-                         uint64_t parent_overlap = 0;
-                         int r = m_ictx->get_parent_overlap(snap_id,
-                                                            &parent_overlap);
-                         if (r < 0) {
-                           ldout(cct, 5) << "failed getting parent overlap for "
-                                         << "snap_id: " << snap_id << ": "
-                                         << cpp_strerror(r) << dendl;
-                         }
-                         if (parent_overlap == 0) {
-                           return false;
-                         }
-                         std::vector<std::pair<uint64_t, uint64_t>> extents;
-                         Striper::extent_to_file(cct, &m_ictx->layout,
-                                                 m_object_no, 0,
-                                                 m_ictx->layout.object_size,
-                                                 extents);
-                         auto overlap = m_ictx->prune_parent_extents(
-                             extents, parent_overlap);
-                         return overlap > 0;
-                       });
-        } else {
-          m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
-                            m_ictx->snaps.end());
-        }
-      }
-      if (copy_on_read &&
-          (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
-        m_snap_ids.insert(m_snap_ids.begin(), CEPH_NOSNAP);
-        object_map_locker.unlock();
-        snap_locker.unlock();
-        owner_locker.unlock();
-
-        update_object_maps();
-        return;
-      }
-
-      bool may_update = false;
-      uint8_t new_state;
-      uint8_t current_state = (*m_ictx->object_map)[m_object_no];
-
-      auto r_it = m_pending_requests.rbegin();
-      if (r_it != m_pending_requests.rend()) {
-        auto req = *r_it;
-        new_state = req->get_pre_write_object_map_state();
-
-        ldout(cct, 20) << req->get_op_type() << " object no "
-                       << m_object_no << " current state "
-                       << stringify(static_cast<uint32_t>(current_state))
-                       << " new state " << stringify(static_cast<uint32_t>(new_state))
-                       << dendl;
-        may_update = true;
-      }
-
-      if (may_update && (new_state != current_state) &&
-          m_ictx->object_map->aio_update<
-              CopyupRequest<I>,
-              &CopyupRequest<I>::handle_update_object_map_head>(
-            CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
-            false, this)) {
-        return;
-      }
-    }
-  }
-
-  update_object_maps();
-}
-
-template <typename I>
-void CopyupRequest<I>::handle_update_object_map_head(int r) {
-  ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
-                         << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_ictx->cct) << "failed to update head object map: "
-                       << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
-  }
-
   update_object_maps();
 }
 
 template <typename I>
 void CopyupRequest<I>::update_object_maps() {
-  if (m_snap_ids.empty()) {
-    // no object map update required
+  RWLock::RLocker owner_locker(m_ictx->owner_lock);
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+  if (m_ictx->object_map == nullptr) {
+    snap_locker.unlock();
+    owner_locker.unlock();
+
     copyup();
     return;
   }
 
-  // update object maps for HEAD and all existing snapshots
-  ldout(m_ictx->cct, 20) << "oid=" << m_oid << dendl;
+  auto cct = m_ictx->cct;
+  ldout(cct, 20) << "oid=" << m_oid << dendl;
 
-  RWLock::RLocker owner_locker(m_ictx->owner_lock);
+  if (!m_ictx->snaps.empty()) {
+    if (m_deep_copy) {
+      compute_deep_copy_snap_ids();
+    } else {
+      m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.rbegin(),
+                        m_ictx->snaps.rend());
+    }
+  }
+
+  bool copy_on_read = m_pending_requests.empty();
+  uint8_t head_object_map_state = OBJECT_EXISTS;
+  if (copy_on_read && !m_snap_ids.empty() &&
+      m_ictx->test_features(RBD_FEATURE_FAST_DIFF, m_ictx->snap_lock)) {
+    // HEAD is non-dirty since data is tied to first snapshot
+    head_object_map_state = OBJECT_EXISTS_CLEAN;
+  }
+
+  auto r_it = m_pending_requests.rbegin();
+  if (r_it != m_pending_requests.rend()) {
+    // last write-op determines the final object map state
+    head_object_map_state = (*r_it)->get_pre_write_object_map_state();
+  }
+
+  RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+  if ((*m_ictx->object_map)[m_object_no] != head_object_map_state) {
+    // (maybe) need to update the HEAD object map state
+    m_snap_ids.push_back(CEPH_NOSNAP);
+  }
+  object_map_locker.unlock();
+  snap_locker.unlock();
+
+  ceph_assert(m_ictx->exclusive_lock->is_lock_owner());
   AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_UpdateObjectMap>(),
-    boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids, m_trace,
-    boost::lambda::_2));
+    boost::lambda::_1, m_ictx, m_object_no, head_object_map_state, &m_snap_ids,
+    m_trace, boost::lambda::_2));
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_update_object_maps>(this);
   auto throttle = new AsyncObjectThrottle<>(
@@ -403,6 +343,11 @@ void CopyupRequest<I>::handle_update_object_maps(int r) {
     return;
   }
 
+  copyup();
+}
+
+template <typename I>
+void CopyupRequest<I>::copyup() {
   m_ictx->copyup_list_lock.Lock();
   if (!m_copyup_required) {
     m_ictx->copyup_list_lock.Unlock();
@@ -413,11 +358,6 @@ void CopyupRequest<I>::handle_update_object_maps(int r) {
   }
   m_ictx->copyup_list_lock.Unlock();
 
-  copyup();
-}
-
-template <typename I>
-void CopyupRequest<I>::copyup() {
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << dendl;
 
   m_ictx->snap_lock.get_read();
@@ -598,6 +538,48 @@ bool CopyupRequest<I>::is_update_object_map_required(int r) {
   auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
   ceph_assert(it != m_ictx->migration_info.snap_map.end());
   return it->second[0] != CEPH_NOSNAP;
+}
+
+template <typename I>
+void CopyupRequest<I>::compute_deep_copy_snap_ids() {
+  ceph_assert(m_ictx->snap_lock.is_locked());
+
+  // don't copy ids for the snaps updated by object deep copy or
+  // that don't overlap
+  std::set<uint64_t> deep_copied;
+  for (auto &it : m_ictx->migration_info.snap_map) {
+    if (it.first != CEPH_NOSNAP) {
+      deep_copied.insert(it.second.front());
+    }
+  }
+
+  RWLock::RLocker parent_locker(m_ictx->parent_lock);
+  std::copy_if(m_ictx->snaps.rbegin(), m_ictx->snaps.rend(),
+               std::back_inserter(m_snap_ids),
+               [this, cct=m_ictx->cct, &deep_copied](uint64_t snap_id) {
+      if (deep_copied.count(snap_id)) {
+        return false;
+      }
+
+      uint64_t parent_overlap = 0;
+      int r = m_ictx->get_parent_overlap(snap_id,
+                                         &parent_overlap);
+      if (r < 0) {
+        ldout(cct, 5) << "failed getting parent overlap for snap_id: "
+                      << snap_id << ": " << cpp_strerror(r) << dendl;
+      }
+      if (parent_overlap == 0) {
+        return false;
+      }
+      std::vector<std::pair<uint64_t, uint64_t>> extents;
+      Striper::extent_to_file(cct, &m_ictx->layout,
+                              m_object_no, 0,
+                              m_ictx->layout.object_size,
+                              extents);
+      auto overlap = m_ictx->prune_parent_extents(
+          extents, parent_overlap);
+      return overlap > 0;
+    });
 }
 
 } // namespace io

@@ -53,25 +53,26 @@ private:
    *
    *              <start>
    *                 |
+   *      /---------/ \---------\
+   *      |                     |
+   *      v                     v
+   *  READ_FROM_PARENT      DEEP_COPY
+   *      |                     |
+   *      \---------\ /---------/
+   *                 |
+   *                 v (skip if not needed)
+   *         UPDATE_OBJECT_MAPS
+   *                 |
+   *                 v (skip if not needed)
+   *              COPYUP
+   *                 |
    *                 v
-   *    . . .STATE_READ_FROM_PARENT. . .
-   *    . .          |                 .
-   *    . .          v                 .
-   *    . .  STATE_OBJECT_MAP_HEAD     v (copy on read /
-   *    . .          |                 .  no HEAD rev. update)
-   *    v v          v                 .
-   *    . .    STATE_OBJECT_MAP. . . . .
-   *    . .          |
-   *    . .          v
-   *    . . . . > STATE_COPYUP
-   *    .            |
-   *    .            v
-   *    . . . . > <finish>
+   *              <finish>
    *
    * @endverbatim
    *
-   * The _OBJECT_MAP state is skipped if the object map isn't enabled or if
-   * an object map update isn't required. The _COPYUP state is skipped if
+   * The OBJECT_MAP state is skipped if the object map isn't enabled or if
+   * an object map update isn't required. The COPYUP state is skipped if
    * no data was read from the parent *and* there are no additional ops.
    */
 
@@ -103,9 +104,6 @@ private:
   void deep_copy();
   void handle_deep_copy(int r);
 
-  void update_object_map_head();
-  void handle_update_object_map_head(int r);
-
   void update_object_maps();
   void handle_update_object_maps(int r);
 
@@ -121,6 +119,7 @@ private:
   bool is_update_object_map_required(int r);
   bool is_deep_copy() const;
 
+  void compute_deep_copy_snap_ids();
 };
 
 } // namespace io
