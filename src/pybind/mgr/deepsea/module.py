@@ -47,7 +47,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
     MODULE_OPTIONS = [
         {
             'name': 'salt_api_url',
-            'default': None
+            'default': ''
         },
         {
             'name': 'salt_api_eauth',
@@ -55,11 +55,11 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         },
         {
             'name': 'salt_api_username',
-            'default': None
+            'default': ''
         },
         {
             'name': 'salt_api_password',
-            'default': None
+            'default': ''
         }
     ]
 
@@ -133,17 +133,12 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             result = []
             if event_data['success']:
                 for node_name, node_devs in event_data["return"].items():
-                    devs = []
-                    for d in node_devs:
-                        dev = orchestrator.InventoryDevice()
-                        dev.blank = d['blank']
-                        dev.type = d['type']
-                        dev.id = d['id']
-                        dev.size = d['size']
-                        dev.extended = d['extended']
-                        dev.metadata_space_free = d['metadata_space_free']
-                        devs.append(dev)
+                    devs = list(map(lambda di:
+                        orchestrator.InventoryDevice.from_ceph_volume_inventory(di),
+                        node_devs))
                     result.append(orchestrator.InventoryNode(node_name, devs))
+            else:
+                self.log.error(event_data['return'])
             return result
 
         with self._completion_lock:
@@ -189,6 +184,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         desc.service_instance = service_instance
                         desc.service_type = service_type
                         result.append(desc)
+            else:
+                self.log.error(event_data['return'])
             return result
 
         with self._completion_lock:
