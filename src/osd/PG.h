@@ -682,7 +682,8 @@ protected:
 public:
   bool dne() { return info.dne(); }
 
-  virtual void send_cluster_message(int osd, Message *m, epoch_t epoch);
+  virtual void send_cluster_message(
+    int osd, Message *m, epoch_t epoch, bool share_map_update) override;
 
 protected:
   epoch_t get_last_peering_reset() const {
@@ -1540,10 +1541,6 @@ protected:
   void update_history(const pg_history_t& history) {
     recovery_state.update_history(history);
   }
-  void fulfill_info(pg_shard_t from, const pg_query_t &query,
-		    pair<pg_shard_t, pg_info_t> &notify_info);
-  void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
-  void fulfill_query(const MQuery& q, PeeringCtx *rctx);
 
   // OpRequest queueing
   bool can_discard_op(OpRequestRef& op);
