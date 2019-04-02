@@ -32,9 +32,12 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
-#include <errno.h>
+#include <cerrno>
 
 #include "objclass/objclass.h"
+
+using ceph::bufferlist;
+using std::string;
 
 CLS_VER(1,0)
 CLS_NAME(hello)

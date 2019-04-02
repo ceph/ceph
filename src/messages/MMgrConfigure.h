@@ -40,6 +40,7 @@ public:
 
   void decode_payload() override
   {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(stats_period, p);
     if (header.version >= 2) {
@@ -58,9 +59,9 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mgrconfigure"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << "(period=" << stats_period
-                           << ", threshold=" << stats_threshold << ")";
+			   << ", threshold=" << stats_threshold << ")";
   }
 
   MMgrConfigure()

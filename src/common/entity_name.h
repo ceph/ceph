@@ -26,12 +26,12 @@
  */
 struct EntityName
 {
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(type, bl);
     encode(id, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     uint32_t type_;
     std::string id_;

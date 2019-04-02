@@ -1,25 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
+#include <cstdlib>
+#include <iostream>
+
+#include <boost/lexical_cast.hpp>
+#include <boost/icl/interval_map.hpp>
+#include <boost/algorithm/string/join.hpp>
+
+#include "common/SubProcess.h"
+#include "common/fork_function.h"
+
 #include "include/stringify.h"
 #include "CrushTester.h"
 #include "CrushTreeDumper.h"
 #include "include/ceph_features.h"
 
-#include <algorithm>
-#include <stdlib.h>
-#include <boost/lexical_cast.hpp>
-// to workaround https://svn.boost.org/trac/boost/ticket/9501
-#ifdef _LIBCPP_VERSION
-#include <boost/version.hpp>
-#if BOOST_VERSION < 105600
-#define ICL_USE_BOOST_MOVE_IMPLEMENTATION
-#endif
-#endif
-#include <boost/icl/interval_map.hpp>
-#include <boost/algorithm/string/join.hpp>
-#include "common/SubProcess.h"
-#include "common/fork_function.h"
+
+using std::cerr;
+using std::cout;
+using std::map;
+using std::ostringstream;
+using std::string;
+using std::stringstream;
+using std::vector;
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -77,7 +82,7 @@ int CrushTester::get_maximum_affected_by_rule(int ruleno)
    * get the smallest number of buckets available of any type as this is our upper bound on
    * the number of replicas we can place
   */
-  int max_affected = max( crush.get_max_buckets(), crush.get_max_devices() );
+  int max_affected = std::max( crush.get_max_buckets(), crush.get_max_devices() );
 
   for(std::vector<int>::iterator it = affected_types.begin(); it != affected_types.end(); ++it){
     if (max_devices_of_type[*it] > 0 && max_devices_of_type[*it] < max_affected )
@@ -264,7 +269,7 @@ int CrushTester::random_placement(int ruleno, vector<int>& out, int maxout, vect
     return -EINVAL;
 
   // determine the real maximum number of devices to return
-  int devices_requested = min(maxout, get_maximum_affected_by_rule(ruleno));
+  int devices_requested = std::min(maxout, get_maximum_affected_by_rule(ruleno));
   bool accept_placement = false;
 
   vector<int> trial_placement(devices_requested);
@@ -498,7 +503,7 @@ int CrushTester::test()
   }
 
   if (output_utilization_all)
-    err << "devices weights (hex): " << hex << weight << dec << std::endl;
+    cerr << "devices weights (hex): " << std::hex << weight << std::dec << std::endl;
 
   // make adjustments
   adjust_weights(weight);
@@ -560,7 +565,7 @@ int CrushTester::test()
 	continue;
 
       // compute the expected number of objects stored per device in the absence of weighting
-      float expected_objects = min(nr, get_maximum_affected_by_rule(r)) * num_objects;
+      float expected_objects = std::min(nr, get_maximum_affected_by_rule(r)) * num_objects;
 
       // compute each device's proportional weight
       vector<float> proportional_weights( per.size() );
@@ -595,7 +600,7 @@ int CrushTester::test()
           objects_per_batch = (batch_max - batch_min + 1);
         }
 
-        float batch_expected_objects = min(nr, get_maximum_affected_by_rule(r)) * objects_per_batch;
+        float batch_expected_objects = std::min(nr, get_maximum_affected_by_rule(r)) * objects_per_batch;
         vector<float> batch_num_objects_expected( per.size() );
 
         for (unsigned i = 0; i < per.size() ; i++)

@@ -25,9 +25,17 @@
 #include "common/dout.h"
 #include "common/Clock.h"
 
+using std::list;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::DNSResolver;
 using ceph::Formatter;
 
-void mon_info_t::encode(bufferlist& bl, uint64_t features) const
+void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   uint8_t v = 4;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -45,7 +53,7 @@ void mon_info_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void mon_info_t::decode(bufferlist::const_iterator& p)
+void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
 {
   DECODE_START(4, p);
   decode(name, p);
@@ -97,29 +105,25 @@ void MonMap::calc_legacy_ranks()
   // added complexity makes up for the additional memory usage of a 'set'.
   set<mon_info_t, rank_cmp> tmp;
 
-  for (map<string,mon_info_t>::iterator p = mon_info.begin();
-      p != mon_info.end();
-      ++p) {
+  for (auto p = mon_info.begin(); p != mon_info.end(); ++p) {
     mon_info_t &m = p->second;
     tmp.insert(m);
   }
 
   // map the set to the actual ranks etc
   unsigned i = 0;
-  for (set<mon_info_t>::iterator p = tmp.begin();
-      p != tmp.end();
-      ++p, ++i) {
+  for (auto p = tmp.begin(); p != tmp.end(); ++p, ++i) {
     ranks[i] = p->name;
   }
 }
 
-void MonMap::encode(bufferlist& blist, uint64_t con_features) const
+void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
 {
   if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
     using ceph::encode;
     __u16 v = 1;
     encode(v, blist);
-    encode_raw(fsid, blist);
+    ceph::encode_raw(fsid, blist);
     encode(epoch, blist);
     vector<entity_inst_t> mon_inst(ranks.size());
     for (unsigned n = 0; n < ranks.size(); n++) {
@@ -151,7 +155,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     using ceph::encode;
     __u16 v = 2;
     encode(v, blist);
-    encode_raw(fsid, blist);
+    ceph::encode_raw(fsid, blist);
     encode(epoch, blist);
     encode(legacy_mon_addr, blist, con_features);
     encode(last_changed, blist);
@@ -161,7 +165,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
 
   if (!HAVE_FEATURE(con_features, SERVER_NAUTILUS)) {
     ENCODE_START(5, 3, blist);
-    encode_raw(fsid, blist);
+    ceph::encode_raw(fsid, blist);
     encode(epoch, blist);
     encode(legacy_mon_addr, blist, con_features);
     encode(last_changed, blist);
@@ -174,7 +178,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   }
 
   ENCODE_START(7, 6, blist);
-  encode_raw(fsid, blist);
+  ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
   encode(created, blist);
@@ -186,11 +190,11 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   ENCODE_FINISH(blist);
 }
 
-void MonMap::decode(bufferlist::const_iterator& p)
+void MonMap::decode(ceph::buffer::list::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
   DECODE_START_LEGACY_COMPAT_LEN_16(7, 3, 3, p);
-  decode_raw(fsid, p);
+  ceph::decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
     vector<entity_inst_t> mon_inst;
@@ -273,7 +277,7 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
 int MonMap::write(const char *fn) 
 {
   // encode
-  bufferlist bl;
+  ceph::buffer::list bl;
   encode(bl, CEPH_FEATURES_ALL);
   
   return bl.write_file(fn);
@@ -282,7 +286,7 @@ int MonMap::write(const char *fn)
 int MonMap::read(const char *fn) 
 {
   // read
-  bufferlist bl;
+  ceph::buffer::list bl;
   std::string error;
   int r = bl.read_file(fn, &error);
   if (r < 0)
@@ -300,9 +304,7 @@ void MonMap::print_summary(ostream& out) const
   // mon_info_t instead. As such, print the map in a way
   // that keeps the expected format.
   bool has_printed = false;
-  for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-       p != mon_info.end();
-       ++p) {
+  for (auto p = mon_info.begin(); p != mon_info.end(); ++p) {
     if (has_printed)
       out << ",";
     out << p->first << "=" << p->second.public_addrs;
@@ -320,9 +322,7 @@ void MonMap::print(ostream& out) const
   out << "min_mon_release " << (int)min_mon_release
       << " (" << ceph_release_name(min_mon_release) << ")\n";
   unsigned i = 0;
-  for (vector<string>::const_iterator p = ranks.begin();
-       p != ranks.end();
-       ++p) {
+  for (auto p = ranks.begin(); p != ranks.end(); ++p) {
     out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
   }
 }
@@ -341,9 +341,7 @@ void MonMap::dump(Formatter *f) const
   f->close_section();
   f->open_array_section("mons");
   int i = 0;
-  for (vector<string>::const_iterator p = ranks.begin();
-       p != ranks.end();
-       ++p, ++i) {
+  for (auto p = ranks.begin(); p != ranks.end(); ++p, ++i) {
     f->open_object_section("mon");
     f->dump_int("rank", i);
     f->dump_string("name", *p);
@@ -649,8 +647,8 @@ future<> MonMap::read_monmap(const std::string& monmap)
     return f.size().then([this, f = std::move(f)](size_t s) {
       return do_with(make_file_input_stream(f), [this, s](input_stream<char>& in) {
         return in.read_exactly(s).then([this](temporary_buffer<char> buf) {
-          bufferlist bl;
-          bl.append(buffer::create(std::move(buf)));
+          ceph::buffer::list bl;
+          bl.append(ceph::buffer::create(std::move(buf)));
           decode(bl);
         });
       });
@@ -762,7 +760,7 @@ int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
   int r;
   try {
     r = read(monmap.c_str());
-  } catch (buffer::error&) {
+  } catch (ceph::buffer::error&) {
     r = -EINVAL;
   }
   if (r >= 0)

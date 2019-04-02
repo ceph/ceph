@@ -58,7 +58,7 @@ protected:
   MgrMap map;
   Messenger *msgr;
 
-  unique_ptr<MgrSessionState> session;
+  std::unique_ptr<MgrSessionState> session;
 
   Mutex lock = {"MgrClient::lock"};
   Cond shutdown_cond;
@@ -137,8 +137,8 @@ public:
     pgstats_cb = std::move(cb_);
   }
 
-  int start_command(const vector<string>& cmd, const bufferlist& inbl,
-		    bufferlist *outbl, string *outs,
+  int start_command(const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+		    ceph::buffer::list *outbl, std::string *outs,
 		    Context *onfinish);
 
   int service_daemon_register(

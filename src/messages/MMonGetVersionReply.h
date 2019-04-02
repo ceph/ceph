@@ -37,7 +37,7 @@ public:
     return "mon_get_version_reply";
   }
 
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_get_version_reply(handle=" << handle << " version=" << version << ")";
   }
 
@@ -49,6 +49,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(handle, p);
     decode(version, p);

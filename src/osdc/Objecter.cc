@@ -12,6 +12,8 @@
  *
  */
 
+#include <cerrno>
+
 #include "Objecter.h"
 #include "osd/OSDMap.h"
 #include "Filer.h"
@@ -42,7 +44,6 @@
 
 #include "messages/MWatchNotify.h"
 
-#include <errno.h>
 
 #include "common/config.h"
 #include "common/perf_counters.h"
@@ -50,6 +51,23 @@
 #include "include/str_list.h"
 #include "common/errno.h"
 #include "common/EventTrace.h"
+
+using std::list;
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::vector;
+
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+
+using std::defer_lock;
 
 using ceph::real_time;
 using ceph::real_clock;
@@ -59,6 +77,9 @@ using ceph::mono_time;
 
 using ceph::timespan;
 
+using ceph::shunique_lock;
+using ceph::acquire_shared;
+using ceph::acquire_unique;
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
@@ -156,7 +177,7 @@ class Objecter::RequestStateHook : public AdminSocketHook {
 public:
   explicit RequestStateHook(Objecter *objecter);
   bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override;
+	    std::string_view format, ceph::buffer::list& out) override;
 };
 
 /**
@@ -524,7 +545,7 @@ void Objecter::_send_linger(LingerOp *info,
   vector<OSDOp> opv;
   Context *oncommit = NULL;
   LingerOp::shared_lock watchl(info->watch_lock);
-  bufferlist *poutbl = NULL;
+  ceph::buffer::list *poutbl = NULL;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect"
 		   << dendl;
@@ -577,7 +598,7 @@ void Objecter::_send_linger(LingerOp *info,
   logger->inc(l_osdc_linger_send);
 }
 
-void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
+void Objecter::_linger_commit(LingerOp *info, int r, ceph::buffer::list& outbl)
 {
   LingerOp::unique_lock wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
@@ -602,7 +623,7 @@ void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
       ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id
 		     << dendl;
     }
-    catch (buffer::error& e) {
+    catch (ceph::buffer::error& e) {
     }
   }
 }
@@ -801,7 +822,7 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
 				  ObjectOperation& op,
 				  const SnapContext& snapc,
 				  real_time mtime,
-				  bufferlist& inbl,
+				  ceph::buffer::list& inbl,
 				  Context *oncommit,
 				  version_t *objver)
 {
@@ -826,8 +847,8 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
 
 ceph_tid_t Objecter::linger_notify(LingerOp *info,
 				   ObjectOperation& op,
-				   snapid_t snap, bufferlist& inbl,
-				   bufferlist *poutbl,
+				   snapid_t snap, ceph::buffer::list& inbl,
+				   ceph::buffer::list *poutbl,
 				   Context *onfinish,
 				   version_t *objver)
 {
@@ -2487,7 +2508,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
 #if 0
   if (s->con) {
-    ldout(cct, 20) << " revoking rx buffer for " << tid
+    ldout(cct, 20) << " revoking rx ceph::buffer for " << tid
 		   << " on " << s->con << dendl;
     s->con->revoke_rx_buffer(tid);
   }
@@ -3249,9 +3270,9 @@ void Objecter::_send_op(Op *op)
   ceph_assert(con);
 
 #if 0
-  // preallocated rx buffer?
+  // preallocated rx ceph::buffer?
   if (op->con) {
-    ldout(cct, 20) << " revoking rx buffer for " << op->tid << " on "
+    ldout(cct, 20) << " revoking rx ceph::buffer for " << op->tid << " on "
 		   << op->con << dendl;
     op->con->revoke_rx_buffer(op->tid);
   }
@@ -3259,7 +3280,7 @@ void Objecter::_send_op(Op *op)
       op->ontimeout == 0 &&  // only post rx_buffer if no timeout; see #9582
       op->outbl->length()) {
     op->outbl->invalidate_crc();  // messenger writes through c_str()
-    ldout(cct, 20) << " posting rx buffer for " << op->tid << " on " << con
+    ldout(cct, 20) << " posting rx ceph::buffer for " << op->tid << " on " << con
 		   << dendl;
     op->con = con;
     op->con->post_rx_buffer(op->tid, *op->outbl);
@@ -3465,9 +3486,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       // read into existing buffers happy.  Notably,
       // libradosstriper::RadosStriperImpl::aio_read().
       ldout(cct,10) << __func__ << " copying resulting " << bl.length()
-		    << " into existing buffer of length " << op->outbl->length()
+		    << " into existing ceph::buffer of length " << op->outbl->length()
 		    << dendl;
-      bufferlist t;
+      ceph::buffer::list t;
       t.claim(*op->outbl);
       t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
       bl.copy(0, bl.length(), t.c_str());
@@ -3487,7 +3508,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
-  vector<bufferlist*>::iterator pb = op->out_bl.begin();
+  vector<ceph::buffer::list*>::iterator pb = op->out_bl.begin();
   vector<int*>::iterator pr = op->out_rval.begin();
   vector<Context*>::iterator ph = op->out_handler.begin();
   ceph_assert(op->out_bl.size() == op->out_rval.size());
@@ -3766,7 +3787,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 
   auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
-  bufferlist extra_info;
+  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
     decode(extra_info, iter);
@@ -3856,7 +3877,7 @@ int Objecter::create_pool_snap(int64_t pool, string& snap_name,
 }
 
 struct C_SelfmanagedSnap : public Context {
-  bufferlist bl;
+  ceph::buffer::list bl;
   snapid_t *psnapid;
   Context *fin;
   C_SelfmanagedSnap(snapid_t *ps, Context *f) : psnapid(ps), fin(f) {}
@@ -3865,7 +3886,7 @@ struct C_SelfmanagedSnap : public Context {
       try {
         auto p = bl.cbegin();
         decode(*psnapid, p);
-      } catch (buffer::error&) {
+      } catch (ceph::buffer::error&) {
         r = -EIO;
       }
     }
@@ -4031,7 +4052,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
 
 /**
  * Handle a reply to a PoolOp message. Check that we sent the message
- * and give the caller responsibility for the returned bufferlist.
+ * and give the caller responsibility for the returned ceph::buffer::list.
  * Then either call the finisher or stash the PoolOp, depending on if we
  * have a new enough map.
  * Lastly, clean up the message and PoolOp.
@@ -4343,15 +4364,15 @@ void Objecter::_finish_statfs_op(StatfsOp *op, int r)
 // scatter/gather
 
 void Objecter::_sg_read_finish(vector<ObjectExtent>& extents,
-			       vector<bufferlist>& resultbl,
-			       bufferlist *bl, Context *onfinish)
+			       vector<ceph::buffer::list>& resultbl,
+			       ceph::buffer::list *bl, Context *onfinish)
 {
   // all done
   ldout(cct, 15) << "_sg_read_finish" << dendl;
 
   if (extents.size() > 1) {
     Striper::StripedReadResult r;
-    vector<bufferlist>::iterator bit = resultbl.begin();
+    vector<ceph::buffer::list>::iterator bit = resultbl.begin();
     for (vector<ObjectExtent>::iterator eit = extents.begin();
 	 eit != extents.end();
 	 ++eit, ++bit) {
@@ -4684,7 +4705,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 bool Objecter::RequestStateHook::call(std::string_view command,
 				      const cmdmap_t& cmdmap,
 				      std::string_view format,
-				      bufferlist& out)
+				      ceph::buffer::list& out)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   shared_lock rl(m_objecter->rwlock);
@@ -5001,7 +5022,7 @@ hobject_t Objecter::enumerate_objects_end()
 }
 
 struct C_EnumerateReply : public Context {
-  bufferlist bl;
+  ceph::buffer::list bl;
 
   Objecter *objecter;
   hobject_t *next;
@@ -5033,7 +5054,7 @@ void Objecter::enumerate_objects(
     const hobject_t &start,
     const hobject_t &end,
     const uint32_t max,
-    const bufferlist &filter_bl,
+    const ceph::buffer::list &filter_bl,
     std::list<librados::ListObjectImpl> *result, 
     hobject_t *next,
     Context *on_finish)
@@ -5092,7 +5113,7 @@ void Objecter::enumerate_objects(
 }
 
 void Objecter::_enumerate_reply(
-    bufferlist &bl,
+    ceph::buffer::list &bl,
     int r,
     const hobject_t &end,
     const int64_t pool_id,
@@ -5119,7 +5140,7 @@ void Objecter::_enumerate_reply(
   pg_nls_response_t response;
 
   // XXX extra_info doesn't seem used anywhere?
-  bufferlist extra_info;
+  ceph::buffer::list extra_info;
   decode(response, iter);
   if (!iter.end()) {
     decode(extra_info, iter);
@@ -5184,7 +5205,7 @@ namespace {
   using namespace librados;
 
   template <typename T>
-  void do_decode(std::vector<T>& items, std::vector<bufferlist>& bls)
+  void do_decode(std::vector<T>& items, std::vector<ceph::buffer::list>& bls)
   {
     for (auto bl : bls) {
       auto p = bl.cbegin();
@@ -5195,7 +5216,7 @@ namespace {
   }
 
   struct C_ObjectOperation_scrub_ls : public Context {
-    bufferlist bl;
+    ceph::buffer::list bl;
     uint32_t *interval;
     std::vector<inconsistent_obj_t> *objects = nullptr;
     std::vector<inconsistent_snapset_t> *snapsets = nullptr;
@@ -5221,7 +5242,7 @@ namespace {
 
       try {
 	decode();
-      } catch (buffer::error&) {
+      } catch (ceph::buffer::error&) {
 	if (rval)
 	  *rval = -EIO;
       }

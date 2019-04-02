@@ -104,13 +104,13 @@ public:
   mutable std::map<std::string, std::string> may_reexpand_meta;
 
   /// encoded, cached copy of of values + ignored_mon_values
-  bufferlist values_bl;
+  ceph::bufferlist values_bl;
 
   /// version for values_bl; increments each time there is a change
   uint64_t values_bl_version = 0;
 
   /// encoded copy of defaults (map<string,string>)
-  bufferlist defaults_bl;
+  ceph::bufferlist defaults_bl;
 
   typedef enum {
     OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
@@ -140,7 +140,7 @@ public:
   // do any commands we got from argv (--show-config, --show-config-val)
   void do_argv_commands(const ConfigValues& values) const;
 
-  bool _internal_field(const string& k);
+  bool _internal_field(const std::string& k);
 
   void set_safe_to_start_threads();
   void _clear_safe_to_start_threads();  // this is only used by the unit test
@@ -155,10 +155,10 @@ public:
 
   /// Set a values from mon
   int set_mon_vals(CephContext *cct,
-      ConfigValues& values,
-      const ConfigTracker& tracker,
-      const map<std::string,std::string, std::less<>>& kv,
-      config_callback config_cb);
+		   ConfigValues& values,
+		   const ConfigTracker& tracker,
+		   const std::map<std::string,std::string, std::less<>>& kv,
+		   config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(ConfigValues& values,
@@ -188,11 +188,11 @@ public:
   /// get encoded map<string,map<int32_t,string>> of entire config
   void get_config_bl(const ConfigValues& values,
 		     uint64_t have_version,
-		     bufferlist *bl,
+		     ceph::buffer::list *bl,
 		     uint64_t *got_version);
 
   /// get encoded map<string,string> of compiled-in defaults
-  void get_defaults_bl(const ConfigValues& values, bufferlist *bl);
+  void get_defaults_bl(const ConfigValues& values, ceph::buffer::list *bl);
 
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
@@ -226,23 +226,23 @@ public:
   /// dump all config values to a stream
   void show_config(const ConfigValues& values, std::ostream& out) const;
   /// dump all config values to a formatter
-  void show_config(const ConfigValues& values, Formatter *f) const;
-  
+  void show_config(const ConfigValues& values, ceph::Formatter *f) const;
+
   /// dump all config settings to a formatter
-  void config_options(Formatter *f) const;
+  void config_options(ceph::Formatter *f) const;
 
   /// dump config diff from default, conf, mon, etc.
   void diff(const ConfigValues& values,
-	    Formatter *f,
-	    std::string name=string{}) const;
+	    ceph::Formatter *f,
+	    std::string name = {}) const;
 
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
 
 private:
   // we use this to avoid variable expansion loops
-  typedef boost::container::small_vector<pair<const Option*,
-					      const Option::value_t*>,
+  typedef boost::container::small_vector<std::pair<const Option*,
+						   const Option::value_t*>,
 					 4> expand_stack_t;
 
   void validate_schema();
@@ -269,12 +269,12 @@ private:
   void _refresh(ConfigValues& values, const Option& opt);
 
   void _show_config(const ConfigValues& values,
-		    std::ostream *out, Formatter *f) const;
+		    std::ostream *out, ceph::Formatter *f) const;
 
   void _get_my_sections(const ConfigValues& values,
-			std::vector <std::string> &sections) const;
+			std::vector<std::string> &sections) const;
 
-  int _get_val_from_conf_file(const std::vector <std::string> &sections,
+  int _get_val_from_conf_file(const std::vector<std::string> &sections,
 			      const std::string_view key, std::string &out) const;
 
   int parse_option(ConfigValues& values,
@@ -338,12 +338,12 @@ private:
   bool safe_to_start_threads = false;
 
   bool do_show_config = false;
-  string do_show_config_value;
+  std::string do_show_config_value;
 
-  vector<Option> subsys_options;
+  std::vector<Option> subsys_options;
 
 public:
-  string data_dir_option;  ///< data_dir config option, if any
+  std::string data_dir_option;  ///< data_dir config option, if any
 
 public:
   unsigned get_osd_pool_default_min_size(const ConfigValues& values,

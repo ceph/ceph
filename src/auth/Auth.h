@@ -34,9 +34,9 @@ class Cond;
 
 struct EntityAuth {
   CryptoKey key;
-  map<string, bufferlist> caps;
+  std::map<std::string, ceph::buffer::list> caps;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     __u8 struct_v = 2;
     using ceph::encode;
     encode(struct_v, bl);
@@ -44,7 +44,7 @@ struct EntityAuth {
     encode(key, bl);
     encode(caps, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -58,17 +58,17 @@ struct EntityAuth {
 };
 WRITE_CLASS_ENCODER(EntityAuth)
 
-static inline ostream& operator<<(ostream& out, const EntityAuth& a) {
+inline std::ostream& operator<<(std::ostream& out, const EntityAuth& a) {
   return out << "auth(key=" << a.key << ")";
 }
 
 struct AuthCapsInfo {
   bool allow_all;
-  bufferlist caps;
+  ceph::buffer::list caps;
 
   AuthCapsInfo() : allow_all(false) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
@@ -76,7 +76,7 @@ struct AuthCapsInfo {
     encode(a, bl);
     encode(caps, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -110,7 +110,7 @@ struct AuthTicket {
     renew_after += ttl / 2.0;
   }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 2;
     encode(struct_v, bl);
@@ -122,7 +122,7 @@ struct AuthTicket {
     encode(caps, bl);
     encode(flags, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -146,14 +146,15 @@ WRITE_CLASS_ENCODER(AuthTicket)
  */
 struct AuthAuthorizer {
   __u32 protocol;
-  bufferlist bl;
+  ceph::buffer::list bl;
   CryptoKey session_key;
 
   explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
-  virtual bool verify_reply(bufferlist::const_iterator& reply,
+  virtual bool verify_reply(ceph::buffer::list::const_iterator& reply,
 			    std::string *connection_secret) = 0;
-  virtual bool add_challenge(CephContext *cct, const bufferlist& challenge) = 0;
+  virtual bool add_challenge(CephContext *cct,
+			     const ceph::buffer::list& challenge) = 0;
 };
 
 struct AuthAuthorizerChallenge {
@@ -203,14 +204,14 @@ struct ExpiringCryptoKey {
   CryptoKey key;
   utime_t expiration;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(key, bl);
     encode(expiration, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -220,25 +221,25 @@ struct ExpiringCryptoKey {
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey)
 
-static inline ostream& operator<<(ostream& out, const ExpiringCryptoKey& c)
+inline std::ostream& operator<<(std::ostream& out, const ExpiringCryptoKey& c)
 {
   return out << c.key << " expires " << c.expiration;
 }
 
 struct RotatingSecrets {
-  map<uint64_t, ExpiringCryptoKey> secrets;
+  std::map<uint64_t, ExpiringCryptoKey> secrets;
   version_t max_ver;
-  
+
   RotatingSecrets() : max_ver(0) {}
-  
-  void encode(bufferlist& bl) const {
+
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
     encode(struct_v, bl);
     encode(secrets, bl);
     encode(max_ver, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -264,12 +265,12 @@ struct RotatingSecrets {
     return secrets.begin()->second;
   }
   ExpiringCryptoKey& current() {
-    map<uint64_t, ExpiringCryptoKey>::iterator p = secrets.begin();
+    auto p = secrets.begin();
     ++p;
     return p->second;
   }
   const ExpiringCryptoKey& current() const {
-    map<uint64_t, ExpiringCryptoKey>::const_iterator p = secrets.begin();
+    auto p = secrets.begin();
     ++p;
     return p->second;
   }

@@ -15,6 +15,12 @@
 #ifndef CEPH_MAUTH_H
 #define CEPH_MAUTH_H
 
+#include <string_view>
+
+#include "include/encoding.h"
+
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "messages/PaxosServiceMessage.h"
 
 class MAuth : public MessageInstance<MAuth, PaxosServiceMessage> {
@@ -22,7 +28,7 @@ public:
   friend factory;
 
   __u32 protocol;
-  bufferlist auth_payload;
+  ceph::buffer::list auth_payload;
   epoch_t monmap_epoch;
 
   /* if protocol == 0, then auth_payload is a set<__u32> listing protocols the client supports */
@@ -33,13 +39,13 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "auth"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes"
 	<< " epoch " << monmap_epoch << ")";
   }
 
   void decode_payload() override {
-    using ceph::encode;
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(protocol, p);
@@ -56,7 +62,7 @@ public:
     encode(auth_payload, payload);
     encode(monmap_epoch, payload);
   }
-  bufferlist& get_auth_payload() { return auth_payload; }
+  ceph::buffer::list& get_auth_payload() { return auth_payload; }
 };
 
 #endif

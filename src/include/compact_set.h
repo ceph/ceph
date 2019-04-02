@@ -258,14 +258,14 @@ public:
       return const_iterator(this);
     return const_iterator(this, set->upper_bound(t));
   }
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     if (set)
       encode(*set, bl);
     else
       encode((uint32_t)0, bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     uint32_t n;
     decode(n, p);
@@ -278,11 +278,11 @@ public:
 };
 
 template<class T, class Set>
-inline void encode(const compact_set_base<T, Set>& m, bufferlist& bl) {
+inline void encode(const compact_set_base<T, Set>& m, ceph::buffer::list& bl) {
   m.encode(bl);
 }
 template<class T, class Set>
-inline void decode(compact_set_base<T, Set>& m, bufferlist::const_iterator& p) {
+inline void decode(compact_set_base<T, Set>& m, ceph::buffer::list::const_iterator& p) {
   m.decode(p);
 }
 

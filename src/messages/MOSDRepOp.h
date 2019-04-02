@@ -37,7 +37,7 @@ public:
 
   spg_t pgid;
 
-  bufferlist::const_iterator p;
+  ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
@@ -48,7 +48,7 @@ public:
   __u8 acks_wanted;
 
   // transaction to exec
-  bufferlist logbl;
+  ceph::buffer::list logbl;
   pg_stat_t pg_stats;
 
   // subop metadata
@@ -80,6 +80,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     p = payload.cbegin();
     // split to partial and final
     decode(map_epoch, p);
@@ -94,6 +95,7 @@ public:
   }
 
   void finish_decode() {
+    using ceph::decode;
     if (!final_decode_needed)
       return; // Message is already final decoded
     decode(poid, p);
@@ -164,7 +166,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "osd_repop"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_repop(" << reqid
 	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;
     if (!final_decode_needed) {

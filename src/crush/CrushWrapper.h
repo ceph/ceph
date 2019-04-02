@@ -32,19 +32,19 @@ namespace ceph {
 }
 
 namespace CrushTreeDumper {
-  typedef mempool::osdmap::map<int64_t,string> name_map_t;
+typedef mempool::osdmap::map<int64_t,std::string> name_map_t;
 }
 
 WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
 
-inline void encode(const crush_rule_step &s, bufferlist &bl)
+inline void encode(const crush_rule_step &s, ceph::buffer::list &bl)
 {
   using ceph::encode;
   encode(s.op, bl);
   encode(s.arg1, bl);
   encode(s.arg2, bl);
 }
-inline void decode(crush_rule_step &s, bufferlist::const_iterator &p)
+inline void decode(crush_rule_step &s, ceph::buffer::list::const_iterator &p)
 {
   using ceph::decode;
   decode(s.op, p);
@@ -61,14 +61,14 @@ public:
     DEFAULT_CHOOSE_ARGS = -1
   };
 
-  std::map<int32_t, string> type_map; /* bucket/device type names */
-  std::map<int32_t, string> name_map; /* bucket/device names */
-  std::map<int32_t, string> rule_name_map;
+  std::map<int32_t, std::string> type_map; /* bucket/device type names */
+  std::map<int32_t, std::string> name_map; /* bucket/device names */
+  std::map<int32_t, std::string> rule_name_map;
 
   std::map<int32_t, int32_t> class_map; /* item id -> class id */
-  std::map<int32_t, string> class_name; /* class id -> class name */
-  std::map<string, int32_t> class_rname; /* class name -> class id */
-  std::map<int32_t, map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
+  std::map<int32_t, std::string> class_name; /* class id -> class name */
+  std::map<std::string, int32_t> class_rname; /* class name -> class id */
+  std::map<int32_t, std::map<int32_t, int32_t> > class_bucket; /* bucket[id][class] == id */
   std::map<int64_t, crush_choose_arg_map> choose_args;
 
 private:
@@ -78,7 +78,7 @@ private:
 
   /* reverse maps */
   mutable bool have_rmaps = false;
-  mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
+  mutable std::map<std::string, int> type_rmap, name_rmap, rule_name_rmap;
   void build_rmaps() const {
     if (have_rmaps) return;
     build_rmap(type_map, type_rmap);
@@ -86,9 +86,9 @@ private:
     build_rmap(rule_name_map, rule_name_rmap);
     have_rmaps = true;
   }
-  void build_rmap(const map<int, string> &f, std::map<string, int> &r) const {
+  void build_rmap(const std::map<int, std::string> &f, std::map<std::string, int> &r) const {
     r.clear();
-    for (std::map<int, string>::const_iterator p = f.begin(); p != f.end(); ++p)
+    for (auto p = f.begin(); p != f.end(); ++p)
       r[p->second] = p->first;
   }
 
@@ -360,7 +360,7 @@ public:
   bool is_v3_rule(unsigned ruleid) const;
   bool is_v5_rule(unsigned ruleid) const;
 
-  string get_min_required_version() const {
+  std::string get_min_required_version() const {
     if (has_v5_rules() || has_nondefault_tunables5())
       return "jewel";
     else if (has_v4_buckets())
@@ -398,45 +398,45 @@ public:
       return 0;
     return type_map.rbegin()->first;
   }
-  int get_type_id(const string& name) const {
+  int get_type_id(const std::string& name) const {
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
     return -1;
   }
   const char *get_type_name(int t) const {
-    std::map<int,string>::const_iterator p = type_map.find(t);
+    auto p = type_map.find(t);
     if (p != type_map.end())
       return p->second.c_str();
     return 0;
   }
-  void set_type_name(int i, const string& name) {
+  void set_type_name(int i, const std::string& name) {
     type_map[i] = name;
     if (have_rmaps)
       type_rmap[name] = i;
   }
 
   // item/bucket names
-  bool name_exists(const string& name) const {
+  bool name_exists(const std::string& name) const {
     build_rmaps();
     return name_rmap.count(name);
   }
   bool item_exists(int i) const {
     return name_map.count(i);
   }
-  int get_item_id(const string& name) const {
+  int get_item_id(const std::string& name) const {
     build_rmaps();
     if (name_rmap.count(name))
       return name_rmap[name];
     return 0;  /* hrm */
   }
   const char *get_item_name(int t) const {
-    std::map<int,string>::const_iterator p = name_map.find(t);
+    std::map<int,std::string>::const_iterator p = name_map.find(t);
     if (p != name_map.end())
       return p->second.c_str();
     return 0;
   }
-  int set_item_name(int i, const string& name) {
+  int set_item_name(int i, const std::string& name) {
     if (!is_valid_crush_name(name))
       return -EINVAL;
     name_map[i] = name;
@@ -445,8 +445,8 @@ public:
     return 0;
   }
   void swap_names(int a, int b) {
-    string an = name_map[a];
-    string bn = name_map[b];
+    std::string an = name_map[a];
+    std::string bn = name_map[b];
     name_map[a] = bn;
     name_map[b] = an;
     if (have_rmaps) {
@@ -456,7 +456,7 @@ public:
   }
   int split_id_class(int i, int *idout, int *classout) const;
 
-  bool class_exists(const string& name) const {
+  bool class_exists(const std::string& name) const {
     return class_rname.count(name);
   }
   const char *get_class_name(int i) const {
@@ -465,14 +465,14 @@ public:
       return p->second.c_str();
     return 0;
   }
-  int get_class_id(const string& name) const {
+  int get_class_id(const std::string& name) const {
     auto p = class_rname.find(name);
     if (p != class_rname.end())
       return p->second;
     else
       return -EINVAL;
   }
-  int remove_class_name(const string& name) {
+  int remove_class_name(const std::string& name) {
     auto p = class_rname.find(name);
     if (p == class_rname.end())
       return -ENOENT;
@@ -487,7 +487,7 @@ public:
 
   int32_t _alloc_class_id() const;
 
-  int get_or_create_class_id(const string& name) {
+  int get_or_create_class_id(const std::string& name) {
     int c = get_class_id(name);
     if (c < 0) {
       int i = _alloc_class_id();
@@ -505,7 +505,7 @@ public:
       return 0;
     return get_class_name(p->second);
   }
-  int set_item_class(int i, const string& name) {
+  int set_item_class(int i, const std::string& name) {
     if (!is_valid_crush_name(name))
       return -EINVAL;
     class_map[i] = get_or_create_class_id(name);
@@ -515,7 +515,8 @@ public:
     class_map[i] = c;
     return c;
   }
-  void get_devices_by_class(const string &name, set<int> *devices) const {
+  void get_devices_by_class(const std::string &name,
+			    std::set<int> *devices) const {
     ceph_assert(devices);
     devices->clear();
     if (!class_exists(name)) {
@@ -535,40 +536,40 @@ public:
     }
     class_map.erase(it);
   }
-  int can_rename_item(const string& srcname,
-		      const string& dstname,
-		      ostream *ss) const;
-  int rename_item(const string& srcname,
-		  const string& dstname,
-		  ostream *ss);
-  int can_rename_bucket(const string& srcname,
-			const string& dstname,
-			ostream *ss) const;
-  int rename_bucket(const string& srcname,
-		    const string& dstname,
-		    ostream *ss);
+  int can_rename_item(const std::string& srcname,
+		      const std::string& dstname,
+		      std::ostream *ss) const;
+  int rename_item(const std::string& srcname,
+		  const std::string& dstname,
+		  std::ostream *ss);
+  int can_rename_bucket(const std::string& srcname,
+			const std::string& dstname,
+			std::ostream *ss) const;
+  int rename_bucket(const std::string& srcname,
+		    const std::string& dstname,
+		    std::ostream *ss);
 
   // rule names
-  int rename_rule(const string& srcname,
-                  const string& dstname,
-                  ostream *ss);
-  bool rule_exists(string name) const {
+  int rename_rule(const std::string& srcname,
+                  const std::string& dstname,
+                  std::ostream *ss);
+  bool rule_exists(std::string name) const {
     build_rmaps();
     return rule_name_rmap.count(name);
   }
-  int get_rule_id(string name) const {
+  int get_rule_id(std::string name) const {
     build_rmaps();
     if (rule_name_rmap.count(name))
       return rule_name_rmap[name];
     return -ENOENT;
   }
   const char *get_rule_name(int t) const {
-    std::map<int,string>::const_iterator p = rule_name_map.find(t);
+    auto p = rule_name_map.find(t);
     if (p != rule_name_map.end())
       return p->second.c_str();
     return 0;
   }
-  void set_rule_name(int i, const string& name) {
+  void set_rule_name(int i, const std::string& name) {
     rule_name_map[i] = name;
     if (have_rmaps)
       rule_name_rmap[name] = i;
@@ -584,22 +585,22 @@ public:
    *
    * Note that these may not be parentless roots.
    */
-  void find_takes(set<int> *roots) const;
-  void find_takes_by_rule(int rule, set<int> *roots) const;
+  void find_takes(std::set<int> *roots) const;
+  void find_takes_by_rule(int rule, std::set<int> *roots) const;
 
   /**
    * find tree roots
    *
    * These are parentless nodes in the map.
    */
-  void find_roots(set<int> *roots) const;
+  void find_roots(std::set<int> *roots) const;
 
 
   /**
    * find tree roots that contain shadow (device class) items only
    */
-  void find_shadow_roots(set<int> *roots) const {
-    set<int> all;
+  void find_shadow_roots(std::set<int> *roots) const {
+    std::set<int> all;
     find_roots(&all);
     for (auto& p: all) {
       if (is_shadow_item(p)) {
@@ -614,8 +615,8 @@ public:
    * These are parentless nodes in the map that are not shadow
    * items for device classes.
    */
-  void find_nonshadow_roots(set<int> *roots) const {
-    set<int> all;
+  void find_nonshadow_roots(std::set<int> *roots) const {
+    std::set<int> all;
     find_roots(&all);
     for (auto& p: all) {
       if (!is_shadow_item(p)) {
@@ -661,8 +662,12 @@ public:
    * @param weight optional pointer to weight of item at that location
    * @return true if item is at specified location
    */
-  bool check_item_loc(CephContext *cct, int item, const map<string,string>& loc, int *iweight);
-  bool check_item_loc(CephContext *cct, int item, const map<string,string>& loc, float *weight) {
+  bool check_item_loc(CephContext *cct, int item,
+		      const std::map<std::string,std::string>& loc,
+		      int *iweight);
+  bool check_item_loc(CephContext *cct, int item,
+		      const std::map<std::string,std::string>& loc,
+		      float *weight) {
     int iweight;
     bool ret = check_item_loc(cct, item, loc, &iweight);
     if (weight)
@@ -676,7 +681,7 @@ public:
    *
    * FIXME: ambiguous for items that occur multiple times in the map
    */
-  pair<string,string> get_immediate_parent(int id, int *ret = NULL) const;
+  std::pair<std::string,std::string> get_immediate_parent(int id, int *ret = NULL) const;
 
   int get_immediate_parent_id(int id, int *parent) const;
 
@@ -696,14 +701,14 @@ public:
    * returns the location in the form of (type=foo) where type is a type of bucket
    * specified in the CRUSH map and foo is a name specified in the CRUSH map
    */
-  map<string, string> get_full_location(int id) const;
+  std::map<std::string, std::string> get_full_location(int id) const;
 
   /**
    * return location map for a item, by name
    */
   int get_full_location(
-    const string& name,
-    std::map<string,string> *ploc);
+    const std::string& name,
+    std::map<std::string,std::string> *ploc);
 
   /*
    * identical to get_full_location(int id) although it returns the type/name
@@ -711,7 +716,9 @@ public:
    *
    * returns -ENOENT if id is not found.
    */
-  int get_full_location_ordered(int id, vector<pair<string, string> >& path) const;
+  int get_full_location_ordered(
+    int id,
+    std::vector<std::pair<std::string, std::string> >& path) const;
 
   /*
    * identical to get_full_location_ordered(int id, vector<pair<string, string> >& path),
@@ -720,13 +727,13 @@ public:
    *
    * returns the location in descending hierarchy as a string.
    */
-  string get_full_location_ordered_string(int id) const;
+  std::string get_full_location_ordered_string(int id) const;
 
   /**
    * returns (type_id, type) of all parent buckets between id and
    * default, can be used to check for anomalous CRUSH maps
    */
-  map<int, string> get_parent_hierarchy(int id) const;
+  std::map<int, std::string> get_parent_hierarchy(int id) const;
 
   /**
    * enumerate immediate children of given node
@@ -734,22 +741,22 @@ public:
    * @param id parent bucket or device id
    * @return number of items, or error
    */
-  int get_children(int id, list<int> *children) const;
+  int get_children(int id, std::list<int> *children) const;
  /**
    * enumerate all children of given node
    *
    * @param id parent bucket or device id
    * @return number of items, or error
    */
-  int get_all_children(int id, set<int> *children) const;
+  int get_all_children(int id, std::set<int> *children) const;
   void get_children_of_type(int id,
                             int type,
-			    vector<int> *children,
+			    std::vector<int> *children,
 			    bool exclude_shadow = true) const;
   /**
    * enumerate all subtrees by type
    */
-  void get_subtree_of_type(int type, vector<int> *subtrees);
+  void get_subtree_of_type(int type, std::vector<int> *subtrees);
 
 
   /**
@@ -759,7 +766,7 @@ public:
   int verify_upmap(CephContext *cct,
                    int rule_id,
                    int pool_size,
-                   const vector<int>& up);
+                   const std::vector<int>& up);
 
   /**
     * enumerate leaves(devices) of given node
@@ -767,10 +774,10 @@ public:
     * @param name parent bucket name
     * @return 0 on success or a negative errno on error.
     */
-  int get_leaves(const string &name, set<int> *leaves) const;
+  int get_leaves(const std::string &name, std::set<int> *leaves) const;
 
 private:
-  int _get_leaves(int id, list<int> *leaves) const; // worker
+  int _get_leaves(int id, std::list<int> *leaves) const; // worker
 
 public:
   /**
@@ -804,8 +811,8 @@ public:
    * @param init_weight_sets initialize weight-set weights to weight (vs 0)
    * @return 0 for success, negative on error
    */
-  int insert_item(CephContext *cct, int id, float weight, string name,
-		  const map<string,string>& loc,
+  int insert_item(CephContext *cct, int id, float weight, std::string name,
+		  const std::map<std::string,std::string>& loc,
 		  bool init_weight_sets=true);
 
   /**
@@ -819,7 +826,7 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for success, negative on error
    */
-  int move_bucket(CephContext *cct, int id, const map<string,string>& loc);
+  int move_bucket(CephContext *cct, int id, const std::map<std::string,std::string>& loc);
 
   /**
    * swap bucket contents of two buckets without touching bucket ids
@@ -843,7 +850,8 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for success, negative on error
    */
-  int link_bucket(CephContext *cct, int id, const map<string,string>& loc);
+  int link_bucket(CephContext *cct, int id,
+		  const std::map<std::string,std::string>& loc);
 
   /**
    * add or update an item's position in the map
@@ -858,7 +866,8 @@ public:
    * @param loc location (map of type to bucket names)
    * @return 0 for no change, 1 for successful change, negative on error
    */
-  int update_item(CephContext *cct, int id, float weight, string name, const map<string,string>& loc);
+  int update_item(CephContext *cct, int id, float weight, std::string name,
+		  const std::map<std::string, std::string>& loc);
 
   /**
    * create or move an item, but do not adjust its weight if it already exists
@@ -871,8 +880,9 @@ public:
    * @param init_weight_sets initialize weight-set values to weight (vs 0)
    * @return 0 for no change, 1 for successful change, negative on error
    */
-  int create_or_move_item(CephContext *cct, int item, float weight, string name,
-			  const map<string,string>& loc,
+  int create_or_move_item(CephContext *cct, int item, float weight,
+			  std::string name,
+			  const std::map<std::string,std::string>& loc,
 			  bool init_weight_sets=true);
 
   /**
@@ -921,7 +931,7 @@ public:
    * @param loc a set of key=value pairs describing a location in the hierarchy
    */
   int get_common_ancestor_distance(CephContext *cct, int id,
-				   const std::multimap<string,string>& loc) const;
+				   const std::multimap<std::string,std::string>& loc) const;
 
   /**
    * parse a set of key/value pairs out of a string vector
@@ -931,10 +941,10 @@ public:
    * @param args list of strings (each key= or key=value)
    * @param ploc pointer to a resulting location map or multimap
    */
-  static int parse_loc_map(const std::vector<string>& args,
-			   std::map<string,string> *ploc);
-  static int parse_loc_multimap(const std::vector<string>& args,
-				std::multimap<string,string> *ploc);
+  static int parse_loc_map(const std::vector<std::string>& args,
+			   std::map<std::string,std::string> *ploc);
+  static int parse_loc_multimap(const std::vector<std::string>& args,
+				std::multimap<std::string,std::string> *ploc);
 
 
   /**
@@ -949,8 +959,10 @@ public:
   float get_item_weightf(int id) const {
     return (float)get_item_weight(id) / (float)0x10000;
   }
-  int get_item_weight_in_loc(int id, const map<string,string> &loc);
-  float get_item_weightf_in_loc(int id, const map<string,string> &loc) {
+  int get_item_weight_in_loc(int id,
+			     const std::map<std::string, std::string> &loc);
+  float get_item_weightf_in_loc(int id,
+				const std::map<std::string, std::string> &loc) {
     return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
   }
 
@@ -976,10 +988,10 @@ public:
 				   int bucket_id,
 				   bool update_weight_sets);
   int adjust_item_weight_in_loc(CephContext *cct, int id, int weight,
-				const map<string,string>& loc,
+				const std::map<std::string,std::string>& loc,
 				bool update_weight_sets=true);
   int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight,
-				 const map<string,string>& loc,
+				 const std::map<std::string,std::string>& loc,
 				 bool update_weight_sets=true) {
     int r = validate_weightf(weight);
     if (r < 0) {
@@ -991,7 +1003,7 @@ public:
   void reweight(CephContext *cct);
   void reweight_bucket(crush_bucket *b,
 		       crush_choose_arg_map& arg_map,
-		       vector<uint32_t> *weightv);
+		       std::vector<uint32_t> *weightv);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight,
 			    bool update_weight_sets=true);
@@ -1097,9 +1109,9 @@ public:
   }
 
 private:
-  float _get_take_weight_osd_map(int root, map<int,float> *pmap) const;
-  void _normalize_weight_map(float sum, const map<int,float>& m,
-			     map<int,float> *pmap) const;
+  float _get_take_weight_osd_map(int root, std::map<int,float> *pmap) const;
+  void _normalize_weight_map(float sum, const std::map<int,float>& m,
+			     std::map<int,float> *pmap) const;
 
 public:
   /**
@@ -1112,7 +1124,7 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_rule_weight_osd_map(unsigned ruleno, map<int,float> *pmap) const;
+  int get_rule_weight_osd_map(unsigned ruleno, std::map<int,float> *pmap) const;
 
   /**
    * calculate a map of osds to weights for a given starting root
@@ -1124,7 +1136,7 @@ public:
    * @param pmap [out] map of osd to weight
    * @return 0 for success, or negative error code
    */
-  int get_take_weight_osd_map(int root, map<int,float> *pmap) const;
+  int get_take_weight_osd_map(int root, std::map<int,float> *pmap) const;
 
   /* modifiers */
 
@@ -1185,17 +1197,17 @@ public:
   }
 
   int add_simple_rule(
-    string name, string root_name, string failure_domain_type,
-    string device_class,
-    string mode, int rule_type, ostream *err = 0);
+    std::string name, std::string root_name, std::string failure_domain_type,
+    std::string device_class, std::string mode, int rule_type,
+    std::ostream *err = 0);
 
   /**
    * @param rno rule[set] id to use, -1 to pick the lowest available
    */
   int add_simple_rule_at(
-    string name, string root_name,
-    string failure_domain_type, string device_class, string mode,
-    int rule_type, int rno, ostream *err = 0);
+    std::string name, std::string root_name,
+    std::string failure_domain_type, std::string device_class, std::string mode,
+    int rule_type, int rno, std::ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -1318,20 +1330,21 @@ public:
   }
   int bucket_set_alg(int id, int alg);
 
-  int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
-  int remove_device_class(CephContext *cct, int id, ostream *ss);
+  int update_device_class(int id, const std::string& class_name,
+			  const std::string& name, std::ostream *ss);
+  int remove_device_class(CephContext *cct, int id, std::ostream *ss);
   int device_class_clone(
     int original, int device_class,
-    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket,
+    const std::map<int32_t, std::map<int32_t, int32_t>>& old_class_bucket,
     const std::set<int32_t>& used_ids,
     int *clone,
-    map<int,map<int,vector<int>>> *cmap_item_weight);
-  bool class_is_in_use(int class_id, ostream *ss = nullptr);
-  int rename_class(const string& srcname, const string& dstname);
+    std::map<int, std::map<int,std::vector<int>>> *cmap_item_weight);
+  bool class_is_in_use(int class_id, std::ostream *ss = nullptr);
+  int rename_class(const std::string& srcname, const std::string& dstname);
   int populate_classes(
-    const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
-  int get_rules_by_class(const string &class_name, set<int> *rules);
-  int get_rules_by_osd(int osd, set<int> *rules);
+    const std::map<int32_t, std::map<int32_t, int32_t>>& old_class_bucket);
+  int get_rules_by_class(const std::string &class_name, std::set<int> *rules);
+  int get_rules_by_osd(int osd, std::set<int> *rules);
   bool _class_is_dead(int class_id);
   void cleanup_dead_classes();
   int rebuild_roots_with_classes(CephContext *cct);
@@ -1340,12 +1353,12 @@ public:
 
   int reclassify(
     CephContext *cct,
-    ostream& out,
-    const map<string,string>& classify_root,
-    const map<string,pair<string,string>>& classify_bucket
+    std::ostream& out,
+    const std::map<std::string,std::string>& classify_root,
+    const std::map<std::string,std::pair<std::string,std::string>>& classify_bucket
     );
 
-  int set_subtree_class(const string& name, const string& class_name);
+  int set_subtree_class(const std::string& name, const std::string& class_name);
 
   void start_choose_profile() {
     free(crush->choose_tries);
@@ -1522,19 +1535,19 @@ public:
     crush_choose_arg_map cmap,
     int bucketid,
     int id,
-    const vector<int>& weight,
-    ostream *ss);
+    const std::vector<int>& weight,
+    std::ostream *ss);
   int choose_args_adjust_item_weight(
     CephContext *cct,
     crush_choose_arg_map cmap,
-    int id, const vector<int>& weight,
-    ostream *ss);
+    int id, const std::vector<int>& weight,
+    std::ostream *ss);
   int choose_args_adjust_item_weightf(
     CephContext *cct,
     crush_choose_arg_map cmap,
-    int id, const vector<double>& weightf,
-    ostream *ss) {
-    vector<int> weight(weightf.size());
+    int id, const std::vector<double>& weightf,
+    std::ostream *ss) {
+    std::vector<int> weight(weightf.size());
     for (unsigned i = 0; i < weightf.size(); ++i) {
       weight[i] = (int)(weightf[i] * (double)0x10000);
     }
@@ -1552,7 +1565,7 @@ public:
   }
 
   template<typename WeightVector>
-  void do_rule(int rule, int x, vector<int>& out, int maxout,
+  void do_rule(int rule, int x, std::vector<int>& out, int maxout,
 	       const WeightVector& weight,
 	       uint64_t choose_args_index) const {
     int rawout[maxout];
@@ -1571,25 +1584,25 @@ public:
 
   int _choose_type_stack(
     CephContext *cct,
-    const vector<pair<int,int>>& stack,
-    const set<int>& overfull,
-    const vector<int>& underfull,
-    const vector<int>& orig,
-    vector<int>::const_iterator& i,
-    set<int>& used,
-    vector<int> *pw,
+    const std::vector<std::pair<int,int>>& stack,
+    const std::set<int>& overfull,
+    const std::vector<int>& underfull,
+    const std::vector<int>& orig,
+    std::vector<int>::const_iterator& i,
+    std::set<int>& used,
+    std::vector<int> *pw,
     int root_bucket) const;
 
   int try_remap_rule(
     CephContext *cct,
     int rule,
     int maxout,
-    const set<int>& overfull,
-    const vector<int>& underfull,
-    const vector<int>& orig,
-    vector<int> *out) const;
+    const std::set<int>& overfull,
+    const std::vector<int>& underfull,
+    const std::vector<int>& orig,
+    std::vector<int> *out) const;
 
-  bool check_crush_rule(int ruleset, int type, int size,  ostream& ss) {
+  bool check_crush_rule(int ruleset, int type, int size, std::ostream& ss) {
     ceph_assert(crush);
 
     __u32 i;
@@ -1614,32 +1627,33 @@ public:
     return false;
   }
 
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator &blp);
-  void decode_crush_bucket(crush_bucket** bptr, bufferlist::const_iterator &blp);
-  void dump(Formatter *f) const;
-  void dump_rules(Formatter *f) const;
-  void dump_rule(int ruleset, Formatter *f) const;
-  void dump_tunables(Formatter *f) const;
-  void dump_choose_args(Formatter *f) const;
-  void list_rules(Formatter *f) const;
-  void list_rules(ostream *ss) const;
-  void dump_tree(ostream *out,
-                 Formatter *f,
+  void encode(ceph::buffer::list &bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator &blp);
+  void decode_crush_bucket(crush_bucket** bptr,
+			   ceph::buffer::list::const_iterator &blp);
+  void dump(ceph::Formatter *f) const;
+  void dump_rules(ceph::Formatter *f) const;
+  void dump_rule(int ruleset, ceph::Formatter *f) const;
+  void dump_tunables(ceph::Formatter *f) const;
+  void dump_choose_args(ceph::Formatter *f) const;
+  void list_rules(ceph::Formatter *f) const;
+  void list_rules(std::ostream *ss) const;
+  void dump_tree(std::ostream *out,
+                 ceph::Formatter *f,
 		 const CrushTreeDumper::name_map_t& ws,
                  bool show_shadow = false) const;
-  void dump_tree(ostream *out, Formatter *f) {
+  void dump_tree(std::ostream *out, ceph::Formatter *f) {
     dump_tree(out, f, CrushTreeDumper::name_map_t());
   }
-  void dump_tree(Formatter *f,
+  void dump_tree(ceph::Formatter *f,
 		 const CrushTreeDumper::name_map_t& ws) const;
-  static void generate_test_instances(list<CrushWrapper*>& o);
+  static void generate_test_instances(std::list<CrushWrapper*>& o);
 
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
-  static bool is_valid_crush_name(const string& s);
+  static bool is_valid_crush_name(const std::string& s);
   static bool is_valid_crush_loc(CephContext *cct,
-				 const map<string,string>& loc);
+				 const std::map<std::string,std::string>& loc);
 };
 WRITE_CLASS_ENCODER_FEATURES(CrushWrapper)
 

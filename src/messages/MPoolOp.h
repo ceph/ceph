@@ -28,14 +28,14 @@ private:
 public:
   uuid_d fsid;
   __u32 pool = 0;
-  string name;
+  std::string name;
   __u32 op = 0;
   snapid_t snapid;
   __s16 crush_rule = 0;
 
   MPoolOp()
     : MessageInstance(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
-  MPoolOp(const uuid_d& f, ceph_tid_t t, int p, string& n, int o, version_t v)
+  MPoolOp(const uuid_d& f, ceph_tid_t t, int p, std::string& n, int o, version_t v)
     : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
       snapid(0), crush_rule(0) {
@@ -47,7 +47,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "poolop"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
 	<< " tid " << get_tid()
 	<< " name " << name
@@ -68,6 +68,7 @@ public:
     encode(crush_rule, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
