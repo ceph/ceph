@@ -224,7 +224,6 @@ struct rgw_pubsub_event {
 WRITE_CLASS_ENCODER(rgw_pubsub_event)
 
 struct rgw_pubsub_sub_dest {
-  rgw_pubsub_sub_dest() : bucket_name(""), oid_prefix(""), push_endpoint(""), push_endpoint_args("") {}
   std::string bucket_name;
   std::string oid_prefix;
   std::string push_endpoint;

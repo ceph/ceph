@@ -1027,8 +1027,8 @@ private:
     }
     if (sub_conf.s3_id.empty()) {
       if (must_delete) {
-        ldout(s->cct, 1) << "notification does not have an ID, ret=" << op_ret << dendl;
         op_ret = -ENOENT;
+        ldout(s->cct, 1) << "notification does not have an ID, ret=" << op_ret << dendl;
       }
       return;
     }
@@ -1227,8 +1227,8 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
       return;
     }
     if (sub_conf.s3_id.empty()) {
-      ldout(s->cct, 1) << "notification does not have an ID, ret=" << op_ret << dendl;
       op_ret = -ENOENT;
+      ldout(s->cct, 1) << "notification does not have an ID, ret=" << op_ret << dendl;
       return;
     }
     rgw_pubsub_bucket_topics bucket_topics;
@@ -1239,8 +1239,8 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
     }
     const auto topic_it = bucket_topics.topics.find(sub_conf.topic);
     if (topic_it == bucket_topics.topics.end()) {
-      ldout(s->cct, 1) << "notification does not have topic information, ret=" << op_ret << dendl;
       op_ret = -ENOENT;
+      ldout(s->cct, 1) << "notification does not have topic information, ret=" << op_ret << dendl;
       return;
     }
     add_notification_to_list(sub_conf, topic_it->second.events, topic_it->second.topic.arn);

@@ -41,11 +41,6 @@
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
-
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-#include "rgw_amqp.h"
-#endif /* WITH_RADOSGW_AMQP_ENDPOINT */
-
 #include "rgw_dmclock_scheduler_ctx.h"
 
 #include "services/svc_zone.h"
@@ -304,10 +299,6 @@ int main(int argc, const char **argv)
   
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
-#endif
-
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  rgw::amqp::init(cct.get());
 #endif
 
   RGWRados *store =
@@ -601,10 +592,6 @@ int main(int argc, const char **argv)
   rgw_shutdown_resolver();
   rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
-
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  rgw::amqp::shutdown();
-#endif
 
   rgw_perf_stop(g_ceph_context);
 
