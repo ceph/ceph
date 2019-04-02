@@ -20,7 +20,7 @@
                   [(ngModel)]="model.backstore"
                   [disabled]="backstores.length == 1">
             <option *ngFor="let bs of backstores"
-                    [value]="bs">{{ bs }}</option>
+                    [value]="bs">{{ bs | iscsiBackstore }}</option>
           </select>
         </div>
       </div>
