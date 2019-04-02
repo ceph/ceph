@@ -4373,15 +4373,14 @@ PeeringState::Deleting::Deleting(my_context ctx)
   DECLARE_LOCALS
   ps->deleting = true;
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
-  pg->on_removal(t);
-  t->register_on_commit(new PG::C_DeleteMore(pg, ps->get_osdmap_epoch()));
+  pl->on_removal(t);
 }
 
 boost::statechart::result PeeringState::Deleting::react(
   const DeleteSome& evt)
 {
   DECLARE_LOCALS
-  pg->_delete_some(context<PeeringMachine>().get_cur_transaction());
+  pl->do_delete_work(context<PeeringMachine>().get_cur_transaction());
   return discard_event();
 }
 
