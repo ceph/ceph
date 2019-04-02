@@ -1584,6 +1584,17 @@ public:
     return missing_loc.num_unfound();
   }
 
+private:
+  void apply_peer_features(uint64_t f) { peer_features &= f; }
+  void reset_min_peer_features() {
+    peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  }
+public:
+  uint64_t get_min_peer_features() const { return peer_features; }
+  uint64_t get_min_acting_features() const { return acting_features; }
+  uint64_t get_min_upacting_features() const { return upacting_features; }
+
+
   // Flush control interface
 private:
   void start_flush(ObjectStore::Transaction *t) {

@@ -4409,7 +4409,7 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
   prior_set = ps->build_prior();
 
-  pg->reset_min_peer_features();
+  ps->reset_min_peer_features();
   get_infos();
   if (prior_set.pg_down) {
     post_event(IsDown());
@@ -4491,13 +4491,13 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
     }
     psdout(20) << "Adding osd: " << infoevt.from.osd << " peer features: "
 		       << hex << infoevt.features << dec << dendl;
-    pg->apply_peer_features(infoevt.features);
+    ps->apply_peer_features(infoevt.features);
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set.pg_down) {
-      psdout(20) << "Common peer features: " << hex << pg->get_min_peer_features() << dec << dendl;
-      psdout(20) << "Common acting features: " << hex << pg->get_min_acting_features() << dec << dendl;
-      psdout(20) << "Common upacting features: " << hex << pg->get_min_upacting_features() << dec << dendl;
+      psdout(20) << "Common peer features: " << hex << ps->get_min_peer_features() << dec << dendl;
+      psdout(20) << "Common acting features: " << hex << ps->get_min_acting_features() << dec << dendl;
+      psdout(20) << "Common upacting features: " << hex << ps->get_min_upacting_features() << dec << dendl;
       post_event(GotInfo());
     }
   }
