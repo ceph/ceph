@@ -3,8 +3,8 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
@@ -39,7 +39,7 @@ describe('NfsListComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         SharedModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         TabsModule.forRoot()
       ],
       providers: [TaskListService, i18nProviders]
