@@ -1,5 +1,5 @@
 ============================
- Add/Remove Metadata Server
+ Add/Remove Metadata Servers
 ============================
 
 You must deploy at least one metadata server daemon to use CephFS.  Instructions are given here for setting up an MDS manually, but you might prefer to use another tool such as ceph-deploy or ceph-ansible.
