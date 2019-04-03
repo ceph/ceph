@@ -1928,19 +1928,11 @@
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">142</context>
         </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
-          <context context-type="linenumber">207</context>
-        </context-group>
       </trans-unit><trans-unit id="6d30b7b36cf8f6364167321bdb4ba35d4cefce7b" datatype="html">
         <source>-- Select the object gateway user --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">145</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
-          <context context-type="linenumber">210</context>
         </context-group>
       </trans-unit><trans-unit id="589ce20d3ba3e3ac44f75decfaadc4ea8f0aec2d" datatype="html">
         <source>CephFS User ID</source>
@@ -1965,6 +1957,18 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">193</context>
+        </context-group>
+      </trans-unit><trans-unit id="ee3ba0ab5f0ccd597b3e44021c71e9aaad14df0a" datatype="html">
+        <source>-- No CephFS filesystem available --</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
+          <context context-type="linenumber">207</context>
+        </context-group>
+      </trans-unit><trans-unit id="764c57812558b1ae66c5eec95d7efd2b1bf761e3" datatype="html">
+        <source>-- Select the CephFS filesystem --</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
+          <context context-type="linenumber">210</context>
         </context-group>
       </trans-unit><trans-unit id="957512d0321f73e9f115bce1bd823fa635170c41" datatype="html">
         <source>Security Label</source>
