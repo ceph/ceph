@@ -1668,9 +1668,31 @@ public:
     return missing_loc.num_unfound();
   }
 
+  bool have_missing() const {
+    return pg_log.get_missing().num_missing() > 0;
+  }
+  bool get_num_missing() const {
+    return pg_log.get_missing().num_missing() > 0;
+  }
+
+  const MissingLoc::missing_by_count_t &get_missing_by_count() const {
+    return missing_loc.get_missing_by_count();
+  }
+
   eversion_t get_min_last_complete_ondisk() const {
     return min_last_complete_ondisk;
   }
+
+  std::string get_pg_state_string() const {
+    return pg_state_string(state);
+  }
+
+  void print_past_intervals(ostream &out) const {
+    out << "[" << past_intervals.get_bounds()
+	<< ")/" << past_intervals.size();
+  }
+
+  void dump_peering_state(Formatter *f);
 
 private:
   void apply_peer_features(uint64_t f) { peer_features &= f; }
@@ -1694,4 +1716,8 @@ public:
     return flushes_in_progress > 0;
   }
   void complete_flush();
+
+  friend ostream &operator<<(ostream &out, const PeeringState &ps);
 };
+
+ostream &operator<<(ostream &out, const PeeringState &ps);

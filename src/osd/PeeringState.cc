@@ -3263,6 +3263,58 @@ void PeeringState::init(
   write_if_dirty(*t);
 }
 
+void PeeringState::dump_peering_state(Formatter *f)
+{
+  f->dump_string("state", get_pg_state_string());
+  f->dump_unsigned("epoch", get_osdmap_epoch());
+  f->open_array_section("up");
+  for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+    f->dump_unsigned("osd", *p);
+  f->close_section();
+  f->open_array_section("acting");
+  for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+    f->dump_unsigned("osd", *p);
+  f->close_section();
+  if (!backfill_targets.empty()) {
+    f->open_array_section("backfill_targets");
+    for (set<pg_shard_t>::iterator p = backfill_targets.begin();
+	 p != backfill_targets.end();
+	 ++p)
+      f->dump_stream("shard") << *p;
+    f->close_section();
+  }
+  if (!async_recovery_targets.empty()) {
+    f->open_array_section("async_recovery_targets");
+    for (set<pg_shard_t>::iterator p = async_recovery_targets.begin();
+	 p != async_recovery_targets.end();
+	 ++p)
+      f->dump_stream("shard") << *p;
+    f->close_section();
+  }
+  if (!acting_recovery_backfill.empty()) {
+    f->open_array_section("acting_recovery_backfill");
+    for (set<pg_shard_t>::iterator p = acting_recovery_backfill.begin();
+	 p != acting_recovery_backfill.end();
+	 ++p)
+      f->dump_stream("shard") << *p;
+    f->close_section();
+  }
+  f->open_object_section("info");
+  update_calc_stats();
+  info.dump(f);
+  f->close_section();
+
+  f->open_array_section("peer_info");
+  for (map<pg_shard_t, pg_info_t>::const_iterator p = peer_info.begin();
+       p != peer_info.end();
+       ++p) {
+    f->open_object_section("info");
+    f->dump_stream("peer") << p->first;
+    p->second.dump(f);
+    f->close_section();
+  }
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
@@ -5927,3 +5979,59 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
   event_time = utime_t();
 }
 
+ostream &operator<<(ostream &out, const PeeringState &ps) {
+  out << "pg[" << ps.info
+      << " " << ps.up;
+  if (ps.acting != ps.up)
+    out << "/" << ps.acting;
+  if (ps.is_ec_pg())
+    out << "p" << ps.get_primary();
+  if (!ps.async_recovery_targets.empty())
+    out << " async=[" << ps.async_recovery_targets << "]";
+  if (!ps.backfill_targets.empty())
+    out << " backfill=[" << ps.backfill_targets << "]";
+  out << " r=" << ps.get_role();
+  out << " lpr=" << ps.get_last_peering_reset();
+
+  if (ps.deleting)
+    out << " DELETING";
+
+  if (!ps.past_intervals.empty()) {
+    out << " pi=[" << ps.past_intervals.get_bounds()
+	<< ")/" << ps.past_intervals.size();
+  }
+
+  if (ps.is_peered()) {
+    if (ps.last_update_ondisk != ps.info.last_update)
+      out << " luod=" << ps.last_update_ondisk;
+    if (ps.last_update_applied != ps.info.last_update)
+      out << " lua=" << ps.last_update_applied;
+  }
+
+  if (ps.pg_log.get_tail() != ps.info.log_tail ||
+      ps.pg_log.get_head() != ps.info.last_update)
+    out << " (info mismatch, " << ps.pg_log.get_log() << ")";
+
+  if (!ps.pg_log.get_log().empty()) {
+    if ((ps.pg_log.get_log().log.begin()->version <= ps.pg_log.get_tail())) {
+      out << " (log bound mismatch, actual=["
+	  << ps.pg_log.get_log().log.begin()->version << ","
+	  << ps.pg_log.get_log().log.rbegin()->version << "]";
+      out << ")";
+    }
+  }
+
+  out << " crt=" << ps.pg_log.get_can_rollback_to();
+
+  if (ps.last_complete_ondisk != ps.info.last_complete)
+    out << " lcod " << ps.last_complete_ondisk;
+
+  if (ps.is_primary()) {
+    out << " mlcod " << ps.min_last_complete_ondisk;
+  }
+
+  out << " " << pg_state_string(ps.get_state());
+  if (ps.should_send_notify())
+    out << " NOTIFY";
+  return out;
+}

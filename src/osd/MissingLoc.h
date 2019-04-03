@@ -43,6 +43,7 @@ class MissingLoc {
   };
 
 
+  using missing_by_count_t = map < shard_id_t, map<loc_count_t,int> >;
  private:
   loc_count_t _get_count(const set<pg_shard_t> &shards) {
     loc_count_t r;
@@ -63,7 +64,7 @@ class MissingLoc {
   // for every entry in missing_loc, we count how many of each type of shard we have,
   // and maintain totals here.  The sum of the values for this map will always equal
   // missing_loc.size().
-  map < shard_id_t, map<loc_count_t,int> > missing_by_count;
+  missing_by_count_t missing_by_count;
 
   void pgs_by_shard_id(
     const set<pg_shard_t>& s,
@@ -341,7 +342,8 @@ class MissingLoc {
   const map<hobject_t, pg_missing_item> &get_needs_recovery() const {
     return needs_recovery_map;
   }
-  const map < shard_id_t, map<loc_count_t,int> > &get_missing_by_count() const {
+
+  const missing_by_count_t &get_missing_by_count() const {
     return missing_by_count;
   }
 };
