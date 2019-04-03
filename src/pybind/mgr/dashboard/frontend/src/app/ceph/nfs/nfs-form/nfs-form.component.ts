@@ -169,7 +169,10 @@ export class NfsFormComponent implements OnInit {
       }),
       tag: new FormControl(''),
       pseudo: new FormControl('', {
-        validators: [Validators.required, Validators.pattern('^/[^><|&()]*$')]
+        validators: [
+          CdValidators.requiredIf({ protocolNfsv4: true }),
+          Validators.pattern('^/[^><|&()]*$')
+        ]
       }),
       access_type: new FormControl('RW', {
         validators: [Validators.required]
@@ -197,6 +200,10 @@ export class NfsFormComponent implements OnInit {
         'security.selinux',
         CdValidators.requiredIf({ security_label: true, 'fsal.name': 'CEPH' })
       )
+    });
+
+    this.nfsForm.get('protocolNfsv4').valueChanges.subscribe(() => {
+      this.nfsForm.get('pseudo').updateValueAndValidity({ emitEvent: false });
     });
   }
 
