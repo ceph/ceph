@@ -2725,12 +2725,12 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
-  // make sure upgrades stop at nautilus
+  // make sure osd versions do not span more than 3 releases
   if (HAVE_FEATURE(m->osd_features, SERVER_O) &&
-      osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+      osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
     mon->clog->info() << "disallowing boot of post-nautilus OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_osd_release < nautilus";
+		      << " because require_osd_release < mimic";
     goto ignore;
   }
 
