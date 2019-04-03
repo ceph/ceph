@@ -726,25 +726,53 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
                            RGWStorageStats *stats = NULL)
 {
   f->open_object_section("user_info");
+  encode_json("tenant", info.user_id.tenant, f);
+  encode_json("user_id", info.user_id.id, f);
+  encode_json("display_name", info.display_name, f);
+  encode_json("email", info.user_email, f);
+  encode_json("suspended", (int)info.suspended, f);
+  encode_json("max_buckets", (int)info.max_buckets, f);
 
-  f->dump_string("tenant", info.user_id.tenant);
-  f->dump_string("user_id", info.user_id.id);
-  f->dump_string("display_name", info.display_name);
-  f->dump_string("email", info.user_email);
-  f->dump_int("suspended", (int)info.suspended);
-  f->dump_int("max_buckets", (int)info.max_buckets);
-  f->dump_bool("system", (bool)info.system);
-  char buf[256];
-  op_type_to_str(info.op_mask, buf, sizeof(buf));
-  f->dump_string("op_mask", (const char *)buf);
   dump_subusers_info(f, info);
   dump_access_keys_info(f, info);
   dump_swift_keys_info(f, info);
-  info.caps.dump(f);
+
+  encode_json("caps", info.caps, f);
+
+  char buf[256];
+  op_type_to_str(info.op_mask, buf, sizeof(buf));
+  encode_json("op_mask", (const char *)buf, f);
+  encode_json("system", (bool)info.system, f);
+  encode_json("default_placement", info.default_placement.name, f);
+  encode_json("default_storage_class", info.default_placement.storage_class, f);
+  encode_json("placement_tags", info.placement_tags, f);
+  encode_json("bucket_quota", info.bucket_quota, f);
+  encode_json("user_quota", info.user_quota, f);
+  encode_json("temp_url_keys", info.temp_url_keys, f);
+
+  string user_source_type;
+  switch ((RGWIdentityType)info.type) {
+  case TYPE_RGW:
+    user_source_type = "rgw";
+    break;
+  case TYPE_KEYSTONE:
+    user_source_type = "keystone";
+    break;
+  case TYPE_LDAP:
+    user_source_type = "ldap";
+    break;
+  case TYPE_NONE:
+    user_source_type = "none";
+    break;
+  default:
+    user_source_type = "none";
+    break;
+  }
+  encode_json("type", user_source_type, f);
+  encode_json("mfa_ids", info.mfa_ids, f);
   if (stats) {
     encode_json("stats", *stats, f);
   }
-
   f->close_section();
 }
 
