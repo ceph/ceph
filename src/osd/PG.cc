@@ -581,106 +581,26 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
+  recovery_state.split_into(child_pgid, &child->recovery_state, split_bits);
+
   child->update_snap_mapper_bits(split_bits);
-  child->recovery_state.update_osdmap_ref(get_osdmap());
-
-  child->recovery_state.pool = pool;
-
-  // Log
-  pg_log.split_into(child_pgid, split_bits, &(child->pg_log));
-  child->info.last_complete = info.last_complete;
-
-  info.last_update = pg_log.get_head();
-  child->info.last_update = child->pg_log.get_head();
-
-  child->info.last_user_version = info.last_user_version;
-
-  info.log_tail = pg_log.get_tail();
-  child->info.log_tail = child->pg_log.get_tail();
-
-  // reset last_complete, we might have modified pg_log & missing above
-  pg_log.reset_complete_to(&info);
-  child->pg_log.reset_complete_to(&child->info);
-
-  // Info
-  child->info.history = info.history;
-  child->info.history.epoch_created = get_osdmap_epoch();
-  child->info.purged_snaps = info.purged_snaps;
-
-  if (info.last_backfill.is_max()) {
-    child->info.set_last_backfill(hobject_t::get_max());
-  } else {
-    // restart backfill on parent and child to be safe.  we could
-    // probably do better in the bitwise sort case, but it's more
-    // fragile (there may be special work to do on backfill completion
-    // in the future).
-    info.set_last_backfill(hobject_t());
-    child->info.set_last_backfill(hobject_t());
-    // restarting backfill implies that the missing set is empty,
-    // since it is only used for objects prior to last_backfill
-    pg_log.reset_backfill();
-    child->pg_log.reset_backfill();
-  }
-
-  child->info.stats = info.stats;
-  child->info.stats.parent_split_bits = split_bits;
-  info.stats.stats_invalid = true;
-  child->info.stats.stats_invalid = true;
-  child->info.last_epoch_started = info.last_epoch_started;
-  child->info.last_interval_started = info.last_interval_started;
 
   child->snap_trimq = snap_trimq;
-
-  // There can't be recovery/backfill going on now
-  int primary, up_primary;
-  vector<int> newup, newacting;
-  get_osdmap()->pg_to_up_acting_osds(
-    child->info.pgid.pgid, &newup, &up_primary, &newacting, &primary);
-  child->recovery_state.init_primary_up_acting(
-    newup,
-    newacting,
-    up_primary,
-    primary);
-  child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
-
-  // this comparison includes primary rank via pg_shard_t
-  if (get_primary() != child->get_primary())
-    child->info.history.same_primary_since = get_osdmap_epoch();
-
-  child->info.stats.up = up;
-  child->info.stats.up_primary = up_primary;
-  child->info.stats.acting = acting;
-  child->info.stats.acting_primary = primary;
-  child->info.stats.mapping_epoch = get_osdmap_epoch();
-
-  // History
-  child->past_intervals = past_intervals;
 
   _split_into(child_pgid, child, split_bits);
 
   // release all backoffs for simplicity
   release_backoffs(hobject_t(), hobject_t::get_max());
-
-  child->recovery_state.on_new_interval();
-
-  child->send_notify = !child->is_primary();
-
-  child->dirty_info = true;
-  child->dirty_big_info = true;
-  dirty_info = true;
-  dirty_big_info = true;
 }
 
 void PG::start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t> *out)
 {
-  out->resize(childpgs.size() + 1);
-  info.stats.stats.sum.split(*out);
+  recovery_state.start_split_stats(childpgs, out);
 }
 
 void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t)
 {
-  info.stats.stats.sum = stats;
-  write_if_dirty(*t);
+  recovery_state.finish_split_stats(stats, t);
 }
 
 void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
@@ -689,164 +609,25 @@ void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
 	   << dendl;
-  bool incomplete = false;
-  if (info.last_complete != info.last_update ||
-      info.is_incomplete() ||
-      info.dne()) {
-    dout(10) << __func__ << " target incomplete" << dendl;
-    incomplete = true;
+  map<spg_t, PeeringState*> source_ps;
+  for (auto &&source : sources) {
+    source_ps.emplace(source.first, &source.second->recovery_state);
   }
-  if (last_pg_merge_meta.source_pgid != pg_t()) {
-    if (info.pgid.pgid != last_pg_merge_meta.source_pgid.get_parent()) {
-      dout(10) << __func__ << " target doesn't match expected parent "
-	       << last_pg_merge_meta.source_pgid.get_parent()
-	       << " of source_pgid " << last_pg_merge_meta.source_pgid
-	       << dendl;
-      incomplete = true;
-    }
-    if (info.last_update != last_pg_merge_meta.target_version) {
-      dout(10) << __func__ << " target version doesn't match expected "
-	       << last_pg_merge_meta.target_version << dendl;
-      incomplete = true;
-    }
-  }
+  recovery_state.merge_from(source_ps, rctx, split_bits, last_pg_merge_meta);
 
-  PGLogEntryHandler handler{this, rctx->transaction};
-  pg_log.roll_forward(&handler);
-
-  info.last_complete = info.last_update;  // to fake out trim()
-  pg_log.reset_recovery_pointers();
-  pg_log.trim(info.last_update, info);
-
-  vector<PGLog*> log_from;
   for (auto& i : sources) {
     auto& source = i.second;
-    if (!source) {
-      dout(10) << __func__ << " source " << i.first << " missing" << dendl;
-      incomplete = true;
-      continue;
-    }
-    if (source->info.last_complete != source->info.last_update ||
-	source->info.is_incomplete() ||
-	source->info.dne()) {
-      dout(10) << __func__ << " source " << source->pg_id << " incomplete"
-	       << dendl;
-      incomplete = true;
-    }
-    if (last_pg_merge_meta.source_pgid != pg_t()) {
-      if (source->info.pgid.pgid != last_pg_merge_meta.source_pgid) {
-	dout(10) << __func__ << " source " << source->info.pgid.pgid
-		 << " doesn't match expected source pgid "
-		 << last_pg_merge_meta.source_pgid << dendl;
-	incomplete = true;
-      }
-      if (source->info.last_update != last_pg_merge_meta.source_version) {
-	dout(10) << __func__ << " source version doesn't match expected "
-		 << last_pg_merge_meta.target_version << dendl;
-	incomplete = true;
-      }
-    }
-
-    // prepare log
-    PGLogEntryHandler handler{source.get(), rctx->transaction};
-    source->pg_log.roll_forward(&handler);
-    source->info.last_complete = source->info.last_update;  // to fake out trim()
-    source->pg_log.reset_recovery_pointers();
-    source->pg_log.trim(source->info.last_update, source->info);
-    log_from.push_back(&source->pg_log);
-
     // wipe out source's pgmeta
     rctx->transaction->remove(source->coll, source->pgmeta_oid);
 
     // merge (and destroy source collection)
     rctx->transaction->merge_collection(source->coll, coll, split_bits);
-
-    // combine stats
-    info.stats.add(source->info.stats);
-
-    // pull up last_update
-    info.last_update = std::max(info.last_update, source->info.last_update);
-
-    // adopt source's PastIntervals if target has none.  we can do this since
-    // pgp_num has been reduced prior to the merge, so the OSD mappings for
-    // the PGs are identical.
-    if (past_intervals.empty() && !source->past_intervals.empty()) {
-      dout(10) << __func__ << " taking source's past_intervals" << dendl;
-      past_intervals = source->past_intervals;
-    }
   }
 
   // merge_collection does this, but maybe all of our sources were missing.
   rctx->transaction->collection_set_bits(coll, split_bits);
 
-  info.last_complete = info.last_update;
-  info.log_tail = info.last_update;
-  if (incomplete) {
-    info.last_backfill = hobject_t();
-  }
-
   snap_mapper.update_bits(split_bits);
-
-  // merge logs
-  pg_log.merge_from(log_from, info.last_update);
-
-  // make sure we have a meaningful last_epoch_started/clean (if we were a
-  // placeholder)
-  if (info.last_epoch_started == 0) {
-    // start with (a) source's history, since these PGs *should* have been
-    // remapped in concert with each other...
-    info.history = sources.begin()->second->info.history;
-
-    // we use the last_epoch_{started,clean} we got from
-    // the caller, which are the epochs that were reported by the PGs were
-    // found to be ready for merge.
-    info.history.last_epoch_clean = last_pg_merge_meta.last_epoch_clean;
-    info.history.last_epoch_started = last_pg_merge_meta.last_epoch_started;
-    info.last_epoch_started = last_pg_merge_meta.last_epoch_started;
-    dout(10) << __func__
-	     << " set les/c to " << last_pg_merge_meta.last_epoch_started << "/"
-	     << last_pg_merge_meta.last_epoch_clean
-	     << " from pool last_dec_*, source pg history was "
-	     << sources.begin()->second->info.history
-	     << dendl;
-
-    // if the past_intervals start is later than last_epoch_clean, it
-    // implies the source repeered again but the target didn't, or
-    // that the source became clean in a later epoch than the target.
-    // avoid the discrepancy but adjusting the interval start
-    // backwards to match so that check_past_interval_bounds() will
-    // not complain.
-    auto pib = past_intervals.get_bounds();
-    if (info.history.last_epoch_clean < pib.first) {
-      dout(10) << __func__ << " last_epoch_clean "
-	       << info.history.last_epoch_clean << " < past_interval start "
-	       << pib.first << ", adjusting start backwards" << dendl;
-      past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
-    }
-
-    // Similarly, if the same_interval_since value is later than
-    // last_epoch_clean, the next interval change will result in a
-    // past_interval start that is later than last_epoch_clean.  This
-    // can happen if we use the pg_history values from the merge
-    // source.  Adjust the same_interval_since value backwards if that
-    // happens.  (We trust the les and lec values more because they came from
-    // the real target, whereas the history value we stole from the source.)
-    if (info.history.last_epoch_started < info.history.same_interval_since) {
-      dout(10) << __func__ << " last_epoch_started "
-	       << info.history.last_epoch_started << " < same_interval_since "
-	       << info.history.same_interval_since
-	       << ", adjusting pg_history backwards" << dendl;
-      info.history.same_interval_since = info.history.last_epoch_clean;
-      // make sure same_{up,primary}_since are <= same_interval_since
-      info.history.same_up_since = std::min(
-	info.history.same_up_since, info.history.same_interval_since);
-      info.history.same_primary_since = std::min(
-	info.history.same_primary_since, info.history.same_interval_since);
-    }
-  }
-
-  dirty_info = true;
-  dirty_big_info = true;
 }
 
 void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
@@ -2609,6 +2390,16 @@ void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)
 void PG::set_not_ready_to_merge_source(pg_t pgid)
 {
   osd->set_not_ready_to_merge_source(pgid);
+}
+
+void PG::set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec)
+{
+  osd->set_ready_to_merge_target(this, lu, les, lec);
+}
+
+void PG::set_ready_to_merge_source(eversion_t lu)
+{
+  osd->set_ready_to_merge_source(this, lu);
 }
 
 void PG::send_pg_created(pg_t pgid)
