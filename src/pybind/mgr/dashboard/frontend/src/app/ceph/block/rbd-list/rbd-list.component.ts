@@ -7,6 +7,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -20,15 +21,21 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdModel } from './rbd-model';
+
+const BASE_URL = 'block/rbd';
 
 @Component({
   selector: 'cd-rbd-list',
   templateUrl: './rbd-list.component.html',
   styleUrls: ['./rbd-list.component.scss'],
-  providers: [TaskListService]
+  providers: [
+    TaskListService,
+    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
+  ]
 })
 export class RbdListComponent implements OnInit {
   @ViewChild(TableComponent)
@@ -77,7 +84,9 @@ export class RbdListComponent implements OnInit {
     private modalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private taskListService: TaskListService,
-    private i18n: I18n
+    private i18n: I18n,
+    private urlBuilder: URLBuilderService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
@@ -88,21 +97,21 @@ export class RbdListComponent implements OnInit {
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
-      routerLink: () => '/block/rbd/add',
+      routerLink: () => this.urlBuilder.getCreate(),
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
-      name: this.i18n('Add')
+      name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
-      routerLink: () => `/block/rbd/edit/${getImageUri()}`,
-      name: this.i18n('Edit')
+      routerLink: () => this.urlBuilder.getEdit(getImageUri()),
+      name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteRbdModal(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
     const copyAction: CdTableAction = {
       permission: 'create',
