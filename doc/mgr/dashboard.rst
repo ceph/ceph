@@ -220,6 +220,7 @@ cluster-wide level (so they apply to all manager instances) as follows::
 
   $ ceph config set mgr mgr/dashboard/server_addr $IP
   $ ceph config set mgr mgr/dashboard/server_port $PORT
+  $ ceph config set mgr mgr/dashboard/ssl_server_port $PORT
 
 Since each ``ceph-mgr`` hosts its own instance of dashboard, it may also be
 necessary to configure them separately. The IP address and port for a specific
@@ -227,6 +228,7 @@ manager instance can be changed with the following commands::
 
   $ ceph config set mgr mgr/dashboard/$name/server_addr $IP
   $ ceph config set mgr mgr/dashboard/$name/server_port $PORT
+  $ ceph config set mgr mgr/dashboard/$name/ssl_server_port $PORT
 
 Replace ``$name`` with the ID of the ceph-mgr instance hosting the dashboard web
 app.
@@ -314,23 +316,29 @@ The default value is 45 seconds.
 Enabling iSCSI Management
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Ceph Dashboard can manage iSCSI targets using the REST API provided
-by the `rbd-target-api` service of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_
-project. Please make sure that it's installed and enabled on the iSCSI gateways.
+The Ceph Dashboard can manage iSCSI targets using the REST API provided by the
+`rbd-target-api` service of the :ref:`ceph-iscsi`. Please make sure that it's
+installed and enabled on the iSCSI gateways.
+
+.. note::
+  The iSCSI management functionality of Ceph Dashboard depends on the latest
+  version 3 of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_ project.
+  Make sure that your operating system provides the correct version, otherwise
+  the dashboard won't enable the managemement features.
+
+If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
+certificate, then you need to configure the dashboard to avoid SSL certificate
+verification when accessing ceph-iscsi API.
+
+To disable API SSL verification run the following command::
+
+    $ ceph dashboard set-iscsi-api-ssl-verification false
 
 The available iSCSI gateways must be defined using the following commands::
 
     $ ceph dashboard iscsi-gateway-list
-    $ ceph dashboard iscsi-gateway-add <gateway_name> <scheme>://<username>:<password>@<host>[:port]
+    $ ceph dashboard iscsi-gateway-add <scheme>://<username>:<password>@<host>[:port]
     $ ceph dashboard iscsi-gateway-rm <gateway_name>
-
-If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
-certificate, then we need to configure the dashboard to avoid SSL certificate
-verification when accessing ceph-iscsi API.
-
-To disable API SSL verification run the following commmand::
-
-    $ ceph dashboard iscsi-set-api-ssl-verification false
 
 
 .. _dashboard-grafana:

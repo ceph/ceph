@@ -319,6 +319,18 @@ exists,  and delete a pool.
 .. automethod:: Rados.delete_pool(pool_name)
 
 
+CLI Commands
+------------
+
+The Ceph CLI command is internally using the following librados Python binding methods.
+
+In order to send a command, choose the correct method and choose the correct target.
+
+.. automethod:: Rados.mon_command
+.. automethod:: Rados.osd_command
+.. automethod:: Rados.mgr_command
+.. automethod:: Rados.pg_command
+
 
 Input/Output Context API
 ========================

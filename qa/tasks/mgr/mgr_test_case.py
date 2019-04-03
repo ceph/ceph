@@ -199,6 +199,6 @@ class MgrTestCase(CephTestCase):
             done = mgr_map['available']
             if done:
                 log.info("Available after assign ports (new active {0}/{1})".format(
-                    mgr_map['active_name'] , mgr_map['active_gid']))
+                    mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(is_available, timeout=30)

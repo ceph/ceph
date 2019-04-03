@@ -35,7 +35,7 @@ public:
     return "mon_get_version";
   }
 
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_get_version(what=" << what << " handle=" << handle << ")";
   }
 
@@ -47,12 +47,13 @@ public:
 
   void decode_payload() override {
     auto p = payload.cbegin();
+    using ceph::decode;
     decode(handle, p);
     decode(what, p);
   }
 
   ceph_tid_t handle = 0;
-  string what;
+  std::string what;
 
 private:
   ~MMonGetVersion() override {}

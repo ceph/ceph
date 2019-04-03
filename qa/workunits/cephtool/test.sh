@@ -1177,6 +1177,19 @@ function test_mon_mon()
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
+function test_mon_priority_and_weight()
+{
+    for i in 0 1 65535; do
+      ceph mon set-weight a $i
+      w=$(ceph mon dump --format=json-pretty 2>/dev/null | jq '.mons[0].weight')
+      [[ "$w" == "$i" ]]
+    done
+
+    for i in -1 65536; do
+      expect_false ceph mon set-weight a $i
+    done
+}
+
 function gen_secrets_file()
 {
   # lets assume we can have the following types
@@ -2231,6 +2244,16 @@ function test_mon_osd_erasure_code()
   # clean up
   ceph osd erasure-code-profile rm fooprofile
   ceph osd erasure-code-profile rm barprofile
+
+  # try weird k and m values
+  expect_false ceph osd erasure-code-profile set badk k=1 m=1
+  expect_false ceph osd erasure-code-profile set badk k=1 m=2
+  expect_false ceph osd erasure-code-profile set badk k=0 m=2
+  expect_false ceph osd erasure-code-profile set badk k=-1 m=2
+  expect_false ceph osd erasure-code-profile set badm k=2 m=0
+  expect_false ceph osd erasure-code-profile set badm k=2 m=-1
+  ceph osd erasure-code-profile set good k=2 m=1
+  ceph osd erasure-code-profile rm good
 }
 
 function test_mon_osd_misc()

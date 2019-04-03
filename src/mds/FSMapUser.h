@@ -53,7 +53,7 @@ public:
   void print(ostream& out) const;
   void print_summary(Formatter *f, ostream *out);
 
-  static void generate_test_instances(list<FSMapUser*>& ls);
+  static void generate_test_instances(std::list<FSMapUser*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser::fs_info_t)
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser)

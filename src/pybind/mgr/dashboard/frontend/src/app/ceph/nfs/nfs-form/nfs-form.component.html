@@ -204,10 +204,10 @@
                         i18n>Loading...</option>
                 <option *ngIf="allFsNames !== null && allFsNames.length === 0"
                         value=""
-                        i18n>-- No users available --</option>
+                        i18n>-- No CephFS filesystem available --</option>
                 <option *ngIf="allFsNames !== null && allFsNames.length > 0"
                         value=""
-                        i18n>-- Select the object gateway user --</option>
+                        i18n>-- Select the CephFS filesystem --</option>
                 <option *ngFor="let filesystem of allFsNames"
                         [value]="filesystem.name">{{ filesystem.name }}</option>
               </select>
@@ -514,10 +514,7 @@
                             (submitAction)="submitAction()">
             <ng-container i18n>Submit</ng-container>
           </cd-submit-button>
-          <button type="button"
-                  class="btn btn-sm btn-default"
-                  (click)="cancelAction()"
-                  i18n>Back</button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

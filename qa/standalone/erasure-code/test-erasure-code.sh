@@ -308,7 +308,7 @@ function TEST_chunk_mapping() {
 
     ceph osd erasure-code-profile set remap-profile \
         plugin=lrc \
-        layers='[ [ "_DD", "" ] ]' \
+        layers='[ [ "cDD", "" ] ]' \
         mapping='_DD' \
         crush-steps='[ [ "choose", "osd", 0 ] ]' || return 1
     ceph osd erasure-code-profile get remap-profile

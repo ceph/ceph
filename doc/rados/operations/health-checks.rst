@@ -301,6 +301,34 @@ You can either raise the pool quota with::
 
 or delete some existing data to reduce utilization.
 
+BLUEFS_SPILLOVER
+________________
+
+One or more OSDs that use the BlueStore backend have been allocated
+`db` partitions (storage space for metadata, normally on a faster
+device) but that space has filled, such that metadata has "spilled
+over" onto the normal slow device.  This isn't necessarily an error
+condition or even unexpected, but if the administrator's expectation
+was that all metadata would fit on the faster device, it indicates
+that not enough space was provided.
+
+This warning can be disabled on all OSDs with::
+
+  ceph config set osd bluestore_warn_on_bluefs_spillover false
+
+Alternatively, it can be disabled on a specific OSD with::
+
+  ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
+
+To provide more metadata space, the OSD in question could be destroyed and
+reprovisioned.  This will involve data migration and recovery.
+
+It may also be possible to expand the LVM logical volume backing the
+`db` storage.  If the underlying LV has been expanded, the OSD daemon
+needs to be stopped and BlueFS informed of the device size change with::
+
+  ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
+
 
 Device health
 -------------

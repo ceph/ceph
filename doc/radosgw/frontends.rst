@@ -7,7 +7,8 @@ HTTP Frontends
 .. contents::
 
 The Ceph Object Gateway supports two embedded HTTP frontend libraries
-that can be configured with ``rgw_frontends``.
+that can be configured with ``rgw_frontends``. See `Config Reference`_
+for details about the syntax.
 
 Beast
 =====
@@ -58,6 +59,19 @@ Options
 
 :Type: String
 :Default: None
+
+``tcp_nodelay``
+
+:Description: If set the socket option will disable Nagle's algorithm on 
+              the connection which means that packets will be sent as soon 
+              as possible instead of waiting for a full buffer or timeout to occur.
+
+              ``1`` Disable Nagel's algorithm for all sockets.
+
+              ``0`` Keep the default: Nagel's algorithm enabled.
+
+:Type: Integer (0 or 1)
+:Default: 0
 
 
 Civetweb
@@ -133,10 +147,7 @@ Options
 The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set: ::
  
  [client.rgw.gateway-node1]
- rgw_frontends = civetweb 
- request_timeout_ms = 30000 
- error_log_file = /var/log/radosgw/civetweb.error.log 
- access_log_file = /var/log/radosgw/civetweb.access.log
+ rgw_frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
 
 A complete list of supported options can be found in the `Civetweb User Manual`_.
 
@@ -157,3 +168,4 @@ Some frontend options are generic and supported by all frontends:
 
 
 .. _Civetweb User Manual: https://civetweb.github.io/civetweb/UserManual.html
+.. _Config Reference: ../config-ref

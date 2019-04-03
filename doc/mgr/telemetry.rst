@@ -24,7 +24,7 @@ The data being reported does *not* contain any sensitive
 data like pool names, object names, object contents, or hostnames.
 
 It contains counters and statistics on how the cluster has been
-deployed, the version of Ceph, the distribition of the hosts and other
+deployed, the version of Ceph, the distribution of the hosts and other
 parameters which help the project to gain a better understanding of
 the way Ceph is used.
 

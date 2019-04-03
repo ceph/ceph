@@ -3090,6 +3090,7 @@ int main(int argc, char **argv)
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
+    ("no-mon-config", "Do not contact mons for config")
     ("force", "Ignore some types of errors and proceed with operation - USE WITH CAUTION: CORRUPTION POSSIBLE NOW OR IN THE FUTURE")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -3275,12 +3276,16 @@ int main(int argc, char **argv)
     perror(err.c_str());
     return 1;
   }
+  int init_flags = 0;
+  if (vm.count("no-mon-config") > 0) {
+    init_flags |= CINIT_FLAG_NO_MON_CONFIG;
+  }
 
   auto cct = global_init(
     NULL, ceph_options,
     CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT,
-    0);
+    init_flags);
   common_init_finish(g_ceph_context);
   if (debug) {
     g_conf().set_val_or_die("log_to_stderr", "true");

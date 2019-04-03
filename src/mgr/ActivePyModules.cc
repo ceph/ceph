@@ -327,7 +327,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "df") {
     cluster_state.with_osdmap_and_pgmap(
-      [this, &f, &tstate](
+      [&f, &tstate](
 	const OSDMap& osd_map,
 	const PGMap &pg_map) {
 	PyEval_RestoreThread(tstate);

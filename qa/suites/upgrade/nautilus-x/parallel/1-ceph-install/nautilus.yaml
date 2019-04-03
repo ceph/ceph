@@ -1,0 +1,43 @@
+meta:
+- desc: |
+   install ceph/luminous latest
+   run workload and upgrade-sequence in parallel
+   upgrade the client node
+tasks:
+- install:
+    branch: nautilus
+- print: "**** done installing nautilus"
+- ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+    conf:
+      global:
+        mon warn on pool no app: false
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client nautilus
+- print: "**** done ceph"
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:
+- print: "**** done install.upgrade non-client hosts"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
+- install.upgrade:
+    client.0:
+- print: "**** done install.upgrade on client.0"

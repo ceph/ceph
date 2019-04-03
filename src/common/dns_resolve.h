@@ -79,6 +79,7 @@ class DNSResolver {
 
     struct Record {
       uint16_t priority;
+      uint16_t weight;
       entity_addr_t addr;
     };
 

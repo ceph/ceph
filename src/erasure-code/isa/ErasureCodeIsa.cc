@@ -14,13 +14,14 @@
 
 // -----------------------------------------------------------------------------
 #include <algorithm>
-#include <errno.h>
+#include <cerrno>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
 #include "include/ceph_assert.h"
 using namespace std;
+using namespace ceph;
 
 // -----------------------------------------------------------------------------
 extern "C" {
@@ -325,7 +326,7 @@ int ErasureCodeIsaDefault::parse(ErasureCodeProfile &profile,
   int err = ErasureCode::parse(profile, ss);
   err |= to_int("k", profile, &k, DEFAULT_K, ss);
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
-  err |= sanity_check_k(k, ss);
+  err |= sanity_check_k_m(k, m, ss);
 
   if (matrixtype == kVandermonde) {
     // these are verified safe values evaluated using the

@@ -150,6 +150,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = 1;  /* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
 			skip = 1;  /* ignore */
+		} else if (strncmp(data, "nofail", 6) == 0) {
+			skip = 1;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {

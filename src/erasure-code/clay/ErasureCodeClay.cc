@@ -36,7 +36,7 @@
 #define talloc(type, num) (type *) malloc(sizeof(type)*(num))
 
 using namespace std;
-
+using namespace ceph;
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeClay: ";
@@ -193,7 +193,7 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
   err |= to_int("k", profile, &k, DEFAULT_K, ss);
   err |= to_int("m", profile, &m, DEFAULT_M, ss);
 
-  err |= sanity_check_k(k, ss);
+  err |= sanity_check_k_m(k, m, ss);
 
   err |= to_int("d", profile, &d, std::to_string(k+m-1), ss);
 

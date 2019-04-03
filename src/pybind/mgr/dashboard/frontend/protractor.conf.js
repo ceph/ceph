@@ -28,6 +28,18 @@ exports.config = {
       password: 'admin'
     }
   },
+
+  plugins: [{
+      package: 'protractor-screenshoter-plugin',
+      screenshotPath: '.protractor-report',
+      screenshotOnExpect: 'failure',
+      screenshotOnSpec: 'none',
+      withLogs: true,
+      writeReportFreq: 'asap',
+      imageToAscii: 'none',
+      clearFoldersBeforeTest: true
+    }],
+
   onPrepare() {
     browser.manage().timeouts().implicitlyWait(360000);
 
@@ -45,12 +57,14 @@ exports.config = {
 
     browser.driver.findElement(by.css('input[type="submit"]')).click();
 
-    // Login takes some time, so wait until it's done.
-    // For the test app's login, we know it's done when it redirects to
-    // dashboard.
-    return browser.driver.wait(function() {
-      return browser.driver.getCurrentUrl().then(function(url) {
-        return /dashboard/.test(url);
+    return global.browser.getProcessedConfig().then(function(config) {
+      // Login takes some time, so wait until it's done.
+      // For the test app's login, we know it's done when it redirects to
+      // dashboard.
+      return browser.driver.wait(function() {
+        return browser.driver.getCurrentUrl().then(function(url) {
+          return /dashboard/.test(url);
+        });
       });
     });
   }

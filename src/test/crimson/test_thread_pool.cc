@@ -1,4 +1,5 @@
 #include <chrono>
+#include <iostream>
 #include <numeric>
 #include <seastar/core/app-template.hh>
 #include "crimson/thread/ThreadPool.h"

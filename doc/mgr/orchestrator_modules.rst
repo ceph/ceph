@@ -135,6 +135,9 @@ effect.  Second, the completion becomes *effective*, meaning that the operation 
 
 .. automethod:: Orchestrator.wait
 
+.. autoclass:: _Completion
+   :members:
+
 .. autoclass:: ReadCompletion
 .. autoclass:: WriteCompletion
 
@@ -149,6 +152,58 @@ specify a location when creating a stateless service.
 
 OSD services generally require a specific placement choice, as this
 will determine which storage devices are used.
+
+Error Handling
+--------------
+
+The main goal of error handling within orchestrator modules is to provide debug information to
+assist users when dealing with deployment errors.
+
+.. autoclass:: OrchestratorError
+.. autoclass:: NoOrchestrator
+.. autoclass:: OrchestratorValidationError
+
+
+In detail, orchestrators need to explicitly deal with different kinds of errors:
+
+1. No orchestrator configured
+
+   See :class:`NoOrchestrator`.
+
+2. An orchestrator doesn't implement a specific method.
+
+   For example, an Orchestrator doesn't support ``add_host``.
+
+   In this case, a ``NotImplementedError`` is raised.
+
+3. Missing features within implemented methods.
+
+   E.g. optional parameters to a command that are not supported by the
+   backend (e.g. the hosts field in :func:`Orchestrator.update_mons` command with the rook backend).
+
+   See :class:`OrchestratorValidationError`.
+
+4. Input validation errors
+
+   The ``orchestrator_cli`` module and other calling modules are supposed to
+   provide meaningful error messages.
+
+   See :class:`OrchestratorValidationError`.
+
+5. Errors when actually executing commands
+
+   The resulting Completion should contain an error string that assists in understanding the
+   problem. In addition, :func:`_Completion.is_errored` is set to ``True``
+
+6. Invalid configuration in the orchestrator modules
+
+   This can be tackled similar to 5.
+
+
+All other errors are unexpected orchestrator issues and thus should raise an exception that are then
+logged into the mgr log file. If there is a completion object at that point,
+:func:`_Completion.result` may contain an error message.
+
 
 Excluded functionality
 ----------------------
@@ -220,3 +275,8 @@ Utility
 
 .. automethod:: Orchestrator.available
 
+Client Modules
+--------------
+
+.. autoclass:: OrchestratorClientMixin
+   :members:

@@ -263,6 +263,7 @@ public:
       "log_file",
       "log_max_new",
       "log_max_recent",
+      "log_to_file",
       "log_to_syslog",
       "err_to_syslog",
       "log_stderr_prefix",
@@ -296,8 +297,13 @@ public:
     }
 
     // file
-    if (changed.count("log_file")) {
-      log->set_log_file(conf->log_file);
+    if (changed.count("log_file") ||
+	changed.count("log_to_file")) {
+      if (conf->log_to_file) {
+	log->set_log_file(conf->log_file);
+      } else {
+	log->set_log_file({});
+      }
       log->reopen_log_file();
     }
 
@@ -629,7 +635,6 @@ CephContext::CephContext(uint32_t module_type_,
     crush_location(this)
 {
   _log = new ceph::logging::Log(&_conf->subsys);
-  _log->start();
 
   _log_obs = new LogObs(_log);
   _conf.add_observer(_log_obs);

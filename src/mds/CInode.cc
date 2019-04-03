@@ -633,15 +633,18 @@ frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
   return dirfragtree[h];
 }
 
-bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
+std::pair<bool, std::vector<CDir*>> CInode::get_dirfrags_under(frag_t fg)
 {
-  bool all = true;
+  std::pair<bool, std::vector<CDir*>> result;
+  auto& all = result.first;
+  auto& dirs = result.second;
+
   {
     frag_vec_t leaves;
     dirfragtree.get_leaves_under(fg, leaves);
     for (const auto &leaf : leaves) {
       if (auto it = dirfrags.find(leaf); it != dirfrags.end()) {
-        ls.push_back(it->second);
+        dirs.push_back(it->second);
       } else {
         all = false;
       }
@@ -649,14 +652,14 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   }
 
   if (all)
-    return all;
+    return result;
 
   fragtree_t tmpdft;
   tmpdft.force_to_leaf(g_ceph_context, fg);
   for (auto &p : dirfrags) {
     tmpdft.force_to_leaf(g_ceph_context, p.first);
     if (fg.contains(p.first) && !dirfragtree.is_leaf(p.first))
-      ls.push_back(p.second);
+      dirs.push_back(p.second);
   }
 
   all = true;
@@ -671,7 +674,7 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
     }
   }
 
-  return all;
+  return result;
 }
 
 void CInode::verify_dirfrags()
@@ -715,10 +718,9 @@ CDir *CInode::get_approx_dirfrag(frag_t fg)
   if (dir) return dir;
 
   // find a child?
-  list<CDir*> ls;
-  get_dirfrags_under(fg, ls);
-  if (!ls.empty()) 
-    return ls.front();
+  auto&& p = get_dirfrags_under(fg);
+  if (!p.second.empty())
+    return p.second.front();
 
   // try parents?
   while (fg.bits() > 0) {
@@ -1560,13 +1562,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
       // also specify which frags are mine
       set<frag_t> myfrags;
-      list<CDir*> dfls;
-      get_dirfrags(dfls);
-      for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
-	if ((*p)->is_auth()) {
-	  frag_t fg = (*p)->get_frag();
+      auto&& dfls = get_dirfrags();
+      for (const auto& dir : dfls) {
+	if (dir->is_auth()) {
+	  frag_t fg = dir->get_frag();
 	  myfrags.insert(fg);
 	}
+      }
       encode(myfrags, bl);
     }
     break;
@@ -4049,7 +4051,7 @@ void InodeStoreBase::dump(Formatter *f) const
 }
 
 
-void InodeStore::generate_test_instances(list<InodeStore*> &ls)
+void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
 {
   InodeStore *populated = new InodeStore;
   populated->inode.ino = 0xdeadbeef;
@@ -4057,7 +4059,7 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
-void InodeStoreBare::generate_test_instances(list<InodeStoreBare*> &ls)
+void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 {
   InodeStoreBare *populated = new InodeStoreBare;
   populated->inode.ino = 0xdeadbeef;
@@ -4623,8 +4625,7 @@ void CInode::dump(Formatter *f, int flags) const
 
   if (flags & DUMP_DIRFRAGS) {
     f->open_array_section("dirfrags");
-    list<CDir*> dfs;
-    get_dirfrags(dfs);
+    auto&& dfs = get_dirfrags();
     for(const auto &dir: dfs) {
       f->open_object_section("dir");
       dir->dump(f, CDir::DUMP_DEFAULT | CDir::DUMP_ITEMS);
@@ -4920,6 +4921,24 @@ bool CInode::is_exportable(mds_rank_t dest) const
     return false;
   } else {
     return true;
+  }
+}
+
+void CInode::get_nested_dirfrags(std::vector<CDir*>& v) const
+{
+  for (const auto &p : dirfrags) {
+    const auto& dir = p.second;
+    if (!dir->is_subtree_root())
+      v.push_back(dir);
+  }
+}
+
+void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
+{
+  for (const auto &p : dirfrags) {
+    const auto& dir = p.second;
+    if (dir->is_subtree_root())
+      v.push_back(dir);
   }
 }
 

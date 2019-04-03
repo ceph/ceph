@@ -16,6 +16,74 @@ function run() {
     done
 }
 
+function TEST_a_merge_empty() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=3 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+
+    ceph osd pool create foo 2 || return 1
+    ceph osd pool set foo pgp_num 1 || return 1
+
+    wait_for_clean || return 1
+
+    # note: we need 1.0 to have the same or more objects than 1.1
+    #  1.1
+    rados -p foo put foo1 /etc/passwd
+    rados -p foo put foo2 /etc/passwd
+    rados -p foo put foo3 /etc/passwd
+    rados -p foo put foo4 /etc/passwd
+    #  1.0
+    rados -p foo put foo5 /etc/passwd
+    rados -p foo put foo6 /etc/passwd
+    rados -p foo put foo8 /etc/passwd
+    rados -p foo put foo10 /etc/passwd
+    rados -p foo put foo11 /etc/passwd
+    rados -p foo put foo12 /etc/passwd
+    rados -p foo put foo16 /etc/passwd
+
+    wait_for_clean || return 1
+
+    ceph tell osd.1 config set osd_debug_no_purge_strays true
+    ceph osd pool set foo size 2 || return 1
+    wait_for_clean || return 1
+
+    kill_daemons $dir TERM osd.2 || return 1
+    ceph-objectstore-tool --data-path $dir/2 --op remove --pgid 1.1 --force || return 1
+    activate_osd $dir 2 || return 1
+
+    wait_for_clean || return 1
+
+    # osd.2: now 1.0 is there but 1.1 is not
+
+    # instantiate 1.1 on osd.2 with last_update=0'0 ('empty'), which is
+    # the problematic state... then let it merge with 1.0
+    ceph tell osd.2 config set osd_debug_no_acting_change true
+    ceph osd out 0 1
+    ceph osd pool set foo pg_num 1
+    sleep 5
+    ceph tell osd.2 config set osd_debug_no_acting_change false
+
+    # go back to osd.1 being primary, and 3x so the osd.2 copy doesn't get
+    # removed
+    ceph osd in 0 1
+    ceph osd pool set foo size 3
+
+    wait_for_clean || return 1
+
+    # scrub to ensure the osd.3 copy of 1.0 was incomplete (vs missing
+    # half of its objects).
+    ceph pg scrub 1.0
+    sleep 10
+    ceph log last debug
+    ceph pg ls
+    ceph pg ls | grep ' active.clean ' || return 1
+}
+
 function TEST_import_after_merge_and_gap() {
     local dir=$1
 

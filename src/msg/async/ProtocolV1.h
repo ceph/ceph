@@ -144,10 +144,10 @@ protected:
 
   State state;
 
-  void run_continuation(CtPtr continuation);
-  CtPtr read(CONTINUATION_PARAM(next, ProtocolV1, char *, int), int len,
+  void run_continuation(CtPtr pcontinuation);
+  CtPtr read(CONTINUATION_RX_TYPE<ProtocolV1> &next, int len,
              char *buffer = nullptr);
-  CtPtr write(CONTINUATION_PARAM(next, ProtocolV1, int), bufferlist &bl);
+  CtPtr write(CONTINUATION_TX_TYPE<ProtocolV1> &next,bufferlist &bl);
   inline CtPtr _fault() {  // helper fault method that stops continuation
     fault();
     return nullptr;

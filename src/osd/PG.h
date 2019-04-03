@@ -414,8 +414,7 @@ public:
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 		  unsigned split_bits,
-		  epoch_t dec_last_epoch_started,
-		  epoch_t dec_last_epoch_clean);
+		  const pg_merge_meta_t& last_pg_merge_meta);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -905,7 +904,7 @@ protected:
       if (item->is_delete())
 	return;
       auto mliter =
-	missing_loc.insert(make_pair(hoid, set<pg_shard_t>())).first;
+	missing_loc.emplace(hoid, set<pg_shard_t>()).first;
       ceph_assert(info.last_backfill.is_max());
       ceph_assert(info.last_update >= item->need);
       if (!missing.is_missing(hoid))
@@ -1055,7 +1054,7 @@ public:
     void send_notify(pg_shard_t to,
 		     const pg_notify_t &info, const PastIntervals &pi) {
       ceph_assert(notify_list);
-      (*notify_list)[to.osd].push_back(make_pair(info, pi));
+      (*notify_list)[to.osd].emplace_back(info, pi);
     }
   };
 protected:
@@ -1323,14 +1322,14 @@ protected:
    *  - waiting_for_map
    *    - may start or stop blocking at any time (depending on client epoch)
    *  - waiting_for_peered
-   *    - !is_peered() or flushes_in_progress
+   *    - !is_peered()
    *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_flush
+   *    - flushes_in_progress
+   *    - waiting for final flush during activate
    *  - waiting_for_active
    *    - !is_active()
    *    - only starts blocking on interval change; never restarts
-   *  - waiting_for_flush
-   *    - is_active() and flushes_in_progress
-   *    - waiting for final flush during activate
    *  - waiting_for_scrub
    *    - starts and stops blocking for varying intervals during scrub
    *  - waiting_for_unreadable_object
@@ -1610,6 +1609,16 @@ protected:
   uint64_t get_num_unfound() const {
     return missing_loc.num_unfound();
   }
+  bool all_missing_unfound() const {
+    const auto& missing = pg_log.get_missing();
+    if (!missing.have_missing())
+      return false;
+    for (auto& m : missing.get_items()) {
+      if (!missing_loc.is_unfound(m.first))
+        return false;
+    }
+    return true;
+  }
 
   virtual void check_local() = 0;
 
@@ -1703,6 +1712,11 @@ public:
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
+    // this flag indicates that we are scrubbing post repair to verify everything is fixed
+    bool check_repair;
+    // this flag indicates that if a regular scrub detects errors <= osd_scrub_auto_repair_num_errors,
+    // we should deep scrub in order to auto repair
+    bool deep_scrub_on_error;
 
     // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<pg_shard_t>> missing;
@@ -1815,6 +1829,8 @@ public:
       must_deep_scrub = false;
       must_repair = false;
       auto_repair = false;
+      check_repair = false;
+      deep_scrub_on_error = false;
 
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();
@@ -1873,7 +1889,7 @@ protected:
   bool scrub_process_inconsistent();
   bool ops_blocked_by_scrub() const;
   void scrub_finish();
-  void scrub_clear_state();
+  void scrub_clear_state(bool keep_repair = false);
   void _scan_snaps(ScrubMap &map);
   void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(const vector<ghobject_t> &rollback_obs);
@@ -2933,7 +2949,7 @@ protected:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-  int get_state() const { return state; }
+  uint64_t get_state() const { return state; }
   bool is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }
@@ -2951,6 +2967,7 @@ protected:
   }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
+  bool is_repair() const { return state_test(PG_STATE_REPAIR); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 

@@ -150,7 +150,7 @@ export class NotificationService {
     }"></i>`;
   }
 
-  notifyTask(finishedTask: FinishedTask, success: boolean = true) {
+  notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
     let notification: CdNotificationConfig;
     if (finishedTask.success && success) {
       notification = new CdNotificationConfig(
@@ -164,7 +164,7 @@ export class NotificationService {
         this.taskMessageService.getErrorMessage(finishedTask)
       );
     }
-    this.show(notification);
+    return this.show(notification);
   }
 
   /**

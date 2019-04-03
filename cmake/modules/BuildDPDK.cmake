@@ -1,4 +1,5 @@
 function(do_build_dpdk dpdk_dir)
+  find_program (MAKE_EXECUTABLE NAMES make gmake)
   # mk/machine/native/rte.vars.mk
   # rte_cflags are extracted from mk/machine/${machine}/rte.vars.mk
   # only 3 of them have -march=<arch> defined, so copying them here.
@@ -59,7 +60,7 @@ function(do_build_dpdk dpdk_dir)
   set(target "${arch}-${machine_tmpl}-${execenv}-${toolchain}")
 
   execute_process(
-    COMMAND ${CMAKE_MAKE_PROGRAM} showconfigs
+    COMMAND ${MAKE_EXECUTABLE} showconfigs
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
     OUTPUT_VARIABLE supported_targets
     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -71,11 +72,18 @@ function(do_build_dpdk dpdk_dir)
       "\"${target}\" not listed in ${supported_targets}")
   endif()
 
+  if(CMAKE_MAKE_PROGRAM MATCHES "make")
+    # try to inherit command line arguments passed by parent "make" job
+    set(make_cmd "$(MAKE)")
+  else()
+    set(make_cmd "${MAKE_EXECUTABLE}")
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
-    CONFIGURE_COMMAND $(MAKE) config O=${dpdk_dir} T=${target}
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} $(MAKE) O=${dpdk_dir} EXTRA_CFLAGS=-fPIC
+    CONFIGURE_COMMAND ${make_cmd} config O=${dpdk_dir} T=${target}
+    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} ${make_cmd} O=${dpdk_dir} EXTRA_CFLAGS=-fPIC
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND "true")
   ExternalProject_Add_Step(dpdk-ext patch-config

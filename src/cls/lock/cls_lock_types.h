@@ -59,18 +59,18 @@ namespace rados {
        */
       struct locker_id_t {
         entity_name_t locker;   // locker's client name
-        string cookie;          // locker's cookie.
+	std::string cookie;          // locker's cookie.
 
         locker_id_t() {}
-        locker_id_t(entity_name_t& _n, const string& _c) : locker(_n), cookie(_c) {}
+        locker_id_t(entity_name_t& _n, const std::string& _c) : locker(_n), cookie(_c) {}
 
-        void encode(bufferlist &bl) const {
+        void encode(ceph::buffer::list &bl) const {
           ENCODE_START(1, 1, bl);
           encode(locker, bl);
           encode(cookie, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(locker, bl);
           decode(cookie, bl);
@@ -93,20 +93,20 @@ namespace rados {
       {
         utime_t expiration;  // expiration: non-zero means epoch of locker expiration
         entity_addr_t addr;  // addr: locker address
-        string description;  // description: locker description, may be empty
+	std::string description;  // description: locker description, may be empty
 
         locker_info_t() {}
         locker_info_t(const utime_t& _e, const entity_addr_t& _a,
-                      const string& _d) :  expiration(_e), addr(_a), description(_d) {}
+                      const std::string& _d) :  expiration(_e), addr(_a), description(_d) {}
 
-        void encode(bufferlist &bl, uint64_t features) const {
+        void encode(ceph::buffer::list &bl, uint64_t features) const {
           ENCODE_START(1, 1, bl);
           encode(expiration, bl);
           encode(addr, bl, features);
           encode(description, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(expiration, bl);
           decode(addr, bl);
@@ -121,11 +121,11 @@ namespace rados {
       struct lock_info_t {
         map<locker_id_t, locker_info_t> lockers; // map of lockers
         ClsLockType lock_type;                   // lock type (exclusive / shared)
-        string tag;                              // tag: operations on lock can only succeed with this tag
+	std::string tag;                              // tag: operations on lock can only succeed with this tag
                                                  //      as long as set of non expired lockers
                                                  //      is bigger than 0.
 
-        void encode(bufferlist &bl, uint64_t features) const {
+        void encode(ceph::buffer::list &bl, uint64_t features) const {
           ENCODE_START(1, 1, bl);
           encode(lockers, bl, features);
           uint8_t t = (uint8_t)lock_type;
@@ -133,7 +133,7 @@ namespace rados {
           encode(tag, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::const_iterator &bl) {
+        void decode(ceph::buffer::list::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(lockers, bl);
           uint8_t t;

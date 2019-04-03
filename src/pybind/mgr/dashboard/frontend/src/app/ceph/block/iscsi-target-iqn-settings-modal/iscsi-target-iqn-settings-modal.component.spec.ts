@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
@@ -14,7 +15,7 @@ describe('IscsiTargetIqnSettingsModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetIqnSettingsModalComponent],
-    imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule],
+    imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule],
     providers: [BsModalRef, i18nProviders]
   });
 

@@ -90,7 +90,7 @@ public:
 
 
   virtual int wait_result() {
-    return http_op->wait(result);
+    return http_op->wait(result, null_yield);
   }
 
   int request_complete() override {
@@ -138,7 +138,7 @@ class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
   {}
 
   int wait_result() override {
-    return http_op->wait(result);
+    return http_op->wait(result, null_yield);
   }
 
 };
@@ -206,10 +206,10 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   int request_complete() override {
     int ret;
     if (result || err_result) {
-      ret = http_op->wait(result, err_result);
+      ret = http_op->wait(result, null_yield, err_result);
     } else {
       bufferlist bl;
-      ret = http_op->wait(&bl);
+      ret = http_op->wait(&bl, null_yield);
     }
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
@@ -363,7 +363,7 @@ public:
   int request_complete() override {
     int ret;
     bufferlist bl;
-    ret = http_op->wait(&bl);
+    ret = http_op->wait(&bl, null_yield);
     auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
       error_stream << "http operation failed: " << op->to_str()

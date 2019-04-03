@@ -62,8 +62,8 @@ Build the Project
 ~~~~~~~~~~~~~~~~~
 
 Run ``npm run build`` to build the project. The build artifacts will be
-stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``https://localhost:8443``.
+stored in the ``dist/`` directory. Use the ``--prod`` flag for a
+production build (``npm run build -- --prod``). Navigate to ``https://localhost:8443``.
 
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -139,6 +139,12 @@ installed and run the tests if either is found.
 Start all frontend e2e tests by running::
 
   $ ./run-frontend-e2e-tests.sh
+
+Report:
+  After running the tests you can find the corresponding report as well as screenshots
+  of failed test cases by opening the following file in your browser:
+
+    src/pybind/mgr/dashboard/frontend/.protractor-report/index.html
 
 Device:
   You can force the script to use a specific device with the ``-d`` flag::

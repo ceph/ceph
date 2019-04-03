@@ -372,14 +372,11 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
-      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt)));
-      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
-      if (f != nullptr) {
-        if (manifest_bl != nullptr) {
-          res = f->read_manifest(*manifest_bl);
-          if (res == 0) {
-            *filter = std::move(f);
-          }
+      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s->cct, cb, std::move(block_crypt));
+      if (manifest_bl != nullptr) {
+        res = f->read_manifest(*manifest_bl);
+        if (res == 0) {
+          *filter = std::move(f);
         }
       }
     }
@@ -2413,7 +2410,7 @@ void RGWGetCORS_ObjStore_S3::send_response()
 {
   if (op_ret) {
     if (op_ret == -ENOENT)
-      set_req_state_err(s, ERR_NOT_FOUND);
+      set_req_state_err(s, ERR_NO_SUCH_CORS_CONFIGURATION);
     else
       set_req_state_err(s, op_ret);
   }
@@ -3196,6 +3193,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
+  } else if (is_tagging_op()) {
+    return nullptr;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -4300,7 +4299,7 @@ std::mutex rgw::auth::s3::LDAPEngine::mtx;
 void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
 {
   if (! cct->_conf->rgw_s3_auth_use_ldap ||
-      ! cct->_conf->rgw_ldap_uri.empty()) {
+      cct->_conf->rgw_ldap_uri.empty()) {
     return;
   }
 

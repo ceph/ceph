@@ -302,8 +302,8 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl) {
-    int ret = req.wait();
+  int wait(bufferlist *pbl, optional_yield y) {
+    int ret = req.wait(y);
     if (ret < 0) {
       return ret;
     }
@@ -316,7 +316,7 @@ public:
   }
 
   template <class T>
-  int wait(T *dest);
+  int wait(T *dest, optional_yield y);
 
   template <class T>
   int fetch(T *dest);
@@ -353,9 +353,9 @@ int RGWRESTReadResource::fetch(T *dest)
 }
 
 template <class T>
-int RGWRESTReadResource::wait(T *dest)
+int RGWRESTReadResource::wait(T *dest, optional_yield y)
 {
-  int ret = req.wait();
+  int ret = req.wait(y);
   if (ret < 0) {
     return ret;
   }
@@ -426,8 +426,8 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl) {
-    int ret = req.wait();
+  int wait(bufferlist *pbl, optional_yield y) {
+    int ret = req.wait(y);
     *pbl = bl;
     if (ret < 0) {
       return ret;
@@ -440,7 +440,7 @@ public:
   }
 
   template <class T, class E = int>
-  int wait(T *dest, E *err_result = nullptr);
+  int wait(T *dest, optional_yield y, E *err_result = nullptr);
 };
 
 template <class T, class E>
@@ -466,9 +466,9 @@ int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
 }
 
 template <class T, class E>
-int RGWRESTSendResource::wait(T *dest, E *err_result)
+int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
-  int ret = req.wait();
+  int ret = req.wait(y);
   if (ret < 0) {
     if (err_result) {
       parse_decode_json(cct, *err_result, bl);

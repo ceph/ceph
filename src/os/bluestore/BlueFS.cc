@@ -305,7 +305,8 @@ void BlueFS::dump_block_extents(ostream& out)
         << " : own 0x" << block_all[i]
         << " = 0x" << owned
         << " : using 0x" << owned - free
-        << std::dec << "\n";
+	<< std::dec << "(" << byte_u_t(owned - free) << ")"
+        << "\n";
   }
 }
 
@@ -2366,6 +2367,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
     auto min_alloc_size = cct->_conf->bluefs_alloc_size;
     int id = _get_slow_device_id();
     ceph_assert(id <= (int)alloc.size() && alloc[id]);
+    auto min_need = round_up_to(need, min_alloc_size);
     need = std::max(need,
       slow_dev_expander->get_recommended_expansion_delta(
         alloc[id]->get_free(), block_all[id].size()));
@@ -2374,7 +2376,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
     dout(10) << __func__ << " expanding slow device by 0x"
              << std::hex << need << std::dec
 	     << dendl;
-    r = slow_dev_expander->allocate_freespace(need, extents);
+    r = slow_dev_expander->allocate_freespace(min_need, need, extents);
   }
   return r;
 }

@@ -1,11 +1,13 @@
 overrides:
   ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
     crush_tunables: hammer
     conf:
+      global:
+        ms bind msgr2: false
       mon:
         mon osd initial require min compat client: hammer
-      client:
-        ms type: simple
 tasks:
 - install:
     branch: hammer

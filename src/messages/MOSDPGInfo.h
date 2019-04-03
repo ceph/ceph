@@ -29,17 +29,22 @@ private:
   epoch_t epoch = 0;
 
 public:
-  vector<pair<pg_notify_t,PastIntervals> > pg_list;
+  using pg_list_t = std::vector<std::pair<pg_notify_t,PastIntervals>>;
+  pg_list_t pg_list;
 
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
-    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
-    set_priority(CEPH_MSG_PRIO_HIGH);
-  }
-  MOSDPGInfo(version_t mv)
+    : MOSDPGInfo{0, {}}
+  {}
+  MOSDPGInfo(epoch_t mv)
+    : MOSDPGInfo(mv, {})
+  {}
+  MOSDPGInfo(epoch_t mv, pg_list_t&& l)
     : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv) {
+      epoch{mv},
+      pg_list{std::move(l)}
+  {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:

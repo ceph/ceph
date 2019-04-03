@@ -14,8 +14,8 @@
 
 #ifndef CEPH_MESSAGE_H
 #define CEPH_MESSAGE_H
- 
-#include <stdlib.h>
+
+#include <cstdlib>
 #include <ostream>
 #include <string_view>
 
@@ -187,8 +187,7 @@
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
 // Xio Testing
-#define MSG_DATA_PING		  0x602
-
+//#define MSG_DATA_PING		  0x602
 // Xio intends to define messages 0x603..0x606
 
 // Special
@@ -220,8 +219,6 @@
 
 // abstract Message class
 
-namespace bi = boost::intrusive;
-
 // XioMessenger conditional trace flags
 #define MSG_MAGIC_XIO          0x0002
 #define MSG_MAGIC_TRACE_XCON   0x0004
@@ -238,9 +235,9 @@ class Message : public RefCountedObject {
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
-  bufferlist       payload;  // "front" unaligned blob
-  bufferlist       middle;   // "middle" unaligned blob
-  bufferlist       data;     // data payload (page-alignment will be preserved where possible)
+  ceph::buffer::list       payload;  // "front" unaligned blob
+  ceph::buffer::list       middle;   // "middle" unaligned blob
+  ceph::buffer::list       data;     // data payload (page-alignment will be preserved where possible)
 
   /* recv_stamp is set when the Messenger starts reading the
    * Message off the wire */
@@ -257,7 +254,7 @@ protected:
 
   uint32_t magic = 0;
 
-  bi::list_member_hook<> dispatch_q;
+  boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
   using ref = MessageRef;
@@ -265,8 +262,8 @@ public:
 
   // zipkin tracing
   ZTracer::Trace trace;
-  void encode_trace(bufferlist &bl, uint64_t features) const;
-  void decode_trace(bufferlist::const_iterator &p, bool create = false);
+  void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
+  void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {
   protected:
@@ -277,10 +274,11 @@ public:
     virtual void set_message(Message *_m) { m = _m; }
   };
 
-  typedef bi::list< Message,
-		    bi::member_hook< Message,
-				     bi::list_member_hook<>,
-				     &Message::dispatch_q > > Queue;
+  typedef boost::intrusive::list<Message,
+				 boost::intrusive::member_hook<
+				   Message,
+				   boost::intrusive::list_member_hook<>,
+				   &Message::dispatch_q>> Queue;
 
 protected:
   CompletionHook* completion_hook = nullptr; // owned by Messenger
@@ -360,7 +358,7 @@ public:
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
-   * use it to change those bufferlists unless you KNOW
+   * use it to change those ceph::buffer::lists unless you KNOW
    * there is no throttle being used. The other
    * functions are throttling-aware as appropriate.
    */
@@ -387,26 +385,26 @@ public:
   }
 
   bool empty_payload() const { return payload.length() == 0; }
-  bufferlist& get_payload() { return payload; }
-  const bufferlist& get_payload() const { return payload; }
-  void set_payload(bufferlist& bl) {
+  ceph::buffer::list& get_payload() { return payload; }
+  const ceph::buffer::list& get_payload() const { return payload; }
+  void set_payload(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    payload.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
 
-  void set_middle(bufferlist& bl) {
+  void set_middle(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
-    middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    middle.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(middle.length());
   }
-  bufferlist& get_middle() { return middle; }
+  ceph::buffer::list& get_middle() { return middle; }
 
-  void set_data(const bufferlist &bl) {
+  void set_data(const ceph::buffer::list &bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
     data.share(bl);
@@ -414,10 +412,10 @@ public:
       byte_throttler->take(data.length());
   }
 
-  const bufferlist& get_data() const { return data; }
-  bufferlist& get_data() { return data; }
-  void claim_data(bufferlist& bl,
-		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
+  const ceph::buffer::list& get_data() const { return data; }
+  ceph::buffer::list& get_data() { return data; }
+  void claim_data(ceph::buffer::list& bl,
+		  unsigned int flags = ceph::buffer::list::CLAIM_DEFAULT) {
     if (byte_throttler)
       byte_throttler->put(data.length());
     bl.claim(data, flags);
@@ -498,30 +496,30 @@ public:
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
   virtual std::string_view get_type_name() const = 0;
-  virtual void print(ostream& out) const {
+  virtual void print(std::ostream& out) const {
     out << get_type_name() << " magic: " << magic;
   }
 
-  virtual void dump(Formatter *f) const;
+  virtual void dump(ceph::Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
+  void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
 
 extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
-			       ceph_msg_footer& footer, bufferlist& front,
-			       bufferlist& middle, bufferlist& data,
+			       ceph_msg_footer& footer, ceph::buffer::list& front,
+			       ceph::buffer::list& middle, ceph::buffer::list& data,
 			       Connection* conn);
-inline ostream& operator<<(ostream& out, const Message& m) {
+inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;
   return out;
 }
 
-extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
+extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               bufferlist::const_iterator& bl);
+                               ceph::buffer::list::const_iterator& bl);
 
 template <class MessageType>
 class MessageFactory {

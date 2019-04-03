@@ -70,6 +70,11 @@ and may not work together; see above.
 Multiple filesystems were available starting in the Jewel release candidates
 but must be turned on via the ``enable_multiple`` flag until declared stable.
 
+LazyIO
+------
+LazyIO relaxes POSIX semantics. Buffered reads/writes are allowed even when a
+file is opened by multiple applications on multiple clients. Applications are
+responsible for managing cache coherency themselves.
 
 Previously experimental features
 ================================

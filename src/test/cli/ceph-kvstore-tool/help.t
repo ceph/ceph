@@ -18,4 +18,5 @@
     compact-prefix <prefix>
     compact-range <prefix> <start> <end>
     destructive-repair  (use only as last resort! may corrupt healthy data)
+    stats
   

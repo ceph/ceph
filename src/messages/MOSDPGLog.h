@@ -72,7 +72,7 @@ public:
     set_priority(CEPH_MSG_PRIO_HIGH); 
   }
   MOSDPGLog(shard_id_t to, shard_id_t from,
-	    version_t mv, pg_info_t& i, epoch_t query_epoch)
+	    version_t mv, const pg_info_t& i, epoch_t query_epoch)
     : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(query_epoch),
       to(to), from(from),
@@ -85,7 +85,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }
-  void inner_print(ostream& out) const override {
+  void inner_print(std::ostream& out) const override {
     // NOTE: log is not const, but operator<< doesn't touch fields
     // swapped out by OSD code.
     out << "log " << log
@@ -109,6 +109,7 @@ public:
     encode(from, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(info, p);

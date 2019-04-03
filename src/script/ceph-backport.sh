@@ -37,7 +37,13 @@
 # redmine_user_id=[your_redmine_user_id]
 # github_token=[your_github_personal_access_token]
 # github_user=[your_github_username]
-# 
+#
+# you can also optionally add the remote repo's name in this file, like
+#
+# github_repo=[your_github_repo_name]
+#
+# If you don't add it, it will default to "origin".
+#
 # Obviously, since this file contains secrets, you should protect it from
 # exposure using all available means (restricted file privileges, encrypted
 # filesystem, etc.). Without correct values for these four variables, this
@@ -56,6 +62,7 @@ test "$redmine_key"     || failed_required_variable_check redmine_key
 test "$redmine_user_id" || failed_required_variable_check redmine_user_id
 test "$github_token"    || failed_required_variable_check github_token
 test "$github_user"     || failed_required_variable_check github_user
+: "${github_repo:=origin}"
 
 function usage () {
     echo "Usage:"
@@ -71,7 +78,7 @@ function usage () {
     exit 1
 }
 
-[[ $1 != ?(-)+([0-9]) ]] && usage
+[[ $1 =~ ^[0-9]+$ ]] || usage
 issue=$1
 echo "Backport issue: $issue"
 
@@ -105,8 +112,11 @@ elif [[ "x$milestone" = "xluminous" ]] ; then
 elif [[ "x$milestone" = "xmimic" ]] ; then
     milestone_number=11
     target_branch=mimic
+elif [[ "x$milestone" = "xnautilus" ]] ; then
+    milestone_number=12
+    target_branch=nautilus
 else
-    echo "Please enter hammer, jewel, kraken, luminous, or mimic"
+    echo "Please enter hammer, jewel, kraken, luminous, mimic, or nautilus"
     exit 1
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
@@ -120,7 +130,8 @@ fi
 title=$(curl --silent 'http://tracker.ceph.com/issues/'$issue.json?key=$redmine_key | jq .issue.subject | tr -d '\\"')
 echo "Issue title: $title" 
 
-git push -u origin wip-$issue-$milestone
+git push -u $github_repo wip-$issue-$milestone
+
 number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':wip-'$issue-$milestone'","base":"'$target_branch'","body":"http://tracker.ceph.com/issues/'$issue'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq .number)
 echo "Opened pull request $number"
 

@@ -116,7 +116,7 @@ struct ManagedLock<MockTestImageCtx> {
       });
 
     Context *release_ctx = new FunctionContext(
-      [this, post_release_ctx](int r) {
+      [post_release_ctx](int r) {
         if (r < 0) {
           MockManagedLock::get_instance().m_on_released->complete(r);
         } else {

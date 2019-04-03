@@ -5,6 +5,7 @@
 #include "common/Clock.h"
 #include "crypto_onwire.h"
 #include <array>
+#include <utility>
 
 /**
  * Protocol V2 Frame Structures
@@ -38,6 +39,7 @@ enum class Tag : __u8 {
   AUTH_REPLY_MORE,
   AUTH_REQUEST_MORE,
   AUTH_DONE,
+  AUTH_SIGNATURE,
   CLIENT_IDENT,
   SERVER_IDENT,
   IDENT_MISSING_FEATURES,
@@ -72,7 +74,7 @@ struct SegmentIndex {
     static constexpr std::size_t DATA = 3;
   };
 
-  struct Frame {
+  struct Control {
     static constexpr std::size_t PAYLOAD = 0;
   };
 };
@@ -159,83 +161,159 @@ static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
   if (padding_size) {
     bl.append_zero(padding_size);
   }
-  return bl;
+  return std::move(bl);
 }
 
-static ceph::bufferlist segment_onwire_bufferlist(const ceph::bufferlist &bl)
-{
-  ceph::bufferlist ret(bl);
-  const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
-  if (padding_size) {
-    ret.append_zero(padding_size);
-  }
-  return ret;
-}
-
-template <class T>
+template <class T, uint16_t... SegmentAlignmentVs>
 struct Frame {
+  static constexpr size_t SegmentsNumV = sizeof...(SegmentAlignmentVs);
+  static_assert(SegmentsNumV > 0 && SegmentsNumV <= MAX_NUM_SEGMENTS);
 protected:
-  ceph::bufferlist payload;
+  std::array<ceph::bufferlist, SegmentsNumV> segments;
+
+private:
+  static constexpr std::array<uint16_t, SegmentsNumV> alignments {
+    SegmentAlignmentVs...
+  };
   ceph::bufferlist::contiguous_filler preamble_filler;
 
-  void fill_preamble(const std::initializer_list<segment_t> main_segments) {
-    ceph_assert(std::size(main_segments) <= MAX_NUM_SEGMENTS);
+  __u8 calc_num_segments(
+    const std::array<segment_t, MAX_NUM_SEGMENTS>& segments)
+  {
+    for (__u8 num = SegmentsNumV; num > 0; num--) {
+      if (segments[num-1].length) {
+        return num;
+      }
+    }
+    // frame always has at least one segment.
+    return 1;
+  }
 
-    // Craft the main preamble. It's always present regardless of the number
-    // of segments message is composed from. This doesn't apply to extra one
-    // as it's optional -- if there is up to 2 segments, we'll never transmit
-    // preamble_extra_t;
-    {
-      preamble_block_t main_preamble;
-      // TODO: we might fill/pad with pseudo-random data.
-      ::memset(&main_preamble, 0, sizeof(main_preamble));
+  // craft the main preamble. It's always present regardless of the number
+  // of segments message is composed from.
+  void fill_preamble() {
+    ceph_assert(std::size(segments) <= MAX_NUM_SEGMENTS);
 
-      main_preamble.num_segments = std::size(main_segments);
-      main_preamble.tag = static_cast<__u8>(T::tag);
-      ceph_assert(main_preamble.tag != 0);
+    preamble_block_t main_preamble;
+    ::memset(&main_preamble, 0, sizeof(main_preamble));
 
-      std::copy(std::cbegin(main_segments), std::cend(main_segments),
-                std::begin(main_preamble.segments));
+    main_preamble.tag = static_cast<__u8>(T::tag);
+    ceph_assert(main_preamble.tag != 0);
 
-      main_preamble.crc =
-          ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
-                      sizeof(main_preamble) - sizeof(main_preamble.crc));
+    // implementation detail: the first bufferlist of Frame::segments carries
+    // space for preamble. This glueing isn't a part of the onwire format but
+    // just our private detail.
+    main_preamble.segments.front().length =
+        segments.front().length() - FRAME_PREAMBLE_SIZE;
+    main_preamble.segments.front().alignment = alignments.front();
 
-      preamble_filler.copy_in(sizeof(main_preamble),
-                              reinterpret_cast<const char *>(&main_preamble));
+    // there is no business in issuing frame without at least one segment
+    // filled.
+    if constexpr(SegmentsNumV > 1) {
+      for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
+        main_preamble.segments[idx].length = segments[idx].length();
+        main_preamble.segments[idx].alignment = alignments[idx];
+      }
+    }
+    // calculate the number of non-empty segments.
+    // TODO: reorder segments to get DATA first
+    main_preamble.num_segments = calc_num_segments(main_preamble.segments);
+
+    main_preamble.crc =
+        ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
+                    sizeof(main_preamble) - sizeof(main_preamble.crc));
+
+    preamble_filler.copy_in(sizeof(main_preamble),
+                            reinterpret_cast<const char *>(&main_preamble));
+  }
+
+  template <size_t... Is>
+  void reset_tx_handler(
+    ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+    std::index_sequence<Is...>)
+  {
+    session_stream_handlers.tx->reset_tx_handler({ segments[Is].length()... });
+  }
+
+public:
+  ceph::bufferlist get_buffer(
+    ceph::crypto::onwire::rxtx_t &session_stream_handlers)
+  {
+    fill_preamble();
+    if (session_stream_handlers.tx) {
+      // we're padding segments to biggest cipher's block size. Although
+      // AES-GCM can live without that as it's a stream cipher, we don't
+      // to be fixed to stream ciphers only.
+      for (auto& segment : segments) {
+        segment = segment_onwire_bufferlist(std::move(segment));
+      }
+
+      // let's cipher allocate one huge buffer for entire ciphertext.
+      reset_tx_handler(
+          session_stream_handlers, std::make_index_sequence<SegmentsNumV>());
+
+      for (auto& segment : segments) {
+        if (segment.length()) {
+          session_stream_handlers.tx->authenticated_encrypt_update(
+            std::move(segment));
+        }
+      }
+
+      // in secure mode we craft only the late_flags. Signature (for AES-GCM
+      // called auth tag) will be added by the cipher.
+      {
+        epilogue_secure_block_t epilogue;
+        ::memset(&epilogue, 0, sizeof(epilogue));
+        ceph::bufferlist epilogue_bl;
+        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
+                           sizeof(epilogue));
+        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
+      }
+      return session_stream_handlers.tx->authenticated_encrypt_final();
+    } else {
+      // plain mode
+      epilogue_plain_block_t epilogue;
+      ::memset(&epilogue, 0, sizeof(epilogue));
+
+      ceph::bufferlist::const_iterator hdriter(&segments.front(),
+                                               FRAME_PREAMBLE_SIZE);
+      epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
+          hdriter.crc32c(hdriter.get_remaining(), -1);
+      if constexpr(SegmentsNumV > 1) {
+        for (__u8 idx = 1; idx < SegmentsNumV; idx++) {
+          epilogue.crc_values[idx] = segments[idx].crc32c(-1);
+        }
+      }
+
+      ceph::bufferlist ret;
+      for (auto& segment : segments) {
+        ret.claim_append(segment);
+      }
+      ret.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+      return ret;
     }
   }
 
-  Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
-
-  void decode_frame(const ceph::bufferlist &bl) {
-    auto ti = bl.cbegin();
-    static_cast<T *>(this)->decode_payload(ti);
+  Frame()
+    : preamble_filler(segments.front().append_hole(FRAME_PREAMBLE_SIZE)) {
   }
-
-  void decode_payload(bufferlist::const_iterator &ti) {}
 
 public:
-  ceph::bufferlist &get_buffer() {
-    fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
-                   segment_t::DEFAULT_ALIGNMENT}});
-
-    epilogue_plain_block_t epilogue;
-    ::memset(&epilogue, 0, sizeof(epilogue));
-
-    ceph::bufferlist::const_iterator hdriter(&this->payload, FRAME_PREAMBLE_SIZE);
-    epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
-        hdriter.crc32c(hdriter.get_remaining(), -1);
-    this->payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-
-    return payload;
-  }
 };
 
+
+// ControlFrames are used to manage transceiver state (like connections) and
+// orchestrate transfers of MessageFrames. They use only single segment with
+// marshalling facilities -- derived classes specify frame structure through
+// Args pack while ControlFrame provides common encode/decode machinery.
 template <class C, typename... Args>
-class PayloadFrame : public Frame<C> {
+class ControlFrame : public Frame<C, segment_t::DEFAULT_ALIGNMENT /* single segment */> {
 protected:
-  // this tuple is only used when decoding values from a payload buffer
+  ceph::bufferlist &get_payload_segment() {
+    return this->segments[SegmentIndex::Control::PAYLOAD];
+  }
+
+  // this tuple is only used when decoding values from a payload segment
   std::tuple<Args...> _values;
 
   // FIXME: for now, we assume specific features for the purpoess of encoding
@@ -244,37 +322,25 @@ protected:
 
   template <typename T>
   inline void _encode_payload_each(T &t) {
-    if constexpr (std::is_same<T, bufferlist const>()) {
-      this->payload.claim_append((bufferlist &)t);
-    } else if constexpr (std::is_same<T, std::vector<uint32_t> const>()) {
-      encode((uint32_t)t.size(), this->payload, features);
+    if constexpr (std::is_same<T, std::vector<uint32_t> const>()) {
+      encode((uint32_t)t.size(), this->get_payload_segment(), features);
       for (const auto &elem : t) {
-        encode(elem, this->payload, features);
+        encode(elem, this->get_payload_segment(), features);
       }
-    } else if constexpr (std::is_same<T, ceph_msg_header2 const>()) {
-      this->payload.append((char *)&t, sizeof(t));
     } else {
-      encode(t, this->payload, features);
+      encode(t, this->get_payload_segment(), features);
     }
   }
 
   template <typename T>
   inline void _decode_payload_each(T &t, bufferlist::const_iterator &ti) const {
-    if constexpr (std::is_same<T, bufferlist>()) {
-      if (ti.get_remaining()) {
-        t.append(ti.get_current_ptr());
-      }
-    } else if constexpr (std::is_same<T, std::vector<uint32_t>>()) {
+    if constexpr (std::is_same<T, std::vector<uint32_t>>()) {
       uint32_t size;
       decode(size, ti);
       t.resize(size);
       for (uint32_t i = 0; i < size; ++i) {
         decode(t[i], ti);
       }
-    } else if constexpr (std::is_same<T, ceph_msg_header2>()) {
-      auto ptr = ti.get_current_ptr();
-      ti.advance(sizeof(T));
-      t = *(T *)ptr.raw_c_str();
     } else {
       decode(t, ti);
     }
@@ -291,10 +357,17 @@ protected:
     return std::get<N>(_values);
   }
 
-  PayloadFrame() : Frame<C>() {}
+  ControlFrame()
+    : Frame<C, segment_t::DEFAULT_ALIGNMENT /* single segment */>() {
+  }
 
   void _encode(const Args &... args) {
     (_encode_payload_each(args), ...);
+  }
+
+  void _decode(const ceph::bufferlist &bl) {
+    auto ti = bl.cbegin();
+    _decode_payload(ti, std::index_sequence_for<Args...>());
   }
 
 public:
@@ -306,53 +379,49 @@ public:
 
   static C Decode(const ceph::bufferlist &payload) {
     C c;
-    c.decode_frame(payload);
+    c._decode(payload);
     return c;
-  }
-
-  void decode_payload(bufferlist::const_iterator &ti) {
-    _decode_payload(ti, std::index_sequence_for<Args...>());
   }
 };
 
-struct HelloFrame : public PayloadFrame<HelloFrame,
+struct HelloFrame : public ControlFrame<HelloFrame,
                                         uint8_t,          // entity type
                                         entity_addr_t> {  // peer address
   static const Tag tag = Tag::HELLO;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint8_t &entity_type() { return get_val<0>(); }
   inline entity_addr_t &peer_addr() { return get_val<1>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AuthRequestFrame : public PayloadFrame<AuthRequestFrame,
-			                                        uint32_t, // auth method
+struct AuthRequestFrame : public ControlFrame<AuthRequestFrame,
+                                              uint32_t, // auth method
                                               vector<uint32_t>, // preferred modes
                                               bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REQUEST;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint32_t &method() { return get_val<0>(); }
   inline vector<uint32_t> &preferred_modes() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AuthBadMethodFrame : public PayloadFrame<AuthBadMethodFrame,
+struct AuthBadMethodFrame : public ControlFrame<AuthBadMethodFrame,
                                                 uint32_t, // method
                                                 int32_t,  // result
                                                 std::vector<uint32_t>,   // allowed methods
                                                 std::vector<uint32_t>> { // allowed modes
   static const Tag tag = Tag::AUTH_BAD_METHOD;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint32_t &method() { return get_val<0>(); }
   inline int32_t &result() { return get_val<1>(); }
@@ -360,109 +429,75 @@ struct AuthBadMethodFrame : public PayloadFrame<AuthBadMethodFrame,
   inline std::vector<uint32_t> &allowed_modes() { return get_val<3>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AuthReplyMoreFrame : public PayloadFrame<AuthReplyMoreFrame,
+struct AuthReplyMoreFrame : public ControlFrame<AuthReplyMoreFrame,
                                                 bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REPLY_MORE;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline bufferlist &auth_payload() { return get_val<0>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AuthRequestMoreFrame : public PayloadFrame<AuthRequestMoreFrame,
+struct AuthRequestMoreFrame : public ControlFrame<AuthRequestMoreFrame,
                                                   bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REQUEST_MORE;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline bufferlist &auth_payload() { return get_val<0>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AuthDoneFrame : public PayloadFrame<AuthDoneFrame,
+struct AuthDoneFrame : public ControlFrame<AuthDoneFrame,
                                            uint64_t, // global id
                                            uint32_t, // connection mode
                                            bufferlist> { // auth method payload
   static const Tag tag = Tag::AUTH_DONE;
-  using PayloadFrame::Encode;
-  using PayloadFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &global_id() { return get_val<0>(); }
   inline uint32_t &con_mode() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using ControlFrame::ControlFrame;
 };
 
-template <class T, typename... Args>
-struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
-  ceph::bufferlist &get_buffer() {
-    // In contrast to Frame::get_buffer() we don't fill preamble here.
-    return this->payload;
-  }
+struct AuthSignatureFrame
+    : public ControlFrame<AuthSignatureFrame,
+                          sha256_digest_t> {
+  static const Tag tag = Tag::AUTH_SIGNATURE;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
-  static T Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                  const Args &... args) {
-    T c = PayloadFrame<T, Args...>::Encode(args...);
-    c.fill_preamble({segment_t{c.payload.length() - FRAME_PREAMBLE_SIZE,
-                     segment_t::DEFAULT_ALIGNMENT}});
-
-    if (session_stream_handlers.tx) {
-      c.payload = segment_onwire_bufferlist(std::move(c.payload));
-
-      epilogue_secure_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-      c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-
-      ceph_assert(session_stream_handlers.tx);
-      session_stream_handlers.tx->reset_tx_handler({c.payload.length()});
-
-      session_stream_handlers.tx->authenticated_encrypt_update(
-          std::move(c.payload));
-      c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
-    } else {
-      epilogue_plain_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
-      ceph::bufferlist::const_iterator hdriter(&c.payload, FRAME_PREAMBLE_SIZE);
-      epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
-          hdriter.crc32c(hdriter.get_remaining(), -1);
-      c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-    }
-    return c;
-  }
-
-  static T Decode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                  ceph::bufferlist &payload) {
-    return PayloadFrame<T, Args...>::Decode(payload);
-  }
+  inline sha256_digest_t &signature() { return get_val<0>(); }
 
 protected:
-  SignedEncryptedFrame() : PayloadFrame<T, Args...>() {}
+  using ControlFrame::ControlFrame;
 };
 
 struct ClientIdentFrame
-    : public SignedEncryptedFrame<ClientIdentFrame, 
-                                  entity_addrvec_t,  // my addresses
-                                  entity_addr_t,  // target address
-                                  int64_t,  // global_id
-                                  uint64_t,  // global seq
-                                  uint64_t,  // supported features
-                                  uint64_t,  // required features
-                                  uint64_t,  // flags
-                                  uint64_t> {  // client cookie
+    : public ControlFrame<ClientIdentFrame,
+                          entity_addrvec_t,  // my addresses
+                          entity_addr_t,  // target address
+                          int64_t,  // global_id
+                          uint64_t,  // global seq
+                          uint64_t,  // supported features
+                          uint64_t,  // required features
+                          uint64_t,  // flags
+                          uint64_t> {  // client cookie
   static const Tag tag = Tag::CLIENT_IDENT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline entity_addr_t &target_addr() { return get_val<1>(); }
@@ -474,21 +509,21 @@ struct ClientIdentFrame
   inline uint64_t &cookie() { return get_val<7>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct ServerIdentFrame
-    : public SignedEncryptedFrame<ServerIdentFrame,
-                                  entity_addrvec_t,  // my addresses
-                                  int64_t,  // global_id
-                                  uint64_t,  // global seq
-                                  uint64_t,  // supported features
-                                  uint64_t,  // required features
-                                  uint64_t,  // flags
-                                  uint64_t> {  // server cookie
+    : public ControlFrame<ServerIdentFrame,
+                          entity_addrvec_t,  // my addresses
+                          int64_t,  // global_id
+                          uint64_t,  // global seq
+                          uint64_t,  // supported features
+                          uint64_t,  // required features
+                          uint64_t,  // flags
+                          uint64_t> {  // server cookie
   static const Tag tag = Tag::SERVER_IDENT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline int64_t &gid() { return get_val<1>(); }
@@ -499,20 +534,20 @@ struct ServerIdentFrame
   inline uint64_t &cookie() { return get_val<6>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct ReconnectFrame
-    : public SignedEncryptedFrame<ReconnectFrame, 
-                                  entity_addrvec_t,  // my addresses
-                                  uint64_t,  // client cookie
-                                  uint64_t,  // server cookie
-                                  uint64_t,  // global sequence
-                                  uint64_t,  // connect sequence
-                                  uint64_t> { // message sequence
+    : public ControlFrame<ReconnectFrame,
+                          entity_addrvec_t,  // my addresses
+                          uint64_t,  // client cookie
+                          uint64_t,  // server cookie
+                          uint64_t,  // global sequence
+                          uint64_t,  // connect sequence
+                          uint64_t> { // message sequence
   static const Tag tag = Tag::SESSION_RECONNECT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline uint64_t &client_cookie() { return get_val<1>(); }
@@ -522,222 +557,195 @@ struct ReconnectFrame
   inline uint64_t &msg_seq() { return get_val<5>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct ResetFrame : public SignedEncryptedFrame<ResetFrame,
-                                                bool> {  // full reset
+struct ResetFrame : public ControlFrame<ResetFrame,
+                                        bool> {  // full reset
   static const Tag tag = Tag::SESSION_RESET;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline bool &full() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct RetryFrame : public SignedEncryptedFrame<RetryFrame,
-                                                uint64_t> {  // connection seq
+struct RetryFrame : public ControlFrame<RetryFrame,
+                                        uint64_t> {  // connection seq
   static const Tag tag = Tag::SESSION_RETRY;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &connect_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct RetryGlobalFrame : public SignedEncryptedFrame<RetryGlobalFrame,
-                                                      uint64_t> { // global seq
+struct RetryGlobalFrame : public ControlFrame<RetryGlobalFrame,
+                                              uint64_t> { // global seq
   static const Tag tag = Tag::SESSION_RETRY_GLOBAL;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &global_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct WaitFrame : public SignedEncryptedFrame<WaitFrame> {
+struct WaitFrame : public ControlFrame<WaitFrame> {
   static const Tag tag = Tag::WAIT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct ReconnectOkFrame : public SignedEncryptedFrame<ReconnectOkFrame,
-                                                      uint64_t> { // message seq
+struct ReconnectOkFrame : public ControlFrame<ReconnectOkFrame,
+                                              uint64_t> { // message seq
   static const Tag tag = Tag::SESSION_RECONNECT_OK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &msg_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct IdentMissingFeaturesFrame 
-    : public SignedEncryptedFrame<IdentMissingFeaturesFrame,
-                                  uint64_t> { // missing features mask
+    : public ControlFrame<IdentMissingFeaturesFrame,
+                          uint64_t> { // missing features mask
   static const Tag tag = Tag::IDENT_MISSING_FEATURES;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &features() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame,
-                                                    utime_t> {  // timestamp
+struct KeepAliveFrame : public ControlFrame<KeepAliveFrame,
+                                            utime_t> {  // timestamp
   static const Tag tag = Tag::KEEPALIVE2;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
-  static KeepAliveFrame Encode(
-      ceph::crypto::onwire::rxtx_t &session_stream_handlers) {
-    return KeepAliveFrame::Encode(session_stream_handlers, ceph_clock_now());
+  static KeepAliveFrame Encode() {
+    return KeepAliveFrame::Encode(ceph_clock_now());
   }
 
   inline utime_t &timestamp() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct KeepAliveFrameAck : public SignedEncryptedFrame<KeepAliveFrameAck,
-                                                       utime_t> { // ack timestamp
+struct KeepAliveFrameAck : public ControlFrame<KeepAliveFrameAck,
+                                               utime_t> { // ack timestamp
   static const Tag tag = Tag::KEEPALIVE2_ACK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline utime_t &timestamp() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AckFrame : public SignedEncryptedFrame<AckFrame,
-                                              uint64_t> { // message sequence
+struct AckFrame : public ControlFrame<AckFrame,
+                                      uint64_t> { // message sequence
   static const Tag tag = Tag::ACK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 // This class is used for encoding/decoding header of the message frame.
 // Body is processed almost independently with the sole junction point
 // being the `extra_payload_len` passed to get_buffer().
-struct MessageHeaderFrame
-    : public PayloadFrame<MessageHeaderFrame, ceph_msg_header2> {
+struct MessageFrame : public Frame<MessageFrame,
+                                   /* four segments */
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::DEFAULT_ALIGNMENT,
+                                   segment_t::PAGE_SIZE_ALIGNMENT> {
+  struct {
+    uint32_t front;
+    uint32_t middle;
+    uint32_t data;
+  } len;
+
   static const Tag tag = Tag::MESSAGE;
 
-  ceph::bufferlist &get_buffer() {
-    // In contrast to Frame::get_buffer() we don't fill preamble here.
-    return this->payload;
+  static MessageFrame Encode(const ceph_msg_header2 &msg_header,
+                             const ceph::bufferlist &front,
+                             const ceph::bufferlist &middle,
+                             const ceph::bufferlist &data) {
+    MessageFrame f;
+    f.segments[SegmentIndex::Msg::HEADER].append(
+        reinterpret_cast<const char*>(&msg_header), sizeof(msg_header));
+
+    f.segments[SegmentIndex::Msg::FRONT] = front;
+    f.segments[SegmentIndex::Msg::MIDDLE] = middle;
+    f.segments[SegmentIndex::Msg::DATA] = data;
+
+    return f;
   }
 
-  static MessageHeaderFrame Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                                   const ceph_msg_header2 &msg_header,
-                                   const ceph::bufferlist& front,
-                                   const ceph::bufferlist& middle,
-                                   const ceph::bufferlist& data) {
-    MessageHeaderFrame f =
-        PayloadFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
-
-    f.fill_preamble({
-      segment_t{ f.payload.length() - FRAME_PREAMBLE_SIZE,
-		 segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ front.length(), segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ middle.length(), segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ data.length(), segment_t::PAGE_SIZE_ALIGNMENT },
-    });
-
-    if (session_stream_handlers.tx) {
-      // we're padding segments to biggest cipher's block size. Although
-      // AES-GCM can live without that as it's a stream cipher, we don't
-      // to be fixed to stream ciphers only.
-      f.payload = segment_onwire_bufferlist(std::move(f.payload));
-      auto front_padded = segment_onwire_bufferlist(front);
-      auto middle_padded = segment_onwire_bufferlist(middle);
-      auto data_padded = segment_onwire_bufferlist(data);
-
-      // let's cipher allocate one huge buffer for entire ciphertext.
-      session_stream_handlers.tx->reset_tx_handler({
-        f.payload.length(),
-        front_padded.length(),
-        middle_padded.length(),
-        data_padded.length()
-      });
-
-      ceph_assert(f.payload.length());
-      session_stream_handlers.tx->authenticated_encrypt_update(
-        std::move(f.payload));
-
-      // TODO: switch TxHandler from `bl&&` to `const bl&`.
-      if (front.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(front_padded);
-      }
-      if (middle.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(middle_padded);
-      }
-      if (data.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(data_padded);
-      }
-
-      // craft the secure's mode epilogue
-      {
-        epilogue_secure_block_t epilogue;
-        ::memset(&epilogue, 0, sizeof(epilogue));
-        ceph::bufferlist epilogue_bl;
-        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
-                                   sizeof(epilogue));
-        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
-      }
-
-      // auth tag will be appended at the end
-      f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
-    } else {
-      epilogue_plain_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
-      ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
-      epilogue.crc_values[SegmentIndex::Msg::HEADER] =
-          hdriter.crc32c(hdriter.get_remaining(), -1);
-      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1);
-      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1);
-      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1);
-
-      f.payload.append(front);
-      f.payload.append(middle);
-      f.payload.append(data);
-      f.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+  using rx_segments_t =
+    boost::container::static_vector<ceph::bufferlist,
+                                    ceph::msgr::v2::MAX_NUM_SEGMENTS>;
+  static MessageFrame Decode(rx_segments_t &&recv_segments) {
+    MessageFrame f;
+    // transfer segments' bufferlists. If a MessageFrame contains less
+    // SegmentsNumV segments, the missing ones will be seen as zeroed.
+    for (__u8 idx = 0; idx < std::size(recv_segments); idx++) {
+      f.segments[idx] = std::move(recv_segments[idx]);
     }
-
     return f;
   }
 
-  static MessageHeaderFrame Decode(ceph::bufferlist&& text) {
-    MessageHeaderFrame f;
-    f.decode_frame(text);
-    return f;
+  inline const ceph_msg_header2 &header() {
+    auto& hdrbl = segments[SegmentIndex::Msg::HEADER];
+    return reinterpret_cast<const ceph_msg_header2&>(*hdrbl.c_str());
   }
 
-  inline ceph_msg_header2 &header() { return get_val<0>(); }
+  ceph::bufferlist &front() {
+    return segments[SegmentIndex::Msg::FRONT];
+  }
+
+  ceph::bufferlist &middle() {
+    return segments[SegmentIndex::Msg::MIDDLE];
+  }
+
+  ceph::bufferlist &data() {
+    return segments[SegmentIndex::Msg::DATA];
+  }
+
+  uint32_t front_len() const {
+    return segments[SegmentIndex::Msg::FRONT].length();
+  }
+
+  uint32_t middle_len() const {
+    return segments[SegmentIndex::Msg::MIDDLE].length();
+  }
+
+  uint32_t data_len() const {
+    return segments[SegmentIndex::Msg::DATA].length();
+  }
 
 protected:
-  using PayloadFrame::PayloadFrame;
+  using Frame::Frame;
 };
 
 } // namespace ceph::msgr::v2

@@ -176,6 +176,8 @@ Once the monitors bind to v2, each daemon will start advertising a v2
 address when it is next restarted.
 
 
+.. _msgr2_ceph_conf:
+
 Updating ceph.conf and mon_host
 -------------------------------
 

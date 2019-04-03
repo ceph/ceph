@@ -99,9 +99,7 @@ void AuthRegistry::_parse_mode_list(const string& s,
     if (i == "crc") {
       v->push_back(CEPH_CON_MODE_CRC);
     } else if (i == "secure") {
-      if (cct->check_experimental_feature_enabled("ms-mode-secure")) {
-	v->push_back(CEPH_CON_MODE_SECURE);
-      }
+      v->push_back(CEPH_CON_MODE_SECURE);
     } else {
       lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
     }

@@ -512,7 +512,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait(shard_info);
+        int ret = http_op->wait(shard_info, null_yield);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
@@ -576,7 +576,7 @@ public:
   }
 
   int request_complete() override {
-    int ret = http_op->wait(result);
+    int ret = http_op->wait(result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
@@ -1046,7 +1046,7 @@ public:
         return io_block(0);
       }
       yield {
-        int ret = http_op->wait(pbl);
+        int ret = http_op->wait(pbl, null_yield);
         http_op->put();
         if (ret < 0) {
           return set_cr_error(ret);
@@ -2309,8 +2309,10 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   completion.reset(new RGWMetadataLogInfoCompletion(
     [this](int ret, const cls_log_header& header) {
       if (ret < 0) {
-        ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
-            << cpp_strerror(ret) << dendl;
+        if (ret != -ENOENT) {
+          ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
+                                      << cpp_strerror(ret) << dendl;
+        }
       } else {
         shard_info.marker = header.max_marker;
         shard_info.last_update = header.max_time.to_real_time();
@@ -2376,7 +2378,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
-  int ret = http_op->wait(&data);
+  int ret = http_op->wait(&data, null_yield);
   if (ret < 0) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << ret << dendl;

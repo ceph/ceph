@@ -103,7 +103,6 @@
 #include "messages/MMonHealth.h"
 #include "messages/MMonHealthChecks.h"
 #include "messages/MMonMetadata.h"
-#include "messages/MDataPing.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonSubscribe.h"
@@ -206,7 +205,7 @@
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags)
+void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -229,7 +228,7 @@ void Message::encode(uint64_t features, int crcflags)
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
-  if (crcflags & MSG_CRC_HEADER)
+  if (!skip_header_crc && (crcflags & MSG_CRC_HEADER))
     calc_header_crc();
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
@@ -839,11 +838,6 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = MMonHealthChecks::create();
     break;
 
-#if defined(HAVE_XIO)
-  case MSG_DATA_PING:
-    m = MDataPing::create();
-    break;
-#endif
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:

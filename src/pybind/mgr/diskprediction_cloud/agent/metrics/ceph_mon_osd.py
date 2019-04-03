@@ -172,7 +172,7 @@ class CephMonOsdAgent(MetricsAgent):
             elif key_name == 'stat_bytes_used':
                 stat_bytes_used = value
             else:
-                d_osd.fields[key_name] = value
+                d_osd.fields[key_name] = float(value)
 
         if stat_bytes and stat_bytes_used:
             d_osd.fields['stat_bytes_used_percentage'] = \

@@ -29,15 +29,12 @@ struct rgw_rados_ref {
 
 class RGWSI_RADOS : public RGWServiceInstance
 {
-  std::vector<librados::Rados> rados;
-  uint32_t next_rados_handle{0};
-  RWLock handle_lock;
-  std::map<pthread_t, int> rados_map;
+  librados::Rados rados;
 
   int do_start() override;
 
-  librados::Rados* get_rados_handle(int rados_handle);
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx, int rados_handle);
+  librados::Rados* get_rados_handle();
+  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx);
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, vector<rgw_bucket_dir_entry>& objs,
@@ -45,8 +42,7 @@ class RGWSI_RADOS : public RGWServiceInstance
                    bool *is_truncated);
 
 public:
-  RGWSI_RADOS(CephContext *cct): RGWServiceInstance(cct),
-                                 handle_lock("rados_handle_lock") {}
+  RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct) {}
 
   void init() {}
 
@@ -56,15 +52,15 @@ public:
 
   class Obj {
     friend class RGWSI_RADOS;
-    friend class Handle;
+    friend Handle;
 
     RGWSI_RADOS *rados_svc{nullptr};
-    int rados_handle{-1};
     rgw_rados_ref ref;
 
     void init(const rgw_raw_obj& obj);
 
-    Obj(RGWSI_RADOS *_rados_svc, const rgw_raw_obj& _obj, int _rados_handle) : rados_svc(_rados_svc), rados_handle(_rados_handle) {
+    Obj(RGWSI_RADOS *_rados_svc, const rgw_raw_obj& _obj)
+      : rados_svc(_rados_svc) {
       init(_obj);
     }
 
@@ -83,9 +79,8 @@ public:
     int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
     int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
-    int notify(bufferlist& bl,
-               uint64_t timeout_ms,
-               bufferlist *pbl);
+    int notify(bufferlist& bl, uint64_t timeout_ms,
+               bufferlist *pbl, optional_yield y);
     void notify_ack(uint64_t notify_id,
                     uint64_t cookie,
                     bufferlist& bl);
@@ -98,17 +93,14 @@ public:
 
   class Pool {
     friend class RGWSI_RADOS;
-    friend class Handle;
+    friend Handle;
 
     RGWSI_RADOS *rados_svc{nullptr};
-    int rados_handle{-1};
     rgw_pool pool;
 
     Pool(RGWSI_RADOS *_rados_svc,
-         const rgw_pool& _pool,
-         int _rados_handle) : rados_svc(_rados_svc),
-                              rados_handle(_rados_handle),
-                              pool(_pool) {}
+         const rgw_pool& _pool) : rados_svc(_rados_svc),
+                                  pool(_pool) {}
 
     Pool(RGWSI_RADOS *_rados_svc) : rados_svc(_rados_svc) {}
   public:
@@ -140,35 +132,33 @@ public:
       return List(*this);
     }
 
-    friend class List;
+    friend List;
   };
 
   class Handle {
     friend class RGWSI_RADOS;
 
     RGWSI_RADOS *rados_svc{nullptr};
-    int rados_handle{-1};
 
-    Handle(RGWSI_RADOS *_rados_svc, int _rados_handle) : rados_svc(_rados_svc),
-                                                         rados_handle(_rados_handle) {}
+    Handle(RGWSI_RADOS *_rados_svc) : rados_svc(_rados_svc) {}
   public:
     Obj obj(const rgw_raw_obj& o) {
-      return Obj(rados_svc, o, rados_handle);
+      return Obj(rados_svc, o);
     }
 
     Pool pool(const rgw_pool& p) {
-      return Pool(rados_svc, p, rados_handle);
+      return Pool(rados_svc, p);
     }
 
     int watch_flush();
   };
 
-  Handle handle(int rados_handle) {
-    return Handle(this, rados_handle);
+  Handle handle() {
+    return Handle(this);
   }
 
   Obj obj(const rgw_raw_obj& o) {
-    return Obj(this, o, -1);
+    return Obj(this, o);
   }
 
   Pool pool() {
@@ -176,12 +166,12 @@ public:
   }
 
   Pool pool(const rgw_pool& p) {
-    return Pool(this, p, -1);
+    return Pool(this, p);
   }
 
-  friend class Obj;
-  friend class Pool;
-  friend class Pool::List;
+  friend Obj;
+  friend Pool;
+  friend Pool::List;
 };
 
 #endif

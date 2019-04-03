@@ -34,7 +34,7 @@ struct SnapInfo {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<SnapInfo*>& ls);
+  static void generate_test_instances(std::list<SnapInfo*>& ls);
 
   std::string_view get_long_name() const;
 };
@@ -67,7 +67,7 @@ struct snaplink_t {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<snaplink_t*>& ls);
+  static void generate_test_instances(std::list<snaplink_t*>& ls);
 };
 WRITE_CLASS_ENCODER(snaplink_t)
 
@@ -103,7 +103,7 @@ struct sr_t {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<sr_t*>& ls);
+  static void generate_test_instances(std::list<sr_t*>& ls);
 };
 WRITE_CLASS_ENCODER(sr_t)
 

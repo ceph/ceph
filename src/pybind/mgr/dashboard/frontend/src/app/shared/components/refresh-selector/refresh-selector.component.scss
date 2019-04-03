@@ -1,0 +1,26 @@
+.refresh-selector {
+  padding: 0;
+  float: right;
+  margin-right: 60px;
+
+  * {
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  label {
+    padding: 10px 10px 0 0;
+    text-align: right;
+    margin: 0;
+  }
+
+  @media (min-width: 500px) and (max-width: 767px) {
+    width: 24vw;
+  }
+  @media (min-width: 1200px) {
+    width: 12vw;
+  }
+  @media (min-width: 1400px) {
+    width: 10vw;
+  }
+}

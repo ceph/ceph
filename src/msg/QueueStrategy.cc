@@ -102,7 +102,7 @@ void QueueStrategy::start()
   lock.Lock();
   threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {
-    string thread_name = "ms_xio_qs_";
+    string thread_name = "ms_qs_";
     thread_name.append(std::to_string(ix));
     auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());

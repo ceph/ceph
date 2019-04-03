@@ -11,7 +11,7 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 
-from .iscsi_cli import IscsiGatewaysConfig
+from .iscsi_config import IscsiGatewaysConfig
 from .. import logger
 from ..settings import Settings
 from ..rest_client import RestClient
@@ -24,11 +24,12 @@ class IscsiClient(RestClient):
     service_url = None
 
     @classmethod
-    def instance(cls, gateway_name=None):
-        if not gateway_name:
-            gateway_name = list(IscsiGatewaysConfig.get_gateways_config()['gateways'].keys())[0]
-        gateways_config = IscsiGatewaysConfig.get_gateway_config(gateway_name)
-        service_url = gateways_config['service_url']
+    def instance(cls, gateway_name=None, service_url=None):
+        if not service_url:
+            if not gateway_name:
+                gateway_name = list(IscsiGatewaysConfig.get_gateways_config()['gateways'].keys())[0]
+            gateways_config = IscsiGatewaysConfig.get_gateway_config(gateway_name)
+            service_url = gateways_config['service_url']
 
         instance = cls._instances.get(gateway_name)
         if not instance or service_url != instance.service_url or \
@@ -46,7 +47,8 @@ class IscsiClient(RestClient):
             instance = IscsiClient(host, port, IscsiClient._CLIENT_NAME, ssl,
                                    auth, Settings.ISCSI_API_SSL_VERIFICATION)
             instance.service_url = service_url
-            cls._instances[gateway_name] = instance
+            if gateway_name:
+                cls._instances[gateway_name] = instance
 
         return instance
 
@@ -60,6 +62,10 @@ class IscsiClient(RestClient):
 
     @RestClient.api_get('/api/sysinfo/ip_addresses')
     def get_ip_addresses(self, request=None):
+        return request()
+
+    @RestClient.api_get('/api/sysinfo/hostname')
+    def get_hostname(self, request=None):
         return request()
 
     @RestClient.api_get('/api/config')

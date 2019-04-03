@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
-set(VERSION 14.1.1)
+set(VERSION 15.0.0)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
@@ -403,12 +403,6 @@ set(USE_NSS 1)
 set(USE_OPENSSL 1)
 set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
-option(WITH_XIO "Enable XIO messaging" OFF)
-if(WITH_XIO)
-  find_package(xio REQUIRED)
-  set(HAVE_XIO ${XIO_FOUND})
-endif()
-
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
   find_package(dpdk)
@@ -582,7 +576,10 @@ option(WITH_SYSTEM_FIO "require and build with system fio" OFF)
 if(WITH_SYSTEM_FIO)
   find_package(fio REQUIRED)
 elseif(WITH_FIO)
-  set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  if (NOT FIO_INCLUDE_DIR)
+    # Use local external fio if include directory is not set
+    set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  endif()
   include(BuildFIO)
   build_fio()
 endif()
@@ -685,7 +682,7 @@ endif()
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
-
+find_package(StdFilesystem)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)

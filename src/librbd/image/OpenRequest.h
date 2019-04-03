@@ -128,6 +128,8 @@ private:
   Context *send_set_snap(int *result);
   Context *handle_set_snap(int *result);
 
+  Context *finalize(int r);
+
   void send_close_image(int error_result);
   Context *handle_close_image(int *result);
 

@@ -43,8 +43,6 @@ overrides:
       mon:
         mon warn on osd down out interval zero: false
       osd:
-        osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
-                              rgw sdk timeindex user version"
-        osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
-                                 rgw sdk timeindex user version"
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
     fs: xfs

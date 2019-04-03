@@ -21,12 +21,12 @@ class MMonCommandAck : public MessageInstance<MMonCommandAck, PaxosServiceMessag
 public:
   friend factory;
 
-  vector<string> cmd;
+  std::vector<std::string> cmd;
   errorcode32_t r;
-  string rs;
-  
+  std::string rs;
+
   MMonCommandAck() : MessageInstance(MSG_MON_COMMAND_ACK, 0) {}
-  MMonCommandAck(vector<string>& c, int _r, string s, version_t v) : 
+  MMonCommandAck(std::vector<std::string>& c, int _r, std::string s, version_t v) : 
     MessageInstance(MSG_MON_COMMAND_ACK, v),
     cmd(c), r(_r), rs(s) { }
 private:
@@ -34,7 +34,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "mon_command"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }
   
@@ -46,6 +46,7 @@ public:
     encode(cmd, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(r, p);

@@ -173,11 +173,15 @@ public:
 };
 
 class RGWReshardWait {
+ public:
+  // the blocking wait uses std::condition_variable::wait_for(), which uses the
+  // std::chrono::steady_clock. use that for the async waits as well
+  using Clock = std::chrono::steady_clock;
+ private:
   const ceph::timespan duration;
   ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
   ceph::condition_variable cond;
 
-  using Clock = ceph::coarse_real_clock;
   struct Waiter : boost::intrusive::list_base_hook<> {
     boost::asio::basic_waitable_timer<Clock> timer;
     explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}

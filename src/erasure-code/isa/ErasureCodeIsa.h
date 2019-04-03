@@ -30,7 +30,7 @@
 #include "ErasureCodeIsaTableCache.h"
 // -----------------------------------------------------------------------------
 
-class ErasureCodeIsa : public ErasureCode {
+class ErasureCodeIsa : public ceph::ErasureCode {
 public:
 
   enum eMatrix {
@@ -74,13 +74,13 @@ public:
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
   int encode_chunks(const std::set<int> &want_to_encode,
-                            std::map<int, bufferlist> *encoded) override;
+                    std::map<int, ceph::buffer::list> *encoded) override;
 
   int decode_chunks(const std::set<int> &want_to_read,
-                            const std::map<int, bufferlist> &chunks,
-                            std::map<int, bufferlist> *decoded) override;
+                            const std::map<int, ceph::buffer::list> &chunks,
+                            std::map<int, ceph::buffer::list> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
   virtual void isa_encode(char **data,
                           char **coding,
@@ -97,7 +97,7 @@ public:
   virtual void prepare() = 0;
 
  private:
-  virtual int parse(ErasureCodeProfile &profile,
+  virtual int parse(ceph::ErasureCodeProfile &profile,
                     std::ostream *ss) = 0;
 };
 
@@ -146,8 +146,8 @@ public:
   void prepare() override;
 
  private:
-  int parse(ErasureCodeProfile &profile,
-                    std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile &profile,
+            std::ostream *ss) override;
 };
 
 #endif

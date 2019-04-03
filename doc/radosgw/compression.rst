@@ -11,9 +11,9 @@ using any of Ceph's existing compression plugins.
 Configuration
 =============
 
-Compression can be enabled on a Zone's placement target by providing the
-``--compression=<type>`` option to the ``radosgw-admin zone placement modify``
-command.
+Compression can be enabled on a storage class in the Zone's placement target
+by providing the ``--compression=<type>`` option to the command
+``radosgw-admin zone placement modify``.
 
 The compression ``type`` refers to the name of the compression plugin to use
 when writing new object data. Each compressed object remembers which plugin
@@ -26,7 +26,11 @@ an empty string or ``none``.
 
 For example::
 
-  $ radosgw-admin zone placement modify --rgw-zone=default --placement-id=default-placement --compression=zlib
+  $ radosgw-admin zone placement modify \
+        --rgw-zone default \
+        --placement-id default-placement \
+        --storage-class STANDARD \
+        --compression zlib
   {
   ...
       "placement_pools": [
@@ -34,10 +38,14 @@ For example::
               "key": "default-placement",
               "val": {
                   "index_pool": "default.rgw.buckets.index",
-                  "data_pool": "default.rgw.buckets.data",
+                  "storage_classes": {
+                      "STANDARD": {
+                          "data_pool": "default.rgw.buckets.data",
+                          "compression_type": "zlib"
+                      }
+                  },
                   "data_extra_pool": "default.rgw.buckets.non-ec",
                   "index_type": 0,
-                  "compression": "zlib"
               }
           }
       ],

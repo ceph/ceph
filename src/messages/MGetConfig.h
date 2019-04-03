@@ -13,11 +13,11 @@ public:
   static constexpr int COMPAT_VERSION = 1;
 
   EntityName name;  ///< e.g., mon.a, client.foo
-  string host;      ///< our hostname
-  string device_class;
+  std::string host;      ///< our hostname
+  std::string device_class;
 
   MGetConfig() : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
-  MGetConfig(const EntityName& n, const string& h)
+  MGetConfig(const EntityName& n, const std::string& h)
     : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       name(n),
       host(h) {}
@@ -25,7 +25,7 @@ public:
   std::string_view get_type_name() const override {
     return "get_config";
   }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "get_config(" << name << "@" << host;
     if (device_class.size()) {
       o << " device_class " << device_class;
