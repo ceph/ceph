@@ -90,12 +90,19 @@ class IscsiUi(BaseController):
         for gateway_name in gateways_names:
             gateway = {
                 'name': gateway_name,
-                'state': 'N/A',
-                'num_targets': 'N/A'
+                'state': '',
+                'num_targets': 'n/a',
+                'num_sessions': 'n/a'
             }
             try:
                 IscsiClient.instance(gateway_name=gateway_name).ping()
                 gateway['state'] = 'up'
+                if config:
+                    gateway['num_sessions'] = 0
+                    if gateway_name in config['gateways']:
+                        gatewayinfo = IscsiClient.instance(
+                            gateway_name=gateway_name).get_gatewayinfo()
+                        gateway['num_sessions'] = gatewayinfo['num_sessions']
             except RequestException:
                 gateway['state'] = 'down'
             if config:
