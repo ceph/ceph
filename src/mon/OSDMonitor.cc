@@ -338,16 +338,22 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
-    if (g_conf()->mon_debug_no_require_mimic) {
-      derr << __func__ << " mon_debug_no_require_mimic=true and nautilus=true" << dendl;
-      newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+  if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
+    if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
+      if (g_conf()->mon_debug_no_require_mimic) {
+	derr << __func__ << " mon_debug_no_require_octopus, nautilus, and mimic=true"
+	     << dendl;
+	newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+      } else {
+	derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
+	newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+      }
     } else {
-      derr << __func__ << " mon_debug_no_require_nautilus=true" << dendl;
-      newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+      derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
+      newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
     }
   } else {
-    newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
+    newmap.require_osd_release = CEPH_RELEASE_OCTOPUS;
     int r = ceph_release_from_name(
       g_conf()->mon_osd_initial_require_min_compat_client.c_str());
     if (r <= 0) {
@@ -2822,12 +2828,12 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     }
   }
 
-  // make sure upgrades stop at nautilus
-  if (HAVE_FEATURE(m->osd_features, SERVER_O) &&
-      osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
-    mon->clog->info() << "disallowing boot of post-nautilus OSD "
+  // make sure osd versions do not span more than 3 releases
+  if (HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS) &&
+      osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+    mon->clog->info() << "disallowing boot of octopus+ OSD "
 		      << m->get_orig_source_inst()
-		      << " because require_osd_release < nautilus";
+		      << " because require_osd_release < mimic";
     goto ignore;
   }
 
@@ -10362,6 +10368,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_NAUTILUS))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_NAUTILUS feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (rel == CEPH_RELEASE_OCTOPUS) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_OCTOPUS)) {
+	ss << "not all mons are octopus";
+	err = -EPERM;
+	goto reply;
+      }
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_OCTOPUS))
+           && !sure) {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_OCTOPUS feature";
 	err = -EPERM;
 	goto reply;
       }
