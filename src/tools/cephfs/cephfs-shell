@@ -10,7 +10,6 @@ import cephfs as libcephfs
 import shutil
 import traceback
 import colorama
-import readline
 import fnmatch
 import math
 import re
@@ -102,7 +101,7 @@ def list_items(shell, dir_name=''):
         d = cephfs.opendir(cephfs.getcwd())
     else:
         try:
-             d = cephfs.opendir(dir_name)
+            d = cephfs.opendir(dir_name)
         except:
             dir_name = dir_name.decode('utf-8')
             return []
@@ -398,19 +397,68 @@ class CephFSShell(Cmd):
 
         def __call__(self, parser, namespace, values, option_string=None):
             o_mode = 0
+            res = None
             try:
                 o_mode = int(values, base=8)
             except ValueError as e:
-                parser.error("invalid mode: %s\n"
-                             "mode must be a numeric octal literal." % values)
+                res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', values)
+                if res is None:
+                    parser.error("invalid mode: %s\n"
+                                 "mode must be a numeric octal literal\n"
+                                 "or   ((u?g?o?)|(a?))(=)(r?w?x?)" %
+                                 values)
+                else:
+                    # we are supporting only assignment of mode and not + or -
+                    # as is generally available with the chmod command
+                    # eg.
+                    # >>> res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', 'go=')
+                    # >>> res.groups()
+                    # ('go', 'go', None, '=', '')
+                    val = res.groups()
+
+                    if val[3] != '=':
+                        parser.error("need assignment operator between user "
+                                     "and mode specifiers")
+                    if val[4] == '':
+                        parser.error("invalid mode: %s"
+                                     "mode must be combination of: r | w | x" %
+                                     values)
+                    users = ''
+                    if val[2] == None:
+                        users = val[1]
+                    else:
+                        users = val[2]
+
+                    t_mode = 0
+                    if users == 'a':
+                        users = 'ugo'
+                    if 'r' in val[4]:
+                        t_mode |= 4
+                    if 'w' in val[4]:
+                        t_mode |= 2
+                    if 'x' in val[4]:
+                        t_mode |= 1
+
+                    if users == 'ugo':
+                        o_mode = (t_mode << 6) | (t_mode << 3) | t_mode
+                    elif users == 'u':
+                        o_mode = t_mode << 6
+                    elif users == 'ug':
+                        o_mode = (t_mode << 6) | t_mode
+                    elif users == 'g':
+                        o_mode = t_mode << 3
+                    elif users == 'go':
+                        o_mode = (t_mode << 3) | t_mode
+                    elif users == 'o':
+                        o_mode = t_mode
 
             if o_mode < 0:
                 parser.error("invalid mode: %s\n"
-                             "mode cannot be negative." % values)
+                             "mode cannot be negative" % values)
             if o_mode > 0o777:
                 parser.error("invalid mode: %s\n"
-                             "mode cannot be greater than octal 0777" % values)
-            setattr(namespace, self.dest, values)
+                             "mode cannot be greater than octal 0o777" % values)
+            setattr(namespace, self.dest, str(oct(o_mode)))
 
 
     mkdir_parser = argparse.ArgumentParser(
@@ -441,7 +489,12 @@ exists.')
             if args.parent:
                 cephfs.mkdirs(path, permission)
             else:
-                cephfs.mkdir(path, permission)
+                try:
+                    cephfs.mkdir(path, permission)
+                except:
+                    self.poutput("directory missing in the path; "
+                                 "you may want to pass the -p argument")
+                    return
 
     def complete_put(self, text, line, begidx, endidx):
         """
@@ -941,7 +994,6 @@ sub-directories, files')
         """
         Lists all files and folders in the current local directory
         """
-        #self.poutput("len(args.paths):%d (%s)" % (len(args.paths), args.paths))
         if len(args.paths) == 0 or (len(args.paths) == 1 and
                                     args.paths[0] == ''):
             if len(args.paths) > 0:
@@ -953,7 +1005,6 @@ sub-directories, files')
             if os.path.isdir(path):
                 self.poutput("%s:" % path)
                 items = os.listdir(path)
-                #self.poutput("len(items):%d" % len(items))
                 print_list(self, items)
             else:
                 self.poutput("%s: no such directory" % path)
