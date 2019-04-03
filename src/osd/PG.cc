@@ -2604,6 +2604,21 @@ void PG::on_recovery_reserved()
   queue_recovery();
 }
 
+void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)
+{
+  osd->set_not_ready_to_merge_target(pgid, src);
+}
+
+void PG::set_not_ready_to_merge_source(pg_t pgid)
+{
+  osd->set_not_ready_to_merge_source(pgid);
+}
+
+void PG::send_pg_created(pg_t pgid)
+{
+  osd->send_pg_created(pgid);
+}
+
 void PG::on_activate_committed()
 {
   if (!is_primary()) {

@@ -71,6 +71,7 @@ public:
 
     virtual void send_cluster_message(
       int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
+    virtual void send_pg_created(pg_t pgid) = 0;
 
     // Flush state
     virtual bool try_flush_or_schedule_async() = 0;
@@ -133,6 +134,10 @@ public:
     // PG deletion
     virtual void on_removal(ObjectStore::Transaction *t) = 0;
     virtual void do_delete_work(ObjectStore::Transaction *t) = 0;
+
+    // PG Merge
+    virtual void set_not_ready_to_merge_target(pg_t pgid, pg_t src) = 0;
+    virtual void set_not_ready_to_merge_source(pg_t pgid) = 0;
 
     // active map notifications
     virtual void on_active_actmap() = 0;

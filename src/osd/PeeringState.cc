@@ -4121,9 +4121,9 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
 	pg_t src = pgid;
 	src.set_ps(ps->pool.info.get_pg_num_pending());
 	assert(src.get_parent() == pgid);
-	pg->osd->set_not_ready_to_merge_target(pgid, src);
+	pl->set_not_ready_to_merge_target(pgid, src);
       } else {
-	pg->osd->set_not_ready_to_merge_source(pgid);
+	pl->set_not_ready_to_merge_source(pgid);
       }
     }
   } else if (ps->acting.size() < ps->pool.info.min_size) {
@@ -4133,7 +4133,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   }
 
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
-    pg->osd->send_pg_created(pgid);
+    pl->send_pg_created(pgid);
   }
 
   ps->info.history.last_epoch_started = ps->info.last_epoch_started;
