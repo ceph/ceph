@@ -35,7 +35,8 @@
       </div>
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submitAction()"
+          <cd-submit-button *ngIf="permissions.configOpt.update"
+                            (submitAction)="submitAction()"
                             [form]="osdPgScrubForm"
                             i18n="form action button|Example: Create Pool@@formActionButton"
                             type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>

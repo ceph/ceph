@@ -10,6 +10,8 @@ import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
+import { Permissions } from '../../../../shared/models/permissions';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 
 @Component({
@@ -19,16 +21,20 @@ import { NotificationService } from '../../../../shared/services/notification.se
 })
 export class OsdRecvSpeedModalComponent implements OnInit {
   osdRecvSpeedForm: CdFormGroup;
+  permissions: Permissions;
+
   priorities = [];
   priorityAttrs = {};
 
   constructor(
     public bsModalRef: BsModalRef,
+    private authStorageService: AuthStorageService,
     private configService: ConfigurationService,
     private notificationService: NotificationService,
     private i18n: I18n,
     private osdService: OsdService
   ) {
+    this.permissions = this.authStorageService.getPermissions();
     this.priorities = this.osdService.osdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
     this.osdRecvSpeedForm = new CdFormGroup({
       priority: new FormControl(null, { validators: [Validators.required] }),
