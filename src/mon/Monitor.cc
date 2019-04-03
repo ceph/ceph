@@ -2275,7 +2275,6 @@ void Monitor::collect_metadata(Metadata *m)
   // infer storage device
   string devname = store->get_devname();
   set<string> devnames;
-  derr << " devname " << devname << dendl;
   get_raw_devices(devname, &devnames);
   (*m)["devices"] = stringify(devnames);
   string devids;
