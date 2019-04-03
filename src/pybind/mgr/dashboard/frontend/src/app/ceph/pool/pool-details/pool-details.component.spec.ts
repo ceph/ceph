@@ -6,6 +6,7 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { AppModule } from '../../../app.module';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permissions } from '../../../shared/models/permissions';
+import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
 import { PoolDetailsComponent } from './pool-details.component';
 
 describe('PoolDetailsComponent', () => {
@@ -14,7 +15,7 @@ describe('PoolDetailsComponent', () => {
 
   configureTestBed({
     imports: [TabsModule.forRoot(), AppModule],
-    decalarations: [PoolDetailsComponent],
+    declarations: [PoolDetailsComponent, RbdConfigurationListComponent],
     providers: [i18nProviders]
   });
 

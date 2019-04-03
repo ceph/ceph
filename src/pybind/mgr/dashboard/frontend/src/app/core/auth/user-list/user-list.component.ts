@@ -5,6 +5,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { UserService } from '../../../shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -13,11 +14,15 @@ import { Permission } from '../../../shared/models/permissions';
 import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
+
+const BASE_URL = 'user-management/users';
 
 @Component({
   selector: 'cd-user-list',
   templateUrl: './user-list.component.html',
-  styleUrls: ['./user-list.component.scss']
+  styleUrls: ['./user-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class UserListComponent implements OnInit {
   @ViewChild('userRolesTpl')
@@ -37,27 +42,29 @@ export class UserListComponent implements OnInit {
     private modalService: BsModalService,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private i18n: I18n
+    private i18n: I18n,
+    private urlBuilder: URLBuilderService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
-      routerLink: () => '/user-management/users/add',
-      name: this.i18n('Add')
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () =>
-        this.selection.first() && `/user-management/users/edit/${this.selection.first().username}`,
-      name: this.i18n('Edit')
+        this.selection.first() && this.urlBuilder.getEdit(this.selection.first().username),
+      name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteUserModal(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
