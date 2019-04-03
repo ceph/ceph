@@ -1442,6 +1442,15 @@ public:
     end_handle();
   }
 
+  void init(
+    int role,
+    const vector<int>& newup, int new_up_primary,
+    const vector<int>& newacting, int new_acting_primary,
+    const pg_history_t& history,
+    const PastIntervals& pi,
+    bool backfill,
+    ObjectStore::Transaction *t);
+
   void start_split_stats(
     const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
   void finish_split_stats(

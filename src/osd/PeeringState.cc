@@ -3211,6 +3211,51 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   }
 }
 
+void PeeringState::init(
+  int role,
+  const vector<int>& newup, int new_up_primary,
+  const vector<int>& newacting, int new_acting_primary,
+  const pg_history_t& history,
+  const PastIntervals& pi,
+  bool backfill,
+  ObjectStore::Transaction *t)
+{
+  psdout(10) << "init role " << role << " up "
+	     << newup << " acting " << newacting
+	     << " history " << history
+	     << " past_intervals " << pi
+	     << dendl;
+
+  set_role(role);
+  init_primary_up_acting(
+    newup,
+    newacting,
+    new_up_primary,
+    new_acting_primary);
+
+  info.history = history;
+  past_intervals = pi;
+
+  info.stats.up = up;
+  info.stats.up_primary = new_up_primary;
+  info.stats.acting = acting;
+  info.stats.acting_primary = new_acting_primary;
+  info.stats.mapping_epoch = info.history.same_interval_since;
+
+  if (backfill) {
+    psdout(10) << __func__ << ": Setting backfill" << dendl;
+    info.set_last_backfill(hobject_t());
+    info.last_complete = info.last_update;
+    pg_log.mark_log_for_rewrite();
+  }
+
+  on_new_interval();
+
+  dirty_info = true;
+  dirty_big_info = true;
+  write_if_dirty(*t);
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \

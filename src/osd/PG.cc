@@ -906,39 +906,9 @@ void PG::init(
   bool backfill,
   ObjectStore::Transaction *t)
 {
-  dout(10) << "init role " << role << " up " << newup << " acting " << newacting
-	   << " history " << history
-	   << " past_intervals " << pi
-	   << dendl;
-
-  recovery_state.set_role(role);
-  recovery_state.init_primary_up_acting(
-    newup,
-    newacting,
-    new_up_primary,
-    new_acting_primary);
-
-  info.history = history;
-  past_intervals = pi;
-
-  info.stats.up = up;
-  info.stats.up_primary = new_up_primary;
-  info.stats.acting = acting;
-  info.stats.acting_primary = new_acting_primary;
-  info.stats.mapping_epoch = info.history.same_interval_since;
-
-  if (backfill) {
-    dout(10) << __func__ << ": Setting backfill" << dendl;
-    info.set_last_backfill(hobject_t());
-    info.last_complete = info.last_update;
-    pg_log.mark_log_for_rewrite();
-  }
-
-  recovery_state.on_new_interval();
-
-  dirty_info = true;
-  dirty_big_info = true;
-  write_if_dirty(*t);
+  recovery_state.init(
+    role, newup, new_up_primary, newacting,
+    new_acting_primary, history, pi, backfill, t);
 }
 
 void PG::shutdown()
