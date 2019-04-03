@@ -501,48 +501,6 @@ unsigned PG::get_scrub_priority()
   return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
 }
 
-void PG::try_mark_clean()
-{
-  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
-    state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
-    state_set(PG_STATE_CLEAN);
-    info.history.last_epoch_clean = get_osdmap_epoch();
-    info.history.last_interval_clean = info.history.same_interval_since;
-    past_intervals.clear();
-    dirty_big_info = true;
-    dirty_info = true;
-  }
-
-  if (is_active()) {
-    kick_snap_trim();
-  } else if (is_peered()) {
-    if (is_clean()) {
-      bool target;
-      if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
-	if (target) {
-	  ldout(cct, 10) << "ready to merge (target)" << dendl;
-	  osd->set_ready_to_merge_target(this,
-					 info.last_update,
-					 info.history.last_epoch_started,
-					 info.history.last_epoch_clean);
-	} else {
-	  ldout(cct, 10) << "ready to merge (source)" << dendl;
-	  osd->set_ready_to_merge_source(this, info.last_update);
-	}
-      }
-    } else {
-      ldout(cct, 10) << "not clean, not ready to merge" << dendl;
-      // we should have notified OSD in Active state entry point
-    }
-  }
-
-  state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
-
-  recovery_state.share_pg_info();
-  publish_stats_to_osd();
-  requeue_ops(waiting_for_clean_to_primary_repair);
-}
-
 Context *PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
