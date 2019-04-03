@@ -559,7 +559,7 @@ static int update_creating_pgs(MonitorDBStore& st)
   auto last_osdmap_epoch = st.get("osdmap", "last_committed");
   int r = st.get("osdmap", st.combine_strings("full", last_osdmap_epoch), bl);
   if (r < 0) {
-    cerr << "unable to losd osdmap e" << last_osdmap_epoch << std::endl;
+    cerr << "unable to load osdmap e" << last_osdmap_epoch << std::endl;
     return r;
   }
 
