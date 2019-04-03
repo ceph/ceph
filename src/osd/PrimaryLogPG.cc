@@ -996,56 +996,9 @@ int PrimaryLogPG::do_command(
   cmd_getval(cct, cmdmap, "cmd", command);
   if (command == "query") {
     f->open_object_section("pg");
-    f->dump_string("state", pg_state_string(get_state()));
     f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("snap_trimq_len", snap_trimq.size());
-    f->dump_unsigned("epoch", get_osdmap_epoch());
-    f->open_array_section("up");
-    for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
-      f->dump_unsigned("osd", *p);
-    f->close_section();
-    f->open_array_section("acting");
-    for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
-      f->dump_unsigned("osd", *p);
-    f->close_section();
-    if (!backfill_targets.empty()) {
-      f->open_array_section("backfill_targets");
-      for (set<pg_shard_t>::iterator p = backfill_targets.begin();
-	   p != backfill_targets.end();
-	   ++p)
-        f->dump_stream("shard") << *p;
-      f->close_section();
-    }
-    if (!async_recovery_targets.empty()) {
-      f->open_array_section("async_recovery_targets");
-      for (set<pg_shard_t>::iterator p = async_recovery_targets.begin();
-	   p != async_recovery_targets.end();
-	   ++p)
-        f->dump_stream("shard") << *p;
-      f->close_section();
-    }
-    if (!acting_recovery_backfill.empty()) {
-      f->open_array_section("acting_recovery_backfill");
-      for (set<pg_shard_t>::iterator p = acting_recovery_backfill.begin();
-	   p != acting_recovery_backfill.end();
-	   ++p)
-        f->dump_stream("shard") << *p;
-      f->close_section();
-    }
-    f->open_object_section("info");
-    _update_calc_stats();
-    info.dump(f.get());
-    f->close_section();
-
-    f->open_array_section("peer_info");
-    for (map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
-	 p != peer_info.end();
-	 ++p) {
-      f->open_object_section("info");
-      f->dump_stream("peer") << p->first;
-      p->second.dump(f.get());
-      f->close_section();
-    }
+    recovery_state.dump_peering_state(f.get());
     f->close_section();
 
     f->open_array_section("recovery_state");

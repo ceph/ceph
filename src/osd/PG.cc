@@ -3622,63 +3622,7 @@ bool PG::try_flush_or_schedule_async()
 
 ostream& operator<<(ostream& out, const PG& pg)
 {
-  out << "pg[" << pg.info
-      << " " << pg.up;
-  if (pg.acting != pg.up)
-    out << "/" << pg.acting;
-  if (pg.is_ec_pg())
-    out << "p" << pg.get_primary();
-  if (!pg.async_recovery_targets.empty())
-    out << " async=[" << pg.async_recovery_targets << "]";
-  if (!pg.backfill_targets.empty())
-    out << " backfill=[" << pg.backfill_targets << "]";
-  out << " r=" << pg.get_role();
-  out << " lpr=" << pg.get_last_peering_reset();
-
-  if (pg.deleting)
-    out << " DELETING";
-
-  if (!pg.past_intervals.empty()) {
-    out << " pi=[" << pg.past_intervals.get_bounds()
-	<< ")/" << pg.past_intervals.size();
-  }
-
-  if (pg.is_peered()) {
-    if (pg.last_update_ondisk != pg.info.last_update)
-      out << " luod=" << pg.last_update_ondisk;
-    if (pg.last_update_applied != pg.info.last_update)
-      out << " lua=" << pg.last_update_applied;
-  }
-
-  if (pg.recovery_ops_active)
-    out << " rops=" << pg.recovery_ops_active;
-
-  if (pg.pg_log.get_tail() != pg.info.log_tail ||
-      pg.pg_log.get_head() != pg.info.last_update)
-    out << " (info mismatch, " << pg.pg_log.get_log() << ")";
-
-  if (!pg.pg_log.get_log().empty()) {
-    if ((pg.pg_log.get_log().log.begin()->version <= pg.pg_log.get_tail())) {
-      out << " (log bound mismatch, actual=["
-	  << pg.pg_log.get_log().log.begin()->version << ","
-	  << pg.pg_log.get_log().log.rbegin()->version << "]";
-      out << ")";
-    }
-  }
-
-  out << " crt=" << pg.pg_log.get_can_rollback_to();
-
-  if (pg.last_complete_ondisk != pg.info.last_complete)
-    out << " lcod " << pg.last_complete_ondisk;
-
-  if (pg.is_primary()) {
-    out << " mlcod " << pg.min_last_complete_ondisk;
-  }
-
-  out << " " << pg_state_string(pg.get_state());
-  if (pg.should_send_notify())
-    out << " NOTIFY";
-
+  out << pg.recovery_state;
   if (pg.scrubber.must_repair)
     out << " MUST_REPAIR";
   if (pg.scrubber.auto_repair)
@@ -3692,17 +3636,20 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
 
+  if (pg.recovery_ops_active)
+    out << " rops=" << pg.recovery_ops_active;
+
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
-  if (pg.pg_log.get_missing().num_missing()) {
-    out << " m=" << pg.pg_log.get_missing().num_missing();
+  if (pg.recovery_state.have_missing()) {
+    out << " m=" << pg.recovery_state.get_num_missing();
     if (pg.is_primary()) {
-      uint64_t unfound = pg.get_num_unfound();
+      uint64_t unfound = pg.recovery_state.get_num_unfound();
       if (unfound)
 	out << " u=" << unfound;
     }
   }
   if (!pg.is_clean()) {
-    out << " mbc=" << pg.missing_loc.get_missing_by_count();
+    out << " mbc=" << pg.recovery_state.get_missing_by_count();
   }
   if (!pg.snap_trimq.empty()) {
     out << " trimq=";
@@ -3713,12 +3660,12 @@ ostream& operator<<(ostream& out, const PG& pg)
       out << pg.snap_trimq;
     }
   }
-  if (!pg.info.purged_snaps.empty()) {
+  if (!pg.recovery_state.get_info().purged_snaps.empty()) {
     out << " ps="; // snap trim queue / purged snaps
-    if (pg.info.purged_snaps.num_intervals() > 16) {
-      out << pg.info.purged_snaps.size();
+    if (pg.recovery_state.get_info().purged_snaps.num_intervals() > 16) {
+      out << pg.recovery_state.get_info().purged_snaps.size();
     } else {
-      out << pg.info.purged_snaps;
+      out << pg.recovery_state.get_info().purged_snaps;
     }
   }
 
