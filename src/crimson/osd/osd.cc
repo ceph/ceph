@@ -61,8 +61,7 @@ OSD::OSD(int id, uint32_t nonce,
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    heartbeat{new Heartbeat{whoami, nonce, *this, *monc,
-                            hb_front_msgr, hb_back_msgr}},
+    heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
     store{std::make_unique<ceph::os::CyanStore>(
       local_conf().get_val<std::string>("osd_data"))}
@@ -737,7 +736,7 @@ void OSD::update_heartbeat_peers()
                                  &up, nullptr,
                                  &acting, nullptr);
     for (auto osd : boost::join(up, acting)) {
-      if (osd != CRUSH_ITEM_NONE) {
+      if (osd != CRUSH_ITEM_NONE && osd != whoami) {
         heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
