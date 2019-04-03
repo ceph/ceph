@@ -255,6 +255,11 @@ public:
   }
 
   PerfCounters &get_peering_perf() override;
+  PerfCounters &get_perf_logger() override;
+  void log_state_enter(const char *state) override;
+  void log_state_exit(
+    const char *state_name, utime_t enter_time,
+    uint64_t events, utime_t event_dur) override;
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
     handle.suspend_tp_timeout();

@@ -306,6 +306,21 @@ std::ostream& PG::gen_prefix(std::ostream& out) const
 PerfCounters &PG::get_peering_perf() {
   return *(osd->recoverystate_perf);
 }
+
+PerfCounters &PG::get_perf_logger() {
+  return *(osd->logger);
+}
+
+void PG::log_state_enter(const char *state) {
+  osd->pg_recovery_stats.log_enter(state);
+}
+
+void PG::log_state_exit(
+  const char *state_name, utime_t enter_time,
+  uint64_t events, utime_t event_dur) {
+  osd->pg_recovery_stats.log_exit(
+    state_name, ceph_clock_now() - enter_time, events, event_dur);
+}
   
 /********* PG **********/
 
