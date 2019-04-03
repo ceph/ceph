@@ -45,7 +45,7 @@ describe('PrometheusNotificationService', () => {
     spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
     prometheusService = TestBed.get(PrometheusService);
-    spyOn(prometheusService, 'getNotificationSince').and.callFake(() => of(notifications));
+    spyOn(prometheusService, 'getNotifications').and.callFake(() => of(notifications));
 
     notifications = [prometheus.createNotification()];
   });
@@ -57,7 +57,7 @@ describe('PrometheusNotificationService', () => {
   describe('getLastNotification', () => {
     it('returns an empty object on the first call', () => {
       service.refresh();
-      expect(prometheusService.getNotificationSince).toHaveBeenCalledWith({});
+      expect(prometheusService.getNotifications).toHaveBeenCalledWith(undefined);
       expect(service['notifications'].length).toBe(1);
     });
 
@@ -65,18 +65,14 @@ describe('PrometheusNotificationService', () => {
       service.refresh();
       notifications = [prometheus.createNotification(1, 'resolved')];
       service.refresh();
-      expect(prometheusService.getNotificationSince).toHaveBeenCalledWith(
-        service['notifications'][0]
-      );
+      expect(prometheusService.getNotifications).toHaveBeenCalledWith(service['notifications'][0]);
       expect(service['notifications'].length).toBe(2);
 
       notifications = [prometheus.createNotification(2)];
       service.refresh();
       notifications = [prometheus.createNotification(3, 'resolved')];
       service.refresh();
-      expect(prometheusService.getNotificationSince).toHaveBeenCalledWith(
-        service['notifications'][2]
-      );
+      expect(prometheusService.getNotifications).toHaveBeenCalledWith(service['notifications'][2]);
       expect(service['notifications'].length).toBe(4);
     });
   });
