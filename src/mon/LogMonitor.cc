@@ -143,26 +143,28 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 		<< " host:" << channels.log_to_graylog_host << dendl;
       }
 
-      string log_file = channels.get_log_file(channel);
-      dout(20) << __func__ << " logging for channel '" << channel
-               << "' to file '" << log_file << "'" << dendl;
+      if (g_conf()->mon_cluster_log_to_file) {
+	string log_file = channels.get_log_file(channel);
+	dout(20) << __func__ << " logging for channel '" << channel
+		 << "' to file '" << log_file << "'" << dendl;
 
-      if (!log_file.empty()) {
-        string log_file_level = channels.get_log_file_level(channel);
-        if (log_file_level.empty()) {
-          dout(1) << __func__ << " warning: log file level not defined for"
-                  << " channel '" << channel << "' yet a log file is --"
-                  << " will assume lowest level possible" << dendl;
-        }
+	if (!log_file.empty()) {
+	  string log_file_level = channels.get_log_file_level(channel);
+	  if (log_file_level.empty()) {
+	    dout(1) << __func__ << " warning: log file level not defined for"
+		    << " channel '" << channel << "' yet a log file is --"
+		    << " will assume lowest level possible" << dendl;
+	  }
 
-	int min = string_to_syslog_level(log_file_level);
-	int l = clog_type_to_syslog_level(le.prio);
-	if (l <= min) {
-	  stringstream ss;
-	  ss << le << "\n";
-          // init entry if DNE
-          bufferlist &blog = channel_blog[channel];
-          blog.append(ss.str());
+	  int min = string_to_syslog_level(log_file_level);
+	  int l = clog_type_to_syslog_level(le.prio);
+	  if (l <= min) {
+	    stringstream ss;
+	    ss << le << "\n";
+	    // init entry if DNE
+	    bufferlist &blog = channel_blog[channel];
+	    blog.append(ss.str());
+	  }
 	}
       }
 
