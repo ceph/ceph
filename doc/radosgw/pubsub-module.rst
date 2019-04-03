@@ -26,10 +26,14 @@ specific topic.
 REST API has been defined to provide configuration and control interfaces for the pubsub
 mechanisms. This API has two flavors, one is S3-compatible and one is not. The two flavors can be used
 together, although it is recommended to use the S3-compatible one. 
-We also have detailed `S3 bucket notification compatibility`_ document.
 
 Events are stored as RGW objects in a special bucket, under a special user. Events cannot
 be accessed directly, but need to be pulled and acked using the new REST API.
+
+.. toctree::
+   :maxdepth: 1
+
+   S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
 PubSub Tier Type Configuration
 -------------------------------
@@ -557,5 +561,4 @@ Request parameters:
 
 - event-id: id of event to be acked
 
-.. _Multisite Configuration: ./multisite.rst
-.. _S3 bucket notification compatibility: ./s3_notification_compatibility.rst 
+.. _Multisite Configuration: ../multisite
