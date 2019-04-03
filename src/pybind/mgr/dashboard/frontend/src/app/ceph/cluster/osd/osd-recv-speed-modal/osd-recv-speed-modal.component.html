@@ -82,7 +82,8 @@
       </div>
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submitAction()"
+          <cd-submit-button *ngIf="permissions.configOpt.update"
+                            (submitAction)="submitAction()"
                             [form]="osdRecvSpeedForm"
                             i18n>Submit</cd-submit-button>
           <cd-back-button [back]="bsModalRef.hide"

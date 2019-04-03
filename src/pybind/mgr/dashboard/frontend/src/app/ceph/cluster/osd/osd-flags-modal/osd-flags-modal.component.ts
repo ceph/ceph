@@ -7,6 +7,8 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
+import { Permissions } from '../../../../shared/models/permissions';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 
 @Component({
@@ -15,6 +17,8 @@ import { NotificationService } from '../../../../shared/services/notification.se
   styleUrls: ['./osd-flags-modal.component.scss']
 })
 export class OsdFlagsModalComponent implements OnInit {
+  permissions: Permissions;
+
   osdFlagsForm = new FormGroup({});
 
   allFlags = {
@@ -112,10 +116,13 @@ export class OsdFlagsModalComponent implements OnInit {
 
   constructor(
     public bsModalRef: BsModalRef,
+    private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private notificationService: NotificationService,
     private i18n: I18n
-  ) {}
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
     this.osdService.getFlags().subscribe((res: string[]) => {
