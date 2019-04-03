@@ -651,6 +651,10 @@ EOF
     echo start osd.$id
     ceph-osd -i $id $ceph_args &
 
+    # If noup is set, then can't wait for this osd
+    if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+      return 0
+    fi
     wait_for_osd up $id || return 1
 
 }
@@ -700,6 +704,10 @@ EOF
     echo start osd.$id
     ceph-osd -i $id $ceph_args &
 
+    # If noup is set, then can't wait for this osd
+    if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+      return 0
+    fi
     wait_for_osd up $id || return 1
 
 
@@ -837,6 +845,10 @@ function activate_osd() {
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 
+    # If noup is set, then can't wait for this osd
+    if ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+      return 0
+    fi
     wait_for_osd up $id || return 1
 }
 
@@ -2126,6 +2138,24 @@ function multidiff() {
         fi
         diff $DIFFCOLOPTS $@
     fi
+}
+
+function create_ec_pool() {
+    local pool_name=$1
+    shift
+    local allow_overwrites=$1
+    shift
+
+    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd "$@" || return 1
+
+    create_pool "$poolname" 1 1 erasure myprofile || return 1
+
+    if [ "$allow_overwrites" = "true" ]; then
+        ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
+    fi
+
+    wait_for_clean || return 1
+    return 0
 }
 
 # Local Variables:
