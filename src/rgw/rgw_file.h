@@ -237,6 +237,9 @@ namespace rgw {
     uint16_t depth;
     uint32_t flags;
 
+    ceph::buffer::list etag;
+    ceph::buffer::list acls;
+
   public:
     const static std::string root_name;
 
@@ -381,6 +384,9 @@ namespace rgw {
 
     struct timespec get_ctime() const { return state.ctime; }
     struct timespec get_mtime() const { return state.mtime; }
+
+    const ceph::buffer::list& get_etag() const { return etag; }
+    const ceph::buffer::list& get_acls() const { return acls; }
 
     void create_stat(struct stat* st, uint32_t mask) {
       if (mask & RGW_SETATTR_UID)
@@ -637,6 +643,14 @@ namespace rgw {
 
     void set_atime(const struct timespec &ts) {
       state.atime = ts;
+    }
+
+    void set_etag(const ceph::buffer::list& _etag ) {
+      etag = _etag;
+    }
+
+    void set_acls(const ceph::buffer::list& _acls ) {
+      acls = _acls;
     }
 
     void encode(buffer::list& bl) const {
@@ -1882,6 +1896,11 @@ public:
     if (bl.length() > cct->_conf->rgw_max_put_size)
       return -ERR_TOO_LARGE;
     return 0;
+  }
+
+  buffer::list* get_attr(const std::string& k) {
+    auto iter = attrs.find(k);
+    return (iter != attrs.end()) ? &(iter->second) : nullptr;
   }
 
 }; /* RGWPutObjRequest */
