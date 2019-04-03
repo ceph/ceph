@@ -65,9 +65,14 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 15 04 * * 6   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=multimds; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 5 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 15 04 * * 7   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=multimds; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
+
+25 10 * * 1   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+25 10 * * 1   CEPH_BRANCH=master; MACHINE_NAME=smithi; SUITE_NAME=kcephfs; KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 6 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+
+
 05 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s rgw -k distro -e $CEPH_QA_EMAIL
 20 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s krbd -k testing -e $CEPH_QA_EMAIL
-25 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s kcephfs -k testing -e $CEPH_QA_EMAIL
+#25 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s kcephfs -k testing -e $CEPH_QA_EMAIL
 #45 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s hadoop -e $CEPH_QA_EMAIL
 #50 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
