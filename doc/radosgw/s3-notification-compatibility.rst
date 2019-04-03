@@ -2,32 +2,43 @@
 S3 Bucket Notifications Compatibility
 =====================================
 
-Notification Push Endpoints
----------------------------
+Ceph's `PubSub module`_ follows `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
 
-AWS supports internal endpoints: SNS, SQS and Lambda as possible push endpoints. Currently we support HTTP/S and AMQP.
-We are using the SNS ARNs to represent these endpoints.
-We also support pulling and acking of events as described in the `pubsub module`_ documentation.
+Supported Destination
+----------------------
 
-Notification configuration XML
+AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
+Currently, we support: **HTTP/S** and **AMQP**. And also support pulling and acking of events stored in Ceph (as an intenal destination).
+
+We are using the SNS ARNs to represent these destinations.
+
+Notification Configuration XML
 ------------------------------
 
 Following tags (and the tags inside them) are not supported:
 
-- ``<QueueConfiguration>``: this is used for AWS SQS endpoints, we treat all endpoints as SNS
-- ``<CloudFunctionConfiguration>``: this is used for AWS Lambda endpoints, we treat all endpoints as SNS
-- ``<Filter>``: object filtering based on key name/prefix/suffix not supported
++-----------------------------------+----------------------------------------------+
+| Tag                               | Remaks                                       |
++===================================+==============================================+
+| ``<QueueConfiguration>``          | not needed, we treat all destinations as SNS |
++-----------------------------------+----------------------------------------------+
+| ``<CloudFunctionConfiguration>``  | not needed, we treat all destinations as SNS |
++-----------------------------------+----------------------------------------------+
+| ``<Filter>``                      | object filtering not supported               |
++-----------------------------------+----------------------------------------------+
 
 REST API Extension
 ------------------
 
-- We support deletion of a specific notification, or all notifications on a bucket, without deletion of the bucket
-- We support getting the information on a specific notification (when some exists on a bucket)  
+Ceph's bucket notification API follows has the following extensions:
+
+- Deletion of a specific notification, or all notifications on a bucket, without deletion of the bucket
+- Getting the information on a specific notification (when some exists on a bucket)  
 
 Unsupported Fields in the Event Record
 --------------------------------------
 
-The records sent for bucket notification follow the S3 format described in the `pubsub module`_ documentation.
+The records sent for bucket notification follow format described in: `Event Message Structure`_.
 However, the following fields are sent empty:
 
 +----------------------------------------+-------------------------------------------------------------+
@@ -73,5 +84,6 @@ Event Types
 | ``s3:ReducedRedundancyLostObject``           | Not Supported   | not applicable to Ceph                    |
 +----------------------------------------------+-----------------+-------------------------------------------+
 
-.. _`pubsub module`: ./pubsub-module.rst
-
+.. _AWS S3 Bucket Notifications API: https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
+.. _Event Message Structure: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
+.. _`PubSub module`: ../pubsub-module
