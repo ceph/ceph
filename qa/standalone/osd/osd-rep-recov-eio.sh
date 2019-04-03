@@ -118,12 +118,18 @@ function rados_get_data() {
 
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "1" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "1" || return 1
 
     inject_$inject rep data $poolname $objname $dir 0 || return 1
     inject_$inject rep data $poolname $objname $dir 1 || return 1
     rados_get $dir $poolname $objname || return 1
 
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "2" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
     test "$COUNT" = "2" || return 1
 
     inject_$inject rep data $poolname $objname $dir 0 || return 1
@@ -133,6 +139,9 @@ function rados_get_data() {
 
     # After hang another repair couldn't happen, so count stays the same
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
+    test "$COUNT" = "2" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
     test "$COUNT" = "2" || return 1
 }
 
