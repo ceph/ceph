@@ -57,6 +57,8 @@ public:
   struct PeeringListener : public EpochSource {
     virtual void prepare_write(
       pg_info_t &info,
+      pg_info_t &last_written_info,
+      PastIntervals &past_intervals,
       PGLog &pglog,
       bool dirty_info,
       bool dirty_big_info,

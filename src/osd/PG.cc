@@ -968,7 +968,8 @@ void PG::upgrade(ObjectStore *store)
 int PG::_prepare_write_info(CephContext* cct,
 			    map<string,bufferlist> *km,
 			    epoch_t epoch,
-			    pg_info_t &info, pg_info_t &last_written_info,
+			    pg_info_t &info,
+			    pg_info_t &last_written_info,
 			    PastIntervals &past_intervals,
 			    bool dirty_big_info,
 			    bool dirty_epoch,
@@ -1009,6 +1010,7 @@ int PG::_prepare_write_info(CephContext* cct,
     }
     *_dout << dendl;
   }
+
   last_written_info = info;
 
   // info.  store purged_snaps separately.
@@ -1061,6 +1063,8 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
 
 void PG::prepare_write(
   pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
   PGLog &pglog,
   bool dirty_info,
   bool dirty_big_info,
@@ -1071,35 +1075,23 @@ void PG::prepare_write(
   unstable_stats.clear();
   map<string,bufferlist> km;
   if (dirty_big_info || dirty_info) {
-    prepare_write_info(
-      dirty_info,
+    int ret = _prepare_write_info(
+      cct,
+      &km,
+      get_osdmap_epoch(),
+      info,
+      last_written_info,
+      past_intervals,
       dirty_big_info,
       need_write_epoch,
-      &km);
+      cct->_conf->osd_fast_info,
+      osd->logger);
+    ceph_assert(ret == 0);
   }
-  pg_log.write_log_and_missing(
+  pglog.write_log_and_missing(
     t, &km, coll, pgmeta_oid, pool.info.require_rollback());
   if (!km.empty())
     t.omap_setkeys(coll, pgmeta_oid, km);
-}
-
-void PG::prepare_write_info(
-  bool dirty_info,
-  bool dirty_big_info,
-  bool need_update_epoch,
-  map<string,bufferlist> *km)
-{
-  int ret = _prepare_write_info(cct, km, get_osdmap_epoch(),
-				info,
-				last_written_info,
-				past_intervals,
-				dirty_big_info, need_update_epoch,
-				cct->_conf->osd_fast_info,
-				osd->logger);
-  ceph_assert(ret == 0);
-
-  dirty_info = false;
-  dirty_big_info = false;
 }
 
 #pragma GCC diagnostic ignored "-Wpragmas"
