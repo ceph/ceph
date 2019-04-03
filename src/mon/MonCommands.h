@@ -221,6 +221,18 @@ COMMAND("features", "report of connected features", \
         "mon", "r")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r")
+COMMAND("mon ok-to-stop " \
+	"name=ids,type=CephString,n=N",
+	"check whether mon(s) can be safely stopped without reducing immediate " \
+	"availability",
+	"mon", "r")
+COMMAND("mon ok-to-add-offline",
+	"check whether adding a mon and not starting it would break quorum",
+	"mon", "r")
+COMMAND("mon ok-to-rm " \
+	"name=id,type=CephString",
+	"check whether removing the specified mon would break quorum",
+	"mon", "r")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
 	     FLAG(NOFORWARD))
@@ -313,6 +325,9 @@ COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds", \
 COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
         "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
 	"mds", "rw", FLAG(OBSOLETE))
+COMMAND("mds ok-to-stop name=ids,type=CephString,n=N",
+	"check whether stopping the specified MDS would reduce immediate availability",
+	"mds", "r")
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", FLAG(OBSOLETE))
