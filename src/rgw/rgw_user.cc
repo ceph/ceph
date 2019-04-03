@@ -1965,7 +1965,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
-    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
+    rgw_apply_default_bucket_quota(user_info.bucket_quota, *cct->_conf);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -1979,7 +1979,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
   } else {
-    rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
+    rgw_apply_default_user_quota(user_info.user_quota, *cct->_conf);
   }
 
   // update the request
