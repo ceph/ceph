@@ -1003,7 +1003,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
                         m->get_hobj().get_head() :
                         m->get_hobj());
       return backend->get_object(oid).then([&osd_op,this](auto oi) {
-        return do_osd_op(oi, &osd_op);
+        return do_osd_op(*oi, &osd_op);
       }).handle_exception_type([&osd_op](const object_not_found&) {
         osd_op.rval = -ENOENT;
         throw;
