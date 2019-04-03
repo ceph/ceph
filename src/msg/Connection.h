@@ -53,10 +53,11 @@ struct Connection : public RefCountedObject {
 private:
   uint64_t features;
 public:
+  bool is_loopback;
   bool failed; // true if we are a lossy connection that has failed.
 
   int rx_buffers_version;
-  map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
+  std::map<ceph_tid_t,std::pair<ceph::buffer::list, int>> rx_buffers;
 
   // authentication state
   // FIXME make these private after ms_handle_authorizer is removed
@@ -81,6 +82,7 @@ public:
       msgr(m),
       peer_type(-1),
       features(0),
+      is_loopback(false),
       failed(false),
       rx_buffers_version(0) {
   }
@@ -213,7 +215,7 @@ public:
     return CEPH_CON_MODE_CRC;
   }
 
-  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
+  void post_rx_buffer(ceph_tid_t tid, ceph::buffer::list& bl) {
 #if 0
     Mutex::Locker l(lock);
     ++rx_buffers_version;

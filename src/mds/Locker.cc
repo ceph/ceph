@@ -301,10 +301,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
     } else if (p.is_wrlock()) {
       dout(20) << " must wrlock " << *lock << " " << *object << dendl;
+      client_t _client = p.is_state_pin() ? lock->get_excl_client() : client;
       if (object->is_auth()) {
 	mustpin.insert(object);
       } else if (!object->is_auth() &&
-		 !lock->can_wrlock(client) &&  // we might have to request a scatter
+		 !lock->can_wrlock(_client) &&  // we might have to request a scatter
 		 !mdr->is_slave()) {           // if we are slave (remote_wrlock), the master already authpinned
 	dout(15) << " will also auth_pin " << *object
 		 << " in case we need to request a scatter" << dendl;
@@ -547,7 +548,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
       if (need_wrlock) {
         marker.message = "failed to wrlock, waiting";
-	if (need_remote_wrlock && !p.lock->can_wrlock(mdr->get_client())) {
+	client_t _client = p.is_state_pin() ? p.lock->get_excl_client() : client;
+	if (need_remote_wrlock && !p.lock->can_wrlock(_client)) {
 	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
@@ -1446,8 +1448,9 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
 }
 
-bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
+bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait)
 {
+  SimpleLock *lock = op.lock;
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
     return local_wrlock_start(static_cast<LocalLock*>(lock), mut);
@@ -1455,7 +1458,7 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
   CInode *in = static_cast<CInode *>(lock->get_parent());
-  client_t client = mut->get_client();
+  client_t client = op.is_state_pin() ? lock->get_excl_client() : mut->get_client();
   bool want_scatter = !nowait && lock->get_parent()->is_auth() &&
 		      (in->has_subtree_or_exporting_dirfrag() ||
 		       static_cast<ScatterLock*>(lock)->get_scatter_wanted());
@@ -3000,14 +3003,14 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
       if (dn) {
 	ClientLease *l = dn->get_client_lease(client);
 	if (l) {
-	  dout(10) << "process_cap_release removing lease on " << *dn << dendl;
+	  dout(10) << __func__ << " removing lease on " << *dn << dendl;
 	  dn->remove_client_lease(l, this);
 	} else {
-	  dout(7) << "process_cap_release client." << client
+	  dout(7) << __func__ << " client." << client
 		  << " doesn't have lease on " << *dn << dendl;
 	}
       } else {
-	dout(7) << "process_cap_release client." << client << " released lease on dn "
+	dout(7) << __func__ << " client." << client << " released lease on dn "
 		<< dir->dirfrag() << "/" << dname << " which dne" << dendl;
       }
     }
@@ -3017,7 +3020,7 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
   if (!cap)
     return;
 
-  dout(10) << "process_cap_release client." << client << " " << ccap_string(caps) << " on " << *in
+  dout(10) << __func__ << " client." << client << " " << ccap_string(caps) << " on " << *in
 	   << (mdr ? "" : " (DEFERRED, no mdr)")
 	   << dendl;
     
@@ -3611,20 +3614,21 @@ bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking,
     }
 }
 
-void Locker::get_late_revoking_clients(std::list<client_t> *result,
-                                       double timeout) const
+std::vector<client_t> Locker::get_late_revoking_clients(double timeout) const
 {
-  if (!any_late_revoking_caps(revoking_caps, timeout)) {
-    // Fast path: no misbehaving clients, execute in O(1)
-    return;
-  }
+  std::vector<client_t> result;
 
-  // Slow path: execute in O(N_clients)
-  for (auto &p : revoking_caps_by_client) {
-    if (any_late_revoking_caps(p.second, timeout)) {
-      result->push_back(p.first);
+  if (any_late_revoking_caps(revoking_caps, timeout)) {
+    // Slow path: execute in O(N_clients)
+    for (auto &p : revoking_caps_by_client) {
+      if (any_late_revoking_caps(p.second, timeout)) {
+        result.push_back(p.first);
+      }
     }
+  } else {
+    // Fast path: no misbehaving clients, execute in O(1)
   }
+  return result;
 }
 
 // Hard-code instead of surfacing a config settings because this is

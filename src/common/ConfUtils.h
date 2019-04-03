@@ -64,14 +64,14 @@ public:
   void clear();
   int parse_file(const std::string &fname, std::deque<std::string> *errors, std::ostream *warnings);
   int parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors, std::ostream *warnings);
-  int read(const std::string &section, const std::string &key,
+  int read(const std::string &section, const std::string_view key,
 	      std::string &val) const;
 
   const_section_iter_t sections_begin() const;
   const_section_iter_t sections_end() const;
 
   static void trim_whitespace(std::string &str, bool strip_internal);
-  static std::string normalize_key_name(const std::string &key);
+  static std::string normalize_key_name(std::string_view key);
   friend std::ostream &operator<<(std::ostream &oss, const ConfFile &cf);
 
 private:

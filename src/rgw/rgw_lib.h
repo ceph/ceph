@@ -129,6 +129,7 @@ namespace rgw {
   public:
     CephContext* cct;
     RGWUserInfo* user;
+    boost::optional<RGWSysObjectCtx> sysobj_ctx;
 
     /* unambiguiously return req_state */
     inline struct req_state* get_state() { return this->RGWRequest::s; }
@@ -159,7 +160,10 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->get_store(), _s, io);
 
+      sysobj_ctx.emplace(store->svc.sysobj);
+
       get_state()->obj_ctx = rados_ctx;
+      get_state()->sysobj_ctx = &(sysobj_ctx.get());
       get_state()->req_id = store->svc.zone_utils->unique_id(id);
       get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
 
@@ -195,7 +199,10 @@ namespace rgw {
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
+	sysobj_ctx.emplace(store->svc.sysobj);
+
 	get_state()->obj_ctx = &rados_ctx;
+	get_state()->sysobj_ctx = &(sysobj_ctx.get());
 	get_state()->req_id = store->svc.zone_utils->unique_id(id);
 	get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
 

@@ -14,6 +14,14 @@
 
 #include "ECMsgTypes.h"
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::pair;
+using std::set;
+using ceph::bufferlist;
+using ceph::Formatter;
+
 void ECSubWrite::encode(bufferlist &bl) const
 {
   ENCODE_START(4, 1, bl);
@@ -170,11 +178,9 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     encode(from, bl);
     encode(tid, bl);
     map<hobject_t, list<pair<uint64_t, uint64_t> >> tmp;
-    for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::const_iterator m = to_read.begin();
-	  m != to_read.end(); ++m) {
+    for (auto m = to_read.cbegin(); m != to_read.cend(); ++m) {
       list<pair<uint64_t, uint64_t> > tlist;
-      for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator l = m->second.begin();
-	    l != m->second.end(); ++l) {
+      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
 	tlist.push_back(std::make_pair(l->get<0>(), l->get<1>()));
       }
       tmp[m->first] = tlist;
@@ -203,11 +209,9 @@ void ECSubRead::decode(bufferlist::const_iterator &bl)
   if (struct_v == 1) {
     map<hobject_t, list<pair<uint64_t, uint64_t> >>tmp;
     decode(tmp, bl);
-    for (map<hobject_t, list<pair<uint64_t, uint64_t> >>::const_iterator m = tmp.begin();
-	  m != tmp.end(); ++m) {
+    for (auto m = tmp.cbegin(); m != tmp.cend(); ++m) {
       list<boost::tuple<uint64_t, uint64_t, uint32_t> > tlist;
-      for (list<pair<uint64_t, uint64_t> > ::const_iterator l = m->second.begin();
-	    l != m->second.end(); ++l) {
+      for (auto l = m->second.cbegin(); l != m->second.cend(); ++l) {
 	tlist.push_back(boost::make_tuple(l->first, l->second, 0));
       }
       to_read[m->first] = tlist;
@@ -241,17 +245,11 @@ void ECSubRead::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
-  for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >>::const_iterator i =
-	 to_read.begin();
-       i != to_read.end();
-       ++i) {
+  for (auto i = to_read.cbegin(); i != to_read.cend(); ++i) {
     f->open_object_section("object");
     f->dump_stream("oid") << i->first;
     f->open_array_section("extents");
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator j =
-	   i->second.begin();
-	 j != i->second.end();
-	 ++j) {
+    for (auto j = i->second.cbegin(); j != i->second.cend(); ++j) {
       f->open_object_section("extent");
       f->dump_unsigned("off", j->get<0>());
       f->dump_unsigned("len", j->get<1>());
@@ -264,9 +262,7 @@ void ECSubRead::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("object_attrs_requested");
-  for (set<hobject_t>::const_iterator i = attrs_to_read.begin();
-       i != attrs_to_read.end();
-       ++i) {
+  for (auto i = attrs_to_read.cbegin(); i != attrs_to_read.cend(); ++i) {
     f->open_object_section("object");
     f->dump_stream("oid") << *i;
     f->close_section();
@@ -330,17 +326,11 @@ void ECSubReadReply::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("buffers_read");
-  for (map<hobject_t, list<pair<uint64_t, bufferlist> >>::const_iterator i =
-	 buffers_read.begin();
-       i != buffers_read.end();
-       ++i) {
+  for (auto i = buffers_read.cbegin(); i != buffers_read.cend(); ++i) {
     f->open_object_section("object");
     f->dump_stream("oid") << i->first;
     f->open_array_section("data");
-    for (list<pair<uint64_t, bufferlist> >::const_iterator j =
-	   i->second.begin();
-	 j != i->second.end();
-	 ++j) {
+    for (auto j = i->second.cbegin(); j != i->second.cend(); ++j) {
       f->open_object_section("extent");
       f->dump_unsigned("off", j->first);
       f->dump_unsigned("buf_len", j->second.length());
@@ -352,16 +342,11 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("attrs_returned");
-  for (map<hobject_t, map<string, bufferlist>>::const_iterator i =
-	 attrs_read.begin();
-       i != attrs_read.end();
-       ++i) {
+  for (auto i = attrs_read.cbegin(); i != attrs_read.cend(); ++i) {
     f->open_object_section("object_attrs");
     f->dump_stream("oid") << i->first;
     f->open_array_section("attrs");
-    for (map<string, bufferlist>::const_iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j) {
+    for (auto j = i->second.cbegin(); j != i->second.cend(); ++j) {
       f->open_object_section("attr");
       f->dump_string("attr", j->first);
       f->dump_unsigned("val_len", j->second.length());
@@ -373,9 +358,7 @@ void ECSubReadReply::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("errors");
-  for (map<hobject_t, int>::const_iterator i = errors.begin();
-       i != errors.end();
-       ++i) {
+  for (auto i = errors.cbegin(); i != errors.cend(); ++i) {
     f->open_object_section("error_pair");
     f->dump_stream("oid") << i->first;
     f->dump_int("error", i->second);

@@ -65,7 +65,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *what = nullptr;
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &what, &prefix)) {
+  if (!PyArg_ParseTuple(args, "s|s:ceph_get_module_option", &what, &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
@@ -81,7 +81,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
     found = self->this_module->get_config(final_key, &value);
   }
   if (found) {
-    dout(10) << __func__ << " " << final_key << " found: " << value.c_str()
+    dout(10) << __func__ << " " << final_key << " found: " << value
 	     << dendl;
     return self->this_module->py_module->get_typed_option_value(what, value);
   } else {

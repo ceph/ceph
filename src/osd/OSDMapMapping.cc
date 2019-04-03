@@ -93,11 +93,11 @@ void OSDMapMapping::_finish(const OSDMap& osdmap)
 void OSDMapMapping::_dump()
 {
   for (auto& p : pools) {
-    cout << "pool " << p.first << std::endl;
+    std::cout << "pool " << p.first << std::endl;
     for (unsigned i = 0; i < p.second.table.size(); ++i) {
-      cout << " " << p.second.table[i];
+      std::cout << " " << p.second.table[i];
       if (i % p.second.row_size() == p.second.row_size() - 1)
-	cout << std::endl;
+	std::cout << std::endl;
     }
   }
 }
@@ -113,7 +113,7 @@ void OSDMapMapping::_update_range(
   ceph_assert(pg_begin <= pg_end);
   ceph_assert(pg_end <= i->second.pg_num);
   for (unsigned ps = pg_begin; ps < pg_end; ++ps) {
-    vector<int> up, acting;
+    std::vector<int> up, acting;
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(
       pg_t(ps, pool),

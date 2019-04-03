@@ -499,7 +499,7 @@ void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted,
 
   print_spaces();
   if (ns) {
-    m_ss << "<" << e << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
+    m_ss << "<" << e << " xmlns=\"" << ns << "\">" << xml_stream_escaper(std::string_view(buf, len)) << "</" << e << ">";
   } else {
     m_ss << "<" << e << ">" << xml_stream_escaper(std::string_view(buf, len)) << "</" << e << ">";
   }

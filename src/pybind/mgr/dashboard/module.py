@@ -16,8 +16,6 @@ from uuid import uuid4
 from OpenSSL import crypto
 from mgr_module import MgrModule, MgrStandbyModule, Option
 
-from .tools import str_to_bool
-
 try:
     import cherrypy
     from cherrypy._cptools import HandlerWrapperTool
@@ -126,19 +124,19 @@ class CherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_module_option('server_addr', '::')
-        ssl = str_to_bool(self.get_localized_module_option('ssl', 'True'))
-        def_server_port = 8443
+        ssl = self.get_localized_module_option('ssl', True)
         if not ssl:
-            def_server_port = 8080
+            server_port = self.get_localized_module_option('server_port', 8080)
+        else:
+            server_port = self.get_localized_module_option('ssl_server_port', 8443)
 
-        server_port = self.get_localized_module_option('server_port', def_server_port)
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
                 'try "ceph config set mgr mgr/{}/{}/server_addr <ip>"'
                 .format(self.module_name, self.get_mgr_id()))
-        self.log.info('server_addr: %s server_port: %s', server_addr,
-                      server_port)
+        self.log.info('server: ssl=%s host=%s port=%d', 'yes' if ssl else 'no',
+                      server_addr, server_port)
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
@@ -265,7 +263,8 @@ class Module(MgrModule, CherryPyConfig):
 
     MODULE_OPTIONS = [
         Option(name='server_addr', type='str', default='::'),
-        Option(name='server_port', type='int', default=8443),
+        Option(name='server_port', type='int', default=8080),
+        Option(name='ssl_server_port', type='int', default=8443),
         Option(name='jwt_token_ttl', type='int', default=28800),
         Option(name='password', type='str', default=''),
         Option(name='url_prefix', type='str', default=''),
@@ -449,7 +448,7 @@ class StandbyModule(MgrStandbyModule, CherryPyConfig):
                     </head>
                     <body>
                         No active ceph-mgr instance is currently running
-                        the dashboard.  A failover may be in progress.
+                        the dashboard. A failover may be in progress.
                         Retrying in {delay} seconds...
                     </body>
                 </html>

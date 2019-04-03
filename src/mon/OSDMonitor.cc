@@ -3318,7 +3318,12 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
   }
 
   if (m->ready) {
-    p.dec_pg_num(m->last_epoch_started, m->last_epoch_clean);
+    p.dec_pg_num(m->pgid,
+		 pending_inc.epoch,
+		 m->source_version,
+		 m->target_version,
+		 m->last_epoch_started,
+		 m->last_epoch_clean);
     p.last_change = pending_inc.epoch;
   } else {
     // back off the merge attempt!
@@ -4548,7 +4553,8 @@ namespace {
     COMPRESSION_MODE, COMPRESSION_ALGORITHM, COMPRESSION_REQUIRED_RATIO,
     COMPRESSION_MAX_BLOB_SIZE, COMPRESSION_MIN_BLOB_SIZE,
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
-    PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO };
+    PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
+    PG_AUTOSCALE_BIAS };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -5248,6 +5254,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"pg_num_min", PG_NUM_MIN},
       {"target_size_bytes", TARGET_SIZE_BYTES},
       {"target_size_ratio", TARGET_SIZE_RATIO},
+      {"pg_autoscale_bias", PG_AUTOSCALE_BIAS},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -5463,6 +5470,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case PG_NUM_MIN:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
+	  case PG_AUTOSCALE_BIAS:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
               if(*it == CSUM_TYPE) {
@@ -5619,6 +5627,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case PG_NUM_MIN:
 	  case TARGET_SIZE_BYTES:
 	  case TARGET_SIZE_RATIO:
+	  case PG_AUTOSCALE_BIAS:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -6660,7 +6669,11 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = std::min(erasure_code->get_data_chunk_count() + 1, *size);
+	*min_size =
+	  erasure_code->get_data_chunk_count() +
+	  std::min<int>(1, erasure_code->get_coding_chunk_count() - 1);
+	assert(*min_size <= *size);
+	assert(*min_size >= erasure_code->get_data_chunk_count());
       }
     }
     break;
@@ -7608,6 +7621,11 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "pool recovery_priority should be less than 30 due to "
            << "Ceph internal implementation restrictions";
         return -EINVAL;
+      }
+    } else if (var == "pg_autoscale_bias") {
+      if (f < 0.0 || f > 1000.0) {
+	ss << "pg_autoscale_bias must be between 0 and 1000";
+	return -EINVAL;
       }
     }
 
@@ -9360,7 +9378,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
-      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc);
+      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc,
+					 g_conf()->osd_crush_update_weight_set);
       if (err == 0) {
 	ss << "create-or-move updated item name '" << osd_name
 	   << "' weight " << weight
@@ -9403,7 +9422,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
 	if (id >= 0) {
-	  err = newcrush.create_or_move_item(cct, id, 0, name, loc);
+	  err = newcrush.create_or_move_item(
+	    cct, id, 0, name, loc,
+	    g_conf()->osd_crush_update_weight_set);
 	} else {
 	  err = newcrush.move_bucket(cct, id, loc);
 	}
@@ -9624,7 +9645,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    err = newcrush.adjust_item_weightf(cct, id, w);
+    err = newcrush.adjust_item_weightf(cct, id, w,
+				       g_conf()->osd_crush_update_weight_set);
     if (err < 0)
       goto reply;
     pending_inc.crush.clear();
@@ -9662,7 +9684,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    err = newcrush.adjust_subtree_weightf(cct, id, w);
+    err = newcrush.adjust_subtree_weightf(cct, id, w,
+					  g_conf()->osd_crush_update_weight_set);
     if (err < 0)
       goto reply;
     pending_inc.crush.clear();

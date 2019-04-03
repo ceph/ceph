@@ -257,16 +257,13 @@ void ProtocolV1::prepare_send_message(uint64_t features, Message *m,
   ldout(cct, 20) << __func__ << " m " << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
-  if (m->empty_payload()) {
-    ldout(cct, 20) << __func__ << " encoding features " << features << " " << m
-                   << " " << *m << dendl;
-  } else {
-    ldout(cct, 20) << __func__ << " half-reencoding features " << features
-                   << " " << m << " " << *m << dendl;
-  }
+  ldout(cct, 20) << __func__ << (m->empty_payload() ? " encoding features " : " half-reencoding features ")
+		 << features << " " << m  << " " << *m << dendl;
 
   // encode and copy out of *m
-  m->encode(features, messenger->crcflags);
+  // in write_message we update header.seq and need recalc crc
+  // so skip calc header in encode function.
+  m->encode(features, messenger->crcflags, true);
 
   bl.append(m->get_payload());
   bl.append(m->get_middle());
@@ -408,35 +405,39 @@ bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
 }
 
-void ProtocolV1::run_continuation(CtPtr continuation) {
-  CONTINUATION_RUN(continuation);
+void ProtocolV1::run_continuation(CtPtr pcontinuation) {
+  if (pcontinuation) {
+    CONTINUATION_RUN(*pcontinuation);
+  }
 }
 
-CtPtr ProtocolV1::read(CONTINUATION_PARAM(next, ProtocolV1, char *, int),
+CtPtr ProtocolV1::read(CONTINUATION_RX_TYPE<ProtocolV1> &next,
                        int len, char *buffer) {
   if (!buffer) {
     buffer = temp_buffer;
   }
   ssize_t r = connection->read(len, buffer,
-                               [CONTINUATION(next), this](char *buffer, int r) {
-                                 CONTINUATION(next)->setParams(buffer, r);
-                                 CONTINUATION_RUN(CONTINUATION(next));
+                               [&next, this](char *buffer, int r) {
+                                 next.setParams(buffer, r);
+                                 CONTINUATION_RUN(next);
                                });
   if (r <= 0) {
-    return CONTINUE(next, buffer, r);
+    next.setParams(buffer, r);
+    return &next;
   }
 
   return nullptr;
 }
 
-CtPtr ProtocolV1::write(CONTINUATION_PARAM(next, ProtocolV1, int),
+CtPtr ProtocolV1::write(CONTINUATION_TX_TYPE<ProtocolV1> &next,
                         bufferlist &buffer) {
-  ssize_t r = connection->write(buffer, [CONTINUATION(next), this](int r) {
-    CONTINUATION(next)->setParams(r);
-    CONTINUATION_RUN(CONTINUATION(next));
+  ssize_t r = connection->write(buffer, [&next, this](int r) {
+    next.setParams(r);
+    CONTINUATION_RUN(next);
   });
   if (r <= 0) {
-    return CONTINUE(next, r);
+    next.setParams(r);
+    return &next;
   }
 
   return nullptr;
@@ -1137,7 +1138,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     if (messenger->crcflags & MSG_CRC_HEADER) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
     } else {
       old_footer.front_crc = old_footer.middle_crc = 0;
     }
@@ -1161,10 +1161,13 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
+
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
+#endif
   m->put();
 
   return rc;

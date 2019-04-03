@@ -5554,10 +5554,15 @@ void BlueStore::_dump_alloc_on_failure()
 }
 
 
-int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_out)
+int BlueStore::allocate_bluefs_freespace(
+  uint64_t min_size,
+  uint64_t size,
+  PExtentVector* extents_out)
 {
+  ceph_assert(min_size <= size);
   if (size) {
     // round up to alloc size
+    min_size = p2roundup(min_size, cct->_conf->bluefs_alloc_size);
     size = p2roundup(size, cct->_conf->bluefs_alloc_size);
 
     PExtentVector extents_local;
@@ -5565,32 +5570,39 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_o
 
 
     uint64_t gift;
+    uint64_t allocated = 0;
+    int64_t alloc_len;
     do {
       // hard cap to fit into 32 bits
       gift = std::min<uint64_t>(size, 1ull << 31);
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
-      int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					  0, 0, extents);
+      alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+				  0, 0, extents);
+      if (alloc_len) {
+	allocated += alloc_len;
+	size -= alloc_len;
+      }
 
-      if (alloc_len < (int64_t)gift) {
+      if (alloc_len < (int64_t)gift && (min_size > allocated)) {
 	derr << __func__
-	     << " failed to allocate on 0x" << std::hex << gift
-	     << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
-	     << " allocated 0x" << alloc_len
-	     << " available 0x " << alloc->get_free()
-	     << std::dec << dendl;
+	      << " failed to allocate on 0x" << std::hex << gift
+	      << " min_size 0x" << min_size
+	      << " > allocated total 0x" << allocated
+	      << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	      << " allocated 0x" << alloc_len
+	      << " available 0x " << alloc->get_free()
+	      << std::dec << dendl;
 
-        alloc->dump();
-        alloc->release(*extents);
-        extents->clear();
+	alloc->dump();
+	alloc->release(*extents);
+	extents->clear();
 	return -ENOSPC;
       }
-      size -= gift;
-    } while (size);
+    } while (size && alloc_len > 0);
     for (auto& e : *extents) {
-      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      dout(5) << __func__ << " gifting " << e << " to bluefs" << dendl;
       bluefs_extents.insert(e.offset, e.length);
       ++out_of_sync_fm;
       // apply to bluefs if not requested from outside
@@ -6240,7 +6252,10 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     dout(1) << __func__
             << " Allocating more space at slow device for BlueFS: +"
 	    << used_space - target_free << " bytes" << dendl;
-    r = allocate_bluefs_freespace(used_space - target_free, nullptr);
+    r = allocate_bluefs_freespace(
+      used_space - target_free,
+      used_space - target_free,
+      nullptr);
 
     umount();
     if (r != 0) {

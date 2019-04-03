@@ -1,10 +1,11 @@
 <div *ngIf="contentData">
+<ng-container *ngTemplateOutlet="logFiltersTpl"></ng-container>
 <tabset>
   <tab i18n-heading
        heading="Cluster Logs">
   <div class="well">
-    <div *ngIf="contentData.clog">
-      <p *ngFor="let line of contentData.clog">
+    <div *ngIf="clog">
+      <p *ngFor="let line of clog">
         <span class="timestamp">{{ line.stamp }}</span>
         <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
         <span class="message">{{ line.message }}</span>
@@ -19,8 +20,8 @@
   <tab i18n-heading
        heading="Audit Logs">
   <div class="well">
-    <div *ngIf="contentData.audit_log">
-      <p *ngFor="let line of contentData.audit_log">
+    <div *ngIf="audit_log">
+      <p *ngFor="let line of audit_log">
         <span class="timestamp">{{ line.stamp }}</span>
         <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
         <span class="message">{{ line.message }}</span>
@@ -33,3 +34,74 @@
   </tab>
 </tabset>
 </div>
+
+<ng-template #logFiltersTpl>
+  <div class="row log-filters">
+    <div class="col-xs-4 col-md-2 cd-col-1 filter-box">
+      <label i18n>Priority:</label>
+      <select class="form-control"
+              [(ngModel)]="priority"
+              (ngModelChange)="filterLogs()">
+        <option class="form-control" 
+                *ngFor="let prio of prioritys"
+                [value]="prio.value">{{ prio.name }}</option>
+      </select>
+    </div>
+    <div class="col-xs-4 col-md-3 cd-col-3 filter-box">
+      <label i18n>Keyword:</label>
+      <div class="input-group">
+        <span class="input-group-addon">
+          <i class="glyphicon glyphicon-search"></i>
+        </span>
+        <input class="form-control"
+               type="text"
+               [(ngModel)]="search"
+               (keyup)="filterLogs()">
+        <span class="input-group-btn">
+          <button type="button"
+                  class="btn btn-default clear-input tc_clearInputBtn"
+                  (click)="clearSearchKey()">
+            <i class="icon-prepend fa fa-remove"></i>
+          </button>
+        </span>
+      </div>
+    </div>
+    <div class="col-xs-4 col-md-3 cd-col-2 filter-box">
+      <label i18n>Date:</label>
+      <div class="input-group">
+        <input type="text"
+               class="form-control"
+               i18n-placeholder
+               placeholder="Datepicker"
+               [bsConfig]="bsConfig"
+               bsDatepicker
+               [(ngModel)]="selectedDate"
+               (ngModelChange)="filterLogs()">
+        <span class="input-group-btn">
+          <button type="button"
+                  class="btn btn-default clear-input tc_clearInputBtn"
+                  (click)="clearDate()">
+            <i class="icon-prepend fa fa-remove"></i>
+          </button>
+        </span>
+      </div>
+    </div>
+    <div class="clearfix visible-xs-block"></div>
+    <div class="col-xs-8 col-md-4 cd-col-4 filter-box time-box">
+      <label i18n>Time range:</label>
+      <timepicker [showMeridian]="false"
+                  [showSpinners]="showSpinners"
+                  [minuteStep]="1"
+                  [(ngModel)]="startTime"
+                  (ngModelChange)="filterLogs()">
+      </timepicker>
+      <span>&nbsp;&mdash;&nbsp;</span>
+      <timepicker [showMeridian]="false"
+                  [showSpinners]="showSpinners"
+                  [minuteStep]="1"
+                  [(ngModel)]="endTime"
+                  (ngModelChange)="filterLogs()">
+      </timepicker>
+    </div>
+  </div>
+</ng-template>

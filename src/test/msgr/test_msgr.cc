@@ -339,10 +339,6 @@ struct TestInterceptor : public Interceptor {
  * Scenario: A connects to B, and B connects to A at the same time.
  */ 
 TEST_P(MessengerTest, ConnectionRaceTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -431,10 +427,6 @@ TEST_P(MessengerTest, ConnectionRaceTest) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -515,10 +507,6 @@ TEST_P(MessengerTest, MissingServerIdenTest) {
  *    - B reconnects to A
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest2) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -590,10 +578,6 @@ TEST_P(MessengerTest, MissingServerIdenTest2) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, ReconnectTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -692,10 +676,6 @@ TEST_P(MessengerTest, ReconnectTest) {
  *    - A reconnects // B reconnects
  */ 
 TEST_P(MessengerTest, ReconnectRaceTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -817,10 +797,7 @@ TEST_P(MessengerTest, ReconnectRaceTest) {
 TEST_P(MessengerTest, SimpleTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -991,10 +968,7 @@ TEST_P(MessengerTest, SimpleMsgr2Test) {
 TEST_P(MessengerTest, NameAddrTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1028,10 +1002,7 @@ TEST_P(MessengerTest, NameAddrTest) {
 TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   uint64_t all_feature_supported, feature_required, feature_supported = 0;
   for (int i = 0; i < 10; i++)
     feature_supported |= 1ULL << i;
@@ -1093,10 +1064,7 @@ TEST_P(MessengerTest, TimeoutTest) {
   g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1135,10 +1103,7 @@ TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_client(0);
@@ -1238,10 +1203,7 @@ TEST_P(MessengerTest, StatelessTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateless_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossy_client(0);
@@ -1318,10 +1280,7 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1394,10 +1353,7 @@ TEST_P(MessengerTest, AuthTest) {
   g_ceph_context->_conf.set_val("auth_client_required", "cephx");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1446,10 +1402,7 @@ TEST_P(MessengerTest, AuthTest) {
 TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1722,8 +1675,7 @@ class SyntheticWorkload {
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
                                "server", getpid()+i, 0);
-      snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-	       (type == "simple") ? "v1:":"v2:",
+      snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 	       base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
@@ -1741,8 +1693,7 @@ class SyntheticWorkload {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
                                "client", getpid()+i+servers, 0);
       if (cli_policy.standby) {
-        snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-		 (type == "simple") ? "v1:":"v2:",
+        snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 		 base_port+i+servers);
         bind_addr.parse(addr);
         msgr->bind(bind_addr);
@@ -2213,19 +2164,13 @@ TEST_P(MessengerTest, MarkdownTest) {
   DummyAuthClientServer dummy_auth(g_ceph_context);
   dummy_auth.auth_registry.refresh_config();
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16800");
-  else
-    bind_addr.parse("v2:127.0.0.1:16800");
+  bind_addr.parse("v2:127.0.0.1:16800");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->set_auth_client(&dummy_auth);
   server_msgr->set_auth_server(&dummy_auth);
   server_msgr->start();
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16801");
-  else
-    bind_addr.parse("v2:127.0.0.1:16801");
+  bind_addr.parse("v2:127.0.0.1:16801");
   server_msgr2->bind(bind_addr);
   server_msgr2->add_dispatcher_head(&srv_dispatcher);
   server_msgr2->set_auth_client(&dummy_auth);
@@ -2277,8 +2222,7 @@ INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async+posix",
-    "simple"
+    "async+posix"
   )
 );
 

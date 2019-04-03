@@ -1106,7 +1106,7 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     r = -EINVAL;
   } else { // valid message
     sscanf(msg, "%hx:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
-    wire_gid_to_gid(gid, &(im.gid));
+    wire_gid_to_gid(gid, &im);
     ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
   }
   return r;
@@ -1120,7 +1120,7 @@ int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
   char msg[TCP_MSG_LEN];
   char gid[33];
 retry:
-  gid_to_wire_gid(&(im.gid), gid);
+  gid_to_wire_gid(im, gid);
   sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
   ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
                  << ", " << im.peer_qpn << ", "  << gid  << dendl;
@@ -1149,7 +1149,7 @@ retry:
   return 0;
 }
 
-void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
+void Infiniband::wire_gid_to_gid(const char *wgid, IBSYNMsg* im)
 {
   char tmp[9];
   uint32_t v32;
@@ -1158,14 +1158,14 @@ void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
   for (tmp[8] = 0, i = 0; i < 4; ++i) {
     memcpy(tmp, wgid + i * 8, 8);
     sscanf(tmp, "%x", &v32);
-    *(uint32_t *)(&gid->raw[i * 4]) = ntohl(v32);
+    *(uint32_t *)(&im->gid.raw[i * 4]) = ntohl(v32);
   }
 }
 
-void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
+void Infiniband::gid_to_wire_gid(const IBSYNMsg& im, char wgid[])
 {
   for (int i = 0; i < 4; ++i)
-    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
+    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(im.gid.raw + i * 4)));
 }
 
 Infiniband::QueuePair::~QueuePair()

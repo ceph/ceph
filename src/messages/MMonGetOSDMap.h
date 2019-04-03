@@ -15,6 +15,10 @@
 #ifndef CEPH_MMONGETOSDMAP_H
 #define CEPH_MMONGETOSDMAP_H
 
+#include <iostream>
+#include <string>
+#include <string_view>
+
 #include "msg/Message.h"
 
 #include "include/types.h"
@@ -62,7 +66,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mon_get_osdmap"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)
       out << "full " << full_first << "-" << full_last;

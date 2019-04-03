@@ -35,13 +35,14 @@ public:
   std::map<std::string,std::string> daemon_status;
 
   // encode map<string,map<int32_t,string>> of current config
-  bufferlist config_bl;
+  ceph::buffer::list config_bl;
 
   // encode map<string,string> of compiled-in defaults
-  bufferlist config_defaults_bl;
+  ceph::buffer::list config_defaults_bl;
 
   void decode_payload() override
   {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(daemon_name, p);
     if (header.version >= 2) {
@@ -72,7 +73,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mgropen"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {
       out << service_name;

@@ -12,17 +12,21 @@ public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
-  map<string,string> config;
+  // use transparent comparator so we can lookup in it by std::string_view keys
+  std::map<std::string,std::string,std::less<>> config;
 
   MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
-  MConfig(const map<string,string>& c)
+  MConfig(const std::map<std::string,std::string,std::less<>>& c)
     : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
-      config(c) {}
+      config{c} {}
+  MConfig(std::map<std::string,std::string,std::less<>>&& c)
+    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+      config{std::move(c)} {}
 
   std::string_view get_type_name() const override {
     return "config";
   }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "config(" << config.size() << " keys" << ")";
   }
 

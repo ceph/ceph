@@ -2,3 +2,6 @@
 /.git_version
 /ceph_ver.h
 /gf_vect_dot_prod_avx2.o
+mypy_report.txt
+.mypy_venv/
+.mypy_cache/
