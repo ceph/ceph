@@ -106,6 +106,10 @@ void common_init_finish(CephContext *cct)
   cct->init_crypto();
   ZTracer::ztrace_init();
 
+  if (!cct->_log->is_started()) {
+    cct->_log->start();
+  }
+
   int flags = cct->get_init_flags();
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     cct->start_service_thread();
