@@ -1437,17 +1437,13 @@ public:
 
   virtual void prepare_write(
     pg_info_t &info,
+    pg_info_t &last_written_info,
+    PastIntervals &past_intervals,
     PGLog &pglog,
     bool dirty_info,
     bool dirty_big_info,
     bool need_write_epoch,
     ObjectStore::Transaction &t) override;
-
-  void prepare_write_info(
-    bool dirty_info,
-    bool dirty_big_info,
-    bool need_update_epoch,
-    map<string,bufferlist> *km);
 
   static int _prepare_write_info(
     CephContext* cct,
