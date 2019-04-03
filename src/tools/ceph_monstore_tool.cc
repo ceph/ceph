@@ -473,13 +473,24 @@ static int update_auth(MonitorDBStore& st, const string& keyring_path)
       cerr << "no caps granted to: " << auth_inc.name << std::endl;
       return -EINVAL;
     }
+    map<string,string> caps;
+    std::transform(begin(auth_inc.auth.caps), end(auth_inc.auth.caps),
+		   inserter(caps, end(caps)),
+		   [](auto& cap) {
+		     string c;
+		     auto p = cap.second.cbegin();
+		     decode(c, p);
+		     return make_pair(cap.first, c);
+		   });
+    cout << "adding auth for '"
+	 << auth_inc.name << "': " << auth_inc.auth
+	 << " with caps(" << caps << ")" << std::endl;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
 
     AuthMonitor::Incremental inc;
     inc.inc_type = AuthMonitor::AUTH_DATA;
     encode(auth_inc, inc.auth_data);
     inc.auth_type = CEPH_AUTH_CEPHX;
-
     inc.encode(bl, CEPH_FEATURES_ALL);
   }
 
