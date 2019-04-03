@@ -810,7 +810,7 @@ protected:
 
 public:
   bool is_backfill_targets(pg_shard_t osd) {
-    return backfill_targets.count(osd);
+    return recovery_state.is_backfill_targets(osd);
   }
 
   // Space reserved for backfill is primary_num_bytes - local_num_bytes
@@ -1406,13 +1406,12 @@ protected:
     return recovery_state.should_send_notify();
   }
 
-  int get_state() const { return state; }
   bool is_active() const { return recovery_state.is_active(); }
   bool is_activating() const { return recovery_state.is_activating(); }
   bool is_peering() const { return recovery_state.is_peering(); }
   bool is_down() const { return recovery_state.is_down(); }
-  bool is_recovery_unfound() const { return state_test(PG_STATE_RECOVERY_UNFOUND); }
-  bool is_backfill_unfound() const { return state_test(PG_STATE_BACKFILL_UNFOUND); }
+  bool is_recovery_unfound() const { return recovery_state.is_recovery_unfound(); }
+  bool is_backfill_unfound() const { return recovery_state.is_backfill_unfound(); }
   bool is_incomplete() const { return recovery_state.is_incomplete(); }
   bool is_clean() const { return recovery_state.is_clean(); }
   bool is_degraded() const { return recovery_state.is_degraded(); }
@@ -1420,7 +1419,7 @@ protected:
   bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
   bool is_remapped() const { return recovery_state.is_remapped(); }
   bool is_peered() const { return recovery_state.is_peered(); }
-  bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
+  bool is_recovering() const { return recovery_state.is_recovering(); }
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
 
