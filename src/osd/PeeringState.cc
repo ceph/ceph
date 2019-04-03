@@ -4431,7 +4431,7 @@ PeeringState::ToDelete::ToDelete(my_context ctx)
 {
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS
-  pg->osd->logger->inc(l_osd_pg_removing);
+  pl->get_perf_logger().inc(l_osd_pg_removing);
 }
 
 void PeeringState::ToDelete::exit()
@@ -4440,7 +4440,7 @@ void PeeringState::ToDelete::exit()
   DECLARE_LOCALS
   // note: on a successful removal, this path doesn't execute. see
   // _delete_some().
-  pg->osd->logger->dec(l_osd_pg_removing);
+  pl->get_perf_logger().dec(l_osd_pg_removing);
 
   pl->cancel_local_background_io_reservation();
 }
@@ -5180,7 +5180,7 @@ void PeeringState::PeeringMachine::log_enter(const char *state_name)
 {
   DECLARE_LOCALS
   psdout(5) << "enter " << state_name << dendl;
-  pg->osd->pg_recovery_stats.log_enter(state_name);
+  pl->log_state_enter(state_name);
 }
 
 void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t enter_time)
@@ -5188,8 +5188,7 @@ void PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t ente
   DECLARE_LOCALS
   utime_t dur = ceph_clock_now() - enter_time;
   psdout(5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
-  pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now() - enter_time,
-				      event_count, event_time);
+  pl->log_state_exit(state_name, enter_time, event_count, event_time);
   event_count = 0;
   event_time = utime_t();
 }
