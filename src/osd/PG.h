@@ -460,7 +460,10 @@ public:
   void on_active_exit() override;
 
   Context *on_clean() override {
-    try_mark_clean();
+    if (is_active()) {
+      kick_snap_trim();
+    }
+    requeue_ops(waiting_for_clean_to_primary_repair);
     return finish_recovery();
   }
 
@@ -997,8 +1000,6 @@ protected:
   void _update_blocked_by();
   friend class TestOpsSocketHook;
   void publish_stats_to_osd() override;
-
-  void try_mark_clean();  ///< mark an active pg clean
 
   bool needs_recovery() const {
     return recovery_state.needs_recovery();
