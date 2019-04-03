@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <boost/algorithm/string.hpp>
+#include <string_view>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
@@ -13,7 +14,6 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include "common/ceph_json.h"
-#include "common/utf8.h"
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -66,6 +66,7 @@ using namespace librados;
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
+#include "rgw_sync_counters.h"
 #include "rgw_sync_trace.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
@@ -816,6 +817,7 @@ public:
 
 class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
 {
+  PerfCountersRef counters;
   RGWDataSyncStatusManager sync;
   bool initialized;
 
@@ -832,9 +834,10 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
   }
 public:
   RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                             const string& _source_zone)
+                             const RGWZone* source_zone)
     : RGWSyncProcessorThread(_store, "data-sync"),
-      sync(_store, async_rados, _source_zone),
+      counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
+      sync(_store, async_rados, source_zone->id, counters.get()),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
@@ -1407,17 +1410,13 @@ int RGWRados::init_rados()
     }
   }
 
-  auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
-
-  for (auto& r : handles) {
-    ret = r.init_with_context(cct);
-    if (ret < 0) {
-      return ret;
-    }
-    ret = r.connect();
-    if (ret < 0) {
-      return ret;
-    }
+  ret = rados.init_with_context(cct);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = rados.connect();
+  if (ret < 0) {
+    return ret;
   }
 
   auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
@@ -1430,15 +1429,13 @@ int RGWRados::init_rados()
   meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
   cr_registry = crs.release();
-
-  std::swap(handles, rados);
   return ret;
 }
 
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
   map<string,string> metadata = meta;
-  metadata["num_handles"] = stringify(rados.size());
+  metadata["num_handles"] = "1"s;
   metadata["zonegroup_id"] = svc.zone->get_zonegroup().get_id();
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
@@ -1447,7 +1444,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
   }
-  int ret = rados[0].service_daemon_register(daemon_type, name, metadata);
+  int ret = rados.service_daemon_register(daemon_type, name, metadata);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1458,7 +1455,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
 
 int RGWRados::update_service_map(std::map<std::string, std::string>&& status)
 {
-  int ret = rados[0].service_daemon_update_status(move(status));
+  int ret = rados.service_daemon_update_status(move(status));
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_update_status() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1598,16 +1595,16 @@ int RGWRados::init_complete()
     data_log->set_observer(&*bucket_trim);
 
     Mutex::Locker dl(data_sync_thread_lock);
-    for (auto iter : svc.zone->get_zone_data_sync_from_map()) {
-      ldout(cct, 5) << "starting data sync thread for zone " << iter.first << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this, async_rados, iter.first);
+    for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
+      ldout(cct, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
+      auto *thread = new RGWDataSyncProcessorThread(this, async_rados, source_zone);
       ret = thread->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
-      data_sync_processor_threads[iter.first] = thread;
+      data_sync_processor_threads[source_zone->id] = thread;
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
@@ -2403,6 +2400,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
+  bucket_info.objv_tracker.clear();
   int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
   if (ret < 0) {
     return ret;
@@ -2424,13 +2422,31 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * marker: if filled in, begin the listing with this object.
  * end_marker: if filled in, end the listing with this object.
  * result: the objects are put in here.
- * common_prefixes: if delim is filled in, any matching prefixes are placed here.
- * is_truncated: if number of objects in the bucket is bigger than max, then truncated.
+ * common_prefixes: if delim is filled in, any matching prefixes are
+ * placed here.
+ * is_truncated: if number of objects in the bucket is bigger than
+ * max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
-						 vector<rgw_bucket_dir_entry> *result,
-						 map<string, bool> *common_prefixes,
-						 bool *is_truncated)
+static inline std::string after_delim(std::string_view delim)
+{
+  // assert: ! delim.empty()
+  unsigned char e = delim.back();
+  delim.remove_suffix(1);
+  std::string result{delim.data(), delim.length()};
+  if (uint8_t(e) < 255) {
+    result += char(++e);
+  } else {
+    result += e;
+    result += char(255);
+  }
+  return result;
+}
+
+int RGWRados::Bucket::List::list_objects_ordered(
+  int64_t max,
+  vector<rgw_bucket_dir_entry> *result,
+  map<string, bool> *common_prefixes,
+  bool *is_truncated)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -2455,27 +2471,16 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
   rgw_obj_key prefix_obj(params.prefix);
   prefix_obj.ns = params.ns;
   string cur_prefix = prefix_obj.get_index_key_name();
-
-  string bigger_than_delim;
+  string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
-    unsigned long val = decode_utf8((unsigned char *)params.delim.c_str(),
-				    params.delim.size());
-    char buf[params.delim.size() + 16];
-    int r = encode_utf8(val + 1, (unsigned char *)buf);
-    if (r < 0) {
-      ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
-      return -EINVAL;
-    }
-    buf[r] = '\0';
-
-    bigger_than_delim = buf;
-
-    /* if marker points at a common prefix, fast forward it into its upperbound string */
+    /* if marker points at a common prefix, fast forward it into its
+     * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
-      s.append(bigger_than_delim);
+      after_delim_s = after_delim(params.delim);
+      s.append(after_delim_s);
       cur_marker = s;
     }
   }
@@ -2484,7 +2489,11 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
   while (truncated && count <= max) {
     if (skip_after_delim > cur_marker.name) {
       cur_marker = skip_after_delim;
-      ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
+
+      ldout(cct, 20) << "setting cur_marker="
+		     << cur_marker.name
+		     << "[" << cur_marker.instance << "]"
+		     << dendl;
     }
     std::map<string, rgw_bucket_dir_entry> ent_map;
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
@@ -2554,7 +2563,9 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
         int delim_pos = obj.name.find(params.delim, params.prefix.size());
 
         if (delim_pos >= 0) {
-          string prefix_key = obj.name.substr(0, delim_pos + 1);
+	  /* extract key -with trailing delimiter- for CommonPrefix */
+          string prefix_key =
+	    obj.name.substr(0, delim_pos + params.delim.length());
 
           if (common_prefixes &&
               common_prefixes->find(prefix_key) == common_prefixes->end()) {
@@ -2565,10 +2576,11 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+            int marker_delim_pos = cur_marker.name.find(
+	      params.delim, cur_prefix.size());
 
             skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
-            skip_after_delim.append(bigger_than_delim);
+            skip_after_delim.append(after_delim_s);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
 
@@ -4282,7 +4294,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
-               rgw_zone_set *zones_trace)
+               rgw_zone_set *zones_trace,
+               std::optional<uint64_t>* bytes_transferred)
 {
   /* source is in a different zonegroup, copy from there */
 
@@ -4496,6 +4509,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
+  if (bytes_transferred) {
+    *bytes_transferred = cb.get_data_len();
+  }
   return 0;
 set_err_state:
   if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
@@ -5886,6 +5902,10 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
 
     if (need_follow_olh) {
       return get_olh_target_state(*rctx, bucket_info, obj, s, state);
+    } else if (obj.key.have_null_instance() && !s->has_manifest) {
+      // read null version, and the head object only have olh info
+      s->exists = false;
+      return -ENOENT;
     }
   }
 
@@ -6434,7 +6454,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
       return r;
     }
     invalidate_bs();
-  }
+  } // for loop
 
   if (r < 0) {
     return r;
@@ -7068,7 +7088,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
     obj = *pobj;
     obj.bucket.update_bucket_id(new_bucket_id);
     pobj = &obj;
-  }
+  } // for loop
 
   if (r < 0) {
     return r;
@@ -7085,21 +7105,47 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
 
-  const int num_retries = 10;
-  for (int i=0; i < num_retries; i++) {
+  // since we want to run this recovery code from two distinct places,
+  // let's just put it in a lambda so we can easily re-use; if the
+  // lambda successfully fetches a new bucket id, it sets
+  // new_bucket_id and returns 0, otherwise it returns a negative
+  // error code
+  auto fetch_new_bucket_id =
+    [this, bucket_info](const std::string& log_tag,
+			std::string* new_bucket_id) -> int {
+      RGWBucketInfo fresh_bucket_info = bucket_info;
+      int ret = try_refresh_bucket_info(fresh_bucket_info, nullptr);
+      if (ret < 0) {
+	ldout(cct, 0) << __func__ <<
+	  " ERROR: failed to refresh bucket info after reshard at " <<
+	  log_tag << ": " << cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+      *new_bucket_id = fresh_bucket_info.bucket.bucket_id;
+      return 0;
+    };
+
+  constexpr int num_retries = 10;
+  for (int i = 1; i <= num_retries; i++) { // nb: 1-based for loop
     ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
-    if (ret < 0) {
-      ldout(cct, 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
-	cpp_strerror(-ret)<< dendl;
+    if (ret == -ENOENT) {
+      return fetch_new_bucket_id("get_bucket_resharding_failed", new_bucket_id);
+    } else if (ret < 0) {
+      ldout(cct, 0) << __func__ <<
+	" ERROR: failed to get bucket resharding : " << cpp_strerror(-ret) <<
+	dendl;
       return ret;
     }
-    if (!entry.resharding_in_progress()) {
-      *new_bucket_id = entry.new_bucket_instance_id;
-      return 0;
-    }
-    ldout(cct, 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
 
-    if (i == num_retries - 1) {
+    if (!entry.resharding_in_progress()) {
+      return fetch_new_bucket_id("get_bucket_resharding_succeeded",
+				 new_bucket_id);
+    }
+
+    ldout(cct, 20) << "NOTICE: reshard still in progress; " <<
+      (i < num_retries ? "retrying" : "too many retries") << dendl;
+
+    if (i == num_retries) {
       break;
     }
 
@@ -7142,11 +7188,14 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 
     ret = reshard_wait->wait(y);
     if (ret < 0) {
-      ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+      ldout(cct, 0) << __func__ <<
+	" ERROR: bucket is still resharding, please retry" << dendl;
       return ret;
     }
-  }
-  ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+  } // for loop
+
+  ldout(cct, 0) << __func__ <<
+    " ERROR: bucket is still resharding, please retry" << dendl;
   return -ERR_BUSY_RESHARDING;
 }
 
@@ -10016,28 +10065,7 @@ void RGWStoreManager::close_storage(RGWRados *store)
 
 librados::Rados* RGWRados::get_rados_handle()
 {
-  if (rados.size() == 1) {
-    return &rados[0];
-  } else {
-    handle_lock.get_read();
-    pthread_t id = pthread_self();
-    std::map<pthread_t, int>:: iterator it = rados_map.find(id);
-
-    if (it != rados_map.end()) {
-      handle_lock.put_read();
-      return &rados[it->second];
-    } else {
-      handle_lock.put_read();
-      handle_lock.get_write();
-      const uint32_t handle = next_rados_handle;
-      rados_map[id] = handle;
-      if (++next_rados_handle == rados.size()) {
-        next_rados_handle = 0;
-      }
-      handle_lock.put_write();
-      return &rados[handle];
-    }
-  }
+  return &rados;
 }
 
 int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompletion *>& handles)

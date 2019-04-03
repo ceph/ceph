@@ -7207,7 +7207,7 @@ TEST_F(TestLibRBD, Migration) {
   rbd_migration_status_cleanup(&status);
 
   ASSERT_EQ(-EBUSY, rbd_remove(ioctx, name.c_str()));
-  ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, name.c_str(), 0));
+  ASSERT_EQ(-EBUSY, rbd_trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_execute(ioctx, name.c_str()));
 
@@ -7224,7 +7224,7 @@ TEST_F(TestLibRBD, Migration) {
                                      new_name.c_str(), image_options));
 
   ASSERT_EQ(-EBUSY, rbd_remove(ioctx, new_name.c_str()));
-  ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, new_name.c_str(), 0));
+  ASSERT_EQ(-EBUSY, rbd_trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_abort(ioctx, name.c_str()));
 
@@ -7270,7 +7270,7 @@ TEST_F(TestLibRBD, MigrationPP) {
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
 
   ASSERT_EQ(-EBUSY, rbd.remove(ioctx, name.c_str()));
-  ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, name.c_str(), 0));
+  ASSERT_EQ(-EBUSY, rbd.trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_execute(ioctx, name.c_str()));
 
@@ -7286,7 +7286,7 @@ TEST_F(TestLibRBD, MigrationPP) {
                                      new_name.c_str(), image_options));
 
   ASSERT_EQ(-EBUSY, rbd.remove(ioctx, new_name.c_str()));
-  ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, new_name.c_str(), 0));
+  ASSERT_EQ(-EBUSY, rbd.trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_abort(ioctx, name.c_str()));
 
@@ -7888,6 +7888,86 @@ TEST_F(TestLibRBD, ImageSpec) {
     }
   );
   ASSERT_EQ(expected_children, children);
+}
+
+void super_simple_write_cb_pp(librbd::completion_t cb, void *arg)
+{
+}
+
+TEST_F(TestLibRBD, DISABLED_TestSeqWriteAIOPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 21;
+    std::string name = get_temp_image_name();
+    uint64_t size = 5 * (1 << order);
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    char test_data[(TEST_IO_SIZE + 1) * 10];
+
+    for (int i = 0; i < 10; i++) {
+      for (uint64_t j = 0; j < TEST_IO_SIZE; j++) {
+        test_data[(TEST_IO_SIZE + 1) * i + j] = (char)(rand() % (126 - 33) + 33);
+      }
+      test_data[(TEST_IO_SIZE + 1) * i + TEST_IO_SIZE] = '\0';
+    }
+
+    struct timespec start_time;
+    clock_gettime(CLOCK_REALTIME, &start_time);
+
+    std::list<librbd::RBD::AioCompletion *> comps;
+    for (uint64_t i = 0; i < size / TEST_IO_SIZE; ++i) {
+      char *p = test_data + (TEST_IO_SIZE + 1) * (i % 10);
+      ceph::bufferlist bl;
+      bl.append(p, strlen(p));
+      auto comp = new librbd::RBD::AioCompletion(
+          NULL, (librbd::callback_t) super_simple_write_cb_pp);
+      image.aio_write(strlen(p) * i, strlen(p), bl, comp);
+      comps.push_back(comp);
+      if (i % 1000 == 0) {
+        cout << i << " reqs sent" << std::endl;
+        image.flush();
+        for (auto comp : comps) {
+          comp->wait_for_complete();
+          ASSERT_EQ(0, comp->get_return_value());
+          comp->release();
+        }
+        comps.clear();
+      }
+    }
+    int i = 0;
+    for (auto comp : comps) {
+      comp->wait_for_complete();
+      ASSERT_EQ(0, comp->get_return_value());
+      comp->release();
+      if (i % 1000 == 0) {
+        std::cout << i << " reqs completed" << std::endl;
+      }
+      i++;
+    }
+    comps.clear();
+
+    struct timespec end_time;
+    clock_gettime(CLOCK_REALTIME, &end_time);
+    int duration = end_time.tv_sec * 1000 + end_time.tv_nsec / 1000000 -
+      start_time.tv_sec * 1000 - start_time.tv_nsec / 1000000;
+    std::cout << "duration: " << duration << " msec" << std::endl;
+
+    for (uint64_t i = 0; i < size / TEST_IO_SIZE; ++i) {
+      char *p = test_data + (TEST_IO_SIZE + 1) * (i % 10);
+      ASSERT_PASSED(read_test_data, image, p, strlen(p) * i, TEST_IO_SIZE, 0);
+    }
+
+    ASSERT_PASSED(validate_object_map, image);
+  }
+
+  ioctx.close();
 }
 
 // poorman's ceph_assert()

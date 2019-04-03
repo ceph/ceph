@@ -63,7 +63,8 @@ function mkfs_and_mount() {
 
     local dev
     dev=$(sudo rbd map $spec)
-    mkfs.ext4 -q -E discard $dev
+    blkdiscard $dev
+    mkfs.ext4 -q -E nodiscard $dev
     sudo mount $dev /mnt
     sudo umount /mnt
     sudo rbd unmap $dev
@@ -189,7 +190,7 @@ for pool in rbd rbdnonzero; do
     done
 done
 
-# mkfs should discard some objects everywhere but in clonesonly
+# mkfs_and_mount should discard some objects everywhere but in clonesonly
 [[ $(list_HEADs rbd | wc -l) -lt $((NUM_META_RBDS + 5 * NUM_OBJECTS)) ]]
 [[ $(list_HEADs repdata | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]
 [[ $(list_HEADs ecdata | wc -l) -lt $((1 + 14 * NUM_OBJECTS)) ]]

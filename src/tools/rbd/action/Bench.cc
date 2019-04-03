@@ -157,9 +157,9 @@ struct rbd_bencher {
     }
   }
 
-  int wait_for(int max) {
+  int wait_for(int max, bool interrupt_on_terminating) {
     Mutex::Locker l(lock);
-    while (in_flight > max && !terminating) {
+    while (in_flight > max && !(terminating && interrupt_on_terminating)) {
       utime_t dur;
       dur.set_from_double(.2);
       cond.WaitInterval(lock, dur);
@@ -292,7 +292,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     while (i < io_threads && off < io_bytes) {
       bool read_flag = should_read(read_proportion);
 
-      r = b.wait_for(io_threads - 1);
+      r = b.wait_for(io_threads - 1, true);
       if (r < 0) {
         break;
       }
@@ -351,7 +351,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       last = elapsed;
     }
   }
-  b.wait_for(0);
+  b.wait_for(0, false);
 
   if (io_type != IO_TYPE_READ) {
     r = image.flush();

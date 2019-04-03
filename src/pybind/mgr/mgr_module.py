@@ -59,22 +59,48 @@ class CPlusPlusHandler(logging.Handler):
         self._module._ceph_log(ceph_level, self.format(record))
 
 
-def configure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def configure_logger(module_inst, module_name):
+    """
+    Create and configure the logger with the specified module.
 
-    # Don't filter any logs at the python level, leave it to C++
-    logger.setLevel(logging.DEBUG)
+    A handler will be added to the root logger which will redirect
+    the messages from all loggers (incl. 3rd party libraries) to the
+    Ceph log.
 
-    # FIXME: we should learn the log level from C++ land, and then
-    # avoid calling the C++ level log when we know a message is of
-    # an insufficient level to be ultimately output
-    logger.addHandler(CPlusPlusHandler(module_inst))
+    :param module_inst: The module instance.
+    :type module_inst: instance
+    :param module_name: The module name.
+    :type module_name: str
+    :return: Return the logger with the specified name.
+    """
+    logger = logging.getLogger(module_name)
+    # Don't filter any logs at the python level, leave it to C++.
+    # FIXME: We should learn the log level from C++ land, and then
+    #        avoid calling the C++ level log when we know a message
+    #        is of an insufficient level to be ultimately output.
+    logger.setLevel(logging.DEBUG)  # Don't use NOTSET
+
+    root_logger = logging.getLogger()
+    # Add handler to the root logger, thus this module and all
+    # 3rd party libraries will log their messages to the Ceph log.
+    root_logger.addHandler(CPlusPlusHandler(module_inst))
+    # Set the log level to ``ERROR`` to ensure that we only get
+    # those message from 3rd party libraries (only effective if
+    # they use the default log level ``NOTSET``).
+    # Check https://docs.python.org/3/library/logging.html#logging.Logger.setLevel
+    # for more information about how the effective log level is
+    # determined.
+    root_logger.setLevel(logging.ERROR)
 
     return logger
 
 
-def unconfigure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def unconfigure_logger(module_name=None):
+    """
+    :param module_name: The module name. Defaults to ``None``.
+    :type module_name: str or None
+    """
+    logger = logging.getLogger(module_name)
     rm_handlers = [
         h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
     for h in rm_handlers:
@@ -352,6 +378,10 @@ def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
 
 
+def _get_localized_key(prefix, key):
+    return '{}/{}'.format(prefix, key)
+
+
 class Option(dict):
     """
     Helper class to declare options for MODULE_OPTIONS list.
@@ -404,7 +434,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @property
     def log(self):
@@ -428,10 +458,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         :param default: the default value of the config if it is not found
         :return: str
         """
-        r = self._ceph_get_module_option(key, "")
+        r = self._ceph_get_module_option(key)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -453,8 +482,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_localized_module_option(self, key, default=None):
         r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -497,7 +525,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         # If we're taking over from a standby module, let's make sure
         # its logger was unconfigured before we hook ours up
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
         self._logger = configure_logger(self, module_name)
 
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
@@ -522,7 +550,7 @@ class MgrModule(ceph_module.BaseMgrModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @classmethod
     def _register_commands(cls):
@@ -908,8 +936,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         r = self._ceph_get_module_option(self.module_name, key,
                                          localized_prefix)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -938,7 +965,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         if module == self.module_name:
             self._validate_module_option(key)
-        r = self._ceph_get_module_option(module, key, "")
+        r = self._ceph_get_module_option(module, key)
         return default if r is None else r
 
     def get_store_prefix(self, key_prefix):
@@ -952,7 +979,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._ceph_get_store_prefix(key_prefix)
 
     def _set_localized(self, key, val, setter):
-        return setter(self.get_mgr_id() + '/' + key, val)
+        return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
     def get_localized_module_option(self, key, default=None):
         """
@@ -1021,11 +1048,11 @@ class MgrModule(ceph_module.BaseMgrModule):
             return r
 
     def get_localized_store(self, key, default=None):
-        r = self._ceph_get_store('{}/{}'.format(self.get_mgr_id(), key))
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
         if r is None:
             r = self._ceph_get_store(key)
-        if r is None:
-            r = default
+            if r is None:
+                r = default
         return r
 
     def set_localized_store(self, key, val):
@@ -1213,7 +1240,8 @@ class MgrModule(ceph_module.BaseMgrModule):
                             exception is raised.
         :param args: Argument tuple
         :param kwargs: Keyword argument dict
-        :return:
+        :raises RuntimeError: **Any** error raised within the method is converted to a RuntimeError
+        :raises ImportError: No such module
         """
         return self._ceph_dispatch_remote(module_name, method_name,
                                           args, kwargs)

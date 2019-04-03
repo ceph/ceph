@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <boost/algorithm/string/replace.hpp>
 //#include "common/debug.h"
 #include "include/scope_guard.h"
 #include "include/uuid.h"
@@ -433,6 +434,16 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return true;
 }
 
+std::string _decode_model_enc(const std::string& in)
+{
+  auto v = boost::replace_all_copy(in, "\\x20", " ");
+  if (auto found = v.find_last_not_of(" "); found != v.npos) {
+    v.erase(found + 1);
+  }
+  std::replace(v.begin(), v.end(), ' ', '_');
+  return v;
+}
+
 // trying to use udev first, and if it doesn't work, we fall back to 
 // reading /sys/block/$devname/device/(vendor/model/serial).
 std::string get_device_id(const std::string& devname,
@@ -472,6 +483,17 @@ std::string get_device_id(const std::string& devname,
   data = udev_device_get_property_value(dev, "ID_MODEL");
   if (data) {
     id_model = data;
+    // sometimes, ID_MODEL is "LVM ..." but ID_MODEL_ENC is correct (but
+    // encoded with \x20 for space).
+    if (id_model.substr(0, 7) == "LVM PV ") {
+      const char *enc = udev_device_get_property_value(dev, "ID_MODEL_ENC");
+      if (enc) {
+	id_model = _decode_model_enc(enc);
+      } else {
+	// ignore ID_MODEL then
+	id_model.clear();
+      }
+    }
   }
   data = udev_device_get_property_value(dev, "ID_SERIAL_SHORT");
   if (data) {

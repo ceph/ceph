@@ -15,8 +15,8 @@
  * 
  */
 
-#include <errno.h>
 #include <algorithm>
+#include <cerrno>
 
 #include "ErasureCode.h"
 
@@ -28,6 +28,17 @@
 #define DEFAULT_RULE_ROOT "default"
 #define DEFAULT_RULE_FAILURE_DOMAIN "host"
 
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
+namespace ceph {
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 
 int ErasureCode::init(
@@ -71,14 +82,17 @@ int ErasureCode::create_rule(
   return ruleid;
 }
 
-int ErasureCode::sanity_check_k(int k, ostream *ss)
+int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
 {
   if (k < 2) {
     *ss << "k=" << k << " must be >= 2" << std::endl;
     return -EINVAL;
-  } else {
-    return 0;
   }
+  if (m < 1) {
+    *ss << "m=" << m << " must be >= 1" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
 }
 
 int ErasureCode::chunk_index(unsigned int i) const
@@ -344,4 +358,5 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
     }
   }
   return r;
+}
 }

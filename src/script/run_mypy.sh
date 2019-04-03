@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 
-# needs to be executed form the src directory.
+# needs to be executed from the src directory.
 # generates a report at src/mypy_report.txt
 
-python3 -m venv venv
+python3 -m venv .mypy_venv
 
-. venv/bin/activate
+. .mypy_venv/bin/activate
 
-pip install $(find * -name requirements.txt | awk '{print "-r  " $0}') mypy
+pip install $(find * -name requirements.txt | grep -v node_modules | awk '{print "-r  " $0}')
+pip install mypy
 
-cat <<EOF > ./mypy.ini
+MYPY_INI=$(cat <<-EOF
 [mypy]
 strict_optional = True
 no_implicit_optional = True
@@ -18,20 +19,22 @@ warn_incomplete_stub = True
 check_untyped_defs = True
 show_error_context = True
 EOF
+)
 
+export MYPYPATH="$PWD/pybind/rados:$PWD/pybind/rbd:$PWD/pybind/cephfs"
 
 echo "pybind:" > mypy_report.txt
 pushd pybind
-mypy --config-file=../mypy.ini  *.py | awk '{print "pybind/" $0}' >> ../mypy_report.txt
+mypy --config-file=<(echo "$MYPY_INI")  *.py | awk '{print "pybind/" $0}' >> ../mypy_report.txt
 popd
 
 echo "MGR Modules:" >> mypy_report.txt
 pushd pybind/mgr
-mypy --config-file=../../mypy.ini  $(find * -name '*.py' | grep -v -e venv -e tox -e env -e gyp -e node_modules) | awk '{print "pybind/mgr/" $0}' >> ../../mypy_report.txt
+mypy --config-file=<(echo "$MYPY_INI")  $(find * -name '*.py' | grep -v -e venv -e tox -e env -e gyp -e node_modules) | awk '{print "pybind/mgr/" $0}' >> ../../mypy_report.txt
 popd
 
 echo "ceph-volume:" >> mypy_report.txt
 pushd ceph-volume/ceph_volume
-mypy --config-file=../../mypy.ini   $(find * -name '*.py' | grep -v -e venv -e tox -e env -e gyp -e node_modules -e tests) | awk '{print "ceph-volume/ceph_volume/" $0}' >> ../../mypy_report.txt
+mypy --config-file=<(echo "$MYPY_INI")   $(find * -name '*.py' | grep -v -e venv -e tox -e env -e gyp -e node_modules -e tests) | awk '{print "ceph-volume/ceph_volume/" $0}' >> ../../mypy_report.txt
 popd
 

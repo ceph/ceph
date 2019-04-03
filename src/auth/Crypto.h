@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -69,10 +69,10 @@ public:
 
   virtual ~CryptoKeyHandler() {}
 
-  virtual int encrypt(const bufferlist& in,
-		       bufferlist& out, std::string *error) const = 0;
-  virtual int decrypt(const bufferlist& in,
-		       bufferlist& out, std::string *error) const = 0;
+  virtual int encrypt(const ceph::buffer::list& in,
+		      ceph::buffer::list& out, std::string *error) const = 0;
+  virtual int decrypt(const ceph::buffer::list& in,
+		      ceph::buffer::list& out, std::string *error) const = 0;
 
   // TODO: provide nullptr in the out::buf to get/estimate size requirements?
   // Or maybe dedicated methods?
@@ -80,6 +80,8 @@ public:
 			      const out_slice_t& out) const;
   virtual std::size_t decrypt(const in_slice_t& in,
 			      const out_slice_t& out) const;
+
+  sha256_digest_t hmac_sha256(const ceph::bufferlist& in) const;
 };
 
 /*
@@ -89,68 +91,73 @@ class CryptoKey {
 protected:
   __u16 type;
   utime_t created;
-  bufferptr secret;   // must set this via set_secret()!
+  ceph::buffer::ptr secret;   // must set this via set_secret()!
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
   mutable std::shared_ptr<CryptoKeyHandler> ckh;
 
-  int _set_secret(int type, const bufferptr& s);
+  int _set_secret(int type, const ceph::buffer::ptr& s);
 
 public:
   CryptoKey() : type(0) { }
-  CryptoKey(int t, utime_t c, bufferptr& s)
+  CryptoKey(int t, utime_t c, ceph::buffer::ptr& s)
     : created(c) {
     _set_secret(t, s);
   }
   ~CryptoKey() {
   }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 
   int get_type() const { return type; }
   utime_t get_created() const { return created; }
   void print(std::ostream& out) const;
 
-  int set_secret(int type, const bufferptr& s, utime_t created);
-  const bufferptr& get_secret() { return secret; }
-  const bufferptr& get_secret() const { return secret; }
+  int set_secret(int type, const ceph::buffer::ptr& s, utime_t created);
+  const ceph::buffer::ptr& get_secret() { return secret; }
+  const ceph::buffer::ptr& get_secret() const { return secret; }
 
-  void encode_base64(string& s) const {
-    bufferlist bl;
+  bool empty() const { return ckh.get() == nullptr; }
+
+  void encode_base64(std::string& s) const {
+    ceph::buffer::list bl;
     encode(bl);
-    bufferlist e;
+    ceph::bufferlist e;
     bl.encode_base64(e);
     e.append('\0');
     s = e.c_str();
   }
-  string encode_base64() const {
-    string s;
+  std::string encode_base64() const {
+    std::string s;
     encode_base64(s);
     return s;
   }
-  void decode_base64(const string& s) {
-    bufferlist e;
+  void decode_base64(const std::string& s) {
+    ceph::buffer::list e;
     e.append(s);
-    bufferlist bl;
+    ceph::buffer::list bl;
     bl.decode_base64(e);
     auto p = std::cbegin(bl);
     decode(p);
   }
 
-  void encode_formatted(string label, Formatter *f, bufferlist &bl);
-  void encode_plaintext(bufferlist &bl);
+  void encode_formatted(std::string label, ceph::Formatter *f,
+			ceph::buffer::list &bl);
+  void encode_plaintext(ceph::buffer::list &bl);
 
   // --
   int create(CephContext *cct, int type);
-  int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string *error) const {
+  int encrypt(CephContext *cct, const ceph::buffer::list& in,
+	      ceph::buffer::list& out,
+	      std::string *error) const {
     ceph_assert(ckh); // Bad key?
     return ckh->encrypt(in, out, error);
   }
-  int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string *error) const {
+  int decrypt(CephContext *cct, const ceph::buffer::list& in,
+	      ceph::buffer::list& out,
+	      std::string *error) const {
     ceph_assert(ckh); // Bad key?
     return ckh->decrypt(in, out, error);
   }
@@ -169,6 +176,11 @@ public:
     return ckh->encrypt(in, out);
   }
 
+  sha256_digest_t hmac_sha256(CephContext*, const ceph::buffer::list& in) {
+    ceph_assert(ckh);
+    return ckh->hmac_sha256(in);
+  }
+
   static constexpr std::size_t get_max_outbuf_size(std::size_t want_size) {
     return want_size + CryptoKeyHandler::MAX_BLOCK_SIZE;
   }
@@ -177,7 +189,7 @@ public:
 };
 WRITE_CLASS_ENCODER(CryptoKey)
 
-static inline ostream& operator<<(ostream& out, const CryptoKey& k)
+inline std::ostream& operator<<(std::ostream& out, const CryptoKey& k)
 {
   k.print(out);
   return out;
@@ -194,10 +206,10 @@ class CryptoHandler {
 public:
   virtual ~CryptoHandler() {}
   virtual int get_type() const = 0;
-  virtual int create(CryptoRandom *random, bufferptr& secret) = 0;
-  virtual int validate_secret(const bufferptr& secret) = 0;
-  virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret,
-					    string& error) = 0;
+  virtual int create(CryptoRandom *random, ceph::buffer::ptr& secret) = 0;
+  virtual int validate_secret(const ceph::buffer::ptr& secret) = 0;
+  virtual CryptoKeyHandler *get_key_handler(const ceph::buffer::ptr& secret,
+					    std::string& error) = 0;
 
   static CryptoHandler *create(int type);
 };

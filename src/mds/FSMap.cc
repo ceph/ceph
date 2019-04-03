@@ -69,7 +69,7 @@ void FSMap::dump(Formatter *f) const
   f->close_section();
 }
 
-void FSMap::generate_test_instances(list<FSMap*>& ls)
+void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 {
   FSMap *m = new FSMap();
 
@@ -946,7 +946,7 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
   standby_epochs[new_info.global_id] = epoch;
 }
 
-std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
+std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
 {
   ceph_assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
@@ -956,7 +956,7 @@ std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
   fs->mds_map.stopped.insert(info.rank);
 
   // Also drop any standby replays that were following this rank
-  std::list<mds_gid_t> standbys;
+  std::vector<mds_gid_t> standbys;
   for (const auto &i : fs->mds_map.mds_info) {
     const auto &other_gid = i.first;
     const auto &other_info = i.second;

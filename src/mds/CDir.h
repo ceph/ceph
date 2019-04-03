@@ -317,7 +317,7 @@ public:
    * list will be filled with all CDentry * which have been returned
    * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
    */
-  void scrub_dentries_scrubbing(std::list<CDentry*> *out_dentries);
+  std::vector<CDentry*> scrub_dentries_scrubbing();
   /**
    * Report to the CDir that a CDentry has been scrubbed. Call this
    * for every CDentry returned from scrub_dentry_next().
@@ -500,8 +500,8 @@ public:
 
 
 public:
-  void split(int bits, std::list<CDir*>& subs, MDSContext::vec& waiters, bool replay);
-  void merge(std::list<CDir*>& subs, MDSContext::vec& waiters, bool replay);
+  void split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay);
+  void merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay);
 
   bool should_split() const {
     return (int)get_frag_size() > g_conf()->mds_bal_split_size;

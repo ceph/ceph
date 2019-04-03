@@ -39,6 +39,7 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
   list(APPEND rocksdb_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
   list(APPEND rocksdb_CMAKE_ARGS -DUSE_RTTI=1)
+  list(APPEND rocksdb_CMAKE_ARGS -G${CMAKE_GENERATOR})
   CHECK_C_COMPILER_FLAG("-Wno-stringop-truncation" HAS_WARNING_STRINGOP_TRUNCATION)
   if(HAS_WARNING_STRINGOP_TRUNCATION)
     list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_C_FLAGS="-Wno-stringop-truncation")
@@ -52,7 +53,7 @@ function(build_rocksdb)
     SOURCE_DIR "${rocksdb_SOURCE_DIR}"
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
-    BUILD_COMMAND $(MAKE) rocksdb
+    BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb
     INSTALL_COMMAND "true")
   # force rocksdb make to be called on each time
   ExternalProject_Add_Step(rocksdb_ext forcebuild

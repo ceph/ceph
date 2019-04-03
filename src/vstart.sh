@@ -128,6 +128,7 @@ if [ `uname` = FreeBSD ]; then
 else
     objectstore="bluestore"
 fi
+ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -193,6 +194,8 @@ usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the P
 usage=$usage"\t--msgr1: use msgr1 only\n"
 usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
+usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
+usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 
 usage_exit() {
 	printf "$usage"
@@ -227,6 +230,13 @@ case $1 in
     --short )
 	    short=1
 	    ;;
+    --crimson )
+        ceph_osd=crimson-osd
+        ;;
+    --osd-args )
+        extra_osd_args="$2"
+        shift
+        ;;
     --msgr1 )
 	msgr="1"
 	;;
@@ -754,7 +764,7 @@ EOF
 	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
 	    rm $CEPH_DEV_DIR/osd$osd/new.json
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
+            $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
 	    cat > $key_fn<<EOF
@@ -765,12 +775,13 @@ EOF
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd.$osd
-        run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
+        run 'osd' $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
     done
 }
 
 start_mgr() {
     local mgr=0
+    local ssl=${DASHBOARD_SSL:-1}
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
@@ -789,11 +800,18 @@ start_mgr() {
 EOF
 
             if $with_mgr_dashboard ; then
-                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT --force
+                local port_option="ssl_server_port"
+                local http_proto="https"
+                if [ "$ssl" == "0" ]; then
+                    port_option="server_port"
+                    http_proto="http"
+                    ceph_adm config set mgr mgr/dashboard/ssl false --force
+                fi
+                ceph_adm config set mgr mgr/dashboard/$name/$port_option $MGR_PORT --force
                 if [ $mgr -eq 1 ]; then
-                    DASH_URLS="https://$IP:$MGR_PORT"
+                    DASH_URLS="$http_proto://$IP:$MGR_PORT"
                 else
-                    DASH_URLS+=", https://$IP:$MGR_PORT"
+                    DASH_URLS+=", $http_proto://$IP:$MGR_PORT"
                 fi
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
@@ -817,8 +835,10 @@ EOF
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
             ceph_adm tell mgr dashboard ac-user-create admin admin administrator
-            if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
-                echo dashboard module not working correctly!
+            if [ "$ssl" != "0" ]; then
+                if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                    echo dashboard module not working correctly!
+                fi
             fi
         fi
 

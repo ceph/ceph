@@ -1079,14 +1079,9 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
     // pick a random dir inode
     CInode *in = mdcache->hack_pick_random_inode();
 
-    list<CDir*> ls;
-    in->get_dirfrags(ls);
+    auto&& ls = in->get_dirfrags();
     if (!ls.empty()) {	// must be an open dir.
-      list<CDir*>::iterator p = ls.begin();
-      int n = rand() % ls.size();
-      while (n--)
-        ++p;
-      CDir *dir = *p;
+      const auto& dir = ls[rand() % ls.size()];
       if (!dir->get_parent_dir()) continue;    // must be linked.
       if (!dir->is_auth()) continue;           // must be auth.
 
@@ -1109,8 +1104,7 @@ bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
     // pick a random dir inode
     CInode *in = mdcache->hack_pick_random_inode();
 
-    list<CDir*> ls;
-    in->get_dirfrags(ls);
+    auto&& ls = in->get_dirfrags();
     if (ls.empty()) continue;                // must be an open dir.
     CDir *dir = ls.front();
     if (!dir->get_parent_dir()) continue;    // must be linked.

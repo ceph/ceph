@@ -77,11 +77,12 @@ public:
 
   void handle_mds_failure(mds_rank_t who);
 
-  int dump_loads(Formatter *f);
+  int dump_loads(Formatter *f) const;
 
 private:
   bool bal_fragment_dirs;
   int64_t bal_fragment_interval;
+  static const unsigned int AUTH_TREES_THRESHOLD = 5;
 
   typedef struct {
     std::map<mds_rank_t, double> targets;
@@ -102,7 +103,7 @@ private:
   void handle_heartbeat(const MHeartbeat::const_ref &m);
   void find_exports(CDir *dir,
                     double amount,
-                    std::list<CDir*>& exports,
+                    std::vector<CDir*>* exports,
                     double& have,
                     set<CDir*>& already_exporting);
 

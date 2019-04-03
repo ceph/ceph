@@ -94,8 +94,9 @@ seastar::future<pg_info_t, PastIntervals> PGMeta::load()
       }
       {
         auto fast_info = find_value<pg_fast_info_t>(values, fastinfo_key);
-        assert(fast_info);
-        fast_info->try_apply_to(&info);
+        if (fast_info) {
+          fast_info->try_apply_to(&info);
+        }
       }
       return seastar::make_ready_future<pg_info_t, PastIntervals>(
         std::move(info),

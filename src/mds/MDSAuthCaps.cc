@@ -214,27 +214,25 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
 		   << " new " << new_uid << ":" << new_gid
 		   << " cap: " << *this << dendl;
 
-  for (std::vector<MDSCapGrant>::const_iterator i = grants.begin();
-       i != grants.end();
-       ++i) {
-    if (i->network.size() &&
-	(!i->network_valid ||
-	 !network_contains(i->network_parsed,
-			   i->network_prefix,
+  for (const auto& grant : grants) {
+    if (grant.network.size() &&
+	(!grant.network_valid ||
+	 !network_contains(grant.network_parsed,
+			   grant.network_prefix,
 			   addr))) {
       continue;
     }
 
-    if (i->match.match(inode_path, caller_uid, caller_gid, caller_gid_list) &&
-	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
+    if (grant.match.match(inode_path, caller_uid, caller_gid, caller_gid_list) &&
+	grant.spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
       // we have a match; narrow down GIDs to those specifically allowed here
       vector<uint64_t> gids;
-      if (std::find(i->match.gids.begin(), i->match.gids.end(), caller_gid) !=
-	  i->match.gids.end()) {
+      if (std::find(grant.match.gids.begin(), grant.match.gids.end(), caller_gid) !=
+	  grant.match.gids.end()) {
 	gids.push_back(caller_gid);
       }
       if (caller_gid_list) {
-	std::set_intersection(i->match.gids.begin(), i->match.gids.end(),
+	std::set_intersection(grant.match.gids.begin(), grant.match.gids.end(),
 			      caller_gid_list->begin(), caller_gid_list->end(),
 			      std::back_inserter(gids));
 	std::sort(gids.begin(), gids.end());
@@ -243,19 +241,19 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
       if (mask & MAY_SET_VXATTR) {
-        if (!i->spec.allow_set_vxattr()) {
+        if (!grant.spec.allow_set_vxattr()) {
           continue;
         }
       }
 
       if (mask & MAY_SNAPSHOT) {
-        if (!i->spec.allow_snapshot()) {
+        if (!grant.spec.allow_snapshot()) {
           continue;
         }
       }
 
       // check unix permissions?
-      if (i->match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
+      if (grant.match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
       }
 
@@ -345,8 +343,8 @@ bool MDSAuthCaps::parse(CephContext *c, std::string_view str, ostream *err)
 
 bool MDSAuthCaps::allow_all() const
 {
-  for (std::vector<MDSCapGrant>::const_iterator i = grants.begin(); i != grants.end(); ++i) {
-    if (i->match.is_match_all() && i->spec.allow_all()) {
+  for (const auto& grant : grants) {
+    if (grant.match.is_match_all() && grant.spec.allow_all()) {
       return true;
     }
   }
@@ -367,12 +365,12 @@ ostream &operator<<(ostream &out, const MDSCapMatch &match)
     out << "uid=" << match.uid;
     if (!match.gids.empty()) {
       out << " gids=";
-      for (std::vector<gid_t>::const_iterator p = match.gids.begin();
-	   p != match.gids.end();
-	   ++p) {
-	if (p != match.gids.begin())
+      bool first = true;
+      for (const auto& gid : match.gids) {
+	if (!first)
 	  out << ',';
-	out << *p;
+	out << gid;
+        first = false;
       }
     }
   }

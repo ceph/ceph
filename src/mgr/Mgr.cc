@@ -406,9 +406,6 @@ void Mgr::shutdown()
   finisher.queue(new FunctionContext([&](int) {
     {
       std::lock_guard l(lock);
-      monc->sub_unwant("log-info");
-      monc->sub_unwant("mgrdigest");
-      monc->sub_unwant("fsmap");
       // First stop the server so that we're not taking any more incoming
       // requests
       server.shutdown();

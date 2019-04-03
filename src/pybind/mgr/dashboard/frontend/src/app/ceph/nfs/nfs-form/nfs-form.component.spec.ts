@@ -100,7 +100,7 @@ describe('NfsFormComponent', () => {
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
-      squash: 'None',
+      squash: '',
       tag: '',
       transportTCP: true,
       transportUDP: true

@@ -31,13 +31,13 @@ private:
   uint64_t ver;        ///< unused
   uint64_t notify_id;  ///< osd unique id for a notify notification
   uint8_t opcode;      ///< CEPH_WATCH_EVENT_*
-  bufferlist bl;       ///< notify payload (osd->client)
+  ceph::buffer::list bl;       ///< notify payload (osd->client)
   errorcode32_t return_code; ///< notify result (osd->client)
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
     : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
-  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, bufferlist b)
+  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b)
     : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       cookie(c),
       ver(v),
@@ -51,6 +51,7 @@ private:
 
 public:
   void decode_payload() override {
+    using ceph::decode;
     uint8_t msg_ver;
     auto p = payload.cbegin();
     decode(msg_ver, p);
@@ -83,7 +84,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "watch-notify"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "watch-notify("
 	<< ceph_watch_event_name(opcode) << " (" << (int)opcode << ")"
 	<< " cookie " << cookie

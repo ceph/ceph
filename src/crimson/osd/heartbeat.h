@@ -22,10 +22,10 @@ class Heartbeat : public ceph::net::Dispatcher {
 public:
   using osd_id_t = int;
 
-  Heartbeat(int whoami,
-	    uint32_t nonce,
-	    const OSDMapService& service,
-	    ceph::mon::Client& monc);
+  Heartbeat(const OSDMapService& service,
+	    ceph::mon::Client& monc,
+	    ceph::net::Messenger& front_msgr,
+	    ceph::net::Messenger& back_msgr);
 
   seastar::future<> start(entity_addrvec_t front,
 			  entity_addrvec_t back);
@@ -44,6 +44,8 @@ public:
   // Dispatcher methods
   seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn,
 				MessageRef m) override;
+  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
+  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
 private:
   seastar::future<> handle_osd_ping(ceph::net::ConnectionRef conn,
@@ -63,15 +65,13 @@ private:
   /// add enough reporters for fast failure detection
   void add_reporter_peers(int whoami);
 
-  seastar::future<> start_messenger(ceph::net::Messenger* msgr,
+  seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
-  const int whoami;
-  const uint32_t nonce;
-  ceph::net::Messenger* front_msgr = nullptr;
-  ceph::net::Messenger* back_msgr = nullptr;
   const OSDMapService& service;
   ceph::mon::Client& monc;
+  ceph::net::Messenger& front_msgr;
+  ceph::net::Messenger& back_msgr;
 
   seastar::timer<seastar::lowres_clock> timer;
   // use real_clock so it can be converted to utime_t

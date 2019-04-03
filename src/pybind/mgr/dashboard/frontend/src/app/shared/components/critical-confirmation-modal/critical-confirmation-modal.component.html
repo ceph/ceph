@@ -33,9 +33,10 @@
                           (submitAction)="callSubmitAction()">
           <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
         </cd-submit-button>
-        <button class="btn btn-link btn-sm"
-                (click)="hideModal()"
-                i18n>Cancel</button>
+        <cd-back-button [back]="modalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

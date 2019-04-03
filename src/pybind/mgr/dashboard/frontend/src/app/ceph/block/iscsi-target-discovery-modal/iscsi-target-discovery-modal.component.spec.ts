@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -21,7 +22,13 @@ describe('IscsiTargetDiscoveryModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetDiscoveryModalComponent],
-    imports: [HttpClientTestingModule, ReactiveFormsModule, SharedModule, ToastModule.forRoot()],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      SharedModule,
+      ToastModule.forRoot(),
+      RouterTestingModule
+    ],
     providers: [i18nProviders, BsModalRef]
   });
 

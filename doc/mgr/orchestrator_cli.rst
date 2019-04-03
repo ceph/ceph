@@ -166,7 +166,7 @@ Update the number of monitor nodes::
 
     ceph orchestrator mon update <num> [host, host:network...]
 
-Each host can optionally specificy a network for the monitor to listen on.
+Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager nodes::
 

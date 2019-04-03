@@ -227,6 +227,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t &hoid) = 0;
 
      virtual bool pg_is_undersized() const = 0;
+     virtual bool pg_is_repair() const = 0;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
@@ -293,6 +294,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
+     virtual bool pg_is_repair() = 0;
+     virtual void inc_osd_stat_repaired() = 0;
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
      virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;

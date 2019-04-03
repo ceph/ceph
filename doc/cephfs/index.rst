@@ -109,6 +109,8 @@ authentication keyring.
     Configuring multiple active MDS daemons <multimds>
     Export over NFS <nfs>
     Application best practices <app-best-practices>
+    Scrub <scrub>
+    LazyIO <lazyio>
 
 .. toctree:: 
    :hidden:

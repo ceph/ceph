@@ -170,11 +170,10 @@ void MutationImpl::add_projected_fnode(CDir *dir)
 
 void MutationImpl::pop_and_dirty_projected_fnodes()
 {
-  while (!projected_fnodes.empty()) {
-    CDir *dir = projected_fnodes.front();
-    projected_fnodes.pop_front();
+  for (const auto& dir : projected_fnodes) {
     dir->pop_and_dirty_projected_fnode(ls);
   }
+  projected_fnodes.clear();
 }
 
 void MutationImpl::add_updated_lock(ScatterLock *lock)
@@ -199,19 +198,16 @@ void MutationImpl::apply()
   pop_and_dirty_projected_inodes();
   pop_and_dirty_projected_fnodes();
   
-  for (list<CInode*>::iterator p = dirty_cow_inodes.begin();
-       p != dirty_cow_inodes.end();
-       ++p) 
-    (*p)->_mark_dirty(ls);
-  for (list<pair<CDentry*,version_t> >::iterator p = dirty_cow_dentries.begin();
-       p != dirty_cow_dentries.end();
-       ++p)
-    p->first->mark_dirty(p->second, ls);
+  for (const auto& in : dirty_cow_inodes) {
+    in->_mark_dirty(ls);
+  }
+  for (const auto& [dentry, v] : dirty_cow_dentries) {
+    dentry->mark_dirty(v, ls);
+  }
   
-  for (list<ScatterLock*>::iterator p = updated_locks.begin();
-       p != updated_locks.end();
-       ++p)
-    (*p)->mark_dirty();
+  for (const auto& lock : updated_locks) {
+    lock->mark_dirty();
+  }
 }
 
 void MutationImpl::cleanup()

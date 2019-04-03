@@ -103,6 +103,7 @@
     "jest-silent-reporter": "0.1.2",
     "prettier": "1.16.4",
     "protractor": "5.4.2",
+    "protractor-screenshoter-plugin": "0.10.3",
     "replace-in-file": "3.4.3",
     "ts-node": "8.0.2",
     "tslint": "5.12.1",

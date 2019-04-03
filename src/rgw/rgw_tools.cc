@@ -47,7 +47,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(pool);
@@ -57,7 +57,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
     }
   }
 
@@ -84,13 +84,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_p
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat();
+                 .stat(null_yield);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl);
+             .read(&bl, null_yield);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -123,7 +123,7 @@ int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove();
+               .remove(null_yield);
 }
 
 thread_local bool is_asio_thread = false;
@@ -169,6 +169,29 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   }
 #endif
   return ioctx.operate(oid, op);
+}
+
+int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto reply = librados::async_notify(context, ioctx, oid,
+                                        bl, timeout_ms, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(reply);
+    }
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
+#endif
+  return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
 
 void parse_mime_map_line(const char *start, const char *end)
@@ -450,10 +473,8 @@ void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
-  if (ret < 0)
-    return ret;
-
+  ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  // ignore errors; missing mime.types is not fatal
   return 0;
 }
 

@@ -73,7 +73,6 @@ const char** MgrStandby::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
-    "osd_objectstore_fuse",
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",

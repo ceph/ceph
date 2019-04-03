@@ -187,45 +187,35 @@ ostream& operator<<(ostream& out, const entity_addr_t &addr)
   return out;
 }
 
+ostream& operator<<(ostream& out, const sockaddr *psa)
+{
+  char buf[NI_MAXHOST] = { 0 };
+
+  switch (psa->sa_family) {
+  case AF_INET:
+    {
+      const sockaddr_in *sa = (const sockaddr_in*)psa;
+      inet_ntop(AF_INET, &sa->sin_addr, buf, NI_MAXHOST);
+      return out << buf << ':'
+		 << ntohs(sa->sin_port);
+    }
+  case AF_INET6:
+    {
+      const sockaddr_in6 *sa = (const sockaddr_in6*)psa;
+      inet_ntop(AF_INET6, &sa->sin6_addr, buf, NI_MAXHOST);
+      return out << '[' << buf << "]:"
+		 << ntohs(sa->sin6_port);
+    }
+  default:
+    return out << "(unrecognized address family " << psa->sa_family << ")";
+  }
+}
+
 ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
-  char buf[NI_MAXHOST] = { 0 };
-  char serv[NI_MAXSERV] = { 0 };
-  size_t hostlen;
-
-  if (ss.ss_family == AF_INET)
-    hostlen = sizeof(struct sockaddr_in);
-  else if (ss.ss_family == AF_INET6)
-    hostlen = sizeof(struct sockaddr_in6);
-  else
-    hostlen = sizeof(struct sockaddr_storage);
-  getnameinfo((struct sockaddr *)&ss, hostlen, buf, sizeof(buf),
-	      serv, sizeof(serv),
-	      NI_NUMERICHOST | NI_NUMERICSERV);
-  if (ss.ss_family == AF_INET6)
-    return out << '[' << buf << "]:" << serv;
-  return out << buf << ':' << serv;
+  return out << (const sockaddr*)&ss;
 }
 
-ostream& operator<<(ostream& out, const sockaddr *sa)
-{
-  char buf[NI_MAXHOST] = { 0 };
-  char serv[NI_MAXSERV] = { 0 };
-  size_t hostlen;
-
-  if (sa->sa_family == AF_INET)
-    hostlen = sizeof(struct sockaddr_in);
-  else if (sa->sa_family == AF_INET6)
-    hostlen = sizeof(struct sockaddr_in6);
-  else
-    hostlen = sizeof(struct sockaddr_storage);
-  getnameinfo(sa, hostlen, buf, sizeof(buf),
-	      serv, sizeof(serv),
-	      NI_NUMERICHOST | NI_NUMERICSERV);
-  if (sa->sa_family == AF_INET6)
-    return out << '[' << buf << "]:" << serv;
-  return out << buf << ':' << serv;
-}
 
 // entity_addrvec_t
 

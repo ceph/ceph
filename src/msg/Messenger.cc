@@ -8,11 +8,7 @@
 
 #include "Messenger.h"
 
-#include "msg/simple/SimpleMessenger.h"
 #include "msg/async/AsyncMessenger.h"
-#ifdef HAVE_XIO
-#include "msg/xio/XioMessenger.h"
-#endif
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {
@@ -28,17 +24,11 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 {
   int r = -1;
   if (type == "random") {
-    r = ceph::util::generate_random_number(0, 1);
+    r = 0;
+    //r = ceph::util::generate_random_number(0, 1);
   }
-  if (r == 0 || type == "simple")
-    return new SimpleMessenger(cct, name, std::move(lname), nonce);
-  else if (r == 1 || type.find("async") != std::string::npos)
+  if (r == 0 || type.find("async") != std::string::npos)
     return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
-#ifdef HAVE_XIO
-  else if ((type == "xio") &&
-	   cct->check_experimental_feature_enabled("ms-type-xio"))
-    return new XioMessenger(cct, name, std::move(lname), nonce, cflags);
-#endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;
 }

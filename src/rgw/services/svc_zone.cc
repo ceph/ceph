@@ -171,9 +171,9 @@ int RGWSI_Zone::do_start()
     ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
   *zone_public_config = zone_by_id[zone_id()];
-  for (auto ziter : zonegroup->zones) {
+  for (const auto& ziter : zonegroup->zones) {
     const string& id = ziter.first;
-    RGWZone& z = ziter.second;
+    const RGWZone& z = ziter.second;
     if (id == zone_id()) {
       continue;
     }
@@ -187,7 +187,7 @@ int RGWSI_Zone::do_start()
     if (zone_syncs_from(*zone_public_config, z) ||
         zone_syncs_from(z, *zone_public_config)) {
       if (zone_syncs_from(*zone_public_config, z)) {
-        zone_data_sync_from_map[id] = conn;
+        data_sync_source_zones.push_back(&z);
       }
       if (zone_syncs_from(z, *zone_public_config)) {
         zone_data_notify_to_map[id] = conn;
@@ -310,7 +310,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl);
+  int ret = sysobj.rop().read(&bl, null_yield);
   if (ret < 0 && ret !=  -ENOENT) {
     ldout(cct, 0) << __func__ << " failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
@@ -533,7 +533,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
   /* mark as converted */
   ret = sysobj.wop()
               .set_exclusive(true)
-              .write(bl);
+              .write(bl, null_yield);
   if (ret < 0 ) {
     ldout(cct, 0) << __func__ << " failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
 		  << dendl;
@@ -727,7 +727,7 @@ int RGWSI_Zone::convert_regionmap()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl);
+  int ret = sysobj.rop().read(&bl, null_yield);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   } else if (ret == -ENOENT) {
@@ -765,7 +765,7 @@ int RGWSI_Zone::convert_regionmap()
   current_period->set_bucket_quota(zonegroupmap.bucket_quota);
 
   // remove the region_map so we don't try to convert again
-  ret = sysobj.wop().remove();
+  ret = sysobj.wop().remove(null_yield);
   if (ret < 0) {
     ldout(cct, 0) << "Error could not remove " << sysobj.get_obj()
         << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
@@ -1086,7 +1086,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.rop().read(&map_bl);
+  int ret = sysobj.rop().read(&map_bl, null_yield);
   if (ret < 0) {
     goto read_omap;
   }
@@ -1100,7 +1100,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
 
 read_omap:
   if (m.empty()) {
-    ret = sysobj.omap().get_all(&m);
+    ret = sysobj.omap().get_all(&m, null_yield);
 
     write_map = true;
   }
@@ -1114,7 +1114,7 @@ read_omap:
     ret = rados_svc->pool().create(pools, &retcodes);
     if (ret < 0)
       return ret;
-    ret = sysobj.omap().set(s, bl);
+    ret = sysobj.omap().set(s, bl, null_yield);
     if (ret < 0)
       return ret;
     m[s] = bl;
@@ -1123,7 +1123,7 @@ read_omap:
   if (write_map) {
     bufferlist new_bl;
     encode(m, new_bl);
-    ret = sysobj.wop().write(new_bl);
+    ret = sysobj.wop().write(new_bl, null_yield);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
     }
@@ -1156,13 +1156,13 @@ int RGWSI_Zone::update_placement_map()
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().get_all(&m);
+  int ret = sysobj.omap().get_all(&m, null_yield);
   if (ret < 0)
     return ret;
 
   bufferlist new_bl;
   encode(m, new_bl);
-  ret = sysobj.wop().write(new_bl);
+  ret = sysobj.wop().write(new_bl, null_yield);
   if (ret < 0) {
     ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
   }
@@ -1182,7 +1182,7 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl);
+  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, null_yield);
 
   // don't care about return value
   update_placement_map();
@@ -1196,7 +1196,7 @@ int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().del(old_pool.to_str());
+  int ret = sysobj.omap().del(old_pool.to_str(), null_yield);
 
   // don't care about return value
   update_placement_map();
@@ -1212,7 +1212,7 @@ int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.omap().get_all(&m);
+  int ret = sysobj.omap().get_all(&m, null_yield);
   if (ret < 0)
     return ret;
 

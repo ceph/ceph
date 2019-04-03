@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef _CEPH_UUID_H
 #define _CEPH_UUID_H
 
@@ -53,12 +54,12 @@ struct uuid_d {
     return (char*)uuid.data;
   }
 
-  void encode(bufferlist& bl) const {
-    ::encode_raw(uuid, bl);
+  void encode(ceph::buffer::list& bl) const {
+    ceph::encode_raw(uuid, bl);
   }
 
-  void decode(bufferlist::const_iterator& p) const {
-    ::decode_raw(uuid, p);
+  void decode(ceph::buffer::list::const_iterator& p) const {
+    ceph::decode_raw(uuid, p);
   }
 };
 WRITE_CLASS_ENCODER(uuid_d)

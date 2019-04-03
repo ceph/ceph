@@ -27,12 +27,12 @@ ORIGIN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345678
 
 
 def get_transtable():
-    transtable = maketrans(CUSTOMER_ALPHABET, ORIGIN_ALPHABET)
+    transtable = maketrans(ORIGIN_ALPHABET, CUSTOMER_ALPHABET)
     return transtable
 
 
 def get_reverse_transtable():
-    transtable = maketrans(ORIGIN_ALPHABET, CUSTOMER_ALPHABET)
+    transtable = maketrans(CUSTOMER_ALPHABET, ORIGIN_ALPHABET)
     return transtable
 
 
@@ -40,16 +40,9 @@ def encode_string(value):
     if len(value) == 0:
         return ""
     transtable = get_transtable()
-    e = str((base64.b64encode(str(value).encode())).decode("utf-8")[:-1])
+    e = str((base64.b64encode(str(value).encode())).decode("utf-8"))
+    e = e.rstrip("=")
     return e.translate(transtable)
-
-
-def decode_string(value):
-    if len(value) == 0:
-        return ""
-    transtable = get_reverse_transtable()
-    e = str(value).translate(transtable) + "="
-    return base64.b64decode(e).decode("utf-8")
 
 
 class Module(MgrModule):

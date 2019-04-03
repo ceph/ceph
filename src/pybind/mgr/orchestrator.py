@@ -4,9 +4,9 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import six
-
-from mgr_util import format_bytes
+import sys
+import time
+import fnmatch
 
 try:
     from typing import TypeVar, Generic, List, Optional, Union, Tuple
@@ -15,13 +15,34 @@ try:
 except ImportError:
     T, G = object, object
 
-import time
-import fnmatch
+import six
 
-class NoOrchestrator(Exception):
-    def __init__(self):
-        super(NoOrchestrator, self).__init__("No orchestrator configured (try "
-                                             "`ceph orchestrator set backend`)")
+from mgr_util import format_bytes
+
+
+class OrchestratorError(Exception):
+    """
+    General orchestrator specific error.
+
+    Used for deployment, configuration or user errors.
+
+    It's not intended for programming errors or orchestrator internal errors.
+    """
+
+
+class NoOrchestrator(OrchestratorError):
+    """
+    No orchestrator in configured.
+    """
+    def __init__(self, msg="No orchestrator configured (try `ceph orchestrator set backend`)"):
+        super(NoOrchestrator, self).__init__(msg)
+
+
+class OrchestratorValidationError(OrchestratorError):
+    """
+    Raised when an orchestrator doesn't support a specific feature.
+    """
+
 
 class _Completion(G):
     @property
@@ -33,6 +54,21 @@ class _Completion(G):
         completion.
         """
         raise NotImplementedError()
+
+    @property
+    def exception(self):
+        # type: () -> Optional[Exception]
+        """
+        Holds an exception object.
+        """
+        try:
+            return self.__exception
+        except AttributeError:
+            return None
+
+    @exception.setter
+    def exception(self, value):
+        self.__exception = value
 
     @property
     def is_read(self):
@@ -47,12 +83,40 @@ class _Completion(G):
     @property
     def is_errored(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Has the completion failed. Default implementation looks for
+        self.exception. Can be overwritten.
+        """
+        return self.exception is not None
 
     @property
     def should_wait(self):
         # type: () -> bool
         raise NotImplementedError()
+
+
+def raise_if_exception(c):
+    # type: (_Completion) -> None
+    """
+    :raises OrchestratorError: Some user error or a config error.
+    :raises Exception: Some internal error
+    """
+    def copy_to_this_subinterpreter(r_obj):
+        # This is something like `return pickle.loads(pickle.dumps(r_obj))`
+        # Without importing anything.
+        r_cls = r_obj.__class__
+        if r_cls.__module__ == '__builtin__':
+            return r_obj
+        my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
+        if id(my_cls) == id(r_cls):
+            return r_obj
+        my_obj = my_cls.__new__(my_cls)
+        for k,v in r_obj.__dict__.items():
+            setattr(my_obj, k, copy_to_this_subinterpreter(v))
+        return my_obj
+
+    if c.exception is not None:
+        raise copy_to_this_subinterpreter(c.exception)
 
 
 class ReadCompletion(_Completion):
@@ -371,37 +435,6 @@ class Orchestrator(object):
         Report on what versions are available to upgrade to
 
         :return: List of strings
-        """
-        raise NotImplementedError()
-
-    def add_stateful_service_rule(self, service_type, stateful_service_spec,
-                                  placement_spec):
-        """
-        Stateful service rules serve two purposes:
-         - Optionally delegate device selection to the orchestrator
-         - Enable the orchestrator to auto-assimilate new hardware if it
-           matches the placement spec, without any further calls from ceph-mgr.
-
-        To create a confidence-inspiring UI workflow, use test_stateful_service_rule
-        beforehand to show the user where stateful services will be placed
-        if they proceed.
-        """
-        raise NotImplementedError()
-
-    def test_stateful_service_rule(self, service_type, stateful_service_spec,
-                                   placement_spec):
-        """
-        See add_stateful_service_rule.
-        """
-        raise NotImplementedError()
-
-    def remove_stateful_service_rule(self, service_type, id_):
-        """
-        This will remove the *rule* but not the services that were
-        created as a result.  Those should be converted into statically
-        placed services as if they had been created with add_stateful_service,
-        so that they can be removed with remove_stateless_service
-        if desired.
         """
         raise NotImplementedError()
 
@@ -814,9 +847,27 @@ def _mk_orch_methods(cls):
 
 @_mk_orch_methods
 class OrchestratorClientMixin(Orchestrator):
+    """
+    A module that inherents from `OrchestratorClientMixin` can directly call
+    all :class:`Orchestrator` methods without manually calling remote.
+
+    Every interface method from ``Orchestrator`` is converted into a stub method that internally
+    calls :func:`OrchestratorClientMixin._oremote`
+
+    >>> class MyModule(OrchestratorClientMixin):
+    ...    def func(self):
+    ...        completion = self.add_host('somehost')  # calls `_oremote()`
+    ...        self._orchestrator_wait([completion])
+    ...        self.log.debug(completion.result)
+
+    """
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
+
+        :raises RuntimeError: If the remote method failed.
+        :raises NoOrchestrator:
+        :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         try:
             o = self._select_orchestrator()
@@ -832,16 +883,17 @@ class OrchestratorClientMixin(Orchestrator):
     def _orchestrator_wait(self, completions):
         # type: (List[_Completion]) -> None
         """
-        Helper to wait for completions to complete (reads) or
+        Wait for completions to complete (reads) or
         become persistent (writes).
 
         Waits for writes to be *persistent* but not *effective*.
+
+        :param completions: List of Completions
+        :raises NoOrchestrator:
+        :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
                 time.sleep(5)
             else:
                 break
-
-        if all(hasattr(c, 'error') and getattr(c, 'error') for c in completions):
-            raise Exception([getattr(c, 'error') for c in completions])

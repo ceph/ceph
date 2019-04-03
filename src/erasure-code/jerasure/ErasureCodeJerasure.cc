@@ -34,6 +34,13 @@ extern "C" {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
+using std::ostream;
+using std::map;
+using std::set;
+
+using ceph::bufferlist;
+using ceph::ErasureCodeProfile;
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeJerasure: ";
@@ -66,7 +73,7 @@ int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
     chunk_mapping.clear();
     err = -EINVAL;
   }
-  err |= sanity_check_k(k, ss);
+  err |= sanity_check_k_m(k, m, ss);
   return err;
 }
 

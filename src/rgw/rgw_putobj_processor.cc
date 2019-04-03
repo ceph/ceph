@@ -485,7 +485,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   r = sysobj.omap()
       .set_must_exist(true)
-      .set(p, bl);
+      .set(p, bl, null_yield);
   if (r < 0) {
     return r;
   }

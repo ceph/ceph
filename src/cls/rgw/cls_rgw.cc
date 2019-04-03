@@ -756,7 +756,8 @@ static void log_entry(const char *func, const char *str, rgw_bucket_olh_entry *e
 }
 
 template <class T>
-static int read_index_entry(cls_method_context_t hctx, string& name, T *entry)
+static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
+                           T* entry)
 {
   bufferlist current_entry;
   int rc = cls_cxx_map_get_val(hctx, name, &current_entry);
@@ -768,8 +769,18 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T *entry)
   try {
     decode(*entry, cur_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: read_index_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: %s(): failed to decode entry\n", __func__);
     return -EIO;
+  }
+  return 0;
+}
+
+template <class T>
+static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
+{
+  int ret = read_omap_entry(hctx, name, entry);
+  if (ret < 0) {
+    return ret;
   }
 
   log_entry(__func__, "existing entry", entry);
@@ -3168,17 +3179,9 @@ static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, c
   string index;
   prepend_index_prefix(key, type, &index);
 
-  bufferlist bl;
-  int ret = cls_cxx_map_get_val(hctx, index, &bl);
+  int ret = read_omap_entry(hctx, index, info);
   if (ret < 0)
     return ret;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(*info, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_cls_gc_omap_get(): failed to decode index=%s\n", index.c_str());
-  }
 
   return 0;
 }
@@ -3494,6 +3497,29 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
   return gc_remove(hctx, op.tags);
 }
 
+static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+
+  cls_rgw_lc_get_entry_op op;
+  try {
+    decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_lc_set_entry(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  rgw_lc_entry_t lc_entry;
+  int ret = read_omap_entry(hctx, op.marker, &lc_entry);
+  if (ret < 0)
+    return ret;
+
+  cls_rgw_lc_get_entry_ret op_ret(std::move(lc_entry));
+  encode(op_ret, *out);
+  return 0;
+}
+
+
 static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -3705,22 +3731,6 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
-static int get_reshard_entry(cls_method_context_t hctx, const string& key, cls_rgw_reshard_entry *entry)
-{
-  bufferlist bl;
-  int ret = cls_cxx_map_get_val(hctx, key, &bl);
-  if (ret < 0)
-    return ret;
-  auto iter = bl.cbegin();
-  try {
-    decode(*entry, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: %s : failed to decode entry %s\n", __func__, err.what());
-    return -EIO;
-  }
-  return 0;
-}
-
 static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -3736,7 +3746,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   string key;
   cls_rgw_reshard_entry  entry;
   op.entry.get_key(&key);
-  int ret = get_reshard_entry(hctx, key, &entry);
+  int ret = read_omap_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;
   }
@@ -3762,7 +3772,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   string key;
   cls_rgw_reshard_entry  entry;
   cls_rgw_reshard_entry::generate_key(op.tenant, op.bucket_name, &key);
-  int ret = get_reshard_entry(hctx, key, &entry);
+  int ret = read_omap_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;
   }
@@ -3917,6 +3927,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_gc_set_entry;
   cls_method_handle_t h_rgw_gc_list;
   cls_method_handle_t h_rgw_gc_remove;
+  cls_method_handle_t h_rgw_lc_get_entry;
   cls_method_handle_t h_rgw_lc_set_entry;
   cls_method_handle_t h_rgw_lc_rm_entry;
   cls_method_handle_t h_rgw_lc_get_next_entry;
@@ -3979,6 +3990,7 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_GC_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_remove, &h_rgw_gc_remove);
 
   /* lifecycle bucket list */
+  cls_register_cxx_method(h_class, RGW_LC_GET_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
   cls_register_cxx_method(h_class, RGW_LC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
   cls_register_cxx_method(h_class, RGW_LC_RM_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
   cls_register_cxx_method(h_class, RGW_LC_GET_NEXT_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);

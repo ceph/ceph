@@ -425,6 +425,31 @@ Description: debugging symbols for rbd-fuse
  .
  This package contains the debugging symbols for rbd-fuse.
 
+Package: ceph-immutable-object-cache
+Architecture: linux-any
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Ceph daemon for immutable object cache
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a daemon for immutable
+ object cache.
+
+Package: ceph-immutable-object-cache-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-immutable-object-cache (= ${binary:Version}),
+	 ${misc:Depends},
+Description: debugging symbols for ceph-immutable-object-cache
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a daemon for immutable
+ object cache.
+ .
+ This package contains the debugging symbols for ceph-immutable-object-cache.
+
 Package: rbd-mirror
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),

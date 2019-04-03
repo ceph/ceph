@@ -296,7 +296,10 @@ TEST(BufferPtr, assignment) {
   //
   {
     bufferptr original(len);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-assign-overloaded"
     original = original;
+#pragma clang diagnostic pop
     ASSERT_EQ(1, original.raw_nref());
     ASSERT_EQ((unsigned)0, original.offset());
     ASSERT_EQ(len, original.length());
@@ -741,7 +744,10 @@ TEST(BufferListIterator, operator_assign) {
   bl.append("ABC", 3);
   bufferlist::iterator i(&bl, 1);
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-assign-overloaded"
   i = i;
+#pragma clang diagnostic pop
   EXPECT_EQ('B', *i);
   bufferlist::iterator j;
   j = i;

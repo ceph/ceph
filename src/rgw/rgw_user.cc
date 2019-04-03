@@ -401,7 +401,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
   return src.rop()
             .set_attrs(&attrs)
             .set_objv_tracker(objv_tracker)
-            .stat();
+            .stat(null_yield);
 }
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
@@ -409,7 +409,7 @@ int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_keys_pool, access_key.id);
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  return sysobj.wop().remove();
+  return sysobj.wop().remove(null_yield);
 }
 
 int rgw_remove_uid_index(RGWRados *store, rgw_user& uid)
@@ -436,7 +436,7 @@ int rgw_remove_email_index(RGWRados *store, string& email)
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_email_pool, email);
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  return sysobj.wop().remove();
+  return sysobj.wop().remove(null_yield);
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
@@ -444,7 +444,7 @@ int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
   rgw_raw_obj obj(store->svc.zone->get_zone_params().user_swift_pool, swift_name);
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  return sysobj.wop().remove();
+  return sysobj.wop().remove(null_yield);
 }
 
 /**
@@ -492,7 +492,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(uid_bucks);
-  ret = sysobj.wop().remove();
+  ret = sysobj.wop().remove(null_yield);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;

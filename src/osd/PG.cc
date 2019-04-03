@@ -594,14 +594,13 @@ bool PG::search_for_missing(
       oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
-    (*(ctx->info_map))[from.osd].push_back(
-      make_pair(
+    (*(ctx->info_map))[from.osd].emplace_back(
 	pg_notify_t(
 	  from.shard, pg_whoami.shard,
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  tinfo),
-	past_intervals));
+	past_intervals);
   }
   return found_missing;
 }
@@ -980,6 +979,7 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
       peer_missing.erase(p->first);
       peer_log_requested.erase(p->first);
       peer_missing_requested.erase(p->first);
+      peer_purged.erase(p->first); // so we can re-purge if necessary
       peer_info.erase(p++);
       removed = true;
     } else
@@ -1123,6 +1123,8 @@ PG::Scrubber::Scrubber()
    shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
    auto_repair(false),
+   check_repair(false),
+   deep_scrub_on_error(false),
    num_digest_updates_pending(0),
    state(INACTIVE),
    deep(false)
@@ -1442,7 +1444,7 @@ void PG::calc_replicated_acting(
       ss << " shard " << acting_cand << " (acting) REJECTED "
 	 << cur_info << std::endl;
     } else {
-      candidate_by_last_update.push_back(make_pair(cur_info.last_update, i));
+      candidate_by_last_update.emplace_back(cur_info.last_update, i);
     }
   }
 
@@ -1488,8 +1490,7 @@ void PG::calc_replicated_acting(
       ss << " shard " << i.first << " (stray) REJECTED " << i.second
          << std::endl;
     } else {
-      candidate_by_last_update.push_back(
-        make_pair(i.second.last_update, i.first.osd));
+      candidate_by_last_update.emplace_back(i.second.last_update, i.first.osd);
     }
   }
 
@@ -1586,7 +1587,7 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     }
     if (static_cast<uint64_t>(approx_missing_objects) >
 	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -1639,7 +1640,7 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     }
     if (static_cast<uint64_t>(approx_missing_objects)  >
 	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
 
@@ -1719,7 +1720,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
   stringstream ss;
-  if (!pool.info.is_erasure())
+  if (pool.info.is_replicated())
     calc_replicated_acting(
       auth_log_shard,
       cct->_conf.get_val<uint64_t>(
@@ -1767,14 +1768,16 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
-    if (want_acting == up) {
-      // There can't be any pending backfill if
-      // want is the same as crush map up OSDs.
-      ceph_assert(want_backfill.empty());
-      vector<int> empty;
-      osd->queue_want_pg_temp(info.pgid.pgid, empty);
-    } else
-      osd->queue_want_pg_temp(info.pgid.pgid, want);
+    if (!cct->_conf->osd_debug_no_acting_change) {
+      if (want_acting == up) {
+	// There can't be any pending backfill if
+	// want is the same as crush map up OSDs.
+	ceph_assert(want_backfill.empty());
+	vector<int> empty;
+	osd->queue_want_pg_temp(info.pgid.pgid, empty);
+      } else
+	osd->queue_want_pg_temp(info.pgid.pgid, want);
+    }
     return false;
   }
   want_acting.clear();
@@ -1979,14 +1982,13 @@ void PG::activate(ObjectStore::Transaction& t,
 			    << " to " << info.last_update;
 	if (!pi.is_empty() && activator_map) {
 	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
-	  (*activator_map)[peer.osd].push_back(
-	    make_pair(
+	  (*activator_map)[peer.osd].emplace_back(
 	      pg_notify_t(
 		peer.shard, pg_whoami.shard,
 		get_osdmap_epoch(),
 		get_osdmap_epoch(),
 		info),
-	      past_intervals));
+	      past_intervals);
 	} else {
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(
@@ -2248,7 +2250,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
       state_set(PG_STATE_PEERED);
     }
 
-    m->pg_list.push_back(make_pair(i, PastIntervals()));
+    m->pg_list.emplace_back(i, PastIntervals());
     osd->send_message_osd_cluster(get_primary().osd, m, get_osdmap_epoch());
 
     // waiters
@@ -2331,6 +2333,8 @@ bool PG::queue_scrub()
   if (is_scrubbing()) {
     return false;
   }
+  // An interrupted recovery repair could leave this set.
+  state_clear(PG_STATE_REPAIR);
   scrubber.priority = scrubber.must_scrub ?
          cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
@@ -2376,11 +2380,12 @@ void PG::try_mark_clean()
 	if (target) {
 	  ldout(cct, 10) << "ready to merge (target)" << dendl;
 	  osd->set_ready_to_merge_target(this,
+					 info.last_update,
 					 info.history.last_epoch_started,
 					 info.history.last_epoch_clean);
 	} else {
 	  ldout(cct, 10) << "ready to merge (source)" << dendl;
-	  osd->set_ready_to_merge_source(this);
+	  osd->set_ready_to_merge_source(this, info.last_update);
 	}
       }
     } else {
@@ -2539,6 +2544,8 @@ Context *PG::finish_recovery()
 void PG::_finish_recovery(Context *c)
 {
   lock();
+  // When recovery is initiated by a repair, that flag is left on
+  state_clear(PG_STATE_REPAIR);
   if (deleting) {
     unlock();
     return;
@@ -2554,6 +2561,7 @@ void PG::_finish_recovery(Context *c)
       dout(10) << "_finish_recovery requeueing for scrub" << dendl;
       scrub_after_recovery = false;
       scrubber.must_deep_scrub = true;
+      scrubber.check_repair = true;
       queue_scrub();
     }
   } else {
@@ -2704,8 +2712,7 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
 
 void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 		    unsigned split_bits,
-		    epoch_t dec_last_epoch_started,
-		    epoch_t dec_last_epoch_clean)
+		    const pg_merge_meta_t& last_pg_merge_meta)
 {
   dout(10) << __func__ << " from " << sources << " split_bits " << split_bits
 	   << dendl;
@@ -2715,6 +2722,20 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
       info.dne()) {
     dout(10) << __func__ << " target incomplete" << dendl;
     incomplete = true;
+  }
+  if (last_pg_merge_meta.source_pgid != pg_t()) {
+    if (info.pgid.pgid != last_pg_merge_meta.source_pgid.get_parent()) {
+      dout(10) << __func__ << " target doesn't match expected parent "
+	       << last_pg_merge_meta.source_pgid.get_parent()
+	       << " of source_pgid " << last_pg_merge_meta.source_pgid
+	       << dendl;
+      incomplete = true;
+    }
+    if (info.last_update != last_pg_merge_meta.target_version) {
+      dout(10) << __func__ << " target version doesn't match expected "
+	       << last_pg_merge_meta.target_version << dendl;
+      incomplete = true;
+    }
   }
 
   PGLogEntryHandler handler{this, rctx->transaction};
@@ -2738,6 +2759,19 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
       dout(10) << __func__ << " source " << source->pg_id << " incomplete"
 	       << dendl;
       incomplete = true;
+    }
+    if (last_pg_merge_meta.source_pgid != pg_t()) {
+      if (source->info.pgid.pgid != last_pg_merge_meta.source_pgid) {
+	dout(10) << __func__ << " source " << source->info.pgid.pgid
+		 << " doesn't match expected source pgid "
+		 << last_pg_merge_meta.source_pgid << dendl;
+	incomplete = true;
+      }
+      if (source->info.last_update != last_pg_merge_meta.source_version) {
+	dout(10) << __func__ << " source version doesn't match expected "
+		 << last_pg_merge_meta.target_version << dendl;
+	incomplete = true;
+      }
     }
 
     // prepare log
@@ -2790,15 +2824,15 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
     // remapped in concert with each other...
     info.history = sources.begin()->second->info.history;
 
-    // we use the pg_num_dec_last_epoch_{started,clean} we got from
+    // we use the last_epoch_{started,clean} we got from
     // the caller, which are the epochs that were reported by the PGs were
     // found to be ready for merge.
-    info.history.last_epoch_clean = dec_last_epoch_clean;
-    info.history.last_epoch_started = dec_last_epoch_started;
-    info.last_epoch_started = dec_last_epoch_started;
+    info.history.last_epoch_clean = last_pg_merge_meta.last_epoch_clean;
+    info.history.last_epoch_started = last_pg_merge_meta.last_epoch_started;
+    info.last_epoch_started = last_pg_merge_meta.last_epoch_started;
     dout(10) << __func__
-	     << " set les/c to " << dec_last_epoch_started << "/"
-	     << dec_last_epoch_clean
+	     << " set les/c to " << last_pg_merge_meta.last_epoch_started << "/"
+	     << last_pg_merge_meta.last_epoch_clean
 	     << " from pool last_dec_*, source pg history was "
 	     << sources.begin()->second->info.history
 	     << dendl;
@@ -2815,6 +2849,26 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 	       << info.history.last_epoch_clean << " < past_interval start "
 	       << pib.first << ", adjusting start backwards" << dendl;
       past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
+    }
+
+    // Similarly, if the same_interval_since value is later than
+    // last_epoch_clean, the next interval change will result in a
+    // past_interval start that is later than last_epoch_clean.  This
+    // can happen if we use the pg_history values from the merge
+    // source.  Adjust the same_interval_since value backwards if that
+    // happens.  (We trust the les and lec values more because they came from
+    // the real target, whereas the history value we stole from the source.)
+    if (info.history.last_epoch_started < info.history.same_interval_since) {
+      dout(10) << __func__ << " last_epoch_started "
+	       << info.history.last_epoch_started << " < same_interval_since "
+	       << info.history.same_interval_since
+	       << ", adjusting pg_history backwards" << dendl;
+      info.history.same_interval_since = info.history.last_epoch_clean;
+      // make sure same_{up,primary}_since are <= same_interval_since
+      info.history.same_up_since = std::min(
+	info.history.same_up_since, info.history.same_interval_since);
+      info.history.same_primary_since = std::min(
+	info.history.same_primary_since, info.history.same_interval_since);
     }
   }
 
@@ -2995,6 +3049,9 @@ void PG::purge_strays()
 	     << dendl;
     return;
   }
+  if (cct->_conf.get_val<bool>("osd_debug_no_purge_strays")) {
+    return;
+  }
   dout(10) << "purge_strays " << stray_set << dendl;
   
   bool removed = false;
@@ -3172,9 +3229,9 @@ void PG::_update_calc_stats()
       missing = pg_log.get_missing().num_missing();
       ceph_assert(acting_recovery_backfill.count(pg_whoami));
       if (upset.count(pg_whoami)) {
-        missing_target_objects.insert(make_pair(missing, pg_whoami));
+        missing_target_objects.emplace(missing, pg_whoami);
       } else {
-        acting_source_objects.insert(make_pair(missing, pg_whoami));
+        acting_source_objects.emplace(missing, pg_whoami);
       }
       info.stats.stats.sum.num_objects_missing_on_primary = missing;
       dout(20) << __func__ << " shard " << pg_whoami
@@ -3205,9 +3262,9 @@ void PG::_update_calc_stats()
         }
       }
       if (upset.count(peer.first)) {
-	missing_target_objects.insert(make_pair(missing, peer.first));
+	missing_target_objects.emplace(missing, peer.first);
       } else if (actingset.count(peer.first)) {
-	acting_source_objects.insert(make_pair(missing, peer.first));
+	acting_source_objects.emplace(missing, peer.first);
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
       dout(20) << __func__ << " shard " << peer.first
@@ -3289,7 +3346,7 @@ void PG::_update_calc_stats()
       ceph_assert(target >= missing_target_objects.size());
       unsigned needed = target - missing_target_objects.size();
       if (needed)
-        missing_target_objects.insert(make_pair(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD)));
+        missing_target_objects.emplace(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD));
     } else {
       for (unsigned i = 0 ; i < num_shards; ++i) {
         shard_id_t shard(i);
@@ -3301,7 +3358,7 @@ void PG::_update_calc_stats()
 	  }
 	}
 	if (!found)
-	  missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD,shard)));
+	  missing_target_objects.emplace(num_objects, pg_shard_t(pg_shard_t::NO_OSD,shard));
       }
     }
 
@@ -3394,8 +3451,10 @@ void PG::publish_stats_to_osd()
 
   if (info.stats.stats.sum.num_scrub_errors)
     state_set(PG_STATE_INCONSISTENT);
-  else
+  else {
     state_clear(PG_STATE_INCONSISTENT);
+    state_clear(PG_STATE_FAILED_REPAIR);
+  }
 
   utime_t now = ceph_clock_now();
   if (info.stats.state != state) {
@@ -3835,11 +3894,16 @@ void PG::append_log(
 
   PGLogEntryHandler handler{this, &t};
   if (!transaction_applied) {
-     /* We must be a backfill peer, so it's ok if we apply
+     /* We must be a backfill or async recovery peer, so it's ok if we apply
       * out-of-turn since we won't be considered when
       * determining a min possible last_update.
+      *
+      * We skip_rollforward() here, which advances the crt, without
+      * doing an actual rollforward. This avoids cleaning up entries
+      * from the backend and we do not end up in a situation, where the
+      * object is deleted before we can _merge_object_divergent_entries().
       */
-    pg_log.roll_forward(&handler);
+    pg_log.skip_rollforward();
   }
 
   for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
@@ -4257,19 +4321,23 @@ bool PG::sched_scrub()
     }
   }
 
+  // Clear these in case user issues the scrub/repair command during
+  // the scheduling of the scrub/repair (e.g. request reservation)
+  scrubber.deep_scrub_on_error = false;
+  scrubber.auto_repair = false;
   if (cct->_conf->osd_scrub_auto_repair
       && get_pgbackend()->auto_repair_supported()
-      && time_for_deep
       // respect the command from user, and not do auto-repair
       && !scrubber.must_repair
       && !scrubber.must_scrub
       && !scrubber.must_deep_scrub) {
-    dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
-    scrubber.auto_repair = true;
-  } else {
-    // this happens when user issue the scrub/repair command during
-    // the scheduling of the scrub/repair (e.g. request reservation)
-    scrubber.auto_repair = false;
+    if (time_for_deep) {
+      dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
+      scrubber.auto_repair = true;
+    } else {
+      dout(20) << __func__ << ": auto repair with scrubbing, rescrub if errors found" << dendl;
+      scrubber.deep_scrub_on_error = true;
+    }
   }
 
   bool ret = true;
@@ -4595,12 +4663,12 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
        i != rollback_obs.end();
        ++i) {
     if (i->generation < trimmed_to.version) {
-      osd->clog->error() << "osd." << osd->whoami
-			<< " pg " << info.pgid
-			<< " found obsolete rollback obj "
-			<< *i << " generation < trimmed_to "
-			<< trimmed_to
-			<< "...repaired";
+      dout(10) << __func__ << "osd." << osd->whoami
+	       << " pg " << info.pgid
+	       << " found obsolete rollback obj "
+	       << *i << " generation < trimmed_to "
+	       << trimmed_to
+	       << "...repaired" << dendl;
       t.remove(coll, *i);
     }
   }
@@ -5479,11 +5547,12 @@ bool PG::range_intersects_scrub(const hobject_t &start, const hobject_t& end)
 	  end >= scrubber.start);
 }
 
-void PG::scrub_clear_state()
+void PG::scrub_clear_state(bool has_error)
 {
   ceph_assert(is_locked());
   state_clear(PG_STATE_SCRUBBING);
-  state_clear(PG_STATE_REPAIR);
+  if (!has_error)
+    state_clear(PG_STATE_REPAIR);
   state_clear(PG_STATE_DEEP_SCRUB);
   publish_stats_to_osd();
 
@@ -5575,12 +5644,9 @@ void PG::scrub_compare_maps()
       for (list<pg_shard_t>::const_iterator j = i->second.begin();
 	   j != i->second.end();
 	   ++j) {
-	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
+	good_peers.emplace_back(maps[*j]->objects[i->first], *j);
       }
-      scrubber.authoritative.insert(
-	make_pair(
-	  i->first,
-	  good_peers));
+      scrubber.authoritative.emplace(i->first, good_peers);
     }
 
     for (map<hobject_t, list<pg_shard_t>>::iterator i = authoritative.begin();
@@ -5671,7 +5737,9 @@ bool PG::ops_blocked_by_scrub() const {
 // the part that actually finalizes a scrub
 void PG::scrub_finish() 
 {
+  dout(20) << __func__ << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
+  bool do_deep_scrub = false;
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (repair && scrubber.auto_repair
@@ -5681,6 +5749,15 @@ void PG::scrub_finish()
   }
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+
+  // if a regular scrub had errors within the limit, do a deep scrub to auto repair.
+  if (scrubber.deep_scrub_on_error
+      && scrubber.authoritative.size() <= cct->_conf->osd_scrub_auto_repair_num_errors) {
+    ceph_assert(!deep_scrub);
+    scrubber.deep_scrub_on_error = false;
+    do_deep_scrub = true;
+    dout(20) << __func__ << " Try to auto repair after scrub errors" << dendl;
+  }
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
@@ -5721,9 +5798,17 @@ void PG::scrub_finish()
     if (scrubber.fixed == scrubber.shallow_errors + scrubber.deep_errors) {
       ceph_assert(deep_scrub);
       scrubber.shallow_errors = scrubber.deep_errors = 0;
-    } else {
+      dout(20) << __func__ << " All may be fixed" << dendl;
+    } else if (has_error) {
       // Deep scrub in order to get corrected error counts
       scrub_after_recovery = true;
+      dout(20) << __func__ << " Set scrub_after_recovery" << dendl;
+    } else if (scrubber.shallow_errors || scrubber.deep_errors) {
+      // We have errors but nothing can be fixed, so there is no repair
+      // possible.
+      state_set(PG_STATE_FAILED_REPAIR);
+      dout(10) << __func__ << " " << (scrubber.shallow_errors + scrubber.deep_errors)
+	       << " error(s) present with no repair possible" << dendl;
     }
   }
   if (deep_scrub) {
@@ -5737,7 +5822,6 @@ void PG::scrub_finish()
     dout(25) << __func__ << " shard " << pg_whoami << " num_omap_bytes = "
              << info.stats.stats.sum.num_omap_bytes << " num_omap_keys = "
              << info.stats.stats.sum.num_omap_keys << dendl;
-    publish_stats_to_osd();
   } else {
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
@@ -5748,6 +5832,22 @@ void PG::scrub_finish()
   info.stats.stats.sum.num_scrub_errors = 
     info.stats.stats.sum.num_shallow_scrub_errors +
     info.stats.stats.sum.num_deep_scrub_errors;
+  if (scrubber.check_repair) {
+    scrubber.check_repair = false;
+    if (info.stats.stats.sum.num_scrub_errors) {
+      state_set(PG_STATE_FAILED_REPAIR);
+      dout(10) << __func__ << " " << info.stats.stats.sum.num_scrub_errors
+	       << " error(s) still present after re-scrub" << dendl;
+    }
+  }
+  publish_stats_to_osd();
+  if (do_deep_scrub) {
+    // XXX: Auto scrub won't activate if must_scrub is set, but
+    // setting the scrub stamps affects what users see.
+    utime_t stamp = utime_t(0,1);
+    set_last_scrub_stamp(stamp);
+    set_last_deep_scrub_stamp(stamp);
+  }
   reg_next_scrub();
 
   {
@@ -5768,7 +5868,7 @@ void PG::scrub_finish()
 	  DoRecovery())));
   }
 
-  scrub_clear_state();
+  scrub_clear_state(has_error);
   scrub_unreserve_replicas();
 
   if (is_active() && is_primary()) {
@@ -5794,14 +5894,13 @@ void PG::share_pg_info()
       peer->second.history.merge(info.history);
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap_epoch());
-    m->pg_list.push_back(
-      make_pair(
+    m->pg_list.emplace_back(
 	pg_notify_t(
 	  pg_shard.shard, pg_whoami.shard,
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  info),
-	past_intervals));
+	past_intervals);
     osd->send_message_osd_cluster(pg_shard.osd, m, get_osdmap_epoch());
   }
 }
@@ -6410,6 +6509,10 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_REPAIR";
   if (pg.scrubber.auto_repair)
     out << " AUTO_REPAIR";
+  if (pg.scrubber.check_repair)
+    out << " CHECK_REPAIR";
+  if (pg.scrubber.deep_scrub_on_error)
+    out << " DEEP_SCRUB_ON_ERROR";
   if (pg.scrubber.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
@@ -7591,6 +7694,7 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_REPAIR);
   pg->publish_stats_to_osd();
 }
 
@@ -9180,7 +9284,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt
 		       << "non-auth_log_shard osd." << logevt.from << dendl;
     return discard_event();
   }
-  ldout(pg->cct, 10) << "GetLog: received master log from osd"
+  ldout(pg->cct, 10) << "GetLog: received master log from osd."
 		     << logevt.from << dendl;
   msg = logevt.msg;
   post_event(GotLog());

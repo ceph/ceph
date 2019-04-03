@@ -193,6 +193,7 @@ void usage()
   cout << "  lc list                    list all bucket lifecycle progress\n";
   cout << "  lc get                     get a lifecycle bucket configuration\n";
   cout << "  lc process                 manually process lifecycle\n";
+  cout << "  lc reshard fix             fix LC for a resharded bucket\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
@@ -435,6 +436,7 @@ enum {
   OPT_LC_LIST,
   OPT_LC_GET,
   OPT_LC_PROCESS,
+  OPT_LC_RESHARD_FIX,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
   OPT_ORPHANS_LIST_JOBS,
@@ -888,6 +890,10 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_LC_GET;
     if (strcmp(cmd, "process") == 0)
       return OPT_LC_PROCESS;
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "lc") == 0) &&
+	     strcmp(prev_cmd, "reshard") == 0) {
+    if (strcmp(cmd, "fix") == 0)
+      return OPT_LC_RESHARD_FIX;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
@@ -2156,7 +2162,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     flush_ss(ss, status);
     return;
   }
-  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
+  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
 
   int ret = sync.init();
   if (ret < 0) {
@@ -6349,7 +6355,7 @@ next:
     RGWReshard reshard(store);
 
     cls_rgw_reshard_entry entry;
-    //entry.tenant = tenant;
+    entry.tenant = tenant;
     entry.bucket_name = bucket_name;
     //entry.bucket_id = bucket_id;
 
@@ -6576,6 +6582,15 @@ next:
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
+  }
+
+
+  if (opt_cmd == OPT_LC_RESHARD_FIX) {
+    ret = RGWBucketAdminOp::fix_lc_shards(store, bucket_op,f);
+    if (ret < 0) {
+      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
+    }
+
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
@@ -7015,7 +7030,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7079,7 +7094,7 @@ next:
       return EINVAL;
     }
 
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7108,7 +7123,7 @@ next:
       return ret;
     }
 
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, sync_module);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr, sync_module);
 
     ret = sync.init();
     if (ret < 0) {
@@ -7836,6 +7851,13 @@ next:
  }
 
  if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_LIST) {
+   if (!store->svc.zone->can_reshard() && !yes_i_really_mean_it) {
+     cerr << "Resharding disabled in a multisite env, stale instances unlikely from resharding" << std::endl;
+     cerr << "These instances may not be safe to delete." << std::endl;
+     cerr << "Use --yes-i-really-mean-it to force displaying these instances." << std::endl;
+     return EINVAL;
+   }
+
    ret = RGWBucketAdminOp::list_stale_instances(store, bucket_op,f);
    if (ret < 0) {
      cerr << "ERROR: listing stale instances" << cpp_strerror(-ret) << std::endl;
@@ -7843,6 +7865,11 @@ next:
  }
 
  if (opt_cmd == OPT_RESHARD_STALE_INSTANCES_DELETE) {
+   if (!store->svc.zone->can_reshard()) {
+     cerr << "Resharding disabled in a multisite env. Stale instances are not safe to be deleted." << std::endl;
+     return EINVAL;
+   }
+
    ret = RGWBucketAdminOp::clear_stale_instances(store, bucket_op,f);
    if (ret < 0) {
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;

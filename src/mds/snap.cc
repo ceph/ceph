@@ -50,7 +50,7 @@ void SnapInfo::dump(Formatter *f) const
   f->dump_string("name", name);
 }
 
-void SnapInfo::generate_test_instances(list<SnapInfo*>& ls)
+void SnapInfo::generate_test_instances(std::list<SnapInfo*>& ls)
 {
   ls.push_back(new SnapInfo);
   ls.push_back(new SnapInfo);
@@ -106,7 +106,7 @@ void snaplink_t::dump(Formatter *f) const
   f->dump_unsigned("first", first);
 }
 
-void snaplink_t::generate_test_instances(list<snaplink_t*>& ls)
+void snaplink_t::generate_test_instances(std::list<snaplink_t*>& ls)
 {
   ls.push_back(new snaplink_t);
   ls.push_back(new snaplink_t);
@@ -196,7 +196,7 @@ void sr_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void sr_t::generate_test_instances(list<sr_t*>& ls)
+void sr_t::generate_test_instances(std::list<sr_t*>& ls)
 {
   ls.push_back(new sr_t);
   ls.push_back(new sr_t);

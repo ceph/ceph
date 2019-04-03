@@ -84,20 +84,20 @@ using namespace ceph;
  * debug-only thing, like it is in many projects.
  */
 #define ceph_abort(msg, ...)                                            \
-  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, "abort() called")
+  ::ceph::__ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, "abort() called")
 
 #define ceph_abort_msg(msg)                                             \
-  __ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, msg) 
+  ::ceph::__ceph_abort( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, msg) 
 
 #define ceph_abort_msgf(...)                                             \
-  __ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
+  ::ceph::__ceph_abortf( __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__)
 
 #ifdef __SANITIZE_ADDRESS__
 #define ceph_assert(expr)                           \
   do {                                              \
     ((expr))                                        \
     ? _CEPH_ASSERT_VOID_CAST (0)                    \
-    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+      : ::ceph::__ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
   } while (false)
 #else
 #define ceph_assert(expr)							\
@@ -105,7 +105,7 @@ using namespace ceph;
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
-   : __ceph_assert_fail(assert_data_ctx)); } while(false)
+    : ::ceph::__ceph_assert_fail(assert_data_ctx)); } while(false)
 #endif
 
 // this variant will *never* get compiled out to NDEBUG in the future.
@@ -115,7 +115,7 @@ using namespace ceph;
   do {                                              \
     ((expr))                                        \
     ? _CEPH_ASSERT_VOID_CAST (0)                    \
-    : __ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
+      : ::ceph::__ceph_assert_fail(__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION); \
   } while(false)
 #else
 #define ceph_assert_always(expr)							\
@@ -123,7 +123,7 @@ using namespace ceph;
    {__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION}; \
    ((expr) \
    ? _CEPH_ASSERT_VOID_CAST (0) \
-   : __ceph_assert_fail(assert_data_ctx)); } while(false)
+    : ::ceph::__ceph_assert_fail(assert_data_ctx)); } while(false)
 #endif
 
 // Named by analogy with printf.  Along with an expression, takes a format
@@ -131,17 +131,17 @@ using namespace ceph;
 #define assertf(expr, ...)                  \
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
+   : ::ceph::__ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 #define ceph_assertf(expr, ...)                  \
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
+   : ::ceph::__ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 
 // this variant will *never* get compiled out to NDEBUG in the future.
 // (ceph_assertf currently doesn't either, but in the future it might.)
 #define ceph_assertf_always(expr, ...)                  \
   ((expr)								\
    ? _CEPH_ASSERT_VOID_CAST (0)					\
-   : __ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
+   : ::ceph::__ceph_assertf_fail (__STRING(expr), __FILE__, __LINE__, __CEPH_ASSERT_FUNCTION, __VA_ARGS__))
 
 #endif

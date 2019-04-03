@@ -110,7 +110,7 @@ public:
   void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
-  bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
+  bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait=false);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
   void remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut);
@@ -181,7 +181,7 @@ public:
 
   void remove_client_cap(CInode *in, Capability *cap);
 
-  void get_late_revoking_clients(std::list<client_t> *result, double timeout) const;
+  std::vector<client_t> get_late_revoking_clients(double timeout) const;
 
 private:
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;

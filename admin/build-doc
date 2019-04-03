@@ -118,7 +118,7 @@ for target in $sphinx_targets; do
             ;;
     esac
     # Build with -W so that warnings are treated as errors and this fails
-    $vdir/bin/sphinx-build -W -a -b $builder $extra_opt -d doctrees \
+    $vdir/bin/sphinx-build -W --keep-going -a -b $builder $extra_opt -d doctrees \
                            $TOPDIR/doc $TOPDIR/build-doc/output/$target
 
 

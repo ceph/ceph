@@ -782,6 +782,23 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.set_addrvec(name, av);
     pending_map.last_changed = ceph_clock_now();
     propose = true;
+  } else if (prefix == "mon set-weight") {
+    string name;
+    int64_t weight;
+    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
+        !cmd_getval(g_ceph_context, cmdmap, "weight", weight)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    err = 0;
+    pending_map.set_weight(name, weight);
+    pending_map.last_changed = ceph_clock_now();
+    propose = true;
   } else if (prefix == "mon enable-msgr2") {
     if (!monmap.get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {

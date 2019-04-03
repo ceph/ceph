@@ -12,27 +12,27 @@ struct object_id_wrapper : public librados::object_id_t {
   explicit object_id_wrapper(const hobject_t& hoid)
     : object_id_t{hoid.oid.name, hoid.nspace, hoid.get_key(), hoid.snap}
   {}
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 };
 
 WRITE_CLASS_ENCODER(object_id_wrapper)
 
 namespace librados {
-inline void decode(object_id_t& obj, bufferlist::const_iterator& bp) {
+inline void decode(object_id_t& obj, ceph::buffer::list::const_iterator& bp) {
   reinterpret_cast<object_id_wrapper&>(obj).decode(bp);
 }
 }
 
 struct osd_shard_wrapper : public librados::osd_shard_t {
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bp);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bp);
 };
 
 WRITE_CLASS_ENCODER(osd_shard_wrapper)
 
 namespace librados {
-  inline void decode(librados::osd_shard_t& shard, bufferlist::const_iterator& bp) {
+  inline void decode(librados::osd_shard_t& shard, ceph::buffer::list::const_iterator& bp) {
     reinterpret_cast<osd_shard_wrapper&>(shard).decode(bp);
   }
 }
@@ -95,15 +95,15 @@ public:
   void clear_data_digest_mismatch_info() {
     errors &= ~err_t::DATA_DIGEST_MISMATCH_INFO;
   }
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bp);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bp);
 };
 
 WRITE_CLASS_ENCODER(shard_info_wrapper)
 
 namespace librados {
   inline void decode(librados::shard_info_t& shard,
-		     bufferlist::const_iterator& bp) {
+		     ceph::buffer::list::const_iterator& bp) {
     reinterpret_cast<shard_info_wrapper&>(shard).decode(bp);
   }
 }
@@ -137,19 +137,19 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,
-                        const map<pg_shard_t, ScrubMap*>&,
-			map<pg_shard_t, shard_info_wrapper>&,
+                        const std::map<pg_shard_t, ScrubMap*>&,
+			std::map<pg_shard_t, shard_info_wrapper>&,
 			int &shallow_errors, int &deep_errors,
 			const pg_shard_t &primary);
   void set_version(uint64_t ver) { version = ver; }
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bp);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bp);
 };
 
 WRITE_CLASS_ENCODER(inconsistent_obj_wrapper)
 
 inline void decode(librados::inconsistent_obj_t& obj,
-		   bufferlist::const_iterator& bp) {
+		   ceph::buffer::list::const_iterator& bp) {
   reinterpret_cast<inconsistent_obj_wrapper&>(obj).decode(bp);
 }
 
@@ -171,15 +171,15 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   void set_snapset_error();
   void set_size_mismatch();
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bp);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bp);
 };
 
 WRITE_CLASS_ENCODER(inconsistent_snapset_wrapper)
 
 namespace librados {
   inline void decode(librados::inconsistent_snapset_t& snapset,
-		     bufferlist::const_iterator& bp) {
+		     ceph::buffer::list::const_iterator& bp) {
     reinterpret_cast<inconsistent_snapset_wrapper&>(snapset).decode(bp);
   }
 }
@@ -189,17 +189,17 @@ struct scrub_ls_arg_t {
   uint32_t get_snapsets;
   librados::object_id_t start_after;
   uint64_t max_return;
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 };
 
 WRITE_CLASS_ENCODER(scrub_ls_arg_t);
 
 struct scrub_ls_result_t {
   epoch_t interval;
-  std::vector<bufferlist> vals;
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
+  std::vector<ceph::buffer::list> vals;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
 };
 
 WRITE_CLASS_ENCODER(scrub_ls_result_t);

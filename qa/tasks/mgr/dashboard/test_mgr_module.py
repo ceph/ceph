@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 class MgrModuleTestCase(DashboardTestCase):
+    MGRS_REQUIRED = 1
+
     @classmethod
     def tearDownClass(cls):
         cls._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
@@ -30,7 +32,7 @@ class MgrModuleTestCase(DashboardTestCase):
                 pass
             return False
 
-        self.wait_until_true(_check_connection, timeout=20, period=2)
+        self.wait_until_true(_check_connection, timeout=30)
 
 
 class MgrModuleTest(MgrModuleTestCase):
@@ -171,6 +173,8 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
         self.assertTrue(module_info['enabled'])
 
     def test_disable(self):
+        # Enable the 'telemetry' module (all CephMgr modules are restarted)
+        # and wait until the Dashboard REST API is accessible.
         self._ceph_cmd(['mgr', 'module', 'enable', 'telemetry'])
         self.wait_until_rest_api_accessible()
         try:

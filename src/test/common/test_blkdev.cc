@@ -91,3 +91,19 @@ TEST_F(BlockDevTest, is_rotational)
   EXPECT_FALSE(sda.is_rotational());
   EXPECT_TRUE(sdb.is_rotational());
 }
+
+TEST(blkdev, _decode_model_enc)
+{
+
+  const char *foo[][2] = {
+    { "WDC\\x20WDS200T2B0A-00SM50\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20\\x20",
+      "WDC_WDS200T2B0A-00SM50" },
+    { 0, 0},
+  };
+
+  for (unsigned i = 0; foo[i][0]; ++i) {
+    std::string d = _decode_model_enc(foo[i][0]);
+    cout << " '" << foo[i][0] << "' -> '" << d << "'" << std::endl;
+    ASSERT_EQ(std::string(foo[i][1]), d);
+  }
+}

@@ -58,7 +58,7 @@ public:
 				 uint32_t want_keys);
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
-
+  AuthAuthorizer* get_authorizer(peer_type_t peer) const;
   seastar::future<> renew_tickets();
   ceph::net::ConnectionRef get_conn();
 
@@ -103,6 +103,15 @@ seastar::future<> Connection::renew_tickets()
     });
   }
   return seastar::now();
+}
+
+AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
+{
+  if (auth) {
+    return auth->build_authorizer(peer);
+  } else {
+    return nullptr;
+  }
 }
 
 std::unique_ptr<AuthClientHandler>
@@ -307,7 +316,6 @@ bool Client::is_hunting() const {
 seastar::future<>
 Client::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
 {
-  logger().info("ms_dispatch {}", *m);
   // we only care about these message types
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
@@ -352,6 +360,20 @@ seastar::future<> Client::ms_handle_reset(ceph::net::ConnectionRef conn)
     logger().error("unknown reset from {}", conn->get_peer_addr());
     return seastar::now();
   }
+}
+
+AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
+{
+  if (active_con) {
+    return active_con->get_authorizer(peer);
+  } else {
+    return nullptr;
+  }
+}
+
+AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
+{
+  return ms_get_authorizer(peer);
 }
 
 seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,

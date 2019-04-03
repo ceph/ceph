@@ -18,7 +18,8 @@ clang = False
 def filter_unsupported_flags(flags):
     if clang:
         return [f for f in flags if not (f == '-mcet' or
-                                         f.startswith('-fcf-protection'))]
+                                         f.startswith('-fcf-protection') or
+                                         f == '-fstack-clash-protection')]
     else:
         return flags
 
@@ -205,6 +206,7 @@ setup(
                 extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
             )
         ],
+        compiler_directives={'language_level': sys.version_info.major},
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         include_path=[
             os.path.join(os.path.dirname(__file__), "..", "rados")

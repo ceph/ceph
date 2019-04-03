@@ -32,24 +32,24 @@ class ObjectMap {
 public:
   CephContext* cct;
   boost::scoped_ptr<KeyValueDB> db;
-  /// Set keys and values from specified map
+  /// std::Set keys and values from specified map
   virtual int set_keys(
     const ghobject_t &oid,              ///< [in] object containing map
-    const map<string, bufferlist> &set,  ///< [in] key to value map to set
+    const std::map<std::string, ceph::buffer::list> &set,  ///< [in] key to value map to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
-  /// Set header
+  /// std::Set header
   virtual int set_header(
     const ghobject_t &oid,              ///< [in] object containing map
-    const bufferlist &bl,               ///< [in] header to set
+    const ceph::buffer::list &bl,               ///< [in] header to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Retrieve header
   virtual int get_header(
     const ghobject_t &oid,              ///< [in] object containing map
-    bufferlist *bl                      ///< [out] header to set
+    ceph::buffer::list *bl                      ///< [out] header to set
     ) = 0;
 
   /// Clear all map keys and values from oid
@@ -61,7 +61,7 @@ public:
   /// Clear all map keys and values in to_clear from oid
   virtual int rm_keys(
     const ghobject_t &oid,              ///< [in] object containing map
-    const set<string> &to_clear,        ///< [in] Keys to clear
+    const std::set<std::string> &to_clear,        ///< [in] Keys to clear
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
@@ -74,54 +74,54 @@ public:
   /// Get all keys and values
   virtual int get(
     const ghobject_t &oid,             ///< [in] object containing map
-    bufferlist *header,                ///< [out] Returned Header
-    map<string, bufferlist> *out       ///< [out] Returned keys and values
+    ceph::buffer::list *header,                ///< [out] Returned Header
+    std::map<std::string, ceph::buffer::list> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Get values for supplied keys
   virtual int get_keys(
     const ghobject_t &oid,             ///< [in] object containing map
-    set<string> *keys                  ///< [out] Keys defined on oid
+    std::set<std::string> *keys                  ///< [out] Keys defined on oid
     ) = 0;
 
   /// Get values for supplied keys
   virtual int get_values(
     const ghobject_t &oid,             ///< [in] object containing map
-    const set<string> &keys,           ///< [in] Keys to get
-    map<string, bufferlist> *out       ///< [out] Returned keys and values
+    const std::set<std::string> &keys,           ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Check key existence
   virtual int check_keys(
     const ghobject_t &oid,             ///< [in] object containing map
-    const set<string> &keys,           ///< [in] Keys to check
-    set<string> *out                   ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys,           ///< [in] Keys to check
+    std::set<std::string> *out                   ///< [out] Subset of keys defined on oid
     ) = 0;
 
   /// Get xattrs
   virtual int get_xattrs(
     const ghobject_t &oid,             ///< [in] object
-    const set<string> &to_get,         ///< [in] keys to get
-    map<string, bufferlist> *out       ///< [out] subset of attrs/vals defined
+    const std::set<std::string> &to_get,         ///< [in] keys to get
+    std::map<std::string, ceph::buffer::list> *out       ///< [out] subset of attrs/vals defined
     ) = 0;
 
   /// Get all xattrs
   virtual int get_all_xattrs(
     const ghobject_t &oid,             ///< [in] object
-    set<string> *out                   ///< [out] attrs and values
+    std::set<std::string> *out                   ///< [out] attrs and values
     ) = 0;
 
-  /// set xattrs in to_set
+  /// std::set xattrs in to_set
   virtual int set_xattrs(
     const ghobject_t &oid,                ///< [in] object
-    const map<string, bufferlist> &to_set,///< [in] attrs/values to set
+    const std::map<std::string, ceph::buffer::list> &to_set,///< [in] attrs/values to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// remove xattrs in to_remove
   virtual int remove_xattrs(
     const ghobject_t &oid,               ///< [in] object
-    const set<string> &to_remove,        ///< [in] attrs to remove
+    const std::set<std::string> &to_remove,        ///< [in] attrs to remove
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 

@@ -360,11 +360,11 @@ struct client_t {
   // cppcheck-suppress noExplicitConstructor
   client_t(int64_t _v = -2) : v(_v) {}
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(v, bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
     decode(v, bl);
   }
@@ -381,7 +381,7 @@ static inline bool operator>=(const client_t& l, const client_t& r) { return l.v
 static inline bool operator>=(const client_t& l, int64_t o) { return l.v >= o; }
 static inline bool operator<(const client_t& l, int64_t o) { return l.v < o; }
 
-inline ostream& operator<<(ostream& out, const client_t& c) {
+inline std::ostream& operator<<(std::ostream& out, const client_t& c) {
   return out << c.v;
 }
 
@@ -390,7 +390,7 @@ inline ostream& operator<<(ostream& out, const client_t& c) {
 // --
 
 namespace {
-  inline ostream& format_u(ostream& out, const uint64_t v, const uint64_t n,
+inline std::ostream& format_u(std::ostream& out, const uint64_t v, const uint64_t n,
       const int index, const uint64_t mult, const char* u)
   {
     char buffer[32];
@@ -430,7 +430,7 @@ struct si_u_t {
   explicit si_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline ostream& operator<<(ostream& out, const si_u_t& b)
+inline std::ostream& operator<<(std::ostream& out, const si_u_t& b)
 {
   uint64_t n = b.v;
   int index = 0;
@@ -458,7 +458,7 @@ struct byte_u_t {
   explicit byte_u_t(uint64_t _v) : v(_v) {};
 };
 
-inline ostream& operator<<(ostream& out, const byte_u_t& b)
+inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)
 {
   uint64_t n = b.v;
   int index = 0;
@@ -472,7 +472,7 @@ inline ostream& operator<<(ostream& out, const byte_u_t& b)
   return format_u(out, b.v, n, index, 1ULL << (10 * index), u[index]);
 }
 
-inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
+inline std::ostream& operator<<(std::ostream& out, const ceph_mon_subscribe_item& i)
 {
   return out << i.start
 	     << ((i.flags & CEPH_SUBSCRIBE_ONETIME) ? "" : "+");
@@ -484,7 +484,7 @@ struct weightf_t {
   weightf_t(float _v) : v(_v) {}
 };
 
-inline ostream& operator<<(ostream& out, const weightf_t& w)
+inline std::ostream& operator<<(std::ostream& out, const weightf_t& w)
 {
   if (w.v < -0.01F) {
     return out << "-";
@@ -506,11 +506,11 @@ struct shard_id_t {
 
   const static shard_id_t NO_SHARD;
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     encode(id, bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(id, bl);
   }
@@ -518,7 +518,7 @@ struct shard_id_t {
 WRITE_CLASS_ENCODER(shard_id_t)
 WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
-ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
+std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || defined(__FreeBSD__)
 __s32  ceph_to_hostos_errno(__s32 e);
@@ -543,12 +543,12 @@ struct errorcode32_t {
   int operator<(int i)  { return code < i; }
   int operator<=(int i) { return code <= i; }
 
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     __s32 newcode = hostos_to_ceph_errno(code);
     encode(newcode, bl);
   }
-  void decode(bufferlist::const_iterator &bl) {
+  void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
     code = ceph_to_hostos_errno(code);
@@ -561,9 +561,11 @@ WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 template <uint8_t S>
 struct sha_digest_t {
   constexpr static uint32_t SIZE = S;
+  // TODO: we might consider std::array in the future. Avoiding it for now
+  // as sha_digest_t is a part of our public API.
   unsigned char v[S] = {0};
 
-  string to_str() const {
+  std::string to_str() const {
     char str[S * 2 + 1] = {0};
     str[0] = '\0';
     for (size_t i = 0; i < S; i++) {
@@ -571,17 +573,42 @@ struct sha_digest_t {
     }
     return string(str);
   }
-  sha_digest_t(const unsigned char *_v) { memcpy(v, _v, S); };
+  sha_digest_t(const unsigned char *_v) { memcpy(v, _v, SIZE); };
   sha_digest_t() {}
+
+  bool operator==(const sha_digest_t& r) const {
+    return ::memcmp(v, r.v, SIZE) == 0;
+  }
+  bool operator!=(const sha_digest_t& r) const {
+    return ::memcmp(v, r.v, SIZE) != 0;
+  }
+
+  void encode(ceph::buffer::list &bl) const {
+    // copy to avoid reinterpret_cast, is_pod and other nasty things
+    using ceph::encode;
+    std::array<unsigned char, SIZE> tmparr;
+    memcpy(tmparr.data(), v, SIZE);
+    encode(tmparr, bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    using ceph::decode;
+    std::array<unsigned char, SIZE> tmparr;
+    decode(tmparr, bl);
+    memcpy(v, tmparr.data(), SIZE);
+  }
 };
 
-template <uint8_t S>
-inline ostream &operator<<(ostream &out, const sha_digest_t<S> &b) {
-  string str = b.to_str();
+template<uint8_t S>
+inline std::ostream &operator<<(std::ostream &out, const sha_digest_t<S> &b) {
+  std::string str = b.to_str();
   return out << str;
 }
 
 using sha1_digest_t = sha_digest_t<20>;
+WRITE_CLASS_ENCODER(sha1_digest_t)
+
 using sha256_digest_t = sha_digest_t<32>;
+WRITE_CLASS_ENCODER(sha256_digest_t)
+
 
 #endif

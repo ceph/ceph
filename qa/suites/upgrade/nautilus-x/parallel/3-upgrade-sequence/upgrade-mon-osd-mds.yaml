@@ -1,0 +1,47 @@
+meta:
+- desc: |
+   upgrade the ceph cluster,
+   upgrate in two steps
+   step one ordering: mon.a, osd.0, osd.1, mds.a
+   step two ordering: mon.b, mon.c, osd.2, osd.3
+   ceph expected to be healthy state after each step
+upgrade-sequence:
+   sequential:
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.b, mgr.x]
+       wait-for-healthy: true
+       mon-health-to-clog: false
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.c]
+       wait-for-healthy: false
+       mon-health-to-clog: false
+   - ceph.healthy:
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.4, osd.5, osd.6, osd.7]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.8, osd.9, osd.10, osd.11]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60

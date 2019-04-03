@@ -23,10 +23,10 @@ public:
   friend factory;
 
   uuid_d fsid;
-  list<string> pools;
+  std::list<std::string> pools;
 
   MGetPoolStats() : MessageInstance(MSG_GETPOOLSTATS, 0) {}
-  MGetPoolStats(const uuid_d& f, ceph_tid_t t, list<string>& ls, version_t l) :
+  MGetPoolStats(const uuid_d& f, ceph_tid_t t, std::list<std::string>& ls, version_t l) :
     MessageInstance(MSG_GETPOOLSTATS, l),
     fsid(f), pools(ls) {
     set_tid(t);
@@ -37,7 +37,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "getpoolstats"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "getpoolstats(" << get_tid() << " " << pools << " v" << version << ")";
   }
 

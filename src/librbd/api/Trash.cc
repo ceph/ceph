@@ -159,7 +159,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       lderr(cct) << "cannot move migrating image to trash" << dendl;
       ictx->snap_lock.put_read();
       ictx->state->close();
-      return -EINVAL;
+      return -EBUSY;
     }
     ictx->snap_lock.put_read();
 

@@ -163,7 +163,7 @@ protected:
       uint64_t expire_to);
 
   bool recovered;
-  std::list<Context*> waiting_for_recovery;
+  std::vector<Context*> waiting_for_recovery;
 
   void _go_readonly(int r);
 

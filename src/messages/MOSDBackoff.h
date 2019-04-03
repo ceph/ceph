@@ -62,6 +62,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
@@ -73,7 +74,7 @@ public:
 
   std::string_view get_type_name() const override { return "osd_backoff"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_backoff(" << pgid << " " << ceph_osd_backoff_op_name(op)
 	<< " id " << id
 	<< " [" << begin << "," << end << ")"

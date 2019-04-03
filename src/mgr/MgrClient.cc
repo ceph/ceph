@@ -26,6 +26,11 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
 #define dout_subsys ceph_subsys_mgrc
 #undef dout_prefix
 #define dout_prefix *_dout << "mgrc " << __func__ << " "
@@ -412,8 +417,8 @@ bool MgrClient::handle_mgr_close(MMgrClose *m)
 }
 
 int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
-                  bufferlist *outbl, string *outs,
-                  Context *onfinish)
+			     bufferlist *outbl, string *outs,
+			     Context *onfinish)
 {
   std::lock_guard l(lock);
 
