@@ -487,6 +487,10 @@ public:
 
   void do_delete_work(ObjectStore::Transaction *t) override;
 
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) override;
+  void set_not_ready_to_merge_source(pg_t pgid) override;
+  void send_pg_created(pg_t pgid) override;
+
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
