@@ -556,6 +556,11 @@ def decode_cstr(val, encoding="utf-8"):
     return val.decode(encoding)
 
 
+def flatten_dict(d, name):
+    items = chain.from_iterable(d.items())
+    return cstr(''.join(i + '\0' for i in items), name)
+
+
 cdef char* opt_str(s) except? NULL:
     if s is None:
         return NULL
@@ -1160,26 +1165,23 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         cdef:
-            char *ret_buf
-            size_t buf_len = 37
-            PyObject* ret_s = NULL
+            char *ret_buf = NULL
+            size_t buf_len = 64
 
-        ret_s = PyBytes_FromStringAndSize(NULL, buf_len)
         try:
-            ret_buf = PyBytes_AsString(ret_s)
-            with nogil:
-                ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
-            if ret < 0:
-                raise make_ex(ret, "error getting cluster fsid")
-            if ret != <int>buf_len:
-                _PyBytes_Resize(&ret_s, ret)
-            return <object>ret_s
+            while True:
+                ret_buf = <char *>realloc_chk(ret_buf, buf_len)
+                with nogil:
+                    ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
+                if ret == -errno.ERANGE:
+                    buf_len = buf_len * 2
+                elif ret < 0:
+                    raise make_ex(ret, "error getting cluster fsid")
+                else:
+                    break
+            return decode_cstr(ret_buf)
         finally:
-            # We DECREF unconditionally: the cast to object above will have
-            # INCREFed if necessary. This also takes care of exceptions,
-            # including if _PyString_Resize fails (that will free the string
-            # itself and set ret_s to NULL, hence XDECREF).
-            ref.Py_XDECREF(ret_s)
+            free(ret_buf)
 
     @requires(('ioctx_name', str_type))
     def open_ioctx(self, ioctx_name):
@@ -1236,8 +1238,23 @@ Rados object in state %s." % self.state)
 
     def mon_command(self, cmd, inbuf, timeout=0, target=None):
         """
+        Send a command to the mon.
+
         mon_command[_target](cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :param cmd: JSON formatted string.
+        :param inbuf: optional string.
+        :param timeout: This parameter is ignored.
+        :param target: name of a specific mon. Optional
+        :return: (int ret, string outbuf, string outs)
+
+        Example:
+
+        >>> import json
+        >>> c = Rados(conffile='/etc/ceph/ceph.conf')
+        >>> c.connect()
+        >>> cmd = json.dumps({"prefix": "osd safe-to-destroy", "ids": ["2"], "format": "json"})
+        >>> c.mon_command(cmd, b'')
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1294,7 +1311,8 @@ Rados object in state %s." % self.state)
     def osd_command(self, osdid, cmd, inbuf, timeout=0):
         """
         osd_command(osdid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1336,7 +1354,7 @@ Rados object in state %s." % self.state)
 
     def mgr_command(self, cmd, inbuf, timeout=0):
         """
-        returns (int ret, string outbuf, string outs)
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1378,7 +1396,8 @@ Rados object in state %s." % self.state)
     def pg_command(self, pgid, cmd, inbuf, timeout=0):
         """
         pg_command(pgid, cmd, inbuf, outbuf, outbuflen, outs, outslen)
-        returns (int ret, string outbuf, string outs)
+
+        :return: (int ret, string outbuf, string outs)
         """
         # NOTE(sileht): timeout is ignored because C API doesn't provide
         # timeout argument, but we keep it for backward compat with old python binding
@@ -1513,8 +1532,7 @@ Rados object in state %s." % self.state)
         """
         service = cstr(service, 'service')
         daemon = cstr(daemon, 'daemon')
-        metadata_dict = '\0'.join(chain.from_iterable(metadata.items()))
-        metadata_dict += '\0'
+        metadata_dict = flatten_dict(metadata, 'metadata')
         cdef:
             char *_service = service
             char *_daemon = daemon
@@ -1527,8 +1545,7 @@ Rados object in state %s." % self.state)
 
     @requires(('metadata', dict))
     def service_daemon_update(self, status):
-        status_dict = '\0'.join(chain.from_iterable(status.items()))
-        status_dict += '\0'
+        status_dict = flatten_dict(status, 'status')
         cdef:
             char *_status = status_dict
 

@@ -193,6 +193,7 @@ Server::Server(MDSRank *m) :
   terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
+  cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
@@ -1045,8 +1046,7 @@ void Server::evict_cap_revoke_non_responders() {
     return;
   }
 
-  std::list<client_t> to_evict;
-  mds->locker->get_late_revoking_clients(&to_evict, cap_revoke_eviction_timeout);
+  auto&& to_evict = mds->locker->get_late_revoking_clients(cap_revoke_eviction_timeout);
 
   for (auto const &client: to_evict) {
     mds->clog->warn() << "client id " << client << " has not responded to"
@@ -1108,7 +1108,7 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
-  std::list<Session*> victims;
+  std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
   for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
@@ -1123,7 +1123,7 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     }
   }
 
-  for (const auto s : victims) {
+  for (const auto& s : victims) {
     kill_session(s, nullptr);
   }
 
@@ -2742,29 +2742,27 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   
   // can we auth pin them?
   if (!fail) {
-    for (list<MDSCacheObject*>::iterator p = objects.begin();
-	 p != objects.end();
-	 ++p) {
-      if (!(*p)->is_auth()) {
-	dout(10) << " not auth for " << **p << dendl;
+    for (const auto& obj : objects) {
+      if (!obj->is_auth()) {
+	dout(10) << " not auth for " << *obj << dendl;
 	fail = true;
 	break;
       }
-      if (mdr->is_auth_pinned(*p))
+      if (mdr->is_auth_pinned(obj))
 	continue;
-      if (!mdr->can_auth_pin(*p)) {
+      if (!mdr->can_auth_pin(obj)) {
 	if (mdr->slave_request->is_nonblock()) {
-	  dout(10) << " can't auth_pin (freezing?) " << **p << " nonblocking" << dendl;
+	  dout(10) << " can't auth_pin (freezing?) " << *obj << " nonblocking" << dendl;
 	  fail = true;
 	  wouldblock = true;
 	  break;
 	}
 	// wait
-	dout(10) << " waiting for authpinnable on " << **p << dendl;
-	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	dout(10) << " waiting for authpinnable on " << *obj << dendl;
+	obj->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
 
-	mds->locker->notify_freeze_waiter(*p);
+	mds->locker->notify_freeze_waiter(obj);
 	return;
       }
     }
@@ -2795,11 +2793,9 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	return;
       }
     }
-    for (list<MDSCacheObject*>::iterator p = objects.begin();
-	 p != objects.end();
-	 ++p) {
-      dout(10) << "auth_pinning " << **p << dendl;
-      mdr->auth_pin(*p);
+    for (const auto& obj : objects) {
+      dout(10) << "auth_pinning " << *obj << dendl;
+      mdr->auth_pin(obj);
     }
   }
 
@@ -7227,10 +7223,8 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
-  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    CDir *dir = *p;
+  auto&& ls = in->get_dirfrags();
+  for (const auto& dir : ls) {
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
@@ -7253,10 +7247,8 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
   frag_info_t dirstat;
   version_t dirstat_version = in->get_projected_inode()->dirstat.version;
 
-  list<CDir*> ls;
-  in->get_dirfrags(ls);
-  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-    CDir *dir = *p;
+  auto&& ls = in->get_dirfrags();
+  for (const auto& dir : ls) {
     const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
       dout(10) << "dir_is_nonempty dirstat has "
@@ -7878,8 +7870,7 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 
 bool Server::_need_force_journal(CInode *diri, bool empty)
 {
-  std::vector<CDir*> dirs;
-  diri->get_dirfrags(dirs);
+  auto&& dirs = diri->get_dirfrags();
 
   bool force_journal = false;
   if (empty) {
@@ -8025,10 +8016,8 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// note which dirfrags have child subtrees in the journal
 	// event, so that we can open those (as bounds) during replay.
 	if (srci->is_dir()) {
-	  list<CDir*> ls;
-	  srci->get_dirfrags(ls);
-	  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-	    CDir *dir = *p;
+	  auto&& ls = srci->get_dirfrags();
+	  for (const auto& dir : ls) {
 	    if (!dir->is_auth())
 	      metablob->renamed_dir_frags.push_back(dir->get_frag());
 	  }
@@ -8204,10 +8193,8 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       metablob->add_primary_dentry(destdn, srci, true);
       if (srcdn->is_auth() && srci->is_dir()) {
 	// journal new subtrees root dirfrags
-	list<CDir*> ls;
-	srci->get_dirfrags(ls);
-	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-	  CDir *dir = *p;
+	auto&& ls = srci->get_dirfrags();
+	for (const auto& dir : ls) {
 	  if (dir->is_auth())
 	    metablob->add_dir(dir, true);
 	}
@@ -8740,11 +8727,12 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   if (srcdn->is_auth() && srcdnl->is_primary()) {
     // set export bounds for CInode::encode_export()
     if (reply) {
-      list<CDir*> bounds;
+      std::vector<CDir*> bounds;
       if (srcdnl->get_inode()->is_dir()) {
 	srcdnl->get_inode()->get_dirfrags(bounds);
-	for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-	  (*p)->state_set(CDir::STATE_EXPORTBOUND);
+	for (const auto& bound : bounds) {
+	  bound->state_set(CDir::STATE_EXPORTBOUND);
+        }
       }
 
       map<client_t,entity_inst_t> exported_client_map;
@@ -8754,8 +8742,9 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
 					     exported_client_map,
 					     exported_client_metadata_map);
 
-      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-	(*p)->state_clear(CDir::STATE_EXPORTBOUND);
+      for (const auto& bound : bounds) {
+	bound->state_clear(CDir::STATE_EXPORTBOUND);
+      }
 
       encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
       encode(exported_client_metadata_map, reply->inode_export);
@@ -9223,10 +9212,8 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     dout(10) << " noting renamed dir ino " << in->ino() << " in metablob" << dendl;
     le->commit.renamed_dirino = in->ino();
     if (srcdn->authority().first == whoami) {
-      list<CDir*> ls;
-      in->get_dirfrags(ls);
-      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-	CDir *dir = *p;
+      auto&& ls = in->get_dirfrags();
+      for (const auto& dir : ls) {
 	if (!dir->is_auth())
 	  le->commit.renamed_dir_frags.push_back(dir->get_frag());
       }

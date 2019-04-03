@@ -8687,7 +8687,7 @@ struct C_Copyfrom : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  PrimaryLogPG::CopyOpRef cop;
+  PrimaryLogPG::CopyOpRef cop;	// used for keeping the cop alive
   C_Copyfrom(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 	     const PrimaryLogPG::CopyOpRef& c)
     : pg(p), oid(o), last_peering_reset(lpr),
@@ -8699,6 +8699,7 @@ struct C_Copyfrom : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->process_copy_chunk(oid, tid, r);
+      cop.reset();
     }
     pg->unlock();
   }
@@ -8731,7 +8732,7 @@ struct C_CopyChunk : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  PrimaryLogPG::CopyOpRef cop;
+  PrimaryLogPG::CopyOpRef cop;	// used for keeping the cop alive
   uint64_t offset = 0;
   C_CopyChunk(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 	     const PrimaryLogPG::CopyOpRef& c)
@@ -8744,6 +8745,7 @@ struct C_CopyChunk : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->process_copy_chunk_manifest(oid, tid, r, offset);
+      cop.reset();
     }
     pg->unlock();
   }
@@ -11493,6 +11495,8 @@ int PrimaryLogPG::recover_missing(
 	 if (!object_missing) {
 	   object_stat_sum_t stat_diff;
 	   stat_diff.num_objects_recovered = 1;
+	   if (scrub_after_recovery)
+	     stat_diff.num_objects_repaired = 1;
 	   on_global_recover(soid, stat_diff, true);
 	 } else {
 	   auto recovery_handle = pgbackend->open_recovery_op();
@@ -12443,15 +12447,14 @@ bool PrimaryLogPG::start_recovery_ops(
 
   const auto &missing = pg_log.get_missing();
 
-  unsigned int num_missing = missing.num_missing();
   uint64_t num_unfound = get_num_unfound();
 
-  if (num_missing == 0) {
+  if (!missing.have_missing()) {
     info.last_complete = info.last_update;
   }
 
-  if (num_missing == num_unfound) {
-    // All of the missing objects we have are unfound.
+  if (!missing.have_missing() || // Primary does not have missing
+      all_missing_unfound()) { // or all of the missing objects are unfound.
     // Recover the replicas.
     started = recover_replicas(max, handle, &recovery_started);
   }
@@ -15230,6 +15233,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   if (!eio_errors_to_process) {
     eio_errors_to_process = true;
     ceph_assert(is_clean());
+    state_set(PG_STATE_REPAIR);
     queue_peering_event(
         PGPeeringEventRef(
 	  std::make_shared<PGPeeringEvent>(

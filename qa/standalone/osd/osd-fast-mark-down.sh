@@ -35,11 +35,6 @@ function run() {
     CEPH_ARGS=$OLD_ARGS"--osd-fast-fail-on-connection-refused=true "
     OLD_ARGS=$CEPH_ARGS
 
-    # force v1 addr here for simple's benefit
-    CEPH_ARGS+="--ms_type=simple --mon-host=v1:$CEPH_MON"
-    echo "Testing simple msgr..."
-    test_fast_kill $dir || return 1
-
     CEPH_ARGS=$OLD_ARGS"--ms_type=async --mon-host=$CEPH_MON"
     echo "Testing async msgr..."
     test_fast_kill $dir || return 1

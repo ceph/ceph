@@ -33,8 +33,8 @@ class AuthRegistry : public md_config_obs_t {
   std::vector<uint32_t> service_modes;
   std::vector<uint32_t> client_modes;
 
-  void _parse_method_list(const string& str, std::vector<uint32_t> *v);
-  void _parse_mode_list(const string& str, std::vector<uint32_t> *v);
+  void _parse_method_list(const std::string& str, std::vector<uint32_t> *v);
+  void _parse_mode_list(const std::string& str, std::vector<uint32_t> *v);
   void _refresh_config();
 
 public:

@@ -306,7 +306,8 @@ private:
     RecoveryMessages *m);
   void handle_recovery_push(
     const PushOp &op,
-    RecoveryMessages *m);
+    RecoveryMessages *m,
+    bool is_repair);
   void handle_recovery_push_reply(
     const PushReplyOp &op,
     pg_shard_t from,

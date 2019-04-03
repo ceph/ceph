@@ -25,15 +25,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "striper "
 
+using std::make_pair;
+using std::map;
+using std::pair;
+
+using ceph::bufferlist;
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
 			      const file_layout_t *layout,
 			      uint64_t offset, uint64_t len,
 			      uint64_t trunc_size,
-			      vector<ObjectExtent>& extents,
+			      std::vector<ObjectExtent>& extents,
 			      uint64_t buffer_offset)
 {
-  map<object_t,vector<ObjectExtent> > object_extents;
+  map<object_t,std::vector<ObjectExtent> > object_extents;
   file_to_extents(cct, object_format, layout, offset, len, trunc_size,
 		  object_extents, buffer_offset);
   assimilate_extents(object_extents, extents);
@@ -44,7 +49,7 @@ void Striper::file_to_extents(
   const file_layout_t *layout,
   uint64_t offset, uint64_t len,
   uint64_t trunc_size,
-  map<object_t,vector<ObjectExtent> >& object_extents,
+  map<object_t,std::vector<ObjectExtent> >& object_extents,
   uint64_t buffer_offset)
 {
   ldout(cct, 10) << "file_to_extents " << offset << "~" << len
@@ -110,7 +115,7 @@ void Striper::file_to_extents(
 		   << dendl;
 
     ObjectExtent *ex = 0;
-    vector<ObjectExtent>& exv = object_extents[oid];
+    std::vector<ObjectExtent>& exv = object_extents[oid];
     if (exv.empty() || exv.back().offset + exv.back().length != x_offset) {
       exv.resize(exv.size() + 1);
       ex = &exv.back();
@@ -145,17 +150,12 @@ void Striper::file_to_extents(
 }
 
 void Striper::assimilate_extents(
-  map<object_t,vector<ObjectExtent> >& object_extents,
-  vector<ObjectExtent>& extents)
+  map<object_t,std::vector<ObjectExtent> >& object_extents,
+  std::vector<ObjectExtent>& extents)
 {
   // make final list
-  for (map<object_t, vector<ObjectExtent> >::iterator it
-	 = object_extents.begin();
-       it != object_extents.end();
-       ++it) {
-    for (vector<ObjectExtent>::iterator p = it->second.begin();
-	 p != it->second.end();
-	 ++p) {
+  for (auto it = object_extents.cbegin(); it != object_extents.cend(); ++it) {
+    for (auto p = it->second.begin(); p != it->second.end(); ++p) {
       extents.push_back(*p);
     }
   }
@@ -163,7 +163,7 @@ void Striper::assimilate_extents(
 
 void Striper::extent_to_file(CephContext *cct, file_layout_t *layout,
 			   uint64_t objectno, uint64_t off, uint64_t len,
-			   vector<pair<uint64_t, uint64_t> >& extents)
+			   std::vector<pair<uint64_t, uint64_t> >& extents)
 {
   ldout(cct, 10) << "extent_to_file " << objectno << " " << off << "~"
 		 << len << dendl;
@@ -258,14 +258,11 @@ uint64_t Striper::get_num_objects(const file_layout_t& layout,
 
 void Striper::StripedReadResult::add_partial_result(
   CephContext *cct, bufferlist& bl,
-  const vector<pair<uint64_t,uint64_t> >& buffer_extents)
+  const std::vector<pair<uint64_t,uint64_t> >& buffer_extents)
 {
   ldout(cct, 10) << "add_partial_result(" << this << ") " << bl.length()
 		 << " to " << buffer_extents << dendl;
-  for (vector<pair<uint64_t,uint64_t> >::const_iterator p
-	 = buffer_extents.begin();
-       p != buffer_extents.end();
-       ++p) {
+  for (auto p = buffer_extents.cbegin(); p != buffer_extents.cend(); ++p) {
     pair<bufferlist, uint64_t>& r = partial[p->first];
     size_t actual = std::min<uint64_t>(bl.length(), p->second);
     bl.splice(0, actual, &r.first);
@@ -276,16 +273,13 @@ void Striper::StripedReadResult::add_partial_result(
 
 void Striper::StripedReadResult::add_partial_sparse_result(
   CephContext *cct, bufferlist& bl, const map<uint64_t, uint64_t>& bl_map,
-  uint64_t bl_off, const vector<pair<uint64_t,uint64_t> >& buffer_extents)
+  uint64_t bl_off, const std::vector<pair<uint64_t,uint64_t> >& buffer_extents)
 {
   ldout(cct, 10) << "add_partial_sparse_result(" << this << ") " << bl.length()
 		 << " covering " << bl_map << " (offset " << bl_off << ")"
 		 << " to " << buffer_extents << dendl;
-  map<uint64_t, uint64_t>::const_iterator s = bl_map.begin();
-  for (vector<pair<uint64_t,uint64_t> >::const_iterator p
-	 = buffer_extents.begin();
-       p != buffer_extents.end();
-       ++p) {
+  auto s = bl_map.cbegin();
+  for (auto p = buffer_extents.cbegin(); p != buffer_extents.cend(); ++p) {
     uint64_t tofs = p->first;
     size_t tlen = p->second;
     ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
@@ -296,7 +290,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 		     << dendl;
       if (s == bl_map.end()) {
 	ldout(cct, 20) << "  s at end" << dendl;
-	pair<bufferlist, uint64_t>& r = partial[tofs];
+	auto& r = partial[tofs];
 	r.second = tlen;
 	total_intended_len += r.second;
 	break;

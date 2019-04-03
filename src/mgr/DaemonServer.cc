@@ -165,7 +165,6 @@ KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
 
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
-  int ret = 0;
   MgrSession *s = new MgrSession(cct);
   con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
@@ -180,27 +179,24 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
     s->caps.set_allow_all();
-  }
-
-  if (caps_info.caps.length() > 0) {
+  } else if (caps_info.caps.length() > 0) {
     auto p = caps_info.caps.cbegin();
     string str;
     try {
       decode(str, p);
     }
     catch (buffer::error& e) {
-      ret = -EPERM;
-    }
-    bool success = s->caps.parse(str);
-    if (success) {
       dout(10) << " session " << s << " " << s->entity_name
-	       << " has caps " << s->caps << " '" << str << "'" << dendl;
-      ret = 1;
-    } else {
+               << " failed to decode caps" << dendl;
+      return -EPERM;
+    }
+    if (!s->caps.parse(str)) {
       dout(10) << " session " << s << " " << s->entity_name
 	       << " failed to parse caps '" << str << "'" << dendl;
-      ret = -EPERM;
+      return -EPERM;
     }
+    dout(10) << " session " << s << " " << s->entity_name
+             << " has caps " << s->caps << " '" << str << "'" << dendl;
   }
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
@@ -211,7 +207,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     osd_cons[s->osd_id].insert(con);
   }
 
-  return ret;
+  return 1;
 }
 
 bool DaemonServer::ms_get_authorizer(
@@ -2736,21 +2732,18 @@ const char** DaemonServer::get_tracked_conf_keys() const
 void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 				      const std::set <std::string> &changed)
 {
-  // We may be called within lock (via MCommand `config set`) or outwith the
-  // lock (via admin socket `config set`), so handle either case.
-  const bool initially_locked = lock.is_locked_by_me();
-  if (!initially_locked) {
-    lock.Lock();
-  }
 
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
-    for (auto &c : daemon_connections) {
-      _send_configure(c);
-    }
+    finisher.queue(new FunctionContext([this](int r) {
+      std::lock_guard l(lock);
+      for (auto &c : daemon_connections) {
+        _send_configure(c);
+      }
+    }));
   }
 }
 

@@ -22,12 +22,12 @@ The following configuration options are available for Keystone integration::
 	nss db path = {path to nss db}
 
 It is also possible to configure a Keystone service tenant, user & password for
-keystone (for v2.0 version of the OpenStack Identity API), similar to the way
+Keystone (for v2.0 version of the OpenStack Identity API), similar to the way
 OpenStack services tend to be configured, this avoids the need for setting the
 shared secret ``rgw keystone admin token`` in the configuration file, which is
 recommended to be disabled in production environments. The service tenant
-credentials should have admin privileges, for more details refer the `Openstack
-keystone documentation`_, which explains the process in detail. The requisite
+credentials should have admin privileges, for more details refer the `OpenStack
+Keystone documentation`_, which explains the process in detail. The requisite
 configuration options for are::
 
    rgw keystone admin user = {keystone service tenant user name}
@@ -49,19 +49,8 @@ For a v3 version of the OpenStack Identity API you should replace
    rgw keystone admin project = {keystone admin project name}
 
 
-Prior to Kilo
--------------
-
-Keystone itself needs to be configured to point to the Ceph Object Gateway as an
-object-storage endpoint::
-
-    keystone service-create --name swift --type object-store
-    keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
-            --internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
-
-
-As of Kilo
-----------
+Ocata (and later)
+-----------------
 
 Keystone itself needs to be configured to point to the Ceph Object Gateway as an
 object-storage endpoint::
@@ -117,7 +106,7 @@ object-storage endpoint::
 	  endpoint URLs must be set to include the suffix
 	  ``/v1/AUTH_%(tenant_id)s`` (instead of just ``/v1``).
 
-The keystone URL is the Keystone admin RESTful API URL. The admin token is the
+The Keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
 
 The Ceph Object Gateway will query Keystone periodically for a list of revoked
@@ -138,16 +127,15 @@ requests to the nss db format, for example::
 		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
 
 
-
-Openstack keystone may also be terminated with a self signed ssl certificate, in
-order for radosgw to interact with keystone in such a case, you could either
-install keystone's ssl certificate in the node running radosgw. Alternatively
+OpenStack Keystone may also be terminated with a self signed ssl certificate, in
+order for radosgw to interact with Keystone in such a case, you could either
+install Keystone's ssl certificate in the node running radosgw. Alternatively
 radosgw could be made to not verify the ssl certificate at all (similar to
-openstack clients with a ``--insecure`` switch) by setting the value of the
+OpenStack clients with a ``--insecure`` switch) by setting the value of the
 configurable ``rgw keystone verify ssl`` to false.
 
 
-.. _Openstack keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
+.. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
 
 Keystone integration with the S3 API

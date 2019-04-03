@@ -157,18 +157,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: 100 threads.
 
 
-``rgw num rados handles``
-
-:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
-              Having a configurable number of RADOS handles is resulting in
-              significant performance boost for all types of workloads. Each RGW
-              worker thread would now get to pick a RADOS handle for its lifetime,
-              from the available bunch.
-
-:Type: Integer
-:Default: ``1``
-
-
 ``rgw num control oids``
 
 :Description: The number of notification objects used for cache synchronization
@@ -941,6 +929,66 @@ Barbican Settings
               user when using OpenStack Identity API v3.
 :Type: String
 :Default: None
+
+
+QoS settings
+------------
+
+.. versionadded:: Nautilus
+
+The ``civetweb`` frontend has a threading model that uses a thread per
+connection and hence automatically throttled by ``rgw thread pool size``
+configurable when it comes to accepting connections. The ``beast`` frontend is
+not restricted by the thread pool size when it comes to accepting new
+connections, so a scheduler abstraction is introduced in Nautilus release which
+for supporting ways for scheduling requests in the future.
+
+Currently the scheduler defaults to a throttler which throttles the active
+connections to a configured limit. QoS based on mClock is currently in an
+*experimental* phase and not recommended for production yet. Current
+implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
+(swift auth, sts) metadata & data requests.
+
+
+``rgw max concurrent requests``
+
+:Description: Maximum number of concurrent HTTP requests that the beast frontend
+              will process. Tuning this can help to limit memory usage under
+              heavy load.
+:Type: Integer
+:Default: 1024
+
+
+``rgw scheduler type``
+
+:Description: The type of RGW Scheduler to use. Valid values are throttler,
+              dmclock. Currently defaults to throttler which throttles beast
+              frontend requests. dmclock is *experimental* and will need the
+              experimental flag set
+
+
+The options below are to tune the experimental dmclock scheduler. For some
+further reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
+one of admin, auth, metadata or data.
+
+``rgw_dmclock_<op_class>_res``
+
+:Description: The mclock reservation for `op_class` requests
+:Type: float
+:Default: 100.0
+
+``rgw_dmclock_<op_class>_wgt``
+
+:Description: The mclock weight for `op_class` requests
+:Type: float
+:Default: 1.0
+
+``rgw_dmclock_<op_class>_lim``
+
+:Description: The mclock limit for `op_class` requests
+:Type: float
+:Default: 0.0
+
 
 
 .. _Architecture: ../../architecture#data-striping

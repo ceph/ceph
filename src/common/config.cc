@@ -111,9 +111,7 @@ md_config_t::md_config_t(ConfigValues& values,
                 << std::endl;
       ceph_abort();
     }
-    schema.emplace(std::piecewise_construct,
-		   std::forward_as_tuple(i.name),
-		   std::forward_as_tuple(i));
+    schema.emplace(i.name, i);
   }
 
   // Define the debug_* options as well.
@@ -166,7 +164,7 @@ md_config_t::md_config_t(ConfigValues& values,
   // members if present.
   legacy_values = {
 #define OPTION(name, type) \
-    {std::string(STRINGIFY(name)), &ConfigValues::name},
+    {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
 #undef OPTION
@@ -242,7 +240,7 @@ void md_config_t::validate_schema()
   }
 }
 
-const Option *md_config_t::find_option(const string& name) const
+const Option *md_config_t::find_option(const std::string_view name) const
 {
   auto p = schema.find(name);
   if (p != schema.end()) {
@@ -253,7 +251,7 @@ const Option *md_config_t::find_option(const string& name) const
 
 void md_config_t::set_val_default(ConfigValues& values,
 				  const ConfigTracker& tracker,
-				  const string& name, const std::string& val)
+				  const string_view name, const std::string& val)
 {
   const Option *o = find_option(name);
   ceph_assert(o);
@@ -265,7 +263,7 @@ void md_config_t::set_val_default(ConfigValues& values,
 int md_config_t::set_mon_vals(CephContext *cct,
     ConfigValues& values,
     const ConfigTracker& tracker,
-    const map<string,string>& kv,
+    const map<string,string,less<>>& kv,
     config_callback config_cb)
 {
   ignored_mon_values.clear();
@@ -676,7 +674,17 @@ int md_config_t::parse_option(ConfigValues& values,
     std::string as_option("--");
     as_option += opt.name;
     option_name = opt.name;
-    if (opt.type == Option::TYPE_BOOL) {
+    if (ceph_argparse_witharg(
+	  args, i, &val, err,
+	  string(string("--default-") + opt.name).c_str(), (char*)NULL)) {
+      if (!err.str().empty()) {
+        error_message = err.str();
+	ret = -EINVAL;
+	break;
+      }
+      ret = _set_val(values, tracker,  val, opt, CONF_DEFAULT, &error_message);
+      break;
+    } else if (opt.type == Option::TYPE_BOOL) {
       int res;
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
@@ -793,7 +801,7 @@ int md_config_t::injectargs(ConfigValues& values,
 
 void md_config_t::set_val_or_die(ConfigValues& values,
 				 const ConfigTracker& tracker,
-				 const std::string &key,
+				 const std::string_view key,
 				 const std::string &val)
 {
   std::stringstream err;
@@ -806,7 +814,7 @@ void md_config_t::set_val_or_die(ConfigValues& values,
 
 int md_config_t::set_val(ConfigValues& values,
 			 const ConfigTracker& tracker,
-			 const std::string &key, const char *val,
+			 const std::string_view key, const char *val,
 			 std::stringstream *err_ss)
 {
   if (key.empty()) {
@@ -839,7 +847,7 @@ int md_config_t::set_val(ConfigValues& values,
   return -ENOENT;
 }
 
-int md_config_t::rm_val(ConfigValues& values, const std::string& key)
+int md_config_t::rm_val(ConfigValues& values, const std::string_view key)
 {
   return _rm_val(values, key, CONF_OVERRIDE);
 }
@@ -923,7 +931,7 @@ void md_config_t::get_config_bl(
 }
 
 int md_config_t::get_val(const ConfigValues& values,
-			 const std::string &key, char **buf, int len) const
+			 const std::string_view key, char **buf, int len) const
 {
   string k(ConfFile::normalize_key_name(key));
   return _get_val_cstr(values, k, buf, len);
@@ -931,7 +939,7 @@ int md_config_t::get_val(const ConfigValues& values,
 
 int md_config_t::get_val(
   const ConfigValues& values,
-  const std::string &key,
+  const std::string_view key,
   std::string *val) const
 {
   return conf_stringify(get_val_generic(values, key), val);
@@ -939,7 +947,7 @@ int md_config_t::get_val(
 
 Option::value_t md_config_t::get_val_generic(
   const ConfigValues& values,
-  const std::string &key) const
+  const std::string_view key) const
 {
   string k(ConfFile::normalize_key_name(key));
   return _get_val(values, k);
@@ -947,7 +955,7 @@ Option::value_t md_config_t::get_val_generic(
 
 Option::value_t md_config_t::_get_val(
   const ConfigValues& values,
-  const std::string &key,
+  const std::string_view key,
   expand_stack_t *stack,
   std::ostream *err) const
 {
@@ -1166,7 +1174,7 @@ Option::value_t md_config_t::_expand_meta(
 
 int md_config_t::_get_val_cstr(
   const ConfigValues& values,
-  const std::string &key, char **buf, int len) const
+  const std::string& key, char **buf, int len) const
 {
   if (key.empty())
     return -EINVAL;
@@ -1239,7 +1247,7 @@ int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 int md_config_t::get_val_from_conf_file(
   const ConfigValues& values,
   const std::vector <std::string> &sections,
-  const std::string &key,
+  const std::string_view key,
   std::string &out,
   bool emeta) const
 {
@@ -1257,13 +1265,11 @@ int md_config_t::get_val_from_conf_file(
 
 int md_config_t::_get_val_from_conf_file(
   const std::vector <std::string> &sections,
-  const std::string &key,
+  const std::string_view key,
   std::string &out) const
 {
-  std::vector <std::string>::const_iterator s = sections.begin();
-  std::vector <std::string>::const_iterator s_end = sections.end();
-  for (; s != s_end; ++s) {
-    int ret = cf.read(s->c_str(), key, out);
+  for (auto &s : sections) {
+    int ret = cf.read(s.c_str(), std::string{key}, out);
     if (ret == 0) {
       return 0;
     } else if (ret != -ENOENT) {
@@ -1334,13 +1340,13 @@ void md_config_t::_refresh(ConfigValues& values, const Option& opt)
 }
 
 int md_config_t::_rm_val(ConfigValues& values,
-			 const std::string& key,
+			 const std::string_view key,
 			 int level)
 {
   if (schema.count(key) == 0) {
     return -EINVAL;
   }
-  auto ret = values.rm_val(key, level);
+  auto ret = values.rm_val(std::string{key}, level);
   if (ret < 0) {
     return ret;
   }
@@ -1449,7 +1455,7 @@ void md_config_t::diff(
       // we only have a default value; exclude from diff
       return;
     }
-    f->open_object_section(name.c_str());
+    f->open_object_section(std::string{name}.c_str());
     const Option *o = find_option(name);
     dump(f, CONF_DEFAULT, _get_val_default(*o));
     for (auto& j : configs) {

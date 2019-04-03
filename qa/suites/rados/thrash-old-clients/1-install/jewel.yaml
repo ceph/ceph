@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        mon warn on msgr2 not enabled: false
 tasks:
 - install:
     branch: jewel

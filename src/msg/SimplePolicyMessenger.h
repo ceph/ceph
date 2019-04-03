@@ -84,9 +84,9 @@ public:
    * start() or bind().
    *
    * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. SimpleMessenger does not take
+   * @param t The Throttler to apply. The messenger does not take
    * ownership of this pointer, but you must not destroy it before
-   * you destroy SimpleMessenger.
+   * you destroy messenger.
    */
   void set_policy_throttlers(int type,
 			     Throttle* byte_throttle,

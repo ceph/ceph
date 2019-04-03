@@ -174,7 +174,7 @@ export class NfsFormComponent implements OnInit {
       access_type: new FormControl('RW', {
         validators: [Validators.required]
       }),
-      squash: new FormControl('None', {
+      squash: new FormControl('', {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
@@ -503,17 +503,17 @@ export class NfsFormComponent implements OnInit {
 
     requestModel.protocols = [];
     if (requestModel.protocolNfsv3) {
-      delete requestModel.protocolNfsv3;
       requestModel.protocols.push(3);
     } else {
       requestModel.tag = null;
     }
+    delete requestModel.protocolNfsv3;
     if (requestModel.protocolNfsv4) {
-      delete requestModel.protocolNfsv4;
       requestModel.protocols.push(4);
     } else {
       requestModel.pseudo = null;
     }
+    delete requestModel.protocolNfsv4;
 
     requestModel.transports = [];
     if (requestModel.transportTCP) {
@@ -545,9 +545,5 @@ export class NfsFormComponent implements OnInit {
     delete requestModel.sec_label_xattr;
 
     return requestModel;
-  }
-
-  cancelAction() {
-    this.router.navigate(['/nfs']);
   }
 }

@@ -409,7 +409,7 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
   // confuse the shit out of us.  we'll remove it after canceling the
   // freeze.  this way no freeze completions run before we want them
   // to.
-  list<CDir*> pinned_dirs;
+  std::vector<CDir*> pinned_dirs;
   for (map<CDir*,export_state_t>::iterator p = export_state.begin();
        p != export_state.end();
        ++p) {
@@ -575,11 +575,9 @@ void Migrator::handle_mds_failure_or_stop(mds_rank_t who)
     q = next;
   }
 
-  while (!pinned_dirs.empty()) {
-    CDir *dir = pinned_dirs.front();
+  for (const auto& dir : pinned_dirs) {
     dout(10) << "removing temp auth_pin on " << *dir << dendl;
     dir->auth_unpin(this);
-    pinned_dirs.pop_front();
   }  
 }
 
@@ -777,6 +775,11 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   ceph_assert(dir->is_auth());
   ceph_assert(dest != mds->get_nodeid());
    
+  if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
+    dout(25) << "dir is export pinned" << dendl;
+    return;
+  }
+
   if (!(mds->is_active() || mds->is_stopping())) {
     dout(7) << "i'm not active, no exports for now" << dendl;
     return;
@@ -805,11 +808,6 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
       dout(7) << "i won't export anything in stray" << dendl;
       return;
     }
-  } else {
-    if (!mds->is_stopping() && !dir->inode->is_exportable(dest)) {
-      dout(7) << "dir is export pinned" << dendl;
-      return;
-    }
   }
 
   if (dir->is_frozen() ||
@@ -824,14 +822,16 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
 
   if (g_conf()->mds_thrash_exports) {
     // create random subtree bound (which will not be exported)
-    list<CDir*> ls;
+    std::vector<CDir*> ls;
     for (auto p = dir->begin(); p != dir->end(); ++p) {
       auto dn = p->second;
       CDentry::linkage_t *dnl= dn->get_linkage();
       if (dnl->is_primary()) {
 	CInode *in = dnl->get_inode();
-	if (in->is_dir())
-	  in->get_nested_dirfrags(ls);
+	if (in->is_dir()) {
+          auto&& dirs = in->get_nested_dirfrags();
+          ls.insert(std::end(ls), std::begin(dirs), std::end(dirs));
+        }
       }
     }
     if (ls.size() > 0) {
@@ -925,8 +925,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
       dirfrag_size += in->get_client_caps().size() * cap_size;
 
       if (in->is_dir()) {
-	vector<CDir*> ls;
-	in->get_nested_dirfrags(ls);
+	auto ls = in->get_nested_dirfrags();
 	std::reverse(ls.begin(), ls.end());
 
 	bool complete = true;
@@ -1072,8 +1071,8 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   // are not auth MDS of the subtree root at the time they receive the
   // lock messages. So the auth MDS of the subtree root inode may get no
   // or duplicated fragstat/neststat for the subtree root dirfrag.
-  lov.add_wrlock(&dir->get_inode()->filelock);
-  lov.add_wrlock(&dir->get_inode()->nestlock);
+  lov.lock_scatter_gather(&dir->get_inode()->filelock);
+  lov.lock_scatter_gather(&dir->get_inode()->nestlock);
   if (dir->get_inode()->is_auth()) {
     dir->get_inode()->filelock.set_scatter_wanted();
     dir->get_inode()->nestlock.set_scatter_wanted();
@@ -1265,8 +1264,9 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   get_export_lock_set(dir, lov);
   if ((diri->is_auth() && diri->is_frozen()) ||
       !mds->locker->can_rdlock_set(lov) ||
-      !diri->filelock.can_wrlock(-1) ||
-      !diri->nestlock.can_wrlock(-1)) {
+      // for pinning scatter gather. loner has a higher chance to get wrlock
+      !diri->filelock.can_wrlock(diri->get_loner()) ||
+      !diri->nestlock.can_wrlock(diri->get_loner())) {
     dout(7) << "export_dir couldn't acquire all needed locks, failing. "
 	    << *dir << dendl;
     export_try_cancel(dir);
@@ -1409,8 +1409,7 @@ void Migrator::get_export_client_set(CDir *dir, set<client_t>& client_set)
       CInode *in = dn->get_linkage()->get_inode();
       if (in->is_dir()) {
 	// directory?
-	vector<CDir*> ls;
-	in->get_dirfrags(ls);
+	auto&& ls = in->get_dirfrags();
 	for (auto& q : ls) {
 	  if (!q->state_test(CDir::STATE_EXPORTBOUND)) {
 	    // include nested dirfrag
@@ -1735,7 +1734,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
   encode(nden, exportbl);
   
   // dentries
-  list<CDir*> subdirs;
+  std::vector<CDir*> subdirs;
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
@@ -1781,20 +1780,18 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
     
     // directory?
-    list<CDir*> dfs;
-    in->get_dirfrags(dfs);
-    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-      CDir *t = *p;
+    auto&& dfs = in->get_dirfrags();
+    for (const auto& t : dfs) {
       if (!t->state_test(CDir::STATE_EXPORTBOUND)) {
 	// include nested dirfrag
 	ceph_assert(t->get_dir_auth().first == CDIR_AUTH_PARENT);
-	subdirs.push_front(t);  // it's ours, recurse (later)
+	subdirs.push_back(t);  // it's ours, recurse (later)
       }
     }
   }
 
   // subdirs
-  for (auto &dir : subdirs)
+  for (const auto& dir : subdirs)
     num_exported += encode_export_dir(exportbl, dir, exported_client_map, exported_client_metadata_map);
 
   return num_exported;
@@ -1825,7 +1822,7 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
   dir->finish_export();
 
   // dentries
-  list<CDir*> subdirs;
+  std::vector<CDir*> subdirs;
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
@@ -1838,7 +1835,8 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
       finish_export_inode(in, peer, peer_imported[in->ino()], finished);
 
       // subdirs?
-      in->get_nested_dirfrags(subdirs);
+      auto&& dirs = in->get_nested_dirfrags();
+      subdirs.insert(std::end(subdirs), std::begin(dirs), std::end(dirs));
     }
 
     cache->touch_dentry_bottom(dn); // move dentry to tail of LRU
@@ -1846,8 +1844,9 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
   }
 
   // subdirs
-  for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); ++it) 
-    finish_export_dir(*it, peer, peer_imported, finished, num_dentries);
+  for (const auto& dir : subdirs) {
+    finish_export_dir(dir, peer, peer_imported, finished, num_dentries);
+  }
 }
 
 class C_MDS_ExportFinishLogged : public MigratorLogContext {
@@ -1954,7 +1953,7 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
   cache->get_subtree_bounds(dir, bounds);
 
   // remove exporting pins
-  list<CDir*> rq;
+  std::deque<CDir*> rq;
   rq.push_back(dir);
   while (!rq.empty()) {
     CDir *t = rq.front(); 
@@ -1971,8 +1970,12 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
 	in->state_clear(CInode::STATE_EVALSTALECAPS);
 	to_eval.insert(in);
       }
-      if (in->is_dir())
-	in->get_nested_dirfrags(rq);
+      if (in->is_dir()) {
+        auto&& dirs = in->get_nested_dirfrags();
+        for (const auto& dir : dirs) {
+          rq.push_back(dir);
+        }
+      }
     }
   }
   
@@ -2550,8 +2553,9 @@ void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_a
     dout(7) << " all ready, noting auth and freezing import region" << dendl;
 
     if (!mds->mdcache->is_readonly() &&
-	diri->filelock.can_wrlock(-1) &&
-	diri->nestlock.can_wrlock(-1)) {
+	// for pinning scatter gather. loner has a higher chance to get wrlock
+	diri->filelock.can_wrlock(diri->get_loner()) &&
+	diri->nestlock.can_wrlock(diri->get_loner())) {
       it->second.mut = new MutationImpl();
       // force some locks.  hacky.
       mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
@@ -2782,7 +2786,7 @@ void Migrator::import_reverse(CDir *dir)
 
   int num_dentries = 0;
   // adjust auth bits.
-  list<CDir*> q;
+  std::deque<CDir*> q;
   q.push_back(dir);
   while (!q.empty()) {
     CDir *cur = q.front();
@@ -2825,11 +2829,11 @@ void Migrator::import_reverse(CDir *dir)
 	in->clear_file_locks();
 
 	// non-bounding dir?
-	list<CDir*> dfs;
-	in->get_dirfrags(dfs);
-	for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p)
-	  if (bounds.count(*p) == 0)
-	    q.push_back(*p);
+	auto&& dfs = in->get_dirfrags();
+	for (const auto& dir : dfs) {
+	  if (bounds.count(dir) == 0)
+	    q.push_back(dir);
+        }
       }
 
       cache->touch_dentry_bottom(dn); // move dentry to tail of LRU

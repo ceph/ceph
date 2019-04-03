@@ -16,6 +16,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
+#include "rgw_string.h"
 
 #include "services/svc_sys_obj.h"
 
@@ -952,16 +953,17 @@ int RGWLC::bucket_lc_process(string& shard_id)
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
-  string bucket_id = result[2];
+  string bucket_marker = result[2];
   int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, &bucket_attrs);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
     return ret;
   }
 
-  ret = bucket_info.bucket.bucket_id.compare(bucket_id) ;
-  if (ret != 0) {
-    ldpp_dout(this, 0) << "LC:old bucket id found. " << bucket_name << " should be deleted" << dendl;
+  if (bucket_info.bucket.marker != bucket_marker) {
+    ldpp_dout(this, 1) << "LC: deleting stale entry found for bucket=" << bucket_tenant
+                       << ":" << bucket_name << " cur_marker=" << bucket_info.bucket.marker
+                       << " orig_marker=" << bucket_marker << dendl;
     return -ENOENT;
   }
 
@@ -1012,7 +1014,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
     orule.build();
 
-    ceph::real_time mtime;
     rgw_bucket_dir_entry o;
     for (; ol.get_obj(&o); ol.next()) {
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
@@ -1289,7 +1290,7 @@ void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfigu
   o.push_back(new RGWLifecycleConfiguration);
 }
 
-static void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
+void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
 {
   int max_objs = (cct->_conf->rgw_lc_max_objs > HASH_PRIME ? HASH_PRIME : cct->_conf->rgw_lc_max_objs);
   int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
@@ -1300,11 +1301,17 @@ static void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
   return;
 }
 
+
+
+static std::string get_lc_shard_name(const rgw_bucket& bucket){
+  return string_join_reserve(':', bucket.tenant, bucket.name, bucket.marker);
+}
+
 template<typename F>
 static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
   CephContext *cct = store->ctx();
 
-  string shard_id = bucket.tenant + ':' + bucket.name + ':' + bucket.bucket_id;  
+  string shard_id = get_lc_shard_name(bucket);
 
   string oid; 
   get_lc_oid(cct, shard_id, &oid);
@@ -1390,3 +1397,52 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
   return ret;
 }
 
+namespace rgw::lc {
+
+int fix_lc_shard_entry(RGWRados* store, const RGWBucketInfo& bucket_info,
+		       const map<std::string,bufferlist>& battrs)
+{
+  if (auto aiter = battrs.find(RGW_ATTR_LC);
+      aiter == battrs.end()) {
+    return 0;    // No entry, nothing to fix
+  }
+
+  auto shard_name = get_lc_shard_name(bucket_info.bucket);
+  std::string lc_oid;
+  get_lc_oid(store->ctx(), shard_name, &lc_oid);
+
+  rgw_lc_entry_t entry;
+  // There are multiple cases we need to encounter here
+  // 1. entry exists and is already set to marker, happens in plain buckets & newly resharded buckets
+  // 2. entry doesn't exist, which usually happens when reshard has happened prior to update and next LC process has already dropped the update
+  // 3. entry exists matching the current bucket id which was after a reshard (needs to be updated to the marker)
+  // We are not dropping the old marker here as that would be caught by the next LC process update
+  auto lc_pool_ctx = store->get_lc_pool_ctx();
+  int ret = cls_rgw_lc_get_entry(*lc_pool_ctx,
+				 lc_oid, shard_name, entry);
+  if (ret == 0) {
+    ldout(store->ctx(), 5) << "Entry already exists, nothing to do" << dendl;
+    return ret; // entry is already existing correctly set to marker
+  }
+  ldout(store->ctx(), 5) << "cls_rgw_lc_get_entry errored ret code=" << ret << dendl;
+  if (ret == -ENOENT) {
+    ldout(store->ctx(), 1) << "No entry for bucket=" << bucket_info.bucket.name
+			   << " creating " << dendl;
+    // TODO: we have too many ppl making cookies like this!
+    char cookie_buf[COOKIE_LEN + 1];
+    gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
+    std::string cookie = cookie_buf;
+
+    ret = guard_lc_modify(store, bucket_info.bucket, cookie,
+			  [&lc_pool_ctx, &lc_oid](librados::IoCtx *ctx, const string& oid,
+					    const pair<string, int>& entry) {
+			    return cls_rgw_lc_set_entry(*lc_pool_ctx,
+							lc_oid, entry);
+			  });
+
+  }
+
+  return ret;
+}
+
+}

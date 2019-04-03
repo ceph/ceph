@@ -47,7 +47,7 @@ public:
   // piggybacked osd state
   eversion_t last_complete_ondisk;
 
-  bufferlist::const_iterator p;
+  ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
@@ -62,6 +62,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     p = payload.cbegin();
     decode(map_epoch, p);
     if (header.version >= 2) {
@@ -75,6 +76,7 @@ public:
   }
 
   void finish_decode() {
+    using ceph::decode;
     if (!final_decode_needed)
       return; // Message is already final decoded
     decode(ack_type, p);
@@ -140,7 +142,7 @@ private:
 public:
   std::string_view get_type_name() const override { return "osd_repop_reply"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_repop_reply(" << reqid
         << " " << pgid << " e" << map_epoch << "/" << min_epoch;
     if (!final_decode_needed) {

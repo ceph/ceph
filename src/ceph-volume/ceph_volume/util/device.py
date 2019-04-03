@@ -199,9 +199,11 @@ class Device(object):
         Please keep this implementation in sync with get_device_id() in
         src/common/blkdev.cc
         """
-        props = ['ID_VENDOR','ID_MODEL','ID_SERIAL_SHORT', 'ID_SERIAL',
+        props = ['ID_VENDOR', 'ID_MODEL', 'ID_MODEL_ENC', 'ID_SERIAL_SHORT', 'ID_SERIAL',
                  'ID_SCSI_SERIAL']
         p = disk.udevadm_property(self.abspath, props)
+        if p.get('ID_MODEL','').startswith('LVM PV '):
+            p['ID_MODEL'] = p.get('ID_MODEL_ENC', '').replace('\\x20', ' ').strip()
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
             dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
                               p['ID_SCSI_SERIAL']])
@@ -268,7 +270,12 @@ class Device(object):
 
     @property
     def rotational(self):
-        return self.sys_api['rotational'] == '1'
+        rotational = self.sys_api.get('rotational')
+        if rotational is None:
+            # fall back to lsblk if not found in sys_api
+            # default to '1' if no value is found with lsblk either
+            rotational = self.disk_api.get('ROTA', '1')
+        return rotational == '1'
 
     @property
     def model(self):

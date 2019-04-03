@@ -928,7 +928,7 @@ class Module(MgrModule):
             if crush_rule not in pools_by_crush_rule:
                 pools_by_crush_rule[crush_rule] = []
             pools_by_crush_rule[crush_rule].append(pool)
-        classified_pools = pools_by_crush_rule.values()
+        classified_pools = list(pools_by_crush_rule.values())
         # shuffle so all pools get equal (in)attention
         random.shuffle(classified_pools)
         for it in classified_pools:

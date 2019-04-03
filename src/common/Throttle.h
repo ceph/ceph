@@ -163,12 +163,12 @@ class BackoffThrottle {
   unsigned next_cond = 0;
 
   /// allocated once to avoid constantly allocating new ones
-  vector<std::condition_variable> conds;
+  std::vector<std::condition_variable> conds;
 
   const bool use_perf;
 
   /// pointers into conds
-  list<std::condition_variable*> waiters;
+  std::list<std::condition_variable*> waiters;
 
   std::list<std::condition_variable*>::iterator _push_waiter() {
     unsigned next = next_cond++;
@@ -215,7 +215,7 @@ public:
     double high_multiple,
     double max_multiple,
     uint64_t throttle_max,
-    ostream *errstream);
+    std::ostream *errstream);
 
   ceph::timespan get(uint64_t c = 1);
   ceph::timespan wait() {
@@ -364,7 +364,7 @@ class TokenBucketThrottle {
   SafeTimer *m_timer;
   Mutex *m_timer_lock;
   FunctionContext *m_token_ctx = nullptr;
-  list<Blocker> m_blockers;
+  std::list<Blocker> m_blockers;
   Mutex m_lock;
 
   // minimum of the filling period.
@@ -410,7 +410,7 @@ public:
   TokenBucketThrottle(CephContext *cct, const std::string &name,
                       uint64_t capacity, uint64_t avg,
                       SafeTimer *timer, Mutex *timer_lock);
-  
+
   ~TokenBucketThrottle();
 
   const std::string &get_name() {
@@ -424,12 +424,9 @@ public:
       });
     m_blockers.emplace_back(c, ctx);
   }
-  
+
   template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
   bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
-    if (0 == c)
-      return false;
-
     bool wait = false;
     uint64_t got = 0;
     std::lock_guard lock(m_lock);
@@ -439,7 +436,7 @@ public:
     } else {
       if (0 == m_throttle.max || 0 == m_avg)
         return false;
-  
+
       got = m_throttle.get(c);
       if (got < c) {
         // Not enough tokens, add a blocker for it.
@@ -452,7 +449,7 @@ public:
 
     return wait;
   }
-  
+
   int set_limit(uint64_t average, uint64_t burst);
   void set_schedule_tick_min(uint64_t tick);
 

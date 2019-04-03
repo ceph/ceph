@@ -96,7 +96,7 @@ void ObserverMgr<ConfigObs>::for_each_change(const std::set<std::string>& change
 {
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
-  string val;
+  std::string val;
   for (auto& key : changes) {
     auto [first, last] = observers.equal_range(key);
     if ((oss) && !proxy.get_val(key, &val)) {

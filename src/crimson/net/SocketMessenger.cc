@@ -112,6 +112,11 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
     });
 }
 
+seastar::future<> SocketMessenger::stop()
+{
+  return do_shutdown();
+}
+
 seastar::future<> SocketMessenger::shutdown()
 {
   return container().invoke_on_all([](auto& msgr) {

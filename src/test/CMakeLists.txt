@@ -38,7 +38,6 @@ endif()
 if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
-add_subdirectory(messenger)
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
@@ -51,6 +50,7 @@ add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(osdc)
 add_subdirectory(pybind)
+add_subdirectory(immutable_object_cache)
 if(WITH_RADOSGW)
   set(rgw_libs rgw_a)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
@@ -469,7 +469,6 @@ endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
-find_package(StdFilesystem)
 if(StdFilesystem_FOUND)
   add_executable(ceph_test_admin_socket_output
     test_admin_socket_output.cc
@@ -892,5 +891,9 @@ target_link_libraries(unittest_pageset global)
 add_executable(unittest_any test_any.cc)
 add_ceph_unittest(unittest_any)
 target_link_libraries(unittest_any)
+
+# unittest_weighted_shuffle
+add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
+add_ceph_unittest(unittest_weighted_shuffle)
 
 #make check ends here

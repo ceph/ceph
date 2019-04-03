@@ -555,6 +555,9 @@ protected:
   bool is_policy_op() {
     return s->info.args.exists("policy");
   }
+  bool is_tagging_op() const {
+    return s->info.args.exists("tagging");
+  }
   RGWOp *get_obj_op(bool get_data);
 
   RGWOp *op_get() override;

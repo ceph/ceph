@@ -184,7 +184,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
 
         if strict:
             title_re = (
-                '^(?:hammer|infernalis|jewel|kraken):\s+(' +
+                '^(?:hammer|infernalis|jewel|kraken|luminous|mimic|nautilus):\s+(' +
                 '|'.join(prefixes) +
                 ')(:.*)'
             )

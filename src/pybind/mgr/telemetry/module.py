@@ -263,7 +263,11 @@ class Module(MgrModule):
             proxies['http'] = self.proxy
             proxies['https'] = self.proxy
 
-        requests.put(url=self.url, json=report, proxies=proxies)
+        resp = requests.put(url=self.url, json=report, proxies=proxies)
+        if not resp.ok:
+            self.log.error("Report send failed: %d %s %s" %
+                           (resp.status_code, resp.reason, resp.text))
+        return resp
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'telemetry status':
@@ -272,15 +276,23 @@ class Module(MgrModule):
                 r[opt['name']] = getattr(self, opt['name'])
             return 0, json.dumps(r, indent=4), ''
         elif command['prefix'] == 'telemetry on':
-            self.set_config('active', True)
+            self.set_module_option('enabled', True)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
-            self.set_config('active', False)
+            self.set_module_option('enabled', False)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
-            self.send(self.last_report)
-            return 0, 'Report send to {0}'.format(self.url), ''
+            resp = self.send(self.last_report)
+            if resp.ok:
+                return 0, 'Report sent to {0}'.format(self.url), ''
+            return 1, '', 'Failed to send report to %s: %d %s %s' % (
+                self.url,
+                resp.status_code,
+                resp.reason,
+                resp.text
+            )
+
         elif command['prefix'] == 'telemetry show':
             report = self.last_report
             if not report:
@@ -328,9 +340,12 @@ class Module(MgrModule):
                     self.log.exception('Exception while compiling report:')
 
                 try:
-                    self.send(self.last_report)
-                    self.last_upload = now
-                    self.set_store('last_upload', str(now))
+                    resp = self.send(self.last_report)
+                    # self.send logs on failure; only update last_upload
+                    # if we succeed
+                    if resp.ok:
+                        self.last_upload = now
+                        self.set_store('last_upload', str(now))
                 except:
                     self.log.exception('Exception while sending report:')
             else:

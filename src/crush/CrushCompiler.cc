@@ -1,4 +1,3 @@
-
 #include "CrushCompiler.h"
 
 #if defined(_AIX)
@@ -11,6 +10,14 @@
 #include <string>
 #include "common/errno.h"
 #include <boost/algorithm/string.hpp>
+
+using std::cout;
+using std::istream;
+using std::map;
+using std::ostream;
+using std::set;
+using std::string;
+using std::vector;
 
 // -------------
 
@@ -1248,8 +1255,8 @@ int CrushCompiler::compile(istream& in, const char *infn)
   crush_grammar crushg;
   const char *start = big.c_str();
   //tree_parse_info<const char *> info = ast_parse(start, crushg, space_p);
-  tree_parse_info<> info = ast_parse(start, crushg, space_p);
-  
+  auto info = ast_parse(start, crushg, boost::spirit::space_p);
+
   // parse error?
   if (!info.full) {
     int cpos = info.stop - start;

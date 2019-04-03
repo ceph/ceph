@@ -711,14 +711,16 @@ public:
 
   // -- pg merge --
   Mutex merge_lock = {"OSD::merge_lock"};
-  set<pg_t> ready_to_merge_source;
-  map<pg_t,pair<epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (les,lec)
+  map<pg_t,eversion_t> ready_to_merge_source;   // pg -> version
+  map<pg_t,std::tuple<eversion_t,epoch_t,epoch_t>> ready_to_merge_target;  // pg -> (version,les,lec)
   set<pg_t> not_ready_to_merge_source;
   map<pg_t,pg_t> not_ready_to_merge_target;
   set<pg_t> sent_ready_to_merge_source;
 
-  void set_ready_to_merge_source(PG *pg);
+  void set_ready_to_merge_source(PG *pg,
+				 eversion_t version);
   void set_ready_to_merge_target(PG *pg,
+				 eversion_t version,
 				 epoch_t last_epoch_started,
 				 epoch_t last_epoch_clean);
   void set_not_ready_to_merge_source(pg_t source);
@@ -905,6 +907,7 @@ public:
   void set_statfs(const struct store_statfs_t &stbuf,
     osd_alert_list_t& alerts);
   osd_stat_t set_osd_stat(vector<int>& hb_peers, int num_pgs);
+  void inc_osd_stat_repaired(void);
   float compute_adjusted_ratio(osd_stat_t new_stat, float *pratio, uint64_t adjust_used = 0);
   osd_stat_t get_osd_stat() {
     std::lock_guard l(stat_lock);
@@ -1008,8 +1011,8 @@ public:
   void request_osdmap_update(epoch_t e);
 
   // -- stopping --
-  Mutex is_stopping_lock;
-  Cond is_stopping_cond;
+  ceph::mutex is_stopping_lock = ceph::make_mutex("OSDService::is_stopping_lock");
+  ceph::condition_variable is_stopping_cond;
   enum {
     NOT_STOPPING,
     PREPARING_TO_STOP,
@@ -1853,7 +1856,6 @@ protected:
 
   pool_pg_num_history_t pg_num_history;
 
-  utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
   deque<utime_t> osd_markdown_log;

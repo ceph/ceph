@@ -517,7 +517,8 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_daemon_default("/var/log/ceph/$cluster-$name.log")
     .set_description("path to log file")
-    .add_see_also({"log_to_stderr",
+    .add_see_also({"log_to_file",
+		   "log_to_stderr",
                    "err_to_stderr",
                    "log_to_syslog",
                    "err_to_syslog"}),
@@ -532,6 +533,11 @@ std::vector<Option> get_global_options() {
     .set_daemon_default(10000)
     .set_description("recent log entries to keep in memory to dump in the event of a crash")
     .set_long_description("The purpose of this option is to log at a higher debug level only to the in-memory buffer, and write out the detailed log messages only if there is a crash.  Only log entries below the lower log level will be written unconditionally to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault or assertion failure, all entries will be dumped to the log."),
+
+    Option("log_to_file", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("send log lines to a file")
+    .add_see_also("log_file"),
 
     Option("log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(true)
@@ -695,63 +701,6 @@ std::vector<Option> get_global_options() {
     .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
 
-    // XIO
-    Option("xio_trace_mempool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_trace_msgcnt", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_trace_xcon", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("xio_queue_depth", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(128)
-    .set_description(""),
-
-    Option("xio_mp_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(128)
-    .set_description(""),
-
-    Option("xio_mp_max_64", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(65536)
-    .set_description(""),
-
-    Option("xio_mp_max_256", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(8192)
-    .set_description(""),
-
-    Option("xio_mp_max_1k", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(8192)
-    .set_description(""),
-
-    Option("xio_mp_max_page", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_description(""),
-
-    Option("xio_mp_max_hint", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(4096)
-    .set_description(""),
-
-    Option("xio_portal_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2)
-    .set_description(""),
-
-    Option("xio_max_conns_per_portal", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(32)
-    .set_description(""),
-
-    Option("xio_transport_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("rdma")
-    .set_description(""),
-
-    Option("xio_max_send_inline", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(512)
-    .set_description(""),
-
     // Compressor
     Option("compressor_zlib_isal", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -841,7 +790,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_type"),
 
     Option("ms_mon_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_description("Connection modes (crc, secure) for intra-mon connections in order of preference")
     .add_see_also("ms_mon_service_mode")
     .add_see_also("ms_mon_client_mode")
@@ -850,7 +799,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_description("Allowed connection modes (crc, secure) for connections to mons")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_mon_cluster_mode")
@@ -859,7 +808,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_description("Connection modes (crc, secure) for connections from clients to monitors in order of preference")
     .add_see_also("ms_mon_service_mode")
     .add_see_also("ms_mon_cluster_mode")
@@ -868,19 +817,19 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_description("Connection modes (crc, secure) for intra-cluster connections in order of preference")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_description("Allowed connection modes (crc, secure) for connections to daemons")
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_description("Connection modes (crc, secure) for connections from clients in order of preference")
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_service_mode"),
@@ -929,6 +878,10 @@ std::vector<Option> get_global_options() {
     Option("ms_die_on_skipped_message", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Induce a daemon crash/exit if sender skips a message sequence number"),
+
+    Option("ms_die_on_bug", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Induce a crash/exit on various bugs (for testing purposes)"),
 
     Option("ms_dispatch_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
@@ -1001,10 +954,6 @@ std::vector<Option> get_global_options() {
     Option("ms_tcp_listen_backlog", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512)
     .set_description("Size of queue of incoming connections for accept(2)"),
-
-    Option("ms_rwthread_stack_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(1_M)
-    .set_description("Size of stack for SimpleMessenger read/write threads"),
 
     Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
@@ -3648,6 +3597,11 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_deep_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
+
+    Option("osd_debug_no_acting_change", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
+    Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -7294,6 +7248,16 @@ static std::vector<Option> get_rbd_options() {
     .set_default(60)
     .set_min(0)
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
+
+    Option("rbd_io_scheduler", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("none")
+    .set_enum_allowed({"none", "simple"})
+    .set_description("RBD IO scheduler"),
+
+    Option("rbd_io_scheduler_simple_max_delay", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_min(0)
+    .set_description("maximum io delay (in milliseconds) for simple io scheduler (if set to 0 dalay is calculated based on latency stats)"),
   });
 }
 
@@ -7376,6 +7340,34 @@ static std::vector<Option> get_rbd_mirror_options() {
                           "mgr_stats_threshold.")
     .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
                  (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
+  });
+}
+
+static std::vector<Option> get_immutable_object_cache_options() {
+  return std::vector<Option>({
+    Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description("immutable object cache data dir"),
+
+    Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/run/ceph/immutable_object_cache_sock")
+    .set_description("immutable object cache domain socket"),
+
+    Option("immutable_object_cache_max_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1_G)
+    .set_description("max immutable object cache data size"),
+
+    Option("immutable_object_cache_max_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_description("max inflight promoting requests for immutable object cache daemon"),
+
+    Option("immutable_object_cache_client_dedicated_thread_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_description("immutable object cache client dedicated thread number"),
+
+    Option("immutable_object_cache_watermark", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.1)
+    .set_description("immutable object cache water mark"),
   });
 }
 
@@ -8132,6 +8124,7 @@ static std::vector<Option> build_options()
   ingest(get_rgw_options(), "rgw");
   ingest(get_rbd_options(), "rbd");
   ingest(get_rbd_mirror_options(), "rbd-mirror");
+  ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
 

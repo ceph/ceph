@@ -67,6 +67,7 @@ public:
       WRLOCK		= 2,
       XLOCK		= 4,
       REMOTE_WRLOCK	= 8,
+      STATE_PIN		= 16, // no RW after locked, just pin lock state
     };
     SimpleLock* lock;
     mutable unsigned flags;
@@ -85,6 +86,7 @@ public:
       flags &= ~REMOTE_WRLOCK;
       wrlock_target = MDS_RANK_NONE;
     }
+    bool is_state_pin() const { return !!(flags & STATE_PIN); }
   };
 
   struct LockOpVec : public vector<LockOp> {
@@ -101,6 +103,9 @@ public:
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
       emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+    }
+    void lock_scatter_gather(SimpleLock *lock) {
+      emplace_back(lock, LockOp::WRLOCK | LockOp::STATE_PIN);
     }
     void sort_and_merge();
 
@@ -143,7 +148,7 @@ public:
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
-  list<CDir*> projected_fnodes;
+  std::vector<CDir*> projected_fnodes;
   list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;
@@ -229,8 +234,8 @@ typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 
 
-/** active_request_t
- * state we track for requests we are currently processing.
+/**
+ * MDRequestImpl: state we track for requests we are currently processing.
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
