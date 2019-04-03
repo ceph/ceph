@@ -147,6 +147,16 @@ describe('NfsFormComponent', () => {
       });
     });
 
+    it('should remove "pseudo" requirement when NFS v4 disabled', () => {
+      component.nfsForm.patchValue({
+        protocolNfsv4: false,
+        pseudo: ''
+      });
+
+      component.nfsForm.updateValueAndValidity({ emitEvent: false });
+      expect(component.nfsForm.valid).toBeTruthy();
+    });
+
     it('should call update', () => {
       activatedRoute.setParams({ cluster_id: 'cluster1', export_id: '1' });
       component.isEdit = true;
