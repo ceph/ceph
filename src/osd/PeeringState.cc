@@ -2527,6 +2527,45 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtx *rctx)
   }
 }
 
+void PeeringState::try_mark_clean()
+{
+  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid)) {
+    state_clear(PG_STATE_FORCED_BACKFILL | PG_STATE_FORCED_RECOVERY);
+    state_set(PG_STATE_CLEAN);
+    info.history.last_epoch_clean = get_osdmap_epoch();
+    info.history.last_interval_clean = info.history.same_interval_since;
+    past_intervals.clear();
+    dirty_big_info = true;
+    dirty_info = true;
+  }
+
+  if (!is_active() && is_peered()) {
+    if (is_clean()) {
+      bool target;
+      if (pool.info.is_pending_merge(info.pgid.pgid, &target)) {
+	if (target) {
+	  psdout(10) << "ready to merge (target)" << dendl;
+	  pl->set_ready_to_merge_target(
+	    info.last_update,
+	    info.history.last_epoch_started,
+	    info.history.last_epoch_clean);
+	} else {
+	  psdout(10) << "ready to merge (source)" << dendl;
+	  pl->set_ready_to_merge_source(info.last_update);
+	}
+      }
+    } else {
+      psdout(10) << "not clean, not ready to merge" << dendl;
+      // we should have notified OSD in Active state entry point
+    }
+  }
+
+  state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
+
+  share_pg_info();
+  pl->publish_stats_to_osd();
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
@@ -3785,6 +3824,9 @@ PeeringState::Clean::Clean(my_context ctx)
   if (ps->info.last_complete != ps->info.last_update) {
     ceph_abort();
   }
+
+  ps->try_mark_clean();
+
   context< PeeringMachine >().get_cur_transaction()->register_on_commit(
     pl->on_clean());
 }

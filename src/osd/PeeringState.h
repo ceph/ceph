@@ -1393,6 +1393,8 @@ public:
     pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
   void fulfill_query(const MQuery& q, PeeringCtx *rctx);
 
+  void try_mark_clean();
+
 public:
   PeeringState(
     CephContext *cct,
