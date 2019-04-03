@@ -68,6 +68,7 @@ OPTION(clog_to_graylog_port, OPT_STR)
 OPTION(mon_cluster_log_to_syslog, OPT_STR)
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR)   // this level and above
 OPTION(mon_cluster_log_to_syslog_facility, OPT_STR)
+OPTION(mon_cluster_log_to_file, OPT_BOOL)
 OPTION(mon_cluster_log_file, OPT_STR)
 OPTION(mon_cluster_log_file_level, OPT_STR)
 OPTION(mon_cluster_log_to_graylog, OPT_STR)
