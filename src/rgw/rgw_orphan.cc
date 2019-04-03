@@ -11,6 +11,7 @@
 #include "rgw_rados.h"
 #include "rgw_orphan.h"
 #include "rgw_zone.h"
+#include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -185,12 +186,19 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
   return 0;
 }
 
-int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
+int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode)
+{
   int r = orphan_store.init();
   if (r < 0) {
     return r;
   }
 
+  constexpr int64_t MAX_LIST_OBJS_ENTRIES=100;
+
+  max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
+                                     MAX_LIST_OBJS_ENTRIES);
+
+  detailed_mode = _detailed_mode;
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
@@ -432,6 +440,12 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
   } else {
     RGWObjManifest& manifest = result.manifest;
 
+    if (!detailed_mode &&
+        manifest.get_obj_size() <= manifest.get_head_size()) {
+      ldout(store->ctx(), 5) << "skipping object as it fits in a head" << dendl;
+      return 0;
+    }
+
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
@@ -472,11 +486,22 @@ done:
 
 int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_id, map<int, list<string> >& oids)
 {
-  ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
-  RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
   auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
-  int ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
+
+  rgw_bucket orphan_bucket;
+  int shard_id;
+  int ret = rgw_bucket_parse_bucket_key(store->ctx(), bucket_instance_id,
+                                        &orphan_bucket, &shard_id);
+  if (ret < 0) {
+    ldout(store->ctx(),0) << __func__ << " failed to parse bucket instance: "
+                 << bucket_instance_id << " skipping" << dendl;
+    return ret;
+  }
+
+  RGWBucketInfo cur_bucket_info;
+  ret = store->get_bucket_info(sysobj_ctx, orphan_bucket.tenant,
+			       orphan_bucket.name, cur_bucket_info, nullptr);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -486,6 +511,32 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
     return ret;
   }
 
+  if (cur_bucket_info.bucket.bucket_id != orphan_bucket.bucket_id) {
+    ldout(store->ctx(), 0) << __func__ << ": Skipping stale bucket instance: "
+                           << orphan_bucket.name << ": "
+                           << orphan_bucket.bucket_id << dendl;
+    return 0;
+  }
+
+  if (cur_bucket_info.reshard_status == CLS_RGW_RESHARD_IN_PROGRESS) {
+    ldout(store->ctx(), 0) << __func__ << ": reshard in progress. Skipping "
+                           << orphan_bucket.name << ": "
+                           << orphan_bucket.bucket_id << dendl;
+    return 0;
+  }
+
+  RGWBucketInfo bucket_info;
+  ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      /* probably raced with bucket removal */
+      return 0;
+    }
+    lderr(store->ctx()) << __func__ << ": ERROR: RGWRados::get_bucket_instance_info() returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
   RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
@@ -498,13 +549,11 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
 
   deque<RGWRados::Object::Stat> stat_ops;
 
-  int count = 0;
-
   do {
     vector<rgw_bucket_dir_entry> result;
 
-#define MAX_LIST_OBJS_ENTRIES 100
-    ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
+    ret = list_op.list_objects(max_list_bucket_entries,
+                               &result, nullptr, &truncated);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -519,6 +568,14 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
       }
 
       ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
+
+      if (!detailed_mode &&
+          entry.meta.accounted_size <= (uint64_t)store->ctx()->_conf->rgw_max_chunk_size) {
+        ldout(store->ctx(),5) << __func__ << "skipping stat as the object " << entry.key.name
+                              << "fits in a head" << dendl;
+        continue;
+      }
+
       rgw_obj obj(bucket_info.bucket, entry.key);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
@@ -540,13 +597,12 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
           }
         }
       }
-      if (++count >= COUNT_BEFORE_FLUSH) {
+      if (oids.size() >= COUNT_BEFORE_FLUSH) {
         ret = log_oids(linked_objs_index, oids);
         if (ret < 0) {
           cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
           return ret;
         }
-        count = 0;
         oids.clear();
       }
     }

@@ -163,6 +163,9 @@ class RGWOrphanSearch {
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
+  int64_t max_list_bucket_entries;
+
+  bool detailed_mode;
 
   struct log_iter_info {
     string oid;
@@ -192,7 +195,7 @@ public:
     return orphan_store.write_job(search_info.job_name, state);
   }
 
-  int init(const string& job_name, RGWOrphanSearchInfo *info);
+  int init(const string& job_name, RGWOrphanSearchInfo *info, bool _detailed_mode=false);
 
   int create(const string& job_name, int num_shards);
 
