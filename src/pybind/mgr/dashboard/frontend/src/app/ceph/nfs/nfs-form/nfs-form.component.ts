@@ -517,13 +517,13 @@ export class NfsFormComponent implements OnInit {
 
     requestModel.transports = [];
     if (requestModel.transportTCP) {
-      delete requestModel.transportTCP;
       requestModel.transports.push('TCP');
     }
+    delete requestModel.transportTCP;
     if (requestModel.transportUDP) {
-      delete requestModel.transportUDP;
       requestModel.transports.push('UDP');
     }
+    delete requestModel.transportUDP;
 
     requestModel.clients.forEach((client) => {
       if (_.isString(client.addresses)) {
