@@ -47,6 +47,10 @@ export class IscsiComponent implements OnInit {
       {
         name: this.i18n('# Targets'),
         prop: 'num_targets'
+      },
+      {
+        name: this.i18n('# Sessions'),
+        prop: 'num_sessions'
       }
     ];
     this.imagesColumns = [
