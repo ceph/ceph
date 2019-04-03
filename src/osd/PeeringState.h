@@ -22,8 +22,6 @@
 #include "MissingLoc.h"
 #include "common/LogClient.h"
 
-class PG;
-
 struct PGPool {
   CephContext* cct;
   epoch_t cached_epoch;
@@ -377,7 +375,6 @@ public:
     spg_t spgid;
     DoutPrefixProvider *dpp;
     PeeringListener *pl;
-    PG *pg;
 
     utime_t event_time;
     uint64_t event_count;
@@ -395,13 +392,12 @@ public:
       spg_t spgid,
       DoutPrefixProvider *dpp,
       PeeringListener *pl,
-      PG *pg,
       PGStateHistory *state_history) :
       state(state),
       state_history(state_history),
       cct(cct), spgid(spgid),
       dpp(dpp), pl(pl),
-      pg(pg), event_count(0) {}
+      event_count(0) {}
 
     /* Accessor functions for state methods */
     ObjectStore::Transaction* get_cur_transaction() {
@@ -1133,7 +1129,6 @@ public:
   spg_t spgid;
   DoutPrefixProvider *dpp;
   PeeringListener *pl;
-  PG *pg;
 
   /// context passed in by state machine caller
   PeeringCtx *orig_ctx;
@@ -1405,8 +1400,7 @@ public:
     const PGPool &pool,
     OSDMapRef curmap,
     DoutPrefixProvider *dpp,
-    PeeringListener *pl,
-    PG *pg);
+    PeeringListener *pl);
 
   void set_backend_predicates(
     IsPGReadablePredicate *is_readable,

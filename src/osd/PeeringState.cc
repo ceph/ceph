@@ -4,7 +4,6 @@
 #include "PGPeeringEvent.h"
 #include "common/dout.h"
 #include "PeeringState.h"
-#include "PG.h"
 #include "OSD.h"
 
 #include "messages/MOSDPGRemove.h"
@@ -117,14 +116,12 @@ PeeringState::PeeringState(
   const PGPool &_pool,
   OSDMapRef curmap,
   DoutPrefixProvider *dpp,
-  PeeringListener *pl,
-  PG *pg)
-  : state_history(pg),
-    machine(this, cct, spgid, dpp, pl, pg, &state_history), cct(cct),
+  PeeringListener *pl)
+  : state_history(pl),
+    machine(this, cct, spgid, dpp, pl, &state_history), cct(cct),
     spgid(spgid),
     dpp(dpp),
     pl(pl),
-    pg(pg),
     orig_ctx(0),
     osdmap_ref(curmap),
     pool(_pool),
@@ -2538,8 +2535,6 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtx *rctx)
 #define psdout(x) ldout(context< PeeringMachine >().cct, x)
 
 #define DECLARE_LOCALS                                  \
-  PG *pg = context< PeeringMachine >().pg;              \
-  std::ignore = pg;                                     \
   PeeringState *ps = context< PeeringMachine >().state; \
   std::ignore = ps;                                     \
   PeeringListener *pl = context< PeeringMachine >().pl; \
