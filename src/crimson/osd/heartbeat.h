@@ -22,9 +22,7 @@ class Heartbeat : public ceph::net::Dispatcher {
 public:
   using osd_id_t = int;
 
-  Heartbeat(int whoami,
-	    uint32_t nonce,
-	    const OSDMapService& service,
+  Heartbeat(const OSDMapService& service,
 	    ceph::mon::Client& monc,
 	    ceph::net::Messenger& front_msgr,
 	    ceph::net::Messenger& back_msgr);
@@ -70,8 +68,6 @@ private:
   seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
-  const int whoami;
-  const uint32_t nonce;
   const OSDMapService& service;
   ceph::mon::Client& monc;
   ceph::net::Messenger& front_msgr;

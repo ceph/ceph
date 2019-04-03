@@ -28,15 +28,11 @@ namespace {
   }
 }
 
-Heartbeat::Heartbeat(int whoami,
-                     uint32_t nonce,
-                     const OSDMapService& service,
+Heartbeat::Heartbeat(const OSDMapService& service,
                      ceph::mon::Client& monc,
                      ceph::net::Messenger& front_msgr,
                      ceph::net::Messenger& back_msgr)
-  : whoami{whoami},
-    nonce{nonce},
-    service{service},
+  : service{service},
     monc{monc},
     front_msgr{front_msgr},
     back_msgr{back_msgr},
