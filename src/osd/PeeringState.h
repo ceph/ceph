@@ -1563,6 +1563,10 @@ public:
     return up_primary.osd;
   }
 
+  bool is_backfill_targets(pg_shard_t osd) {
+    return backfill_targets.count(osd);
+  }
+
   bool state_test(uint64_t m) const { return (state & m) != 0; }
   void state_set(uint64_t m) { state |= m; }
   void state_clear(uint64_t m) { state &= ~m; }
@@ -1575,6 +1579,12 @@ public:
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }
   bool is_down() const { return state_test(PG_STATE_DOWN); }
+  bool is_recovery_unfound() const {
+    return state_test(PG_STATE_RECOVERY_UNFOUND);
+  }
+  bool is_backfill_unfound() const {
+    return state_test(PG_STATE_BACKFILL_UNFOUND);
+  }
   bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
   bool is_clean() const { return state_test(PG_STATE_CLEAN); }
   bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
@@ -1583,6 +1593,7 @@ public:
   bool is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
+  bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
