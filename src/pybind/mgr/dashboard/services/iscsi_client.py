@@ -102,6 +102,11 @@ class IscsiClient(RestClient):
             'skipchecks': 'true'
         })
 
+    @RestClient.api_get('/api/gatewayinfo')
+    def get_gatewayinfo(self, request=None):
+        logger.debug("iSCSI: Getting gatewayinfo")
+        return request()
+
     @RestClient.api_put('/api/disk/{pool}/{image}')
     def create_disk(self, pool, image, backstore, request=None):
         logger.debug("iSCSI: Creating disk: %s/%s", pool, image)
