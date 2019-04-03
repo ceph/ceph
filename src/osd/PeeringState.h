@@ -105,8 +105,6 @@ public:
     virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
     virtual void clear_probe_targets() = 0;
 
-    virtual PerfCounters &get_peering_perf() = 0;
-
     virtual void clear_ready_to_merge() = 0;
 
     virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
@@ -161,6 +159,14 @@ public:
 
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
+
+    // Logging
+    virtual PerfCounters &get_peering_perf() = 0;
+    virtual PerfCounters &get_perf_logger() = 0;
+    virtual void log_state_enter(const char *state) = 0;
+    virtual void log_state_exit(
+      const char *state_name, utime_t enter_time,
+      uint64_t events, utime_t event_dur) = 0;
 
     virtual ~PeeringListener() {}
   };
