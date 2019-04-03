@@ -8,6 +8,8 @@ import { ConfigOptionComponent } from '../../../../shared/components/config-opti
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
+import { Permissions } from '../../../../shared/models/permissions';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { OsdPgScrubModalOptions } from './osd-pg-scrub-modal.options';
 
@@ -20,6 +22,7 @@ export class OsdPgScrubModalComponent {
   osdPgScrubForm: CdFormGroup;
   action: string;
   resource: string;
+  permissions: Permissions;
 
   @ViewChild('basicOptionsValues')
   basicOptionsValues: ConfigOptionComponent;
@@ -33,6 +36,7 @@ export class OsdPgScrubModalComponent {
 
   constructor(
     public bsModalRef: BsModalRef,
+    private authStorageService: AuthStorageService,
     private notificationService: NotificationService,
     private i18n: I18n,
     public actionLabels: ActionLabelsI18n
@@ -40,6 +44,7 @@ export class OsdPgScrubModalComponent {
     this.osdPgScrubForm = new CdFormGroup({});
     this.resource = this.i18n('PG scrub options');
     this.action = this.actionLabels.EDIT;
+    this.permissions = this.authStorageService.getPermissions();
   }
 
   submitAction() {
