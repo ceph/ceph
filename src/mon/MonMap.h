@@ -164,6 +164,13 @@ public:
     return mon_info.size();
   }
 
+  unsigned min_quorum_size(unsigned total_mons=0) const {
+    if (total_mons == 0) {
+      total_mons = size();
+    }
+    return total_mons / 2 + 1;
+  }
+
   epoch_t get_epoch() const { return epoch; }
   void set_epoch(epoch_t e) { epoch = e; }
 
