@@ -10668,7 +10668,8 @@ void PrimaryLogPG::submit_log_entries(
     [this, entries, repop, on_complete]() {
       ObjectStore::Transaction t;
       eversion_t old_last_update = info.last_update;
-      merge_new_log_entries(entries, t, pg_trim_to, min_last_complete_ondisk);
+      recovery_state.merge_new_log_entries(
+	entries, t, pg_trim_to, min_last_complete_ondisk);
 
 
       set<pg_shard_t> waiting_on;
@@ -11715,7 +11716,8 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 
   dout(20) << __func__ << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
 
-  append_log_entries_update_missing(m->entries, t, op_trim_to, op_roll_forward_to);
+  recovery_state.append_log_entries_update_missing(
+    m->entries, t, op_trim_to, op_roll_forward_to);
   eversion_t new_lcod = info.last_complete;
 
   Context *complete = new FunctionContext(

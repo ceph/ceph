@@ -1506,22 +1506,6 @@ protected:
   bool queue_scrub();
   unsigned get_scrub_priority();
 
-  bool append_log_entries_update_missing(
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
-
-  /**
-   * Merge entries updating missing as necessary on all
-   * acting_recovery_backfill logs and missings (also missing_loc)
-   */
-  void merge_new_log_entries(
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
-
   bool try_flush_or_schedule_async() override;
   void start_flush_on_transaction(
     ObjectStore::Transaction *t) override;
