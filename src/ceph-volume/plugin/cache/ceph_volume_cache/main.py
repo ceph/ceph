@@ -223,22 +223,25 @@ $> ceph-volume cache rm --osdid <id>
         # This should be under if argv[0] == 'add'
         if args.osdid:
             lvs = api.Volumes()
+            lvs.filter(lv_tags={'ceph.osd_id': args.osdid})
+
+            # this loop might not be necessary, take any LV from lvs and it will work
+            # proof: we break after the first iteration
             for lv in lvs:
-                if lv.tags.get('ceph.osd_id', '') == args.osdid:
-                    # TODO make sure there is a db or wal partition
-                    osdid = args.osdid
-                    # TODO update the cache's name accordingly to this
-                    # TODO make sure there's a separate wal or db
-                    if args.data:
-                        origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
-                    elif args.db:
-                        # TODO make sure 'ceph.db_device' and others are in tag. ie use tags.get()
-                        origin_lv = api.get_lv(lv_path=lv.tags['ceph.db_device'])
-                    elif args.wal:
-                        origin_lv = api.get_lv(lv_path=lv.tags['ceph.wal_device'])
-                    else:
-                        origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
-                    break
+                # TODO make sure there is a db or wal partition
+                osdid = args.osdid
+                # TODO update the cache's name accordingly to this
+                # TODO make sure there's a separate wal or db
+                if args.data:
+                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
+                elif args.db:
+                    # TODO make sure 'ceph.db_device' and others are in tag. ie use tags.get()
+                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.db_device'])
+                elif args.wal:
+                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.wal_device'])
+                else:
+                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
+                break
             if not origin_lv:
                 print('Couldn\'t find origin LV for OSD ' + args.osdid)
                 return
@@ -264,8 +267,9 @@ $> ceph-volume cache rm --osdid <id>
             # TODO verify that the OSD has a cache
             if args.osdid and not args.origin:
                 lvs = api.Volumes()
+                lvs.filter(lv_tags={'ceph.osd_id': args.osdid})
                 for lv in lvs:
-                    if lv.tags.get('ceph.osd_id', '') == args.osdid and lv.tags.get('ceph.cache_lv', None):
+                    if lv.tags.get('ceph.cache_lv', None):
                         origin_lv = lv
                         break
             if not origin_lv:
