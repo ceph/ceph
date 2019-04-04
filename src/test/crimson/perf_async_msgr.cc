@@ -17,8 +17,8 @@ namespace {
 constexpr int CEPH_OSD_PROTOCOL = 10;
 
 struct Server {
-  Server(CephContext* cct)
-    : dummy_auth(cct), dispatcher(cct)
+  Server(CephContext* cct, unsigned msg_len)
+    : dummy_auth(cct), dispatcher(cct, msg_len)
   {
     msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(0), "server", 0, 0));
     dummy_auth.auth_registry.refresh_config();
@@ -31,9 +31,14 @@ struct Server {
   DummyAuthClientServer dummy_auth;
   unique_ptr<Messenger> msgr;
   struct ServerDispatcher : Dispatcher {
-    ServerDispatcher(CephContext* cct)
-      : Dispatcher(cct)
-    {}
+    unsigned msg_len = 0;
+    bufferlist msg_data;
+
+    ServerDispatcher(CephContext* cct, unsigned msg_len)
+      : Dispatcher(cct), msg_len(msg_len)
+    {
+      msg_data.append_zero(msg_len);
+    }
     bool ms_can_fast_dispatch_any() const override {
       return true;
     }
@@ -42,8 +47,15 @@ struct Server {
     }
     void ms_fast_dispatch(Message* m) override {
       ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
-      MOSDOp *req = static_cast<MOSDOp*>(m);
-      m->get_connection()->send_message(new MOSDOpReply(req, 0, 0, 0, false));
+      const static pg_t pgid;
+      const static object_locator_t oloc;
+      const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
+                                  pgid.pool(), oloc.nspace);
+      static spg_t spgid(pgid);
+      MOSDOp *rep = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
+      bufferlist data(msg_data);
+      rep->write(0, msg_len, data);
+      m->get_connection()->send_message(rep);
       m->put();
     }
     bool ms_dispatch(Message*) override {
@@ -62,10 +74,10 @@ struct Server {
 
 }
 
-static void run(CephContext* cct, entity_addr_t addr)
+static void run(CephContext* cct, entity_addr_t addr, unsigned bs)
 {
   std::cout << "async server listening at " << addr << std::endl;
-  Server server{cct};
+  Server server{cct, bs};
   server.msgr->bind(addr);
   server.msgr->add_dispatcher_head(&server.dispatcher);
   server.msgr->start();
@@ -79,7 +91,9 @@ int main(int argc, char** argv)
   desc.add_options()
     ("help,h", "show help message")
     ("addr", po::value<std::string>()->default_value("v1:0.0.0.0:9010"),
-     "server address");
+     "server address")
+    ("bs", po::value<unsigned>()->default_value(0),
+     "server block size");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -102,6 +116,7 @@ int main(int argc, char** argv)
   auto addr = vm["addr"].as<std::string>();
   entity_addr_t target_addr;
   target_addr.parse(addr.c_str(), nullptr);
+  auto bs = vm["bs"].as<unsigned>();
 
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
@@ -109,5 +124,5 @@ int main(int argc, char** argv)
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
-  run(cct.get(), target_addr);
+  run(cct.get(), target_addr, bs);
 }
