@@ -12,6 +12,14 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 """
 
 
+# TODO handle OSD removal
+# TODO add a 'cache status' function that shows which OSDs are cached, cache mode, etc
+# TODO look into getting cache statistics
+# TODO add change caching mode
+# TODO  stderr: WARNING: Maximum supported pool metadata size is 16.00 GiB.
+# TODO  stderr: WARNING: recovery of pools without pool metadata spare LV is not automated.
+# TODO do we want a spare partition or not?
+
 # partition sizes in GB
 def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_partition_size = disk.size_from_human_readable(disk.lsblk(md_partition)['SIZE'])
