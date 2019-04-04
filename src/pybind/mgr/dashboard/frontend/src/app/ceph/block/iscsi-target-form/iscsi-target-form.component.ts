@@ -544,7 +544,7 @@ export class IscsiTargetFormComponent implements OnInit {
   }
 
   submit() {
-    const formValue = this.targetForm.value;
+    const formValue = _.cloneDeep(this.targetForm.value);
 
     const request = {
       target_iqn: this.targetForm.getValue('target_iqn'),
@@ -581,17 +581,18 @@ export class IscsiTargetFormComponent implements OnInit {
     if (request.acl_enabled) {
       formValue.initiators.forEach((initiator) => {
         if (!initiator.auth.user) {
-          initiator.auth.user = null;
+          initiator.auth.user = '';
         }
         if (!initiator.auth.password) {
-          initiator.auth.password = null;
+          initiator.auth.password = '';
         }
         if (!initiator.auth.mutual_user) {
-          initiator.auth.mutual_user = null;
+          initiator.auth.mutual_user = '';
         }
         if (!initiator.auth.mutual_password) {
-          initiator.auth.mutual_password = null;
+          initiator.auth.mutual_password = '';
         }
+        delete initiator.cdIsInGroup;
 
         const newLuns = [];
         initiator.luns.forEach((lun) => {
