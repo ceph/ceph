@@ -567,7 +567,7 @@ exists.')
                     self.poutput(dir_name, ':\n')
                 items = sorted(list_items(dir_name),
                                key=lambda item: item.d_name)
-            if not args.all and len(items) > 2:
+            if not args.all and len(items) >= 2:
                 items = [i for i in items if not i.d_name.startswith('.')]
             flag = 0
             if args.S:
