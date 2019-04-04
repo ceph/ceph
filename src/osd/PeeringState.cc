@@ -3511,6 +3511,74 @@ void PeeringState::append_log(
   write_if_dirty(t);
 }
 
+void PeeringState::recover_got(
+  const hobject_t &oid, eversion_t v,
+  bool is_delete,
+  ObjectStore::Transaction &t)
+{
+  if (v > pg_log.get_can_rollback_to()) {
+    /* This can only happen during a repair, and even then, it would
+     * be one heck of a race.  If we are repairing the object, the
+     * write in question must be fully committed, so it's not valid
+     * to roll it back anyway (and we'll be rolled forward shortly
+     * anyway) */
+    PGLog::LogEntryHandlerRef handler{pl->get_log_handler(&t)};
+    pg_log.roll_forward_to(v, handler.get());
+  }
+
+  psdout(10) << "got missing " << oid << " v " << v << dendl;
+  pg_log.recover_got(oid, v, info);
+  if (pg_log.get_log().complete_to != pg_log.get_log().log.end()) {
+    psdout(10) << "last_complete now " << info.last_complete
+	       << " log.complete_to " << pg_log.get_log().complete_to->version
+	       << dendl;
+  } else {
+    psdout(10) << "last_complete now " << info.last_complete
+	       << " log.complete_to at end" << dendl;
+    //below is not true in the repair case.
+    //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
+    ceph_assert(info.last_complete == info.last_update);
+  }
+
+  if (is_primary()) {
+    ceph_assert(missing_loc.needs_recovery(oid));
+    if (!is_delete)
+      missing_loc.add_location(oid, pg_whoami);
+  }
+
+  // update pg
+  dirty_info = true;
+  write_if_dirty(t);
+}
+
+void PeeringState::update_backfill_progress(
+  const hobject_t &updated_backfill,
+  const pg_stat_t &updated_stats,
+  bool preserve_local_num_bytes,
+  ObjectStore::Transaction &t) {
+  info.set_last_backfill(updated_backfill);
+  if (preserve_local_num_bytes) {
+    psdout(25) << __func__ << " primary " << updated_stats.stats.sum.num_bytes
+	       << " local " << info.stats.stats.sum.num_bytes << dendl;
+    int64_t bytes = info.stats.stats.sum.num_bytes;
+    info.stats = updated_stats;
+    info.stats.stats.sum.num_bytes = bytes;
+  } else {
+    psdout(20) << __func__ << " final " << updated_stats.stats.sum.num_bytes
+	       << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
+    info.stats = updated_stats;
+  }
+
+  dirty_info = true;
+  write_if_dirty(t);
+}
+
+void PeeringState::adjust_purged_snaps(
+  std::function<void(interval_set<snapid_t> &snaps)> f) {
+  f(info.purged_snaps);
+  dirty_info = true;
+  dirty_big_info = true;
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
@@ -5477,6 +5545,16 @@ PeeringState::Deleting::Deleting(my_context ctx)
   DECLARE_LOCALS
   ps->deleting = true;
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
+
+  // adjust info to backfill
+  ps->info.set_last_backfill(hobject_t());
+  ps->pg_log.reset_backfill();
+  ps->dirty_info = true;
+
+  // clear log
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
+  ps->pg_log.roll_forward(rollbacker.get());
+
   pl->on_removal(t);
 }
 

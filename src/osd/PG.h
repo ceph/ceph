@@ -188,8 +188,6 @@ protected:
   set<pg_shard_t> &upset;
   set<pg_shard_t> &actingset;
   set<pg_shard_t> &acting_recovery_backfill;
-  bool &dirty_info;
-  bool &dirty_big_info;
   pg_info_t &info;
   PastIntervals &past_intervals;
   PGLog &pg_log;
@@ -250,8 +248,7 @@ public:
   void lock(bool no_lockdep = false) const;
   void unlock() const {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    ceph_assert(!dirty_info);
-    ceph_assert(!dirty_big_info);
+    ceph_assert(!recovery_state.debug_has_dirty_state());
     _lock.Unlock();
   }
   bool is_locked() const {

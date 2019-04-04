@@ -191,8 +191,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   upset(recovery_state.upset),
   actingset(recovery_state.actingset),
   acting_recovery_backfill(recovery_state.acting_recovery_backfill),
-  dirty_info(recovery_state.dirty_info),
-  dirty_big_info(recovery_state.dirty_big_info),
   info(recovery_state.info),
   past_intervals(recovery_state.past_intervals),
   pg_log(recovery_state.pg_log),
@@ -262,8 +260,7 @@ void PG::lock(bool no_lockdep) const
 {
   _lock.Lock(no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
-  ceph_assert(!dirty_info);
-  ceph_assert(!dirty_big_info);
+  ceph_assert(!recovery_state.debug_has_dirty_state());
 
   dout(30) << "lock" << dendl;
 }
@@ -925,9 +922,7 @@ void PG::upgrade(ObjectStore *store)
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
-  dirty_info = true;
-  dirty_big_info = true;
-  write_if_dirty(t);
+  recovery_state.force_write_state(t);
 
   ObjectStore::CollectionHandle ch = store->open_collection(coll);
   int r = store->queue_transaction(ch, std::move(t));
@@ -3885,8 +3880,6 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
 	      info.pgid.get_split_bits(pool.info.get_pg_num()));
       _init(*t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
-      dirty_info = true;
-      dirty_big_info = true;
     } else {
       recovery_state.set_delete_complete();
 
