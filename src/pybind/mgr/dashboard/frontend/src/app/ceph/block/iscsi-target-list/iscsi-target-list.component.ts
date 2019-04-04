@@ -101,6 +101,11 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         name: this.i18n('Images'),
         prop: 'cdImages',
         flexGrow: 2
+      },
+      {
+        name: this.i18n('# Sessions'),
+        prop: 'info.num_sessions',
+        flexGrow: 1
       }
     ];
 
