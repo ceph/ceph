@@ -253,7 +253,7 @@ if(WITH_PYTHON3)
     set(WITH_PYTHON3 "3")
   endif()
   find_package(Python3Interp ${WITH_PYTHON3} REQUIRED)
-  find_package(Python3Libs ${WITH_PYTHON3} REQUIRED)
+  find_package(Python3Libs ${PYTHON_VERSION_STRING} REQUIRED)
 endif()
 
 if(HAVE_XIO)
