@@ -383,16 +383,6 @@ public:
       for(auto& it: current_shards_iterators) {
         it->lower_bound(to);
       }
-      struct KeyLess {
-        WholeSpaceIteratorMerged_Impl& iter;
-        KeyLess(WholeSpaceIteratorMerged_Impl& iter) : iter(iter) {};
-        bool operator()(KeyValueDB::Iterator a, KeyValueDB::Iterator b) const
-        {
-          if (!a->valid())
-            return false;
-          return iter.compare(a->key(), b->key()) < 0;
-        }
-      };
       std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
       return 0;
     }
@@ -502,6 +492,221 @@ public:
       return current_shards_iterators[position]->status();
     }
   };
+
+#undef dout_context
+#define dout_context db_hash.cct
+
+
+  class SinglePrefixIteratorMerged_Impl: public IteratorImpl {
+  private:
+    BlueStore_DB_Hash &db_hash;
+    ActiveShards::iterator shards_it;
+    /** for currently processed prefix, contains iterators to shards */
+    std::vector<KeyValueDB::Iterator> current_shards_iterators;
+    /** for currently processed prefix, marks first iterator that is not exhaused */
+    ssize_t position;
+    /*
+     * simulation of next/prev work
+     * v_______________________v   ---
+     * it0 it1 it2 it3 it4 it5 it6 it7
+     * next
+     * it1 it2 it0 it3 it4 it5 it6 it7
+     * next
+     * it2 it0 it3 it4 it1 it5 it6 it7
+     * next
+     * it2 it0 it3 it4 it1 it5 it6 it7
+     * next, it2 expired
+     * --- v___________________v   ---
+     * it2 it0 it3 it4 it1 it5 it6 it7
+     * next, it0 expired
+     * --- --- v_______________v   ---
+     * prev, requires checking before, revived it0
+     * --- v___________________v   ---
+     * it2 it0 it3 it4 it1 it5 it6 it7
+     * prev, checks before, but not revives
+     * it2 it0 it3 it4 it1 it5 it6 it7
+    */
+    bool open_shards() {
+      current_shards_iterators.clear();
+      for (auto& it: shards_it->second) {
+        Iterator wsi = db_hash.db->get_iterator_cf(it, shards_it->first);
+        wsi->seek_to_first();
+        if (wsi->valid())
+          current_shards_iterators.emplace_back(wsi);
+      }
+      position = 0;
+      std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
+      return true;
+    }
+    int compare(const std::string& a, const std::string& b) {
+      rocksdb::Slice _a(a.data(), a.size());
+      rocksdb::Slice _b(b.data(), b.size());
+      return db_hash.comparator->Compare(_a, _b);
+    }
+    struct KeyLess {
+      SinglePrefixIteratorMerged_Impl& iter;
+      KeyLess(SinglePrefixIteratorMerged_Impl& iter) : iter(iter) {};
+      bool operator()(KeyValueDB::Iterator a, KeyValueDB::Iterator b) const
+      {
+        if (!a->valid())
+          return false;
+        return iter.compare(a->key(), b->key()) < 0;
+      }
+    };
+
+  public:
+    SinglePrefixIteratorMerged_Impl(BlueStore_DB_Hash &db_hash, const string& prefix) : db_hash(db_hash), position(-1) {
+      shards_it = db_hash.shards.find(prefix);
+      if (shards_it != db_hash.shards.end()) {
+        for (auto& it: shards_it->second) {
+          Iterator wsi = db_hash.db->get_iterator_cf(it, shards_it->first);
+          wsi->seek_to_first();
+          if (wsi->valid())
+            current_shards_iterators.emplace_back(wsi);
+        }
+        if (!current_shards_iterators.empty()) {
+          position = 0;
+          std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
+        }
+      }
+    }
+
+    virtual ~SinglePrefixIteratorMerged_Impl() {
+    }
+
+    int seek_to_first() override {
+      for (auto& it: current_shards_iterators) {
+        it->seek_to_first();
+      }
+      if (!current_shards_iterators.empty()) {
+        position = 0;
+        std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
+      }
+      return 0;
+    }
+
+    int seek_to_last() override {
+      ceph_assert(false && "expected seek_to_last() not called");
+      return 0;
+    }
+
+    int upper_bound(const string &after) override {
+      for(auto& it: current_shards_iterators) {
+        it->upper_bound(after);
+      }
+      if (!current_shards_iterators.empty()) {
+        position = 0;
+        std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
+      }
+      return 0;
+    }
+
+    int lower_bound(const string &to) override {
+      for(auto& it: current_shards_iterators) {
+        it->lower_bound(to);
+      }
+      if (!current_shards_iterators.empty()) {
+        position = 0;
+        std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
+      }
+      return 0;
+    }
+
+    bool valid() override {
+      if ((position < 0) || (position >= (ssize_t)current_shards_iterators.size()) )
+        return false;
+      return current_shards_iterators[position]->valid();
+    }
+
+    int next() override {
+      current_shards_iterators[position]->next();
+      if (current_shards_iterators[position]->valid()) {
+        /* this means that next element on this iterator is ok,
+         * but it is likely that it will NOT be next in order */
+        if (position == (ssize_t)current_shards_iterators.size() - 1) {
+          /* this is last one, so it must be correct one */
+          return 0;
+        }
+        std::string key0 = current_shards_iterators[position]->key();
+        for (size_t p = position + 1; p < current_shards_iterators.size(); p++) {
+          std::string key1 = current_shards_iterators[p]->key();
+          if (compare(key0, key1) < 0) {
+            /* all in order, no need to sort more */
+            break;
+          }
+          std::swap(current_shards_iterators[p - 1], current_shards_iterators[p]);
+        }
+        return 0;
+      }
+      ceph_assert(!current_shards_iterators[position]->valid());
+      return -1;
+    }
+
+    int prev() override {
+      ceph_assert(false && "expected prev() not called");
+      if (position > 0) {
+        if (!current_shards_iterators[position - 1]->valid()) {
+          current_shards_iterators[position - 1]->seek_to_last();
+        }
+      }
+
+      current_shards_iterators[position]->prev();
+      if (!current_shards_iterators[position]->valid()) {
+        current_shards_iterators[position]->seek_to_first();
+      }
+
+      current_shards_iterators[position]->prev();
+      if (current_shards_iterators[position]->valid()) {
+        /* this means that prev element on this iterator is ok,
+         * but it is likely that it will NOT be prev in order */
+        if (position == (ssize_t)current_shards_iterators.size() - 1) {
+          /* this is last one, so it must be correct one */
+          return 0;
+        }
+        std::string key0 = current_shards_iterators[position]->key();
+        for (size_t p = position + 1; p < current_shards_iterators.size(); p++) {
+          std::string key1 = current_shards_iterators[p]->key();
+          if (compare(key0, key1) < 0) {
+            /* all in order, no need to sort more */
+            break;
+          }
+          std::swap(current_shards_iterators[p - 1], current_shards_iterators[p]);
+          std::swap(key0, key1);
+        }
+        return 0;
+      }
+      ceph_assert(!current_shards_iterators[position]->valid());
+
+      /* this shard is used up */
+      if (position)
+      position--;
+      if (position == (ssize_t)current_shards_iterators.size()) {
+        /* end! */
+        return -1;
+      }
+      return 0;
+    }
+
+    string key() override {
+      return current_shards_iterators[position]->key();
+    }
+    pair<string,string> raw_key() override {
+      return current_shards_iterators[position]->raw_key();
+    }
+    bufferlist value() override {
+      return current_shards_iterators[position]->value();
+    }
+    bufferptr value_as_ptr() override {
+      return current_shards_iterators[position]->value_as_ptr();
+    }
+    int status() override {
+      return current_shards_iterators[position]->status();
+    }
+  };
+#undef dout_context
+#define dout_context cct
+
+
 private:
 
 #if 1
@@ -562,12 +767,10 @@ public:
   }
   Iterator get_iterator(const std::string &prefix) override {
     auto shards_it = shards.find(prefix);
-    if (shards_it == shards.end()) {
-      return db->get_iterator(prefix);
+    if (shards_it != shards.end()) {
+      return std::make_shared<SinglePrefixIteratorMerged_Impl>(*this, prefix);
     }
-    return std::make_shared<PrefixIteratorImpl>(
-      prefix,
-      get_wholespace_iterator());
+    return db->get_iterator(prefix);
   }
   WholeSpaceIterator get_wholespace_iterator_cf(ColumnFamilyHandle cfh) override {
     ceph_abort_msg("Not implemented"); return {};
