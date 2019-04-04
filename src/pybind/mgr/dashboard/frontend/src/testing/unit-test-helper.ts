@@ -7,6 +7,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
+import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
 import { Permission } from '../app/shared/models/permissions';
 import {
@@ -253,7 +254,7 @@ export class PrometheusHelper {
   }
 
   createLink(url) {
-    return `<a href="${url}" target="_blank"><i class="fa fa-line-chart"></i></a>`;
+    return `<a href="${url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
   }
 }
 

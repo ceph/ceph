@@ -260,7 +260,7 @@
   <ng-template #logsLink>
     <ng-container *ngIf="permissions.log.read">
       <p class="logs-link"
-         i18n><i class="fa fa-info-circle"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+         i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
     </ng-container>
   </ng-template>
 </div>

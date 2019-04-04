@@ -1,4 +1,5 @@
 import { ToastOptions } from 'ng2-toastr';
+import { Icons } from '../enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 
 export class CdNotificationConfig {
@@ -26,7 +27,7 @@ export class CdNotification extends CdNotificationConfig {
   iconClass: string;
 
   private textClasses = ['text-danger', 'text-info', 'text-success'];
-  private iconClasses = ['fa-exclamation-triangle', 'fa-info', 'fa-check'];
+  private iconClasses = [Icons.warning, Icons.info, Icons.check];
 
   constructor(private config: CdNotificationConfig = new CdNotificationConfig()) {
     super(config.type, config.title, config.message, config.options, config.application);

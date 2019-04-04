@@ -32,7 +32,7 @@
                         id="ecp-info-button"
                         type="button"
                         (click)="targetSettingsModal()">
-                  <i class="fa fa-cogs fa-fw"
+                  <i [ngClass]="[icons.deepCheck, icons.width]"
                      aria-hidden="true"></i>
                 </button>
               </span>
@@ -84,7 +84,7 @@
                   <button class="btn btn-default"
                           type="button"
                           (click)="removePortal(i, portal)">
-                    <i class="fa fa-remove fa-fw"
+                    <i [ngClass]="[icons.destroy, icons.width]"
                        aria-hidden="true"></i>
                   </button>
                 </span>
@@ -102,7 +102,7 @@
                            [messages]="messages.portals"
                            (selection)="onPortalSelection($event)"
                            elemClass="btn btn-default pull-right">
-                  <i class="fa fa-fw fa-plus"></i>
+                  <i [ngClass]="[icons.add, icons.width]"></i>
                   <ng-container i18n>Add portal</ng-container>
                 </cd-select>
               </div>
@@ -129,13 +129,13 @@
                   <button class="btn btn-default"
                           type="button"
                           (click)="imageSettingsModal(image)">
-                    <i class="fa fa-cogs fa-fw"
+                    <i [ngClass]="[icons.deepCheck, icons.width]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-default"
                           type="button"
                           (click)="removeImage(i, image)">
-                    <i class="fa fa-remove fa-fw"
+                    <i [ngClass]="[icons.destroy, icons.width]"
                        aria-hidden="true"></i>
                   </button>
                 </span>
@@ -162,7 +162,7 @@
                            [messages]="messages.images"
                            (selection)="onImageSelection($event)"
                            elemClass="btn btn-default pull-right">
-                  <i class="fa fa-fw fa-plus"></i>
+                  <i [ngClass]="[icons.add, icons.width]"></i>
                   <ng-container i18n>Add image</ng-container>
                 </cd-select>
               </div>
@@ -204,7 +204,7 @@
                 <button type="button"
                         class="close"
                         (click)="removeInitiator(ii)">
-                  <i class="fa fa-remove fa-fw"></i>
+                  <i [ngClass]="[icons.deepCheck, icons.width]"></i>
                 </button>
               </div>
               <div class="panel-body">
@@ -372,7 +372,7 @@
                           <button class="btn btn-default"
                                   type="button"
                                   (click)="removeInitiatorImage(initiator, li, ii, image)">
-                            <i class="fa fa-remove fa-fw"
+                            <i [ngClass]="[icons.destroy, icons.width]"
                                aria-hidden="true"></i>
                           </button>
                         </span>
@@ -389,7 +389,7 @@
                                    [options]="imagesInitiatorSelections[ii]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-default pull-right">
-                          <i class="fa fa-fw fa-plus"></i>
+                          <i [ngClass]="[icons.add, icons.width]"></i>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
                       </div>
@@ -407,7 +407,7 @@
 
                 <button (click)="addInitiator(); false"
                         class="btn btn-default pull-right">
-                  <i class="fa fa-fw fa-plus"></i>
+                  <i [ngClass]="[icons.add, icons.width]"></i>
                   <ng-container i18n>Add initiator</ng-container>
                 </button>
               </div>
@@ -434,7 +434,7 @@
                 <button type="button"
                         class="close"
                         (click)="groups.removeAt(gi)">
-                  <i class="fa fa-remove fa-fw"></i>
+                  <i [ngClass]="[icons.destroy, icons.width]"></i>
                 </button>
               </div>
               <div class="panel-body">
@@ -470,7 +470,7 @@
                           <button class="btn btn-default"
                                   type="button"
                                   (click)="removeGroupInitiator(group, i, gi)">
-                            <i class="fa fa-remove fa-fw"
+                            <i [ngClass]="[icons.destroy, icons.width]"
                                aria-hidden="true"></i>
                           </button>
                         </span>
@@ -484,7 +484,7 @@
                                    [messages]="messages.groupInitiator"
                                    (selection)="onGroupMemberSelection($event)"
                                    elemClass="btn btn-default pull-right">
-                          <i class="fa fa-fw fa-plus"></i>
+                          <i [ngClass]="[icons.add, icons.width]"></i>
                           <ng-container i18n>Add initiator</ng-container>
                         </cd-select>
                       </div>
@@ -512,7 +512,7 @@
                           <button class="btn btn-default"
                                   type="button"
                                   (click)="removeGroupDisk(group, i, gi)">
-                            <i class="fa fa-remove fa-fw"
+                            <i [ngClass]="[icons.destroy, icons.width]"
                                aria-hidden="true"></i>
                           </button>
                         </span>
@@ -525,7 +525,7 @@
                                    [options]="groupDiskSelections[gi]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-default pull-right">
-                          <i class="fa fa-fw fa-plus"></i>
+                          <i [ngClass]="[icons.add, icons.width]"></i>
                           <ng-container i18n>Add image</ng-container>
                         </cd-select>
                       </div>
@@ -545,7 +545,7 @@
 
                 <button (click)="addGroup(); false"
                         class="btn btn-default pull-right">
-                  <i class="fa fa-fw fa-plus"></i>
+                  <i [ngClass]="[icons.add, icons.width]"></i>
                   <ng-container i18n>Add group</ng-container>
                 </button>
               </div>

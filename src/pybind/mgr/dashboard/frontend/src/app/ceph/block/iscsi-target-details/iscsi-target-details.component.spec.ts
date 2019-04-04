@@ -7,6 +7,9 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details.component';
 
+import * as _ from 'lodash';
+import { Icons } from '../../../shared/enum/icons.enum';
+
 describe('IscsiTargetDetailsComponent', () => {
   let component: IscsiTargetDetailsComponent;
   let fixture: ComponentFixture<IscsiTargetDetailsComponent>;
@@ -97,7 +100,10 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [{ id: 'disk_rbd_disk_1', value: 'rbd/disk_1' }],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-hdd-o fa-lg', leaf: 'fa fa-fw fa-hdd-o' },
+            cssClasses: {
+              expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
+              leaf: _.join([Icons.width, Icons.disk], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Disks'
@@ -105,7 +111,10 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [{ value: 'node1:192.168.100.201' }],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-server fa-lg', leaf: 'fa fa-fw fa-server fa-lg' },
+            cssClasses: {
+              expanded: _.join([Icons.width, Icons.large, Icons.server], ' '),
+              leaf: _.join([Icons.width, Icons.large, Icons.server], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Portals'
@@ -117,7 +126,10 @@ describe('IscsiTargetDetailsComponent', () => {
                 {
                   id: 'disk_rbd_disk_1',
                   settings: {
-                    cssClasses: { expanded: 'fa fa-fw fa-hdd-o fa-lg', leaf: 'fa fa-fw fa-hdd-o' }
+                    cssClasses: {
+                      expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
+                      leaf: _.join([Icons.width, Icons.disk], ' ')
+                    }
                   },
                   value: 'rbd/disk_1'
                 }
@@ -127,7 +139,10 @@ describe('IscsiTargetDetailsComponent', () => {
             }
           ],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-user fa-lg', leaf: 'fa fa-fw fa-user' },
+            cssClasses: {
+              expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.width, Icons.user], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Initiators'
@@ -135,14 +150,20 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-users fa-lg', leaf: 'fa fa-fw fa-users' },
+            cssClasses: {
+              expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.width, Icons.user], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Groups'
         }
       ],
       id: 'root',
-      settings: { cssClasses: { expanded: 'fa fa-fw fa-bullseye fa-lg' }, static: true },
+      settings: {
+        cssClasses: { expanded: _.join([Icons.width, Icons.large, Icons.bullseye], ' ') },
+        static: true
+      },
       value: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw'
     });
   });

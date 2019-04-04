@@ -9,6 +9,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -77,19 +78,19 @@ export class RgwUserListComponent {
       this.selection.first() && `${encodeURIComponent(this.selection.first().uid)}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       routerLink: () => this.urlBuilder.getEdit(getUserUri()),
       name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteAction(),
       name: this.actionLabels.DELETE
     };

@@ -9,6 +9,7 @@ import { ScopeService } from '../../../shared/api/scope.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -51,13 +52,13 @@ export class RoleListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
+      icon: Icons.add,
       routerLink: () => this.urlBuilder.getCreate(),
       name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       routerLink: () =>
         this.selection.first() && this.urlBuilder.getEdit(this.selection.first().name),
@@ -65,7 +66,7 @@ export class RoleListComponent implements OnInit {
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       click: () => this.deleteRoleModal(),
       name: this.actionLabels.DELETE
