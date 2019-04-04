@@ -262,7 +262,7 @@ class IscsiTarget(RESTController):
                 return True
         # Check if any disk inside this group has changed
         for disk in new_group['disks']:
-            image_id = '{}.{}'.format(disk['pool'], disk['image'])
+            image_id = '{}/{}'.format(disk['pool'], disk['image'])
             if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
                                                          new_target_controls, new_portals,
                                                          new_disks, image_id):
@@ -301,7 +301,7 @@ class IscsiTarget(RESTController):
     @staticmethod
     def _get_disk(disks, image_id):
         for disk in disks:
-            if '{}.{}'.format(disk['pool'], disk['image']) == image_id:
+            if '{}/{}'.format(disk['pool'], disk['image']) == image_id:
                 return disk
         return None
 
