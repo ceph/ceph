@@ -1453,6 +1453,19 @@ public:
     bool backfill,
     ObjectStore::Transaction *t);
 
+  template <typename F>
+  void init_from_disk_state(
+    pg_info_t &&info_from_disk,
+    PastIntervals &&past_intervals_from_disk,
+    F &&pg_log_init) {
+    info = std::move(info_from_disk);
+    last_written_info = info;
+    past_intervals = std::move(past_intervals_from_disk);
+    pg_log_init(pg_log);
+    log_weirdness();
+  }
+
+
   void start_split_stats(
     const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
   void finish_split_stats(
