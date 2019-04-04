@@ -75,6 +75,12 @@ class OpenStackProvider(Provider):
         return driver_args
 
     @property
+    def ssh_interface(self):
+        if not hasattr(self, '_ssh_interface'):
+            self._ssh_interface = self.conf.get('ssh_interface', 'public_ips')
+        return self._ssh_interface
+
+    @property
     def images(self):
         if not hasattr(self, '_images'):
             self._images = retry(self.driver.list_images)
@@ -202,6 +208,7 @@ class OpenStackProvisioner(base.Provisioner):
         results = retry(
             self.provider.driver.wait_until_running,
             nodes=[self.node],
+            ssh_interface=self.provider.ssh_interface,
         )
         self._node, self.ips = results[0]
         log.debug("Node started: %s", self.node)
@@ -352,6 +359,7 @@ class OpenStackProvisioner(base.Provisioner):
                 'git',
                 'wget',
                 'python',
+                'ntp',
             ],
             runcmd=[
                 # Remove the user's password so that console logins are
