@@ -32,6 +32,8 @@
 #include "common/align.h"
 #include "common/numa.h"
 
+#include "global/global_context.h"
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -514,13 +516,27 @@ void KernelDevice::_aio_thread()
 		 << dendl;
             ioc->set_return_value(-EIO);
           } else {
-            ceph_assert(0 == "got unexpected error from aio_t::get_return_value. "
-			"This may suggest HW issue. Please check your dmesg!");
+	    if (is_expected_ioerr(r)) {
+	      note_io_error_event(
+		devname.c_str(),
+		path.c_str(),
+		r,
+		aio[i]->iocb.aio_lio_opcode,
+		aio[i]->offset,
+		aio[i]->length);
+	      ceph_abort_msg(
+		"Unexpected IO error. "
+		"This may suggest a hardware issue. "
+		"Please check your kernel log!");
+	    }
+	    ceph_abort_msg(
+	      "Unexpected IO error. "
+	      "This may suggest HW issue. Please check your dmesg!");
           }
         } else if (aio[i]->length != (uint64_t)r) {
           derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
                << " but returned: " << r << dendl;
-          ceph_abort_msg("unexpected aio error");
+          ceph_abort_msg("unexpected aio return value: does not match length");
         }
 
         dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
