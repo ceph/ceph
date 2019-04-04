@@ -266,8 +266,8 @@ template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
 
-  image_ctx->snap_lock.get_read();
-  image_ctx->parent_lock.get_read();
+  RWLock::RLocker snap_locker(image_ctx->snap_lock);
+  RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
   // calculate reverse mapping onto the image
   Extents parent_extents;
@@ -284,8 +284,8 @@ void ObjectReadRequest<I>::read_parent() {
   }
 
   if (object_overlap == 0) {
-    image_ctx->parent_lock.put_read();
-    image_ctx->snap_lock.put_read();
+    parent_locker.unlock();
+    snap_locker.unlock();
 
     this->finish(-ENOENT);
     return;
@@ -299,9 +299,6 @@ void ObjectReadRequest<I>::read_parent() {
   ImageRequest<I>::aio_read(image_ctx->parent, parent_completion,
                             std::move(parent_extents), ReadResult{m_read_data},
                             0, this->m_trace);
-
-  image_ctx->parent_lock.put_read();
-  image_ctx->snap_lock.put_read();
 }
 
 template <typename I>
