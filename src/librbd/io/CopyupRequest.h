@@ -76,7 +76,7 @@ private:
    * no data was read from the parent *and* there are no additional ops.
    */
 
-  typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> PendingRequests;
+  typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> WriteRequests;
 
   ImageCtx *m_ictx;
   std::string m_oid;
@@ -89,14 +89,17 @@ private:
   bool m_copyup_required = true;
 
   ceph::bufferlist m_copyup_data;
-  PendingRequests m_pending_requests;
-  unsigned m_pending_copyups = 0;
 
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
 
   Mutex m_lock;
+  WriteRequests m_pending_requests;
+  unsigned m_pending_copyups = 0;
+
+  WriteRequests m_restart_requests;
+  bool m_append_request_permitted = true;
 
   void read_from_parent();
   void handle_read_from_parent(int r);
@@ -111,8 +114,9 @@ private:
   void handle_copyup(int r);
 
   void finish(int r);
-  void complete_requests(int r);
+  void complete_requests(bool override_restart_retval, int r);
 
+  void disable_append_requests();
   void remove_from_list();
 
   bool is_copyup_required();
