@@ -10,6 +10,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -74,20 +75,20 @@ export class PoolListComponent implements OnInit {
     this.tableActions = [
       {
         permission: 'create',
-        icon: 'fa-plus',
+        icon: Icons.add,
         routerLink: () => this.urlBuilder.getCreate(),
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: 'fa-pencil',
+        icon: Icons.edit,
         routerLink: () =>
           this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
         name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: 'fa-trash-o',
+        icon: Icons.destroy,
         click: () => this.deletePoolModal(),
         name: this.actionLabels.DELETE,
         disable: () => !this.selection.first() || !this.monAllowPoolDelete,

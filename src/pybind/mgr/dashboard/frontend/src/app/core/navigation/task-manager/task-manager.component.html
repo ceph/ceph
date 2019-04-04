@@ -7,9 +7,9 @@
       <table>
         <tr>
           <td rowspan="3"  class="icon-col text-center">
-            <span class="fa-stack fa-2x text-info">
-              <i class="fa fa-circle fa-stack-2x"></i>
-              <i class="fa fa-stack-1x fa-inverse fa-spinner fa-spin"></i>
+            <span [ngClass]="[icons.stack, icons.large2x]" class="text-info">
+              <i [ngClass]="[icons.stack2x, icons.circle]"></i>
+              <i [ngClass]="[icons.stack1x, icons.spinner, icons.spin, icons.inverse]"></i>
             </span>
           </td>
           <td colspan="3"><strong>{{ executingTask.description }}</strong></td>
@@ -33,15 +33,15 @@
         <tr>
           <td rowspan="3"  class="icon-col text-center">
             <span *ngIf="!finishedTask.errorMessage">
-              <span class="fa-stack fa-2x text-success">
-                <i class="fa fa-circle fa-stack-2x"></i>
-                <i class="fa fa-stack-1x fa-inverse fa-check"></i>
+              <span [ngClass]="[icons.stack, icons.large2x]" class="text-success">
+                <i [ngClass]="[icons.stack2x, icons.circle]"></i>
+                <i [ngClass]="[icons.stack1x, icons.inverse, icons.check]"></i>
               </span>
             </span>
             <span *ngIf="finishedTask.errorMessage">
-              <span class="fa-stack fa-2x text-danger">
-                <i class="fa fa-circle fa-stack-2x"></i>
-                <i class="fa fa-stack-1x fa-inverse fa-exclamation-triangle"></i>
+              <span [ngClass]="[icons.stack, icons.large2x]" class="text-danger">
+                <i [ngClass]="[icons.stack2x, icons.circle]"></i>
+                <i [ngClass]="[icons.stack1x, icons.inverse, icons.warning]"></i>
               </span>
             </span>
           </td>
@@ -77,8 +77,7 @@
    outsideClick="true"
    i18n-title
    title="Background Tasks">
-  <i class="fa fa-fw"
-     [ngClass]="icon"></i>
+  <i [ngClass]="[icon,icons.width]"></i>
   <span i18n
         class="visible-xs-inline-block">Background Tasks</span>
   <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>

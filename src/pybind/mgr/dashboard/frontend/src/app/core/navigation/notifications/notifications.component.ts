@@ -2,6 +2,7 @@ import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdNotification } from '../../../shared/models/cd-notification';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -16,6 +17,7 @@ import { PrometheusNotificationService } from '../../../shared/services/promethe
 export class NotificationsComponent implements OnInit, OnDestroy {
   notifications: CdNotification[];
   private interval: number;
+  icons = Icons;
 
   constructor(
     public notificationService: NotificationService,
