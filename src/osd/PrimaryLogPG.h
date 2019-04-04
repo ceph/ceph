@@ -449,7 +449,16 @@ public:
     if (hset_history) {
       info.hit_set = *hset_history;
     }
-    append_log(logv, trim_to, roll_forward_to, t, transaction_applied, async);
+    if (transaction_applied) {
+      update_snap_map(logv, t);
+    }
+    auto last = logv.rbegin();
+    if (is_primary() && last != logv.rend()) {
+      projected_log.skip_can_rollback_to_to_head();
+      projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
+    }
+    recovery_state.append_log(
+      logv, trim_to, roll_forward_to, t, transaction_applied, async);
   }
 
   void op_applied(const eversion_t &applied_version) override;
