@@ -175,6 +175,32 @@ bool ObjectDispatch<I>::compare_and_write(
 }
 
 template <typename I>
+bool ObjectDispatch<I>::flush(
+    io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
+    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
+  if (*journal_tid == 0) {
+    // non-journaled IO
+    return false;
+  }
+
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  auto ctx = *on_finish;
+  *on_finish = new FunctionContext(
+    [image_ctx=m_image_ctx, ctx, journal_tid=*journal_tid](int r) {
+      image_ctx->journal->commit_io_event(journal_tid, r);
+      ctx->complete(r);
+    });
+
+  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+  wait_or_flush_event(*journal_tid, io::OBJECT_DISPATCH_FLAG_FLUSH,
+                      on_dispatched);
+  return true;
+}
+
+template <typename I>
 void ObjectDispatch<I>::extent_overwritten(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     uint64_t journal_tid, uint64_t new_journal_tid) {
