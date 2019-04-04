@@ -122,7 +122,10 @@ set(crimson_net_srcs
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
-  net/Socket.cc)
+  net/Socket.cc
+  net/Protocol.cc
+  net/ProtocolV1.cc
+  net/ProtocolV2.cc)
 set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)
