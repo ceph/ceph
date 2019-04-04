@@ -621,7 +621,7 @@ void PGLog::write_log_and_missing(
   const ghobject_t &log_oid,
   bool require_rollback)
 {
-  if (is_dirty()) {
+  if (needs_write()) {
     dout(6) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
