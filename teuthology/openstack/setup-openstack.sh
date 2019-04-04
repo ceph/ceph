@@ -551,7 +551,7 @@ function main() {
 
     case $provider in
         ovh)
-            flavor_select='^(vps|eg)-'
+            flavor_select='^(vps|hg)-.*ssd'
             ;;
     esac
 
