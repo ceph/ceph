@@ -1,5 +1,5 @@
 ===============================
-Looking op Monitors through DNS
+Looking up Monitors through DNS
 ===============================
 
 Since version 11.0.0 RADOS supports looking up Monitors through DNS.
