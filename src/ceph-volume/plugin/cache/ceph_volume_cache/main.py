@@ -34,17 +34,15 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
         'cache_md_osd.' + osdid,
         vg_name,
         size=str(md_lv_size._b) + 'B',
+        tags={'ceph.osd_id': osdid, 'ceph.type': 'cache_metadata', 'ceph.partition': md_partition},
         pv=md_partition)
-    cache_md_lv.set_tag('ceph.type', 'cache_metadata')
-    cache_md_lv.set_tag('ceph.partition', md_partition)
 
     cache_data_lv = api.create_lv(
         'cache_osd.' + osdid,
         vg_name,
         size=str(data_lv_size._b) + 'B',
+        tags={'ceph.osd_id': osdid, 'ceph.type': 'cache_data', 'ceph.partition': data_partition},
         pv=data_partition)
-    cache_data_lv.set_tag('ceph.type', 'cache_data')
-    cache_data_lv.set_tag('ceph.partition', data_partition)
 
     return cache_md_lv, cache_data_lv
 
