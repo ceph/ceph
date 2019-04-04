@@ -1481,14 +1481,6 @@ protected:
     return at_version;
   }
 
-  void add_log_entry(const pg_log_entry_t& e, bool applied);
-  void append_log(
-    const vector<pg_log_entry_t>& logv,
-    eversion_t trim_to,
-    eversion_t roll_forward_to,
-    ObjectStore::Transaction &t,
-    bool transaction_applied = true,
-    bool async = false);
   bool check_log_for_corruption(ObjectStore *store);
 
   std::string get_corrupt_pg_log_name() const;
