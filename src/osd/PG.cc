@@ -188,9 +188,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   primary(recovery_state.primary),
   pg_whoami(recovery_state.pg_whoami),
   up_primary(recovery_state.up_primary),
-  up(recovery_state.up),
   upset(recovery_state.upset),
-  acting(recovery_state.acting),
   actingset(recovery_state.actingset),
   acting_recovery_backfill(recovery_state.acting_recovery_backfill),
   dirty_info(recovery_state.dirty_info),
@@ -1640,7 +1638,8 @@ bool PG::sched_scrub()
       clear_scrub_reserved();
       scrub_unreserve_replicas();
       ret = false;
-    } else if (scrubber.reserved_peers.size() == acting.size()) {
+    } else if (scrubber.reserved_peers.size() ==
+	       recovery_state.get_acting().size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
       if (time_for_deep) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
@@ -3207,13 +3206,13 @@ void PG::scrub_compare_maps()
     osd->clog->warn(ss);
   }
 
-  if (acting.size() > 1) {
+  if (recovery_state.get_acting().size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
 
     // Map from object with errors to good peer
     map<hobject_t, list<pg_shard_t>> authoritative;
 
-    dout(2) << __func__ << "   osd." << acting[0] << " has "
+    dout(2) << __func__ << get_primary() << " has "
 	    << scrubber.primary_scrubmap.objects.size() << " items" << dendl;
 
     ss.str("");
@@ -3230,7 +3229,7 @@ void PG::scrub_compare_maps()
       scrubber.shallow_errors,
       scrubber.deep_errors,
       scrubber.store.get(),
-      info.pgid, acting,
+      info.pgid, recovery_state.get_acting(),
       ss);
     dout(2) << ss.str() << dendl;
 

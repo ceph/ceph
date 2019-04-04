@@ -185,9 +185,7 @@ protected:
   pg_shard_t &primary;
   pg_shard_t &pg_whoami;
   pg_shard_t &up_primary;
-  vector<int> &up;
   set<pg_shard_t> &upset;
-  vector<int> &acting;
   set<pg_shard_t> &actingset;
   set<pg_shard_t> &acting_recovery_backfill;
   bool &dirty_info;
