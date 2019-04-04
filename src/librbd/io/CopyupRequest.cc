@@ -119,11 +119,16 @@ CopyupRequest<I>::~CopyupRequest() {
 
 template <typename I>
 void CopyupRequest<I>::append_request(AbstractObjectWriteRequest<I> *req) {
-  ceph_assert(m_ictx->copyup_list_lock.is_locked());
+  Mutex::Locker locker(m_lock);
 
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
-                         << "object_request=" << req << dendl;
-  m_pending_requests.push_back(req);
+                         << "object_request=" << req << ", "
+                         << "append=" << m_append_request_permitted << dendl;
+  if (m_append_request_permitted) {
+    m_pending_requests.push_back(req);
+  } else {
+    m_restart_requests.push_back(req);
+  }
 }
 
 template <typename I>
@@ -173,12 +178,12 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
                          << "r=" << r << dendl;
 
-  m_ictx->copyup_list_lock.Lock();
+  m_lock.Lock();
   m_copyup_required = is_copyup_required();
-  remove_from_list();
+  disable_append_requests();
 
   if (r < 0 && r != -ENOENT) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
 
     lderr(m_ictx->cct) << "error reading from parent: " << cpp_strerror(r)
                        << dendl;
@@ -187,13 +192,13 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   }
 
   if (!m_copyup_required) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
 
     ldout(m_ictx->cct, 20) << "no-op, skipping" << dendl;
     finish(0);
     return;
   }
-  m_ictx->copyup_list_lock.Unlock();
+  m_lock.Unlock();
 
   update_object_maps();
 }
@@ -204,9 +209,9 @@ void CopyupRequest<I>::deep_copy() {
   ceph_assert(m_ictx->parent_lock.is_locked());
   ceph_assert(m_ictx->parent != nullptr);
 
-  m_ictx->copyup_list_lock.Lock();
+  m_lock.Lock();
   m_flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
-  m_ictx->copyup_list_lock.Unlock();
+  m_lock.Unlock();
 
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
                          << "flatten=" << m_flatten << dendl;
@@ -229,10 +234,10 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
                          << "r=" << r << dendl;
 
   m_ictx->snap_lock.get_read();
-  m_ictx->copyup_list_lock.Lock();
+  m_lock.Lock();
   m_copyup_required = is_copyup_required();
   if (r == -ENOENT && !m_flatten && m_copyup_required) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
     m_ictx->snap_lock.put_read();
 
     ldout(m_ictx->cct, 10) << "restart deep-copy with flatten" << dendl;
@@ -240,10 +245,10 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
     return;
   }
 
-  remove_from_list();
+  disable_append_requests();
 
   if (r < 0 && r != -ENOENT) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
     m_ictx->snap_lock.put_read();
 
     lderr(m_ictx->cct) << "error encountered during deep-copy: "
@@ -253,7 +258,7 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
   }
 
   if (!m_copyup_required && !is_update_object_map_required(r)) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
     m_ictx->snap_lock.put_read();
 
     if (r == -ENOENT) {
@@ -265,7 +270,7 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
     return;
   }
 
-  m_ictx->copyup_list_lock.Unlock();
+  m_lock.Unlock();
   m_ictx->snap_lock.put_read();
 
   update_object_maps();
@@ -348,15 +353,15 @@ void CopyupRequest<I>::handle_update_object_maps(int r) {
 
 template <typename I>
 void CopyupRequest<I>::copyup() {
-  m_ictx->copyup_list_lock.Lock();
+  m_lock.Lock();
   if (!m_copyup_required) {
-    m_ictx->copyup_list_lock.Unlock();
+    m_lock.Unlock();
 
     ldout(m_ictx->cct, 20) << "skipping copyup" << dendl;
     finish(0);
     return;
   }
-  m_ictx->copyup_list_lock.Unlock();
+  m_lock.Unlock();
 
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << dendl;
 
@@ -453,7 +458,7 @@ void CopyupRequest<I>::handle_copyup(int r) {
   } else if (r < 0) {
     lderr(m_ictx->cct) << "failed to copyup object: "
                        << cpp_strerror(r) << dendl;
-    complete_requests(r);
+    complete_requests(false, r);
   }
 
   if (pending_copyups == 0) {
@@ -466,13 +471,14 @@ void CopyupRequest<I>::finish(int r) {
   ldout(m_ictx->cct, 20) << "oid=" << m_oid << ", "
                          << "r=" << r << dendl;
 
-  complete_requests(r);
+  complete_requests(true, r);
   delete this;
 }
 
 template <typename I>
-void CopyupRequest<I>::complete_requests(int r) {
-  // already removed from copyup list
+void CopyupRequest<I>::complete_requests(bool override_restart_retval, int r) {
+  remove_from_list();
+
   while (!m_pending_requests.empty()) {
     auto it = m_pending_requests.begin();
     auto req = *it;
@@ -480,20 +486,39 @@ void CopyupRequest<I>::complete_requests(int r) {
     req->handle_copyup(r);
     m_pending_requests.erase(it);
   }
+
+  if (override_restart_retval) {
+    r = -ERESTART;
+  }
+
+  while (!m_restart_requests.empty()) {
+    auto it = m_restart_requests.begin();
+    auto req = *it;
+    ldout(m_ictx->cct, 20) << "restarting request " << req << dendl;
+    req->handle_copyup(r);
+    m_restart_requests.erase(it);
+  }
+}
+
+template <typename I>
+void CopyupRequest<I>::disable_append_requests() {
+  ceph_assert(m_lock.is_locked());
+  m_append_request_permitted = false;
 }
 
 template <typename I>
 void CopyupRequest<I>::remove_from_list() {
-  assert(m_ictx->copyup_list_lock.is_locked());
+  Mutex::Locker copyup_list_locker(m_ictx->copyup_list_lock);
 
   auto it = m_ictx->copyup_list.find(m_object_no);
-  ceph_assert(it != m_ictx->copyup_list.end());
-  m_ictx->copyup_list.erase(it);
+  if (it != m_ictx->copyup_list.end()) {
+    m_ictx->copyup_list.erase(it);
+  }
 }
 
 template <typename I>
 bool CopyupRequest<I>::is_copyup_required() {
-  ceph_assert(m_ictx->copyup_list_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
 
   bool copy_on_read = m_pending_requests.empty();
   if (copy_on_read) {
