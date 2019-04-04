@@ -835,10 +835,6 @@ public:
   void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
     ceph_assert(is_auth());
     
-    // relax locks?
-    if (!is_replicated())
-      replicate_relax_locks();
-    
     __u32 nonce = add_replica(rep);
     using ceph::encode;
     encode(nonce, bl);
@@ -1046,7 +1042,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, mempool_inode *file_i) const;
+  int get_caps_allowed_for_client(Session *s, Capability *cap, mempool_inode *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -1054,7 +1050,6 @@ public:
   bool is_any_caps_wanted() const;
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
   bool issued_caps_need_gather(SimpleLock *lock);
-  void replicate_relax_locks();
 
   // -- authority --
   mds_authority_t authority() const override;
