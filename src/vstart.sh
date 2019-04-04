@@ -1234,13 +1234,23 @@ if [ "$new" -eq 1 ]; then
     echo ""
 fi
 echo ""
-echo "export PYTHONPATH=./pybind:$PYTHONPATH"
-echo "export LD_LIBRARY_PATH=$CEPH_LIB"
+# add header to the environment file
+{
+    echo "#"
+    echo "# source this file into your shell to set up the environment."
+    echo "# For example:"
+    echo "# $ . $CEPH_DIR/vstart_environment.sh"
+    echo "#"
+} > $CEPH_DIR/vstart_environment.sh
+{
+    echo "export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:\$PYTHONPATH"
+    echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
 
-if [ "$CEPH_DIR" != "$PWD" ]; then
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
-fi
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
+} | tee -a $CEPH_DIR/vstart_environment.sh
 
 echo "CEPH_DEV=1"
 
