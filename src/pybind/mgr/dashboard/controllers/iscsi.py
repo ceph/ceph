@@ -30,10 +30,17 @@ class IscsiUi(BaseController):
     @ReadPermission
     def status(self):
         status = {'available': False}
-        if not IscsiGatewaysConfig.get_gateways_config()['gateways']:
+        gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
+        if not gateways:
             status['message'] = 'There are no gateways defined'
             return status
         try:
+            for gateway in gateways.keys():
+                try:
+                    IscsiClient.instance(gateway_name=gateway).ping()
+                except RequestException:
+                    status['message'] = 'Gateway {} is inaccessible'.format(gateway)
+                    return status
             config = IscsiClient.instance().get_config()
             if config['version'] != IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_VERSION:
                 status['message'] = 'Unsupported `ceph-iscsi` config version. Expected {} but ' \
@@ -105,6 +112,7 @@ class IscsiTarget(RESTController):
         targets = []
         for target_iqn in config['targets'].keys():
             target = IscsiTarget._config_to_target(target_iqn, config)
+            IscsiTarget._set_info(target)
             targets.append(target)
         return targets
 
@@ -112,7 +120,9 @@ class IscsiTarget(RESTController):
         config = IscsiClient.instance().get_config()
         if target_iqn not in config['targets']:
             raise cherrypy.HTTPError(404)
-        return IscsiTarget._config_to_target(target_iqn, config)
+        target = IscsiTarget._config_to_target(target_iqn, config)
+        IscsiTarget._set_info(target)
+        return target
 
     @iscsi_target_task('delete', {'target_iqn': '{target_iqn}'})
     def delete(self, target_iqn):
@@ -563,6 +573,15 @@ class IscsiTarget(RESTController):
             'acl_enabled': acl_enabled
         }
         return target
+
+    @staticmethod
+    def _set_info(target):
+        if not target['portals']:
+            return
+        target_iqn = target['target_iqn']
+        gateway_name = target['portals'][0]['host']
+        target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(target_iqn)
+        target['info'] = target_info
 
     @staticmethod
     def _sorted_portals(portals):
