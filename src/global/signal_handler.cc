@@ -318,7 +318,13 @@ static void handle_fatal_signal(int signum)
     }
   }
 
-  reraise_fatal(signum);
+  if (g_eio) {
+    // if this was an EIO crash, we don't need to trigger a core dump,
+    // since the problem is hardware, or some layer beneath us.
+    _exit(EIO);
+  } else {
+    reraise_fatal(signum);
+  }
 }
 
 void install_standard_sighandlers(void)
