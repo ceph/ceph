@@ -33,4 +33,20 @@ extern char g_assert_thread_name[4096];
 extern char g_assert_msg[8096];
 extern char g_process_name[NAME_MAX + 1];
 
+extern bool g_eio;
+extern char g_eio_devname[1024];
+extern char g_eio_path[PATH_MAX];
+extern int g_eio_error;
+extern int g_eio_iotype;   // IOCB_CMD_* from libaio's aio_abh.io
+extern unsigned long long g_eio_offset;
+extern unsigned long long g_eio_length;
+
+extern int note_io_error_event(
+  const char *devname,
+  const char *path,
+  int error,
+  int iotype,
+  unsigned long long offset,
+  unsigned long long length);
+
 #endif
