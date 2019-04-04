@@ -1595,12 +1595,6 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   dout(7) << "encode_export_inode " << *in << dendl;
   ceph_assert(!in->is_replica(mds->get_nodeid()));
 
-  // relax locks?
-  if (!in->is_replicated()) {
-    in->replicate_relax_locks();
-    dout(20) << " did replicate_relax_locks, now " << *in << dendl;
-  }
-
   encode(in->inode.ino, enc_state);
   encode(in->last, enc_state);
   in->encode_export(enc_state);
@@ -1738,9 +1732,6 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
-    
-    if (!dn->is_replicated())
-      dn->lock.replicate_relax();
 
     num_exported++;
     

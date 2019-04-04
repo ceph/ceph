@@ -1944,13 +1944,9 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
     mds->server->create_quota_realm(in);
 
   for (auto &p : in->client_caps) {
-    Session *session = mds->get_session(p.first);
-    if (!session ||
-	!session->get_connection() ||
-        !session->get_connection()->has_feature(CEPH_FEATURE_MDS_QUOTA))
-      continue;
-
     Capability *cap = &p.second;
+    if (cap->is_noquota())
+      continue;
 
     if (exclude_ct >= 0 && exclude_ct != p.first)
       goto update;
@@ -1987,7 +1983,7 @@ update:
     msg->ino = in->ino();
     msg->rstat = i->rstat;
     msg->quota = i->quota;
-    mds->send_message_client_counted(msg, session->get_connection());
+    mds->send_message_client_counted(msg, cap->get_session());
   }
   for (const auto &it : in->get_replicas()) {
     auto msg = MGatherCaps::create();
