@@ -1325,8 +1325,15 @@ int PG::read_info(
 
 void PG::read_state(ObjectStore *store)
 {
-  int r = read_info(store, pg_id, coll, info, past_intervals,
-		    info_struct_v);
+  PastIntervals past_intervals_from_disk;
+  pg_info_t info_from_disk;
+  int r = read_info(
+    store,
+    pg_id,
+    coll,
+    info_from_disk,
+    past_intervals_from_disk,
+    info_struct_v);
   ceph_assert(r >= 0);
 
   if (info_struct_v < compat_struct_v) {
@@ -1335,22 +1342,25 @@ void PG::read_state(ObjectStore *store)
     ceph_abort_msg("PG too old to upgrade");
   }
 
-  last_written_info = info;
+  recovery_state.last_written_info = info;
 
-  ostringstream oss;
-  pg_log.read_log_and_missing(
-    store,
-    ch,
-    pgmeta_oid,
-    info,
-    oss,
-    cct->_conf->osd_ignore_stale_divergent_priors,
-    cct->_conf->osd_debug_verify_missing_on_start);
-  if (oss.tellp())
-    osd->clog->error() << oss.str();
+  recovery_state.init_from_disk_state(
+    std::move(info_from_disk),
+    std::move(past_intervals_from_disk),
+    [this, store] (PGLog &pglog) {
+      ostringstream oss;
+      pglog.read_log_and_missing(
+	store,
+	ch,
+	pgmeta_oid,
+	info,
+	oss,
+	cct->_conf->osd_ignore_stale_divergent_priors,
+	cct->_conf->osd_debug_verify_missing_on_start);
 
-  // log any weirdness
-  recovery_state.log_weirdness();
+      if (oss.tellp())
+	osd->clog->error() << oss.str();
+    });
 
   if (info_struct_v < latest_struct_v) {
     upgrade(store);
