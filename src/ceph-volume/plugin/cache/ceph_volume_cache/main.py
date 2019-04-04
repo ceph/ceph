@@ -52,14 +52,23 @@ def _create_lvmcache(vg_name, origin_lv, cache_metadata_lv, cache_data_lv):
     api.create_lvmcache_pool(vg_name, cache_data_lv, cache_metadata_lv)
     api.create_lvmcache(vg_name, cache_data_lv, origin_lv)
 
+    # After this point, cache_metadata_lv and cache_data_lv are hidden, and
+    # their names have changed from:
+    #   cache_osd.5 to [cache_osd.5_cdata]
+    #   cache_md_osd.5 to [cache_osd.5_cmeta]
+    # these two partitions keep their tags. A new hidden partition has been created:
+    #   [cache_osd.5]
+    # We can't set its tags because "Operation not permitted on hidden LV [...]"
+
+    cache_lv = api.get_lv(vg_name=vg_name, lv_name='['+cache_data_lv.name+']')
+    if not cache_lv:
+        print('Error: can\'t find newly created cache partition.')
+        print('Creation of lvmcache probably failed. Aborting.')
+        return
+
     # TODO do we need this tag?
     origin_lv.set_tag('ceph.cache_lv', cache_data_lv.lv_name)
     api.set_lvmcache_caching_mode('writeback', vg_name, origin_lv)
-
-    _cache_data_lv_name = '[' + cache_data_lv.name + ']'
-    cache_lv = api.get_lv(lv_name=_cache_data_lv_name, vg_name=vg_name)
-    cache_lv.set_tag('ceph.osd_id', origin_lv.tags['ceph.osd_id'])
-    cache_lv.set_tag('ceph.type', 'cache')
 
     return cache_lv
 
