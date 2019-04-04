@@ -32,7 +32,8 @@
 static std::map<std::string, std::string>* ext_mime_map;
 
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
-                   librados::IoCtx& ioctx, bool create)
+                   librados::IoCtx& ioctx, bool create,
+		   bool mostly_omap)
 {
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
   if (r == -ENOENT && create) {

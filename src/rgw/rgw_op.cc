@@ -5657,7 +5657,7 @@ void RGWCompleteMultipart::execute()
   store->obj_to_raw((s->bucket_info).placement_rule, meta_obj, &raw_obj);
   store->get_obj_data_pool((s->bucket_info).placement_rule,
 			   meta_obj,&meta_pool);
-  store->open_pool_ctx(meta_pool, serializer.ioctx);
+  store->open_pool_ctx(meta_pool, serializer.ioctx, true);
 
   op_ret = serializer.try_lock(raw_obj.oid, dur);
   if (op_ret < 0) {
