@@ -1,8 +1,0 @@
-overrides:
-  ceph:
-    log-whitelist:
-      - inconsistent rstat on inode
-    conf:
-      mds:
-        mds debug scatterstat: 0
-        mds verify scatter: 0
