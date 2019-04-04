@@ -938,7 +938,7 @@ RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const std::string& sou
 int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
 {
   IoCtx ioctx;
-  int r = open_pool_ctx(pool, ioctx);
+  int r = open_pool_ctx(pool, ioctx, false);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: open_pool_ctx() returned " << r << dendl;
     return r;
@@ -1669,33 +1669,34 @@ int RGWRados::initialize()
  */
 int RGWRados::open_root_pool_ctx()
 {
-  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().domain_root, root_pool_ctx, true);
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().domain_root, root_pool_ctx, true, true);
 }
 
 int RGWRados::open_gc_pool_ctx()
 {
-  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().gc_pool, gc_pool_ctx, true);
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().gc_pool, gc_pool_ctx, true, true);
 }
 
 int RGWRados::open_lc_pool_ctx()
 {
-  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().lc_pool, lc_pool_ctx, true);
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().lc_pool, lc_pool_ctx, true, true);
 }
 
 int RGWRados::open_objexp_pool_ctx()
 {
-  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().log_pool, objexp_pool_ctx, true);
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().log_pool, objexp_pool_ctx, true, true);
 }
 
 int RGWRados::open_reshard_pool_ctx()
 {
-  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().reshard_pool, reshard_pool_ctx, true);
+  return rgw_init_ioctx(get_rados_handle(), svc.zone->get_zone_params().reshard_pool, reshard_pool_ctx, true, true);
 }
 
-int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx)
+int RGWRados::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+			    bool mostly_omap)
 {
   constexpr bool create = true; // create the pool if it doesn't exist
-  return rgw_init_ioctx(get_rados_handle(), pool, io_ctx, create);
+  return rgw_init_ioctx(get_rados_handle(), pool, io_ctx, create, mostly_omap);
 }
 
 void RGWRados::build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
@@ -1712,7 +1713,7 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
   const rgw_pool& explicit_pool = bucket_info.bucket.explicit_placement.index_pool;
 
   if (!explicit_pool.empty()) {
-    return open_pool_ctx(explicit_pool, index_ctx);
+    return open_pool_ctx(explicit_pool, index_ctx, false);
   }
 
   auto& zonegroup = svc.zone->get_zonegroup();
@@ -1728,7 +1729,7 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
     return -EINVAL;
   }
 
-  int r = open_pool_ctx(iter->second.index_pool, index_ctx);
+  int r = open_pool_ctx(iter->second.index_pool, index_ctx, true);
   if (r < 0)
     return r;
 
@@ -2900,7 +2901,7 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
     return -EIO;
   }
 
-  int r = open_pool_ctx(pool, *ioctx);
+  int r = open_pool_ctx(pool, *ioctx, false);
   if (r < 0) {
     return r;
   }
@@ -2920,7 +2921,7 @@ int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& 
     return -EIO;
   }
 
-  int r = open_pool_ctx(pool, ref->ioctx);
+  int r = open_pool_ctx(pool, ref->ioctx, false);
   if (r < 0) {
     return r;
   }
@@ -2940,7 +2941,7 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
     ref->obj.oid = obj.pool.to_str();
     ref->obj.pool = svc.zone->get_zone_params().domain_root;
   }
-  r = open_pool_ctx(ref->obj.pool, ref->ioctx);
+  r = open_pool_ctx(ref->obj.pool, ref->ioctx, false);
   if (r < 0)
     return r;
 
@@ -6668,7 +6669,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
     auto iter = state.io_ctxs.find(read_obj.pool);
     if (iter == state.io_ctxs.end()) {
       state.cur_ioctx = &state.io_ctxs[read_obj.pool];
-      r = store->open_pool_ctx(read_obj.pool, *state.cur_ioctx);
+      r = store->open_pool_ctx(read_obj.pool, *state.cur_ioctx, false);
       if (r < 0) {
         ldout(cct, 20) << "ERROR: failed to open pool context for pool=" << read_obj.pool << " r=" << r << dendl;
         return r;
@@ -8476,7 +8477,7 @@ int RGWRados::pool_iterate_begin(const rgw_pool& pool, RGWPoolIterCtx& ctx)
   librados::IoCtx& io_ctx = ctx.io_ctx;
   librados::NObjectIterator& iter = ctx.iter;
 
-  int r = open_pool_ctx(pool, io_ctx);
+  int r = open_pool_ctx(pool, io_ctx, false);
   if (r < 0)
     return r;
 
@@ -8490,7 +8491,7 @@ int RGWRados::pool_iterate_begin(const rgw_pool& pool, const string& cursor, RGW
   librados::IoCtx& io_ctx = ctx.io_ctx;
   librados::NObjectIterator& iter = ctx.iter;
 
-  int r = open_pool_ctx(pool, io_ctx);
+  int r = open_pool_ctx(pool, io_ctx, false);
   if (r < 0)
     return r;
 

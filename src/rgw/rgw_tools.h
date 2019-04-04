@@ -18,7 +18,9 @@ class optional_yield;
 struct obj_version;
 
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
-                   librados::IoCtx& ioctx, bool create = false);
+                   librados::IoCtx& ioctx,
+		   bool create = false,
+		   bool mostly_omap = false);
 
 int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
