@@ -702,6 +702,7 @@ void FileStore::collect_metadata(map<string,string> *pm)
       (*pm)["backend_filestore_dev_node"] = "unknown";
     } else {
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
+      devname = dev_node;
     }
     if (rc == 0 && vdo_fd >= 0) {
       (*pm)["vdo"] = "true";
