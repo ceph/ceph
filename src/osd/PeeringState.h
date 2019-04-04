@@ -1418,6 +1418,15 @@ public:
     ObjectStore::Transaction &t,
     boost::optional<eversion_t> trim_to,
     boost::optional<eversion_t> roll_forward_to);
+
+  void add_log_entry(const pg_log_entry_t& e, bool applied);
+  void append_log(
+    const vector<pg_log_entry_t>& logv,
+    eversion_t trim_to,
+    eversion_t roll_forward_to,
+    ObjectStore::Transaction &t,
+    bool transaction_applied,
+    bool async);
 public:
   PeeringState(
     CephContext *cct,

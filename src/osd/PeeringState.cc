@@ -3420,6 +3420,98 @@ void PeeringState::merge_new_log_entries(
       peer_info);
   }
 }
+
+void PeeringState::add_log_entry(const pg_log_entry_t& e, bool applied)
+{
+  // raise last_complete only if we were previously up to date
+  if (info.last_complete == info.last_update)
+    info.last_complete = e.version;
+
+  // raise last_update.
+  ceph_assert(e.version > info.last_update);
+  info.last_update = e.version;
+
+  // raise user_version, if it increased (it may have not get bumped
+  // by all logged updates)
+  if (e.user_version > info.last_user_version)
+    info.last_user_version = e.user_version;
+
+  // log mutation
+  pg_log.add(e, applied);
+  psdout(10) << "add_log_entry " << e << dendl;
+}
+
+
+void PeeringState::append_log(
+  const vector<pg_log_entry_t>& logv,
+  eversion_t trim_to,
+  eversion_t roll_forward_to,
+  ObjectStore::Transaction &t,
+  bool transaction_applied,
+  bool async)
+{
+  /* The primary has sent an info updating the history, but it may not
+   * have arrived yet.  We want to make sure that we cannot remember this
+   * write without remembering that it happened in an interval which went
+   * active in epoch history.last_epoch_started.
+   */
+  if (info.last_epoch_started != info.history.last_epoch_started) {
+    info.history.last_epoch_started = info.last_epoch_started;
+  }
+  if (info.last_interval_started != info.history.last_interval_started) {
+    info.history.last_interval_started = info.last_interval_started;
+  }
+  psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
+
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(&t)};
+  if (!transaction_applied) {
+     /* We must be a backfill or async recovery peer, so it's ok if we apply
+      * out-of-turn since we won't be considered when
+      * determining a min possible last_update.
+      *
+      * We skip_rollforward() here, which advances the crt, without
+      * doing an actual rollforward. This avoids cleaning up entries
+      * from the backend and we do not end up in a situation, where the
+      * object is deleted before we can _merge_object_divergent_entries().
+      */
+    pg_log.skip_rollforward();
+  }
+
+  for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
+       p != logv.end();
+       ++p) {
+    add_log_entry(*p, transaction_applied);
+
+    /* We don't want to leave the rollforward artifacts around
+     * here past last_backfill.  It's ok for the same reason as
+     * above */
+    if (transaction_applied &&
+	p->soid > info.last_backfill) {
+      pg_log.roll_forward(handler.get());
+    }
+  }
+  if (transaction_applied && roll_forward_to > pg_log.get_can_rollback_to()) {
+    pg_log.roll_forward_to(
+      roll_forward_to,
+      handler.get());
+    last_rollback_info_trimmed_to_applied = roll_forward_to;
+  }
+
+  psdout(10) << __func__ << " approx pg log length =  "
+	     << pg_log.get_log().approx_size() << dendl;
+  psdout(10) << __func__ << " transaction_applied = "
+	     << transaction_applied << dendl;
+  if (!transaction_applied || async)
+    psdout(10) << __func__ << " " << pg_whoami
+	       << " is async_recovery or backfill target" << dendl;
+  pg_log.trim(trim_to, info, transaction_applied, async);
+
+  // update the local pg, pg log
+  dirty_info = true;
+  write_if_dirty(t);
+}
+
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
