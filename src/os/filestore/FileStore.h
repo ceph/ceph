@@ -179,6 +179,8 @@ private:
   }
   void init_temp_collections();
 
+  void handle_eio();
+
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;
 
