@@ -160,6 +160,8 @@ private:
 
   void create_backend(unsigned long f_type);
 
+  string devname;
+
   int vdo_fd = -1;
   string vdo_name;
 
