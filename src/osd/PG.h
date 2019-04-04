@@ -182,8 +182,6 @@ protected:
   /**
    * Peering state information being moved to PeeringState
    */
-  int &role;
-  uint64_t &state;
   pg_shard_t &primary;
   pg_shard_t &pg_whoami;
   pg_shard_t &up_primary;
@@ -192,11 +190,9 @@ protected:
   vector<int> &acting;
   set<pg_shard_t> &actingset;
   set<pg_shard_t> &acting_recovery_backfill;
-  bool &send_notify;
   bool &dirty_info;
   bool &dirty_big_info;
   pg_info_t &info;
-  pg_info_t &last_written_info;
   PastIntervals &past_intervals;
   PGLog &pg_log;
   epoch_t &last_peering_reset;
@@ -204,24 +200,13 @@ protected:
   eversion_t &last_complete_ondisk;
   eversion_t &last_update_applied;
   eversion_t &last_rollback_info_trimmed_to_applied;
-  set<pg_shard_t> &stray_set;
   map<pg_shard_t, pg_info_t> &peer_info;
-  map<pg_shard_t, int64_t> &peer_bytes;
-  set<pg_shard_t> &peer_purged;
   map<pg_shard_t, pg_missing_t> &peer_missing;
   set<pg_shard_t> &peer_log_requested;
   set<pg_shard_t> &peer_missing_requested;
-  uint64_t &peer_features;
-  uint64_t &acting_features;
-  uint64_t &upacting_features;
-  unsigned &last_require_osd_release;
-  vector<int> &want_acting;
   map<pg_shard_t,eversion_t> &peer_last_complete_ondisk;
   eversion_t &min_last_complete_ondisk;
   eversion_t &pg_trim_to;
-  set<int> &blocked_by;
-  bool &need_up_thru;
-  set<pg_shard_t> &peer_activated;
   set<pg_shard_t> &backfill_targets;
   set<pg_shard_t> &async_recovery_targets;
   set<pg_shard_t> &might_have_unfound;
