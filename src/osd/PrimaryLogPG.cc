@@ -397,16 +397,11 @@ void PrimaryLogPG::on_local_recover(
   // keep track of active pushes for scrub
   ++active_pushes;
 
-  if (recovery_info.version > pg_log.get_can_rollback_to()) {
-    /* This can only happen during a repair, and even then, it would
-     * be one heck of a race.  If we are repairing the object, the
-     * write in question must be fully committed, so it's not valid
-     * to roll it back anyway (and we'll be rolled forward shortly
-     * anyway) */
-    PGLogEntryHandler h{this, t};
-    pg_log.roll_forward_to(recovery_info.version, &h);
-  }
-  recover_got(recovery_info.soid, recovery_info.version);
+  recovery_state.recover_got(
+    recovery_info.soid,
+    recovery_info.version,
+    is_delete,
+    *t);
 
   if (is_primary()) {
     if (!is_delete) {
@@ -423,9 +418,6 @@ void PrimaryLogPG::on_local_recover(
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
 
     publish_stats_to_osd();
-    ceph_assert(missing_loc.needs_recovery(hoid));
-    if (!is_delete)
-      missing_loc.add_location(hoid, pg_whoami);
     release_backoffs(hoid);
     if (!is_unreadable_object(hoid)) {
       auto unreadable_object_entry = waiting_for_unreadable_object.find(hoid);
@@ -446,10 +438,6 @@ void PrimaryLogPG::on_local_recover(
       this,
       get_osdmap_epoch(),
       info.last_complete));
-
-  // update pg
-  dirty_info = true;
-  write_if_dirty(*t);
 }
 
 void PrimaryLogPG::on_global_recover(
@@ -4261,24 +4249,13 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
     {
       ceph_assert(cct->_conf->osd_kill_backfill_at != 2);
 
-      info.set_last_backfill(m->last_backfill);
-      // During backfill submit_push_data() tracks num_bytes which is needed in case
-      // backfill stops and starts again.  We want to know how many bytes this
-      // pg is consuming on the disk in order to compute amount of new data
-      // reserved to hold backfill if it won't fit.
-      if (m->op == MOSDPGBackfill::OP_BACKFILL_PROGRESS) {
-        dout(25) << __func__ << " primary " << m->stats.stats.sum.num_bytes << " local " << info.stats.stats.sum.num_bytes << dendl;
-        int64_t bytes = info.stats.stats.sum.num_bytes;
-        info.stats = m->stats;
-        info.stats.stats.sum.num_bytes = bytes;
-      } else {
-        dout(20) << __func__ << " final " << m->stats.stats.sum.num_bytes << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
-        info.stats = m->stats;
-      }
-
       ObjectStore::Transaction t;
-      dirty_info = true;
-      write_if_dirty(t);
+      recovery_state.update_backfill_progress(
+	m->last_backfill,
+	m->stats,
+	m->op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
+	t);
+
       int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
       ceph_assert(tr == 0);
     }
@@ -11623,23 +11600,6 @@ void PrimaryLogPG::_applied_recovered_object_replica()
   }
 }
 
-void PrimaryLogPG::recover_got(hobject_t oid, eversion_t v)
-{
-  dout(10) << "got missing " << oid << " v " << v << dendl;
-  pg_log.recover_got(oid, v, info);
-  if (pg_log.get_log().complete_to != pg_log.get_log().log.end()) {
-    dout(10) << "last_complete now " << info.last_complete
-	     << " log.complete_to " << pg_log.get_log().complete_to->version
-	     << dendl;
-  } else {
-    dout(10) << "last_complete now " << info.last_complete
-	     << " log.complete_to at end" << dendl;
-    //below is not true in the repair case.
-    //assert(missing.num_missing() == 0);  // otherwise, complete_to was wrong.
-    ceph_assert(info.last_complete == info.last_update);
-  }
-}
-
 void PrimaryLogPG::primary_failed(const hobject_t &soid)
 {
   list<pg_shard_t> fl = { pg_whoami };
@@ -12013,15 +11973,6 @@ void PrimaryLogPG::on_flushed()
 void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
-
-  // adjust info to backfill
-  info.set_last_backfill(hobject_t());
-  pg_log.reset_backfill();
-  dirty_info = true;
-
-  // clear log
-  PGLogEntryHandler rollbacker{this, t};
-  pg_log.roll_forward(&rollbacker);
 
   on_shutdown();
 
@@ -12606,8 +12557,11 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	      ceph_assert(!pool.info.require_rollback());
 	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
-	      recover_got(soid, latest->version);
-	      missing_loc.add_location(soid, pg_whoami);
+	      recovery_state.recover_got(
+		soid,
+		latest->version,
+		false,
+		t);
 
 	      ++active_pushes;
 
@@ -15315,15 +15269,19 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     ldout(pg->cct, 10) << "adding snap " << snap_to_trim
 		       << " to purged_snaps"
 		       << dendl;
-    pg->info.purged_snaps.insert(snap_to_trim);
+
+    ObjectStore::Transaction t;
+    pg->recovery_state.adjust_purged_snaps(
+      [snap_to_trim](auto &purged_snaps) {
+	purged_snaps.insert(snap_to_trim);
+      });
+    pg->write_if_dirty(t);
+
     pg->snap_trimq.erase(snap_to_trim);
     ldout(pg->cct, 10) << "purged_snaps now "
 		       << pg->info.purged_snaps << ", snap_trimq now "
 		       << pg->snap_trimq << dendl;
 
-    ObjectStore::Transaction t;
-    pg->recovery_state.dirty_big_info = true;
-    pg->write_if_dirty(t);
     int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
     ceph_assert(tr == 0);
 

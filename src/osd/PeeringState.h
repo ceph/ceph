@@ -1419,24 +1419,8 @@ public:
     boost::optional<eversion_t> trim_to,
     boost::optional<eversion_t> roll_forward_to);
 
-  /**
-   * Merge entries updating missing as necessary on all
-   * acting_recovery_backfill logs and missings (also missing_loc)
-   */
-  void merge_new_log_entries(
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
-
   void add_log_entry(const pg_log_entry_t& e, bool applied);
-  void append_log(
-    const vector<pg_log_entry_t>& logv,
-    eversion_t trim_to,
-    eversion_t roll_forward_to,
-    ObjectStore::Transaction &t,
-    bool transaction_applied,
-    bool async);
+
 public:
   PeeringState(
     CephContext *cct,
@@ -1522,6 +1506,35 @@ public:
     const pg_stat_t &pg_stats_publish,
     const object_stat_collection_t &unstable_stats);
 
+  /**
+   * Merge entries updating missing as necessary on all
+   * acting_recovery_backfill logs and missings (also missing_loc)
+   */
+  void merge_new_log_entries(
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    ObjectStore::Transaction &t,
+    boost::optional<eversion_t> trim_to,
+    boost::optional<eversion_t> roll_forward_to);
+
+  void append_log(
+    const vector<pg_log_entry_t>& logv,
+    eversion_t trim_to,
+    eversion_t roll_forward_to,
+    ObjectStore::Transaction &t,
+    bool transaction_applied,
+    bool async);
+
+  void recover_got(
+    const hobject_t &oid, eversion_t v,
+    bool is_delete,
+    ObjectStore::Transaction &t);
+
+  void update_backfill_progress(
+    const hobject_t &updated_backfill,
+    const pg_stat_t &updated_stats,
+    bool preserve_local_num_bytes,
+    ObjectStore::Transaction &t);
+
   void dump_history(Formatter *f) const {
     state_history.dump(f);
   }
@@ -1569,6 +1582,8 @@ public:
   /// resets last_persisted_osdmap
   void reset_last_persisted() {
     last_persisted_osdmap = 0;
+    dirty_info = true;
+    dirty_big_info = true;
   }
 
   void shutdown() {
@@ -1579,11 +1594,14 @@ public:
     deleted = true;
   }
 
-  template <typename Func>
-  void adjust_purged_snaps(Func f) {
-    f(info.purged_snaps);
+  void adjust_purged_snaps(
+    std::function<void(interval_set<snapid_t> &snaps)> f);
+
+
+  void force_write_state(ObjectStore::Transaction &t) {
     dirty_info = true;
     dirty_big_info = true;
+    write_if_dirty(t);
   }
 
   bool is_deleting() const {
@@ -1741,6 +1759,10 @@ public:
 
   eversion_t get_min_last_complete_ondisk() const {
     return min_last_complete_ondisk;
+  }
+
+  bool debug_has_dirty_state() const {
+    return dirty_info || dirty_big_info;
   }
 
   std::string get_pg_state_string() const {
