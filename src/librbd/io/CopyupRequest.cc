@@ -143,13 +143,11 @@ void CopyupRequest<I>::send() {
 template <typename I>
 void CopyupRequest<I>::read_from_parent() {
   auto cct = m_image_ctx->cct;
-  m_image_ctx->snap_lock.get_read();
-  m_image_ctx->parent_lock.get_read();
+  RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+  RWLock::RLocker parent_locker(m_image_ctx->parent_lock);
 
   if (m_image_ctx->parent == nullptr) {
     ldout(cct, 5) << "parent detached" << dendl;
-    m_image_ctx->parent_lock.put_read();
-    m_image_ctx->snap_lock.put_read();
 
     m_image_ctx->op_work_queue->queue(
       util::create_context_callback<
@@ -157,7 +155,6 @@ void CopyupRequest<I>::read_from_parent() {
       -ENOENT);
     return;
   } else if (is_deep_copy()) {
-    // will release locks
     deep_copy();
     return;
   }
@@ -175,9 +172,6 @@ void CopyupRequest<I>::read_from_parent() {
   ImageRequest<I>::aio_read(m_image_ctx->parent, comp,
                             std::move(m_image_extents),
                             ReadResult{&m_copyup_data}, 0, m_trace);
-
-  m_image_ctx->parent_lock.put_read();
-  m_image_ctx->snap_lock.put_read();
 }
 
 template <typename I>
@@ -230,8 +224,6 @@ void CopyupRequest<I>::deep_copy() {
     m_object_no, m_flatten, ctx);
 
   req->send();
-  m_image_ctx->parent_lock.put_read();
-  m_image_ctx->snap_lock.put_read();
 }
 
 template <typename I>
