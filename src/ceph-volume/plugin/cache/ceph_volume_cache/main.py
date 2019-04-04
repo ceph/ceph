@@ -122,7 +122,7 @@ class Cache(object):
     _help = """
 Deploy lvmcache. Usage:
 
-$> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data partition> --osddata <osd lvm name> --volumegroup <volume group>
+$> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data partition> --origin <osd lvm name> --volumegroup <volume group>
 
 or:
 
@@ -173,7 +173,7 @@ $> ceph-volume cache rm --osdid <id>
             help='Cache data partition',
         )
         parser.add_argument(
-            '--osddata',
+            '--origin',
             help='OSD data partition',
         )
         parser.add_argument(
@@ -205,9 +205,15 @@ $> ceph-volume cache rm --osdid <id>
             return parser.print_help()
 
         # TODO make sure OSD is on bluestore
+        # TODO make sure OSDs are LVs (deployed with ceph-volume/LVM)
 
+        if args.osdid and args.origin:
+            print('Can\'t have --osdid and --origin')
+            return
+
+        origin_lv = None
         # This should be under if argv[0] == 'add'
-        if args.osdid and not args.osddata:
+        if args.osdid:
             lvs = api.Volumes()
             for lv in lvs:
                 if lv.tags.get('ceph.osd_id', '') == args.osdid:
@@ -218,25 +224,25 @@ $> ceph-volume cache rm --osdid <id>
                     if args.data:
                         origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
                     elif args.db:
+                        # TODO make sure 'ceph.db_device' and others are in tag. ie use tags.get()
                         origin_lv = api.get_lv(lv_path=lv.tags['ceph.db_device'])
                     elif args.wal:
                         origin_lv = api.get_lv(lv_path=lv.tags['ceph.wal_device'])
                     else:
                         origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
-                    vg_name = origin_lv.vg_name
                     break
+            if not origin_lv:
+                print('Couldn\'t find origin LV for OSD ' + args.osdid)
+                return
+            vg_name = origin_lv.vg_name
         else:
-            # osddata is already the LV's name, so no need to look for
+            # origin is already the LV's name, so no need to look for
             # --data, --db or --wal flags.
-            # note: it should actually be --originlv instead of --osddata
             vg_name = args.volumegroup
-            lvs = api.Volumes()
-            for lv in lvs:
-                if lv.name == args.osddata:
-                    origin_lv = lv
-                    vg_name = lv.vg_name
-                    osdid = lv.tags.get('ceph.osd_id', None)
-                    break
+            origin_lv = api.get_lv(lv_name=args.origin, vg_name=vg_name)
+            if not origin_lv:
+                print('Couldn\'t find origin LV ' + args.origin)
+            osdid = origin_lv.tags.get('ceph.osd_id', None)
 
         # TODO make sure the OSD exists (ie is on this node)
         if self.argv[0] == 'add':
@@ -248,14 +254,16 @@ $> ceph-volume cache rm --osdid <id>
                 osdid)
         elif self.argv[0] == 'rm':
             # TODO verify that the OSD has a cache
-
-            if args.osdid and not args.osddata:
+            if args.osdid and not args.origin:
                 lvs = api.Volumes()
                 for lv in lvs:
                     if lv.tags.get('ceph.osd_id', '') == args.osdid and lv.tags.get('ceph.cache_lv', None):
                         origin_lv = lv
-                        vg_name = origin_lv.vg_name
                         break
+            if not origin_lv:
+                print('Couldn\'t find cached LV for OSD ' + args.osdid)
+                return
+            vg_name = origin_lv.vg_name
             rm_lvmcache(vg_name, origin_lv.name)
 
 
