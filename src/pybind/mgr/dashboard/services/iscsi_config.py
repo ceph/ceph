@@ -24,6 +24,12 @@ class IscsiGatewayDoesNotExist(Exception):
             "iSCSI gateway '{}' does not exist".format(hostname))
 
 
+class IscsiGatewayInUse(Exception):
+    def __init__(self, hostname):
+        super(IscsiGatewayInUse, self).__init__(
+            "iSCSI gateway '{}' is in use".format(hostname))
+
+
 class InvalidServiceUrl(Exception):
     def __init__(self, service_url):
         super(InvalidServiceUrl, self).__init__(
