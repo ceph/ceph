@@ -215,7 +215,7 @@
             <span *ngFor="let subuser of subusers; let i=index;">
               <div class="input-group">
                 <span class="input-group-addon">
-                  <i class="icon-prepend fa fa-user"></i>
+                  <i class="icon-prepend {{ icons.user }}"></i>
                 </span>
                 <input type="text"
                        class="form-control"
@@ -223,7 +223,7 @@
                        readonly>
                 <span class="input-group-addon"
                       style="border-left: 0; border-right: 0;">
-                  <i class="icon-prepend fa fa-share-alt"></i>
+                  <i class="icon-prepend {{ icons.share }}"></i>
                 </span>
                 <input type="text"
                        class="form-control"
@@ -235,14 +235,14 @@
                           i18n-tooltip
                           tooltip="Edit"
                           (click)="showSubuserModal(i)">
-                    <i class="fa fa-cogs"></i>
+                    <i [ngClass]="[icons.edit]"></i>
                   </button>
                   <button type="button"
                           class="btn btn-default tc_deleteSubuserButton"
                           i18n-tooltip
                           tooltip="Delete"
                           (click)="deleteSubuser(i)">
-                    <i class="fa fa-times"></i>
+                    <i [ngClass]="[icons.destroy]"></i>
                   </button>
                 </span>
               </div>
@@ -253,7 +253,7 @@
               <button type="button"
                       class="btn btn-sm btn-default btn-label pull-right tc_addSubuserButton"
                       (click)="showSubuserModal()">
-                <i class="fa fa-fw fa-plus"></i>
+                <i [ngClass]="[icons.add, icons.width]"></i>
                 <ng-container i18n>{{ actionLabels.CREATE | titlecase }} {{ subuserLabel | upperFirst }}</ng-container>
               </button>
             </span>
@@ -277,7 +277,7 @@
             <span *ngFor="let key of s3Keys; let i=index;">
               <div class="input-group">
                 <span class="input-group-addon">
-                  <i class="icon-prepend fa fa-key"></i>
+                  <i class="icon-prepend {{ icons.key }}"></i>
                 </span>
                 <input type="text"
                        class="form-control"
@@ -289,14 +289,14 @@
                           i18n-tooltip
                           tooltip="Show"
                           (click)="showS3KeyModal(i)">
-                    <i class="fa fa-eye"></i>
+                    <i [ngClass]="[icons.show]"></i>
                   </button>
                   <button type="button"
                           class="btn btn-default tc_deleteS3KeyButton"
                           i18n-tooltip
                           tooltip="Delete"
                           (click)="deleteS3Key(i)">
-                    <i class="fa fa-times"></i>
+                    <i [ngClass]="[icons.destroy]"></i>
                   </button>
                 </span>
               </div>
@@ -307,7 +307,7 @@
               <button type="button"
                       class="btn btn-sm btn-default btn-label pull-right tc_addS3KeyButton"
                       (click)="showS3KeyModal()">
-                <i class="fa fa-fw fa-plus"></i>
+                <i [ngClass]="[icons.add, icons.width]"></i>
                 <ng-container i18n>{{ actionLabels.CREATE | titlecase }} {{ s3keyLabel | upperFirst }}</ng-container>
               </button>
             </span>
@@ -327,7 +327,7 @@
             <span *ngFor="let key of swiftKeys; let i=index;">
               <div class="input-group">
                 <span class="input-group-addon">
-                  <i class="icon-prepend fa fa-key"></i>
+                  <i class="icon-prepend {{ icons.key }}"></i>
                 </span>
                 <input type="text"
                        class="form-control"
@@ -339,7 +339,7 @@
                           i18n-tooltip
                           tooltip="Show"
                           (click)="showSwiftKeyModal(i)">
-                    <i class="fa fa-eye"></i>
+                    <i [ngClass]="[icons.show]"></i>
                   </button>
                 </span>
               </div>
@@ -362,7 +362,7 @@
             <span *ngFor="let cap of capabilities; let i=index;">
               <div class="input-group">
                 <span class="input-group-addon">
-                  <i class="icon-prepend fa fa-share-alt"></i>
+                  <i class="icon-prepend {{ icons.share }}"></i>
                 </span>
                 <input type="text"
                        class="form-control"
@@ -374,14 +374,14 @@
                           i18n-tooltip
                           tooltip="Edit"
                           (click)="showCapabilityModal(i)">
-                    <i class="fa fa-cogs"></i>
+                    <i [ngClass]="[icons.edit]"></i>
                   </button>
                   <button type="button"
                           class="btn btn-default tc_deleteCapButton"
                           i18n-tooltip
                           tooltip="Delete"
                           (click)="deleteCapability(i)">
-                    <i class="fa fa-times"></i>
+                    <i [ngClass]="[icons.destroy]"></i>
                   </button>
                 </span>
               </div>
@@ -392,7 +392,7 @@
               <button type="button"
                       class="btn btn-sm btn-default btn-label pull-right tc_addCapButton"
                       (click)="showCapabilityModal()">
-                <i class="fa fa-fw fa-plus"></i>
+                <i [ngClass]="[icons.add, icons.width]"></i>
                 <ng-container i18n>{{ actionLabels.ADD | titlecase }} {{ capabilityLabel | upperFirst }}</ng-container>
               </button>
             </span>

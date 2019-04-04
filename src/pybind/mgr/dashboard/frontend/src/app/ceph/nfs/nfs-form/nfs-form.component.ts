@@ -12,6 +12,7 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -43,6 +44,7 @@ export class NfsFormComponent implements OnInit {
 
   allClusters: string[] = null;
   allDaemons = {};
+  icons = Icons;
 
   allFsals: any[] = [];
   allRgwUsers: any[] = [];

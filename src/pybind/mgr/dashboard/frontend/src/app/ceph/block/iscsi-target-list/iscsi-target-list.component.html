@@ -33,7 +33,7 @@
     <button class="btn btn-sm btn-default btn-label"
             type="button"
             (click)="configureDiscoveryAuth()">
-      <i class="fa fa-fw fa-key-modern"
+      <i [ngClass]="[icons.key, icons.width]"
          aria-hidden="true">
       </i>
       <ng-container i18n>Discovery authentication</ng-container>

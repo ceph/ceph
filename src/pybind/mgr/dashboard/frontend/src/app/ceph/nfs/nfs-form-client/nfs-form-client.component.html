@@ -95,7 +95,7 @@
     <span class="form-control no-border">
       <button class="btn btn-default btn-label pull-right"
               (click)="addClient()">
-        <i class="fa fa-fw fa-plus"></i>
+        <i [ngClass]="[icons.add, icons.width]"></i>
         <ng-container i18n>Add clients</ng-container>
       </button>
     </span>

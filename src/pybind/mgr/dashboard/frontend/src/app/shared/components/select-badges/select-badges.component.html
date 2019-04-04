@@ -7,7 +7,7 @@
            [customBadgeValidators]="customBadgeValidators"
            elemClass="margin-right-sm select-menu-edit"
            (selection)="selection.emit($event)">
-  <i class="fa fa-fw fa-pencil"></i>
+  <i [ngClass]="[icons.edit, icons.width]"></i>
 </cd-select>
 
 <span *ngFor="let dataItem of data">
@@ -15,7 +15,7 @@
     <span class="margin-right-sm">{{ dataItem }}</span>
     <a class="badge-remove"
        (click)="cdSelect.removeItem(dataItem)">
-      <i class="fa fa-times"
+      <i [ngClass]="[icons.destroy]"
          aria-hidden="true"></i>
     </a>
   </span>
