@@ -254,6 +254,10 @@ shortcuts
 
 Lists shortcuts (aliases) available
 
+Usage :
+
+    shortcuts
+
 history
 -------
 
