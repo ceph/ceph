@@ -2095,7 +2095,8 @@ public:
     return dbiter->status().ok() ? 0 : -1;
   }
   int lower_bound(const string &to) override {
-    rocksdb::Slice slice_bound(prefix + "\000" + to);
+    string bound = RocksDBStore::combine_strings(prefix, to);
+    rocksdb::Slice slice_bound(bound);
     dbiter->Seek(slice_bound);
     return dbiter->status().ok() ? 0 : -1;
   }
