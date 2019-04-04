@@ -183,6 +183,7 @@ void ProtocolV1::fault() {
     // backoff!
     if (state == WAIT) {
       backoff.set_from_double(cct->_conf->ms_max_backoff);
+      connect_seq++;
     } else if (backoff == utime_t()) {
       backoff.set_from_double(cct->_conf->ms_initial_backoff);
     } else {
