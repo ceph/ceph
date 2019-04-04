@@ -1362,8 +1362,15 @@ void Server::update_required_client_features()
 {
   vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
 
+  /* If this blows up on you, you added a release without adding a new release bit to cephfs_features.h */
+  static_assert(CEPHFS_CURRENT_RELEASE == CEPH_RELEASE_MAX-1);
+
   int min_compat = mds->mdsmap->get_min_compat_client();
-  if (min_compat >= CEPH_RELEASE_MIMIC)
+  if (min_compat >= CEPH_RELEASE_OCTOPUS)
+    bits.push_back(CEPHFS_FEATURE_OCTOPUS);
+  else if (min_compat >= CEPH_RELEASE_NAUTILUS)
+    bits.push_back(CEPHFS_FEATURE_NAUTILUS);
+  else if (min_compat >= CEPH_RELEASE_MIMIC)
     bits.push_back(CEPHFS_FEATURE_MIMIC);
   else if (min_compat >= CEPH_RELEASE_LUMINOUS)
     bits.push_back(CEPHFS_FEATURE_LUMINOUS);
