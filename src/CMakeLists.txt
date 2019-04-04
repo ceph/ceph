@@ -223,10 +223,13 @@ if(WITH_PYTHON2)
   find_package(PythonLibs 2 REQUIRED)
 endif()
 
-option(WITH_PYTHON3 "build python3 bindings" OFF)
+set(WITH_PYTHON3 "OFF" CACHE STRING "build python3 bindings with specified python3 version")
 if(WITH_PYTHON3)
-  find_package(Python3Interp 3 REQUIRED)
-  find_package(Python3Libs 3 REQUIRED)
+  if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
+    set(WITH_PYTHON3 "3")
+  endif()
+  find_package(Python3Interp ${WITH_PYTHON3} REQUIRED)
+  find_package(Python3Libs ${PYTHON_VERSION_STRING} REQUIRED)
 endif()
 
 # the major version of the python bindings as a dependency of other
