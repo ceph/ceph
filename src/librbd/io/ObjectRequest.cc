@@ -604,14 +604,14 @@ void AbstractObjectWriteRequest<I>::handle_copyup(int r) {
   ceph_assert(m_copyup_in_progress);
   m_copyup_in_progress = false;
 
-  if (r < 0) {
+  if (r < 0 && r != -ERESTART) {
     lderr(image_ctx->cct) << "failed to copyup object: " << cpp_strerror(r)
                           << dendl;
     this->finish(r);
     return;
   }
 
-  if (is_post_copyup_write_required()) {
+  if (r == -ERESTART || is_post_copyup_write_required()) {
     write_object();
     return;
   }
