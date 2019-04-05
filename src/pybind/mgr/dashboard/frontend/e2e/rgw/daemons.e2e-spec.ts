@@ -12,8 +12,13 @@ describe('RGW daemons page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Daemons');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(Helper.getBreadcrumbText()).toEqual('Daemons');
+    });
   });
 });
