@@ -3000,6 +3000,8 @@ private:
     PExtentVector& extents) override {
     return allocate_bluefs_freespace(min_size, size, &extents);
   };
+
+  inline bool _use_rotational_settings();
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {

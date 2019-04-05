@@ -4703,6 +4703,13 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description("log omap iteration operation if it's slower than this age (seconds)"),
 
+    Option("bluestore_debug_enforce_settings", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("default")
+    .set_enum_allowed({"default", "hdd", "ssd"})
+    .set_description("Enforces specific hw profile settings")
+    .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
+
+
     // -----------------------------------------
     // kstore
 
