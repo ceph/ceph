@@ -663,7 +663,7 @@ not contain as much data have too many PGs.  See the discussion of
 *TOO_MANY_PGS* above.
 
 The threshold can be raised to silence the health warning by adjusting
-the ``mon_pg_warn_max_object_skew`` config option on the monitors.
+the ``mon_pg_warn_max_object_skew`` config option on the managers.
 
 
 POOL_APP_NOT_ENABLED
