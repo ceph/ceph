@@ -314,7 +314,6 @@ private:
     // lazy delete, see "deleted_conns"
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.erase(p->second)) {
-      p->second->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(p);
       return NULL;
     }
@@ -403,6 +402,7 @@ public:
   void unregister_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(deleted_lock);
     deleted_conns.insert(conn);
+    conn->get_perf_counter()->dec(l_msgr_active_connections);
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
       local_worker->center.dispatch_event_external(reap_handler);
