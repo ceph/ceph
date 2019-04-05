@@ -6079,6 +6079,16 @@ std::vector<Option> get_rgw_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("rgw_rados_pool_autoscale_bias", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(4.0)
+    .set_min_max(0.01, 100000.0)
+    .set_description("pg_autoscale_bias value for RGW metadata (omap-heavy) pools"),
+
+    Option("rgw_rados_pool_pg_num_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(8)
+    .set_min_max(1, 1024)
+    .set_description("pg_num_min value for RGW metadata (omap-heavy) pools"),
+
     Option("rgw_zone", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Zone name")
