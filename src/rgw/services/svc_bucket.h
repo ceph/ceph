@@ -227,7 +227,8 @@ public:
 
   int store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
 				   RGWBucketEntryPoint& be, bool exclusive,
-				   RGWObjVersionTracker *objv_tracker, real_time mtime);
+				   RGWObjVersionTracker *objv_tracker, real_time mtime,
+                                   std::map<string, bufferlist>&& attrs);
   int store_bucket_instance_info(RGWBucketInfo& bucket_info, bool exclusive,
 				 map<string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
 				 real_time mtime);

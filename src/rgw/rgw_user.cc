@@ -28,6 +28,8 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
+#include "services/svc_user.h"
+#include "services/svc_meta.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -147,14 +149,13 @@ int rgw_store_user_info(RGWSI_User *user_svc,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
 {
-  RGWSysObjectCtx obj_ctx = svc.sysobj->init_obj_ctx();
-  auto user = user_svc->user(obj_ctx, info.user);
+  auto user = user_svc->user(info.user_id);
 
   return user.set_op()
     .set_exclusive(exclusive)
     .set_mtime(mtime)
     .set_attrs(pattrs)
-    .set_old_info(pattrs)
+    .set_old_info(old_info)
     .set_objv_tracker(objv_tracker)
     .exec();
 }
@@ -304,7 +305,7 @@ int rgw_remove_uid_index(RGWRados *store, rgw_user& uid)
     return ret;
 
   string oid = uid.to_str();
-  ret = store->meta_mgr->remove_entry(user_meta_handler, oid, &objv_tracker);
+  ret = store->svc.meta->get_mgr()->remove_entry(user_meta_handler, oid, &objv_tracker);
   if (ret < 0)
     return ret;
 
@@ -386,7 +387,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   
   rgw_raw_obj uid_obj(store->svc.zone->get_zone_params().user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
-  ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
+  ret = store->get_mgr()->remove_entry(user_meta_handler, key, &objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -2247,7 +2248,9 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
     op_state.max_entries = 1000;
   }
 
-  int ret = store->meta_mgr->list_keys_init(metadata_key, op_state.marker, &handle);
+  auto meta_mgr = store->svc.meta->get_mgr();
+
+  int ret = meta_mgr->list_keys_init(metadata_key, op_state.marker, &handle);
   if (ret < 0) {
     return ret;
   }
@@ -2265,7 +2268,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   do {
     std::list<std::string> keys;
     left = op_state.max_entries - count;
-    ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    ret = meta_mgr->get_->list_keys_next(handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
@@ -2281,13 +2284,13 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   formatter->dump_bool("truncated", truncated);
   formatter->dump_int("count", count);
   if (truncated) {
-    formatter->dump_string("marker", store->meta_mgr->get_marker(handle));
+    formatter->dump_string("marker", meta_mgr->get_marker(handle));
   }
 
   // close result object section
   formatter->close_section();
 
-  store->meta_mgr->list_keys_complete(handle);
+  meta_mgr->list_keys_complete(handle);
 
   flusher.flush();
   return 0;
@@ -2656,10 +2659,12 @@ class RGWUserMetadataHandler : public RGWMetadataHandler {
     RGWUID user_id;
 
     RGWSI_MBSObj_GetParams params = {
-      .pmtime = pmtime,
-      .pattrs = pattrs,
-      .pbl = &bl;
-      .y = null_yield;
+      pmtime,
+      std::nullopt, /* _bl */
+      &bl,
+      pattrs,
+      nullptr, /* cache_info */
+      null_yield,
     };
     int ret = meta_be->get_entry(ctx, params, objv_tracker);
     if (ret < 0) {
@@ -2706,7 +2711,7 @@ public:
     real_time mtime;
 
     int ret = read_user_info_entry(ctx, entry, uci.info, &objv_tracker,
-                                   &mtime, nullpt, &uci.attrs);
+                                   &mtime, nullptr, &uci.attrs);
     if (ret < 0) {
       return ret;
     }
@@ -2721,48 +2726,24 @@ public:
              RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker,
              RGWMDLogSyncType type) override;
-  int do_put_checked(RGWSI_MetaBackend::Context *ctx, string& entry,
-                     RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-                     RGWMetadataObject *_old_obj) override {
-    RGWUserMetadataObject *obj = static_cast<RGWUserMetadataObject *>(_obj);
-    RGWUserMetadataObject *old_obj = static_cast<RGWUserMetadataObject *>(_old_obj);
-    RGWUserCompleteInfo& uci = obj->get_uci();
-
-    map<string, bufferlist> *pattrs = nullptr;
-    if (uci.has_attrs) {
-      pattrs = &uci.attrs;
-    }
-
-    RGWUserInfo *pold_info = (old_obj ? &old_obj->info : nullptr);
-
-    ret = store_user_info_entry(ctx, entry, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
-    if (ret < 0) {
-      return ret;
-    }
-
-    return STATUS_APPLIED;
-  }
 
   struct list_keys_info {
     RGWRados *store;
     RGWListRawObjsCtx ctx;
   };
 
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) {
     RGWUserInfo info;
 
     rgw_user uid(entry);
 
-    int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker);
-    if (ret < 0)
+    int ret = read_user_info_entry(ctx, entry, uci.info, nullptr,
+                                   nullptr, nullptr, nullptr);
+    if (ret < 0) {
       return ret;
+    }
 
     return rgw_delete_user(store, info, objv_tracker);
-  }
-
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
-    oid = key;
-    pool = store->svc.zone->get_zone_params().user_uid_pool;
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
@@ -2827,7 +2808,7 @@ public:
   }
 };
 
-class RGWMetadataHandlerPut_User : public RGWMetadataHanderPut_SObj
+class RGWMetadataHandlerPut_User : public RGWMetadataHandlerPut_SObj
 {
   RGWUserMetadataHandler *handler;
   RGWUserEntryMetadataObject *obj;
@@ -2835,7 +2816,7 @@ public:
   RGWMetadataHandlerPut_User(RGWUserMetadataHandler *_handler,
                                        RGWSI_MetaBackend::Context *ctx, string& entry,
                                        RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-                                       RGWMDLogSyncType type) : RGWMetadataHanderPut_SObj(ctx, entry, obj, objv_tracker, type),
+                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(ctx, entry, obj, objv_tracker, type),
                                                                 handler(_handler) {
     obj = static_cast<RGWUserMetadataObject *>(_obj);
   }
@@ -2849,7 +2830,7 @@ int RGWUserMetaHandler::do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
                                RGWMDLogSyncType type)
 {
   RGWMetadataHandlerPut_User op(this, ctx, entry, obj, objv_tracker, type);
-  return do_put(&op);
+  return do_put_operation(&op);
 }
 
 int RGWMetadataHandlerPut_User::put_checked(RGWMetadataObject *_old_obj)

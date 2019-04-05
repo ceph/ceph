@@ -303,12 +303,13 @@ int RGWSI_Bucket::Instance::SetOp::exec()
 
 int RGWSI_Bucket::store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
                                                RGWBucketEntryPoint& be, bool exclusive,
-                                               RGWObjVersionTracker *objv_tracker, real_time mtime)
+                                               RGWObjVersionTracker *objv_tracker, real_time mtime,
+                                               std::map<string, bufferlist>&& attrs)
 {
   string entry;
   rgw_make_bucket_entry_name(tenant, bucket_name, entry);
   auto apply_type = (exclusive ? APPLY_EXCLUSIVE : APPLY_ALWAYS);
-  RGWBucketEntryMetadataObject mdo(be, objv_tracker->write_version, mtime);
+  RGWBucketEntryMetadataObject mdo(be, objv_tracker->write_version, mtime, std::move(attrs));
   return bucket_meta_handler->put(entry, &mdo, *objv_tracker, apply_type);
 }
 
