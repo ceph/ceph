@@ -101,4 +101,8 @@ export class IscsiService {
   updateDiscovery(auth) {
     return this.http.put(`api/iscsi/discoveryauth`, auth);
   }
+
+  overview() {
+    return this.http.get(`ui-api/iscsi/overview`);
+  }
 }
