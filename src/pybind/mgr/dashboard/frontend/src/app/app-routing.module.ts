@@ -19,6 +19,7 @@ import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
@@ -164,6 +165,12 @@ const routes: Routes = [
     data: { breadcrumbs: 'Filesystems' }
   },
   // Object Gateway
+  {
+    path: 'rgw/501/:message',
+    component: Rgw501Component,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'RGW' }
+  },
   {
     path: 'rgw',
     canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService, AuthGuardService],

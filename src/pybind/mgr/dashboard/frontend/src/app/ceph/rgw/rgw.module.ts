@@ -10,7 +10,6 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
-import { AuthGuardService } from '../../shared/services/auth-guard.service';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { Rgw501Component } from './rgw-501/rgw-501.component';
@@ -119,12 +118,6 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
-  },
-  {
-    path: '501/:message',
-    component: Rgw501Component,
-    canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Object Gateway' }
   }
 ];
 
