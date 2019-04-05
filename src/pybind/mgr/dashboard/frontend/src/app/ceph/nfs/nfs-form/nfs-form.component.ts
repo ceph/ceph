@@ -510,17 +510,17 @@ export class NfsFormComponent implements OnInit {
 
     requestModel.protocols = [];
     if (requestModel.protocolNfsv3) {
-      delete requestModel.protocolNfsv3;
       requestModel.protocols.push(3);
     } else {
       requestModel.tag = null;
     }
+    delete requestModel.protocolNfsv3;
     if (requestModel.protocolNfsv4) {
-      delete requestModel.protocolNfsv4;
       requestModel.protocols.push(4);
     } else {
       requestModel.pseudo = null;
     }
+    delete requestModel.protocolNfsv4;
 
     requestModel.transports = [];
     if (requestModel.transportTCP) {
