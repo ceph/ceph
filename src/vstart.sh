@@ -1195,7 +1195,7 @@ do_rgw()
     # Start server
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
+        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
@@ -1212,7 +1212,7 @@ do_rgw()
     for rgw in j k l m n o p q r s t u v; do
         current_port=$((CEPH_RGW_PORT_NUM + i))
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done
