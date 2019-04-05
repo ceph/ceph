@@ -860,7 +860,6 @@ int AsyncMessenger::accept_conn(AsyncConnectionRef conn)
     // If conn already in, we will return 0
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.erase(existing)) {
-      existing->get_perf_counter()->dec(l_msgr_active_connections);
       conns.erase(it);
     } else if (conn != existing) {
       return -1;
