@@ -12,8 +12,13 @@ describe('RGW users page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Users');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(Helper.getBreadcrumbText()).toEqual('Users');
+    });
   });
 });

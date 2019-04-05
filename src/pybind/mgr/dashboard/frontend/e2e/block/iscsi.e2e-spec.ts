@@ -12,8 +12,13 @@ describe('Iscsi Page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Overview');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(Helper.getBreadcrumbText()).toEqual('Overview');
+    });
   });
 });
