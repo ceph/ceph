@@ -29,7 +29,7 @@ directory while creating key for a client using the following syntax. ::
 
  ceph fs authorize *filesystem_name* client.*client_name* /*specified_directory* rw
 
-for example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs``, use ::
+For example, to restrict client ``foo`` to writing only in the ``bar`` directory of filesystem ``cephfs``, use ::
 
  ceph fs authorize cephfs client.foo / r /bar rw
 
@@ -61,7 +61,7 @@ directory while mounting using the following syntax. ::
 
  ./ceph-fuse -n client.*client_name* *mount_path* -r *directory_to_be_mounted*
 
-for example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
+For example, to restrict client ``foo`` to ``mnt/bar`` directory, we will use. ::
 
  ./ceph-fuse -n client.foo mnt -r /bar
 
