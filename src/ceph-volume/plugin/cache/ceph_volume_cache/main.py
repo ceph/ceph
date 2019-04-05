@@ -2,6 +2,7 @@ import argparse
 import sys
 from ceph_volume.api import lvm as api
 from ceph_volume.util import disk
+from ceph_volume import process
 
 """
 The user is responsible for splitting the disk into data and metadata partitions.
@@ -19,6 +20,39 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 # TODO  stderr: WARNING: Maximum supported pool metadata size is 16.00 GiB.
 # TODO  stderr: WARNING: recovery of pools without pool metadata spare LV is not automated.
 # TODO do we want a spare partition or not?
+# TODO what happens when the OSD is zapped?
+#   the cache LVs will be detected by ceph-volume. See find_associated_devices()
+#   actually, they will not. See ensure_associated_lvs(), which makes sure that
+#   LVs are either lock, journal or wal. Will probably need to be done by the
+#   orchestrator.
+# TODO raise exceptions instead of print+return
+
+
+def get_lvs_caching_info():
+    fields = 'lv_tags,lv_path,lv_name,vg_name,cache_mode,cache_policy,cache_settings'
+    stdout, stderr, returncode = process.call(
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-a', '-o', fields],
+        verbose_on_failure=False
+    )
+    return api._output_parser(stdout, fields)
+
+
+def print_cache_info(osdid=None):
+    # TODO filter on osdid optionally
+    column_width = 12
+    s = '{0:>{w}}'.format('OSD', w=column_width)
+    # TODO change 'partition' to something else
+    s = s + '{0:>{w}}'.format('Partition', w=column_width)
+    s = s + '{0:>{w}}'.format('Cache mode', w=column_width)
+    print(s)
+    for item in get_lvs_caching_info():
+        if item['cache_mode'] is not "" and item['lv_tags'] is not "":
+            v = api.Volume(**item)
+            s = '{0:>{w}}'.format(v.tags['ceph.osd_id'], w=column_width)
+            s = s + '{0:>{w}}'.format(v.tags['ceph.type'], w=column_width)
+            s = s + '{0:>{w}}'.format(item['cache_mode'], w=column_width)
+            print(s)
+
 
 # partition sizes in GB
 def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
@@ -141,6 +175,11 @@ $> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data 
 Remove cache:
 
 $> ceph-volume cache rm --osdid <id>
+
+Get info:
+
+$> ceph-volume cache info
+
     """
     name = 'cache'
 
@@ -246,7 +285,7 @@ $> ceph-volume cache rm --osdid <id>
                 print('Couldn\'t find origin LV for OSD ' + args.osdid)
                 return
             vg_name = origin_lv.vg_name
-        else:
+        elif args.origin:
             # origin is already the LV's name, so no need to look for
             # --data, --db or --wal flags.
             vg_name = args.volumegroup
@@ -277,6 +316,9 @@ $> ceph-volume cache rm --osdid <id>
                 return
             vg_name = origin_lv.vg_name
             rm_lvmcache(vg_name, origin_lv.name)
+        elif self.argv[0] == 'info':
+            print_cache_info()
+            return
 
 
 if __name__ == '__main__':
