@@ -897,6 +897,57 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ds << fsmap;
     }
     r = 0;
+  } else if (prefix == "mds ok-to-stop") {
+    vector<string> ids;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+      r = -EINVAL;
+      ss << "must specify mds id";
+      goto out;
+    }
+    if (fsmap.is_any_degraded()) {
+      ss << "one or more filesystems is currently degraded";
+      r = -EBUSY;
+      goto out;
+    }
+    set<mds_gid_t> stopping;
+    for (auto& id : ids) {
+      ostringstream ess;
+      mds_gid_t gid = gid_from_arg(fsmap, id, ess);
+      if (gid == MDS_GID_NONE) {
+	// the mds doesn't exist, but no file systems are unhappy, so losing it
+	// can't have any effect.
+	continue;
+      }
+      stopping.insert(gid);
+    }
+    set<mds_gid_t> active;
+    set<mds_gid_t> standby;
+    for (auto gid : stopping) {
+      if (fsmap.gid_has_rank(gid)) {
+	// ignore standby-replay daemons (at this level)
+	if (!fsmap.is_standby_replay(gid)) {
+	  auto standby = fsmap.get_standby_replay(gid);
+	  if (standby == MDS_GID_NONE ||
+	      stopping.count(standby)) {
+	    // no standby-replay, or we're also stopping the standby-replay
+	    // for this mds
+	    active.insert(gid);
+	  }
+	}
+      } else {
+	// net loss of a standby
+	standby.insert(gid);
+      }
+    }
+    if (fsmap.get_num_standby() - standby.size() < active.size()) {
+      r = -EBUSY;
+      ss << "insufficent standby MDS daemons to stop active gids "
+	 << stringify(active)
+	 << " and/or standby gids " << stringify(standby);;
+      goto out;
+    }
+    r = 0;
+    ss << "should be safe to stop " << ids;
   } else if (prefix == "fs dump") {
     int64_t epocharg;
     epoch_t epoch;
