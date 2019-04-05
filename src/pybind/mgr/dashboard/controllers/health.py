@@ -8,7 +8,7 @@ from . import ApiController, Endpoint, BaseController
 from .. import mgr
 from ..security import Permission, Scope
 from ..services.ceph_service import CephService
-from ..services.tcmu_service import TcmuService
+from ..services.iscsi_cli import IscsiGatewaysConfig
 
 
 class HealthData(object):
@@ -123,7 +123,8 @@ class HealthData(object):
         return len(mgr.list_servers())
 
     def iscsi_daemons(self):
-        return TcmuService.get_iscsi_daemons_amount()
+        gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
+        return len(gateways) if gateways else 0
 
     def mgr_map(self):
         mgr_map = mgr.get('mgr_map')

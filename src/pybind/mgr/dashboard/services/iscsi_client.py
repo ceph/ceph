@@ -22,6 +22,7 @@ class IscsiClient(RestClient):
     _instances = {}
 
     service_url = None
+    gateway_name = None
 
     @classmethod
     def instance(cls, gateway_name=None, service_url=None):
@@ -47,6 +48,7 @@ class IscsiClient(RestClient):
             instance = IscsiClient(host, port, IscsiClient._CLIENT_NAME, ssl,
                                    auth, Settings.ISCSI_API_SSL_VERIFICATION)
             instance.service_url = service_url
+            instance.gateway_name = gateway_name
             if gateway_name:
                 cls._instances[gateway_name] = instance
 
@@ -76,19 +78,19 @@ class IscsiClient(RestClient):
 
     @RestClient.api_put('/api/target/{target_iqn}')
     def create_target(self, target_iqn, target_controls, request=None):
-        logger.debug("iSCSI: Creating target: %s", target_iqn)
+        logger.debug("iSCSI[%s] Creating target: %s", self.gateway_name, target_iqn)
         return request({
             'controls': json.dumps(target_controls)
         })
 
     @RestClient.api_delete('/api/target/{target_iqn}')
     def delete_target(self, target_iqn, request=None):
-        logger.debug("iSCSI: Deleting target: %s", target_iqn)
+        logger.debug("iSCSI[%s] Deleting target: %s", self.gateway_name, target_iqn)
         return request()
 
     @RestClient.api_put('/api/target/{target_iqn}')
     def reconfigure_target(self, target_iqn, target_controls, request=None):
-        logger.debug("iSCSI: Reconfiguring target: %s", target_iqn)
+        logger.debug("iSCSI[%s] Reconfiguring target: %s", self.gateway_name, target_iqn)
         return request({
             'mode': 'reconfigure',
             'controls': json.dumps(target_controls)
@@ -96,15 +98,20 @@ class IscsiClient(RestClient):
 
     @RestClient.api_put('/api/gateway/{target_iqn}/{gateway_name}')
     def create_gateway(self, target_iqn, gateway_name, ip_address, request=None):
-        logger.debug("iSCSI: Creating gateway: %s/%s", target_iqn, gateway_name)
+        logger.debug("iSCSI[%s] Creating gateway: %s/%s", self.gateway_name, target_iqn,
+                     gateway_name)
         return request({
             'ip_address': ','.join(ip_address),
             'skipchecks': 'true'
         })
 
+    @RestClient.api_get('/api/gatewayinfo')
+    def get_gatewayinfo(self, request=None):
+        return request()
+
     @RestClient.api_put('/api/disk/{pool}/{image}')
     def create_disk(self, pool, image, backstore, request=None):
-        logger.debug("iSCSI: Creating disk: %s/%s", pool, image)
+        logger.debug("iSCSI[%s] Creating disk: %s/%s", self.gateway_name, pool, image)
         return request({
             'mode': 'create',
             'backstore': backstore
@@ -112,14 +119,14 @@ class IscsiClient(RestClient):
 
     @RestClient.api_delete('/api/disk/{pool}/{image}')
     def delete_disk(self, pool, image, request=None):
-        logger.debug("iSCSI: Deleting disk: %s/%s", pool, image)
+        logger.debug("iSCSI[%s] Deleting disk: %s/%s", self.gateway_name, pool, image)
         return request({
             'preserve_image': 'true'
         })
 
     @RestClient.api_put('/api/disk/{pool}/{image}')
     def reconfigure_disk(self, pool, image, controls, request=None):
-        logger.debug("iSCSI: Reconfiguring disk: %s/%s", pool, image)
+        logger.debug("iSCSI[%s] Reconfiguring disk: %s/%s", self.gateway_name, pool, image)
         return request({
             'controls': json.dumps(controls),
             'mode': 'reconfigure'
@@ -127,31 +134,34 @@ class IscsiClient(RestClient):
 
     @RestClient.api_put('/api/targetlun/{target_iqn}')
     def create_target_lun(self, target_iqn, image_id, request=None):
-        logger.debug("iSCSI: Creating target lun: %s/%s", target_iqn, image_id)
+        logger.debug("iSCSI[%s] Creating target lun: %s/%s", self.gateway_name, target_iqn,
+                     image_id)
         return request({
             'disk': image_id
         })
 
     @RestClient.api_delete('/api/targetlun/{target_iqn}')
     def delete_target_lun(self, target_iqn, image_id, request=None):
-        logger.debug("iSCSI: Deleting target lun: %s/%s", target_iqn, image_id)
+        logger.debug("iSCSI[%s] Deleting target lun: %s/%s", self.gateway_name, target_iqn,
+                     image_id)
         return request({
             'disk': image_id
         })
 
     @RestClient.api_put('/api/client/{target_iqn}/{client_iqn}')
     def create_client(self, target_iqn, client_iqn, request=None):
-        logger.debug("iSCSI: Creating client: %s/%s", target_iqn, client_iqn)
+        logger.debug("iSCSI[%s] Creating client: %s/%s", self.gateway_name, target_iqn, client_iqn)
         return request()
 
     @RestClient.api_delete('/api/client/{target_iqn}/{client_iqn}')
     def delete_client(self, target_iqn, client_iqn, request=None):
-        logger.debug("iSCSI: Deleting client: %s/%s", target_iqn, client_iqn)
+        logger.debug("iSCSI[%s] Deleting client: %s/%s", self.gateway_name, target_iqn, client_iqn)
         return request()
 
     @RestClient.api_put('/api/clientlun/{target_iqn}/{client_iqn}')
     def create_client_lun(self, target_iqn, client_iqn, image_id, request=None):
-        logger.debug("iSCSI: Creating client lun: %s/%s", target_iqn, client_iqn)
+        logger.debug("iSCSI[%s] Creating client lun: %s/%s", self.gateway_name, target_iqn,
+                     client_iqn)
         return request({
             'disk': image_id
         })
@@ -159,8 +169,9 @@ class IscsiClient(RestClient):
     @RestClient.api_put('/api/clientauth/{target_iqn}/{client_iqn}')
     def create_client_auth(self, target_iqn, client_iqn, username, password, mutual_username,
                            mutual_password, request=None):
-        logger.debug("iSCSI: Creating client auth: %s/%s/%s/%s/%s/%s",
-                     target_iqn, client_iqn, username, password, mutual_username, mutual_password)
+        logger.debug("iSCSI[%s] Creating client auth: %s/%s/%s/%s/%s/%s",
+                     self.gateway_name, target_iqn, client_iqn, username, password, mutual_username,
+                     mutual_password)
         return request({
             'username': username,
             'password': password,
@@ -170,7 +181,7 @@ class IscsiClient(RestClient):
 
     @RestClient.api_put('/api/hostgroup/{target_iqn}/{group_name}')
     def create_group(self, target_iqn, group_name, members, image_ids, request=None):
-        logger.debug("iSCSI: Creating group: %s/%s", target_iqn, group_name)
+        logger.debug("iSCSI[%s] Creating group: %s/%s", self.gateway_name, target_iqn, group_name)
         return request({
             'members': ','.join(members),
             'disks': ','.join(image_ids)
@@ -178,13 +189,13 @@ class IscsiClient(RestClient):
 
     @RestClient.api_delete('/api/hostgroup/{target_iqn}/{group_name}')
     def delete_group(self, target_iqn, group_name, request=None):
-        logger.debug("iSCSI: Deleting group: %s/%s", target_iqn, group_name)
+        logger.debug("iSCSI[%s] Deleting group: %s/%s", self.gateway_name, target_iqn, group_name)
         return request()
 
     @RestClient.api_put('/api/discoveryauth')
     def update_discoveryauth(self, user, password, mutual_user, mutual_password, request=None):
-        logger.debug("iSCSI: Updating discoveryauth: %s/%s/%s/%s", user, password, mutual_user,
-                     mutual_password)
+        logger.debug("iSCSI[%s] Updating discoveryauth: %s/%s/%s/%s", self.gateway_name, user,
+                     password, mutual_user, mutual_password)
         return request({
             'username': user,
             'password': password,
@@ -194,7 +205,7 @@ class IscsiClient(RestClient):
 
     @RestClient.api_put('/api/targetauth/{target_iqn}')
     def update_targetauth(self, target_iqn, action, request=None):
-        logger.debug("iSCSI: Updating targetauth: %s/%s", target_iqn, action)
+        logger.debug("iSCSI[%s] Updating targetauth: %s/%s", self.gateway_name, target_iqn, action)
         return request({
             'action': action
         })
