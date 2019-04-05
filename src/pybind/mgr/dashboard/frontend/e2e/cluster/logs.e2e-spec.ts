@@ -12,23 +12,25 @@ describe('Logs page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Logs');
-  });
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
 
-  it('should show two tabs', () => {
-    page.navigateTo();
-    expect(Helper.getTabsCount()).toEqual(2);
-  });
+    it('should open and show breadcrumb', () => {
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Logs');
+    });
 
-  it('should show cluster logs tab at first', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(0)).toEqual('Cluster Logs');
-  });
+    it('should show two tabs', () => {
+      expect(Helper.getTabsCount()).toEqual(2);
+    });
 
-  it('should show audit logs as a second tab', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(1)).toEqual('Audit Logs');
+    it('should show cluster logs tab at first', () => {
+      expect(Helper.getTabText(0)).toEqual('Cluster Logs');
+    });
+
+    it('should show audit logs as a second tab', () => {
+      expect(Helper.getTabText(1)).toEqual('Audit Logs');
+    });
   });
 });
