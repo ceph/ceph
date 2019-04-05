@@ -189,9 +189,7 @@ protected:
   set<pg_shard_t> &actingset;
   set<pg_shard_t> &acting_recovery_backfill;
   pg_info_t &info;
-  PastIntervals &past_intervals;
   PGLog &pg_log;
-  epoch_t &last_peering_reset;
   eversion_t &last_update_ondisk;
   eversion_t &last_complete_ondisk;
   eversion_t &last_update_applied;
@@ -701,7 +699,7 @@ public:
 
 protected:
   epoch_t get_last_peering_reset() const {
-    return last_peering_reset;
+    return recovery_state.get_last_peering_reset();
   }
 
   /* heartbeat peers */

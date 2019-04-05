@@ -192,9 +192,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   actingset(recovery_state.actingset),
   acting_recovery_backfill(recovery_state.acting_recovery_backfill),
   info(recovery_state.info),
-  past_intervals(recovery_state.past_intervals),
   pg_log(recovery_state.pg_log),
-  last_peering_reset(recovery_state.last_peering_reset),
   last_update_ondisk(recovery_state.last_update_ondisk),
   last_complete_ondisk(recovery_state.last_complete_ondisk),
   last_update_applied(recovery_state.last_update_applied),
@@ -3373,10 +3371,10 @@ void PG::scrub_finish()
 
 bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 {
-  if (last_peering_reset > reply_epoch ||
-      last_peering_reset > query_epoch) {
+  if (get_last_peering_reset() > reply_epoch ||
+      get_last_peering_reset() > query_epoch) {
     dout(10) << "old_peering_msg reply_epoch " << reply_epoch << " query_epoch " << query_epoch
-	     << " last_peering_reset " << last_peering_reset
+	     << " last_peering_reset " << get_last_peering_reset()
 	     << dendl;
     return true;
   }
