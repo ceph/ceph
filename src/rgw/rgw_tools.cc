@@ -9,6 +9,7 @@
 #include "common/async/yield_context.h"
 
 #include "include/types.h"
+#include "include/stringify.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -58,6 +59,32 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
     r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
     if (r < 0 && r != -EOPNOTSUPP) {
       return r;
+    }
+
+    if (mostly_omap) {
+      // set pg_autoscale_bias
+      bufferlist inbl;
+      float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
+      int r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_autoscale_bias\": \"" +
+	stringify(bias) + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+		 << pool.name << dendl;
+      }
+      // set pg_num_min
+      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
+      r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_num_min\": \"" +
+	stringify(min) + "\"}",
+	inbl, NULL, NULL);
+     if (r < 0) {
+       dout(10) << __func__ << " warning: failed to set pg_num_min on "
+		<< pool.name << dendl;
+      }
     }
   } else if (r < 0) {
     return r;
