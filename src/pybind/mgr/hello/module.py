@@ -18,7 +18,7 @@ class Hello(MgrModule):
         },
     ]
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         self.log.info("hello_world_info")
         self.log.debug("hello_world_debug")
         self.log.error("hello_world_error")

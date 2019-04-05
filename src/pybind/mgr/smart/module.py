@@ -17,7 +17,7 @@ class Module(MgrModule):
         },
     ]
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == 'osd smart get':

@@ -663,7 +663,7 @@ class Module(MgrModule):
         ]
         return 0, json.dumps(ret), ""
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'prometheus self-test':
             self.collect()
             self.get_file_sd_config()

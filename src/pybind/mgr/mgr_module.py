@@ -531,7 +531,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         self._ceph_set_health_checks(checks)
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         """
         Called by ceph-mgr to request the plugin to handle one
         of the commands that it declared in self.COMMANDS
@@ -540,6 +540,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         output string.  The output buffer is for data results,
         the output string is for informative text.
 
+        :param string inbuf: content of any "-i <file>" supplied to ceph cli
         :param dict cmd: from Ceph's cmdmap_t
 
         :return: 3-tuple of (int, str, str)

@@ -537,6 +537,10 @@ std::vector<Option> get_global_options() {
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
+    Option("crash_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/lib/ceph/crash")
+    .set_description("Directory where crash reports are archived"),
+
     // restapi
     Option("restapi_log_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("default set by python code"),
@@ -4803,7 +4807,7 @@ std::vector<Option> get_global_options() {
     .set_description("Filesystem path to manager modules."),
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("restful status balancer iostat")
+    .set_default("restful status balancer iostat crash")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")
@@ -4930,6 +4934,10 @@ std::vector<Option> get_global_options() {
     Option("debug_asserts_on_shutdown", Option::TYPE_BOOL,Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738"),
+
+    Option("debug_asok_assert_abort", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("allow commands 'assert' and 'abort' via asok for testing crash dumps etc"),
   });
 }
 

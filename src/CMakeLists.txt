@@ -950,6 +950,9 @@ configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
 configure_file(ceph-post-file.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file @ONLY)
 
+configure_file(ceph-crash.in
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash @ONLY)
+
 if(WITH_TESTS)
   install(PROGRAMS
     ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-debugpack
@@ -960,6 +963,7 @@ endif()
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crash
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)

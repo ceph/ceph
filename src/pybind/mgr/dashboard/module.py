@@ -334,7 +334,7 @@ class Module(MgrModule, CherryPyConfig):
         logger.info('Stopping engine...')
         self.shutdown_event.set()
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         res = handle_option_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res

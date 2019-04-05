@@ -38,3 +38,4 @@ sensible.
     Telemetry plugin <telemetry>
     Telegraf plugin <telegraf>
     Iostat plugin <iostat>
+    Crash plugin <crash>

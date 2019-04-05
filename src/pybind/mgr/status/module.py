@@ -304,7 +304,7 @@ class Module(MgrModule):
 
         return 0, osd_table.get_string(), ""
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
 
         if cmd['prefix'] == "fs status":

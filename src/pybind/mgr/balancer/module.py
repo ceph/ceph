@@ -293,7 +293,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {

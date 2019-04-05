@@ -4,6 +4,7 @@ set(CEPH_SYSTEMD_ENV_DIR "/etc/sysconfig"
   CACHE PATH "Location for systemd service environmental variable settings files")
 set(SYSTEMD_ENV_FILE "${CEPH_SYSTEMD_ENV_DIR}/ceph")
 foreach(service
+    ceph-crash
     ceph-fuse@
     ceph-mds@
     ceph-mgr@

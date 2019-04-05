@@ -67,7 +67,7 @@ class Module(MgrModule):
         self._event = threading.Event()
         self._workload = None
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'mgr self-test run':
             self._self_test()
             return 0, '', 'Self-test succeeded'

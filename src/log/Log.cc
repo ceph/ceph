@@ -299,8 +299,31 @@ void Log::flush()
 
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
-  Entry *e;
-  while ((e = t->dequeue()) != NULL) {
+  Entry *e = nullptr;
+  long len = 0;
+  if (crash) {
+    len = t->m_len;
+  }
+  if (!requeue) {
+    e = t->m_head;
+    if (!e) {
+      return;
+    }
+  }
+  while (true) {
+    if (requeue) {
+      e = t->dequeue();
+      if (!e) {
+	break;
+      }
+      requeue->enqueue(e);
+    } else {
+      e = e->m_next;
+      if (!e) {
+	break;
+      }
+    }
+
     unsigned sub = e->m_subsys;
 
     bool should_log = crash || m_subs->get_log_level(sub) >= e->m_prio;
@@ -324,8 +347,9 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         buf = buf0;
       }
 
-      if (crash)
+      if (crash) {
 	buflen += snprintf(buf, buf_size, "%6d> ", -t->m_len);
+      }
       buflen += append_time(e->m_stamp, buf + buflen, buf_size - buflen);
       buflen += snprintf(buf + buflen, buf_size-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
@@ -362,7 +386,6 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       m_graylog->log_entry(e);
     }
 
-    requeue->enqueue(e);
   }
 }
 
@@ -402,9 +425,8 @@ void Log::dump_recent()
   pthread_mutex_unlock(&m_queue_mutex);
   _flush(&t, &m_recent, false);
 
-  EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
-  _flush(&m_recent, &old, true);
+  _flush(&m_recent, nullptr, true);
 
   char buf[4096];
   _log_message("--- logging levels ---", true);

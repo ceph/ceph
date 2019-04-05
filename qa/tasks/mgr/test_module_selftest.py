@@ -58,6 +58,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_telemetry(self):
         self._selftest_plugin("telemetry")
 
+    def test_crash(self):
+        self._selftest_plugin("crash")
+
     def test_selftest_config_update(self):
         """
         That configuration updates are seen by running mgr modules

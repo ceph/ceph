@@ -34,6 +34,7 @@ OPTION(chdir, OPT_STR)
 OPTION(restapi_log_level, OPT_STR) 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR)	// "
 OPTION(fatal_signal_handlers, OPT_BOOL)
+OPTION(crash_dir, OPT_STR)
 SAFE_OPTION(erasure_code_dir, OPT_STR) // default location for erasure-code plugins
 
 OPTION(log_file, OPT_STR) // default changed by common_preinit()
@@ -1519,6 +1520,7 @@ OPTION(rgw_torrent_sha_unit, OPT_INT)    // torrent field piece length 512K
 OPTION(event_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL)
+OPTION(debug_asok_assert_abort, OPT_BOOL)
 
 OPTION(rgw_swift_custom_header, OPT_STR) // option to enable swift custom headers
 

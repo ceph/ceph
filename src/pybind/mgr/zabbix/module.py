@@ -298,7 +298,7 @@ class Module(MgrModule):
 
         return False
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'zabbix config-set':

@@ -330,7 +330,7 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def handle_command(self, cmd):
+    def handle_command(self, inbuf, cmd):
         if cmd['prefix'] == 'influx config-show':
             return 0, json.dumps(self.config), ''
         elif cmd['prefix'] == 'influx config-set':

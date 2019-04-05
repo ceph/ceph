@@ -402,7 +402,7 @@ class Module(MgrModule):
         )
 
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == "restful create-key":
             if command['key_name'] in self.keys:
