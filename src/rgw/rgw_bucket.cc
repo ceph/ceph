@@ -1849,7 +1849,7 @@ static int process_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_st
   do {
     list<std::string> keys;
 
-    ret = store-svc.meta->get_mgr()meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+    ret = store->svc.meta->get_mgr()meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2534,7 +2534,7 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
 class RGW_MB_Handler_Module_Bucket : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Zone *zone_svc;
 public:
-  RGW_MB_Handler_Module_Bucket(RGWSI_Zone *_zone_svc) : zone_svc {}
+  RGW_MB_Handler_Module_Bucket(RGWSI_Zone *_zone_svc) : zone_svc(_zone_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool& pool, string& oid) override {
     oid = key;
@@ -2627,7 +2627,7 @@ public:
     try {
       decode_json_obj(be, obj);
     } catch (JSONDecoder::err& e) {
-      return -EINVAL;
+      return nullptr;
     }
 
     return new RGWBucketEntryMetadataObject(be, objv, mtime);
@@ -2688,7 +2688,7 @@ public:
     return 0;
   }
 
-  int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
+  int list_keys_init(const string& marker, void **phandle) override {
     auto info = std::make_unique<list_keys_info>();
 
     info->store = store;
@@ -2806,7 +2806,7 @@ int RGWMetadataHandlerPut_Bucket::put_post()
   return ret;
 }
 
-void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
+static void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
 
    char md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];

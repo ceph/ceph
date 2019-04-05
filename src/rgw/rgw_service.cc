@@ -77,7 +77,8 @@ int RGWServices_Def::init(CephContext *cct,
   } else {
     sysobj->init(rados.get(), sysobj_core.get());
   }
-  user->init(zone.get(), sysobj.get(), sysobj_cache.get(), meta.get(), sync_modules.get());
+  user->init(zone.get(), sysobj.get(), sysobj_cache.get(),
+             meta.get(), meta_be_sobj.get(), sync_modules.get());
 
   can_shutdown = true;
 

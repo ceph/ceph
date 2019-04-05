@@ -68,7 +68,7 @@ class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
   map<string, bufferlist> attrs;
 public:
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m, map<string, bufferlist>&& _attrs) :
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, real_time m, std::map<string, bufferlist>&& _attrs) :
     ep(_ep), attrs(std::move(_attrs)) {
     objv = v;
     mtime = m;

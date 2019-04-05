@@ -19,6 +19,8 @@
 
 #include "rgw/rgw_service.h"
 
+#include "svc_meta_be.h"
+
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
@@ -41,6 +43,7 @@ class RGWSI_User : public RGWServiceInstance
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
     RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
     RGWSI_SyncModules *sync_modules{nullptr};
   } svc;
 
@@ -78,6 +81,7 @@ public:
 
   void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+            RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
   class User {
@@ -87,10 +91,6 @@ public:
     RGWSysObjectCtx& ctx;
     rgw_user user;
     RGWUserInfo user_info;
-
-    static string get_meta_key(const rgw_user& user) {
-      return user.to_str();
-    }
 
   public:
     User(RGWSI_User *_user_svc,
@@ -110,6 +110,10 @@ public:
       return user_info;
     }
 
+    static string get_meta_key(const rgw_user& user) {
+      return user.to_str();
+    }
+
     struct GetOp {
       User& source;
 
@@ -117,6 +121,7 @@ public:
       map<string, bufferlist> *pattrs{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWUserInfo *pinfo{nullptr};
+      RGWObjVersionTracker *objv_tracker{nullptr};
 
 
       GetOp& set_mtime(ceph::real_time *_mtime) {
@@ -139,6 +144,11 @@ public:
         return *this;
       }
 
+      GetOp& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
       GetOp(User& _source) : source(_source) {}
 
       int exec();
@@ -150,6 +160,7 @@ public:
       ceph::real_time mtime;
       map<string, bufferlist> *pattrs{nullptr};
       bool exclusive{false};
+      RGWUserInfo *old_info{nullptr};
 
 
       SetOp& set_mtime(const ceph::real_time& _mtime) {
@@ -164,6 +175,11 @@ public:
 
       SetOp& set_exclusive(bool _exclusive) {
         exclusive = _exclusive;
+        return *this;
+      }
+
+      SetOp& set_old_info(RGWUserInfo *_old_info) {
+        old_info = _old_info;
         return *this;
       }
 
