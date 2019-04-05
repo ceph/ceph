@@ -2254,7 +2254,7 @@ CtPtr ProtocolV2::handle_auth_signature(ceph::bufferlist &payload)
     // this happened at client side
     return finish_client_auth();
   } else {
-    ceph_assert_always("state corruption" == nullptr);
+    ceph_abort("state corruption");
   }
 }
 
