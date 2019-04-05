@@ -28,6 +28,11 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
  protected:
   entity_addr_t peer_addr;
   peer_type_t peer_type = -1;
+  int64_t peer_id = -1;
+  utime_t last_keepalive, last_keepalive_ack;
+
+ public:
+  uint64_t peer_global_id = 0;
 
  public:
   Connection() {}
@@ -54,6 +59,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   virtual seastar::shard_id shard_id() const = 0;
 
   virtual void print(ostream& out) const = 0;
+
+  utime_t get_last_keepalive() const { return last_keepalive; }
+  utime_t get_last_keepalive_ack() const { return last_keepalive_ack; }
 };
 
 inline ostream& operator<<(ostream& out, const Connection& conn) {
