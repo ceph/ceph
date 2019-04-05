@@ -1747,7 +1747,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     return -err;
   }
 
-  if (off > st.st_size) {
+  if (off > (uint64_t)st.st_size) {
     std::ostringstream oss;
     oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
     *error = oss.str();
@@ -1759,7 +1759,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     len = st.st_size - off;
   }
   ssize_t ret = lseek64(fd, off, SEEK_SET);
-  if (ret != off) {
+  if (ret != (ssize_t)off) {
     return -errno;
   }
 
@@ -1771,7 +1771,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     *error = oss.str();
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
-  } else if (ret != len) {
+  } else if (ret != (ssize_t)len) {
     // Premature EOF.
     // Perhaps the file changed between stat() and read()?
     std::ostringstream oss;

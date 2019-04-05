@@ -72,6 +72,8 @@ class MonmapMonitor : public PaxosService {
 
   void check_sub(Subscription *sub);
 
+  void tick() override;
+
 private:
   void check_subs();
   bufferlist monmap_bl;
