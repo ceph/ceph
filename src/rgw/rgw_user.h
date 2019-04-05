@@ -771,11 +771,7 @@ public:
 struct RGWUserCompleteInfo {
   RGWUserInfo info;
   map<string, bufferlist> attrs;
-  bool has_attrs;
-
-  RGWUserCompleteInfo()
-    : has_attrs(false)
-  {}
+  bool has_attrs{false};
 
   void dump(Formatter * const f) const {
     info.dump(f);

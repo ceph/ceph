@@ -48,24 +48,27 @@ class RGWMetadataManager;
 class RGWMetadataHandler {
   friend class RGWSI_MetaBackend;
   friend class RGWMetadataManager;
+  friend class Put;
 
-protected:
-  RGWSI_MetaBackend *meta_be{nullptr};
-  RGWSI_MetaBackend_Handle be_handle{0};
-  RGWSI_MetaBackend::ModuleRef be_module;
-
+public:
   class Put {
   protected:
+    RGWMetadataHandler *handler;
     RGWSI_MetaBackend::Context *ctx;
     string& entry;
     RGWMetadataObject *obj;
     RGWObjVersionTracker& objv_tracker;
     RGWMDLogSyncType apply_type;
+
+    int get(RGWMetadataObject **obj) {
+      return handler->do_get(ctx, entry, obj);
+    }
   public:
-    Put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
-        RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) : ctx(_ctx), entry(_entry),
-                                                                     obj(_obj), objv_tracker(_objv_tracker),
-                                                                     apply_type(_type) {}
+    Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
+        string& _entry, RGWMetadataObject *_obj,
+        RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type) : ctx(_ctx), entry(_entry),
+                                                                       obj(_obj), objv_tracker(_objv_tracker),
+                                                                       apply_type(_type) {}
     virtual ~Put() {}
 
     virtual int put_pre() {
@@ -82,13 +85,17 @@ protected:
     }
   };
 
+protected:
+  RGWSI_MetaBackend *meta_be{nullptr};
+  RGWSI_MetaBackend_Handle be_handle{0};
+  RGWSI_MetaBackend::ModuleRef be_module;
+
   virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) = 0;
   virtual int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
                      RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
-  virtual int do_put(Put *put_op);
+  virtual int do_put_operate(Put *put_op);
   virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
-  virtual Put *alloc_put_op() = 0;
   virtual int init_module() = 0;
 
 public:
@@ -191,9 +198,9 @@ public:
 class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler::Put
 {
 public:
-  RGWMetadataHandlerPut_SObj(RGWSI_MetaBackend::Context *ctx, string& entry,
-                             RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-                             RGWMDLogSyncType type) : Put(ctx, entry, obj, objv_tracker, type) {}
+  RGWMetadataHandlerPut_SObj(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *ctx,
+                             string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                             RGWMDLogSyncType type) : Put(handler, ctx, entry, obj, objv_tracker, type) {}
   ~RGWMetadataHandlerPut_SObj() {}
 
   int put() override;

@@ -26,6 +26,7 @@ RGWSI_User::User RGWSI_User::user(RGWSysObjectCtx& _ctx,
 
 void RGWSI_User::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                         RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+                        RGWSI_MetaBackend *_meta_be_svc,
                         RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.user = this;
@@ -33,6 +34,7 @@ void RGWSI_User::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
   svc.meta = _meta_svc;
+  svc.meta_be = _meta_be_svc;
   svc.sync_modules = _sync_modules_svc;
 }
 
@@ -52,6 +54,8 @@ int RGWSI_User::do_start()
   return 0;
 }
 
+#warning clean me?
+#if 0
 int RGWSI_User::User::read_user_info(const rgw_user& user,
                                      RGWUserInfo *info,
                                      real_time *pmtime,
@@ -68,11 +72,13 @@ int RGWSI_User::User::write_user_info(RGWUserInfo& info,
 {
 #warning FIXME
 }
+#endif
 
 int RGWSI_User::User::GetOp::exec()
 {
-  int r = source.read_user_info(source.user, &source.user_info,
-                                pmtime, pattrs, refresh_version);
+  int r = source.svc.user->read_user_info(source.user, &source.user_info,
+                                          pmtime, pattrs,
+                                          objv_tracker, refresh_version);
   if (r < 0) {
     return r;
   }
@@ -86,9 +92,10 @@ int RGWSI_User::User::GetOp::exec()
 
 int RGWSI_User::User::SetOp::exec()
 {
-  int r = source.write_user_info(source.user_info,
-                                 exclusive,
-                                 mtime, pattrs);
+  int r = source.svc.user->store_user_info(source.user_info,
+                                           exclusive,
+                                           objv_tracker,
+                                           mtime, pattrs);
   if (r < 0) {
     return r;
   }
@@ -96,21 +103,22 @@ int RGWSI_User::User::SetOp::exec()
   return 0;
 }
 
-int RGWSI_User::read_user_info_meta(RGWSI_MetaBackend::Context *ctx,
-                                    string& entry,
-                                    RGWUserInfo& info,
-                                    RGWObjVersionTracker * const objv_tracker,
-                                    real_time * const pmtime,
-                                    rgw_cache_entry_info * const cache_info,
-                                    map<string, bufferlist> * const pattrs)
-{
+int RGWSI_User::read_user_info_meta_entry(RGWSI_MetaBackend::Context *ctx,
+                                          string& entry,
+                                          RGWUserInfo& info,
+                                          RGWObjVersionTracker * const objv_tracker,
+                                          real_time * const pmtime,
+                                          rgw_cache_entry_info * const cache_info,
+                                          map<string, bufferlist> * const pattrs) {
   bufferlist bl;
   RGWUID user_id;
 
   RGWSI_MBSObj_GetParams params = {
-    .pmtime = pmtime,
-    .pattrs = pattrs,
-    .pbl = &bl;
+    pmtime,
+    std::nullopt, /* _bl */
+    &bl,
+    pattrs,
+    nullptr, /* cache_info */
   };
   int ret = svc.meta_be->get_entry(ctx, params, objv_tracker);
   if (ret < 0) {
@@ -120,15 +128,15 @@ int RGWSI_User::read_user_info_meta(RGWSI_MetaBackend::Context *ctx,
   auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
-    if (user_id.user_id.to_str().compare(entry) != 0) {
-      lderr(meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id.to_str() << " != " << entry << dendl;
+    if (User::get_meta_key(user_id.user_id).compare(entry) != 0) {
+      lderr(svc.meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << User::get_meta_key(user_id.user_id) << " != " << entry << dendl;
       return -EIO;
     }
     if (!iter.end()) {
       decode(info, iter);
     }
   } catch (buffer::error& err) {
-    ldout(meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
+    ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
   }
 
@@ -172,6 +180,7 @@ int RGWSI_User::read_user_info(const rgw_user& user,
 class RGWMetaPut_User
 {
   RGWSI_MetaBackend::Context *ctx;
+  RGWUID ui;
   string& entry;
   RGWUserInfo& info;
   RGWUserInfo *old_info;
@@ -188,13 +197,14 @@ class RGWMetaPut_User
                   real_time& mtime,
                   bool exclusive,
                   map<string, bufferlist> *pattrs) :
-    ctx(ctx), entry(entry),
-    info(info), old_info(old_info),
-    objv_tracker(objv_tracker), mtime(mtime),
-    exclusive(exclusive), pattrs(patts) {}
+      ctx(ctx), entry(entry),
+      info(info), old_info(old_info),
+      objv_tracker(objv_tracker), mtime(mtime),
+      exclusive(exclusive), pattrs(pattrs) {
+    ui.user_id = info.user_id;
+  }
 
   int prepare() {
-    int ret;
     RGWObjVersionTracker ot;
 
     if (objv_tracker) {
@@ -217,6 +227,7 @@ class RGWMetaPut_User
       RGWAccessKey& k = iter->second;
       /* check if swift mapping exists */
       RGWUserInfo inf;
+#warning this needs to change to use svc.sysobj
       int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
       if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
         ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
@@ -245,20 +256,11 @@ class RGWMetaPut_User
   }
 
   int put() {
-    RGWUID ui;
-    ui.user_id = info.user_id;
-
-    bufferlist link_bl;
-    encode(ui, link_bl);
-
     bufferlist data_bl;
     encode(ui, data_bl);
     encode(info, data_bl);
 
-    string key;
-    info.user_id.to_str(key);
-
-    ret = svc.meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
+    int ret = svc.meta_be->put_entry(ctx, data_bl, exclusive, &ot, mtime, pattrs);
     if (ret < 0)
       return ret;
 
@@ -266,9 +268,14 @@ class RGWMetaPut_User
   }
 
   int complete() {
+    int ret;
+
     if (!info.user_email.empty()) {
       if (!old_info ||
           old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
+        bufferlist link_bl;
+        encode(ui, link_bl);
+
         ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
                                  link_bl, exclusive, NULL, real_time());
         if (ret < 0)
@@ -306,124 +313,12 @@ class RGWMetaPut_User
   }
 };
 
-int RGWSI_User::store_user_info_meta(RGWSI_MetaBackend::Context *ctx,
-                                     string& entry,
-                                     RGWUserInfo& info,
-                                     RGWUserInfo *old_info,
-                                     RGWObjVersionTracker *objv_tracker,
-                                     real_time& mtime,
-                                     bool exclusive,
-                                     map<string, bufferlist> *pattrs)
-{
-  int ret;
-  RGWObjVersionTracker ot;
-
-  if (objv_tracker) {
-    ot = *objv_tracker;
-  }
-
-  if (ot.write_version.tag.empty()) {
-    if (ot.read_version.tag.empty()) {
-      ot.generate_new_write_ver(store->ctx());
-    } else {
-      ot.write_version = ot.read_version;
-      ot.write_version.ver++;
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator iter;
-  for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
-    if (old_info && old_info->swift_keys.count(iter->first) != 0)
-      continue;
-    RGWAccessKey& k = iter->second;
-    /* check if swift mapping exists */
-    RGWUserInfo inf;
-    int r = do_get_user_info_by_swift(meta_be, ctx, k.id, inf);
-    if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-      ldout(store->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
-        << ") already mapped to another user (" << info.user_id << ")" << dendl;
-      return -EEXIST;
-    }
-  }
-
-  if (!info.access_keys.empty()) {
-    /* check if access keys already exist */
-    RGWUserInfo inf;
-    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
-    for (; iter != info.access_keys.end(); ++iter) {
-      RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
-        continue;
-      int r = do_get_user_info_by_access_key(meta_be, ctx, k.id, inf);
-      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
-        ldout(store->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
-        return -EEXIST;
-      }
-    }
-  }
-
-  RGWUID ui;
-  ui.user_id = info.user_id;
-
-  bufferlist link_bl;
-  encode(ui, link_bl);
-
-  bufferlist data_bl;
-  encode(ui, data_bl);
-  encode(info, data_bl);
-
-  string key;
-  info.user_id.to_str(key);
-
-  ret = svc.meta_be->put_entry(key, data_bl, exclusive, &ot, mtime, pattrs);
-  if (ret < 0)
-    return ret;
-
-  if (!info.user_email.empty()) {
-    if (!old_info ||
-        old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_email_pool, info.user_email,
-                               link_bl, exclusive, NULL, real_time());
-      if (ret < 0)
-        return ret;
-    }
-  }
-
-  if (!info.access_keys.empty()) {
-    map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
-    for (; iter != info.access_keys.end(); ++iter) {
-      RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) != 0)
-	continue;
-
-      ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
-                               link_bl, exclusive, NULL, real_time());
-      if (ret < 0)
-        return ret;
-    }
-  }
-
-  map<string, RGWAccessKey>::iterator siter;
-  for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
-    RGWAccessKey& k = siter->second;
-    if (old_info && old_info->swift_keys.count(siter->first) != 0)
-      continue;
-
-    ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,
-                             link_bl, exclusive, NULL, real_time());
-    if (ret < 0)
-      return ret;
-  }
-
-  return ret;
-}
-
 int RGWSI_User::store_user_info(RGWUserInfo& user_info, bool exclusive,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker,
                                 real_time mtime)
 {
-  string entry = User::get_meta_oid(user);
+  string entry = User::get_meta_key(user);
   auto apply_type = (exclusive ? APPLY_EXCLUSIVE : APPLY_ALWAYS);
   RGWUserCompleteInfo bci{user_info, attrs};
   RGWUserMetadataObject mdo(bci, objv_tracker->write_version, mtime);
@@ -433,7 +328,7 @@ int RGWSI_User::store_user_info(RGWUserInfo& user_info, bool exclusive,
 int RGWSI_User::remove_user_info(const rgw_user& user,
                                  RGWObjVersionTracker *objv_tracker)
 {
-  string entry = User::get_meta_oid(user);
+  string entry = User::get_meta_key(user);
   return user_handler->remove(entry, *objv_tracker);
 }
 
