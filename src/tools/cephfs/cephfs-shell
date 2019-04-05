@@ -399,19 +399,64 @@ class CephFSShell(Cmd):
 
         def __call__(self, parser, namespace, values, option_string=None):
             o_mode = 0
+            res = None
             try:
                 o_mode = int(values, base=8)
             except ValueError as e:
-                parser.error("invalid mode: %s\n"
-                             "mode must be a numeric octal literal." % values)
+                res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', values)
+                if res is None:
+                    parser.error("invalid mode: %s\n"
+                                 "mode must be a numeric octal literal\n"
+                                 "or   ((u?g?o?)|(a?))(=)(r?w?x?)" %
+                                 values)
+                else:
+                    # we are supporting only assignment of mode and not + or -
+                    # as is generally available with the chmod command
+                    # eg.
+                    # >>> res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', 'go=')
+                    # >>> res.groups()
+                    # ('go', 'go', None, '=', '')
+                    val = res.groups()
+
+                    if val[3] != '=':
+                        parser.error("need assignment operator between user "
+                                     "and mode specifiers")
+                    if val[4] == '':
+                        parser.error("invalid mode: %s"
+                                     "mode must be combination of: r | w | x" %
+                                     values)
+                    users = ''
+                    if val[2] == None:
+                        users = val[1]
+                    else:
+                        users = val[2]
+
+                    t_mode = 0
+                    if users == 'a':
+                        users = 'ugo'
+
+                    if 'r' in val[4]:
+                        t_mode |= 4
+                    if 'w' in val[4]:
+                        t_mode |= 2
+                    if 'x' in val[4]:
+                        t_mode |= 1
+
+                    if 'u' in users:
+                        o_mode |= (t_mode << 6)
+                    if 'g' in users:
+                        o_mode |= (t_mode << 3)
+                    if 'o' in users:
+                        o_mode |= t_mode
 
             if o_mode < 0:
                 parser.error("invalid mode: %s\n"
-                             "mode cannot be negative." % values)
+                             "mode cannot be negative" % values)
             if o_mode > 0o777:
                 parser.error("invalid mode: %s\n"
                              "mode cannot be greater than octal 0777" % values)
-            setattr(namespace, self.dest, values)
+
+            setattr(namespace, self.dest, str(oct(o_mode)))
 
 
     mkdir_parser = argparse.ArgumentParser(
