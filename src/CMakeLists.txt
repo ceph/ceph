@@ -245,7 +245,7 @@ endif()
 
 # Python stuff
 find_package(PythonInterp 2 REQUIRED)
-find_package(PythonLibs 2 REQUIRED)
+find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
 
 option(WITH_PYTHON3 "build python3 bindings" ON)
 if(WITH_PYTHON3)
@@ -253,7 +253,7 @@ if(WITH_PYTHON3)
     set(WITH_PYTHON3 "3")
   endif()
   find_package(Python3Interp ${WITH_PYTHON3} REQUIRED)
-  find_package(Python3Libs ${PYTHON_VERSION_STRING} REQUIRED)
+  find_package(Python3Libs ${PYTHON3_VERSION_STRING} EXACT REQUIRED)
 endif()
 
 if(HAVE_XIO)
