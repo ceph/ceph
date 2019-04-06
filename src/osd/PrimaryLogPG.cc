@@ -481,24 +481,6 @@ void PrimaryLogPG::on_global_recover(
   finish_degraded_object(soid);
 }
 
-void PrimaryLogPG::on_peer_recover(
-  pg_shard_t peer,
-  const hobject_t &soid,
-  const ObjectRecoveryInfo &recovery_info)
-{
-  publish_stats_to_osd();
-  // done!
-  peer_missing[peer].got(soid, recovery_info.version);
-  missing_loc.add_location(soid, peer);
-}
-
-void PrimaryLogPG::begin_peer_recover(
-  pg_shard_t peer,
-  const hobject_t soid)
-{
-  peer_missing[peer].revise_have(soid, eversion_t());
-}
-
 void PrimaryLogPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c)
 {
@@ -561,7 +543,8 @@ bool PrimaryLogPG::should_send_op(
              << peer_info[peer].last_backfill << ")" << dendl;
     return should_send;
   }
-  if (is_async_recovery_target(peer) && peer_missing[peer].is_missing(hoid)) {
+  if (is_async_recovery_target(peer) &&
+      recovery_state.get_peer_missing(peer).is_missing(hoid)) {
     should_send = false;
     dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
@@ -643,10 +626,10 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
-    auto peer_missing_entry = peer_missing.find(peer);
+    auto peer_missing_entry = recovery_state.get_peer_missing().find(peer);
     // If an object is missing on an async_recovery_target, return false.
     // This will not block the op and the object is async recovered later.
-    if (peer_missing_entry != peer_missing.end() &&
+    if (peer_missing_entry != recovery_state.get_peer_missing().end() &&
 	peer_missing_entry->second.get_items().count(soid)) {
       if (is_async_recovery_target(peer))
 	continue;
@@ -667,8 +650,8 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
 {
   for (auto &i: get_async_recovery_targets()) {
-    auto peer_missing_entry = peer_missing.find(i);
-    if (peer_missing_entry != peer_missing.end() &&
+    auto peer_missing_entry = recovery_state.get_peer_missing().find(i);
+    if (peer_missing_entry != recovery_state.get_peer_missing().end() &&
         peer_missing_entry->second.get_items().count(soid)) {
       dout(30) << __func__ << " " << soid << dendl;
       return true;
@@ -782,10 +765,10 @@ void PrimaryLogPG::maybe_force_recovery()
        ++it) {
     if (*it == get_primary()) continue;
     pg_shard_t peer = *it;
-    auto it_missing = peer_missing.find(peer);
-    if (it_missing != peer_missing.end() &&
+    auto it_missing = recovery_state.get_peer_missing().find(peer);
+    if (it_missing != recovery_state.get_peer_missing().end() &&
 	!it_missing->second.get_rmissing().empty()) {
-      const auto& min_obj = peer_missing[peer].get_rmissing().begin();
+      const auto& min_obj = recovery_state.get_peer_missing(peer).get_rmissing().begin();
       dout(20) << __func__ << " peer " << peer << " min_version " << min_obj->first
                << " oid " << min_obj->second << dendl;
       if (min_version > min_obj->first) {
@@ -10450,18 +10433,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
           << dendl;
 
   repop->v = ctx->at_version;
-  if (ctx->at_version > eversion_t()) {
-    for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
-	 i != get_acting_recovery_backfill().end();
-	 ++i) {
-      if (*i == get_primary()) continue;
-      pg_info_t &pinfo = peer_info[*i];
-      // keep peer_info up to date
-      if (pinfo.last_complete == pinfo.last_update)
-	pinfo.last_complete = ctx->at_version;
-      pinfo.last_update = ctx->at_version;
-    }
-  }
 
   ctx->op_t->add_obc(ctx->obc);
   if (ctx->clone_obc) {
@@ -10480,34 +10451,10 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     projected_log.add(entry);
   }
 
-  bool requires_missing_loc = false;
-  for (set<pg_shard_t>::iterator i = get_async_recovery_targets().begin();
-       i != get_async_recovery_targets().end();
-       ++i) {
-    if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
-    requires_missing_loc = true;
-    for (auto &&entry: ctx->log) {
-      peer_missing[*i].add_next_event(entry);
-    }
-  }
-
-  if (requires_missing_loc) {
-    for (auto &&entry: ctx->log) {
-      dout(30) << __func__ << " missing_loc before: "
-               << missing_loc.get_locations(entry.soid) << dendl;
-      missing_loc.add_missing(entry.soid, entry.version,
-                              eversion_t(), entry.is_delete());
-      // clear out missing_loc
-      missing_loc.clear_location(entry.soid);
-      for (auto &i: get_actingset()) {
-        if (!peer_missing[i].is_missing(entry.soid))
-          missing_loc.add_location(entry.soid, i);
-      }
-      dout(30) << __func__ << " missing_loc after: "
-               << missing_loc.get_locations(entry.soid) << dendl;
-    }
-  }
-
+  recovery_state.pre_submit_op(
+    soid,
+    ctx->log,
+    ctx->at_version);
   pgbackend->submit_transaction(
     soid,
     ctx->delta_stats,
@@ -10657,7 +10604,7 @@ void PrimaryLogPG::submit_log_entries(
 	   ++i) {
 	pg_shard_t peer(*i);
 	if (peer == pg_whoami) continue;
-	ceph_assert(peer_missing.count(peer));
+	ceph_assert(recovery_state.get_peer_missing().count(peer));
 	ceph_assert(peer_info.count(peer));
 	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  ceph_assert(repop);
@@ -11417,7 +11364,7 @@ int PrimaryLogPG::recover_missing(
 	 for (const auto& shard : get_acting_recovery_backfill()) {
 	   if (shard == pg_whoami)
 	     continue;
-	   if (peer_missing[shard].is_missing(soid)) {
+	   if (recovery_state.get_peer_missing(shard).is_missing(soid)) {
 	     dout(20) << __func__ << ": soid " << soid << " needs to be deleted from replica " << shard << dendl;
 	     object_missing = true;
 	     break;
@@ -11651,10 +11598,10 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
-    if (!peer_missing[peer].is_missing(oid)) {
+    if (!recovery_state.get_peer_missing(peer).is_missing(oid)) {
       continue;
     }
-    eversion_t h = peer_missing[peer].get_items().at(oid).have;
+    eversion_t h = recovery_state.get_peer_missing(peer).get_items().at(oid).have;
     dout(10) << "pick_newest_available " << oid << " " << h << " on osd." << peer << dendl;
     if (h > v)
       v = h;
@@ -12590,8 +12537,8 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	    eversion_t alternate_need = latest->reverting_to;
 	    dout(10) << " need to pull prior_version " << alternate_need << " for revert " << item << dendl;
 
-	    for (map<pg_shard_t, pg_missing_t>::iterator p = peer_missing.begin();
-		 p != peer_missing.end();
+	    for (auto p = recovery_state.get_peer_missing().begin();
+		 p != recovery_state.get_peer_missing().end();
 		 ++p)
 	      if (p->second.is_missing(soid, need) &&
 		  p->second.get_items().at(soid).have == alternate_need) {
@@ -12651,7 +12598,7 @@ bool PrimaryLogPG::primary_error(
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
-    if (!peer_missing[peer].is_missing(soid, v)) {
+    if (!recovery_state.get_peer_missing(peer).is_missing(soid, v)) {
       missing_loc.add_location(soid, peer);
       dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
 	       << ", there should be a copy on shard " << peer << dendl;
@@ -12766,8 +12713,8 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     if (p == get_primary()) {
       continue;
     }
-    auto pm = peer_missing.find(p);
-    ceph_assert(pm != peer_missing.end());
+    auto pm = recovery_state.get_peer_missing().find(p);
+    ceph_assert(pm != recovery_state.get_peer_missing().end());
     auto nm = pm->second.num_missing();
     if (nm != 0) {
       if (is_async_recovery_target(p)) {
@@ -12791,8 +12738,8 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
   for (auto &replica: replicas_by_num_missing) {
     pg_shard_t &peer = replica.second;
     ceph_assert(peer != get_primary());
-    map<pg_shard_t, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
-    ceph_assert(pm != peer_missing.end());
+    auto pm = recovery_state.get_peer_missing().find(peer);
+    ceph_assert(pm != recovery_state.get_peer_missing().end());
     map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
     ceph_assert(pi != peer_info.end());
     size_t m_sz = pm->second.num_missing();
@@ -13287,9 +13234,7 @@ int PrimaryLogPG::prep_backfill_object_push(
 
   backfills_in_flight.insert(oid);
   for (unsigned int i = 0 ; i < peers.size(); ++i) {
-    map<pg_shard_t, pg_missing_t>::iterator bpm = peer_missing.find(peers[i]);
-    ceph_assert(bpm != peer_missing.end());
-    bpm->second.add(oid, eversion_t(), eversion_t(), false);
+    recovery_state.force_object_missing(peers[i], oid, eversion_t());
   }
 
   ceph_assert(!recovering.count(oid));
