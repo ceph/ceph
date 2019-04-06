@@ -498,10 +498,10 @@ public:
     return pg_whoami;
   }
   spg_t primary_spg_t() const override {
-    return spg_t(info.pgid.pgid, primary.shard);
+    return spg_t(info.pgid.pgid, get_primary().shard);
   }
   pg_shard_t primary_shard() const override {
-    return primary;
+    return get_primary();
   }
 
   void send_message_osd_cluster(
