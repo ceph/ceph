@@ -87,7 +87,13 @@
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
+%if 0%{?rhel} == 7
+%{!?python3_pkgversion: %global python3_pkgversion 34}
+%{!?python3_version: %global python3_version 3.4}
+%else
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+%{!?python3_version: %global python3_version 3}
+%endif
 # define _python_buildid macro which will expand to the empty string when
 # building with python2
 %global _python_buildid %{?_defined_if_python2_absent:%{python3_pkgversion}}
