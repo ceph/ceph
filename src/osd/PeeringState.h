@@ -1643,6 +1643,9 @@ public:
   const vector<int> &get_acting() const {
     return acting;
   }
+  const set<pg_shard_t> &get_actingset() const {
+    return actingset;
+  }
   int get_acting_primary() const {
     return primary.osd;
   }
@@ -1667,6 +1670,9 @@ public:
   }
   const set<pg_shard_t> &get_async_recovery_targets() const {
     return async_recovery_targets;
+  }
+  const set<pg_shard_t> &get_acting_recovery_backfill() const {
+    return acting_recovery_backfill;
   }
 
   bool state_test(uint64_t m) const { return (state & m) != 0; }

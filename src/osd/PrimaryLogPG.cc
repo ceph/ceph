@@ -637,9 +637,9 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     return true;
   if (pg_log.get_missing().get_items().count(soid))
     return true;
-  ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+       i != get_acting_recovery_backfill().end();
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
@@ -776,9 +776,9 @@ void PrimaryLogPG::maybe_force_recovery()
     min_version = pg_log.get_missing().get_rmissing().begin()->first;
     soid = pg_log.get_missing().get_rmissing().begin()->second;
   }
-  ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator it = acting_recovery_backfill.begin();
-       it != acting_recovery_backfill.end();
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (set<pg_shard_t>::iterator it = get_acting_recovery_backfill().begin();
+       it != get_acting_recovery_backfill().end();
        ++it) {
     if (*it == get_primary()) continue;
     pg_shard_t peer = *it;
@@ -10451,8 +10451,8 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 
   repop->v = ctx->at_version;
   if (ctx->at_version > eversion_t()) {
-    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	 i != acting_recovery_backfill.end();
+    for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+	 i != get_acting_recovery_backfill().end();
 	 ++i) {
       if (*i == get_primary()) continue;
       pg_info_t &pinfo = peer_info[*i];
@@ -10499,7 +10499,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
                               eversion_t(), entry.is_delete());
       // clear out missing_loc
       missing_loc.clear_location(entry.soid);
-      for (auto &i: actingset) {
+      for (auto &i: get_actingset()) {
         if (!peer_missing[i].is_missing(entry.soid))
           missing_loc.add_location(entry.soid, i);
       }
@@ -10652,8 +10652,8 @@ void PrimaryLogPG::submit_log_entries(
 
 
       set<pg_shard_t> waiting_on;
-      for (set<pg_shard_t>::const_iterator i = acting_recovery_backfill.begin();
-	   i != acting_recovery_backfill.end();
+      for (set<pg_shard_t>::const_iterator i = get_acting_recovery_backfill().begin();
+	   i != get_acting_recovery_backfill().end();
 	   ++i) {
 	pg_shard_t peer(*i);
 	if (peer == pg_whoami) continue;
@@ -11414,7 +11414,7 @@ int PrimaryLogPG::recover_missing(
        lock();
        if (!pg_has_reset_since(cur_epoch)) {
 	 bool object_missing = false;
-	 for (const auto& shard : acting_recovery_backfill) {
+	 for (const auto& shard : get_acting_recovery_backfill()) {
 	   if (shard == pg_whoami)
 	     continue;
 	   if (peer_missing[shard].is_missing(soid)) {
@@ -11645,9 +11645,9 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
   v = pmi.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
-  ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+       i != get_acting_recovery_backfill().end();
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
@@ -12645,9 +12645,9 @@ bool PrimaryLogPG::primary_error(
   pg_log.set_last_requested(0);
   missing_loc.remove_location(soid, pg_whoami);
   bool uhoh = true;
-  ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  ceph_assert(!get_acting_recovery_backfill().empty());
+  for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+       i != get_acting_recovery_backfill().end();
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
@@ -12756,13 +12756,13 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
-  ceph_assert(!acting_recovery_backfill.empty());
+  ceph_assert(!get_acting_recovery_backfill().empty());
   // choose replicas to recover, replica has the shortest missing list first
   // so we can bring it back to normal ASAP
   std::vector<std::pair<unsigned int, pg_shard_t>> replicas_by_num_missing,
     async_by_num_missing;
-  replicas_by_num_missing.reserve(acting_recovery_backfill.size() - 1);
-  for (auto &p: acting_recovery_backfill) {
+  replicas_by_num_missing.reserve(get_acting_recovery_backfill().size() - 1);
+  for (auto &p: get_acting_recovery_backfill()) {
     if (p == get_primary()) {
       continue;
     }
@@ -15101,7 +15101,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpContext *ct
   ceph_assert(is_primary());
 
   dout(10) << __func__ << " " << soid
-	   << " peers osd.{" << acting_recovery_backfill << "}" << dendl;
+	   << " peers osd.{" << get_acting_recovery_backfill() << "}" << dendl;
 
   if (!is_clean()) {
     block_for_clean(soid, op);
