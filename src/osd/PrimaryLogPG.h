@@ -339,7 +339,7 @@ public:
     return actingset;
   }
   const set<pg_shard_t> &get_backfill_shards() const override {
-    return backfill_targets;
+    return get_backfill_targets();
   }
 
   std::ostream& gen_dbg_prefix(std::ostream& out) const override {
@@ -1832,6 +1832,18 @@ public:
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
+  bool is_backfill_target(pg_shard_t osd) const {
+    return recovery_state.is_backfill_target(osd);
+  }
+  const set<pg_shard_t> &get_backfill_targets() const {
+    return recovery_state.get_backfill_targets();
+  }
+  bool is_async_recovery_target(pg_shard_t peer) const {
+    return recovery_state.is_async_recovery_target(peer);
+  }
+  const set<pg_shard_t> &get_async_recovery_targets() const {
+    return recovery_state.get_async_recovery_targets();
+  }
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   bool is_degraded_on_async_recovery_target(const hobject_t& soid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
