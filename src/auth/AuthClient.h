@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
+#include "include/buffer_fwd.h"
 
-class EntityName;
+class AuthConnectionMeta;
+class Connection;
 class CryptoKey;
 
 class AuthClient {
