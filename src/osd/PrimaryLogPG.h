@@ -282,10 +282,14 @@ public:
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info
-    ) override;
+    ) override {
+    recovery_state.on_peer_recover(peer, oid, recovery_info.version);
+  }
   void begin_peer_recover(
     pg_shard_t peer,
-    const hobject_t oid) override;
+    const hobject_t oid) override {
+    recovery_state.begin_peer_recover(peer, oid);
+  }
   void on_global_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
@@ -351,11 +355,11 @@ public:
     return missing_loc.get_missing_locs();
   }
   const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
-    return peer_missing;
+    return recovery_state.get_peer_missing();
   }
   using PGBackend::Listener::get_shard_missing;
   const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
-    return peer_info;
+    return recovery_state.get_peer_info();
   }
   using PGBackend::Listener::get_shard_info;  
   const pg_missing_tracker_t &get_local_missing() const override {

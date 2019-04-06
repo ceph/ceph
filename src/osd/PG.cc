@@ -192,7 +192,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   last_complete_ondisk(recovery_state.last_complete_ondisk),
   last_update_applied(recovery_state.last_update_applied),
   peer_info(recovery_state.peer_info),
-  peer_missing(recovery_state.peer_missing),
   peer_last_complete_ondisk(recovery_state.peer_last_complete_ondisk),
   min_last_complete_ondisk(recovery_state.min_last_complete_ondisk),
   pg_trim_to(recovery_state.pg_trim_to),
@@ -2410,17 +2409,13 @@ void PG::repair_object(
     dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
     ceph_abort();
   }
-  if (bad_peer != get_primary()) {
-    peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
-  } else {
+
+  if (bad_peer == get_primary()) {
     // We should only be scrubbing if the PG is clean.
     ceph_assert(waiting_for_unreadable_object.empty());
-
-    pg_log.missing_add(soid, oi.version, eversion_t());
-
-    pg_log.set_last_requested(0);
     dout(10) << __func__ << ": primary = " << get_primary() << dendl;
   }
+  recovery_state.force_object_missing(bad_peer, soid, oi.version);
 
   if (is_ec_pg() || bad_peer == get_primary()) {
     // we'd better collect all shard for EC pg, and prepare good peers as the
