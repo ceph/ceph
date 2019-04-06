@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
+#include "crimson/common/auth_handler.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
@@ -46,6 +47,7 @@ template<typename T> using Ref = boost::intrusive_ptr<T>;
 
 class OSD : public ceph::net::Dispatcher,
 	    private OSDMapService,
+	    private ceph::common::AuthHandler,
 	    private ceph::mgr::WithStats {
   seastar::gate gate;
   const int whoami;
@@ -88,8 +90,14 @@ class OSD : public ceph::net::Dispatcher,
   seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
+
   // mgr::WithStats methods
   MessageRef get_stats() override;
+
+  // AuthHandler methods
+  void handle_authentication(const EntityName& name,
+			     uint64_t global_id,
+			     const AuthCapsInfo& caps) final;
 
 public:
   OSD(int id, uint32_t nonce,

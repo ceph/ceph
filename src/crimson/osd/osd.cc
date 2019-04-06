@@ -59,7 +59,7 @@ OSD::OSD(int id, uint32_t nonce,
     beacon_timer{[this] { send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
-    monc{new ceph::mon::Client{public_msgr}},
+    monc{new ceph::mon::Client{public_msgr, *this}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
     heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
@@ -67,6 +67,10 @@ OSD::OSD(int id, uint32_t nonce,
       local_conf().get_val<std::string>("osd_data"))}
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
+  for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
+                 std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
+    msgr.get().set_auth_server(monc.get());
+  }
 }
 
 OSD::~OSD() = default;
@@ -415,6 +419,13 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
 {
   logger().warn("ms_handle_remote_reset");
   return seastar::now();
+}
+
+void OSD::handle_authentication(const EntityName& name,
+                                 uint64_t global_id,
+                                 const AuthCapsInfo& caps)
+{
+  // todo
 }
 
 MessageRef OSD::get_stats()

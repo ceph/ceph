@@ -11,7 +11,9 @@
 
 #include "auth/KeyRing.h"
 
+#include "crimson/auth/AuthServer.h"
 #include "crimson/common/auth_service.h"
+#include "crimson/common/auth_handler.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
 
@@ -38,7 +40,8 @@ namespace ceph::mon {
 class Connection;
 
 class Client : public ceph::net::Dispatcher,
-	       public ceph::common::AuthService
+	       public ceph::common::AuthService,
+	       public ceph::auth::AuthServer
 {
   EntityName entity_name;
   KeyRing keyring;
@@ -53,6 +56,7 @@ class Client : public ceph::net::Dispatcher,
   seastar::gate tick_gate;
 
   ceph::net::Messenger& msgr;
+  ceph::common::AuthHandler& auth_handler;
 
   // commands
   using get_version_t = seastar::future<version_t, version_t>;
@@ -68,8 +72,7 @@ class Client : public ceph::net::Dispatcher,
   MonSub sub;
 
 public:
-  Client(ceph::net::Messenger& messenger);
-  Client(Client&&);
+  Client(ceph::net::Messenger&, ceph::common::AuthHandler&);
   ~Client();
   seastar::future<> start();
   seastar::future<> stop();
@@ -88,6 +91,13 @@ public:
   seastar::future<> renew_subs();
   // AuthService methods
   AuthAuthorizer* get_authorizer(peer_type_t peer) const override;
+  // AuthServer methods
+  int handle_auth_request(ceph::net::ConnectionRef conn,
+			  AuthConnectionMetaRef auth_meta,
+			  bool more,
+			  uint32_t auth_method,
+			  const ceph::bufferlist& payload,
+			  ceph::bufferlist *reply);
 
 private:
   void tick();
