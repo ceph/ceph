@@ -182,9 +182,7 @@ protected:
   /**
    * Peering state information being moved to PeeringState
    */
-  pg_shard_t &primary;
-  pg_shard_t &pg_whoami;
-  pg_shard_t &up_primary;
+  pg_shard_t pg_whoami;
   set<pg_shard_t> &upset;
   set<pg_shard_t> &actingset;
   set<pg_shard_t> &acting_recovery_backfill;
