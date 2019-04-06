@@ -196,7 +196,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   last_update_ondisk(recovery_state.last_update_ondisk),
   last_complete_ondisk(recovery_state.last_complete_ondisk),
   last_update_applied(recovery_state.last_update_applied),
-  last_rollback_info_trimmed_to_applied(recovery_state.last_rollback_info_trimmed_to_applied),
   peer_info(recovery_state.peer_info),
   peer_missing(recovery_state.peer_missing),
   peer_log_requested(recovery_state.peer_log_requested),
@@ -204,8 +203,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   peer_last_complete_ondisk(recovery_state.peer_last_complete_ondisk),
   min_last_complete_ondisk(recovery_state.min_last_complete_ondisk),
   pg_trim_to(recovery_state.pg_trim_to),
-  backfill_targets(recovery_state.backfill_targets),
-  async_recovery_targets(recovery_state.async_recovery_targets),
   might_have_unfound(recovery_state.might_have_unfound),
   missing_loc(recovery_state.missing_loc),
   pg_id(p),
@@ -746,7 +743,6 @@ void PG::clear_recovery_state()
 {
   dout(10) << "clear_recovery_state" << dendl;
 
-  pg_log.reset_recovery_pointers();
   finish_sync_event = 0;
 
   hobject_t soid;
@@ -757,8 +753,6 @@ void PG::clear_recovery_state()
     finish_recovery_op(soid, true);
   }
 
-  async_recovery_targets.clear();
-  backfill_targets.clear();
   backfill_info.clear();
   peer_backfill_info.clear();
   waiting_on_backfill.clear();
@@ -2116,7 +2110,7 @@ void PG::clear_scrub_reserved()
 
 void PG::scrub_reserve_replicas()
 {
-  ceph_assert(backfill_targets.empty());
+  ceph_assert(recovery_state.get_backfill_targets().empty());
   for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
        i != acting_recovery_backfill.end();
        ++i) {
@@ -2133,7 +2127,7 @@ void PG::scrub_reserve_replicas()
 
 void PG::scrub_unreserve_replicas()
 {
-  ceph_assert(backfill_targets.empty());
+  ceph_assert(recovery_state.get_backfill_targets().empty());
   for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
        i != acting_recovery_backfill.end();
        ++i) {
@@ -2151,7 +2145,7 @@ void PG::scrub_unreserve_replicas()
 void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
 {
   ObjectStore::Transaction t;
-  eversion_t trimmed_to = last_rollback_info_trimmed_to_applied;
+  eversion_t trimmed_to = recovery_state.get_last_rollback_info_trimmed_to_applied();
   for (vector<ghobject_t>::const_iterator i = rollback_obs.begin();
        i != rollback_obs.end();
        ++i) {
@@ -2567,7 +2561,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
   }
 
   if (!scrubber.active) {
-    ceph_assert(backfill_targets.empty());
+    ceph_assert(recovery_state.get_backfill_targets().empty());
 
     scrubber.deep = state_test(PG_STATE_DEEP_SCRUB);
 
