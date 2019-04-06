@@ -1515,16 +1515,35 @@ public:
     bool transaction_applied,
     bool async);
 
+  void pre_submit_op(
+    const hobject_t &hoid,
+    const vector<pg_log_entry_t>& logv,
+    eversion_t at_version);
+
   void recover_got(
     const hobject_t &oid, eversion_t v,
     bool is_delete,
     ObjectStore::Transaction &t);
+
+  void on_peer_recover(
+    pg_shard_t peer,
+    const hobject_t &soid,
+    const eversion_t &version);
+
+  void begin_peer_recover(
+    pg_shard_t peer,
+    const hobject_t soid);
 
   void update_backfill_progress(
     const hobject_t &updated_backfill,
     const pg_stat_t &updated_stats,
     bool preserve_local_num_bytes,
     ObjectStore::Transaction &t);
+
+  void force_object_missing(
+    pg_shard_t peer,
+    const hobject_t &oid,
+    eversion_t version);
 
   void dump_history(Formatter *f) const {
     state_history.dump(f);
@@ -1728,6 +1747,16 @@ public:
 
   const pg_info_t &get_info() const {
     return info;
+  }
+
+  const decltype(peer_info) &get_peer_info() const {
+    return peer_info;
+  }
+  const decltype(peer_missing) &get_peer_missing() const {
+    return peer_missing;
+  }
+  const pg_missing_t &get_peer_missing(pg_shard_t peer) const {
+    return peer_missing.find(peer)->second;
   }
 
   bool needs_recovery() const;

@@ -189,7 +189,6 @@ protected:
   eversion_t &last_complete_ondisk;
   eversion_t &last_update_applied;
   map<pg_shard_t, pg_info_t> &peer_info;
-  map<pg_shard_t, pg_missing_t> &peer_missing;
   map<pg_shard_t,eversion_t> &peer_last_complete_ondisk;
   eversion_t &min_last_complete_ondisk;
   eversion_t &pg_trim_to;

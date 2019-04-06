@@ -3590,6 +3590,82 @@ void PeeringState::adjust_purged_snaps(
   dirty_big_info = true;
 }
 
+void PeeringState::on_peer_recover(
+  pg_shard_t peer,
+  const hobject_t &soid,
+  const eversion_t &version)
+{
+  pl->publish_stats_to_osd();
+  // done!
+  peer_missing[peer].got(soid, version);
+  missing_loc.add_location(soid, peer);
+}
+
+void PeeringState::begin_peer_recover(
+  pg_shard_t peer,
+  const hobject_t soid)
+{
+  peer_missing[peer].revise_have(soid, eversion_t());
+}
+
+void PeeringState::force_object_missing(
+  pg_shard_t peer,
+  const hobject_t &soid,
+  eversion_t version)
+{
+  if (peer != primary) {
+    peer_missing[peer].add(soid, version, eversion_t(), false);
+  } else {
+    pg_log.missing_add(soid, version, eversion_t());
+    pg_log.set_last_requested(0);
+  }
+}
+
+void PeeringState::pre_submit_op(
+  const hobject_t &hoid,
+  const vector<pg_log_entry_t>& logv,
+  eversion_t at_version)
+{
+  if (at_version > eversion_t()) {
+    for (auto &&i : get_acting_recovery_backfill()) {
+      if (i == primary) continue;
+      pg_info_t &pinfo = peer_info[i];
+      // keep peer_info up to date
+      if (pinfo.last_complete == pinfo.last_update)
+	pinfo.last_complete = at_version;
+      pinfo.last_update = at_version;
+    }
+  }
+
+  bool requires_missing_loc = false;
+  for (auto &&i : get_async_recovery_targets()) {
+    if (i == primary || !get_peer_missing(i).is_missing(hoid))
+      continue;
+    requires_missing_loc = true;
+    for (auto &&entry: logv) {
+      peer_missing[i].add_next_event(entry);
+    }
+  }
+
+  if (requires_missing_loc) {
+    for (auto &&entry: logv) {
+      psdout(30) << __func__ << " missing_loc before: "
+		 << missing_loc.get_locations(entry.soid) << dendl;
+      missing_loc.add_missing(entry.soid, entry.version,
+                              eversion_t(), entry.is_delete());
+      // clear out missing_loc
+      missing_loc.clear_location(entry.soid);
+      missing_loc.add_location(entry.soid, pg_whoami);
+      for (auto &&i: get_actingset()) {
+        if (!get_peer_missing(i).is_missing(entry.soid))
+          missing_loc.add_location(entry.soid, i);
+      }
+      psdout(30) << __func__ << " missing_loc after: "
+		 << missing_loc.get_locations(entry.soid) << dendl;
+    }
+  }
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
