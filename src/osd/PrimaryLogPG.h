@@ -333,10 +333,10 @@ public:
     return get_last_peering_reset();
   }
   const set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
-    return acting_recovery_backfill;
+    return get_acting_recovery_backfill();
   }
   const set<pg_shard_t> &get_acting_shards() const override {
-    return actingset;
+    return recovery_state.get_actingset();
   }
   const set<pg_shard_t> &get_backfill_shards() const override {
     return get_backfill_targets();
@@ -1826,7 +1826,7 @@ public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
     return is_missing_object(oid) ||
-      !missing_loc.readable_with_acting(oid, actingset);
+      !missing_loc.readable_with_acting(oid, get_actingset());
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);

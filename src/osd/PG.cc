@@ -186,9 +186,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     this,
     this),
   pg_whoami(recovery_state.pg_whoami),
-  upset(recovery_state.upset),
-  actingset(recovery_state.actingset),
-  acting_recovery_backfill(recovery_state.acting_recovery_backfill),
   info(recovery_state.info),
   pg_log(recovery_state.pg_log),
   last_update_ondisk(recovery_state.last_update_ondisk),
@@ -2109,8 +2106,8 @@ void PG::clear_scrub_reserved()
 void PG::scrub_reserve_replicas()
 {
   ceph_assert(recovery_state.get_backfill_targets().empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+       i != get_acting_recovery_backfill().end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
@@ -2126,8 +2123,8 @@ void PG::scrub_reserve_replicas()
 void PG::scrub_unreserve_replicas()
 {
   ceph_assert(recovery_state.get_backfill_targets().empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+       i != get_acting_recovery_backfill().end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
@@ -2836,8 +2833,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.waiting_on_whom.insert(pg_whoami);
 
         // request maps from replicas
-	for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	     i != acting_recovery_backfill.end();
+	for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
+	     i != get_acting_recovery_backfill().end();
 	     ++i) {
 	  if (*i == pg_whoami) continue;
           _request_scrub_map(*i, scrubber.subset_last_update,
@@ -3066,7 +3063,7 @@ void PG::scrub_compare_maps()
   map<pg_shard_t, ScrubMap *> maps;
   maps[pg_whoami] = &scrubber.primary_scrubmap;
 
-  for (const auto& i : acting_recovery_backfill) {
+  for (const auto& i : get_acting_recovery_backfill()) {
     if (i == pg_whoami) continue;
     dout(2) << __func__ << " replica " << i << " has "
             << scrubber.received_maps[i].objects.size()

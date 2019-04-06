@@ -183,9 +183,6 @@ protected:
    * Peering state information being moved to PeeringState
    */
   pg_shard_t pg_whoami;
-  set<pg_shard_t> &upset;
-  set<pg_shard_t> &actingset;
-  set<pg_shard_t> &acting_recovery_backfill;
   pg_info_t &info;
   PGLog &pg_log;
   eversion_t &last_update_ondisk;
@@ -322,6 +319,9 @@ public:
   const vector<int> get_acting() const {
     return recovery_state.get_acting();
   }
+  const set<pg_shard_t> &get_actingset() const {
+    return recovery_state.get_actingset();
+  }
   int get_acting_primary() const {
     return recovery_state.get_acting_primary();
   }
@@ -339,6 +339,9 @@ public:
   }
   bool is_acting_recovery_backfill(pg_shard_t osd) const {
     return recovery_state.is_acting_recovery_backfill(osd);
+  }
+  const set<pg_shard_t> &get_acting_recovery_backfill() const {
+    return recovery_state.get_acting_recovery_backfill();
   }
   bool is_acting(pg_shard_t osd) const {
     return recovery_state.is_acting(osd);
