@@ -59,6 +59,7 @@ public:
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(peer_type_t peer) const;
+  KeyStore& get_keys();
   seastar::future<> renew_tickets();
   ceph::net::ConnectionRef get_conn();
 
@@ -112,6 +113,10 @@ AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
   } else {
     return nullptr;
   }
+}
+
+KeyStore& Connection::get_keys() {
+  return rotating_keyring;
 }
 
 std::unique_ptr<AuthClientHandler>
@@ -264,16 +269,17 @@ auto create_auth_methods(uint32_t entity_type)
 }
 }
 
-Client::Client(ceph::net::Messenger& messenger)
+Client::Client(ceph::net::Messenger& messenger,
+               ceph::common::AuthHandler& auth_handler)
   // currently, crimson is OSD-only
   : want_keys{CEPH_ENTITY_TYPE_MON |
               CEPH_ENTITY_TYPE_OSD |
               CEPH_ENTITY_TYPE_MGR},
     timer{[this] { tick(); }},
-    msgr{messenger}
+    msgr{messenger},
+    auth_handler{auth_handler}
 {}
 
-Client::Client(Client&&) = default;
 Client::~Client() = default;
 
 seastar::future<> Client::start() {
@@ -374,6 +380,55 @@ AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
 AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
 {
   return ms_get_authorizer(peer);
+}
+
+int Client::handle_auth_request(ceph::net::ConnectionRef con,
+                                AuthConnectionMetaRef auth_meta,
+                                bool more,
+                                uint32_t auth_method,
+                                const ceph::bufferlist& payload,
+                                ceph::bufferlist *reply)
+{
+  auth_meta->auth_mode = payload[0];
+  if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
+      auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
+    return -EACCES;
+  }
+  AuthAuthorizeHandler* ah = get_auth_authorize_handler(con->get_peer_type(),
+                                                        auth_method);
+  if (!ah) {
+    logger().error("no AuthAuthorizeHandler found for auth method: {}",
+                   auth_method);
+    return -EOPNOTSUPP;
+  }
+  ceph_assert(active_con);
+  bool was_challenge = (bool)auth_meta->authorizer_challenge;
+  EntityName name;
+  uint64_t global_id;
+  AuthCapsInfo caps_info;
+  bool is_valid = ah->verify_authorizer(
+    nullptr,
+    &active_con->get_keys(),
+    payload,
+    auth_meta->get_connection_secret_length(),
+    reply,
+    &name,
+    &global_id,
+    &caps_info,
+    &auth_meta->session_key,
+    &auth_meta->connection_secret,
+    &auth_meta->authorizer_challenge);
+  if (is_valid) {
+    auth_handler.handle_authentication(name, global_id, caps_info);
+    return 1;
+  }
+  if (!more && !was_challenge && auth_meta->authorizer_challenge) {
+    logger().info("added challenge on {}", con);
+    return 0;
+  } else {
+    logger().info("bad authorizer on {}", con);
+    return -EACCES;
+  }
 }
 
 seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
