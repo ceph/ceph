@@ -769,6 +769,12 @@ void PeeringState::init_primary_up_acting(
   ceph_assert(primary.osd == new_acting_primary);
 }
 
+void PeeringState::clear_recovery_state()
+{
+  async_recovery_targets.clear();
+  backfill_targets.clear();
+}
+
 void PeeringState::clear_primary_state()
 {
   psdout(10) << "clear_primary_state" << dendl;
@@ -788,6 +794,9 @@ void PeeringState::clear_primary_state()
   need_up_thru = false;
   missing_loc.clear();
   pg_log.reset_recovery_pointers();
+
+  clear_recovery_state();
+
   pl->clear_primary_state();
 }
 
@@ -2623,6 +2632,7 @@ void PeeringState::try_mark_clean()
 
   share_pg_info();
   pl->publish_stats_to_osd();
+  clear_recovery_state();
 }
 
 void PeeringState::split_into(
@@ -3001,7 +3011,7 @@ void PeeringState::update_calc_stats()
       int64_t peer_num_objects = peer.second.stats.stats.sum.num_objects;
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
-      if (is_backfill_targets(peer.first)) {
+      if (is_backfill_target(peer.first)) {
         missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
         if (peer_missing.count(peer.first)) {
@@ -4916,6 +4926,7 @@ PeeringState::Clean::Clean(my_context ctx)
   if (ps->info.last_complete != ps->info.last_update) {
     ceph_abort();
   }
+
 
   ps->try_mark_clean();
 

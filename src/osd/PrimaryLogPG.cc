@@ -553,7 +553,7 @@ bool PrimaryLogPG::should_send_op(
       hoid <= last_backfill_started ||
       hoid <= peer_info[peer].last_backfill;
   if (!should_send) {
-    ceph_assert(is_backfill_targets(peer));
+    ceph_assert(is_backfill_target(peer));
     dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " beyond std::max(last_backfill_started "
@@ -561,7 +561,7 @@ bool PrimaryLogPG::should_send_op(
              << peer_info[peer].last_backfill << ")" << dendl;
     return should_send;
   }
-  if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(hoid)) {
+  if (is_async_recovery_target(peer) && peer_missing[peer].is_missing(hoid)) {
     should_send = false;
     dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
@@ -648,14 +648,14 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     // This will not block the op and the object is async recovered later.
     if (peer_missing_entry != peer_missing.end() &&
 	peer_missing_entry->second.get_items().count(soid)) {
-      if (async_recovery_targets.count(peer))
+      if (is_async_recovery_target(peer))
 	continue;
       else
 	return true;
     }
     // Object is degraded if after last_backfill AND
     // we are backfilling it
-    if (is_backfill_targets(peer) &&
+    if (is_backfill_target(peer) &&
 	peer_info[peer].last_backfill <= soid &&
 	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
@@ -666,7 +666,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 
 bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
 {
-  for (auto &i: async_recovery_targets) {
+  for (auto &i: get_async_recovery_targets()) {
     auto peer_missing_entry = peer_missing.find(i);
     if (peer_missing_entry != peer_missing.end() &&
         peer_missing_entry->second.get_items().count(soid)) {
@@ -1870,8 +1870,8 @@ void PrimaryLogPG::do_request(
 hobject_t PrimaryLogPG::earliest_backfill() const
 {
   hobject_t e = hobject_t::get_max();
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
     map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(bt);
@@ -4190,7 +4190,7 @@ void PrimaryLogPG::do_scan(
       pg_shard_t from = m->from;
 
       // Check that from is in backfill_targets vector
-      ceph_assert(is_backfill_targets(from));
+      ceph_assert(is_backfill_target(from));
 
       BackfillInterval& bi = peer_backfill_info[from];
       bi.begin = m->begin;
@@ -4203,7 +4203,9 @@ void PrimaryLogPG::do_scan(
 
       if (waiting_on_backfill.erase(from)) {
 	if (waiting_on_backfill.empty()) {
-	  ceph_assert(peer_backfill_info.size() == backfill_targets.size());
+	  ceph_assert(
+	    peer_backfill_info.size() ==
+	    get_backfill_targets().size());
 	  finish_recovery_op(hobject_t::get_max());
 	}
       } else {
@@ -8541,8 +8543,8 @@ void PrimaryLogPG::apply_stats(
   info.stats.stats.add(delta_stats);
   info.stats.stats.floor(0);
 
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
@@ -10479,8 +10481,8 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   }
 
   bool requires_missing_loc = false;
-  for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
-       i != async_recovery_targets.end();
+  for (set<pg_shard_t>::iterator i = get_async_recovery_targets().begin();
+       i != get_async_recovery_targets().end();
        ++i) {
     if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
     requires_missing_loc = true;
@@ -12087,14 +12089,14 @@ void PrimaryLogPG::on_activate_complete()
 
   publish_stats_to_osd();
 
-  if (!backfill_targets.empty()) {
+  if (get_backfill_targets().size()) {
     last_backfill_started = earliest_backfill();
     new_backfill = true;
     ceph_assert(!last_backfill_started.is_max());
-    dout(5) << __func__ << ": bft=" << backfill_targets
+    dout(5) << __func__ << ": bft=" << get_backfill_targets()
 	   << " from " << last_backfill_started << dendl;
-    for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	 i != backfill_targets.end();
+    for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+	 i != get_backfill_targets().end();
 	 ++i) {
       dout(5) << "target shard " << *i
 	     << " from " << peer_info[*i].last_backfill
@@ -12370,7 +12372,7 @@ bool PrimaryLogPG::start_recovery_ops(
   bool deferred_backfill = false;
   if (recovering.empty() &&
       state_test(PG_STATE_BACKFILLING) &&
-      !backfill_targets.empty() && started < max &&
+      !get_backfill_targets().empty() && started < max &&
       missing.num_missing() == 0 &&
       waiting_on_backfill.empty()) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
@@ -12768,7 +12770,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     ceph_assert(pm != peer_missing.end());
     auto nm = pm->second.num_missing();
     if (nm != 0) {
-      if (async_recovery_targets.count(p)) {
+      if (is_async_recovery_target(p)) {
         async_by_num_missing.push_back(make_pair(nm, p));
       } else {
         replicas_by_num_missing.push_back(make_pair(nm, p));
@@ -12857,8 +12859,8 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 hobject_t PrimaryLogPG::earliest_peer_backfill() const
 {
   hobject_t e = hobject_t::get_max();
-  for (set<pg_shard_t>::const_iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     pg_shard_t peer = *i;
     map<pg_shard_t, BackfillInterval>::const_iterator iter =
@@ -12875,8 +12877,8 @@ bool PrimaryLogPG::all_peer_done() const
   // Primary hasn't got any more objects
   ceph_assert(backfill_info.empty());
 
-  for (set<pg_shard_t>::const_iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
     map<pg_shard_t, BackfillInterval>::const_iterator piter =
@@ -12923,11 +12925,11 @@ uint64_t PrimaryLogPG::recover_backfill(
   ThreadPool::TPHandle &handle, bool *work_started)
 {
   dout(10) << __func__ << " (" << max << ")"
-           << " bft=" << backfill_targets
+           << " bft=" << get_backfill_targets()
 	   << " last_backfill_started " << last_backfill_started
 	   << (new_backfill ? " new_backfill":"")
 	   << dendl;
-  ceph_assert(!backfill_targets.empty());
+  ceph_assert(!get_backfill_targets().empty());
 
   // Initialize from prior backfill state
   if (new_backfill) {
@@ -12936,8 +12938,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     new_backfill = false;
 
     // initialize BackfillIntervals
-    for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	 i != backfill_targets.end();
+    for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+	 i != get_backfill_targets().end();
 	 ++i) {
       peer_backfill_info[*i].reset(peer_info[*i].last_backfill);
     }
@@ -12947,8 +12949,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     pending_backfill_updates.clear();
   }
 
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     dout(10) << "peer osd." << *i
 	   << " info " << peer_info[*i]
@@ -12966,8 +12968,8 @@ uint64_t PrimaryLogPG::recover_backfill(
   vector<boost::tuple<hobject_t, eversion_t, pg_shard_t> > to_remove;
   set<hobject_t> add_to_stat;
 
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     peer_backfill_info[*i].trim_to(
       std::max(peer_info[*i].last_backfill, last_backfill_started));
@@ -12988,8 +12990,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     dout(20) << "   my backfill interval " << backfill_info << dendl;
 
     bool sent_scan = false;
-    for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	 i != backfill_targets.end();
+    for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+	 i != get_backfill_targets().end();
 	 ++i) {
       pg_shard_t bt = *i;
       BackfillInterval& pbi = peer_backfill_info[bt];
@@ -13029,8 +13031,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     if (check < backfill_info.begin) {
 
       set<pg_shard_t> check_targets;
-      for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	   i != backfill_targets.end();
+      for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+	   i != get_backfill_targets().end();
 	   ++i) {
         pg_shard_t bt = *i;
         BackfillInterval& pbi = peer_backfill_info[bt];
@@ -13062,8 +13064,8 @@ uint64_t PrimaryLogPG::recover_backfill(
       eversion_t& obj_v = backfill_info.objects.begin()->second;
 
       vector<pg_shard_t> need_ver_targs, missing_targs, keep_ver_targs, skip_targs;
-      for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	   i != backfill_targets.end();
+      for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+	   i != get_backfill_targets().end();
 	   ++i) {
 	pg_shard_t bt = *i;
 	BackfillInterval& pbi = peer_backfill_info[bt];
@@ -13128,7 +13130,7 @@ uint64_t PrimaryLogPG::recover_backfill(
       }
       dout(20) << "need_ver_targs=" << need_ver_targs
 	       << " keep_ver_targs=" << keep_ver_targs << dendl;
-      dout(20) << "backfill_targets=" << backfill_targets
+      dout(20) << "backfill_targets=" << get_backfill_targets()
 	       << " missing_targs=" << missing_targs
 	       << " skip_targs=" << skip_targs << dendl;
 
@@ -13204,8 +13206,8 @@ uint64_t PrimaryLogPG::recover_backfill(
        pending_backfill_updates.erase(i++)) {
     dout(20) << " pending_backfill_update " << i->first << dendl;
     ceph_assert(i->first > new_last_backfill);
-    for (set<pg_shard_t>::iterator j = backfill_targets.begin();
-	 j != backfill_targets.end();
+    for (set<pg_shard_t>::const_iterator j = get_backfill_targets().begin();
+	 j != get_backfill_targets().end();
 	 ++j) {
       pg_shard_t bt = *j;
       pg_info_t& pinfo = peer_info[bt];
@@ -13230,8 +13232,8 @@ uint64_t PrimaryLogPG::recover_backfill(
   // If new_last_backfill == MAX, then we will send OP_BACKFILL_FINISH to
   // all the backfill targets.  Otherwise, we will move last_backfill up on
   // those targets need it and send OP_BACKFILL_PROGRESS to them.
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
@@ -13669,8 +13671,8 @@ void PrimaryLogPG::hit_set_persist()
   // look just at that.  This is necessary because our transactions
   // may include a modify of the new hit_set *and* a delete of the
   // old one, and this may span the backfill boundary.
-  for (set<pg_shard_t>::iterator p = backfill_targets.begin();
-       p != backfill_targets.end();
+  for (set<pg_shard_t>::const_iterator p = get_backfill_targets().begin();
+       p != get_backfill_targets().end();
        ++p) {
     ceph_assert(peer_info.count(*p));
     const pg_info_t& pi = peer_info[*p];

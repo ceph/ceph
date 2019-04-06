@@ -1288,6 +1288,7 @@ public:
     const vector<int> &newacting,
     int new_up_primary,
     int new_acting_primary);
+  void clear_recovery_state();
   void clear_primary_state();
   void check_past_interval_bounds() const;
   bool set_force_recovery(bool b);
@@ -1547,6 +1548,10 @@ public:
     return last_peering_reset;
   }
 
+  eversion_t get_last_rollback_info_trimmed_to_applied() const {
+    return last_rollback_info_trimmed_to_applied;
+  }
+
   /// Returns stable reference to internal pool structure
   const PGPool &get_pool() const {
     return pool;
@@ -1661,8 +1666,17 @@ public:
     return up_primary.osd;
   }
 
-  bool is_backfill_targets(pg_shard_t osd) {
+  bool is_backfill_target(pg_shard_t osd) const {
     return backfill_targets.count(osd);
+  }
+  const set<pg_shard_t> &get_backfill_targets() const {
+    return backfill_targets;
+  }
+  bool is_async_recovery_target(pg_shard_t peer) const {
+    return async_recovery_targets.count(peer);
+  }
+  const set<pg_shard_t> &get_async_recovery_targets() const {
+    return async_recovery_targets;
   }
 
   bool state_test(uint64_t m) const { return (state & m) != 0; }

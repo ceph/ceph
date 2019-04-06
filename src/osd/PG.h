@@ -193,7 +193,6 @@ protected:
   eversion_t &last_update_ondisk;
   eversion_t &last_complete_ondisk;
   eversion_t &last_update_applied;
-  eversion_t &last_rollback_info_trimmed_to_applied;
   map<pg_shard_t, pg_info_t> &peer_info;
   map<pg_shard_t, pg_missing_t> &peer_missing;
   set<pg_shard_t> &peer_log_requested;
@@ -201,8 +200,6 @@ protected:
   map<pg_shard_t,eversion_t> &peer_last_complete_ondisk;
   eversion_t &min_last_complete_ondisk;
   eversion_t &pg_trim_to;
-  set<pg_shard_t> &backfill_targets;
-  set<pg_shard_t> &async_recovery_targets;
   set<pg_shard_t> &might_have_unfound;
   MissingLoc &missing_loc;
 
@@ -807,10 +804,6 @@ protected:
   std::atomic<int64_t> local_num_bytes = 0;
 
 public:
-  bool is_backfill_targets(pg_shard_t osd) {
-    return recovery_state.is_backfill_targets(osd);
-  }
-
   // Space reserved for backfill is primary_num_bytes - local_num_bytes
   // Don't care that difference itself isn't atomic
   uint64_t get_reserved_num_bytes() {
