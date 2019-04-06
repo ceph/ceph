@@ -190,12 +190,9 @@ protected:
   eversion_t &last_update_applied;
   map<pg_shard_t, pg_info_t> &peer_info;
   map<pg_shard_t, pg_missing_t> &peer_missing;
-  set<pg_shard_t> &peer_log_requested;
-  set<pg_shard_t> &peer_missing_requested;
   map<pg_shard_t,eversion_t> &peer_last_complete_ondisk;
   eversion_t &min_last_complete_ondisk;
   eversion_t &pg_trim_to;
-  set<pg_shard_t> &might_have_unfound;
   MissingLoc &missing_loc;
 
 public:
