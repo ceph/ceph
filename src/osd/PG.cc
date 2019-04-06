@@ -185,9 +185,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     curmap,
     this,
     this),
-  primary(recovery_state.primary),
   pg_whoami(recovery_state.pg_whoami),
-  up_primary(recovery_state.up_primary),
   upset(recovery_state.upset),
   actingset(recovery_state.actingset),
   acting_recovery_backfill(recovery_state.acting_recovery_backfill),
@@ -1958,7 +1956,7 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
   const MOSDScrubReserve *m =
     static_cast<const MOSDScrubReserve*>(op->get_req());
   Message *reply = new MOSDScrubReserve(
-    spg_t(info.pgid.pgid, primary.shard),
+    spg_t(info.pgid.pgid, get_primary().shard),
     m->map_epoch,
     scrubber.reserved ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
     pg_whoami);
@@ -2418,7 +2416,7 @@ void PG::repair_object(
     dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
     ceph_abort();
   }
-  if (bad_peer != primary) {
+  if (bad_peer != get_primary()) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
   } else {
     // We should only be scrubbing if the PG is clean.
@@ -2427,10 +2425,10 @@ void PG::repair_object(
     pg_log.missing_add(soid, oi.version, eversion_t());
 
     pg_log.set_last_requested(0);
-    dout(10) << __func__ << ": primary = " << primary << dendl;
+    dout(10) << __func__ << ": primary = " << get_primary() << dendl;
   }
 
-  if (is_ec_pg() || bad_peer == primary) {
+  if (is_ec_pg() || bad_peer == get_primary()) {
     // we'd better collect all shard for EC pg, and prepare good peers as the
     // source of pull in the case of replicated pg.
     missing_loc.add_missing(soid, oi.version, eversion_t());
