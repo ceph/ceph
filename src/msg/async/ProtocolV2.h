@@ -137,7 +137,7 @@ private:
   void reset_session();
   void prepare_send_message(uint64_t features, Message *m);
   out_queue_entry_t _get_next_outgoing();
-  ssize_t write_message(Message *m, bool more);
+  void write_message(Message *m);
   void append_keepalive();
   void append_keepalive_ack(utime_t &timestamp);
   void handle_message_ack(uint64_t seq);

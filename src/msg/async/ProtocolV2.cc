@@ -9,6 +9,7 @@
 #include "common/EventTrace.h"
 #include "common/ceph_crypto.h"
 #include "common/errno.h"
+#include "common/likely.h"
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
@@ -481,7 +482,7 @@ ProtocolV2::out_queue_entry_t ProtocolV2::_get_next_outgoing() {
   return out_entry;
 }
 
-ssize_t ProtocolV2::write_message(Message *m, bool more) {
+void ProtocolV2::write_message(Message *m) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
   m->set_seq(++out_seq);
@@ -517,18 +518,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                  << " src=" << entity_name_t(messenger->get_myname())
                  << " off=" << header2.data_off
                  << dendl;
-  ssize_t total_send_size = connection->outcoming_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
-
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
@@ -536,8 +525,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
 #endif
   m->put();
-
-  return rc;
 }
 
 void ProtocolV2::append_keepalive() {
@@ -589,7 +576,6 @@ void ProtocolV2::write_event() {
     }
 
     auto start = ceph::mono_clock::now();
-    bool more;
     do {
       const auto out_entry = _get_next_outgoing();
       if (!out_entry.m) {
@@ -601,7 +587,6 @@ void ProtocolV2::write_event() {
         sent.push_back(out_entry.m);
         out_entry.m->get();
       }
-      more = !out_queue.empty();
       connection->write_lock.unlock();
 
       // send_message or requeue messages may not encode message
@@ -609,17 +594,26 @@ void ProtocolV2::write_event() {
         prepare_send_message(connection->get_features(), out_entry.m);
       }
 
-      r = write_message(out_entry.m, more);
+      write_message(out_entry.m);
 
       connection->write_lock.lock();
-      if (r == 0) {
-        ;
-      } else if (r < 0) {
-        ldout(cct, 1) << __func__ << " send msg failed" << dendl;
-        break;
-      } else if (r > 0)
-        break;
     } while (can_write);
+
+    {
+      connection->write_lock.unlock();
+      ssize_t total_send_size = connection->outcoming_bl.length();
+      r = connection->_try_send();
+      if (unlikely(r) < 0) {
+	ldout(cct, 1) << __func__ << " error sending "
+	  << cpp_strerror(r) << dendl;
+      } else {
+	connection->logger->inc(
+	    l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
+	ldout(cct, 10) << __func__ << " sending "
+	  << (r ? " continuely." : " done.") << dendl;
+      }
+      connection->write_lock.lock();
+    }
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {

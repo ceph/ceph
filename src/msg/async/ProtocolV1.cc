@@ -317,7 +317,6 @@ void ProtocolV1::write_event() {
     }
 
     auto start = ceph::mono_clock::now();
-    bool more;
     do {
       bufferlist data;
       Message *m = _get_next_outgoing(&data);
@@ -330,7 +329,6 @@ void ProtocolV1::write_event() {
         sent.push_back(m);
         m->get();
       }
-      more = !out_q.empty();
       connection->write_lock.unlock();
 
       // send_message or requeue messages may not encode message
@@ -338,18 +336,26 @@ void ProtocolV1::write_event() {
         prepare_send_message(connection->get_features(), m, data);
       }
 
-      r = write_message(m, data, more);
+      write_message(m, data);
 
       connection->write_lock.lock();
-      if (r == 0) {
-        ;
-      } else if (r < 0) {
-        ldout(cct, 1) << __func__ << " send msg failed" << dendl;
-        break;
-      } else if (r > 0)
-        break;
     } while (can_write == WriteStatus::CANWRITE);
     connection->write_lock.unlock();
+
+    //batch handle sendmsg
+    {
+      ssize_t total_send_size = connection->outcoming_bl.length();
+      r = connection->_try_send();
+      if (unlikely(r) < 0) {
+	ldout(cct, 1) << __func__ << " error sending "
+	  << cpp_strerror(r) << dendl;
+      } else {
+	connection->logger->inc(
+	    l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
+	ldout(cct, 10) << __func__ << " sending "
+	  << (r ? " continuely." : " done.") << dendl;
+      }
+    }
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
@@ -1083,7 +1089,7 @@ void ProtocolV1::randomize_out_seq() {
   }
 }
 
-ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
+void ProtocolV1::write_message(Message *m, bufferlist &bl) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
   m->set_seq(++out_seq);
@@ -1150,18 +1156,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
-  ssize_t total_send_size = connection->outcoming_bl.length();
-  ssize_t rc = connection->_try_send(more);
-  if (rc < 0) {
-    ldout(cct, 1) << __func__ << " error sending " << m << ", "
-                  << cpp_strerror(rc) << dendl;
-  } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
-    ldout(cct, 10) << __func__ << " sending " << m
-                   << (rc ? " continuely." : " done.") << dendl;
-  }
-
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
@@ -1169,8 +1163,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
 #endif
   m->put();
-
-  return rc;
 }
 
 void ProtocolV1::requeue_sent() {

@@ -197,7 +197,7 @@ protected:
   Message *_get_next_outgoing(bufferlist *bl);
 
   void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  ssize_t write_message(Message *m, bufferlist &bl, bool more);
+  void write_message(Message *m, bufferlist &bl);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
