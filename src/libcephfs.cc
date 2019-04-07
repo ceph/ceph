@@ -79,6 +79,11 @@ public:
   {
     int ret;
 
+    if (cct->_conf->log_early &&
+	!cct->_log->is_started()) {
+      cct->_log->start();
+    }
+
     {
       MonClient mc_bootstrap(cct);
       ret = mc_bootstrap.get_monmap_and_config();
