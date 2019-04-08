@@ -46,6 +46,7 @@ class Protocol {
 
   // encode/write a message
   virtual seastar::future<> write_message(MessageRef msg) = 0;
+  virtual seastar::future<> write_messages(std::queue<MessageRef>& msgs) { return seastar::now(); };
 
   virtual seastar::future<> do_keepalive() = 0;
 

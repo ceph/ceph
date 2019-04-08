@@ -113,12 +113,8 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
       return seastar::now();
     }).then([this] {
       if (!conn.out_q.empty()){
-        MessageRef msg = conn.out_q.front();
-        return write_message(msg)
-        .then([this, msg] {
-          if (msg == conn.out_q.front()) {
-            conn.out_q.pop();
-          }
+        return write_messages(conn.out_q)
+        .then([this] {
           return stop_t::no;
         });
       } else {

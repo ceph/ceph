@@ -27,6 +27,7 @@ class ProtocolV1 final : public Protocol {
   void trigger_close() override;
 
   seastar::future<> write_message(MessageRef msg) override;
+  seastar::future<> write_messages(std::queue<MessageRef>& msgs) override;
 
   seastar::future<> do_keepalive() override;
 

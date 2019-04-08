@@ -595,6 +595,55 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
 
 // open state
 
+seastar::future<> ProtocolV1::write_messages(std::queue<MessageRef>& msgs)
+{
+  bufferlist bl;
+  static const size_t RESERVE_MSG_SIZE = sizeof(CEPH_MSGR_TAG_MSG) +
+                                         sizeof(ceph_msg_header) +
+                                         sizeof(ceph_msg_footer);
+  static const size_t RESERVE_MSG_SIZE_OLD = sizeof(CEPH_MSGR_TAG_MSG) +
+                                             sizeof(ceph_msg_header) +
+                                             sizeof(ceph_msg_footer_old);
+  if (HAVE_FEATURE(conn.features, MSG_AUTH)) {
+    bl.reserve(msgs.size() * RESERVE_MSG_SIZE);
+  } else {
+    bl.reserve(msgs.size() * RESERVE_MSG_SIZE_OLD);
+  }
+  while (!msgs.empty()) {
+    auto& msg = msgs.front();
+    msg->set_seq(++conn.out_seq);
+    auto& header = msg->get_header();
+    header.src = messenger.get_myname();
+    msg->encode(conn.features, messenger.get_crc_flags());
+    bl.append(CEPH_MSGR_TAG_MSG);
+    bl.append((const char*)&header, sizeof(header));
+    bl.append(msg->get_payload());
+    bl.append(msg->get_middle());
+    bl.append(msg->get_data());
+    auto& footer = msg->get_footer();
+    if (HAVE_FEATURE(conn.features, MSG_AUTH)) {
+      bl.append((const char*)&footer, sizeof(footer));
+    } else {
+      ceph_msg_footer_old old_footer;
+      if (messenger.get_crc_flags() & MSG_CRC_HEADER) {
+        old_footer.front_crc = footer.front_crc;
+        old_footer.middle_crc = footer.middle_crc;
+      } else {
+        old_footer.front_crc = old_footer.middle_crc = 0;
+      }
+      if (messenger.get_crc_flags() & MSG_CRC_DATA) {
+        old_footer.data_crc = footer.data_crc;
+      } else {
+        old_footer.data_crc = 0;
+      }
+      old_footer.flags = footer.flags;
+      bl.append((const char*)&old_footer, sizeof(old_footer));
+    }
+    msgs.pop();
+  }
+  return socket->write(std::move(bl));
+}
+
 seastar::future<> ProtocolV1::write_message(MessageRef msg)
 {
   msg->set_seq(++conn.out_seq);
