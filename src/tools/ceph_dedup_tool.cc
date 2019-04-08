@@ -288,9 +288,10 @@ void EstimateDedupRatio::print_status(Formatter *f, ostream &out)
     f->dump_string("PID", stringify(get_pid()));
     for (auto p : local_chunk_statistics) {
       f->open_object_section("fingerprint object");
-      f->dump_string("fingperint", p.first);
+      f->dump_string("fingerprint", p.first);
       f->dump_string("count", stringify(p.second.first));
       f->dump_string("chunk_size", stringify(p.second.second));
+      f->close_section();
     }
     f->close_section();
     f->open_object_section("Status");
