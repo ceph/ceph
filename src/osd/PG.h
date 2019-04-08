@@ -184,8 +184,6 @@ protected:
    */
   pg_shard_t pg_whoami;
   pg_info_t &info;
-  PGLog &pg_log;
-  MissingLoc &missing_loc;
 
 public:
   // -- members --
@@ -397,7 +395,6 @@ public:
   void clear_want_pg_temp() override;
 
   void on_new_interval() override;
-  virtual void plpg_on_new_interval() = 0;
 
   void on_role_change() override;
   virtual void plpg_on_role_change() = 0;
@@ -485,6 +482,8 @@ public:
   void set_ready_to_merge_source(eversion_t lu) override;
 
   void send_pg_created(pg_t pgid) override;
+
+  void rebuild_missing_set_with_deletes(PGLog &pglog) override;
 
   void queue_peering_event(PGPeeringEventRef evt);
   void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
@@ -1446,7 +1445,7 @@ protected:
       get_osdmap_epoch(),
       projected_last_update.version+1);
     ceph_assert(at_version > info.last_update);
-    ceph_assert(at_version > pg_log.get_head());
+    ceph_assert(at_version > recovery_state.get_pg_log().get_head());
     ceph_assert(at_version > projected_last_update);
     return at_version;
   }
