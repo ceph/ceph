@@ -2044,7 +2044,7 @@ void Client::_close_mds_session(MetaSession *s)
   s->con->send_message2(make_message<MClientSession>(CEPH_SESSION_REQUEST_CLOSE, s->seq));
 }
 
-void Client::_closed_mds_session(MetaSession *s, bool rejected)
+void Client::_closed_mds_session(MetaSession *s, int err, bool rejected)
 {
   ldout(cct, 5) << __func__ << " mds." << s->mds_num << " seq " << s->seq << dendl;
   if (rejected && s->state != MetaSession::STATE_CLOSING)
@@ -2054,7 +2054,7 @@ void Client::_closed_mds_session(MetaSession *s, bool rejected)
   s->con->mark_down();
   signal_context_list(s->waiting_for_open);
   mount_cond.notify_all();
-  remove_session_caps(s);
+  remove_session_caps(s, err);
   kick_requests_closed(s);
   if (s->state == MetaSession::STATE_CLOSED)
     mds_sessions.erase(s->mds_num);
@@ -4121,7 +4121,7 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(&in->caps.begin()->second, true);
 }
 
-void Client::remove_session_caps(MetaSession *s)
+void Client::remove_session_caps(MetaSession *s, int err)
 {
   ldout(cct, 10) << __func__ << " mds." << s->mds_num << dendl;
 
@@ -4134,6 +4134,7 @@ void Client::remove_session_caps(MetaSession *s)
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
     }
+    auto caps = cap->implemented;
     if (cap->wanted | cap->issued)
       in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
@@ -4148,6 +4149,20 @@ void Client::remove_session_caps(MetaSession *s)
       in->mark_caps_clean();
       put_inode(in.get());
     }
+    caps &= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER;
+    if (caps && !in->caps_issued_mask(caps, true)) {
+      if (err == -EBLACKLISTED) {
+	if (in->oset.dirty_or_tx) {
+	  lderr(cct) << __func__ << " still has dirty data on " << *in << dendl;
+	  in->set_async_err(err);
+	}
+	objectcacher->purge_set(&in->oset);
+      } else {
+	objectcacher->release_set(&in->oset);
+      }
+      _schedule_invalidate_callback(in.get(), 0, 0);
+    }
+
     signal_cond_list(in->waitfor_caps);
   }
   s->flushing_caps_tids.clear();
@@ -6011,7 +6026,7 @@ void Client::_abort_mds_sessions(int err)
   // Force-close all sessions
   while(!mds_sessions.empty()) {
     auto& session = mds_sessions.begin()->second;
-    _closed_mds_session(&session);
+    _closed_mds_session(&session, err);
   }
 }
 
