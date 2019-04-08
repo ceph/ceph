@@ -6,30 +6,31 @@ overrides:
         rgw max concurrent requests: 100
         admin socket: /var/run/ceph/radosgw.asok
 tasks:
-  rgw_scheduler_tests:
-      rgw_server: client.0
-      git_remote: git://github.com/theanalyst/
-      default:
-        req_count: 25
-        create_buckets: bucket1, bucket2
-        admin_sock_path: /var/run/ceph/radosgw.asok
-      requests:
-        create_obj1:
-          req_type: PUT
-          req_path: bucket1/foo
-          per_req_path: true
-          obj_size: 1
-        create_obj2:
-          req_type: PUT
-          req_path: bucket2/bar
-          per_req_path: true
-          obj_size: 5
-        get_bucket1:
-          req_type: GET
-          req_path: bucket1
-        put_bucket3:
-          req_type: PUT
-          req_path: bucket3
-        get_bucket2:
-          req_type: GET
-          req_path: bucket2
+  - rgw_scheduler_tests:
+      client.0:
+        rgw_server: client.0
+        git_remote: git://github.com/theanalyst/
+        default:
+          req_count: 25
+          create_buckets: bucket1, bucket2
+          admin_sock_path: /var/run/ceph/radosgw.asok
+          requests:
+            create_obj1:
+              req_type: PUT
+              req_path: bucket1/foo
+              per_req_path: true
+              obj_size: 1
+            create_obj2:
+              req_type: PUT
+              req_path: bucket2/bar
+              per_req_path: true
+              obj_size: 5
+            get_bucket1:
+              req_type: GET
+              req_path: bucket1
+            put_bucket3:
+              req_type: PUT
+              req_path: bucket3
+            get_bucket2:
+              req_type: GET
+              req_path: bucket2
