@@ -3797,6 +3797,48 @@ void PeeringState::calc_trim_to_aggressive()
   }
 }
 
+void PeeringState::apply_op_stats(
+  const hobject_t &soid,
+  const object_stat_sum_t &delta_stats)
+{
+  info.stats.stats.add(delta_stats);
+  info.stats.stats.floor(0);
+
+  for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
+       i != get_backfill_targets().end();
+       ++i) {
+    pg_shard_t bt = *i;
+    pg_info_t& pinfo = peer_info[bt];
+    if (soid <= pinfo.last_backfill)
+      pinfo.stats.stats.add(delta_stats);
+  }
+}
+
+void PeeringState::update_complete_backfill_object_stats(
+  const hobject_t &hoid,
+  const pg_stat_t &stats)
+{
+  for (auto &&bt: get_backfill_targets()) {
+    pg_info_t& pinfo = peer_info[bt];
+    //Add stats to all peers that were missing object
+    if (hoid > pinfo.last_backfill)
+      pinfo.stats.add(stats);
+  }
+}
+
+void PeeringState::update_peer_last_backfill(
+  pg_shard_t peer,
+  const hobject_t &new_last_backfill)
+{
+  pg_info_t &pinfo = peer_info[peer];
+  pinfo.last_backfill = new_last_backfill;
+  if (new_last_backfill.is_max()) {
+    /* pinfo.stats might be wrong if we did log-based recovery on the
+     * backfilled portion in addition to continuing backfill.
+     */
+    pinfo.stats = info.stats;
+  }
+}
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix

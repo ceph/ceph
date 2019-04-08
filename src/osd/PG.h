@@ -185,7 +185,6 @@ protected:
   pg_shard_t pg_whoami;
   pg_info_t &info;
   PGLog &pg_log;
-  map<pg_shard_t, pg_info_t> &peer_info;
   MissingLoc &missing_loc;
 
 public:
