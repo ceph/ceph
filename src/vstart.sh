@@ -48,6 +48,7 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
         # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
+	[ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/cephfs-shell
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
         [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
@@ -1249,6 +1250,10 @@ echo ""
     if [ "$CEPH_DIR" != "$PWD" ]; then
         echo "export CEPH_CONF=$conf_fn"
         echo "export CEPH_KEYRING=$keyring_fn"
+    fi
+
+    if [ -n "$CEPHFS_SHELL" ]; then
+	    echo "alias cephfs-shell=$CEPHFS_SHELL"
     fi
 } | tee -a $CEPH_DIR/vstart_environment.sh
 
