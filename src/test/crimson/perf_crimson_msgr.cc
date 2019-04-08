@@ -38,14 +38,68 @@ enum class perf_mode_t {
   server
 };
 
-static seastar::future<> run(unsigned rounds,
-                             unsigned jobs,
-                             unsigned cbs,
-                             unsigned sbs,
-                             unsigned depth,
-                             std::string addr,
-                             perf_mode_t mode,
-                             unsigned core)
+struct client_config {
+  entity_addr_t server_addr;
+  unsigned block_size;
+  unsigned rounds;
+  unsigned jobs;
+  unsigned depth;
+
+  std::string str() const {
+    std::ostringstream out;
+    out << "client[>> " << server_addr
+        << "](bs=" << block_size
+        << ", rounds=" << rounds
+        << ", jobs=" << jobs
+        << ", depth=" << depth
+        << ")";
+    return out.str();
+  }
+
+  static client_config load(bpo::variables_map& options) {
+    client_config conf;
+    entity_addr_t addr;
+    ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+
+    conf.server_addr = addr;
+    conf.block_size = options["cbs"].as<unsigned>();
+    conf.rounds = options["rounds"].as<unsigned>();
+    conf.jobs = options["jobs"].as<unsigned>();
+    conf.depth = options["depth"].as<unsigned>();
+    return conf;
+  }
+};
+
+struct server_config {
+  entity_addr_t addr;
+  unsigned block_size;
+  unsigned core;
+
+  std::string str() const {
+    std::ostringstream out;
+    out << "server[" << addr
+        << "](bs=" << block_size
+        << ", core=" << core
+        << ")";
+    return out.str();
+  }
+
+  static server_config load(bpo::variables_map& options) {
+    server_config conf;
+    entity_addr_t addr;
+    ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+
+    conf.addr = addr;
+    conf.block_size = options["sbs"].as<unsigned>();
+    conf.core = options["core"].as<unsigned>();
+    return conf;
+  }
+};
+
+static seastar::future<> run(
+    perf_mode_t mode,
+    const client_config& client_conf,
+    const server_config& server_conf)
 {
   struct test_state {
     struct Server final
@@ -302,24 +356,24 @@ static seastar::future<> run(unsigned rounds,
   };
 
   return seastar::when_all_succeed(
-      ceph::net::create_sharded<test_state::Server>(core, sbs),
-      ceph::net::create_sharded<test_state::Client>(jobs, rounds, cbs, depth))
+      ceph::net::create_sharded<test_state::Server>(server_conf.core, server_conf.block_size),
+      ceph::net::create_sharded<test_state::Client>(client_conf.jobs, client_conf.rounds,
+                                                    client_conf.block_size, client_conf.depth))
     .then([=](test_state::Server *server,
               test_state::Client *client) {
-      entity_addr_t target_addr;
-      target_addr.parse(addr.c_str(), nullptr);
       if (mode == perf_mode_t::both) {
-          logger().info("\nperf settings:\n  mode=server+client\n  server addr={}\n  server core={}\n  rounds={}\n  client jobs={}\n  client bs={}\n  server bs={}\n  depth={}\n",
-                        addr, core, rounds, jobs, cbs, sbs, depth);
-          ceph_assert(seastar::smp::count >= std::max(1+jobs, 1+core));
-          ceph_assert(core == 0 || core > jobs);
-          ceph_assert(jobs > 0);
+          logger().info("\nperf settings:\n  {}\n  {}\n",
+                        client_conf.str(), server_conf.str());
+          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+          ceph_assert(client_conf.jobs > 0);
+          ceph_assert(seastar::smp::count >= 1+server_conf.core);
+          ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
           return seastar::when_all_succeed(
-              server->init(target_addr),
+              server->init(server_conf.addr),
               client->init())
           // dispatch ops
-            .then([client, target_addr] {
-              return client->dispatch_messages(target_addr);
+            .then([client, addr = client_conf.server_addr] {
+              return client->dispatch_messages(addr);
           // shutdown
             }).finally([client] {
               return client->shutdown();
@@ -327,23 +381,21 @@ static seastar::future<> run(unsigned rounds,
               return server->shutdown();
             });
       } else if (mode == perf_mode_t::client) {
-          logger().info("\nperf settings:\n  mode=client\n  server addr={}\n  rounds={}\n  client jobs={}\n  client bs={}\n  depth={}\n",
-                        addr, rounds, jobs, cbs, depth);
-          ceph_assert(seastar::smp::count >= 1+jobs);
-          ceph_assert(jobs > 0);
+          logger().info("\nperf settings:\n  {}\n", client_conf.str());
+          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+          ceph_assert(client_conf.jobs > 0);
           return client->init()
           // dispatch ops
-            .then([client, target_addr] {
-              return client->dispatch_messages(target_addr);
+            .then([client, addr = client_conf.server_addr] {
+              return client->dispatch_messages(addr);
           // shutdown
             }).finally([client] {
               return client->shutdown();
             });
       } else { // mode == perf_mode_t::server
-          ceph_assert(seastar::smp::count >= 1+core);
-          logger().info("\nperf settings:\n  mode=server\n  server addr={}\n  server core={}\n  server bs={}\n",
-                        addr, core, sbs);
-          return server->init(target_addr)
+          ceph_assert(seastar::smp::count >= 1+server_conf.core);
+          logger().info("\nperf settings:\n  {}\n", server_conf.str());
+          return server->init(server_conf.addr)
           // dispatch ops
             .then([server] {
               return server->msgr->wait();
@@ -361,36 +413,30 @@ int main(int argc, char** argv)
 {
   seastar::app_template app;
   app.add_options()
-    ("addr", bpo::value<std::string>()->default_value("v1:0.0.0.0:9010"),
-     "server address")
-    ("core", bpo::value<unsigned>()->default_value(0),
-     "server running core")
     ("mode", bpo::value<unsigned>()->default_value(0),
      "0: both, 1:client, 2:server")
+    ("addr", bpo::value<std::string>()->default_value("v1:0.0.0.0:9010"),
+     "server address")
     ("rounds", bpo::value<unsigned>()->default_value(65536),
-     "number of messaging rounds")
+     "number of client messaging rounds")
     ("jobs", bpo::value<unsigned>()->default_value(1),
-     "number of jobs (client messengers)")
+     "number of client jobs (messengers)")
     ("cbs", bpo::value<unsigned>()->default_value(4096),
-     "block size")
-    ("sbs", bpo::value<unsigned>()->default_value(0),
-     "server block size")
+     "client block size")
     ("depth", bpo::value<unsigned>()->default_value(512),
-     "io depth");
+     "client io depth")
+    ("core", bpo::value<unsigned>()->default_value(0),
+     "server running core")
+    ("sbs", bpo::value<unsigned>()->default_value(0),
+     "server block size");
   return app.run(argc, argv, [&app] {
       auto&& config = app.configuration();
-      auto rounds = config["rounds"].as<unsigned>();
-      auto jobs = config["jobs"].as<unsigned>();
-      auto cbs = config["cbs"].as<unsigned>();
-      auto sbs = config["sbs"].as<unsigned>();
-      auto depth = config["depth"].as<unsigned>();
-      auto addr = config["addr"].as<std::string>();
-      auto core = config["core"].as<unsigned>();
       auto mode = config["mode"].as<unsigned>();
       ceph_assert(mode <= 2);
       auto _mode = static_cast<perf_mode_t>(mode);
-      return run(rounds, jobs, cbs, sbs, depth, addr, _mode, core)
-        .then([] {
+      auto server_conf = server_config::load(config);
+      auto client_conf = client_config::load(config);
+      return run(_mode, client_conf, server_conf).then([] {
           logger().info("\nsuccessful!\n");
         }).handle_exception([] (auto eptr) {
           logger().info("\nfailed!\n");
