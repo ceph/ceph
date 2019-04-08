@@ -7,6 +7,8 @@
 #include <functional>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
+class CephContext;
+
 namespace rgw::amqp {
 // forward declaration of connection object
 struct connection_t;
@@ -20,6 +22,12 @@ void intrusive_ptr_release(const connection_t* p);
 // the reply callback is expected to get an integer parameter
 // indicating the result, and not to return anything
 typedef std::function<void(int)> reply_callback_t;
+
+// initialize the amqp manager
+bool init(CephContext* cct);
+
+// shutdown the amqp manager
+void shutdown();
 
 // connect to an amqp endpoint
 connection_ptr_t connect(const std::string& url, const std::string& exchange);

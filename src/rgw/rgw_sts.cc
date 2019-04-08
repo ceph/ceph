@@ -142,7 +142,7 @@ void AssumedRoleUser::dump(Formatter *f) const
 int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
                                               RGWRados *store,
                                               const string& roleId,
-                                              const rgw::IAM::ARN& roleArn,
+                                              const rgw::ARN& roleArn,
                                               const string& roleSessionName)
 {
   string resource = std::move(roleArn.resource);
@@ -150,8 +150,8 @@ int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
   resource.append("/");
   resource.append(roleSessionName);
   
-  rgw::IAM::ARN assumed_role_arn(rgw::IAM::Partition::aws,
-                                  rgw::IAM::Service::sts,
+  rgw::ARN assumed_role_arn(rgw::Partition::aws,
+                                  rgw::Service::sts,
                                   "", roleArn.account, resource);
   arn = assumed_role_arn.to_string();
 
@@ -248,7 +248,7 @@ int AssumeRoleRequest::validate_input() const
 
 std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
 {
-  if (auto r_arn = rgw::IAM::ARN::parse(arn); r_arn) {
+  if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
     RGWRole role(cct, store, roleName, r_arn->account);
@@ -296,7 +296,7 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRo
   response.sub = req.getSub();
 
   //Get the role info which is being assumed
-  boost::optional<rgw::IAM::ARN> r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
   if (r_arn == boost::none) {
     response.assumeRoleResp.retCode = -EINVAL;
     return response;
@@ -345,7 +345,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   response.packedPolicySize = 0;
 
   //Get the role info which is being assumed
-  boost::optional<rgw::IAM::ARN> r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  boost::optional<rgw::ARN> r_arn = rgw::ARN::parse(req.getRoleARN());
   if (r_arn == boost::none) {
     response.retCode = -EINVAL;
     return response;

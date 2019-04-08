@@ -42,7 +42,7 @@ int RGWRestRole::verify_permission()
   uint64_t op = get_op();
   if (!verify_user_permission(this,
                               s,
-                              rgw::IAM::ARN(resource_name,
+                              rgw::ARN(resource_name,
                                             "role",
                                              s->user->user_id.tenant, true),
                                              op)) {
@@ -89,7 +89,7 @@ int RGWCreateRole::verify_permission()
   string resource_name = role_path + role_name;
   if (!verify_user_permission(this,
                               s,
-                              rgw::IAM::ARN(resource_name,
+                              rgw::ARN(resource_name,
                                             "role",
                                              s->user->user_id.tenant, true),
                                              get_op())) {
@@ -188,7 +188,7 @@ int RGWGetRole::_verify_permission(const RGWRole& role)
   string resource_name = role.get_path() + role.get_name();
   if (!verify_user_permission(this,
                               s,
-                              rgw::IAM::ARN(resource_name,
+                              rgw::ARN(resource_name,
                                             "role",
                                              s->user->user_id.tenant, true),
                                              get_op())) {
@@ -274,7 +274,7 @@ int RGWListRoles::verify_permission()
 
   if (!verify_user_permission(this, 
                               s,
-                              rgw::IAM::ARN(),
+                              rgw::ARN(),
                               get_op())) {
     return -EACCES;
   }

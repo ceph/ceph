@@ -1527,7 +1527,7 @@ void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
     f->open_object_section("auth");
       f->open_object_section("passwordCredentials");
         encode_json("username", to_string(conf.get_admin_user()), f);
-        encode_json("password", to_string(conf.get_admin_password()), f);
+        encode_json("password", ::to_string(conf.get_admin_password()), f);
       f->close_section();
       encode_json("tenantName", to_string(conf.get_admin_tenant()), f);
     f->close_section();
@@ -1548,7 +1548,7 @@ void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
               encode_json("name", to_string(conf.get_admin_domain()), f);
             f->close_section();
             encode_json("name", to_string(conf.get_admin_user()), f);
-            encode_json("password", to_string(conf.get_admin_password()), f);
+            encode_json("password", ::to_string(conf.get_admin_password()), f);
           f->close_section();
         f->close_section();
       f->close_section();
