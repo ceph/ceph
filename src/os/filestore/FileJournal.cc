@@ -1459,6 +1459,9 @@ void FileJournal::write_finish_thread_entry()
 	continue;
       }
       derr << "io_getevents got " << cpp_strerror(r) << dendl;
+      if (r == -EIO) {
+	note_io_error_event(devname.c_str(), fn.c_str(), -EIO, 0, 0, 0);
+      }
       ceph_abort_msg("got unexpected error from io_getevents");
     }
 
@@ -2208,5 +2211,6 @@ void FileJournal::collect_metadata(map<string,string> *pm)
     (*pm)["backend_filestore_journal_dev_node"] = "unknown";
   } else {
     (*pm)["backend_filestore_journal_dev_node"] = string(dev_node);
+    devname = dev_node;
   }
 }
