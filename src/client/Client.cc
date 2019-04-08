@@ -9601,9 +9601,11 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 		       in->truncate_size, in->truncate_seq,
 		       &onfinish);
     client_lock.Unlock();
-    onfinish.wait();
+    r = onfinish.wait();
     client_lock.Lock();
     _sync_write_commit(in);
+    if (r < 0)
+      goto done;
   }
 
   // if we get here, write was successful, update client metadata
