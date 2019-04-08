@@ -788,31 +788,27 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
 {
   ldout(cct,1) << __func__ << " " << dendl;
   lock.Lock();
-  for (set<AsyncConnectionRef>::iterator q = accepting_conns.begin();
-       q != accepting_conns.end(); ++q) {
-    AsyncConnectionRef p = *q;
-    ldout(cct, 5) << __func__ << " accepting_conn " << p.get() << dendl;
-    p->stop(queue_reset);
+  for (const auto& c : accepting_conns) {
+    ldout(cct, 5) << __func__ << " accepting_conn " << c << dendl;
+    c->stop(queue_reset);
   }
   accepting_conns.clear();
 
-  while (!conns.empty()) {
-    auto it = conns.begin();
-    AsyncConnectionRef p = it->second;
-    ldout(cct, 5) << __func__ << " mark down " << it->first << " " << p << dendl;
-    conns.erase(it);
-    p->get_perf_counter()->dec(l_msgr_active_connections);
-    p->stop(queue_reset);
+  for (const auto& [e, c] : conns) {
+    ldout(cct, 5) << __func__ << " mark down " << e << " " << c << dendl;
+    c->get_perf_counter()->dec(l_msgr_active_connections);
+    c->stop(queue_reset);
   }
+  conns.clear();
 
   {
     Mutex::Locker l(deleted_lock);
-    while (!deleted_conns.empty()) {
-      set<AsyncConnectionRef>::iterator it = deleted_conns.begin();
-      AsyncConnectionRef p = *it;
-      ldout(cct, 5) << __func__ << " delete " << p << dendl;
-      deleted_conns.erase(it);
+    if (cct->_conf->subsys.should_gather<ceph_subsys_ms, 5>()) {
+      for (const auto& c : deleted_conns) {
+        ldout(cct, 5) << __func__ << " delete " << c << dendl;
+      }
     }
+    deleted_conns.clear();
   }
   lock.Unlock();
 }
@@ -931,18 +927,18 @@ int AsyncMessenger::reap_dead()
   int num = 0;
 
   Mutex::Locker l1(lock);
-  Mutex::Locker l2(deleted_lock);
 
-  while (!deleted_conns.empty()) {
-    auto it = deleted_conns.begin();
-    AsyncConnectionRef p = *it;
-    ldout(cct, 5) << __func__ << " delete " << p << dendl;
-    auto conns_it = conns.find(*p->peer_addrs);
-    if (conns_it != conns.end() && conns_it->second == p)
-      conns.erase(conns_it);
-    accepting_conns.erase(p);
-    deleted_conns.erase(it);
-    ++num;
+  {
+    Mutex::Locker l2(deleted_lock);
+    for (auto& c : deleted_conns) {
+      ldout(cct, 5) << __func__ << " delete " << c << dendl;
+      auto conns_it = conns.find(*c->peer_addrs);
+      if (conns_it != conns.end() && conns_it->second == c)
+        conns.erase(conns_it);
+      accepting_conns.erase(c);
+      ++num;
+    }
+    deleted_conns.clear();
   }
 
   return num;
