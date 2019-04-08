@@ -8041,6 +8041,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description("reconnect when the session becomes stale"),
 
+    Option("client_discard_dirty_on_blacklisted", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("discard dirty data when blacklisted"),
+
     Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(".snap")
     .set_description("pseudo directory for snapshot access to a directory"),

@@ -2067,14 +2067,14 @@ void Client::_close_mds_session(MetaSession *s)
   s->con->send_message2(make_message<MClientSession>(CEPH_SESSION_REQUEST_CLOSE, s->seq));
 }
 
-void Client::_closed_mds_session(MetaSession *s)
+void Client::_closed_mds_session(MetaSession *s, int err)
 {
   ldout(cct, 5) << __func__ << " mds." << s->mds_num << " seq " << s->seq << dendl;
   s->state = MetaSession::STATE_CLOSED;
   s->con->mark_down();
   signal_context_list(s->waiting_for_open);
   mount_cond.Signal();
-  remove_session_caps(s);
+  remove_session_caps(s, err);
   kick_requests_closed(s);
   mds_sessions.erase(s->mds_num);
 }
@@ -4120,7 +4120,7 @@ void Client::remove_all_caps(Inode *in)
     remove_cap(&in->caps.begin()->second, true);
 }
 
-void Client::remove_session_caps(MetaSession *s)
+void Client::remove_session_caps(MetaSession *s, int err)
 {
   ldout(cct, 10) << __func__ << " mds." << s->mds_num << dendl;
 
@@ -4134,6 +4134,7 @@ void Client::remove_session_caps(MetaSession *s)
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
     }
+    auto caps = cap->implemented;
     if (cap->wanted | cap->issued)
       in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
@@ -4150,6 +4151,17 @@ void Client::remove_session_caps(MetaSession *s)
       in->mark_caps_clean();
       put_inode(in.get());
     }
+    caps &= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER;
+    if (err == -EBLACKLISTED &&
+	cct->_conf.get_val<bool>("client_discard_dirty_on_blacklisted") &&
+	caps && !in->caps_issued_mask(caps, true)) {
+      if (in->oset.dirty_or_tx) {
+	lderr(cct) << __func__ << " still has dirty data on " << *in << dendl;
+	in->set_async_err(err);
+      }
+      objectcacher->purge_set(&in->oset);
+    }
+
     signal_cond_list(in->waitfor_caps);
   }
   s->flushing_caps_tids.clear();
@@ -5989,7 +6001,7 @@ void Client::_abort_mds_sessions(int err)
   // Force-close all sessions
   while(!mds_sessions.empty()) {
     auto& session = mds_sessions.begin()->second;
-    _closed_mds_session(&session);
+    _closed_mds_session(&session, err);
   }
 }
 
