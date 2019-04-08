@@ -2602,7 +2602,7 @@ public:
     for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
       string& k = *iter;
 
-      if (k.find(".buckets") == string::npos) {
+      if (k.find(".buckets") != string::npos) {
         keys.push_back(k);
       }
     }
