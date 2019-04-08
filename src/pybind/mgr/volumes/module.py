@@ -131,7 +131,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         r, outb, outs = self.mon_command({
             'prefix': 'osd pool create',
             'pool': mdp_name,
-            'pg_num': 8
+            'pg_num': 16,
+            'pg_num_min': 16,
+        })
+        if r != 0:
+            return r, outb, outs
+
+        # count fs metadata omap at 4x usual rate
+        r, outb, outs = self.mon_command({
+            'prefix': 'osd pool set',
+            'pool': mdp_name,
+            'var': "pg_autoscale_bias",
+            'val': "4.0",
         })
         if r != 0:
             return r, outb, outs
