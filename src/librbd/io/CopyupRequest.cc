@@ -552,6 +552,12 @@ bool CopyupRequest<I>::is_update_object_map_required(int r) {
     return false;
   }
 
+  if (m_image_ctx->migration_info.empty()) {
+    // migration might have completed while IO was in-flight,
+    // assume worst-case and perform an object map update
+    return true;
+  }
+
   auto it = m_image_ctx->migration_info.snap_map.find(CEPH_NOSNAP);
   ceph_assert(it != m_image_ctx->migration_info.snap_map.end());
   return it->second[0] != CEPH_NOSNAP;
