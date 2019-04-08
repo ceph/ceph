@@ -185,14 +185,6 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr)}) {
-      if (local_conf()->ms_crc_data) {
-        msgr.get().set_crc_data();
-      }
-      if (local_conf()->ms_crc_header) {
-        msgr.get().set_crc_header();
-      }
-    }
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
     dispatchers.push_front(mgrc.get());

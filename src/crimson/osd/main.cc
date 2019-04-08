@@ -101,11 +101,19 @@ int main(int argc, char* argv[])
         local_conf().parse_argv(ceph_args).get();
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = static_cast<uint32_t>(getpid());
-        const auto shard = seastar::engine().cpu_id();
-        cluster_msgr.start(entity_name_t::OSD(whoami), "cluster"s, nonce, shard).get();
-        client_msgr.start(entity_name_t::OSD(whoami), "client"s, nonce, shard).get();
-        hb_front_msgr.start(entity_name_t::OSD(whoami), "hb_front"s, nonce, shard).get();
-        hb_back_msgr.start(entity_name_t::OSD(whoami), "hb_back"s, nonce, shard).get();
+        for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
+                                  make_pair(std::ref(client_msgr), "client"s),
+                                  make_pair(std::ref(hb_front_msgr), "hb_front"s),
+                                  make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
+          const auto shard = seastar::engine().cpu_id();
+          msgr.start(entity_name_t::OSD(whoami), name, nonce, shard).get();
+          if (local_conf()->ms_crc_data) {
+            msgr.local().set_crc_data();
+          }
+          if (local_conf()->ms_crc_header) {
+            msgr.local().set_crc_header();
+          }
+        }
         osd.start_single(whoami, nonce,
           reference_wrapper<ceph::net::Messenger>(cluster_msgr.local()),
           reference_wrapper<ceph::net::Messenger>(client_msgr.local()),

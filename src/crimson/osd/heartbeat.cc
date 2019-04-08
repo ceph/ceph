@@ -59,12 +59,6 @@ seastar::future<>
 Heartbeat::start_messenger(ceph::net::Messenger& msgr,
                            const entity_addrvec_t& addrs)
 {
-  if (local_conf()->ms_crc_data) {
-    msgr.set_crc_data();
-  }
-  if (local_conf()->ms_crc_header) {
-    msgr.set_crc_header();
-  }
   return msgr.try_bind(addrs,
                        local_conf()->ms_bind_port_min,
                        local_conf()->ms_bind_port_max).then([&msgr, this] {
