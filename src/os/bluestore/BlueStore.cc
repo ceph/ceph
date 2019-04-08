@@ -1628,6 +1628,16 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
 
+void BlueStore::SharedBlob::dump(Formatter* f) const
+{
+  f->dump_bool("loaded", loaded);
+  if (loaded) {
+    persistent->dump(f);
+  } else {
+    f->dump_unsigned("sbid_unloaded", sbid_unloaded);
+  }
+}
+
 ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 {
   out << "SharedBlob(" << &sb;
@@ -1730,6 +1740,17 @@ void BlueStore::SharedBlobSet::dump(CephContext *cct)
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+
+void BlueStore::Blob::dump(Formatter* f) const
+{
+  if (is_spanning()) {
+    f->dump_unsigned("spanning_id ", id);
+  }
+  blob.dump(f);
+  if (shared_blob) {
+    f->dump_object("shared", *shared_blob);
+  }
+}
 
 ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 {
@@ -1970,6 +1991,14 @@ void BlueStore::Blob::decode(
 
 // Extent
 
+void BlueStore::Extent::dump(Formatter* f) const
+{
+  f->dump_unsigned("logical_offset", logical_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_offset", blob_offset);
+  f->dump_object("blob", *blob);
+}
+
 ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 {
   return out << std::hex << "0x" << e.logical_offset << "~" << e.length
@@ -1998,6 +2027,16 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
   : onode(o),
     inline_bl(
       o->c->store->cct->_conf->bluestore_extent_map_inline_shard_prealloc_size) {
+}
+
+void BlueStore::ExtentMap::dump(Formatter* f) const
+{
+  f->open_array_section("extents");
+
+  for (auto& e : extent_map) {
+      f->dump_object("extent", e);
+  }
+  f->close_section();
 }
 
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
@@ -3093,6 +3132,12 @@ void BlueStore::Onode::flush()
     }
   }
   ldout(c->store->cct, 20) << __func__ << " done" << dendl;
+}
+
+void BlueStore::Onode::dump(Formatter* f) const
+{
+  onode.dump(f);
+  extent_map.dump(f);
 }
 
 // =======================================================
@@ -8870,6 +8915,42 @@ int BlueStore::fiemap(
   if (r >= 0) {
     m.move_into(destmap);
   }
+  return r;
+}
+
+int BlueStore::dump_onode(CollectionHandle &c_,
+  const ghobject_t& oid,
+  const string& section_name,
+  Formatter *f)
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
+    return -ENOENT;
+
+  int r;
+  {
+    RWLock::RLocker l(c->lock);
+
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    // FIXME minor: actually the next line isn't enough to
+    // load shared blobs. Leaving as is for now..
+    //
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+
+    _dump_onode<0>(o);
+    f->open_object_section(section_name.c_str());
+    o->dump(f);
+    f->close_section();
+    r = 0;
+  }
+ out:
+  dout(10) << __func__ << " " << c->cid << " " << oid
+	   << " = " << r << dendl;
   return r;
 }
 
