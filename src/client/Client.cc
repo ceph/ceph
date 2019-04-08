@@ -6321,6 +6321,15 @@ void Client::tick()
   }
 
   trim_cache(true);
+
+  if (blacklisted && mounted &&
+      last_auto_reconnect + 30 * 60 < now &&
+      cct->_conf.get_val<bool>("client_reconnect_stale")) {
+    messenger->client_reset();
+    blacklisted = false;
+    _kick_stale_sessions();
+    last_auto_reconnect = now;
+  }
 }
 
 void Client::renew_caps()
@@ -14122,8 +14131,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	case MetaSession::STATE_OPEN:
 	  {
 	    objecter->maybe_request_map(); /* to check if we are blacklisted */
-	    const auto& conf = cct->_conf;
-	    if (conf->client_reconnect_stale) {
+	    if (cct->_conf.get_val<bool>("client_reconnect_stale")) {
 	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
 	      _closed_mds_session(s);
 	    } else {

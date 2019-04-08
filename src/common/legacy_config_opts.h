@@ -347,7 +347,6 @@ OPTION(client_trace, OPT_STR)
 OPTION(client_readahead_min, OPT_LONGLONG)  // readahead at _least_ this much.
 OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG)  // as multiple of file layout period (object size * num stripes)
-OPTION(client_reconnect_stale, OPT_BOOL)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR)
 OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)

@@ -1264,6 +1264,8 @@ private:
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
+  utime_t last_auto_reconnect;
+
   // trace generation
   ofstream traceout;
 
