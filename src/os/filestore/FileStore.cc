@@ -166,10 +166,20 @@ int FileStore::get_cdir(const coll_t& cid, char *s, int len)
   return snprintf(s, len, "%s/current/%s", basedir.c_str(), cid_str.c_str());
 }
 
+void FileStore::handle_eio()
+{
+  // don't try to map this back to an offset; too hard since there is
+  // a file system in between.  we also don't really know whether this
+  // was a read or a write, since we have so many layers beneath us.
+  // don't even try.
+  note_io_error_event(devname.c_str(), basedir.c_str(), -EIO, 0, 0, 0);
+  ceph_abort_msg("unexpected eio error");
+}
+
 int FileStore::get_index(const coll_t& cid, Index *index)
 {
   int r = index_manager.get_index(cid, basedir, index);
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   return r;
 }
 
@@ -178,7 +188,7 @@ int FileStore::init_index(const coll_t& cid)
   char path[PATH_MAX];
   get_cdir(cid, path, sizeof(path));
   int r = index_manager.init_index(cid, path, target_version);
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   return r;
 }
 
@@ -191,7 +201,7 @@ int FileStore::lfn_find(const ghobject_t& oid, const Index& index, IndexedPath *
   ceph_assert(index.index);
   r = (index.index)->lookup(oid, path, &exist);
   if (r < 0) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   if (!exist)
@@ -213,7 +223,7 @@ int FileStore::lfn_truncate(const coll_t& cid, const ghobject_t& oid, off_t leng
     ceph_assert(rc >= 0);
   }
   lfn_close(fd);
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   return r;
 }
 
@@ -343,7 +353,7 @@ int FileStore::lfn_open(const coll_t& cid,
     ((*index).index)->access_lock.put_write();
   }
 
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   return r;
 }
 
@@ -389,7 +399,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_old->lookup(o, &path_old, &exist);
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
     if (!exist)
@@ -399,7 +409,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_new->lookup(newoid, &path_new, &exist);
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
     if (exist)
@@ -413,7 +423,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_new->created(newoid, path_new->path());
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
   } else {
@@ -421,7 +431,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_old->lookup(o, &path_old, &exist);
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
     if (!exist)
@@ -429,7 +439,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_new->lookup(newoid, &path_new, &exist);
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
     if (exist)
@@ -446,7 +456,7 @@ int FileStore::lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t&
 
     r = index_new->created(newoid, path_new->path());
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
   }
@@ -472,7 +482,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
     int hardlink;
     r = index->lookup(o, &path, &hardlink);
     if (r < 0) {
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       return r;
     }
 
@@ -487,7 +497,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT) {
 	dout(25) << __FUNC__ << ": omap clear failed " << cpp_strerror(r) << dendl;
-	ceph_assert(!m_filestore_fail_eio || r != -EIO);
+	if (r == -EIO && m_filestore_fail_eio) handle_eio();
 	return r;
       }
       if (cct->_conf->filestore_debug_inject_read_err) {
@@ -702,6 +712,7 @@ void FileStore::collect_metadata(map<string,string> *pm)
       (*pm)["backend_filestore_dev_node"] = "unknown";
     } else {
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
+      devname = dev_node;
     }
     if (rc == 0 && vdo_fd >= 0) {
       (*pm)["vdo"] = "true";
@@ -737,7 +748,7 @@ int FileStore::statfs(struct store_statfs_t *buf0, osd_alert_list_t* alerts)
   }
   if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     ceph_assert(r != -ENOENT);
     return r;
   }
@@ -1485,7 +1496,7 @@ int FileStore::read_op_seq(uint64_t *seq)
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (op_fd < 0) {
     int r = -errno;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   char s[40];
@@ -2536,7 +2547,7 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
   int r = chain_fgetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
     dout(20) << __FUNC__ << ": no xattr" << dendl;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 1;  // no xattr
   }
@@ -2721,7 +2732,7 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   int r = chain_fgetxattr(fd, REPLAY_GUARD_XATTR, buf, sizeof(buf));
   if (r < 0) {
     dout(20) << __FUNC__ << ": no xattr" << dendl;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return 1;  // no xattr
   }
   bufferlist bl;
@@ -3619,7 +3630,7 @@ int FileStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
 done:
 
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << destmap.size() << " " << destmap << dendl;
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   tracepoint(objectstore, fiemap_exit, r);
   return r;
 }
@@ -3860,7 +3871,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
   lfn_close(o);
  out2:
   dout(10) << __FUNC__ << ": " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   return r;
 }
 
@@ -4600,7 +4611,7 @@ int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *
   }
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   if (cct->_conf->filestore_debug_inject_read_err &&
       debug_mdata_eio(oid)) {
     return -EIO;
@@ -4677,7 +4688,7 @@ int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,
   }
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
 
   if (cct->_conf->filestore_debug_inject_read_err &&
       debug_mdata_eio(oid)) {
@@ -4713,7 +4724,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
 
   r = _fgetattrs(**fd, inline_set);
   incomplete_inline = (r == -E2BIG);
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   dout(15) << __FUNC__ << ": " << cid << "/" << oid
 	   << (incomplete_inline ? " (incomplete_inline, forcing omap)" : "")
 	   << dendl;
@@ -4765,7 +4776,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __FUNC__ << ": could not remove_xattrs r = " << r << dendl;
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       goto out_close;
     } else {
       r = 0; // don't confuse the debug output
@@ -4776,7 +4787,7 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
       dout(10) << __FUNC__ << ": could not set_xattrs r = " << r << dendl;
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       goto out_close;
     }
   }
@@ -4821,7 +4832,7 @@ int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *nam
     r = object_map->remove_xattrs(oid, to_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __FUNC__ << ": could not remove_xattrs index r = " << r << dendl;
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       goto out_close;
     }
   }
@@ -4881,7 +4892,7 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
     r = object_map->get_all_xattrs(oid, &omap_attrs);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __FUNC__ << ": could not get omap_attrs r = " << r << dendl;
-      ceph_assert(!m_filestore_fail_eio || r != -EIO);
+      if (r == -EIO && m_filestore_fail_eio) handle_eio();
       goto out_close;
     }
     r = object_map->remove_xattrs(oid, omap_attrs, &spos);
@@ -4957,7 +4968,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   if (!dir) {
     r = -errno;
     derr << "tried opening directory " << fn << ": " << cpp_strerror(-r) << dendl;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
 
@@ -4977,7 +4988,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       if (r < 0) {
 	r = -errno;
 	derr << "stat on " << filename << ": " << cpp_strerror(-r) << dendl;
-	ceph_assert(!m_filestore_fail_eio || r != -EIO);
+	if (r == -EIO && m_filestore_fail_eio) handle_eio();
 	break;
       }
       if (!S_ISDIR(sb.st_mode)) {
@@ -5009,7 +5020,7 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
   }
 
   ::closedir(dir);
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   tracepoint(objectstore, list_collections_exit, r);
   return r;
 }
@@ -5024,7 +5035,7 @@ int FileStore::collection_stat(const coll_t& c, struct stat *st)
   if (r < 0)
     r = -errno;
   dout(10) << __FUNC__ << ": " << fn << " = " << r << dendl;
-  ceph_assert(!m_filestore_fail_eio || r != -EIO);
+  if (r == -EIO && m_filestore_fail_eio) handle_eio();
   tracepoint(objectstore, collection_stat_exit, r);
   return r;
 }
@@ -5059,7 +5070,7 @@ int FileStore::collection_empty(const coll_t& cid, bool *empty)
   if (r < 0) {
     derr << __FUNC__ << ": collection_list_partial returned: "
          << cpp_strerror(r) << dendl;
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   *empty = ls.empty();
@@ -5181,7 +5192,7 @@ int FileStore::collection_list(const coll_t& c,
   r = index->collection_list_partial(start, end, max, ls, next);
 
   if (r < 0) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   dout(20) << "objects: " << *ls << dendl;
@@ -5220,7 +5231,7 @@ int FileStore::omap_get(CollectionHandle& ch, const ghobject_t &hoid,
   }
   r = object_map->get(hoid, header, out);
   if (r < 0 && r != -ENOENT) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   tracepoint(objectstore, omap_get_exit, 0);
@@ -5282,7 +5293,7 @@ int FileStore::omap_get_keys(CollectionHandle& ch, const ghobject_t &hoid, set<s
   }
   r = object_map->get_keys(hoid, keys);
   if (r < 0 && r != -ENOENT) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   tracepoint(objectstore, omap_get_keys_exit, 0);
@@ -5318,7 +5329,7 @@ int FileStore::omap_get_values(CollectionHandle& ch, const ghobject_t &hoid,
   }
   r = object_map->get_values(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     where = " (get_values)";
     goto out;
   }
@@ -5354,7 +5365,7 @@ int FileStore::omap_check_keys(CollectionHandle& ch, const ghobject_t &hoid,
   }
   r = object_map->check_keys(hoid, keys, out);
   if (r < 0 && r != -ENOENT) {
-    ceph_assert(!m_filestore_fail_eio || r != -EIO);
+    if (r == -EIO && m_filestore_fail_eio) handle_eio();
     return r;
   }
   tracepoint(objectstore, omap_check_keys_exit, 0);
