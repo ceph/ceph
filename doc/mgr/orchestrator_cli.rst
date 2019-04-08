@@ -249,7 +249,7 @@ This is an overview of the current implementation status of the orchestrators.
  host ls                             ⚪         ⚪       ⚪         ✔️
  host rm                             ⚪         ⚪       ⚪         ✔️
  mgr update                          ⚪         ⚪       ⚪         ✔️
- mon update                          ⚪         ⚪       ⚪         ✔️
+ mon update                          ⚪         ✔️       ⚪         ✔️
  osd create                          ✔️         ✔️       ⚪         ✔️
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔️         ⚪       ⚪         ⚪
