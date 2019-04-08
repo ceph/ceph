@@ -1561,6 +1561,18 @@ public:
     bool preserve_local_num_bytes,
     ObjectStore::Transaction &t);
 
+  void update_complete_backfill_object_stats(
+    const hobject_t &hoid,
+    const pg_stat_t &stats);
+
+  void update_peer_last_backfill(
+    pg_shard_t peer,
+    const hobject_t &new_last_backfill);
+
+  void apply_op_stats(
+    const hobject_t &soid,
+    const object_stat_sum_t &delta_stats);
+
   void force_object_missing(
     pg_shard_t peer,
     const hobject_t &oid,
@@ -1801,6 +1813,13 @@ public:
       assert(peer_missing.count(peer));
       return peer_missing.find(peer)->second;
     }
+  }
+  const pg_info_t&get_peer_info(pg_shard_t peer) const {
+    assert(peer_info.count(peer));
+    return peer_info.find(peer)->second;
+  }
+  bool has_peer_info(pg_shard_t peer) const {
+    return peer_info.count(peer);
   }
 
   bool needs_recovery() const;

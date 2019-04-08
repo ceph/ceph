@@ -529,18 +529,19 @@ bool PrimaryLogPG::should_send_op(
   const hobject_t &hoid) {
   if (peer == get_primary())
     return true;
-  ceph_assert(peer_info.count(peer));
+  ceph_assert(recovery_state.has_peer_info(peer));
   bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= last_backfill_started ||
-      hoid <= peer_info[peer].last_backfill;
+      hoid <= recovery_state.get_peer_info(peer).last_backfill;
   if (!should_send) {
     ceph_assert(is_backfill_target(peer));
     dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " beyond std::max(last_backfill_started "
              << ", peer_info[peer].last_backfill "
-             << peer_info[peer].last_backfill << ")" << dendl;
+             << recovery_state.get_peer_info(peer).last_backfill
+	     << ")" << dendl;
     return should_send;
   }
   if (is_async_recovery_target(peer) &&
@@ -639,7 +640,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     // Object is degraded if after last_backfill AND
     // we are backfilling it
     if (is_backfill_target(peer) &&
-	peer_info[peer].last_backfill <= soid &&
+        recovery_state.get_peer_info(peer).last_backfill <= soid &&
 	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
       return true;
@@ -1758,10 +1759,9 @@ hobject_t PrimaryLogPG::earliest_backfill() const
        i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
-    map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(bt);
-    ceph_assert(iter != peer_info.end());
-    if (iter->second.last_backfill < e)
-      e = iter->second.last_backfill;
+    const pg_info_t &pi = recovery_state.get_peer_info(bt);
+    if (pi.last_backfill < e)
+      e = pi.last_backfill;
   }
   return e;
 }
@@ -8421,18 +8421,15 @@ void PrimaryLogPG::apply_stats(
   const hobject_t &soid,
   const object_stat_sum_t &delta_stats) {
 
-  info.stats.stats.add(delta_stats);
-  info.stats.stats.floor(0);
-
+  recovery_state.apply_op_stats(soid, delta_stats);
   for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
        i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
-    pg_info_t& pinfo = peer_info[bt];
-    if (soid <= pinfo.last_backfill)
-      pinfo.stats.stats.add(delta_stats);
-    else if (soid <= last_backfill_started)
+    const pg_info_t& pinfo = recovery_state.get_peer_info(bt);
+    if (soid > pinfo.last_backfill && soid <= last_backfill_started) {
       pending_backfill_updates[soid].stats.add(delta_stats);
+    }
   }
 
   if (is_primary() && scrubber.active) {
@@ -10499,7 +10496,7 @@ void PrimaryLogPG::submit_log_entries(
 	pg_shard_t peer(*i);
 	if (peer == pg_whoami) continue;
 	ceph_assert(recovery_state.get_peer_missing().count(peer));
-	ceph_assert(peer_info.count(peer));
+	ceph_assert(recovery_state.has_peer_info(peer));
 	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
 	  ceph_assert(repop);
 	  MOSDPGUpdateLogMissing *m = new MOSDPGUpdateLogMissing(
@@ -11920,7 +11917,7 @@ void PrimaryLogPG::on_activate_complete()
 	 i != get_backfill_targets().end();
 	 ++i) {
       dout(5) << "target shard " << *i
-	     << " from " << peer_info[*i].last_backfill
+	     << " from " << recovery_state.get_peer_info(*i).last_backfill
 	     << dendl;
     }
   }
@@ -12614,8 +12611,6 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     ceph_assert(peer != get_primary());
     auto pm = recovery_state.get_peer_missing().find(peer);
     ceph_assert(pm != recovery_state.get_peer_missing().end());
-    map<pg_shard_t, pg_info_t>::const_iterator pi = peer_info.find(peer);
-    ceph_assert(pi != peer_info.end());
     size_t m_sz = pm->second.num_missing();
 
     dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
@@ -12634,9 +12629,11 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 	continue;
       }
 
-      if (soid > pi->second.last_backfill) {
+      const pg_info_t &pi = recovery_state.get_peer_info(peer);
+      if (soid > pi.last_backfill) {
 	if (!recovering.count(soid)) {
-          derr << __func__ << ": object " << soid << " last_backfill " << pi->second.last_backfill << dendl;
+          derr << __func__ << ": object " << soid << " last_backfill "
+	       << pi.last_backfill << dendl;
 	  derr << __func__ << ": object added to missing set for backfill, but "
 	       << "is not in recovering, error!" << dendl;
 	  ceph_abort();
@@ -12762,7 +12759,8 @@ uint64_t PrimaryLogPG::recover_backfill(
     for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
 	 i != get_backfill_targets().end();
 	 ++i) {
-      peer_backfill_info[*i].reset(peer_info[*i].last_backfill);
+      peer_backfill_info[*i].reset(
+	recovery_state.get_peer_info(*i).last_backfill);
     }
     backfill_info.reset(last_backfill_started);
 
@@ -12774,7 +12772,7 @@ uint64_t PrimaryLogPG::recover_backfill(
        i != get_backfill_targets().end();
        ++i) {
     dout(10) << "peer osd." << *i
-	   << " info " << peer_info[*i]
+	   << " info " << recovery_state.get_peer_info(*i)
 	   << " interval " << peer_backfill_info[*i].begin
 	   << "-" << peer_backfill_info[*i].end
 	   << " " << peer_backfill_info[*i].objects.size() << " objects"
@@ -12793,7 +12791,9 @@ uint64_t PrimaryLogPG::recover_backfill(
        i != get_backfill_targets().end();
        ++i) {
     peer_backfill_info[*i].trim_to(
-      std::max(peer_info[*i].last_backfill, last_backfill_started));
+      std::max(
+	recovery_state.get_peer_info(*i).last_backfill,
+	last_backfill_started));
   }
   backfill_info.trim_to(last_backfill_started);
 
@@ -12898,7 +12898,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 	    keep_ver_targs.push_back(bt);
 	  }
         } else {
-	  pg_info_t& pinfo = peer_info[bt];
+	  const pg_info_t& pinfo = recovery_state.get_peer_info(bt);
 
           // Only include peers that we've caught up to their backfill line
 	  // otherwise, they only appear to be missing this object
@@ -13027,15 +13027,9 @@ uint64_t PrimaryLogPG::recover_backfill(
        pending_backfill_updates.erase(i++)) {
     dout(20) << " pending_backfill_update " << i->first << dendl;
     ceph_assert(i->first > new_last_backfill);
-    for (set<pg_shard_t>::const_iterator j = get_backfill_targets().begin();
-	 j != get_backfill_targets().end();
-	 ++j) {
-      pg_shard_t bt = *j;
-      pg_info_t& pinfo = peer_info[bt];
-      //Add stats to all peers that were missing object
-      if (i->first > pinfo.last_backfill)
-        pinfo.stats.add(i->second);
-    }
+    recovery_state.update_complete_backfill_object_stats(
+      i->first,
+      i->second);
     new_last_backfill = i->first;
   }
   dout(10) << "possible new_last_backfill at " << new_last_backfill << dendl;
@@ -13057,10 +13051,10 @@ uint64_t PrimaryLogPG::recover_backfill(
        i != get_backfill_targets().end();
        ++i) {
     pg_shard_t bt = *i;
-    pg_info_t& pinfo = peer_info[bt];
+    const pg_info_t& pinfo = recovery_state.get_peer_info(bt);
 
     if (new_last_backfill > pinfo.last_backfill) {
-      pinfo.set_last_backfill(new_last_backfill);
+      recovery_state.update_peer_last_backfill(bt, new_last_backfill);
       epoch_t e = get_osdmap_epoch();
       MOSDPGBackfill *m = NULL;
       if (pinfo.last_backfill.is_max()) {
@@ -13070,10 +13064,6 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  get_last_peering_reset(),
 	  spg_t(info.pgid.pgid, bt.shard));
         // Use default priority here, must match sub_op priority
-        /* pinfo.stats might be wrong if we did log-based recovery on the
-         * backfilled portion in addition to continuing backfill.
-         */
-        pinfo.stats = info.stats;
         start_recovery_op(hobject_t::get_max());
       } else {
         m = new MOSDPGBackfill(
@@ -13493,8 +13483,7 @@ void PrimaryLogPG::hit_set_persist()
   for (set<pg_shard_t>::const_iterator p = get_backfill_targets().begin();
        p != get_backfill_targets().end();
        ++p) {
-    ceph_assert(peer_info.count(*p));
-    const pg_info_t& pi = peer_info[*p];
+    const pg_info_t& pi = recovery_state.get_peer_info(*p);
     if (pi.last_backfill == hobject_t() ||
 	pi.last_backfill.get_hash() == info.pgid.ps()) {
       dout(10) << __func__ << " backfill target osd." << *p
