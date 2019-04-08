@@ -307,7 +307,7 @@ def task(ctx, config):
 
     log.debug('s3tests config is %s', config)
 
-    s3tests_conf = {}
+    scheduler_conf = {}
     for client in clients:
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
