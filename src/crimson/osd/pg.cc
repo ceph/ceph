@@ -924,7 +924,7 @@ seastar::future<> PG::send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch)
   if (osdmap->is_down(peer) || osdmap->get_info(peer).up_from > from_epoch) {
     return seastar::now();
   } else {
-    return msgr.connect(osdmap->get_cluster_addrs(peer).legacy_addr(),
+    return msgr.connect(osdmap->get_cluster_addrs(peer).front(),
                         CEPH_ENTITY_TYPE_OSD)
      .then([m, this] (auto xconn) {
        return (*xconn)->send(m);
