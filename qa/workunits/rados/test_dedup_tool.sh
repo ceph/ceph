@@ -33,12 +33,12 @@ if [ -n "$CEPH_BIN" ] ; then
    # CMake env
    RADOS_TOOL="$CEPH_BIN/rados"
    CEPH_TOOL="$CEPH_BIN/ceph"
-   DEDUP_TOOL="$CEPH_BIN/cephdeduptool"
+   DEDUP_TOOL="$CEPH_BIN/ceph-dedup-tool"
 else
    # executables should be installed by the QA env 
    RADOS_TOOL=$(which rados)
    CEPH_TOOL=$(which ceph)
-   DEDUP_TOOL=$(which cephdeduptool)
+   DEDUP_TOOL=$(which ceph-dedup-tool)
 fi
 
 POOL=dedup_pool
