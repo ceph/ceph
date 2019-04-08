@@ -163,6 +163,9 @@ public:
     virtual epoch_t oldest_stored_osdmap() = 0;
     virtual LogChannel &get_clog() = 0;
 
+    // On disk representation changes
+    virtual void rebuild_missing_set_with_deletes(PGLog &pglog) = 0;
+
     // Logging
     virtual PerfCounters &get_peering_perf() = 0;
     virtual PerfCounters &get_perf_logger() = 0;
@@ -1518,6 +1521,10 @@ public:
     bool transaction_applied,
     bool async);
 
+  void add_local_next_event(const pg_log_entry_t& e) {
+    pg_log.missing_add_next_entry(e);
+  }
+
   void update_trim_to() {
     bool hard_limit = (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
     if (hard_limit)
@@ -1544,6 +1551,11 @@ public:
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t soid);
+
+  void object_recovered(
+    const hobject_t &hoid) {
+    missing_loc.recovered(hoid);
+  }
 
   void update_backfill_progress(
     const hobject_t &updated_backfill,
@@ -1580,6 +1592,10 @@ public:
   }
 
   void recovery_committed_to(eversion_t version);
+
+  void set_last_requested(version_t v) {
+    pg_log.set_last_requested(v);
+  }
 
   void complete_write(eversion_t v, eversion_t lc);
   void local_write_applied(eversion_t v) {

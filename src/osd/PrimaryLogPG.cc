@@ -372,10 +372,10 @@ void PrimaryLogPG::on_local_recover(
       derr << __func__ << " " << hoid << " had no clone_snaps" << dendl;
     }
   }
-  if (!is_delete && pg_log.get_missing().is_missing(recovery_info.soid) &&
-      pg_log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
+  if (!is_delete && recovery_state.get_pg_log().get_missing().is_missing(recovery_info.soid) &&
+      recovery_state.get_pg_log().get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
     ceph_assert(is_primary());
-    const pg_log_entry_t *latest = pg_log.get_log().objects.find(recovery_info.soid)->second;
+    const pg_log_entry_t *latest = recovery_state.get_pg_log().get_log().objects.find(recovery_info.soid)->second;
     if (latest->op == pg_log_entry_t::LOST_REVERT &&
 	latest->reverting_to == recovery_info.version) {
       dout(10) << " got old revert version " << recovery_info.version
@@ -446,7 +446,7 @@ void PrimaryLogPG::on_global_recover(
   bool is_delete)
 {
   info.stats.stats.sum.add(stat_diff);
-  missing_loc.recovered(soid);
+  recovery_state.object_recovered(soid);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
   map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
@@ -562,7 +562,7 @@ PerfCounters *PrimaryLogPG::get_logger()
 
 bool PrimaryLogPG::is_missing_object(const hobject_t& soid) const
 {
-  return pg_log.get_missing().get_items().count(soid);
+  return recovery_state.get_pg_log().get_missing().get_items().count(soid);
 }
 
 void PrimaryLogPG::maybe_kick_recovery(
@@ -570,20 +570,20 @@ void PrimaryLogPG::maybe_kick_recovery(
 {
   eversion_t v;
   bool work_started = false;
-  if (!missing_loc.needs_recovery(soid, &v))
+  if (!recovery_state.get_missing_loc().needs_recovery(soid, &v))
     return;
 
   map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
     dout(7) << "object " << soid << " v " << v << ", already recovering." << dendl;
-  } else if (missing_loc.is_unfound(soid)) {
+  } else if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << "object " << soid << " v " << v << ", is unfound." << dendl;
   } else {
     dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     if (is_missing_object(soid)) {
       recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
-    } else if (missing_loc.is_deleted(soid)) {
+    } else if (recovery_state.get_missing_loc().is_deleted(soid)) {
       prep_object_replica_deletes(soid, v, h, &work_started);
     } else {
       prep_object_replica_pushes(soid, v, h, &work_started);
@@ -609,7 +609,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
    */
   if (waiting_for_degraded_object.count(soid))
     return true;
-  if (pg_log.get_missing().get_items().count(soid))
+  if (recovery_state.get_pg_log().get_missing().get_items().count(soid))
     return true;
   ceph_assert(!get_acting_recovery_backfill().empty());
   for (set<pg_shard_t>::iterator i = get_acting_recovery_backfill().begin();
@@ -738,17 +738,17 @@ void PrimaryLogPG::maybe_force_recovery()
 		  PG_STATE_BACKFILL_TOOFULL))
     return;
 
-  if (pg_log.get_log().approx_size() <
+  if (recovery_state.get_pg_log().get_log().approx_size() <
       cct->_conf->osd_max_pg_log_entries *
         cct->_conf->osd_force_recovery_pg_log_entries_factor)
     return;
 
   // find the oldest missing object
-  version_t min_version = pg_log.get_log().head.version;
+  version_t min_version = recovery_state.get_pg_log().get_log().head.version;
   hobject_t soid;
-  if (!pg_log.get_missing().get_rmissing().empty()) {
-    min_version = pg_log.get_missing().get_rmissing().begin()->first;
-    soid = pg_log.get_missing().get_rmissing().begin()->second;
+  if (!recovery_state.get_pg_log().get_missing().get_rmissing().empty()) {
+    min_version = recovery_state.get_pg_log().get_missing().get_rmissing().begin()->first;
+    soid = recovery_state.get_pg_log().get_missing().get_rmissing().begin()->second;
   }
   ceph_assert(!get_acting_recovery_backfill().empty());
   for (set<pg_shard_t>::iterator it = get_acting_recovery_backfill().begin();
@@ -1000,7 +1000,7 @@ int PrimaryLogPG::do_command(
       return -EROFS;
     }
 
-    uint64_t unfound = missing_loc.num_unfound();
+    uint64_t unfound = recovery_state.get_missing_loc().num_unfound();
     if (!unfound) {
       ss << "pg has no unfound objects";
       return 0;  // make command idempotent
@@ -1037,7 +1037,8 @@ int PrimaryLogPG::do_command(
       offset.dump(f.get());
       f->close_section();
     }
-    auto &needs_recovery_map = missing_loc.get_needs_recovery();
+    auto &needs_recovery_map = recovery_state.get_missing_loc()
+      .get_needs_recovery();
     f->dump_int("num_missing", needs_recovery_map.size());
     f->dump_int("num_unfound", get_num_unfound());
     map<hobject_t, pg_missing_item>::const_iterator p =
@@ -1045,8 +1046,10 @@ int PrimaryLogPG::do_command(
     {
       f->open_array_section("objects");
       int32_t num = 0;
-      for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
-        if (missing_loc.is_unfound(p->first)) {
+      for (; p != needs_recovery_map.end() &&
+	     num < cct->_conf->osd_command_max_records;
+	   ++p) {
+        if (recovery_state.get_missing_loc().is_unfound(p->first)) {
 	  f->open_object_section("object");
 	  {
 	    f->open_object_section("oid");
@@ -1056,11 +1059,10 @@ int PrimaryLogPG::do_command(
           p->second.dump(f.get()); // have, need keys
 	  {
 	    f->open_array_section("locations");
-            for (set<pg_shard_t>::iterator r =
-                missing_loc.get_locations(p->first).begin();
-                r != missing_loc.get_locations(p->first).end();
-                ++r)
-              f->dump_stream("shard") << *r;
+            for (auto &&r : recovery_state.get_missing_loc().get_locations(
+		   p->first)) {
+              f->dump_stream("shard") << r;
+	    }
 	    f->close_section();
 	  }
 	  f->close_section();
@@ -1182,12 +1184,12 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	}
 
 	map<hobject_t, pg_missing_item>::const_iterator missing_iter =
-	  pg_log.get_missing().get_items().lower_bound(current);
+	  recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
 	while (1) {
 	  const hobject_t &mcand =
-	    missing_iter == pg_log.get_missing().get_items().end() ?
+	    missing_iter == recovery_state.get_pg_log().get_missing().get_items().end() ?
 	    _max :
 	    missing_iter->first;
 	  const hobject_t &lcand =
@@ -1232,7 +1234,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
 	    continue;
 
-	  if (missing_loc.is_deleted(candidate))
+	  if (recovery_state.get_missing_loc().is_deleted(candidate))
 	    continue;
 
 	  // skip wrong namespace
@@ -1257,7 +1259,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	}
 
 	if (next.is_max() &&
-	    missing_iter == pg_log.get_missing().get_items().end() &&
+	    missing_iter == recovery_state.get_pg_log().get_missing().get_items().end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
 
@@ -1338,15 +1340,15 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  break;
 	}
 
-	ceph_assert(snapid == CEPH_NOSNAP || pg_log.get_missing().get_items().empty());
+	ceph_assert(snapid == CEPH_NOSNAP || recovery_state.get_pg_log().get_missing().get_items().empty());
 
 	map<hobject_t, pg_missing_item>::const_iterator missing_iter =
-	  pg_log.get_missing().get_items().lower_bound(current);
+	  recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
 	while (1) {
 	  const hobject_t &mcand =
-	    missing_iter == pg_log.get_missing().get_items().end() ?
+	    missing_iter == recovery_state.get_pg_log().get_missing().get_items().end() ?
 	    _max :
 	    missing_iter->first;
 	  const hobject_t &lcand =
@@ -1387,7 +1389,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
-	  if (missing_loc.is_deleted(candidate))
+	  if (recovery_state.get_missing_loc().is_deleted(candidate))
 	    continue;
 
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
@@ -1397,7 +1399,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 					       candidate.get_key()));
 	}
 	if (next.is_max() &&
-	    missing_iter == pg_log.get_missing().get_items().end() &&
+	    missing_iter == recovery_state.get_pg_log().get_missing().get_items().end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
 	}
@@ -1951,7 +1953,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
     if (can_backoff &&
 	(g_conf()->osd_backoff_on_degraded ||
-	 (g_conf()->osd_backoff_on_unfound && missing_loc.is_unfound(head)))) {
+	 (g_conf()->osd_backoff_on_unfound &&
+	  recovery_state.get_missing_loc().is_unfound(head)))) {
       add_backoff(session, head, head);
       maybe_kick_recovery(head);
     } else {
@@ -8690,7 +8693,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
   if (cursor.is_complete()) {
     // include reqids only in the final step.  this is a bit fragile
     // but it works...
-    pg_log.get_log().get_object_reqids(ctx->obc->obs.oi.soid, 10,
+    recovery_state.get_pg_log().get_log().get_object_reqids(ctx->obc->obs.oi.soid, 10,
                                        &reply_obj.reqids,
                                        &reply_obj.reqid_return_codes);
     dout(20) << " got reqids" << dendl;
@@ -8728,7 +8731,7 @@ void PrimaryLogPG::fill_in_copy_get_noent(OpRequestRef& op, hobject_t oid,
   uint64_t features = m->get_features();
   object_copy_data_t reply_obj;
 
-  pg_log.get_log().get_object_reqids(oid, 10, &reply_obj.reqids,
+  recovery_state.get_pg_log().get_log().get_object_reqids(oid, 10, &reply_obj.reqids,
                                      &reply_obj.reqid_return_codes);
   dout(20) << __func__ << " got reqids " << reply_obj.reqids << dendl;
   encode(reply_obj, osd_op.outdata, features);
@@ -9768,7 +9771,7 @@ int PrimaryLogPG::start_flush(
       hobject_t next = soid;
       next.snap = *p;
       ceph_assert(next.snap < soid.snap);
-      if (pg_log.get_missing().is_missing(next)) {
+      if (recovery_state.get_pg_log().get_missing().is_missing(next)) {
 	dout(10) << __func__ << " missing clone is " << next << dendl;
 	if (pmissing)
 	  *pmissing = next;
@@ -10628,10 +10631,10 @@ void PrimaryLogPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 {
   ceph_assert(is_active());
-  auto it_objects = pg_log.get_log().objects.find(obc->obs.oi.soid);
+  auto it_objects = recovery_state.get_pg_log().get_log().objects.find(obc->obs.oi.soid);
   ceph_assert((recovering.count(obc->obs.oi.soid) ||
 	  !is_missing_object(obc->obs.oi.soid)) ||
-	 (it_objects != pg_log.get_log().objects.end() && // or this is a revert... see recover_primary()
+	 (it_objects != recovery_state.get_pg_log().get_log().objects.end() && // or this is a revert... see recover_primary()
 	  it_objects->second->op ==
 	    pg_log_entry_t::LOST_REVERT &&
 	  it_objects->second->reverting_to ==
@@ -10752,11 +10755,11 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   bool can_create,
   const map<string, bufferlist> *attrs)
 {
-  auto it_objects = pg_log.get_log().objects.find(soid);
+  auto it_objects = recovery_state.get_pg_log().get_log().objects.find(soid);
   ceph_assert(
-    attrs || !pg_log.get_missing().is_missing(soid) ||
+    attrs || !recovery_state.get_pg_log().get_missing().is_missing(soid) ||
     // or this is a revert... see recover_primary()
-    (it_objects != pg_log.get_log().objects.end() &&
+    (it_objects != recovery_state.get_pg_log().get_log().objects.end() &&
       it_objects->second->op ==
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
@@ -10954,7 +10957,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
 	       << " snapset " << ssc->snapset
 	       << " maps to " << oid << dendl;
 
-      if (pg_log.get_missing().is_missing(oid)) {
+      if (recovery_state.get_pg_log().get_missing().is_missing(oid)) {
 	dout(10) << __func__ << " " << oid << " @" << oid.snap
 		 << " snapset " << ssc->snapset
 		 << " " << oid << " is missing" << dendl;
@@ -11018,7 +11021,7 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   hobject_t soid(oid.oid, oid.get_key(), ssc->snapset.clones[k], oid.get_hash(),
 		 info.pgid.pool(), oid.get_namespace());
 
-  if (pg_log.get_missing().is_missing(soid)) {
+  if (recovery_state.get_pg_log().get_missing().is_missing(soid)) {
     dout(20) << __func__ << " " << soid << " missing, try again later"
 	     << dendl;
     if (pmissing)
@@ -11222,14 +11225,14 @@ int PrimaryLogPG::recover_missing(
   int priority,
   PGBackend::RecoveryHandle *h)
 {
-  if (missing_loc.is_unfound(soid)) {
+  if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << __func__ << " " << soid
 	    << " v " << v 
 	    << " but it is unfound" << dendl;
     return PULL_NONE;
   }
 
-  if (missing_loc.is_deleted(soid)) {
+  if (recovery_state.get_missing_loc().is_deleted(soid)) {
     start_recovery_op(soid);
     ceph_assert(!recovering.count(soid));
     recovering.insert(make_pair(soid, ObjectContextRef()));
@@ -11271,13 +11274,13 @@ int PrimaryLogPG::recover_missing(
   if (soid.snap && soid.snap < CEPH_NOSNAP) {
     // do we have the head?
     hobject_t head = soid.get_head();
-    if (pg_log.get_missing().is_missing(head)) {
+    if (recovery_state.get_pg_log().get_missing().is_missing(head)) {
       if (recovering.count(head)) {
 	dout(10) << " missing but already recovering head " << head << dendl;
 	return PULL_NONE;
       } else {
 	int r = recover_missing(
-	  head, pg_log.get_missing().get_items().find(head)->second.need, priority,
+	  head, recovery_state.get_pg_log().get_missing().get_items().find(head)->second.need, priority,
 	  h);
 	if (r != PULL_NONE)
 	  return PULL_HEAD;
@@ -11450,7 +11453,7 @@ eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
 {
   eversion_t v;
   pg_missing_item pmi;
-  bool is_missing = pg_log.get_missing().is_missing(oid, &pmi);
+  bool is_missing = recovery_state.get_pg_log().get_missing().is_missing(oid, &pmi);
   ceph_assert(is_missing);
   v = pmi.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
@@ -11579,24 +11582,24 @@ void PrimaryLogPG::mark_all_unfound_lost(
   list<hobject_t> oids;
 
   dout(30) << __func__ << ": log before:\n";
-  pg_log.get_log().print(*_dout);
+  recovery_state.get_pg_log().get_log().print(*_dout);
   *_dout << dendl;
 
   mempool::osd_pglog::list<pg_log_entry_t> log_entries;
 
   utime_t mtime = ceph_clock_now();
   map<hobject_t, pg_missing_item>::const_iterator m =
-    missing_loc.get_needs_recovery().begin();
+    recovery_state.get_missing_loc().get_needs_recovery().begin();
   map<hobject_t, pg_missing_item>::const_iterator mend =
-    missing_loc.get_needs_recovery().end();
+    recovery_state.get_missing_loc().get_needs_recovery().end();
 
   ObcLockManager manager;
   eversion_t v = get_next_version();
   v.epoch = get_osdmap_epoch();
-  uint64_t num_unfound = missing_loc.num_unfound();
+  uint64_t num_unfound = recovery_state.get_missing_loc().num_unfound();
   while (m != mend) {
     const hobject_t &oid(m->first);
-    if (!missing_loc.is_unfound(oid)) {
+    if (!recovery_state.get_missing_loc().is_unfound(oid)) {
       // We only care about unfound objects
       ++m;
       continue;
@@ -11672,7 +11675,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	    // clear old locations - merge_new_log_entries will have
 	    // handled rebuilding missing_loc for each of these
 	    // objects if we have the RECOVERY_DELETES flag
-	    missing_loc.recovered(oid);
+	    recovery_state.object_recovered(oid);
 	  }
 	}
 
@@ -11918,17 +11921,6 @@ void PrimaryLogPG::on_activate_complete()
   agent_setup();
 }
 
-void PrimaryLogPG::plpg_on_new_interval()
-{
-  dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
-
-  if (!pg_log.get_missing().may_include_deletes &&
-      get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
-    pg_log.rebuild_missing_set_with_deletes(osd->store, ch, info);
-  }
-  ceph_assert(pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
-}
-
 void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
@@ -12070,7 +12062,6 @@ void PrimaryLogPG::plpg_on_pool_change()
 // clear state.  called on recovery completion AND cancellation.
 void PrimaryLogPG::_clear_recovery_state()
 {
-  missing_loc.clear();
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
@@ -12120,7 +12111,7 @@ void PrimaryLogPG::cancel_pull(const hobject_t &soid)
     waiting_for_unreadable_object.erase(soid);
   }
   if (is_missing_object(soid))
-    pg_log.set_last_requested(0); // get recover_primary to start over
+    recovery_state.set_last_requested(0);
   finish_degraded_object(soid);
 }
 
@@ -12153,7 +12144,7 @@ bool PrimaryLogPG::start_recovery_ops(
     return have_unfound();
   }
 
-  const auto &missing = pg_log.get_missing();
+  const auto &missing = recovery_state.get_pg_log().get_missing();
 
   uint64_t num_unfound = get_num_unfound();
 
@@ -12221,10 +12212,10 @@ bool PrimaryLogPG::start_recovery_ops(
   ceph_assert(recovery_ops_active == 0);
 
   dout(10) << __func__ << " needs_recovery: "
-	   << missing_loc.get_needs_recovery()
+	   << recovery_state.get_missing_loc().get_needs_recovery()
 	   << dendl;
   dout(10) << __func__ << " missing_loc: "
-	   << missing_loc.get_missing_locs()
+	   << recovery_state.get_missing_loc().get_missing_locs()
 	   << dendl;
   int unfound = get_num_unfound();
   if (unfound) {
@@ -12294,7 +12285,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 {
   ceph_assert(is_primary());
 
-  const auto &missing = pg_log.get_missing();
+  const auto &missing = recovery_state.get_pg_log().get_missing();
 
   dout(10) << __func__ << " recovering " << recovering.size()
            << " in pg,"
@@ -12309,14 +12300,14 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   map<version_t, hobject_t>::const_iterator p =
-    missing.get_rmissing().lower_bound(pg_log.get_log().last_requested);
+    missing.get_rmissing().lower_bound(recovery_state.get_pg_log().get_log().last_requested);
   while (p != missing.get_rmissing().end()) {
     handle.reset_tp_timeout();
     hobject_t soid;
     version_t v = p->first;
 
-    auto it_objects = pg_log.get_log().objects.find(p->second);
-    if (it_objects != pg_log.get_log().objects.end()) {
+    auto it_objects = recovery_state.get_pg_log().get_log().objects.find(p->second);
+    if (it_objects != recovery_state.get_pg_log().get_log().objects.end()) {
       latest = it_objects->second;
       ceph_assert(latest->is_update() || latest->is_delete());
       soid = latest->soid;
@@ -12441,7 +12432,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
     
     // only advance last_requested if we haven't skipped anything
     if (!skipped)
-      pg_log.set_last_requested(v);
+      recovery_state.set_last_requested(v);
   }
  
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
@@ -12472,7 +12463,8 @@ bool PrimaryLogPG::primary_error(
     osd->clog->error() << info.pgid << " missing primary copy of " << soid << ", unfound";
   else
     osd->clog->error() << info.pgid << " missing primary copy of " << soid
-			 << ", will try copies on " << missing_loc.get_locations(soid);
+		       << ", will try copies on "
+		       << recovery_state.get_missing_loc().get_locations(soid);
   return uhoh;
 }
 
@@ -12615,7 +12607,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
-      if (missing_loc.is_unfound(soid)) {
+      if (recovery_state.get_missing_loc().is_unfound(soid)) {
 	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
 	continue;
       }
@@ -12637,20 +12629,22 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
 	continue;
       }
 
-      if (missing_loc.is_deleted(soid)) {
+      if (recovery_state.get_missing_loc().is_deleted(soid)) {
 	dout(10) << __func__ << ": " << soid << " is a delete, removing" << dendl;
 	map<hobject_t,pg_missing_item>::const_iterator r = m.get_items().find(soid);
 	started += prep_object_replica_deletes(soid, r->second.need, h, work_started);
 	continue;
       }
 
-      if (soid.is_snap() && pg_log.get_missing().is_missing(soid.get_head())) {
+      if (soid.is_snap() &&
+	  recovery_state.get_pg_log().get_missing().is_missing(
+	    soid.get_head())) {
 	dout(10) << __func__ << ": " << soid.get_head()
 		 << " still missing on primary" << dendl;
 	continue;
       }
 
-      if (pg_log.get_missing().is_missing(soid)) {
+      if (recovery_state.get_pg_log().get_missing().is_missing(soid)) {
 	dout(10) << __func__ << ": " << soid << " still missing on primary" << dendl;
 	continue;
       }
@@ -13129,7 +13123,7 @@ void PrimaryLogPG::update_range(
     dout(10) << __func__<< ": bi is current " << dendl;
     ceph_assert(bi->version == projected_last_update);
   } else if (bi->version >= info.log_tail) {
-    if (pg_log.get_log().empty() && projected_log.empty()) {
+    if (recovery_state.get_pg_log().get_log().empty() && projected_log.empty()) {
       /* Because we don't move log_tail on split, the log might be
        * empty even if log_tail != last_update.  However, the only
        * way to get here with an empty log is if log_tail is actually
@@ -13165,7 +13159,7 @@ void PrimaryLogPG::update_range(
       }
     };
     dout(10) << "scanning pg log first" << dendl;
-    pg_log.get_log().scan_log_after(bi->version, func);
+    recovery_state.get_pg_log().get_log().scan_log_after(bi->version, func);
     dout(10) << "scanning projected log" << dendl;
     projected_log.scan_log_after(bi->version, func);
     bi->version = projected_last_update;
@@ -13225,15 +13219,17 @@ void PrimaryLogPG::check_local()
 {
   dout(10) << __func__ << dendl;
 
-  ceph_assert(info.last_update >= pg_log.get_tail());  // otherwise we need some help!
+  ceph_assert(
+    info.last_update >=
+    recovery_state.get_pg_log().get_tail());  // otherwise we need some help!
 
   if (!cct->_conf->osd_debug_verify_stray_on_activate)
     return;
 
   // just scan the log.
   set<hobject_t> did;
-  for (list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
-       p != pg_log.get_log().log.rend();
+  for (list<pg_log_entry_t>::const_reverse_iterator p = recovery_state.get_pg_log().get_log().log.rbegin();
+       p != recovery_state.get_pg_log().get_log().log.rend();
        ++p) {
     if (did.count(p->soid))
       continue;
@@ -13428,10 +13424,11 @@ bool PrimaryLogPG::hit_set_apply_log()
   }
 
   dout(20) << __func__ << " " << to << " .. " << info.last_update << dendl;
-  list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
-  while (p != pg_log.get_log().log.rend() && p->version > to)
+  list<pg_log_entry_t>::const_reverse_iterator p =
+    recovery_state.get_pg_log().get_log().log.rbegin();
+  while (p != recovery_state.get_pg_log().get_log().log.rend() && p->version > to)
     ++p;
-  while (p != pg_log.get_log().log.rend() && p->version > from) {
+  while (p != recovery_state.get_pg_log().get_log().log.rend() && p->version > from) {
     hit_set->insert(p->soid);
     ++p;
   }
