@@ -77,8 +77,6 @@ public:
 
   int init()
   {
-    common_init_finish(cct);
-
     int ret;
 
     {
@@ -87,6 +85,8 @@ public:
       if (ret < 0)
 	return ret;
     }
+
+    common_init_finish(cct);
 
     //monmap
     monclient = new MonClient(cct);
