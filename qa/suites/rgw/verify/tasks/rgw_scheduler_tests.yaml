@@ -14,7 +14,7 @@ tasks:
           req_count: 25
           create_buckets: bucket1, bucket2
           admin_sock_path: /var/run/ceph/radosgw.asok
-          requests:
+        requests:
             create_obj1:
               req_type: PUT
               req_path: bucket1/foo
