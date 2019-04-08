@@ -721,6 +721,17 @@ void PeeringState::on_new_interval()
     upacting_features &= osdmap->get_xinfo(*p).features;
   }
 
+  psdout(20) << __func__ << " checking missing set deletes flag. missing = "
+	     << get_pg_log().get_missing() << dendl;
+
+  if (!pg_log.get_missing().may_include_deletes &&
+    get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+    pl->rebuild_missing_set_with_deletes(pg_log);
+  }
+  ceph_assert(
+    pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(
+      CEPH_OSDMAP_RECOVERY_DELETES));
+
   pl->on_new_interval();
 }
 
@@ -799,6 +810,7 @@ void PeeringState::clear_primary_state()
   clear_recovery_state();
 
   last_update_ondisk = eversion_t();
+  missing_loc.clear();
   pl->clear_primary_state();
 }
 

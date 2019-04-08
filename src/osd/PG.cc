@@ -187,8 +187,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     this),
   pg_whoami(recovery_state.pg_whoami),
   info(recovery_state.info),
-  pg_log(recovery_state.pg_log),
-  missing_loc(recovery_state.missing_loc),
   pg_id(p),
   coll(p),
   osd(o),
@@ -805,7 +803,8 @@ bool PG::check_in_progress_op(
 {
   return (
     projected_log.get_request(r, version, user_version, return_code) ||
-    pg_log.get_log().get_request(r, version, user_version, return_code));
+    recovery_state.get_pg_log().get_log().get_request(
+      r, version, user_version, return_code));
 }
 
 void PG::publish_stats_to_osd()
@@ -1620,7 +1619,6 @@ void PG::on_new_interval() {
   scrub_queued = false;
   projected_last_update = eversion_t();
   cancel_recovery();
-  plpg_on_new_interval();
 }
 
 epoch_t PG::oldest_stored_osdmap() {
@@ -1843,6 +1841,14 @@ void PG::set_ready_to_merge_source(eversion_t lu)
 void PG::send_pg_created(pg_t pgid)
 {
   osd->send_pg_created(pgid);
+}
+
+void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
+{
+  pglog.rebuild_missing_set_with_deletes(
+    osd->store,
+    ch,
+    recovery_state.get_info());
 }
 
 void PG::on_activate_committed()
@@ -2781,8 +2787,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	}
 	if (scrubber.subset_last_update == eversion_t()) {
 	  for (list<pg_log_entry_t>::const_reverse_iterator p =
-		 pg_log.get_log().log.rbegin();
-	       p != pg_log.get_log().log.rend();
+		 recovery_state.get_pg_log().get_log().log.rbegin();
+	       p != recovery_state.get_pg_log().get_log().log.rend();
 	       ++p) {
 	    if (p->soid >= scrubber.start &&
 		p->soid < scrubber.end) {
@@ -3912,14 +3918,16 @@ void PG::dump_pgstate_history(Formatter *f)
 
 void PG::dump_missing(Formatter *f)
 {
-  for (auto& i : pg_log.get_missing().get_items()) {
+  for (auto& i : recovery_state.get_pg_log().get_missing().get_items()) {
     f->open_object_section("object");
     f->dump_object("oid", i.first);
     f->dump_object("missing_info", i.second);
-    if (missing_loc.needs_recovery(i.first)) {
-      f->dump_bool("unfound", missing_loc.is_unfound(i.first));
+    if (recovery_state.get_missing_loc().needs_recovery(i.first)) {
+      f->dump_bool(
+	"unfound",
+	recovery_state.get_missing_loc().is_unfound(i.first));
       f->open_array_section("locations");
-      for (auto l : missing_loc.get_locations(i.first)) {
+      for (auto l : recovery_state.get_missing_loc().get_locations(i.first)) {
 	f->dump_object("shard", l);
       }
       f->close_section();

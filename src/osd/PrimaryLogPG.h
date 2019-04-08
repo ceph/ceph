@@ -353,7 +353,7 @@ public:
 
   const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
-    return missing_loc.get_missing_locs();
+    return recovery_state.get_missing_loc().get_missing_locs();
   }
   const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return recovery_state.get_peer_missing();
@@ -364,13 +364,13 @@ public:
   }
   using PGBackend::Listener::get_shard_info;  
   const pg_missing_tracker_t &get_local_missing() const override {
-    return pg_log.get_missing();
+    return recovery_state.get_pg_log().get_missing();
   }
   const PGLog &get_log() const override {
-    return pg_log;
+    return recovery_state.get_pg_log();
   }
   void add_local_next_event(const pg_log_entry_t& e) override {
-    pg_log.missing_add_next_entry(e);
+    recovery_state.add_local_next_event(e);
   }
   bool pgb_is_primary() const override {
     return is_primary();
@@ -1829,7 +1829,8 @@ public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
     return is_missing_object(oid) ||
-      !missing_loc.readable_with_acting(oid, get_actingset());
+      !recovery_state.get_missing_loc().readable_with_acting(
+	oid, get_actingset());
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
@@ -1879,7 +1880,6 @@ public:
 
   void plpg_on_role_change() override;
   void plpg_on_pool_change() override;
-  void plpg_on_new_interval() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction *t) override;
   void on_activate_complete() override;
