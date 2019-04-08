@@ -2190,6 +2190,11 @@ void Client::_kick_stale_sessions()
 {
   ldout(cct, 1) << __func__ << dendl;
 
+  if (blacklisted) {
+    messenger->client_reset();
+    blacklisted = false;
+  }
+
   for (auto it = mds_sessions.begin(); it != mds_sessions.end(); ) {
     MetaSession &s = it->second;
     ++it;
@@ -2505,7 +2510,6 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
         return o.get_epoch();
         });
     lderr(cct) << "I was blacklisted at osd epoch " << epoch << dendl;
-    blacklisted = true;
 
     _abort_mds_sessions(-EBLACKLISTED);
 
@@ -2514,6 +2518,8 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
     // some PGs were inaccessible.
     objecter->op_cancel_writes(-EBLACKLISTED);
 
+    // no auto reconnect even 'client_reconnect_stale' config is true.
+    blacklisted = true;
   } else if (blacklisted) {
     // Handle case where we were blacklisted but no longer are
     blacklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
@@ -13987,8 +13993,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	case MetaSession::STATE_OPEN:
 	  {
 	    objecter->maybe_request_map(); /* to check if we are blacklisted */
-	    const auto& conf = cct->_conf;
-	    if (conf->client_reconnect_stale) {
+	    if (cct->_conf.get_val<bool>("client_reconnect_stale")) {
 	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
 	      _closed_mds_session(s);
 	    } else {
