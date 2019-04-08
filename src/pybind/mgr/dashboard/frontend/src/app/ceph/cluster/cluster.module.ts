@@ -5,9 +5,11 @@ import { RouterModule } from '@angular/router';
 
 import { TreeModule } from 'ng2-tree';
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TimepickerModule } from 'ngx-bootstrap/timepicker';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -51,7 +53,9 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     AlertModule.forRoot(),
     TooltipModule.forRoot(),
     TreeModule,
-    MgrModulesModule
+    MgrModulesModule,
+    TimepickerModule.forRoot(),
+    BsDatepickerModule.forRoot()
   ],
   declarations: [
     HostsComponent,
