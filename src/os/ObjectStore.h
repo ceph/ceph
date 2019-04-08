@@ -1706,6 +1706,24 @@ public:
 		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
+   * dump_onode -- dumps onode metadata in human readable form,
+     intended primiarily for debugging
+   *
+   * @param cid collection for object
+   * @param oid oid of object
+   * @param section_name section name to create and print under
+   * @param f Formatter class instance to print to
+   * @returns 0 on success, negative error code on failure.
+   */
+  virtual int dump_onode(
+    CollectionHandle &c,
+    const ghobject_t& oid,
+    const string& section_name,
+    Formatter *f) {
+    return -ENOTSUP;
+  }
+
+  /**
    * getattr -- get an xattr of an object
    *
    * @param cid collection for object

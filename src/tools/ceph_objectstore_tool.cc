@@ -2438,6 +2438,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
            << cpp_strerror(r) << std::endl;
     }
   }
+  gr = store->dump_onode(ch, ghobj, "onode", formatter);
 
   formatter->close_section();
   formatter->flush(cout);
