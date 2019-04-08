@@ -28,7 +28,7 @@ if [ -e CMakeCache.txt ]; then
   CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
-  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f 1)
   if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
       CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
   else
@@ -52,7 +52,7 @@ elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
         [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
-        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BUILD_DIR/bin/init-ceph
+        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
@@ -392,15 +392,15 @@ fi
 if [ "$overwrite_conf" -eq 0 ]; then
     CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
     mkdir -p $CEPH_ASOK_DIR
-    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
+    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
-    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
+    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_osd 2>/dev/null` && \
         CEPH_NUM_OSD="$OSD"
-    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mds 2>/dev/null` && \
+    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mds 2>/dev/null` && \
         CEPH_NUM_MDS="$MDS"
-    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mgr 2>/dev/null` && \
+    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mgr 2>/dev/null` && \
         CEPH_NUM_MGR="$MGR"
-    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_rgw 2>/dev/null` && \
+    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
 else
     if [ "$new" -ne 0 ]; then
@@ -472,7 +472,7 @@ wconf() {
 }
 
 get_pci_selector() {
-    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
+    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1
 }
 
 prepare_conf() {
@@ -739,7 +739,7 @@ EOF
 }
 
 start_osd() {
-    for osd in `seq 0 $((CEPH_NUM_OSD-1))`
+    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
 	    if [ "$new" -eq 1 ]; then
 		    wconf <<EOF
@@ -942,7 +942,7 @@ then
   while [ true ]
   do
     CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
+    ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
   done
 fi
 
@@ -973,7 +973,7 @@ else
     else
 	IP_CMD="ifconfig"
     fi
-    # filter out IPv6 and localhost addresses
+    # filter out IPv4 and localhost addresses
     IP="$($IP_CMD | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
     # if nothing left, try using localhost address, it might work
     if [ -z "$IP" ]; then IP="127.0.0.1"; fi
