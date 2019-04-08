@@ -6,7 +6,7 @@ overrides:
         rgw max concurrent requests: 100
         admin socket: /var/run/ceph/radosgw.asok
 tasks:
-  scheduler_tests:
+  rgw_scheduler_tests:
       rgw_server: client.0
       git_remote: git://github.com/theanalyst/
       default:
