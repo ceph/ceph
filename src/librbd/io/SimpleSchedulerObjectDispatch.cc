@@ -61,8 +61,7 @@ bool SimpleSchedulerObjectDispatch<I>::ObjectRequests::try_delay_request(
     int op_flags, int object_dispatch_flags, Context* on_dispatched) {
   if (!m_delayed_requests.empty()) {
     if (snapc.seq != m_snapc.seq || op_flags != m_op_flags ||
-        data.length() == 0 ||
-        m_delayed_request_extents.intersects(object_off, data.length())) {
+        data.length() == 0 || intersects(object_off, data.length())) {
       return false;
     }
   } else {
@@ -222,7 +221,9 @@ bool SimpleSchedulerObjectDispatch<I>::read(
                  << object_len << dendl;
 
   Mutex::Locker locker(m_lock);
-  dispatch_delayed_requests(object_no);
+  if (intersects(object_no, object_off, object_len)) {
+    dispatch_delayed_requests(object_no);
+  }
 
   return false;
 }
@@ -320,6 +321,21 @@ bool SimpleSchedulerObjectDispatch<I>::flush(
   dispatch_all_delayed_requests();
 
   return false;
+}
+
+template <typename I>
+bool SimpleSchedulerObjectDispatch<I>::intersects(
+    uint64_t object_no, uint64_t object_off, uint64_t len) const {
+  ceph_assert(m_lock.is_locked());
+  auto cct = m_image_ctx->cct;
+
+  auto it = m_requests.find(object_no);
+  bool intersects = (it != m_requests.end()) &&
+      it->second->intersects(object_off, len);
+
+  ldout(cct, 20) << intersects << dendl;
+
+  return intersects;
 }
 
 template <typename I>
