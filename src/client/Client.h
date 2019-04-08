@@ -627,7 +627,7 @@ public:
 		      inodeno_t realm, int flags, const UserPerm& perms);
   void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
-  void remove_session_caps(MetaSession *session);
+  void remove_session_caps(MetaSession *session, int err);
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
@@ -766,7 +766,7 @@ protected:
   MetaSession *_get_or_open_mds_session(mds_rank_t mds);
   MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
-  void _closed_mds_session(MetaSession *s, bool rejected=false);
+  void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
   void handle_client_session(const MConstRef<MClientSession>& m);
