@@ -873,7 +873,7 @@ seastar::future<> Client::reopen_session(int rank)
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
 #warning fixme
-    auto peer = monmap.get_addrs(rank).legacy_addr();
+    auto peer = monmap.get_addrs(rank).front();
     logger().info("connecting to mon.{}", rank);
     return msgr.connect(peer, CEPH_ENTITY_TYPE_MON).then([this] (auto xconn) {
       // sharded-messenger compatible mode assumes all connections running
