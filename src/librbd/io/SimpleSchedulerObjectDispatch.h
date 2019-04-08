@@ -143,6 +143,10 @@ private:
       return m_delayed_requests.size();
     }
 
+    bool intersects(uint64_t object_off, uint64_t len) const {
+      return m_delayed_request_extents.intersects(object_off, len);
+    }
+
     bool try_delay_request(uint64_t object_off, ceph::bufferlist&& data,
                            const ::SnapContext &snapc, int op_flags,
                            int object_dispatch_flags, Context* on_dispatched);
@@ -186,6 +190,7 @@ private:
                        ceph::bufferlist&& data, const ::SnapContext &snapc,
                        int op_flags, int object_dispatch_flags,
                        Context* on_dispatched);
+  bool intersects(uint64_t object_no, uint64_t object_off, uint64_t len) const;
 
   void dispatch_all_delayed_requests();
   void dispatch_delayed_requests(uint64_t object_no);
