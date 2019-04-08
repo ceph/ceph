@@ -570,6 +570,9 @@ int md_config_t::parse_argv(ConfigValues& values,
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
       values.no_mon_config = true;
     }
+    else if (ceph_argparse_flag(args, i, "--log-early", (char*)NULL)) {
+      values.log_early = true;
+    }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
       values.no_mon_config = false;
     }
