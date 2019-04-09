@@ -342,6 +342,7 @@ public:
   int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, map<string, bufferlist>& attrs,
 	std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state,  map<string, bufferlist>& attrs, const string& marker, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
@@ -366,6 +367,7 @@ public:
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int chown(RGWRados *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);

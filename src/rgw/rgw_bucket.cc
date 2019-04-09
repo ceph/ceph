@@ -24,6 +24,7 @@
 #include "rgw_user.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
+#include "rgw_op.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -992,6 +993,113 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   return 0;
 }
 
+int RGWBucket::chown(RGWBucketAdminOpState& op_state,
+	map<string, bufferlist>& attrs, const string& marker, std::string *err_msg)
+{
+
+  //after bucket link
+  rgw_bucket& bucket = op_state.get_bucket();
+  tenant = bucket.tenant;
+  bucket_name = bucket.name;
+
+  std::vector<rgw_bucket_dir_entry> objs;
+  map<string, bool> common_prefixes;
+  RGWObjectCtx obj_ctx(store);
+
+  RGWBucketInfo bucket_info;
+  RGWSysObjectCtx sys_ctx = store->svc.sysobj->init_obj_ctx();
+
+  int ret = store->get_bucket_info(sys_ctx, tenant, bucket_name, bucket_info, NULL, &attrs);
+  if (ret < 0) {
+    set_err_msg(err_msg, "bucket info failed: tenant: " + tenant + "bucket_name: " + bucket_name + " " + cpp_strerror(-ret));
+    return ret;
+  }
+
+  RGWUserInfo user_info;
+  ret = rgw_get_user_info_by_uid(store, bucket_info.owner, user_info);
+  if (ret < 0) {
+    set_err_msg(err_msg, "user info failed: " + cpp_strerror(-ret));
+    return ret;
+  }
+
+  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.list_versions = true;
+  list_op.params.allow_unordered = true;
+  list_op.params.marker = marker;
+
+  bool is_truncated = false;
+  int count = 0;
+  int max_entries = 1000;
+
+  //Loop through objects and update object acls to point to bucket owner
+
+  do {
+      objs.clear();
+      ret = list_op.list_objects(max_entries, &objs, &common_prefixes, &is_truncated);
+      if (ret < 0) {
+        set_err_msg(err_msg, "list objects failed: " + cpp_strerror(-ret));
+        return ret;
+      }
+
+      list_op.params.marker = list_op.get_next_marker();
+      count += objs.size();
+
+      for (const auto& obj : objs) {
+
+        const rgw_obj r_obj(bucket_info.bucket, obj.key);
+        ret = get_obj_attrs(store, obj_ctx, bucket_info, r_obj, attrs);
+        if (ret < 0){
+          set_err_msg(err_msg, "failed to read object " + obj.key.name +  "with " + cpp_strerror(-ret));
+          continue;
+        }
+        const auto& aiter = attrs.find(RGW_ATTR_ACL);
+        if (aiter == attrs.end()) {
+          set_err_msg(err_msg, "no acls found for object " + obj.key.name + " .Continuing with next object." + cpp_strerror(-ret));
+          continue;
+        } else {
+          bufferlist& bl = aiter->second;
+          RGWAccessControlPolicy policy(store->ctx());
+          ACLOwner owner;
+          try {
+            decode(policy, bl);
+            owner = policy.get_owner();
+          } catch (buffer::error& err) {
+            set_err_msg(err_msg, "decode policy failed: ");
+            return -EIO;
+          }
+
+          //Get the ACL from the policy
+          RGWAccessControlList& acl = policy.get_acl();
+
+          //Remove grant that is set to old owner
+          acl.remove_canon_user_grant(owner.get_id());
+
+          //Create a grant and add grant
+          ACLGrant grant;
+          grant.set_canon(bucket_info.owner, user_info.display_name, RGW_PERM_FULL_CONTROL);
+          acl.add_grant(&grant);
+
+          //Update the ACL owner to the new user
+          owner.set_id(bucket_info.owner);
+          owner.set_name(user_info.display_name);
+          policy.set_owner(owner);
+
+          bl.clear();
+          encode(policy, bl);
+
+          ret = modify_obj_attr(store, obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
+          if (ret < 0) {
+            set_err_msg(err_msg, "modify attr failed: " + cpp_strerror(-ret));
+            return ret;
+          }
+        }
+      } cerr << count << " objects processed, next marker " << list_op.params.marker.name << std::endl;
+    } while(is_truncated);
+    return 0;
+}
+
 int RGWBucket::unlink(RGWBucketAdminOpState& op_state, std::string *err_msg)
 {
   rgw_bucket bucket = op_state.get_bucket();
@@ -1427,6 +1535,23 @@ int RGWBucketAdminOp::link(RGWRados *store, RGWBucketAdminOpState& op_state, str
     return ret;
 
   return bucket.link(op_state, attrs, err);
+
+}
+
+int RGWBucketAdminOp::chown(RGWRados *store, RGWBucketAdminOpState& op_state, const string& marker, string *err)
+{
+  RGWBucket bucket;
+  map<string, bufferlist> attrs;
+
+  int ret = bucket.init(store, op_state, err, &attrs);
+  if (ret < 0)
+    return ret;
+
+  ret = bucket.link(op_state, attrs, err);
+  if (ret < 0)
+    return ret;
+
+  return bucket.chown(op_state, attrs, marker, err);
 
 }
 

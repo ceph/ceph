@@ -105,6 +105,7 @@ void usage()
   cout << "  bucket stats               returns bucket statistics\n";
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
+  cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard             reshard bucket\n";
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
@@ -415,6 +416,7 @@ enum {
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_BUCKET_RESHARD,
+  OPT_BUCKET_CHOWN,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -680,6 +682,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BUCKET_STATS;
     if (strcmp(cmd, "rm") == 0)
       return OPT_BUCKET_RM;
+    if (strcmp(cmd, "chown") == 0)
+      return OPT_BUCKET_CHOWN;
     if (strcmp(cmd, "rewrite") == 0)
       return OPT_BUCKET_REWRITE;
     if (strcmp(cmd, "reshard") == 0)
@@ -5525,6 +5529,20 @@ int main(int argc, const char **argv)
     int r = RGWBucketAdminOp::unlink(store, bucket_op);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_CHOWN) {
+
+    bucket_op.set_bucket_name(bucket_name);
+    bucket_op.set_new_bucket_name(new_bucket_name);
+    string err;
+    string marker;
+
+    int r = RGWBucketAdminOp::chown(store, bucket_op, marker, &err);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
   }

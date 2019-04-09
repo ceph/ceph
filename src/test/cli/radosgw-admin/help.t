@@ -25,6 +25,7 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket chown               link bucket to specified user and update its object ACLs
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
