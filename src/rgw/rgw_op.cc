@@ -3842,18 +3842,12 @@ void RGWPutObj::execute()
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
     }
-    complete_etag(hash, &etag);
-    ldpp_dout(this, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
 
   if (slo_info) {
     bufferlist manifest_bl;
     encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
-
-    hash.Update((unsigned char *)(slo_info->raw_data.c_str()), slo_info->raw_data.length());
-    complete_etag(hash, &etag);
-    ldpp_dout(this, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
 
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
