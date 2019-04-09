@@ -77,9 +77,12 @@ public:
 
   int init()
   {
-    common_init_finish(cct);
-
     int ret;
+
+    if (cct->_conf->log_early &&
+	!cct->_log->is_started()) {
+      cct->_log->start();
+    }
 
     {
       MonClient mc_bootstrap(cct);
@@ -87,6 +90,8 @@ public:
       if (ret < 0)
 	return ret;
     }
+
+    common_init_finish(cct);
 
     //monmap
     monclient = new MonClient(cct);
