@@ -54,6 +54,59 @@ def print_cache_info(osdid=None):
             print(s)
 
 
+def get_lvs_caching_stats():
+    fields = 'lv_tags,lv_path,lv_name,vg_name,cache_mode,cache_total_blocks,cache_used_blocks,cache_dirty_blocks,cache_read_hits,cache_read_misses,cache_write_hits,cache_write_misses'
+    # Cache stats aren't printed by `lvs`` if --readonly is passed. This command
+    # doesn't have the --readonly flag. TODO look into the consequences it might
+    # have on the workload (with ongoing traffic against Ceph)
+    stdout, stderr, returncode = process.call(
+        ['lvs', '--noheadings', '--separator=";"', '-a', '-o', fields],
+        verbose_on_failure=False
+    )
+    return api._output_parser(stdout, fields)
+
+
+def print_cache_stats(osdid=None):
+    osd_id_width = 8
+    rows, columns = get_terminal_size()
+    column_width = int(columns / 4)
+    s = ''
+    if not osdid:
+        s = '{0:>{w}}'.format('OSD', w=osd_id_width)
+        column_width = int((columns - osd_id_width) / 4)
+    # TODO change 'partition' to something else
+    s = s + '{0:>{w}}'.format('Read hits', w=column_width)
+    s = s + '{0:>{w}}'.format('Read misses', w=column_width)
+    s = s + '{0:>{w}}'.format('Write hits', w=column_width)
+    s = s + '{0:>{w}}'.format('Write misses', w=column_width)
+    print(s)
+
+    # TODO refactor this. Look at the mgr's iostat plugin.
+    # TODO show the table's header again when it disappears
+    while True:
+        try:
+            for item in get_lvs_caching_stats():
+                # Need to test that lv_tags isn't empty because each OSD has two LVs
+                # that will have cache_mode non-empty, its origin LV and the (new hidden) cache LV
+                # The new hidden cache LV doesn't have tags, and we can't set them, so
+                # we only want to print the info for the origin LV
+                if item['cache_mode'] is not "" and item['lv_tags'] is not "":
+                    v = api.Volume(**item)
+                    if not osdid or (osdid and v.tags['ceph.osd_id'] == osdid):
+                        s = ''
+                        if not osdid:
+                            s = '{0:>{w}}'.format(v.tags['ceph.osd_id'], w=osd_id_width)
+                        s = s + '{0:>{w}}'.format(item['cache_read_hits'], w=column_width)
+                        s = s + '{0:>{w}}'.format(item['cache_read_misses'], w=column_width)
+                        s = s + '{0:>{w}}'.format(item['cache_write_hits'], w=column_width)
+                        s = s + '{0:>{w}}'.format(item['cache_write_misses'], w=column_width)
+                        print(s)
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print('Interrupted')
+            return
+
+
 # partition sizes in GB
 def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_partition_size = disk.size_from_human_readable(disk.lsblk(md_partition)['SIZE'])
@@ -179,6 +232,10 @@ $> ceph-volume cache rm --osdid <id>
 Get info:
 
 $> ceph-volume cache info
+
+Get cache usage numbers:
+
+$> ceph-volume cache stats
 
     """
     name = 'cache'
@@ -318,6 +375,9 @@ $> ceph-volume cache info
             rm_lvmcache(vg_name, origin_lv.name)
         elif self.argv[0] == 'info':
             print_cache_info()
+            return
+        elif self.argv[0] == 'stats':
+            print_cache_stats(args.osdid)
             return
 
 
