@@ -168,7 +168,7 @@ def print_long(shell, file_name, is_dir, human_readable):
     info = cephfs.stat(file_name)
     file_name = os.path.basename(file_name.decode('utf-8'))
     if is_dir:
-        file_name = shell.colorize(file_name+'/',  'blue')
+        file_name = colorama.Style.BRIGHT + colorama.Fore.CYAN + file_name + '/' + colorama.Style.RESET_ALL
     if human_readable:
         shell.poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
@@ -590,7 +590,7 @@ exists.')
                     print_long(self, cephfs.getcwd().decode(
                         'utf-8') + dir_name + '/' + path, is_dir, False)
                 elif is_dir:
-                    values.append(self.colorize(path + '/', 'blue'))
+                    values.append(colorama.Style.BRIGHT + colorama.Fore.CYAN + path + '/')
                 else:
                     values.append(path)
             if not args.long:
