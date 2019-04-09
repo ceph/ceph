@@ -520,6 +520,12 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   uint64_t src_size;
   {
     RWLock::RLocker snap_locker(src->snap_lock);
+
+    if (!src->migration_info.empty()) {
+      lderr(cct) << "cannot deep copy migrating image" << dendl;
+      return -EBUSY;
+    }
+
     features = (src->features & ~RBD_FEATURES_IMPLICIT_ENABLE);
     src_size = src->get_image_size(src->snap_id);
   }
