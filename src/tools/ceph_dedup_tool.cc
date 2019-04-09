@@ -440,7 +440,7 @@ uint64_t EstimateDedupRatio::rabin_chunk(string oid, uint64_t offset)
     chunk.append(c_data);
     chunk.copy_in(0, p.second, outdata.c_str() + p.first);
     add_chunk_fp_to_stat(chunk);
-    cout << " oid: " << oid <<  " offset: " << p.first << " length: " << p.second << std::endl;
+    cout << " oid: " << oid <<  " offset: " << p.first + offset << " length: " << p.second << std::endl;
   }
 
   if (outdata.length() < op_size) {
