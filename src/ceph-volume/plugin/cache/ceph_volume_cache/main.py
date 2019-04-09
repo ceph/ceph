@@ -26,6 +26,12 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 #   LVs are either lock, journal or wal. Will probably need to be done by the
 #   orchestrator.
 # TODO raise exceptions instead of print+return
+# TODO add error handling at every step
+
+
+def get_terminal_size():
+    rows, columns = os.popen('stty size', 'r').read().split()
+    return int(rows), int(columns)
 
 
 def get_lvs_caching_info():
@@ -39,18 +45,24 @@ def get_lvs_caching_info():
 
 def print_cache_info(osdid=None):
     # TODO filter on osdid optionally
-    column_width = 12
-    s = '{0:>{w}}'.format('OSD', w=column_width)
+    osd_id_width = 8
+    rows, columns = get_terminal_size()
+    column_width = int((columns - osd_id_width) / 4)
+    s = '{0:>{w}}'.format('OSD', w=osd_id_width)
     # TODO change 'partition' to something else
     s = s + '{0:>{w}}'.format('Partition', w=column_width)
     s = s + '{0:>{w}}'.format('Cache mode', w=column_width)
+    s = s + '{0:>{w}}'.format('Cache policy', w=column_width)
+    s = s + '{0:>{w}}'.format('Cache settings', w=column_width)
     print(s)
     for item in get_lvs_caching_info():
         if item['cache_mode'] is not "" and item['lv_tags'] is not "":
             v = api.Volume(**item)
-            s = '{0:>{w}}'.format(v.tags['ceph.osd_id'], w=column_width)
+            s = '{0:>{w}}'.format(v.tags['ceph.osd_id'], w=osd_id_width)
             s = s + '{0:>{w}}'.format(v.tags['ceph.type'], w=column_width)
             s = s + '{0:>{w}}'.format(item['cache_mode'], w=column_width)
+            s = s + '{0:>{w}}'.format(item['cache_policy'], w=column_width)
+            s = s + '{0:>{w}}'.format(item['cache_settings'], w=column_width)
             print(s)
 
 
