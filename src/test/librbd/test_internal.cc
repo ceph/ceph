@@ -1365,10 +1365,13 @@ TEST_F(TestInternal, Sparsify) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  REQUIRE(is_sparsify_supported(ictx->data_ctx, ictx->get_object_name(10)));
-
+  bool sparsify_supported = is_sparsify_supported(ictx->data_ctx,
+                                                  ictx->get_object_name(10));
   bool sparse_read_supported = is_sparse_read_supported(
       ictx->data_ctx, ictx->get_object_name(10));
+
+  std::cout << "sparsify_supported=" << sparsify_supported << std::endl;
+  std::cout << "sparse_read_supported=" << sparse_read_supported << std::endl;
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx->operations->resize((1 << ictx->order) * 20, true, no_op));
@@ -1379,13 +1382,24 @@ TEST_F(TestInternal, Sparsify) {
   ASSERT_EQ((ssize_t)bl.length(),
             ictx->io_work_queue->write(0, bl.length(), bufferlist{bl}, 0));
 
+  ASSERT_EQ((ssize_t)bl.length(),
+            ictx->io_work_queue->write((1 << ictx->order) * 1 + 512,
+                                       bl.length(), bufferlist{bl}, 0));
+
   bl.append(std::string(4096, '1'));
   bl.append(std::string(4096, '\0'));
   bl.append(std::string(4096, '2'));
-  bl.append(std::string(4096, '\0'));
+  bl.append(std::string(4096 - 1, '\0'));
   ASSERT_EQ((ssize_t)bl.length(),
             ictx->io_work_queue->write((1 << ictx->order) * 10, bl.length(),
                                        bufferlist{bl}, 0));
+
+  bufferlist bl2;
+  bl2.append(std::string(4096 - 1, '\0'));
+  ASSERT_EQ((ssize_t)bl2.length(),
+            ictx->io_work_queue->write((1 << ictx->order) * 10 + 4096 * 10,
+                                       bl2.length(), bufferlist{bl2}, 0));
+
   ASSERT_EQ(0, ictx->io_work_queue->flush());
 
   ASSERT_EQ(0, ictx->operations->sparsify(4096, no_op));
@@ -1404,21 +1418,30 @@ TEST_F(TestInternal, Sparsify) {
   uint64_t size;
   ASSERT_EQ(-ENOENT, ictx->data_ctx.stat(oid, &size, NULL));
 
-  if (!sparse_read_supported) {
-    return;
-  }
+  oid = ictx->get_object_name(1);
+  ASSERT_EQ(-ENOENT, ictx->data_ctx.stat(oid, &size, NULL));
 
   oid = ictx->get_object_name(10);
   std::map<uint64_t, uint64_t> m;
-  read_bl.clear();
-  ASSERT_EQ(2, ictx->data_ctx.sparse_read(oid, m, read_bl, bl.length(), 0));
-  std::map<uint64_t, uint64_t> expected_m =
-      {{4096 * 1, 4096}, {4096 * 3, 4096}};
-  ASSERT_EQ(m, expected_m);
+  std::map<uint64_t, uint64_t> expected_m;
+  auto read_len = bl.length();
   bl.clear();
-  bl.append(std::string(4096, '1'));
-  bl.append(std::string(4096, '2'));
-  ASSERT_TRUE(bl.contents_equal(read_bl));
+  if (sparsify_supported && sparse_read_supported) {
+    expected_m = {{4096 * 1, 4096}, {4096 * 3, 4096}};
+    bl.append(std::string(4096, '1'));
+    bl.append(std::string(4096, '2'));
+  } else {
+    expected_m = {{0, 4096 * 4}};
+    bl.append(std::string(4096, '\0'));
+    bl.append(std::string(4096, '1'));
+    bl.append(std::string(4096, '\0'));
+    bl.append(std::string(4096, '2'));
+  }
+  read_bl.clear();
+  EXPECT_EQ(static_cast<int>(expected_m.size()),
+            ictx->data_ctx.sparse_read(oid, m, read_bl, read_len, 0));
+  EXPECT_EQ(m, expected_m);
+  EXPECT_TRUE(bl.contents_equal(read_bl));
 }
 
 
@@ -1428,10 +1451,9 @@ TEST_F(TestInternal, SparsifyClone) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  REQUIRE(is_sparsify_supported(ictx->data_ctx, ictx->get_object_name(10)));
-
-  bool sparse_read_supported = is_sparse_read_supported(
-      ictx->data_ctx, ictx->get_object_name(10));
+  bool sparsify_supported = is_sparsify_supported(ictx->data_ctx,
+                                                  ictx->get_object_name(10));
+  std::cout << "sparsify_supported=" << sparsify_supported << std::endl;
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, ictx->operations->resize((1 << ictx->order) * 10, true, no_op));
@@ -1484,20 +1506,4 @@ TEST_F(TestInternal, SparsifyClone) {
   uint64_t size;
   ASSERT_EQ(0, ictx->data_ctx.stat(oid, &size, NULL));
   ASSERT_EQ(0, ictx->data_ctx.read(oid, read_bl, 4096, 0));
-
-  if (!sparse_read_supported) {
-    return;
-  }
-
-  oid = ictx->get_object_name(10);
-  std::map<uint64_t, uint64_t> m;
-  read_bl.clear();
-  ASSERT_EQ(2, ictx->data_ctx.sparse_read(oid, m, read_bl, bl.length(), 0));
-  std::map<uint64_t, uint64_t> expected_m =
-      {{4096 * 1, 4096}, {4096 * 3, 4096}};
-  ASSERT_EQ(m, expected_m);
-  bl.clear();
-  bl.append(std::string(4096, '1'));
-  bl.append(std::string(4096, '2'));
-  ASSERT_TRUE(bl.contents_equal(read_bl));
 }
