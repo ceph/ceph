@@ -823,6 +823,79 @@ TEST_F(KVSharded, iterator_basic) {
   ASSERT_EQ(k_v.size(), 0);
 }
 
+TEST_F(KVSharded, iterator_basic_gaps) {
+  std::map<std::string, std::string> k_v;
+  k_v.emplace("0","00000000");
+  k_v.emplace("zzzzzzzz","z");
+  while (k_v.size() < 1000) {
+    std::string k, v;
+    do {
+      k.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 9);
+    do {
+      v.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 15);
+    k_v.emplace(k,v);
+  }
+
+  std::map<std::string, size_t> shards{{"A", 0}, {"C", 7}, {"D", 1}, {"E", 0}, {"F", 7}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& it: k_v) {
+    bufferlist value;
+    value.append(it.second);
+    t->set("C", it.first, value);
+    t->set("F", it.first, value);
+  }
+  bufferlist a_value;
+  a_value.append("a value");
+  t->set("A","aaa", a_value);
+  t->set("D","ddd", a_value);
+
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  iter->upper_bound("A","");
+  ASSERT_EQ(1, iter->valid());
+  ASSERT_EQ("aaa", iter->key());
+
+  iter->next();
+  ASSERT_EQ(1, iter->valid());
+  auto k = iter->raw_key();
+  ASSERT_EQ("C", k.first);
+  ASSERT_EQ("0", k.second);
+  
+  iter->upper_bound("D","");
+  ASSERT_EQ(1, iter->valid());
+  ASSERT_EQ("ddd", iter->key());
+  iter->next();
+  ASSERT_EQ(1, iter->valid());
+  k = iter->raw_key();
+  ASSERT_EQ("F", k.first);
+  ASSERT_EQ("0", k.second);
+  
+  iter->upper_bound("B","");
+  ASSERT_EQ(1, iter->valid());
+  k = iter->raw_key();
+  ASSERT_EQ("C", k.first);
+  ASSERT_EQ("0", k.second);
+  
+  ASSERT_EQ(0,iter->lower_bound("F","0"));
+  ASSERT_EQ(1, iter->valid());
+  k = iter->raw_key();
+  ASSERT_EQ("F", k.first);
+  ASSERT_EQ("0", k.second);
+  
+  iter->upper_bound("C","0");
+  ASSERT_EQ(1, iter->valid());
+  k = iter->raw_key();
+  ASSERT_EQ("C", k.first);
+  ASSERT_NE("0", k.second);
+}
+
 TEST_F(KVSharded, iterator_multitable) {
   std::map<char, std::map<std::string, std::string>> prefix_k_v;
   char prefix;
