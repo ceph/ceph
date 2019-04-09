@@ -9,7 +9,9 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timer.hh>
 
+#include "auth/AuthRegistry.h"
 #include "auth/KeyRing.h"
+#include "common/ceph_context.h"
 
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/auth_service.h"
@@ -26,6 +28,7 @@ namespace ceph::net {
   class Messenger;
 }
 
+struct AuthAuthorizeHandler;
 class AuthMethodList;
 class MAuthReply;
 struct MMonMap;
@@ -56,7 +59,6 @@ class Client : public ceph::net::Dispatcher,
   seastar::gate tick_gate;
 
   ceph::net::Messenger& msgr;
-  ceph::common::AuthHandler& auth_handler;
 
   // commands
   using get_version_t = seastar::future<version_t, version_t>;
@@ -91,13 +93,26 @@ public:
   seastar::future<> renew_subs();
   // AuthService methods
   AuthAuthorizer* get_authorizer(peer_type_t peer) const override;
+
+private:
   // AuthServer methods
+  std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+  get_supported_auth_methods(int peer_type) final;
+  uint32_t pick_con_mode(int peer_type,
+			 uint32_t auth_method,
+			 const std::vector<uint32_t>& preferred_modes) final;
+  AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
+						   int auth_method) final;
   int handle_auth_request(ceph::net::ConnectionRef conn,
 			  AuthConnectionMetaRef auth_meta,
 			  bool more,
 			  uint32_t auth_method,
 			  const ceph::bufferlist& payload,
-			  ceph::bufferlist *reply);
+			  ceph::bufferlist *reply) final;
+
+  CephContext cct; // for auth_registry
+  AuthRegistry auth_registry;
+  ceph::common::AuthHandler& auth_handler;
 
 private:
   void tick();
