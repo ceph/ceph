@@ -130,4 +130,5 @@ int RabinChunk::do_rabin_chunks(bufferlist & inputdata,
     chunks.push_back(make_pair(c_start, c_size));
   }
 
+  return 0;
 }
