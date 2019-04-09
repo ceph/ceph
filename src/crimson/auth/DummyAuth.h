@@ -12,6 +12,25 @@ public:
   DummyAuthClientServer() {}
 
   // client
+  std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+  get_supported_auth_methods(int peer_type) final {
+    return {{CEPH_AUTH_NONE}, {CEPH_AUTH_NONE}};
+  }
+
+  uint32_t pick_con_mode(int peer_type,
+			 uint32_t auth_method,
+			 const std::vector<uint32_t>& preferred_modes) final {
+    ceph_assert(auth_method == CEPH_AUTH_NONE);
+    ceph_assert(preferred_modes.size() &&
+                preferred_modes[0] == CEPH_CON_MODE_CRC);
+    return CEPH_CON_MODE_CRC;
+  }
+
+  AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
+						   int auth_method) final {
+    return nullptr;
+  }
+
   int get_auth_request(
     ceph::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
