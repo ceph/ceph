@@ -604,6 +604,27 @@ You may set values for the following keys:
 :Default: ``0``
 
 
+.. _recovery_priority:
+
+``recovery_priority``
+
+:Description: When a value is set it will boost the computed reservation priority
+              by this amount. This value should be less than 30.
+
+:Type: Integer
+:Default: ``0``
+
+
+.. _recovery_op_priority:
+
+``recovery_op_priority``
+
+:Description: Specify the recovery operation priority for this pool instead of ``osd_recovery_op_priority``.
+
+:Type: Integer
+:Default: ``0``
+
+
 Get Pool Values
 ===============
 
@@ -756,6 +777,20 @@ You may get values for the following keys:
 :Description: see allow_ec_overwrites_
 
 :Type: Boolean
+
+
+``recovery_priority``
+
+:Description: see recovery_priority_
+
+:Type: Integer
+
+
+``recovery_op_priority``
+
+:Description: see recovery_op_priority_
+
+:Type: Integer
 
 
 Set the Number of Object Replicas
