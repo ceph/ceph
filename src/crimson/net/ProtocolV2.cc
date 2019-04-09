@@ -481,14 +481,9 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           logger().debug("{} auth reply more len={}",
                          conn, auth_more.auth_payload().length());
           ceph_assert(messenger.get_auth_client());
-          ceph::bufferlist reply;
-          int r = messenger.get_auth_client()->handle_auth_reply_more(
-               conn.shared_from_this(), auth_meta, auth_more.auth_payload(), &reply);
-          if (r < 0) {
-            logger().error("{} auth_client handle_auth_reply_more returned {}",
-                           conn, r);
-            abort_in_fault();
-          }
+          // let execute_connecting() take care of the thrown exception
+          auto reply = messenger.get_auth_client()->handle_auth_reply_more(
+            conn.shared_from_this(), auth_meta, auth_more.auth_payload());
           auto more_reply = AuthRequestMoreFrame::Encode(reply);
           return write_frame(more_reply);
         }).then([this] {
@@ -503,9 +498,7 @@ seastar::future<> ProtocolV2::handle_auth_reply()
               conn.shared_from_this(), auth_meta,
               auth_done.global_id(),
               auth_done.con_mode(),
-              auth_done.auth_payload(),
-              &auth_meta->session_key,
-              &auth_meta->connection_secret);
+              auth_done.auth_payload());
           if (r < 0) {
             logger().error("{} auth_client handle_auth_done returned {}", conn, r);
             abort_in_fault();
@@ -528,21 +521,20 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
   // send_auth_request() logic
   ceph_assert(messenger.get_auth_client());
 
-  bufferlist bl;
-  vector<uint32_t> preferred_modes;
-  int r = messenger.get_auth_client()->get_auth_request(
-      conn.shared_from_this(), auth_meta, &auth_meta->auth_method,
-      &preferred_modes, &bl);
-  if (r < 0) {
-    logger().error("{} get_initial_auth_request returned {}", conn, r);
+  try {
+    auto [auth_method, preferred_modes, bl] =
+      messenger.get_auth_client()->get_auth_request(conn.shared_from_this(), auth_meta);
+    auth_meta->auth_method = auth_method;
+    auto frame = AuthRequestFrame::Encode(auth_method, preferred_modes, bl);
+    return write_frame(frame).then([this] {
+      return handle_auth_reply();
+    });
+  } catch (const ceph::auth::error& e) {
+    logger().error("{} get_initial_auth_request returned {}", conn, e);
     dispatch_reset();
     abort_in_close();
+    return seastar::now();
   }
-
-  auto frame = AuthRequestFrame::Encode(auth_meta->auth_method, preferred_modes, bl);
-  return write_frame(frame).then([this] {
-    return handle_auth_reply();
-  });
 }
 
 seastar::future<bool> ProtocolV2::process_wait()
