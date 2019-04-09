@@ -11,6 +11,8 @@ import orchestrator
 
 from ceph_volume_client import CephFSVolumeClient, VolumePath
 
+from .volume import VolumeIndex
+
 class PurgeJob(object):
     def __init__(self, volume_fscid, subvolume_path):
         """
@@ -81,6 +83,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self._initialized = Event()
 
         self._background_jobs = Queue.Queue()
+        self.vindex = VolumeIndex(self)
 
     def serve(self):
         # TODO: discover any subvolumes pending purge, and enqueue
@@ -107,17 +110,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return handler(inbuf, cmd)
 
-    def _pool_base_name(self, volume_name):
-        """
-        Convention for naming pools for volumes
-
-        :return: string
-        """
-        return "cephfs.{0}".format(volume_name)
-
-    def _pool_names(self, pool_base_name):
-        return pool_base_name + ".meta", pool_base_name + ".data"
-
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         # TODO: validate name against any rules for pool/fs names
@@ -125,52 +117,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         size = cmd.get('size', None)
 
-        base_name = self._pool_base_name(vol_id)
-        mdp_name, dp_name = self._pool_names(base_name)
-
-        r, outb, outs = self.mon_command({
-            'prefix': 'osd pool create',
-            'pool': mdp_name,
-            'pg_num': 16,
-            'pg_num_min': 16,
-        })
-        if r != 0:
-            return r, outb, outs
-
-        # count fs metadata omap at 4x usual rate
-        r, outb, outs = self.mon_command({
-            'prefix': 'osd pool set',
-            'pool': mdp_name,
-            'var': "pg_autoscale_bias",
-            'val': "4.0",
-        })
-        if r != 0:
-            return r, outb, outs
-
-        r, outb, outs = self.mon_command({
-            'prefix': 'osd pool create',
-            'pool': dp_name,
-            'pg_num': 8
-        })
-        if r != 0:
-            return r, outb, outs
-
-        # Create a filesystem
-        # ====================
-        r, outb, outs = self.mon_command({
-            'prefix': 'fs new',
-            'fs_name': vol_id,
-            'metadata': mdp_name,
-            'data': dp_name
-        })
-
-        if r != 0:
-            self.log.error("Filesystem creation error: {0} {1} {2}".format(
-                r, outb, outs
-            ))
-            return r, outb, outs
-
-        # TODO: apply quotas to the filesystem root
+        self.vindex.create(vol_id, size=size)
 
         # Create an MDS cluster
         # =====================
@@ -198,13 +145,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # Fall through
         return None
-
-    def _volume_get_mds_daemon_names(self, vol_name):
-        fs = self._volume_get_fs(vol_name)
-        if fs is None:
-            return []
-
-        return [i['name'] for i in fs['mdsmap']['info'].values()]
 
     def _volume_exists(self, vol_name):
         return self._volume_get_fs(vol_name) is not None
@@ -270,72 +210,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.log.exception("Failed to tear down MDS daemons")
             return -errno.EINVAL, "", str(e)
 
-        if self._volume_exists(vol_name):
-            # In case orchestrator didn't tear down MDS daemons cleanly, or
-            # there was no orchestrator, we force the daemons down.
-            r, out, err = self.mon_command({
-                'prefix': 'fs set',
-                'fs_name': vol_name,
-                'var': 'cluster_down',
-                'val': 'true'
-            })
-            if r != 0:
-                return r, out, err
-
-            for mds_name in self._volume_get_mds_daemon_names(vol_name):
-                r, out, err = self.mon_command({
-                    'prefix': 'mds fail',
-                    'role_or_gid': mds_name})
-                if r != 0:
-                    return r, out, err
-
-            # Delete CephFS filesystem
-            # =========================
-            r, out, err = self.mon_command({
-                'prefix': 'fs rm',
-                'fs_name': vol_name,
-                'yes_i_really_mean_it': True,
-            })
-            if r != 0:
-                return r, out, err
-        else:
-            self.log.warning("Filesystem already gone for volume '{0}'".format(
-                vol_name
-            ))
-
-        # Delete pools
-        # ============
-        base_name = self._pool_base_name(vol_name)
-        mdp_name, dp_name = self._pool_names(base_name)
-
-        r, out, err = self.mon_command({
-            'prefix': 'osd pool rm',
-            'pool': mdp_name,
-            'pool2': mdp_name,
-            'yes_i_really_really_mean_it': True,
-        })
-        if r != 0:
-            return r, out, err
-
-        r, out, err = self.mon_command({
-            'prefix': 'osd pool rm',
-            'pool': dp_name,
-            'pool2': dp_name,
-            'yes_i_really_really_mean_it': True,
-        })
-        if r != 0:
-            return r, out, err
-
-        return 0, "", ""
+        return self.vindex.rm(vol_name)
 
     def _cmd_fs_volume_ls(self, inbuf, cmd):
-        fs_map = self.get("fs_map")
-
-        result = []
-
-        for f in fs_map['filesystems']:
-            result.append({
-                'name': f['mdsmap']['fs_name']
-            })
-
-        return 0, json.dumps(result, indent=2), ""
+        return self.vindex.ls()
