@@ -50,7 +50,6 @@ struct AioCompletion {
   void *complete_arg;
   rbd_completion_t rbd_comp;
   uint32_t pending_count;   ///< number of requests
-  uint32_t blockers;
   int ref;
   bool released;
   ImageCtx *ictx;
@@ -106,8 +105,7 @@ struct AioCompletion {
   AioCompletion() : lock("AioCompletion::lock", true, false),
                     state(AIO_STATE_PENDING), rval(0), complete_cb(NULL),
                     complete_arg(NULL), rbd_comp(NULL),
-                    pending_count(0), blockers(1),
-                    ref(1), released(false), ictx(NULL),
+                    pending_count(0), ref(1), released(false), ictx(NULL),
                     aio_type(AIO_TYPE_NONE), m_xlist_item(this),
                     event_notify(false) {
   }
@@ -185,20 +183,6 @@ struct AioCompletion {
         }
       }
       delete this;
-    }
-  }
-
-  void block() {
-    Mutex::Locker l(lock);
-    ++blockers;
-  }
-  void unblock() {
-    Mutex::Locker l(lock);
-    ceph_assert(blockers > 0);
-    --blockers;
-    if (pending_count == 0 && blockers == 0) {
-      finalize(rval);
-      complete();
     }
   }
 

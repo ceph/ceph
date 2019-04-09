@@ -395,7 +395,7 @@ void AbstractImageWriteRequest<I>::send_request() {
     send_object_requests(object_extents, snapc, journal_tid);
   } else {
     // no IO to perform -- fire completion
-    aio_comp->unblock();
+    aio_comp->set_request_count(0);
   }
 
   update_stats(clip_len);
