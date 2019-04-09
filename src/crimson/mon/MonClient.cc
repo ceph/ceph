@@ -277,6 +277,7 @@ Client::Client(ceph::net::Messenger& messenger,
               CEPH_ENTITY_TYPE_MGR},
     timer{[this] { tick(); }},
     msgr{messenger},
+    auth_registry{&cct},
     auth_handler{auth_handler}
 {}
 
@@ -381,6 +382,29 @@ AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
 {
   return ms_get_authorizer(peer);
 }
+
+std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+Client::get_supported_auth_methods(int peer_type)
+{
+    std::vector<uint32_t> methods;
+    std::vector<uint32_t> modes;
+    auth_registry.get_supported_methods(peer_type, &methods, &modes);
+    return {methods, modes};
+}
+
+uint32_t Client::pick_con_mode(int peer_type,
+                               uint32_t auth_method,
+                               const std::vector<uint32_t>& preferred_modes)
+{
+  return auth_registry.pick_mode(peer_type, auth_method, preferred_modes);
+}
+
+AuthAuthorizeHandler* Client::get_auth_authorize_handler(int peer_type,
+                                                         int auth_method)
+{
+  return auth_registry.get_handler(peer_type, auth_method);
+}
+
 
 int Client::handle_auth_request(ceph::net::ConnectionRef con,
                                 AuthConnectionMetaRef auth_meta,
