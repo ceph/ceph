@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/weighted_shuffle.h"
+#include <array>
 #include <map>
 #include "gtest/gtest.h"
 
