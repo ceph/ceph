@@ -4,16 +4,13 @@ overrides:
       client:
         rgw scheduler type: throttler
         rgw max concurrent requests: 100
-        admin socket: /var/run/ceph/radosgw.asok
 tasks:
   - rgw_scheduler_tests:
       client.0:
-        rgw_server: client.0
         git_remote: git://github.com/theanalyst/
         default:
           req_count: 25
           create_buckets: bucket1, bucket2
-          admin_sock_path: /var/run/ceph/radosgw.asok
         requests:
             create_obj1:
               req_type: PUT

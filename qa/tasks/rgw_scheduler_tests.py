@@ -205,7 +205,10 @@ def run_tests(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [run.Raw('TEST_CONF={tdir}/archive/rgw-scheduler-tests.{client}.conf'.format(tdir=testdir, client=client)),
         ]
+        # needed for making sandwiches and reading from admin sockets
         args += [
+            'sudo',
+            '-E',
             '{tdir}/rgw-scheduler-tests/scheduler-venv/bin/pytest'.format(tdir=testdir),
             '-v',
             '{tdir}/rgw-scheduler-tests/scheduler/'.format(tdir=testdir)
@@ -283,6 +286,10 @@ def task(ctx, config):
 
     rgw_scheduler_tests_conf = {}
     for client in clients:
+        cluster_name, daemon_type, client_id = teuthology.split_role(client)
+        client_with_id = daemon_type + '.' + client_id
+        client_with_cluster = cluster_name + '.' + client_with_id
+
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
         #log.debug('abhi got endpoint', endpoint)
@@ -293,6 +300,7 @@ def task(ctx, config):
                     'req_count': 100,
                     'base_url' : endpoint.url(),
                     'auth_type' : 's3',
+                    'admin_sock_path': '/var/run/ceph/rgw.{client_with_cluster}.asok'.format(client_with_cluster=client_with_cluster)
                 }
                 }
             )
