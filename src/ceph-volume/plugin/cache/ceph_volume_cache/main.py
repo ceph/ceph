@@ -1,5 +1,8 @@
 import argparse
 import sys
+import time
+import os
+import json
 from ceph_volume.api import lvm as api
 from ceph_volume.util import disk
 from ceph_volume import process
@@ -27,6 +30,24 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 #   orchestrator.
 # TODO raise exceptions instead of print+return
 # TODO add error handling at every step
+
+
+def pretty(s):
+    print(json.dumps(s, indent=4, sort_keys=True))
+
+
+def pretty_lv(lv):
+    print('-------------')
+    print('lv_name: ' + lv.lv_name)
+    print('type: ' + lv.tags.get('ceph.type', ''))
+    print('osdid: ' + lv.tags.get('ceph.osd_id', ''))
+    print('vg_name: ' + lv.vg_name)
+    print('lv_path: ' + lv.lv_path)
+    print('\ntags:')
+    pretty(lv.tags)
+    print('\nreport')
+    pretty(lv.report())
+    print('-------------')
 
 
 def get_terminal_size():
@@ -316,6 +337,12 @@ $> ceph-volume cache stats
             help='cache the OSD\'s wal',
         )
         args = parser.parse_args(main_args)
+
+        if self.argv[0] == 'debug':
+            lvs = api.Volumes()
+            for lv in lvs:
+                pretty_lv(lv)
+            return
 
         if len(self.argv) <= 1:
             return parser.print_help()
