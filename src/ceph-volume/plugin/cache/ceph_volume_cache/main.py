@@ -107,7 +107,6 @@ def print_cache_stats(osdid=None):
     if not osdid:
         s = '{0:>{w}}'.format('OSD', w=osd_id_width)
         column_width = int((columns - osd_id_width) / 4)
-    # TODO change 'partition' to something else
     s = s + '{0:>{w}}'.format('Read hits', w=column_width)
     s = s + '{0:>{w}}'.format('Read misses', w=column_width)
     s = s + '{0:>{w}}'.format('Write hits', w=column_width)
@@ -157,6 +156,7 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_lv_size = md_partition_size - disk.Size(gb=1)
     data_lv_size = data_partition_size - disk.Size(gb=1)
 
+    # TODO: update the "ceph.block_device" tag to point to the origin LV
     # TODO: update these new LVs' tags (ceph.osd_id, ceph.cluster_fsid, etc.)
     cache_md_lv = api.create_lv(
         'cache_md_osd.' + osdid,
@@ -313,6 +313,8 @@ $> ceph-volume cache stats
             '--origin',
             help='OSD data partition',
         )
+        # other parts of the code use --osd-id
+        # TODO add an --osd-fsid argument
         parser.add_argument(
             '--osdid',
             help='OSD id',
@@ -358,25 +360,24 @@ $> ceph-volume cache stats
         # This should be under if argv[0] == 'add'
         if args.osdid:
             lvs = api.Volumes()
-            lvs.filter(lv_tags={'ceph.osd_id': args.osdid})
+            osdid = args.osdid
+            lvs.filter(lv_tags={'ceph.osd_id': osdid})
 
-            # this loop might not be necessary, take any LV from lvs and it will work
-            # proof: we break after the first iteration
             for lv in lvs:
                 # TODO make sure there is a db or wal partition
-                osdid = args.osdid
                 # TODO update the cache's name accordingly to this
                 # TODO make sure there's a separate wal or db
                 if args.data:
-                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
+                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
                 elif args.db:
                     # TODO make sure 'ceph.db_device' and others are in tag. ie use tags.get()
-                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.db_device'])
+                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.db_device', None))
                 elif args.wal:
-                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.wal_device'])
+                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.wal_device', None))
                 else:
-                    origin_lv = api.get_lv(lv_path=lv.tags['ceph.block_device'])
-                break
+                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
+                if origin_lv:
+                    break
             if not origin_lv:
                 print('Couldn\'t find origin LV for OSD ' + args.osdid)
                 return
@@ -390,6 +391,9 @@ $> ceph-volume cache stats
                 print('Couldn\'t find origin LV ' + args.origin)
             osdid = origin_lv.tags.get('ceph.osd_id', None)
 
+        # TODO think about the interface to possibly use caching "backends"
+        # other than lvm. Maybe bcache, iCAS, etc. Maybe the easiest solution is
+        # to rename this plugin to 'lvmcache'.
         # TODO make sure the OSD exists (ie is on this node)
         if self.argv[0] == 'add':
             add_lvmcache(
