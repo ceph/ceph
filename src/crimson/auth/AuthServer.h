@@ -4,7 +4,9 @@
 #pragma once
 
 #include <vector>
+#include "common/ceph_context.h"
 #include "auth/AuthAuthorizeHandler.h"
+#include "auth/AuthRegistry.h"
 #include "crimson/net/Fwd.h"
 
 namespace ceph::auth {
@@ -13,50 +15,32 @@ namespace ceph::auth {
 class AuthServer {
 public:
   // TODO:
-  // AuthRegistry auth_registry;
-
-  AuthServer() {}
+  AuthServer()
+    : auth_registry{&cct}
+  {}
   virtual ~AuthServer() {}
 
   // Get authentication methods and connection modes for the given peer type
   virtual std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
-  get_supported_auth_methods(
-    int peer_type) {
-    // std::vector<uint32_t> methods;
-    // std::vector<uint32_t> modes;
-    // auth_registry.get_supported_methods(peer_type, &methods, &modes);
-    return {{CEPH_AUTH_NONE}, {CEPH_AUTH_NONE}};
+  get_supported_auth_methods(int peer_type) {
+    std::vector<uint32_t> methods;
+    std::vector<uint32_t> modes;
+    auth_registry.get_supported_methods(peer_type, &methods, &modes);
+    return {methods, modes};
   }
-
-  // Get support connection modes for the given peer type and auth method
-  virtual void get_supported_con_modes(
-    int peer_type,
-    uint32_t auth_method,
-    std::vector<uint32_t> *modes) {
-    // auth_registry.get_supported_modes(peer_type, auth_method, modes);
-    *modes = { CEPH_CON_MODE_CRC };
-  }
-
   // Get support connection modes for the given peer type and auth method
   virtual uint32_t pick_con_mode(
     int peer_type,
     uint32_t auth_method,
     const std::vector<uint32_t>& preferred_modes) {
-    // return auth_registry.pick_mode(peer_type, auth_method, preferred_modes);
-    ceph_assert(auth_method == CEPH_AUTH_NONE);
-    ceph_assert(preferred_modes.size() &&
-                preferred_modes[0] == CEPH_CON_MODE_CRC);
-    return CEPH_CON_MODE_CRC;
+    return auth_registry.pick_mode(peer_type, auth_method, preferred_modes);
   }
-
   // return an AuthAuthorizeHandler for the given peer type and auth method
   AuthAuthorizeHandler *get_auth_authorize_handler(
     int peer_type,
     int auth_method) {
-    // return auth_registry.get_handler(peer_type, auth_method);
-    return nullptr;
+    return auth_registry.get_handler(peer_type, auth_method);
   }
-
   // Handle an authentication request on an incoming connection
   virtual int handle_auth_request(
     ceph::net::ConnectionRef conn,
@@ -65,6 +49,10 @@ public:
     uint32_t auth_method,
     const bufferlist& bl,
     bufferlist *reply) = 0;
+
+private:
+  CephContext cct; // for auth_registry
+  AuthRegistry auth_registry;
 };
 
 } // namespace ceph::auth
