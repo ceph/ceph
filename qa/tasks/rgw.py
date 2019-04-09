@@ -86,7 +86,9 @@ def start_rgw(ctx, config, clients):
             '/var/log/ceph/rgw.{client_with_cluster}.log'.format(client_with_cluster=client_with_cluster),
             '--rgw_ops_log_socket_path',
             '{tdir}/rgw.opslog.{client_with_cluster}.sock'.format(tdir=testdir,
-                                                     client_with_cluster=client_with_cluster)
+                                                                  client_with_cluster=client_with_cluster),
+            '--admin-socket',
+            '/var/run/ceph/rgw.{client_with_cluster}.asok'.format(client_with_cluster=client_with_cluster),
 	    ])
 
         keystone_role = client_config.get('use-keystone-role', None)
