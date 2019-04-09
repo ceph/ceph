@@ -14,7 +14,7 @@ import threading
 import time
 from uuid import uuid4
 from OpenSSL import crypto, SSL
-from mgr_module import MgrModule, MgrStandbyModule, Option
+from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
 from mgr_util import get_default_addr
 
 try:
@@ -404,6 +404,30 @@ class Module(MgrModule, CherryPyConfig):
         CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
+
+    @CLIWriteCommand("dashboard set-ssl-certificate",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/crt'.format(mgr_id), inbuf)
+        else:
+            self.set_store('crt', inbuf)
+        return 0, 'SSL certificate updated', ''
+
+    @CLIWriteCommand("dashboard set-ssl-certificate-key",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate key file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/key'.format(mgr_id), inbuf)
+        else:
+            self.set_store('key', inbuf)
+        return 0, 'SSL certificate key updated', ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
