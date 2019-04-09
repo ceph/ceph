@@ -52,6 +52,20 @@ void RGWAccessControlList::add_grant(ACLGrant *grant)
   _add_grant(grant);
 }
 
+void RGWAccessControlList::remove_canon_user_grant(rgw_user& user_id)
+{
+  auto multi_map_iter = grant_map.find(user_id.to_str());
+  if(multi_map_iter != grant_map.end()) {
+    auto grants = grant_map.equal_range(user_id.to_str());
+    grant_map.erase(grants.first, grants.second);
+  }
+
+  auto map_iter = acl_user_map.find(user_id.to_str());
+  if (map_iter != acl_user_map.end()){
+    acl_user_map.erase(map_iter);
+  }
+}
+
 uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp, 
                                         const rgw::auth::Identity& auth_identity,
                                         const uint32_t perm_mask)
