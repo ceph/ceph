@@ -553,8 +553,4 @@ export class NfsFormComponent implements OnInit {
 
     return requestModel;
   }
-
-  cancelAction() {
-    this.router.navigate(['/nfs']);
-  }
 }

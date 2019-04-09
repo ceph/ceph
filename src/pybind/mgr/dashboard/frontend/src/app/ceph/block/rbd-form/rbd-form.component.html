@@ -312,10 +312,7 @@
                             (submitAction)="submit()">
             <span i18n>{mode, select, editing {Update} cloning {Clone} copying {Copy} other {Create}} RBD</span>
           </cd-submit-button>
-          <button type="button"
-                  class="btn btn-sm btn-default"
-                  routerLink="/block/rbd"
-                  i18n>Back</button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>
