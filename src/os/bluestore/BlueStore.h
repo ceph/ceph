@@ -2697,6 +2697,7 @@ private:
   string failed_cmode;
   set<string> failed_compressors;
   string spillover_alert;
+  string legacy_statfs_alert;
 
   void _log_alerts(osd_alert_list_t& alerts);
   bool _set_compression_alert(bool cmode, const char* s) {
@@ -2722,6 +2723,8 @@ private:
     std::lock_guard l(qlock);
     spillover_alert.clear();
   }
+
+  void _check_legacy_statfs_alert();
 
 private:
 
