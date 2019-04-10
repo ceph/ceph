@@ -1,0 +1,3 @@
+aiohttp
+boto3
+pytest
