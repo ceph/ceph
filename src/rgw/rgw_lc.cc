@@ -492,7 +492,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << key << dendl;
+              ldout(cct, 10) << "DELETED case 1:" << bucket_name << ":" << key << dendl;
             }
 
             if (going_down())
@@ -570,6 +570,33 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (!skip_expiration && expiration <= 0 && prefix_iter->second.expiration_date == boost::none) {
               continue;
             } else if (!skip_expiration) {
+
+	      rgw_obj_key key(obj_iter->key);
+	      rgw_obj obj(bucket_info.bucket, key);
+	      RGWObjectCtx rctx(store);
+	      if (prefix_iter->second.obj_tags != boost::none) {
+		bufferlist tags_bl;
+		int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
+		if (ret < 0) {
+		  if (ret != -ENODATA)
+		    ldout(cct, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
+		  continue;
+		}
+		RGWObjTags dest_obj_tags;
+		try {
+		  auto iter = tags_bl.begin();
+		  dest_obj_tags.decode(iter);
+		} catch (buffer::error& err) {
+		  ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+		  return -EIO;
+		}
+
+		if (! has_all_tags(prefix_iter->second, dest_obj_tags)) {
+		  ldout(cct, 16) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
+		  continue;
+		}
+	      }
+
               if (expiration > 0) {
                 is_expired = obj_has_expired(mtime, expiration);
               } else {
@@ -594,14 +621,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
               if (ret < 0) {
                 return ret;
               }
-              if (state->mtime != obj_iter->meta.mtime)//Check mtime again to avoid delete a recently update object as much as possible
-                continue;
             }
             ret = remove_expired_obj(bucket_info, obj_iter->key, obj_iter->meta.owner, obj_iter->meta.owner_display_name, remove_indeed);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
+              ldout(cct, 10) << "DELETED case 2:" << bucket_name << ":" << obj_iter->key << dendl;
             }
 
             if (going_down())
