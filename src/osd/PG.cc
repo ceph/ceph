@@ -178,17 +178,8 @@ void PG::dump_live_ids()
 
 PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
-  pg_whoami(osd->whoami, p.shard),
+  pg_whoami(o->whoami, p.shard),
   pg_id(p),
-  recovery_state(
-    cct,
-    pg_whoami,
-    p,
-    _pool,
-    curmap,
-    this,
-    this),
-  info(recovery_state.get_info()),
   coll(p),
   osd(o),
   cct(o->cct),
@@ -215,7 +206,16 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   finish_sync_event(NULL),
   backoff_lock("PG::backoff_lock"),
   scrub_after_recovery(false),
-  active_pushes(0)
+  active_pushes(0),
+  recovery_state(
+    o->cct,
+    pg_whoami,
+    p,
+    _pool,
+    curmap,
+    this,
+    this),
+  info(recovery_state.get_info())
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);

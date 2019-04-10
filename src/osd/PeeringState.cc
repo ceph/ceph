@@ -120,7 +120,7 @@ PeeringState::PeeringState(
   DoutPrefixProvider *dpp,
   PeeringListener *pl)
   : state_history(pl),
-    machine(this, cct, spgid, dpp, pl, &state_history), cct(cct),
+    cct(cct),
     spgid(spgid),
     dpp(dpp),
     pl(pl),
@@ -130,7 +130,8 @@ PeeringState::PeeringState(
     pg_whoami(pg_whoami),
     info(spgid),
     pg_log(cct),
-    missing_loc(spgid, this, dpp, cct)
+    missing_loc(spgid, this, dpp, cct),
+    machine(this, cct, spgid, dpp, pl, &state_history)
 {
   machine.initiate();
 }
