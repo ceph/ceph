@@ -3701,16 +3701,27 @@ void PeeringState::begin_peer_recover(
 }
 
 void PeeringState::force_object_missing(
-  pg_shard_t peer,
+  const set<pg_shard_t> &peers,
   const hobject_t &soid,
   eversion_t version)
 {
-  if (peer != primary) {
-    peer_missing[peer].add(soid, version, eversion_t(), false);
-  } else {
-    pg_log.missing_add(soid, version, eversion_t());
-    pg_log.set_last_requested(0);
+  for (auto &&peer : peers) {
+    if (peer != primary) {
+      peer_missing[peer].add(soid, version, eversion_t(), false);
+    } else {
+      pg_log.missing_add(soid, version, eversion_t());
+      pg_log.set_last_requested(0);
+    }
   }
+
+  missing_loc.rebuild(
+    soid,
+    pg_whoami,
+    acting_recovery_backfill,
+    info,
+    pg_log.get_missing(),
+    peer_missing,
+    peer_info);
 }
 
 void PeeringState::pre_submit_op(
@@ -3926,6 +3937,24 @@ void PeeringState::update_peer_last_backfill(
      * backfilled portion in addition to continuing backfill.
      */
     pinfo.stats = info.stats;
+  }
+}
+
+void PeeringState::set_revert_with_targets(
+  const hobject_t &soid,
+  const set<pg_shard_t> &good_peers)
+{
+  for (auto &&peer: good_peers) {
+    missing_loc.add_location(soid, peer);
+  }
+}
+
+void PeeringState::prepare_backfill_for_missing(
+  const hobject_t &soid,
+  const eversion_t &version,
+  const vector<pg_shard_t> &targets) {
+  for (auto &&peer: targets) {
+    peer_missing[peer].add(soid, version, eversion_t(), false);
   }
 }
 

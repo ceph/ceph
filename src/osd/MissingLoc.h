@@ -284,7 +284,7 @@ class MissingLoc {
   void rebuild(
     const hobject_t &hoid,
     pg_shard_t self,
-    const set<pg_shard_t> to_recover,
+    const set<pg_shard_t> &to_recover,
     const pg_info_t &info,
     const pg_missing_t &missing,
     const map<pg_shard_t, pg_missing_t> &pmissing,

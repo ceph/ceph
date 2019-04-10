@@ -2385,45 +2385,42 @@ void PG::Scrubber::cleanup_store(ObjectStore::Transaction *t) {
 }
 
 void PG::repair_object(
-  const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
-  pg_shard_t bad_peer)
+  const hobject_t &soid,
+  const list<pair<ScrubMap::object, pg_shard_t> > &ok_peers,
+  const set<pg_shard_t> &bad_peers)
 {
-  list<pg_shard_t> op_shards;
-  for (auto i : *ok_peers) {
-    op_shards.push_back(i.second);
-  }
-  dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peers osd.{" << op_shards << "}" << dendl;
-  ScrubMap::object &po = ok_peers->back().first;
+  set<pg_shard_t> ok_shards;
+  for (auto &&peer: ok_peers) ok_shards.insert(peer.second);
+
+  dout(10) << "repair_object " << soid
+	   << " bad_peers osd.{" << bad_peers << "},"
+	   << " ok_peers osd.{" << ok_shards << "}" << dendl;
+
+  const ScrubMap::object &po = ok_peers.back().first;
   eversion_t v;
-  bufferlist bv;
-  bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi;
   try {
+    bufferlist bv;
+    if (po.attrs.count(OI_ATTR)) {
+      bv.push_back(po.attrs.find(OI_ATTR)->second);
+    }
     auto bliter = bv.cbegin();
     decode(oi, bliter);
   } catch (...) {
-    dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
+    dout(0) << __func__ << ": Need version of replica, bad object_info_t: "
+	    << soid << dendl;
     ceph_abort();
   }
 
-  if (bad_peer == get_primary()) {
+  if (bad_peers.count(get_primary())) {
     // We should only be scrubbing if the PG is clean.
     ceph_assert(waiting_for_unreadable_object.empty());
     dout(10) << __func__ << ": primary = " << get_primary() << dendl;
   }
-  recovery_state.force_object_missing(bad_peer, soid, oi.version);
 
-  if (is_ec_pg() || bad_peer == get_primary()) {
-    // we'd better collect all shard for EC pg, and prepare good peers as the
-    // source of pull in the case of replicated pg.
-    missing_loc.add_missing(soid, oi.version, eversion_t());
-    list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
-    for (i = ok_peers->begin();
-	i != ok_peers->end();
-	++i)
-      missing_loc.add_location(soid, i->second);
-  }
+  /* No need to pass ok_peers, they must not be missing the object, so
+   * force_object_missing will add them to missing_loc anyway */
+  recovery_state.force_object_missing(bad_peers, soid, oi.version);
 }
 
 /* replica_scrub
@@ -3174,29 +3171,20 @@ bool PG::scrub_process_inconsistent()
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
 	   ++i) {
-	set<pg_shard_t>::iterator j;
-
 	auto missing_entry = scrubber.missing.find(i->first);
 	if (missing_entry != scrubber.missing.end()) {
-	  for (j = missing_entry->second.begin();
-	       j != missing_entry->second.end();
-	       ++j) {
-	    repair_object(
-	      i->first,
-	      &(i->second),
-	      *j);
-	    ++scrubber.fixed;
-	  }
+          repair_object(
+            i->first,
+            i->second,
+	    missing_entry->second);
+	  scrubber.fixed += missing_entry->second.size();
 	}
 	if (scrubber.inconsistent.count(i->first)) {
-	  for (j = scrubber.inconsistent[i->first].begin(); 
-	       j != scrubber.inconsistent[i->first].end(); 
-	       ++j) {
-	    repair_object(i->first, 
-	      &(i->second),
-	      *j);
-	    ++scrubber.fixed;
-	  }
+          repair_object(
+            i->first,
+            i->second,
+	    scrubber.inconsistent[i->first]);
+	  scrubber.fixed += missing_entry->second.size();
 	}
       }
     }
