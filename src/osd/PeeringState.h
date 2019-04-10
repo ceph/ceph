@@ -1578,7 +1578,17 @@ public:
   void force_object_missing(
     pg_shard_t peer,
     const hobject_t &oid,
-    eversion_t version);
+    eversion_t version,
+    const set<pg_shard_t> *candidates=nullptr);
+
+  void prepare_backfill_for_missing(
+    const hobject_t &soid,
+    const eversion_t &version,
+    const vector<pg_shard_t> &targets);
+
+  void set_revert_with_targets(
+    const hobject_t &soid,
+    const set<pg_shard_t> &good_peers);
 
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
@@ -1751,6 +1761,10 @@ public:
     return acting_recovery_backfill;
   }
 
+  const PGLog &get_pg_log() const {
+    return pg_log;
+  }
+
   bool state_test(uint64_t m) const { return (state & m) != 0; }
   void state_set(uint64_t m) { state |= m; }
   void state_clear(uint64_t m) { state &= ~m; }
@@ -1855,6 +1869,10 @@ public:
   }
   bool get_num_missing() const {
     return pg_log.get_missing().num_missing() > 0;
+  }
+
+  const MissingLoc &get_missing_loc() const {
+    return missing_loc;
   }
 
   const MissingLoc::missing_by_count_t &get_missing_by_count() const {

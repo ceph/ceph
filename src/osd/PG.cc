@@ -2412,18 +2412,18 @@ void PG::repair_object(
     ceph_assert(waiting_for_unreadable_object.empty());
     dout(10) << __func__ << ": primary = " << get_primary() << dendl;
   }
-  recovery_state.force_object_missing(bad_peer, soid, oi.version);
 
+  set<pg_shard_t> good_targets;
   if (is_ec_pg() || bad_peer == get_primary()) {
     // we'd better collect all shard for EC pg, and prepare good peers as the
     // source of pull in the case of replicated pg.
-    missing_loc.add_missing(soid, oi.version, eversion_t());
     list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
     for (i = ok_peers->begin();
 	i != ok_peers->end();
 	++i)
-      missing_loc.add_location(soid, i->second);
+      good_targets.insert(i->second);
   }
+  recovery_state.force_object_missing(bad_peer, soid, oi.version, &good_targets);
 }
 
 /* replica_scrub
