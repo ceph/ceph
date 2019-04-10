@@ -1,5 +1,6 @@
 #include <seastar/core/app-template.hh>
 #include "common/ceph_argparse.h"
+#include "crimson/common/auth_handler.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -7,6 +8,19 @@
 
 using Config = ceph::common::ConfigProxy;
 using MonClient = ceph::mon::Client;
+
+namespace {
+
+class DummyAuthHandler : public ceph::common::AuthHandler {
+public:
+  void handle_authentication(const EntityName& name,
+                             uint64_t global_id,
+                             const AuthCapsInfo& caps) override {}
+};
+
+DummyAuthHandler dummy_handler;
+
+}
 
 static seastar::future<> test_monc()
 {
@@ -35,7 +49,7 @@ static seastar::future<> test_monc()
       if (conf->ms_crc_header) {
         msgr->set_crc_header();
       }
-      auto monc = std::make_unique<MonClient>(*msgr);
+      auto monc = std::make_unique<MonClient>(*msgr, dummy_handler);
       auto monc_ptr = monc.get();
       return msgr->start(monc_ptr).then([monc_ptr] {
         return seastar::with_timeout(
