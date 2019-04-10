@@ -113,6 +113,7 @@ void PeeringState::PeeringMachine::send_query(
 
 PeeringState::PeeringState(
   CephContext *cct,
+  pg_shard_t pg_whoami,
   spg_t spgid,
   const PGPool &_pool,
   OSDMapRef curmap,
@@ -126,6 +127,7 @@ PeeringState::PeeringState(
     orig_ctx(0),
     osdmap_ref(curmap),
     pool(_pool),
+    pg_whoami(pg_whoami),
     info(spgid),
     pg_log(cct),
     missing_loc(spgid, this, dpp, cct)

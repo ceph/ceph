@@ -172,22 +172,21 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
   friend class NamedState;
   friend class PeeringState;
 
-protected:
-  PeeringState recovery_state;
 public:
-  using PeeringCtx = PeeringState::PeeringCtx;
+  const pg_shard_t pg_whoami;
+  const spg_t pg_id;
+  PeeringState recovery_state;
 
+  using PeeringCtx = PeeringState::PeeringCtx;
 
 protected:
   /**
-   * Peering state information being moved to PeeringState
+   * Ref to pg_info_t in Peering state
    */
-  pg_shard_t pg_whoami;
   const pg_info_t &info;
 
 public:
   // -- members --
-  const spg_t pg_id;
   const coll_t coll;
 
   ObjectStore::CollectionHandle ch;
@@ -322,7 +321,7 @@ public:
     return recovery_state.get_up_primary();
   }
   const PastIntervals& get_past_intervals() const {
-    return recovery_state.past_intervals;
+    return recovery_state.get_past_intervals();
   }
   bool is_acting_recovery_backfill(pg_shard_t osd) const {
     return recovery_state.is_acting_recovery_backfill(osd);
