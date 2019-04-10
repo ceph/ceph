@@ -151,8 +151,14 @@ class PgRecoveryEvent(Event):
             self._original_bytes_recovered = {}
             for pg in self._pgs:
                 pg_str = str(pg)
-                self._original_bytes_recovered[pg] = \
-                    pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                try:
+                    self._original_bytes_recovered[pg] = \
+                        pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                except KeyError:
+                    log.info('got KeyError, see http://tracker.ceph.com/issues/38157')
+                    log.info('pg_to_state as string: ' + repr(pg_to_state))
+                    log.info('pg_str "' + repr(pg_str) + '"')
+                    raise
 
         complete_accumulate = 0.0
 
@@ -236,6 +242,9 @@ class PgId(object):
 
     def __str__(self):
         return "{0}.{1:x}".format(self.pool_id, self.ps)
+
+    def __repr__(self):
+        return "PgId({},{})".format(self.pool_id, self.ps)
 
 
 class Module(MgrModule):
