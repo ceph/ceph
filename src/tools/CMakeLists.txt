@@ -65,6 +65,10 @@ endif(WITH_LIBCEPHFS)
 add_executable(ceph-kvstore-tool
   kvstore_tool.cc
   ceph_kvstore_tool.cc)
+# Temporary workaround to get past a compiler bug in gcc7
+# https://bugzilla.redhat.com/show_bug.cgi?id=1531154
+set_source_files_properties(kvstore_tool.cc PROPERTIES COMPILE_FLAGS
+  "${CMAKE_CXX_FLAGS} --param ggc-min-expand=1 --param ggc-min-heapsize=0")
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
