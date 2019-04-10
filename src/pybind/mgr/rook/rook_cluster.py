@@ -377,7 +377,7 @@ class RookCluster(object):
         #       - name: "gravel1.rockery"
         #         devices:
         #          - name: "sdb"
-        #         storeConfig:
+        #         config:
         #           storeType: bluestore
 
         current_cluster = self.rook_api_get(
@@ -398,7 +398,7 @@ class RookCluster(object):
 
         if drive_group.hosts(all_hosts)[0] not in [n['name'] for n in current_nodes]:
             pd = { "name": drive_group.hosts(all_hosts)[0],
-                   "storeConfig": { "storeType": drive_group.objectstore }}
+                   "config": { "storeType": drive_group.objectstore }}
 
             if block_devices:
                 pd["devices"] = [{'name': d} for d in block_devices]
