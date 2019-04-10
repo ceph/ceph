@@ -21,36 +21,29 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def download(ctx, config):
     """
-    Download the scheduler tests from the git re[p]
-    Remove downloaded s3 file upon exit.
+    TODO: run the tests directly when we move to py3, this copy/git thing is
+    only around as teuthology is not py3 ready yet
 
-    The context passed in should be identical to the context
-    passed in to the main task.
     """
     assert isinstance(config, dict)
-    log.info('Downloading s3-tests...')
+    log.info('Downloading ceph...')
     testdir = teuthology.get_testdir(ctx)
-    for client, cconf in config.items():
-        git_remote = cconf.get('git_remote', None) or teuth_config.ceph_git_base_url
-        sha1 = cconf.get('sha1')
-        branch = cconf.get('branch','master')
-        ctx.cluster.only(client).run(
-            args=[
-                'git', 'clone',
-                '-b', branch,
-                git_remote + 'scheduler_tests.git',
-                '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
-                ],
-        )
-        if sha1 is not None:
-            ctx.cluster.only(client).run(
-                args=[
-                    'cd', '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
-                    run.Raw('&&'),
-                    'git', 'reset', '--hard', sha1,
-                ],
-            )
+    local_dir, _ = os.path.split(os.path.realpath(__file__))
+    local_dir += "/rgw_scheduler_tests/"
+    remote_dir = "{tdir}/rgw-scheduler-tests".format(tdir=testdir)
     try:
+        # TODO:
+        # hopefully this is less expensive than cloning the entire repo
+        # if this trick works, modify workunits to do the same instead of a
+        # full clone
+        for client in config:
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            log.info('abhi, k:=%s' % remote.name)
+            teuthology.sh("scp -r {local_dir} {host}:{remote_dir}".format(
+                local_dir=local_dir,
+                host=remote.name,
+                remote_dir=remote_dir
+            ))
         yield
     finally:
         log.info('Removing s3-tests...')
@@ -58,6 +51,7 @@ def download(ctx, config):
         for client in config:
             ctx.cluster.only(client).run(
                 args=[
+                    'sudo',
                     'rm',
                     '-rf',
                     '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
@@ -203,15 +197,16 @@ def run_tests(ctx, config):
     # civetweb > 1.8 && beast parsers are strict on rfc2616
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        args = [run.Raw('TEST_CONF={tdir}/archive/rgw-scheduler-tests.{client}.conf'.format(tdir=testdir, client=client)),
-        ]
-        # needed for making sandwiches and reading from admin sockets
-        args += [
+        args = [
+            'cd',
+            '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
+            run.Raw('&&'),
+            run.Raw('TEST_CONF={tdir}/archive/rgw-scheduler-tests.{client}.conf'.format(tdir=testdir, client=client)),
             'sudo',
             '-E',
             '{tdir}/rgw-scheduler-tests/scheduler-venv/bin/pytest'.format(tdir=testdir),
             '-v',
-            '{tdir}/rgw-scheduler-tests/scheduler/'.format(tdir=testdir)
+            'tests'
         ]
         if client_config is not None and 'extra_args' in client_config:
             args.extend(client_config['extra_args'])
