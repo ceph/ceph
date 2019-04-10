@@ -41,7 +41,7 @@ PubSub Zone Configuration
 The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
 First, a master zone must exist (see: :ref:`master-zone-label`), 
 then a secondary zone should be created (see :ref:`secondary-zone-label`).
-None that, When doing the actual creation of the secondary zone zone, its tier type must be set to ``pubsub``:
+In the creation of the secondary zone, its tier type must be set to ``pubsub``:
 
 ::
 
@@ -84,8 +84,8 @@ The oid prefix for the stored events.
 
 How many days to keep events that weren't acked.
 
-How to Configure?
-~~~~~~~~~~~~~~~~~
+Configuring Parameters via CLI
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The tier configuration could be set using the following command:
 
@@ -95,8 +95,8 @@ The tier configuration could be set using the following command:
                                 --rgw-zone={zone-name} \
                                 --tier-config={key}={val}[,{key}={val}]
 
-Where the ``key`` in the configuration specifies the configuration variable that needs to be updated, and
-the ``val`` specifies its new value. Nested values can be accessed using period. For example:
+Where the ``key`` in the configuration specifies the configuration variable that needs to be updated (from the list above), and
+the ``val`` specifies its new value. For example, setting the pubsub control user ``uid`` to ``user_ps``:
 
 ::
 
@@ -119,10 +119,12 @@ PubSub Performance Stats
 .. note:: 
 
     ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while: 
-    ``pubsub_store_ok``, ``pubsub_store_fail``, ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per store/push action on each subscription
+    ``pubsub_store_ok``, ``pubsub_store_fail``, ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per store/push action on each subscriptions.
 
 PubSub REST API
 ---------------
+
+.. tip:: PubSub REST calls, and only them, should be sent to an RGW which belong to a PubSub zone
 
 Topics
 ~~~~~~
