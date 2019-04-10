@@ -355,7 +355,8 @@ Instructions
      
    To create a minimal but sufficient ``ceph.conf`` for each host,::
 
-     ceph config generate-minimal-conf > /etc/ceph/ceph.conf
+     ceph config generate-minimal-conf > /etc/ceph/ceph.conf.new
+     mv /etc/ceph/ceph.conf.new /etc/ceph/ceph.conf
 
    Be sure to use this new config only on hosts that have been
    upgraded to Nautilus, as it may contain a ``mon_host`` value that
