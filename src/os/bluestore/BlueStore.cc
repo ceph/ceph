@@ -4035,6 +4035,8 @@ const char **BlueStore::get_tracked_conf_keys() const
     "osd_memory_cache_min",
     "bluestore_cache_autotune",
     "bluestore_cache_autotune_interval",
+    "bluestore_no_per_pool_stats_tolerance",
+    "bluestore_warn_on_legacy_statfs",
     NULL
   };
   return KEYS;
@@ -4043,6 +4045,11 @@ const char **BlueStore::get_tracked_conf_keys() const
 void BlueStore::handle_conf_change(const ConfigProxy& conf,
 				   const std::set<std::string> &changed)
 {
+  if (changed.count("bluestore_no_per_pool_stats_tolerance") ||
+      changed.count("bluestore_warn_on_legacy_statfs")) {
+    _check_legacy_statfs_alert();
+  }
+
   if (changed.count("bluestore_csum_type")) {
     _set_csum();
   }
@@ -5797,6 +5804,7 @@ void BlueStore::_open_statfs()
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
+    _check_legacy_statfs_alert();
   } else if (cct->_conf->bluestore_no_per_pool_stats_tolerance == "enforce") {
     per_pool_stat_collection = false;
     dout(10) << __func__ << " store_statfs is requested but missing, using empty" << dendl;
@@ -8168,6 +8176,7 @@ int BlueStore::statfs(struct store_statfs_t *buf,
 int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
 {
   dout(20) << __func__ << " pool " << pool_id<< dendl;
+
   if (!per_pool_stat_collection) {
     dout(20) << __func__ << " not supported in legacy mode " << dendl;
     return -ENOTSUP;
@@ -8180,6 +8189,19 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
   }
   dout(10) << __func__ << *buf << dendl;
   return 0;
+}
+
+void BlueStore::_check_legacy_statfs_alert()
+{
+  string s;
+  if (!per_pool_stat_collection &&
+    cct->_conf->bluestore_no_per_pool_stats_tolerance != "enforce" &&
+    cct->_conf->bluestore_warn_on_legacy_statfs) {
+    s = "legacy statfs reporting detected, "
+        "suggest to run store repair to get consistent statistic reports";
+  }
+  std::lock_guard l(qlock);
+  legacy_statfs_alert = s;
 }
 
 // ---------------
@@ -13781,6 +13803,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
+  if (!legacy_statfs_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_LEGACY_STATFS",
+      legacy_statfs_alert);
+  }
   if (!spillover_alert.empty() &&
       cct->_conf->bluestore_warn_on_bluefs_spillover) {
     alerts.emplace(

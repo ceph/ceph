@@ -2994,6 +2994,8 @@ void PGMap::get_health_checks(
 	summary = "BlueFS spillover detected";
       } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
 	summary = "BlueStore compression broken";
+      } else if (asum.first == "BLUESTORE_LEGACY_STATFS") {
+	summary = "Legacy BlueStore stats reporting detected";
       }
       summary += " on ";
       summary += stringify(asum.second.first);
