@@ -439,6 +439,23 @@ static int get_multipart_info(RGWRados *store, struct req_state *s,
   return get_multipart_info(store, s, meta_obj, policy, attrs, upload_info);
 }
 
+int modify_obj_attr(RGWRados *store, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, const char* attr_name, bufferlist& attr_val)
+{
+  map<string, bufferlist> attrs;
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+
+  int r = read_op.prepare();
+  if (r < 0) {
+    return r;
+  }
+  store->set_atomic(&obj_ctx, read_op.state.obj);
+  attrs[attr_name] = attr_val;
+  return store->set_attrs(&obj_ctx, bucket_info, read_op.state.obj, attrs, NULL);
+}
+
 static int modify_obj_attr(RGWRados *store, struct req_state *s, const rgw_obj& obj, const char* attr_name, bufferlist& attr_val)
 {
   map<string, bufferlist> attrs;
