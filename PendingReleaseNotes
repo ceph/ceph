@@ -1,3 +1,10 @@
+12.2.13
+-------
+* Ceph now packages python bindings for python3.6 instead of
+  python3.4, because EPEL7 recently switched from python3.4 to
+  python3.6 as the native python3. see the `announcement <https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/>_`
+  for more details on the background of this change.
+
 12.2.12
 -------
 * In 12.2.9 and earlier releases, keyring caps were not checked for validity,
