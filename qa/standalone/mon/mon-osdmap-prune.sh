@@ -4,11 +4,6 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 base_test=$CEPH_ROOT/qa/workunits/mon/test_mon_osdmap_prune.sh
 
-# We are going to open and close a lot of files, and generate a lot of maps
-# that the osds will need to process. If we don't increase the fd ulimit, we
-# risk having the osds asserting when handling filestore transactions.
-ulimit -n 4096
-
 function run() {
 
   local dir=$1
