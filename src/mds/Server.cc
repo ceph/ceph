@@ -5460,6 +5460,11 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   ls->open_files.push_back(&newi->item_open_file);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+
+  // We hit_dir (via hit_inode) in our finish callback, but by then we might
+  // have overshot the split size (multiple mkdir in flight), so here is
+  // an early chance to split the dir if this mkdir makes it oversized.
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 
