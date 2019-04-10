@@ -470,7 +470,7 @@ void OSDService::shutdown()
     recovery_request_timer.shutdown();
   }
 
-  osdmap = OSDMapRef();
+  publish_map(OSDMapRef());
   next_osdmap = OSDMapRef();
 }
 
@@ -3959,7 +3959,10 @@ int OSD::shutdown()
   monc->shutdown();
   osd_lock.Unlock();
 
+  map_lock.get_write();
   osdmap = OSDMapRef();
+  map_lock.put_write();
+
   for (auto s : shards) {
     std::lock_guard l(s->osdmap_lock);
     s->shard_osdmap = OSDMapRef();
