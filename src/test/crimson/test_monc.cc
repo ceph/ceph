@@ -35,16 +35,15 @@ static seastar::future<> test_monc()
       if (conf->ms_crc_header) {
         msgr->set_crc_header();
       }
-      return seastar::do_with(MonClient{*msgr},
-                              [msgr](auto& monc) {
-        return msgr->start(&monc).then([&monc] {
-          return seastar::with_timeout(
-            seastar::lowres_clock::now() + std::chrono::seconds{10},
-            monc.start());
-        }).then([&monc] {
-          return monc.stop();
-        });
-      }).finally([msgr] {
+      auto monc = std::make_unique<MonClient>(*msgr);
+      auto monc_ptr = monc.get();
+      return msgr->start(monc_ptr).then([monc_ptr] {
+        return seastar::with_timeout(
+          seastar::lowres_clock::now() + std::chrono::seconds{10},
+          monc_ptr->start());
+      }).then([monc_ptr] {
+        return monc_ptr->stop();
+      }).finally([msgr, monc=std::move(monc)] {
         return msgr->shutdown();
       });
     });
