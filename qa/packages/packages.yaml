@@ -49,5 +49,5 @@ ceph:
   - python-ceph
   - rbd-fuse
   - ceph-debuginfo
-  - python34-cephfs
-  - python34-rados
+  - python3-cephfs
+  - python3-rados
