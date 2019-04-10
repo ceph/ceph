@@ -1157,7 +1157,6 @@ public:
    */
   boost::optional<PeeringCtx> rctx;
 
-public:
   /**
    * OSDMap state
    */
@@ -1262,14 +1261,10 @@ public:
     osdmap_ref = std::move(newmap);
   }
 
-  void write_if_dirty(ObjectStore::Transaction& t);
-
   void update_heartbeat_peers();
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
   void remove_down_peer_info(const OSDMapRef &osdmap);
-  void purge_strays();
-  void update_history(const pg_history_t& new_history);
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();
   void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
@@ -1286,11 +1281,6 @@ public:
     const vector<int>& newacting, int acting_primary,
     ObjectStore::Transaction *t);
   void on_new_interval();
-  void init_primary_up_acting(
-    const vector<int> &newup,
-    const vector<int> &newacting,
-    int new_up_primary,
-    int new_acting_primary);
   void clear_recovery_state();
   void clear_primary_state();
   void check_past_interval_bounds() const;
@@ -1363,7 +1353,6 @@ public:
     const pg_info_t &oinfo, const pg_missing_t &omissing,
     pg_shard_t fromosd,
     PeeringCtx*);
-  void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
   void build_might_have_unfound();
   void log_weirdness();
   void activate(
@@ -1372,7 +1361,6 @@ public:
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
     PeeringCtx *ctx);
-  void share_pg_info();
 
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   void merge_log(
@@ -1417,12 +1405,6 @@ public:
   void update_blocked_by();
   void update_calc_stats();
 
-  bool append_log_entries_update_missing(
-    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
-
   void add_log_entry(const pg_log_entry_t& e, bool applied);
 
   void calc_trim_to();
@@ -1431,6 +1413,7 @@ public:
 public:
   PeeringState(
     CephContext *cct,
+    pg_shard_t pg_whoami,
     spg_t spgid,
     const PGPool &pool,
     OSDMapRef curmap,
@@ -1491,6 +1474,13 @@ public:
     log_weirdness();
   }
 
+  void init_primary_up_acting(
+    const vector<int> &newup,
+    const vector<int> &newacting,
+    int new_up_primary,
+    int new_acting_primary);
+
+  void share_pg_info();
 
   void start_split_stats(
     const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
@@ -1504,11 +1494,14 @@ public:
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
 
+  void purge_strays();
+
   void update_stats(
     std::function<bool(pg_history_t &, pg_stat_t &)> f,
     ObjectStore::Transaction *t = nullptr);
 
   void update_hset(const pg_hit_set_history_t &hset_history);
+  void update_history(const pg_history_t& new_history);
 
   std::optional<pg_stat_t> prepare_stats_for_publish(
     bool pg_stats_publish_valid,
@@ -1519,7 +1512,7 @@ public:
    * Merge entries updating missing as necessary on all
    * acting_recovery_backfill logs and missings (also missing_loc)
    */
-  void merge_new_log_entries(
+  bool append_log_entries_update_missing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     boost::optional<eversion_t> trim_to,
@@ -1532,6 +1525,12 @@ public:
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);
+
+  void merge_new_log_entries(
+    const mempool::osd_pglog::list<pg_log_entry_t> &entries,
+    ObjectStore::Transaction &t,
+    boost::optional<eversion_t> trim_to,
+    boost::optional<eversion_t> roll_forward_to);
 
   void add_local_next_event(const pg_log_entry_t& e) {
     pg_log.missing_add_next_entry(e);
@@ -1563,6 +1562,8 @@ public:
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t soid);
+
+  void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
 
   void object_recovered(
     const hobject_t &hoid,
@@ -1629,6 +1630,8 @@ public:
   void set_last_requested(version_t v) {
     pg_log.set_last_requested(v);
   }
+
+  void write_if_dirty(ObjectStore::Transaction& t);
 
   void complete_write(eversion_t v, eversion_t lc);
   void local_write_applied(eversion_t v) {

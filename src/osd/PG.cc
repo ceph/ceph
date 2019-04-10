@@ -178,16 +178,17 @@ void PG::dump_live_ids()
 
 PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
+  pg_whoami(osd->whoami, p.shard),
+  pg_id(p),
   recovery_state(
     cct,
+    pg_whoami,
     p,
     _pool,
     curmap,
     this,
     this),
-  pg_whoami(recovery_state.pg_whoami),
   info(recovery_state.get_info()),
-  pg_id(p),
   coll(p),
   osd(o),
   cct(o->cct),
@@ -1192,8 +1193,6 @@ void PG::read_state(ObjectStore *store)
 	 << " an older version first." << dendl;
     ceph_abort_msg("PG too old to upgrade");
   }
-
-  recovery_state.last_written_info = info;
 
   recovery_state.init_from_disk_state(
     std::move(info_from_disk),
