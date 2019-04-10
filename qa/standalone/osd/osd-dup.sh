@@ -33,10 +33,10 @@ function TEST_filestore_to_bluestore() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd $dir 0 || return 1
+    run_osd_filestore $dir 0 || return 1
     osd_pid=$(cat $dir/osd.0.pid)
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
+    run_osd_filestore $dir 1 || return 1
+    run_osd_filestore $dir 2 || return 1
 
     sleep 5
 
@@ -61,7 +61,7 @@ function TEST_filestore_to_bluestore() {
 			  --op dup || return 1
     CEPH_ARGS=$O
 
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
 
     while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
     ceph osd metadata 0 | grep bluestore || return 1
