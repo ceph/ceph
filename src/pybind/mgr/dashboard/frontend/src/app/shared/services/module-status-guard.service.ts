@@ -36,6 +36,9 @@ import { ServicesModule } from './services.module';
   providedIn: ServicesModule
 })
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
+  // TODO: Hotfix - remove WHITELIST'ing when a generic ErrorComponent is implemented
+  static readonly WHITELIST: string[] = ['501'];
+
   constructor(private http: HttpClient, private router: Router) {}
 
   canActivate(route: ActivatedRouteSnapshot) {
@@ -47,6 +50,9 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   }
 
   private doCheck(route: ActivatedRouteSnapshot) {
+    if (route.url.length > 0 && ModuleStatusGuardService.WHITELIST.includes(route.url[0].path)) {
+      return observableOf(true);
+    }
     const config = route.data['moduleStatusGuardConfig'];
     return this.http.get(`/api/${config.apiPath}/status`).pipe(
       map((resp: any) => {
