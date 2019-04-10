@@ -1286,8 +1286,9 @@ protected:
   bool range_intersects_scrub(const hobject_t &start, const hobject_t& end);
 
   void repair_object(
-    const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
-    pg_shard_t bad_peer);
+    const hobject_t &soid,
+    const list<pair<ScrubMap::object, pg_shard_t> > &ok_peers,
+    const set<pg_shard_t> &bad_peers);
 
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();

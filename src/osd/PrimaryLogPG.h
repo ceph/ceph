@@ -305,7 +305,6 @@ public:
 
   bool primary_error(const hobject_t& soid, eversion_t v);
 
-  void backfill_add_missing(const hobject_t &oid, eversion_t v);
   void remove_missing_object(const hobject_t &oid,
 			     eversion_t v,
 			     Context *on_complete) override;
