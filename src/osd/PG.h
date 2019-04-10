@@ -175,15 +175,8 @@ class PG : public DoutPrefixProvider, public PeeringState::PeeringListener {
 public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
-  PeeringState recovery_state;
 
   using PeeringCtx = PeeringState::PeeringCtx;
-
-protected:
-  /**
-   * Ref to pg_info_t in Peering state
-   */
-  const pg_info_t &info;
 
 public:
   // -- members --
@@ -1508,6 +1501,14 @@ protected:
   friend class FlushState;
 
   friend ostream& operator<<(ostream& out, const PG& pg);
+
+protected:
+  PeeringState recovery_state;
+
+  /**
+   * Ref to pg_info_t in Peering state
+   */
+  const pg_info_t &info;
 };
 
 

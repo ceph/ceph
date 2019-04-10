@@ -1132,7 +1132,6 @@ public:
   };
 
   PGStateHistory state_history;
-  PeeringMachine machine;
   CephContext* cct;
   spg_t spgid;
   DoutPrefixProvider *dpp;
@@ -1250,6 +1249,8 @@ public:
 
   bool backfill_reserved = false;
   bool backfill_reserving = false;
+
+  PeeringMachine machine;
 
   void update_osdmap_ref(OSDMapRef newmap) {
     osdmap_ref = std::move(newmap);
