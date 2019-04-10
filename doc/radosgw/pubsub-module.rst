@@ -35,9 +35,25 @@ be accessed directly, but need to be pulled and acked using the new REST API.
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
-PubSub Tier Type Configuration
--------------------------------
+PubSub Zone Configuration
+-------------------------
 
+The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
+First, a master zone must exist (see: :ref:`master-zone-label`), 
+then a secondary zone should be created (see :ref:`secondary-zone-label`).
+None that, When doing the actual creation of the secondary zone zone, its tier type must be set to ``pubsub``:
+
+::
+
+   # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
+                                --rgw-zone={zone-name} \
+                                --endpoints={http://fqdn}[,{http://fqdn}]
+                                --tier-type=pubsub
+
+
+PubSub Zone Configuration Parameters
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                                
 ::
 
    {
@@ -68,20 +84,10 @@ The oid prefix for the stored events.
 
 How many days to keep events that weren't acked.
 
-How to Configure
-~~~~~~~~~~~~~~~~
+How to Configure?
+~~~~~~~~~~~~~~~~~
 
-See `Multisite Configuration`_ for multisite configuration instructions. The pubsub sync module requires a creation of a new zone. The zone
-tier type needs to be defined as ``pubsub``:
-
-::
-
-   # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
-                                --rgw-zone={zone-name} \
-                                --endpoints={http://fqdn}[,{http://fqdn}]
-                                --tier-type=pubsub
-
-The tier configuration can be then done using the following command
+The tier configuration could be set using the following command:
 
 ::
 
@@ -89,7 +95,7 @@ The tier configuration can be then done using the following command
                                 --rgw-zone={zone-name} \
                                 --tier-config={key}={val}[,{key}={val}]
 
-The ``key`` in the configuration specifies the configuration variable that needs to be updated, and
+Where the ``key`` in the configuration specifies the configuration variable that needs to be updated, and
 the ``val`` specifies its new value. Nested values can be accessed using period. For example:
 
 ::
@@ -110,8 +116,10 @@ PubSub Performance Stats
 - ``pubsub_push_fail``: running counter, for all subscriptions, of pubsub events failed to be pushed to their endpoint
 - ``pubsub_push_pending``: gauge value of pubsub events pushed to a endpoint but not acked or nacked yet
 
-Note that ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, 
-while: ``pubsub_store_ok``, ``pubsub_store_fail``, ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per store/push action on each subscriptions.
+.. note:: 
+
+    ``pubsub_event_triggered`` and ``pubsub_event_lost`` are incremented per event, while: 
+    ``pubsub_store_ok``, ``pubsub_store_fail``, ``pubsub_push_ok``, ``pubsub_push_fail``, are incremented per store/push action on each subscription
 
 PubSub REST API
 ---------------
@@ -239,7 +247,7 @@ Request parameters are encoded in XML in the body of the request, with the follo
 
 - Id: name of the notification
 - Topic: topic ARN
-- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*``. Note that multiple ``Event`` tags may be used
+- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*`` (multiple ``Event`` tags may be used)
 
 Delete Notification
 ```````````````````
@@ -254,12 +262,12 @@ Request parameters:
 
 - notification-id: name of the notification (if not provided, all S3-compliant notifications on the bucket are deleted)
 
-Notes:
+.. note:: 
 
-- This is an extension to the S3 notification API
-- When the bucket is deleted, any notification defined on it is also deleted. 
-  In this case, the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access), 
-  and will have to be deleted explicitly with the subscription deletion API
+    - Notification deletion is an extension to the S3 notification API
+    - When the bucket is deleted, any notification defined on it is also deleted. 
+      In this case, the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access), 
+      and will have to be deleted explicitly with the subscription deletion API
 
 Get/List Notifications
 ``````````````````````
@@ -288,12 +296,13 @@ Response is XML formatted:
 
 - Id: name of the notification
 - Topic: topic ARN
-- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*``. Note that multiple ``Event`` tags may be used
+- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*`` (multiple ``Event`` tags may be used)
 
-Notes:
 
-- Getting information on a specific notification is an extension to the S3 notification API
-- When multiple notifications are fetched from the bucket, multiple ``NotificationConfiguration`` tags will be used
+.. note::
+
+    - Getting information on a specific notification is an extension to the S3 notification API
+    - When multiple notifications are fetched from the bucket, multiple ``NotificationConfiguration`` tags will be used
 
 Non S3-Compliant Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -325,7 +334,7 @@ Request parameters:
 
 - topic-name: name of topic
 
-Note that when the bucket is deleted, any notification defined on it is also deleted
+.. note:: when the bucket is deleted, any notification defined on it is also deleted
 
 List Notifications
 ``````````````````
@@ -561,4 +570,4 @@ Request parameters:
 
 - event-id: id of event to be acked
 
-.. _Multisite Configuration: ../multisite
+.. _Multisite : ../multisite

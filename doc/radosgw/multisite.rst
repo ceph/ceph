@@ -82,6 +82,7 @@ of the master zone group.
 See `Pools`_ for instructions on creating and tuning pools for Ceph
 Object Storage.
 
+.. _master-zone-label:
 
 Configuring a Master Zone
 =========================
@@ -321,6 +322,8 @@ service:
 
     # systemctl start ceph-radosgw@rgw.`hostname -s`
     # systemctl enable ceph-radosgw@rgw.`hostname -s`
+
+.. _secondary-zone-label:
 
 Configure Secondary Zones
 =========================
