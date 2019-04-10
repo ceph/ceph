@@ -912,6 +912,7 @@ int ActivePyModules::handle_command(
   auto mod_iter = modules.find(module_name);
   if (mod_iter == modules.end()) {
     *ss << "Module '" << module_name << "' is not available";
+    lock.Unlock();
     return -ENOENT;
   }
 
