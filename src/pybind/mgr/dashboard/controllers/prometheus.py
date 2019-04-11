@@ -12,17 +12,19 @@ from ..settings import Settings
 
 @Controller('/api/prometheus_receiver', secure=False)
 class PrometheusReceiver(BaseController):
-    # The receiver is needed in order to receive alert notifications (reports)
+    ''' The receiver is needed in order to receive alert notifications (reports) '''
     notifications = []
 
     @Endpoint('POST', path='/')
     def fetch_alert(self, **notification):
         notification['notified'] = datetime.now().isoformat()
+        notification['id'] = str(len(self.notifications))
         self.notifications.append(notification)
 
 
 @ApiController('/prometheus', Scope.PROMETHEUS)
 class Prometheus(RESTController):
+
     def _get_api_url(self):
         return Settings.ALERTMANAGER_API_HOST.rstrip('/') + '/api/v1'
 
@@ -35,10 +37,14 @@ class Prometheus(RESTController):
     def list(self, **params):
         return self._api_request('/alerts', params)
 
-    @RESTController.Collection('POST')
-    def get_notifications_since(self, **last_notification):
-        notifications = PrometheusReceiver.notifications
-        if last_notification not in notifications:
-            return notifications[-1:]
-        index = notifications.index(last_notification)
-        return notifications[index + 1:]
+
+@ApiController('/prometheus/notifications', Scope.PROMETHEUS)
+class PrometheusNotifications(RESTController):
+
+    def list(self, **params):
+        if 'from' in params:
+            f = params['from']
+            if f == 'last':
+                return PrometheusReceiver.notifications[-1:]
+            return PrometheusReceiver.notifications[int(f) + 1:]
+        return PrometheusReceiver.notifications
