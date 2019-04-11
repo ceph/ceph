@@ -1132,8 +1132,8 @@ namespace rgw { namespace lc {
 int fix_lc_shard_entry(RGWRados* store, const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs)
 {
-  if (auto aiter = battrs.find(RGW_ATTR_LC);
-      aiter == battrs.end()) {
+  auto aiter = battrs.find(RGW_ATTR_LC);
+  if (aiter == battrs.end()) {
     return 0;    // No entry, nothing to fix
   }
 

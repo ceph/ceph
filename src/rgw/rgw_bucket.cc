@@ -1919,8 +1919,8 @@ int RGWBucketAdminOp::fix_lc_shards(RGWRados *store,
   static constexpr auto default_max_keys = 1000;
 
   bool truncated;
-  if (const std::string& bucket_name = op_state.get_bucket_name();
-      ! bucket_name.empty()) {
+  const std::string& bucket_name = op_state.get_bucket_name();
+  if (! bucket_name.empty()) {
     const rgw_user user_id = op_state.get_user_id();
     process_single_lc_entry(store, formatter, user_id.tenant, bucket_name);
     formatter->flush(cout);
@@ -1946,7 +1946,9 @@ int RGWBucketAdminOp::fix_lc_shards(RGWRados *store,
           return ret;
         } if (ret != -ENOENT) {
           for (const auto &key:keys) {
-            auto [tenant_name, bucket_name] = split_tenant(key);
+	    std::string tenant_name;
+	    std::string bucket_name;
+	    std::tie(tenant_name, bucket_name) = split_tenant(key);
             process_single_lc_entry(store, formatter, tenant_name, bucket_name);
           }
         }
