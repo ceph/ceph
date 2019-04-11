@@ -83,6 +83,9 @@
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
 
+/// base recovery priority for MRecoveryReserve (inactive PG)
+#define OSD_RECOVERY_INACTIVE_PRIORITY_BASE 220
+
 /// max manually/automatically set recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MAX 253
 
@@ -2076,6 +2079,7 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   std::vector<int32_t> up, acting;
+  std::vector<pg_shard_t> avail_no_missing;
   epoch_t mapping_epoch;
 
   std::vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
