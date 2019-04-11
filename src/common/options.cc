@@ -1355,6 +1355,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_down_out_subtree_limit", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rack")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("do not automatically mark OSDs 'out' if an entire subtree of this size is down")
     .add_see_also("mon_osd_down_out_interval"),
