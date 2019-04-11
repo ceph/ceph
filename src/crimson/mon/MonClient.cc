@@ -53,10 +53,10 @@ public:
   Connection(ceph::net::ConnectionRef conn,
 	     KeyRing* keyring);
   seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
-  seastar::future<> authenticate(epoch_t epoch,
-				 const EntityName& name,
-				 const AuthMethodList& auth_methods,
-				 uint32_t want_keys);
+  seastar::future<> authenticate_v1(epoch_t epoch,
+                                    const EntityName& name,
+                                    const AuthMethodList& auth_methods,
+                                    uint32_t want_keys);
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(peer_type_t peer) const;
@@ -192,10 +192,10 @@ seastar::future<bool> Connection::do_auth()
 }
 
 seastar::future<>
-Connection::authenticate(epoch_t epoch,
-                         const EntityName& name,
-                         const AuthMethodList& auth_methods,
-                         uint32_t want_keys)
+Connection::authenticate_v1(epoch_t epoch,
+                            const EntityName& name,
+                            const AuthMethodList& auth_methods,
+                            uint32_t want_keys)
 {
   return conn->keepalive().then([epoch, auth_methods, name, this] {
     return setup_session(epoch, auth_methods, name);
@@ -624,7 +624,7 @@ seastar::future<> Client::reopen_session(int rank)
       ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
       ceph::net::ConnectionRef conn = xconn->release();
       auto& mc = pending_conns.emplace_back(conn, &keyring);
-      return mc.authenticate(
+      return mc.authenticate_v1(
         monmap.get_epoch(), entity_name,
         *auth_methods, want_keys).handle_exception([conn](auto ep) {
         return conn->close().then([ep = std::move(ep)] {
