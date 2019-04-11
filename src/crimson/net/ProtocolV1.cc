@@ -597,6 +597,9 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
 
 seastar::future<> ProtocolV1::write_messages(std::queue<MessageRef>& msgs)
 {
+  ++avg_out_cnt;
+  avg_out = (avg_out * (avg_out_cnt-1) + msgs.size()) / avg_out_cnt;
+
   bufferlist bl;
   static const size_t RESERVE_MSG_SIZE = sizeof(CEPH_MSGR_TAG_MSG) +
                                          sizeof(ceph_msg_header) +
@@ -832,6 +835,9 @@ void ProtocolV1::do_decode_messages()
     return seastar::keep_doing([this] {
       return in_messages.not_empty().then([this] {
         auto batch_size = in_messages.size();
+        ++avg_in_cnt;
+        avg_in = (avg_in * (avg_in_cnt-1) + batch_size) / avg_in_cnt;
+
         unsigned pending_size = 0;
         while (batch_size) {
           MessageReader* raw_msg = in_messages.pop();
@@ -941,6 +947,9 @@ void ProtocolV1::trigger_close()
   }
 
   state = state_t::closing;
+
+  logger().info("{} out queue length average: {}", conn, avg_out);
+  logger().info("{} in batch size average: {}", conn, avg_in);
 }
 
 seastar::future<> ProtocolV1::fault()

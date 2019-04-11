@@ -77,6 +77,11 @@ class ProtocolV1 final : public Protocol {
 
   std::unique_ptr<Message*[]> pending_messages = std::make_unique<Message*[]>(msgs_max);
 
+  double avg_out = 0;
+  unsigned avg_out_cnt = 0;
+  double avg_in = 0;
+  unsigned avg_in_cnt = 0;
+
   struct Keepalive {
     struct {
       const char tag = CEPH_MSGR_TAG_KEEPALIVE2;
