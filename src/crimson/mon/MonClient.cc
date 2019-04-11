@@ -208,7 +208,6 @@ seastar::future<bool> Connection::do_auth()
     reply = {};
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
-#warning fix crimson: session_key, connection_secret
 				     nullptr, nullptr);
     if (ret != 0 && ret != -EAGAIN) {
       throw std::system_error(make_error_code(
@@ -239,7 +238,6 @@ Connection::authenticate_v1(epoch_t epoch,
     global_id = m->global_id;
     switch (auto p = m->result_bl.cbegin();
             auth->handle_response(m->result, p,
-#warning fix crimson: session_key, connection_secret
 				  nullptr, nullptr)) {
     case 0:
       // none
