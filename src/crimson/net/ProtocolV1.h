@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <seastar/core/queue.hh>
 #include "Protocol.h"
 
 class AuthAuthorizer;
@@ -67,7 +68,18 @@ class ProtocolV1 final : public Protocol {
     bufferlist front;
     bufferlist middle;
     bufferlist data;
-  } m;
+  };
+  // max messages that could be batched in read queue
+  const size_t msgs_max = 128;
+  // segmented message buffer pointers for later decoding
+  seastar::queue<MessageReader*> in_messages = seastar::queue<MessageReader*>(msgs_max-1);
+  // the memory space that hold the message buffers,
+  // so less copy during enqueue/dequeue
+  std::unique_ptr<MessageReader[]> in_messages_space = std::make_unique<MessageReader[]>(msgs_max);
+  // current index and pointer of the memory space,
+  // which will be enqueued
+  size_t msgs_index = 0;
+  MessageReader* m = nullptr;
 
   struct Keepalive {
     struct {
@@ -109,6 +121,7 @@ class ProtocolV1 final : public Protocol {
   seastar::future<> maybe_throttle();
   seastar::future<> read_message();
   seastar::future<> handle_tags();
+  void do_decode_messages();
   void execute_open();
 
   // replacing
