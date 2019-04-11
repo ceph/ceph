@@ -248,6 +248,21 @@ class LocalRemote(object):
         except ValueError:
             pass
 
+        # Quotes don't work in Python's shell simulation as a bash user would
+        # expect. However, it works fine it has special meaning for the given
+        # command (writing a small python program on the command line).
+        if 'sudo' in args and 'python' not in args and \
+           'python2' not in args and 'python3' not in args:
+            if '-c' in args:
+                args_to_check = args[args.index('-c') + 1 : ]
+            else:
+                args_to_check = args
+
+            for arg in args_to_check:
+                if arg.find("'") != -1 or arg.find('"') != -1:
+                    raise RuntimeError("Don't surround commands by "
+                                       "single/double quotes")
+
         if omit_sudo:
             args = [a for a in args if a != "sudo"]
 
