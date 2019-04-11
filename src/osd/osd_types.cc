@@ -2667,6 +2667,10 @@ void pg_stat_t::dump(Formatter *f) const
   for (auto p = acting.cbegin(); p != acting.cend(); ++p)
     f->dump_int("osd", *p);
   f->close_section();
+  f->open_array_section("avail_no_missing");
+  for (auto p = avail_no_missing.cbegin(); p != avail_no_missing.cend(); ++p)
+    f->dump_stream("shard") << *p;
+  f->close_section();
   f->open_array_section("blocked_by");
   for (auto p = blocked_by.cbegin(); p != blocked_by.cend(); ++p)
     f->dump_int("osd", *p);
@@ -2700,7 +2704,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(25, 22, bl);
+  ENCODE_START(26, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -2746,6 +2750,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(top_state, bl);
   encode(purged_snaps, bl);
   encode(manifest_stats_invalid, bl);
+  encode(avail_no_missing, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2753,7 +2758,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(25, bl);
+  DECODE_START(26, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -2816,6 +2821,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     } else {
       manifest_stats_invalid = true;
     }
+    if (struct_v >= 26) {
+      decode(avail_no_missing, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2857,6 +2865,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.up.push_back(123);
   a.up_primary = 123;
   a.acting.push_back(456);
+  a.avail_no_missing.push_back(pg_shard_t(456, shard_id_t::NO_SHARD));
   a.acting_primary = 456;
   o.push_back(new pg_stat_t(a));
 
@@ -2901,6 +2910,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.ondisk_log_size == r.ondisk_log_size &&
     l.up == r.up &&
     l.acting == r.acting &&
+    l.avail_no_missing == r.avail_no_missing &&
     l.mapping_epoch == r.mapping_epoch &&
     l.blocked_by == r.blocked_by &&
     l.last_became_active == r.last_became_active &&
