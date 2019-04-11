@@ -855,7 +855,7 @@ sub-directories, files')
             if index == 0:
                 self.poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
                     "1K-blocks", "Used", "Available", "Use%", "Stored on"))
-            if not is_dir_exists(i.d_name):
+            if i.is_dir():
                 statfs = cephfs.statfs(i.d_name)
                 stat = cephfs.stat(i.d_name)
                 block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
