@@ -21,8 +21,16 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def download(ctx, config):
     """
-    TODO: run the tests directly when we move to py3, this copy/git thing is
-    only around as teuthology is not py3 ready yet
+
+    We are shipping the current contents of in tree rgw_scheduler_tests folder
+    to the remotes, one of the main reasons for doing this and not actually
+    calling the rest apis from the teuthology machine itself is that, in the
+    current form we are dependant on the admin socket to get the perf counter
+    information on knowing if any of the limit/throttle counters were hit, an
+    ability to retreive perf counters remotely will avoid the need to ship this
+    to every remote and just run the tests directly from the teuthology machine
+    itself. (also the fact that tests are py3 only atm due to asyncio
+    requirements means that atleast that also has to be solved)
 
     """
     assert isinstance(config, dict)
@@ -32,13 +40,12 @@ def download(ctx, config):
     local_dir += "/rgw_scheduler_tests/"
     remote_dir = "{tdir}/rgw-scheduler-tests".format(tdir=testdir)
     try:
-        # TODO:
-        # hopefully this is less expensive than cloning the entire repo
-        # if this trick works, modify workunits to do the same instead of a
-        # full clone
+        # FIXME:
+        # this is less expensive than cloning the entire repo
+        # Also eventually modify workunits to do the same instead of a
+        # full git clone
         for client in config:
             (remote,) = ctx.cluster.only(client).remotes.keys()
-            log.info('abhi, k:=%s' % remote.name)
             teuthology.sh("scp -r {local_dir} {host}:{remote_dir}".format(
                 local_dir=local_dir,
                 host=remote.name,
@@ -54,7 +61,7 @@ def download(ctx, config):
                     'sudo',
                     'rm',
                     '-rf',
-                    '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
+                    remote_dir
                     ],
                 )
 
@@ -81,11 +88,10 @@ def create_users(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     users = {'DEFAULT': 'foo'}
     for client in config['clients']:
-        #log.info("abhi: client is ", client)
-        s3tests_conf = config['rgw_scheduler_tests_conf'][client]
-        s3tests_conf.setdefault('DEFAULT', {})
+        scheduler_tests_conf = config['rgw_scheduler_tests_conf'][client]
+        scheduler_tests_conf.setdefault('DEFAULT', {})
         for section, user in users.iteritems():
-            _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
+            _config_user(scheduler_tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=user, host=client))
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_id = daemon_type + '.' + client_id
@@ -97,11 +103,11 @@ def create_users(ctx, config):
                     'radosgw-admin',
                     '-n', client_with_id,
                     'user', 'create',
-                    '--uid', s3tests_conf[section]['user_id'],
-                    '--display-name', s3tests_conf[section]['display_name'],
-                    '--access-key', s3tests_conf[section]['access_key'],
-                    '--secret', s3tests_conf[section]['secret_key'],
-                    '--email', s3tests_conf[section]['email'],
+                    '--uid', scheduler_tests_conf[section]['user_id'],
+                    '--display-name', scheduler_tests_conf[section]['display_name'],
+                    '--access-key', scheduler_tests_conf[section]['access_key'],
+                    '--secret', scheduler_tests_conf[section]['secret_key'],
+                    '--email', scheduler_tests_conf[section]['email'],
                     '--cluster', cluster_name,
                 ],
             )
@@ -139,18 +145,6 @@ def configure(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
         scheduler_conf = config['rgw_scheduler_tests_conf'][client]
-        # if properties is not None and 'rgw_server' in properties:
-        #     log.debug("abhi", ctx.config['roles'])
-        #     host = None
-        #     for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-        #         log.info('roles: ' + str(roles))
-        #         log.info('target: ' + str(target))
-        #         if properties['rgw_server'] in roles:
-        #             _, host = split_user(target)
-        #     assert host is not None, "Invalid client specified as the rgw_server"
-        #     scheduler_conf['DEFAULT']['baseurl'] = host
-        # else:
-        #     scheduler_conf['DEFAULT']['baseurl'] = 'localhost'
 
         if properties is not None and 'default' in properties:
             for key, val in properties['default'].items():
@@ -178,11 +172,7 @@ def configure(ctx, config):
             path='{tdir}/archive/rgw-scheduler-tests.{client}.conf'.format(tdir=testdir, client=client),
             data=conf_fp.getvalue(),
             )
-
-    try:
-        yield
-    finally:
-        pass
+    yield
 
 @contextlib.contextmanager
 def run_tests(ctx, config):
@@ -194,7 +184,6 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    # civetweb > 1.8 && beast parsers are strict on rfc2616
     for client, client_config in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
@@ -202,7 +191,7 @@ def run_tests(ctx, config):
             '{tdir}/rgw-scheduler-tests'.format(tdir=testdir),
             run.Raw('&&'),
             run.Raw('TEST_CONF={tdir}/archive/rgw-scheduler-tests.{client}.conf'.format(tdir=testdir, client=client)),
-            'sudo',
+            'sudo',   # needed for admin socket reading
             '-E',
             '{tdir}/rgw-scheduler-tests/scheduler-venv/bin/pytest'.format(tdir=testdir),
             '-v',
@@ -221,47 +210,32 @@ def run_tests(ctx, config):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Run the s3-tests suite against rgw.
+    Run the rgw-scheduler-tests suite against rgw.
 
-    To run all tests on all clients::
+    We don't yet default construct the different type of requests, so the yaml
+    has to be created similar to eg conf.
 
-        tasks:
-        - ceph:
-        - rgw:
-        - s3tests:
+    eg. config:
+      - rgw_scheduler_tests:
+      client.0:
+        default:
+          req_count: 25
+          create_buckets: bucket1, bucket2
+        requests:
+            create_obj1:
+              req_type: PUT
+              req_path: bucket1/foo
+              per_req_path: true
+              obj_size: 1
+            get_bucket1:
+              req_type: GET
+              req_path: bucket2
 
-    To restrict testing to particular clients::
-
-        tasks:
-        - ceph:
-        - rgw: [client.0]
-        - s3tests: [client.0]
-
-    To run against a server on client.1 and increase the boto timeout to 10m::
-
-        tasks:
-        - ceph:
-        - rgw: [client.1]
-        - s3tests:
-            client.0:
-              rgw_server: client.1
-              idle_timeout: 600
-
-    To pass extra arguments to nose (e.g. to run a certain test)::
-
-        tasks:
-        - ceph:
-        - rgw: [client.0]
-        - s3tests:
-            client.0:
-              extra_args: ['test_s3:test_object_acl_grand_public_read']
-            client.1:
-              extra_args: ['--exclude', 'test_100_continue']
     """
-    assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
+    assert hasattr(ctx, 'rgw'), 'rgw scheduler tests must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task s3tests only supports a list or dictionary for configuration"
+        "task only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
@@ -277,7 +251,7 @@ def task(ctx, config):
             config[client] = {}
         teuthology.deep_merge(config[client], overrides.get('rgw_scheduler_tests', {}))
 
-    log.debug('s3tests config is %s', config)
+    log.debug('rgw scheduler test config is %s', config)
 
     rgw_scheduler_tests_conf = {}
     for client in clients:
@@ -287,7 +261,6 @@ def task(ctx, config):
 
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
-        #log.debug('abhi got endpoint', endpoint)
         rgw_scheduler_tests_conf[client] = ConfigObj(
             indent_type='',
             infile={
