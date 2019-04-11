@@ -2212,7 +2212,7 @@ CtPtr ProtocolV1::handle_connect_message_reply_write(int r) {
   return CONTINUE(wait_connect_message);
 }
 
-CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
+CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
                           ceph_msg_connect_reply &reply,
                           bufferlist &authorizer_reply) {
   ldout(cct, 10) << __func__ << " accept replacing " << existing << dendl;
