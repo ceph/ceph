@@ -9,7 +9,6 @@ This module is runnable outside of ceph-mgr, useful for testing.
 import logging
 import json
 from contextlib import contextmanager
-from typing import List
 
 from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 
@@ -23,6 +22,7 @@ except ImportError:
 try:
     import orchestrator
     from rook.module import RookEnv
+    from typing import List
 except ImportError:
     pass  # just used for type checking.
 
