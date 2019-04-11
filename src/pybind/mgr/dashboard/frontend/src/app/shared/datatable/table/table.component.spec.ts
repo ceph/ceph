@@ -98,11 +98,13 @@ describe('TableComponent', () => {
     });
 
     describe('test search', () => {
-      const doSearch = (search: string, expectedLength: number, firstObject: object) => {
+      const doSearch = (search: string, expectedLength: number, firstObject?: object) => {
         component.search = search;
         component.updateFilter();
         expect(component.rows.length).toBe(expectedLength);
-        expect(component.rows[0]).toEqual(firstObject);
+        if (firstObject) {
+          expect(component.rows[0]).toEqual(firstObject);
+        }
       };
 
       it('should search for 13', () => {
@@ -159,10 +161,10 @@ describe('TableComponent', () => {
         doSearch('poker+array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
       });
 
-      it('should not search if column name is incomplete', () => {
-        doSearch(`'poker array'`, 100, { a: 0, b: 0, c: [-0, 'score6'], d: true });
-        doSearch('pok', 100, { a: 0, b: 0, c: [-0, 'score6'], d: true });
-        doSearch('pok:', 100, { a: 0, b: 0, c: [-0, 'score6'], d: true });
+      it('should search if column name is incomplete', () => {
+        doSearch(`'poker array'`, 0);
+        doSearch('pok', 0);
+        doSearch('pok:', 100);
       });
 
       it('should restore full table after search', () => {
