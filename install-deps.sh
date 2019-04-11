@@ -185,6 +185,7 @@ else
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
+        $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
