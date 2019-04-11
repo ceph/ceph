@@ -674,7 +674,7 @@ class PSSubscription {
                                                   sync_env->store,
                                                   lc_config));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to set lifecycle on bucket: ret=" << retcode << dendl;
+          ldout(sync_env->cct, 1) << "ERROR: failed to set lifecycle on bucket: ret=" << retcode << dendl;
           return set_cr_error(retcode);
         }
 
@@ -801,12 +801,10 @@ class PSSubscription {
                                             sync_env->store,
                                             put_obj));
         if (retcode < 0) {
-          ldout(sync_env->cct, 1) << "ERROR: failed to store event: " << put_obj.bucket << "/" << put_obj.key << " ret=" << retcode << dendl;
-          if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
+          ldout(sync_env->cct, 10) << "failed to store event: " << put_obj.bucket << "/" << put_obj.key << " ret=" << retcode << dendl;
           return set_cr_error(retcode);
         } else {
           ldout(sync_env->cct, 20) << "event stored: " << put_obj.bucket << "/" << put_obj.key << dendl;
-          if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
         }
 
         return set_cr_done();
@@ -836,15 +834,13 @@ class PSSubscription {
         yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
       
         if (retcode < 0) {
-          ldout(sync_env->cct, 10) << "ERROR: failed to push event: " << event->id <<
+          ldout(sync_env->cct, 10) << "failed to push event: " << event->id <<
             " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
-          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
           return set_cr_error(retcode);
         }
         
-        ldout(sync_env->cct, 10) << "event: " << event->id <<
+        ldout(sync_env->cct, 20) << "event: " << event->id <<
           " pushed to endpoint: " << sub_conf->push_endpoint_name << dendl;
-        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
         return set_cr_done();
       }
       return 0;
@@ -938,7 +934,7 @@ class PSManager
       reenter(this) {
         if (owner.empty()) {
           if (!conf->find_sub(sub_name, &sub_conf)) {
-            ldout(sync_env->cct, 1) << "ERROR: could not find subscription config: name=" << sub_name << dendl;
+            ldout(sync_env->cct, 10) << "failed to find subscription config: name=" << sub_name << dendl;
             mgr->remove_get_sub(owner, sub_name);
             return set_cr_error(-ENOENT);
           }
@@ -965,7 +961,7 @@ class PSManager
 
         yield (*ref)->call_init_cr(this);
         if (retcode < 0) {
-          ldout(sync_env->cct, 1) << "ERROR: failed to init subscription" << dendl;
+          ldout(sync_env->cct, 10) << "failed to init subscription" << dendl;
           mgr->remove_get_sub(owner, sub_name);
           return set_cr_error(retcode);
         }
@@ -1223,20 +1219,24 @@ public:
 
       if (perfcounter) perfcounter->inc(l_rgw_pubsub_event_triggered);
 
+      // loop over all topics related to the bucket/object
       for (titer = topics->begin(); titer != topics->end(); ++titer) {
         ldout(sync_env->cct, 20) << ": notification for " << event->source << ": topic=" << 
           (*titer)->name << ", has " << (*titer)->subs.size() << " subscriptions" << dendl;
-
+        // loop over all subscriptions of the topic
         for (siter = (*titer)->subs.begin(); siter != (*titer)->subs.end(); ++siter) {
           ldout(sync_env->cct, 20) << ": subscription: " << *siter << dendl;
           has_subscriptions = true;
           sub_conf_found = false;
+          // try to read subscription configuration from global/user cond
+          // configuration is considered missing only if does not exist in either
           for (oiter = owners.begin(); oiter != owners.end(); ++oiter) {
-            /*
-             * once for the global subscriptions, once for the user specific subscriptions
-             */
             yield PSManager::call_get_subscription_cr(sync_env, env->manager, this, *oiter, *siter, &sub);
             if (retcode < 0) {
+              if (sub_conf_found) {
+                // not a real issue, sub conf already found
+                retcode = 0;
+              }
               last_sub_conf_error = retcode;
               continue;
             }
@@ -1246,16 +1246,20 @@ public:
               ldout(sync_env->cct, 20) << "storing event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
               yield call(PSSubscription::store_event_cr(sync_env, sub, event));
               if (retcode < 0) {
+                if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
                 ldout(sync_env->cct, 1) << "ERROR: failed to store event for subscription=" << *siter << " ret=" << retcode << dendl;
               } else {
+                if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
                 event_handled = true;
               }
               if (sub->sub_conf->push_endpoint) {
-                  ldout(sync_env->cct, 20) << "push event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
+                ldout(sync_env->cct, 20) << "push event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
                 yield call(PSSubscription::push_event_cr(sync_env, sub, event));
                 if (retcode < 0) {
+                  if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
                   ldout(sync_env->cct, 1) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
                 } else {
+                  if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
                   event_handled = true;
                 }
               } 
@@ -1265,16 +1269,20 @@ public:
               record->configurationId = sub->sub_conf->s3_id;
               yield call(PSSubscription::store_event_cr(sync_env, sub, record));
               if (retcode < 0) {
+                if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
                 ldout(sync_env->cct, 1) << "ERROR: failed to store record for subscription=" << *siter << " ret=" << retcode << dendl;
               } else {
+                if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
                 event_handled = true;
               }
               if (sub->sub_conf->push_endpoint) {
                   ldout(sync_env->cct, 20) << "push record for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
                 yield call(PSSubscription::push_event_cr(sync_env, sub, record));
                 if (retcode < 0) {
+                  if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
                   ldout(sync_env->cct, 1) << "ERROR: failed to push record for subscription=" << *siter << " ret=" << retcode << dendl;
                 } else {
+                  if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
                   event_handled = true;
                 }
               }
@@ -1282,8 +1290,14 @@ public:
           }
           if (!sub_conf_found) {
             // could not find conf for subscription at user or global levels
+            if (perfcounter) perfcounter->inc(l_rgw_pubsub_missing_conf);
             ldout(sync_env->cct, 1) << "ERROR: failed to find subscription config for subscription=" << *siter 
               << " ret=" << last_sub_conf_error << dendl;
+              if (retcode == -ENOENT) {
+                // missing subscription info should be reflected back as invalid argument
+                // and not as missing object
+                retcode =  -EINVAL;
+              }
           }
         }
       }
@@ -1404,7 +1418,7 @@ public:
                                              EVENT_NAME_OBJECT_CREATE,
                                              &topics));
       if (retcode < 0) {
-        ldout(sync_env->cct, 0) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
+        ldout(sync_env->cct, 1) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
       }
       if (topics->empty()) {
@@ -1446,7 +1460,7 @@ public:
                                                              mtime(_mtime), event_name(get_event_name(_event_type)) {}
   int operate() override {
     reenter(this) {
-      ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sync_env->source_zone
+      ldout(sync_env->cct, 20) << ": remove remote obj: z=" << sync_env->source_zone
                                << " b=" << bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield call(new RGWPSFindBucketTopicsCR(sync_env, env, owner, bucket, key, event_name, &topics));
       if (retcode < 0) {
