@@ -5546,14 +5546,14 @@ PeeringState::Deleting::Deleting(my_context ctx)
   ps->deleting = true;
   ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
 
+  // clear log
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
+  ps->pg_log.roll_forward(rollbacker.get());
+
   // adjust info to backfill
   ps->info.set_last_backfill(hobject_t());
   ps->pg_log.reset_backfill();
   ps->dirty_info = true;
-
-  // clear log
-  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
-  ps->pg_log.roll_forward(rollbacker.get());
 
   pl->on_removal(t);
 }
