@@ -23,10 +23,10 @@ export class PrometheusService {
     return this.http.get<PrometheusAlert[]>(this.baseURL, { params });
   }
 
-  getNotificationSince(notification): Observable<PrometheusNotification[]> {
-    return this.http.post<PrometheusNotification[]>(
-      `${this.baseURL}/get_notifications_since`,
-      notification
-    );
+  getNotifications(notification?: PrometheusNotification): Observable<PrometheusNotification[]> {
+    const url = `${this.baseURL}/notifications?from=${
+      notification && notification.id ? notification.id : 'last'
+    }`;
+    return this.http.get<PrometheusNotification[]>(url);
   }
 }
