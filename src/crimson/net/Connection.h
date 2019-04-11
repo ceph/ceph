@@ -60,6 +60,12 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   virtual void print(ostream& out) const = 0;
 
+  void set_last_keepalive(utime_t when) {
+    last_keepalive = when;
+  }
+  void set_last_keepalive_ack(utime_t when) {
+    last_keepalive_ack = when;
+  }
   utime_t get_last_keepalive() const { return last_keepalive; }
   utime_t get_last_keepalive_ack() const { return last_keepalive_ack; }
 };
