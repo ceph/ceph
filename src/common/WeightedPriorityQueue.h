@@ -22,6 +22,7 @@
 #include <boost/intrusive/avl_set.hpp>
 
 #include "include/ceph_assert.h"
+#include "osd/OpQueueItem.h"
 
 namespace bi = boost::intrusive;
 
@@ -47,10 +48,13 @@ class DelItem
     { delete delete_this; }
 };
 
-template <typename T, typename K>
-class WeightedPriorityQueue :  public OpQueue <T, K>
+class OpQueueItem;
+template <typename K, typename Guard, typename Builder>
+class WeightedPriorityQueue :  public OpQueue <OpQueueItem, K>
 {
+  typedef OpQueueItem T;
   private:
+    using OrderKey = OpQueueItem::orderkey_type;
     class ListPair : public bi::list_base_hook<>
     {
       public:
@@ -61,26 +65,29 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
           item(std::move(i))
 	{}
     };
-    class Klass : public bi::set_base_hook<>
+    class SubKlass : public bi::set_base_hook<>
     {
       typedef bi::list<ListPair> ListPairs;
       typedef typename ListPairs::iterator Lit;
       public:
-        K key;		// klass
+        OrderKey key;
         ListPairs lp;
-        Klass(K& k) :
-          key(k) {
+        Guard guard;
+        SubKlass(OrderKey& key) :
+          key(key) {
         }
-        ~Klass() {
+        ~SubKlass() {
           lp.clear_and_dispose(DelItem<ListPair>());
         }
-      friend bool operator< (const Klass &a, const Klass &b)
+      friend bool operator< (const SubKlass &a, const SubKlass &b)
         { return a.key < b.key; }
-      friend bool operator> (const Klass &a, const Klass &b)
+      friend bool operator> (const SubKlass &a, const SubKlass &b)
         { return a.key > b.key; }
-      friend bool operator== (const Klass &a, const Klass &b)
+      friend bool operator== (const SubKlass &a, const SubKlass &b)
         { return a.key == b.key; }
-      void insert(unsigned cost, T&& item, bool front) {
+      void insert(unsigned cost, T&& item, Builder* builder, bool front) {
+        if (!guard.is_inited())
+        builder->init(guard, key);
         if (front) {
           lp.push_front(*new ListPair(cost, std::move(item)));
         } else {
@@ -93,8 +100,8 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         return lp.begin()->cost;
       }
       T pop() {
-	ceph_assert(!lp.empty());
-	T ret = std::move(lp.begin()->item);
+        ceph_assert(!lp.empty());
+        T ret = std::move(lp.begin()->item);
         lp.erase_and_dispose(lp.begin(), DelItem<ListPair>());
         return ret;
       }
@@ -102,7 +109,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         return lp.empty();
       }
       unsigned get_size() const {
-	return lp.size();
+        return lp.size();
       }
       void filter_class(std::list<T>* out) {
         for (Lit i = --lp.end();; --i) {
@@ -113,6 +120,95 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
           if (i == lp.begin()) {
             break;
           }
+        }
+      }
+    };
+    class Klass : public bi::set_base_hook<>
+    {
+      typedef bi::rbtree<SubKlass> SubKlasses;
+      typedef typename SubKlasses::iterator SKit;
+      void check_end() {
+        if (next == subklasses.end()) {
+          next = subklasses.begin();
+        }
+      }
+      public:
+        K key;		
+        SubKlasses subklasses;
+        SKit next;
+        Klass(K& k) :
+          key(k),
+          next(subklasses.begin())
+          {}
+        ~Klass() {
+          subklasses.clear_and_dispose(DelItem<SubKlass>());
+        }
+      friend bool operator< (const Klass &a, const Klass &b)
+        { return a.key < b.key; }
+      friend bool operator> (const Klass &a, const Klass &b)
+        { return a.key > b.key; }
+      friend bool operator== (const Klass &a, const Klass &b)
+        { return a.key == b.key; }
+      bool empty() const {
+        return subklasses.empty();
+      }
+      void insert(unsigned cost, T&& item, Builder* builder, bool front) {
+        typename SubKlasses::insert_commit_data insert_data;
+        OrderKey sk = item.get_ordering_token();
+        std::pair<SKit, bool> ret =
+          subklasses.insert_unique_check(sk, MapKey<SubKlass, OrderKey>(), insert_data);
+        if (ret.second) { 
+          ret.first = subklasses.insert_unique_commit(*new SubKlass(sk), insert_data);
+          check_end();
+        }
+        ret.first->insert(cost, std::move(item), builder, front);
+      }
+      //Get the cost of the next item to dequeue
+      unsigned get_cost() const {
+        assert(!empty());
+        return next->get_cost();
+      }
+      T pop() {
+        SKit start = next;
+        do {
+          if (next->guard.check()) 
+            break;
+          ++next;
+          check_end();
+        } while (next != start);
+        T ret = next->pop();
+        if (next->empty()) {
+          next = subklasses.erase_and_dispose(next, DelItem<SubKlass>());
+        } else {
+          ++next;
+        }
+        check_end();
+
+        return ret;
+      }
+      unsigned get_size() const {
+        unsigned size = 0;
+        for (auto i = subklasses.begin(); i != subklasses.end();) {
+          size += i->get_size();
+        }
+
+        return size;
+      }
+      void filter_class(std::list<T>* out) {
+        SKit i = subklasses.begin();
+        while (i != subklasses.end()) {
+          i->filter_class(out);
+          SKit tmp = subklasses.erase_and_dispose(i, DelItem<SubKlass>());
+          if (next == i) {
+            next = tmp;
+          }
+          check_end();
+        }
+      }
+      void dump(ceph::Formatter *f) const {
+        f->dump_int("num_keys", next->get_size());
+        if (!next->empty()) {
+          f->dump_int("first_item_cost", next->get_cost());
         }
       }
     };
@@ -145,7 +241,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       bool empty() const {
         return klasses.empty();
       }
-      void insert(K cl, unsigned cost, T&& item, bool front = false) {
+      void insert(K cl, unsigned cost, T&& item, Builder* builder, bool front = false) {
         typename Klasses::insert_commit_data insert_data;
       	std::pair<Kit, bool> ret =
           klasses.insert_unique_check(cl, MapKey<Klass, K>(), insert_data);
@@ -153,7 +249,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	  ret.first = klasses.insert_unique_commit(*new Klass(cl), insert_data);
           check_end();
 	}
-	ret.first->insert(cost, std::move(item), front);
+	ret.first->insert(cost, std::move(item), builder, front);
       }
       unsigned get_cost() const {
         ceph_assert(!empty());
@@ -212,7 +308,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	bool empty() const {
 	  return queues.empty();
 	}
-	void insert(unsigned p, K cl, unsigned cost, T&& item, bool front = false) {
+	void insert(unsigned p, K cl, unsigned cost, T&& item, Builder* builder, bool front = false) {
 	  typename SubQueues::insert_commit_data insert_data;
       	  std::pair<typename SubQueues::iterator, bool> ret =
       	    queues.insert_unique_check(p, MapKey<SubQueue, unsigned>(), insert_data);
@@ -220,7 +316,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       	    ret.first = queues.insert_unique_commit(*new SubQueue(p), insert_data);
 	    total_prio += p;
       	  }
-	  ret.first->insert(cl, cost, std::move(item), front);
+	  ret.first->insert(cl, cost, std::move(item), builder, front);
 	  if (cost > max_cost) {
 	    max_cost = cost;
 	  }
@@ -300,13 +396,18 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 
     Queue strict;
     Queue normal;
+    Builder* builder;
   public:
-    WeightedPriorityQueue(unsigned max_per, unsigned min_c) :
+    WeightedPriorityQueue(unsigned max_per, unsigned min_c, Builder* builder) :
       strict(),
-      normal()
+      normal(),
+      builder(builder)
       {
 	std::srand(time(0));
       }
+    virtual ~WeightedPriorityQueue() {
+      free(builder);
+    }
     void remove_by_class(K cl, std::list<T>* removed = 0) final {
       strict.filter_class(cl, removed);
       normal.filter_class(cl, removed);
@@ -315,16 +416,16 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       return strict.empty() && normal.empty();
     }
     void enqueue_strict(K cl, unsigned p, T&& item) final {
-      strict.insert(p, cl, 0, std::move(item));
+      strict.insert(p, cl, 0, std::move(item), builder);
     }
     void enqueue_strict_front(K cl, unsigned p, T&& item) final {
-      strict.insert(p, cl, 0, std::move(item), true);
+      strict.insert(p, cl, 0, std::move(item), builder, true);
     }
     void enqueue(K cl, unsigned p, unsigned cost, T&& item) final {
-      normal.insert(p, cl, cost, std::move(item));
+      normal.insert(p, cl, cost, std::move(item), builder);
     }
     void enqueue_front(K cl, unsigned p, unsigned cost, T&& item) final {
-      normal.insert(p, cl, cost, std::move(item), true);
+      normal.insert(p, cl, cost, std::move(item), builder, true);
     }
     T dequeue() override {
       ceph_assert(!empty());

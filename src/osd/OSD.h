@@ -1224,6 +1224,26 @@ struct OSDShard {
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
 
+  struct PopGuard {
+    PGRef pg = nullptr;
+
+    bool is_inited() {
+      return !!pg;
+    }
+    bool check() {
+      if (!pg)
+        return true;
+      return !pg->is_locked();
+    }
+  };
+
+  struct GuardBuilder {
+    OSD* osd;
+    GuardBuilder(OSD* osd): osd(osd) { }
+
+    void init(PopGuard& guard, spg_t& pgid);
+  };
+
   OSDShard(
     int id,
     CephContext *cct,
@@ -1243,8 +1263,8 @@ struct OSDShard {
       context_queue(sdata_wait_lock, sdata_cond) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
-	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
-	  max_tok_per_prio, min_cost);
+	WeightedPriorityQueue<uint64_t,PopGuard,GuardBuilder>>(
+	  max_tok_per_prio, min_cost, new GuardBuilder(osd));
     } else if (opqueue == io_queue::prioritized) {
       pqueue = std::make_unique<
 	PrioritizedQueue<OpQueueItem,uint64_t>>(
@@ -1738,6 +1758,8 @@ protected:
   {
     OSD *osd;
 
+
+
   public:
     ShardedOpWQ(OSD *o,
 		time_t ti,
@@ -1930,6 +1952,7 @@ protected:
 
   PGRef _lookup_pg(spg_t pgid);
   PGRef _lookup_lock_pg(spg_t pgid);
+  PGRef _lookup_pg_within_shardlock(spg_t pgid);
   void register_pg(PGRef pg);
   bool try_finish_pg_delete(PG *pg, unsigned old_pg_num);
 
@@ -1937,7 +1960,9 @@ protected:
   void _get_pgids(vector<spg_t> *v);
 
 public:
+  PGRef lookup_pg(spg_t pgid);
   PGRef lookup_lock_pg(spg_t pgid);
+  PGRef lookup_pg_within_shardlock(spg_t pgid);
 
   std::set<int64_t> get_mapped_pools();
 

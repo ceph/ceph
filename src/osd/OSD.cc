@@ -4368,6 +4368,19 @@ PGRef OSD::_lookup_pg(spg_t pgid)
   return p->second->pg;
 }
 
+PGRef OSD::_lookup_pg_within_shardlock(spg_t pgid)
+{
+  uint32_t shard_index = pgid.hash_to_shard(num_shards);
+  auto sdata = shards[shard_index];
+  assert(sdata->shard_lock.is_locked());
+  auto p = sdata->pg_slots.find(pgid);
+  if (p == sdata->pg_slots.end()) {
+    return nullptr;
+  }
+  return p->second->pg;
+}
+
+
 PGRef OSD::_lookup_lock_pg(spg_t pgid)
 {
   PGRef pg = _lookup_pg(pgid);
@@ -4380,6 +4393,16 @@ PGRef OSD::_lookup_lock_pg(spg_t pgid)
   }
   pg->unlock();
   return nullptr;
+}
+
+PGRef OSD::lookup_pg_within_shardlock(spg_t pgid)
+{
+  return _lookup_pg_within_shardlock(pgid);
+}
+
+PGRef OSD::lookup_pg(spg_t pgid)
+{
+  return _lookup_pg(pgid);
 }
 
 PGRef OSD::lookup_lock_pg(spg_t pgid)
@@ -10631,6 +10654,13 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
   }
   for (auto pgid : to_delete) {
     pg_slots.erase(pgid);
+  }
+}
+
+void OSDShard::GuardBuilder::init(PopGuard& guard, spg_t& pgid)
+{
+  if (!guard.pg) {
+    guard.pg = osd->lookup_pg_within_shardlock(pgid);
   }
 }
 
