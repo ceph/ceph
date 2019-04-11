@@ -35,7 +35,7 @@ class Socket
     : sid{seastar::engine().cpu_id()},
       socket(std::move(_socket)),
       in(socket.input()),
-      out(socket.output()) {}
+      out(socket.output(65536)) {}
 
   Socket(Socket&& o) = delete;
 
