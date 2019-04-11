@@ -1343,9 +1343,17 @@ void ImageReplayer<I>::finish_mirror_image_status_update() {
 template <typename I>
 void ImageReplayer<I>::queue_mirror_image_status_update(const OptionalState &state) {
   dout(15) << dendl;
-  FunctionContext *ctx = new FunctionContext(
+
+  auto ctx = new FunctionContext(
     [this, state](int r) {
       send_mirror_status_update(state);
+    });
+
+  // ensure pending IO is flushed and the commit position is updated
+  // prior to updating the mirror status
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      flush_local_replay(ctx);
     });
   m_threads->work_queue->queue(ctx, 0);
 }
