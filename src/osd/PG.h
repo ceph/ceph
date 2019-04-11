@@ -826,10 +826,13 @@ protected:
 	if (j == needs_recovery_map.end()) {
 	  needs_recovery_map.insert(*i);
 	} else {
-	  lgeneric_dout(pg->cct, 0) << this << " " << pg->info.pgid << " unexpected need for "
-				    << i->first << " have " << j->second
-				    << " tried to add " << i->second << dendl;
-	  ceph_assert(i->second.need == j->second.need);
+	  if (i->second.need != j->second.need) {
+	    lgeneric_dout(pg->cct, 0) << this << " " << pg->info.pgid << " unexpected need for "
+				      << i->first << " have " << j->second
+				      << " tried to add " << i->second << dendl;
+	    ceph_assert(0 == "unexpected need for missing item");
+
+	  }
 	}
       }
     }
