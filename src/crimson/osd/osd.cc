@@ -68,8 +68,9 @@ OSD::OSD(int id, uint32_t nonce,
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
-                 std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
+                    std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get().set_auth_server(monc.get());
+    msgr.get().set_auth_client(monc.get());
   }
 }
 
