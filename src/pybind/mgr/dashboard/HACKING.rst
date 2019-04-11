@@ -230,6 +230,25 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+Terminology and wording
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of using the Ceph component names, the approach
+suggested is to use the logical/generic names (Block over RBD, Filesystem over
+CephFS, Object over RGW). Nevertheless, as Ceph-Dashboard cannot completely hide
+the Ceph internals, some Ceph-specific names might remain visible.
+
+Regarding the wording for action labels and other textual elements (form titles,
+buttons, etc.), the chosen approach is to follow `these guidelines
+<https://www.patternfly.org/styles/terminology-and-wording/#terminology-and-wording-for-action-labels>`_.
+As a rule of thumb, 'Create' and 'Delete' are the proper wording for most forms,
+instead of 'Add' and 'Remove', unless some already created item is either added
+or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
+(new) permission').
+
+In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
+been created, which provides translated labels for use in UI elements.
+    
 Frontend branding
 ~~~~~~~~~~~~~~~~~
 
