@@ -67,12 +67,17 @@ function run() {
     source /etc/os-release
     if test -f /etc/redhat-release ; then
         if ! type bc > /dev/null 2>&1 ; then
-            echo "Please install bc and re-run." 
+            echo "Please install bc and re-run."
             exit 1
         fi
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
             install_cmd="dnf -y install"
         else
+            # TEMP TESTS
+            sudo yum makecache
+            sudo yum install -y yum-utils
+            sudo yum install -y https://centos7.iuscommunity.org/ius-release.rpm
+            sudo yum makecache
             install_cmd="yum install -y"
         fi
     elif type zypper > /dev/null 2>&1 ; then
@@ -84,7 +89,7 @@ function run() {
 
     if ! type sudo > /dev/null 2>&1 ; then
         echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo." 
+        echo "as a normal user with the ability to run commands as root via sudo."
         exit 1
     fi
     if [ -n "$install_cmd" ]; then
@@ -110,7 +115,7 @@ function run() {
     DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
-    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    CHECK_MAKEOPTS=${CHECK_MAKEOPTS:--j$(get_processors) -N} # TEMP TEST
     CMAKE_BUILD_OPTS="-DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_SEASTAR=ON"
     CMAKE_BUILD_OPTS+=$(detect_ceph_dev_pkgs)
     cat <<EOM
