@@ -10,9 +10,9 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
+#include "common/Clock.h"
 #include "common/hostname.h"
 
-#include "crimson/auth/AuthClient.h"
 #include "crimson/auth/KeyRing.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
@@ -26,6 +26,7 @@
 #include "messages/MLogAck.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
@@ -50,13 +51,32 @@ namespace ceph::mon {
 
 class Connection {
 public:
-  Connection(ceph::net::ConnectionRef conn,
-	     KeyRing* keyring);
+  Connection(AuthRegistry* auth_registry,
+             ceph::net::ConnectionRef conn,
+             KeyRing* keyring);
   seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
+  // v1
   seastar::future<> authenticate_v1(epoch_t epoch,
                                     const EntityName& name,
                                     const AuthMethodList& auth_methods,
                                     uint32_t want_keys);
+  // v2
+  seastar::future<> authenticate_v2();
+  tuple<ceph::auth::method_t, vector<uint32_t>, bufferlist>
+  get_auth_request(const EntityName& name,
+                   uint32_t want_keys);
+  using secret_t = string;
+  tuple<CryptoKey, secret_t, bufferlist>
+  handle_auth_reply_more(const ceph::buffer::list& bl);
+  tuple<CryptoKey, secret_t, int>
+  handle_auth_done(uint64_t new_global_id,
+                   const ceph::buffer::list& bl);
+  int handle_auth_bad_method(uint32_t old_auth_method,
+                             int result,
+                             const std::vector<uint32_t>& allowed_methods,
+                             const std::vector<uint32_t>& allowed_modes);
+
+  // v1 and v2
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(peer_type_t peer) const;
@@ -76,16 +96,25 @@ private:
 
 private:
   bool closed = false;
+  // v1
   seastar::promise<Ref<MAuthReply>> reply;
+  // v2
+  utime_t auth_start;
+  ceph::auth::method_t auth_method = 0;
+  seastar::promise<> auth_done;
+  AuthRegistry* auth_registry;
+  // v1 and v2
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
   RotatingKeyRing rotating_keyring;
   uint64_t global_id;
 };
 
-Connection::Connection(ceph::net::ConnectionRef conn,
+Connection::Connection(AuthRegistry* auth_registry,
+                       ceph::net::ConnectionRef conn,
                        KeyRing* keyring)
-  : conn{conn},
+  : auth_registry{auth_registry},
+    conn{conn},
     rotating_keyring{nullptr, CEPH_ENTITY_TYPE_OSD, keyring}
 {}
 
@@ -234,6 +263,112 @@ Connection::authenticate_v1(epoch_t epoch,
   });
 }
 
+seastar::future<> Connection::authenticate_v2()
+{
+  auth_start = ceph_clock_now();
+  return conn->send(make_message<MMonGetMap>()).then([this] {
+    return auth_done.get_future();
+  });
+}
+
+tuple<ceph::auth::method_t, vector<uint32_t>, ceph::bufferlist>
+Connection::get_auth_request(const EntityName& entity_name,
+                             uint32_t want_keys)
+{
+  // choose method
+  auth_method = [&] {
+    std::vector<ceph::auth::method_t> methods;
+    auth_registry->get_supported_methods(conn->get_peer_type(), &methods);
+    if (methods.empty()) {
+      logger().info("get_auth_request no methods is supported");
+      throw ceph::auth::error("no methods is supported");
+    }
+    return methods.front();
+  }();
+
+  std::vector<uint32_t> modes;
+  auth_registry->get_supported_modes(conn->get_peer_type(), auth_method,
+                                     &modes);
+  logger().info("method {} preferred_modes {}", auth_method, modes);
+  if (modes.empty()) {
+    throw ceph::auth::error("no modes is supported");
+  }
+  auth = create_auth(auth_method, global_id, entity_name, want_keys);
+
+  using ceph::encode;
+  bufferlist bl;
+  // initial request includes some boilerplate...
+  encode((char)AUTH_MODE_MON, bl);
+  encode(entity_name, bl);
+  encode(global_id, bl);
+  // and (maybe) some method-specific initial payload
+  auth->build_initial_request(&bl);
+  return {auth_method, modes, bl};
+}
+
+tuple<CryptoKey, Connection::secret_t, bufferlist>
+Connection::handle_auth_reply_more(const ceph::buffer::list& payload)
+{
+  CryptoKey session_key;
+  secret_t connection_secret;
+  bufferlist reply;
+  auto p = payload.cbegin();
+  int r = auth->handle_response(0, p, &session_key,	&connection_secret);
+  if (r == -EAGAIN) {
+    auth->prepare_build_request();
+    auth->build_request(reply);
+    logger().info(" responding with {} bytes", reply.length());
+    return {session_key, connection_secret, reply};
+  } else if (r < 0) {
+    logger().error(" handle_response returned {}",  r);
+    throw ceph::auth::error("unable to build auth");
+  } else {
+    logger().info("authenticated!");
+    std::terminate();
+  }
+}
+
+tuple<CryptoKey, Connection::secret_t, int>
+Connection::handle_auth_done(uint64_t new_global_id,
+                             const ceph::buffer::list& payload)
+{
+  global_id = new_global_id;
+  auth->set_global_id(global_id);
+  auto p = payload.begin();
+  CryptoKey session_key;
+  secret_t connection_secret;
+  int r = auth->handle_response(0, p, &session_key, &connection_secret);
+  conn->set_last_keepalive_ack(auth_start);
+  auth_done.set_value();
+  return {session_key, connection_secret, r};
+}
+
+int Connection::handle_auth_bad_method(uint32_t old_auth_method,
+                                       int result,
+                                       const std::vector<uint32_t>& allowed_methods,
+                                       const std::vector<uint32_t>& allowed_modes)
+{
+  logger().info("old_auth_method {} result {} allowed_methods {}",
+                old_auth_method, cpp_strerror(result), allowed_methods);
+  std::vector<uint32_t> auth_supported;
+  auth_registry->get_supported_methods(conn->get_peer_type(), &auth_supported);
+  auto p = std::find(auth_supported.begin(), auth_supported.end(),
+                     old_auth_method);
+  assert(p != auth_supported.end());
+  p = std::find_first_of(std::next(p), auth_supported.end(),
+                         allowed_methods.begin(), allowed_methods.end());
+  if (p == auth_supported.end()) {
+    logger().error("server allowed_methods {} but i only support {}",
+                   allowed_methods, auth_supported);
+    auth_done.set_exception(std::system_error(make_error_code(
+      ceph::net::error::negotiation_failure)));
+    return -EACCES;
+  }
+  auth_method = *p;
+  logger().info("will try {} next", auth_method);
+  return 0;
+}
+
 seastar::future<> Connection::close()
 {
   if (conn && !std::exchange(closed, true)) {
@@ -291,6 +426,7 @@ seastar::future<> Client::start() {
   entity_name = ceph::common::local_conf()->name;
   // should always be OSD, though
   auth_methods = create_auth_methods(entity_name.get_type());
+  auth_registry.refresh_config();
   return load_keyring().then([this] {
     return monmap.build_initial(ceph::common::local_conf(), false);
   }).then([this] {
@@ -459,6 +595,128 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   }
 }
 
+tuple<uint32_t, vector<uint32_t>, ceph::bufferlist>
+Client::get_auth_request(ceph::net::ConnectionRef con,
+                         AuthConnectionMetaRef auth_meta)
+{
+  logger().info("get_auth_request(con={}, auth_method={})",
+                con, auth_meta->auth_method);
+  // connection to mon?
+  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+                              [peer_addr = con->get_peer_addr()](auto& mc) {
+                                return mc.is_my_peer(peer_addr);
+                              });
+    if (found == pending_conns.end()) {
+      throw ceph::auth::error{"unknown connection"};
+    }
+    return found->get_auth_request(entity_name, want_keys);
+  } else {
+    // generate authorizer
+    if (!active_con) {
+      logger().error(" but no auth handler is set up");
+      throw ceph::auth::error("no auth available");
+    }
+    auto authorizer = active_con->get_authorizer(con->get_peer_type());
+    if (!authorizer) {
+      logger().error("failed to build_authorizer for type {}",
+                     ceph_entity_type_name(con->get_peer_type()));
+      throw ceph::auth::error("unable to build auth");
+    }
+    auth_meta->authorizer.reset(authorizer);
+    auth_meta->auth_method = authorizer->protocol;
+    vector<uint32_t> modes;
+    auth_registry.get_supported_modes(con->get_peer_type(),
+                                      auth_meta->auth_method,
+                                      &modes);
+    return {authorizer->protocol, modes, authorizer->bl};
+  }
+}
+
+ ceph::bufferlist Client::handle_auth_reply_more(ceph::net::ConnectionRef conn,
+                                                AuthConnectionMetaRef auth_meta,
+                                                const bufferlist& bl)
+{
+  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                                return mc.is_my_peer(peer_addr);
+                              });
+    if (found == pending_conns.end()) {
+      throw ceph::auth::error{"unknown connection"};
+    }
+    bufferlist reply;
+    tie(auth_meta->session_key, auth_meta->connection_secret, reply) =
+      found->handle_auth_reply_more(bl);
+    return reply;
+  } else {
+    // authorizer challenges
+    if (!active_con || !auth_meta->authorizer) {
+      logger().error("no authorizer?");
+      throw ceph::auth::error("no auth available");
+    }
+    auth_meta->authorizer->add_challenge(&cct, bl);
+    return auth_meta->authorizer->bl;
+  }
+}
+
+int Client::handle_auth_done(ceph::net::ConnectionRef conn,
+                             AuthConnectionMetaRef auth_meta,
+                             uint64_t global_id,
+                             uint32_t con_mode,
+                             const bufferlist& bl)
+{
+  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                                return mc.is_my_peer(peer_addr);
+                              });
+    if (found == pending_conns.end()) {
+      return -ENOENT;
+    }
+    int r = 0;
+    tie(auth_meta->session_key, auth_meta->connection_secret, r) =
+      found->handle_auth_done(global_id, bl);
+    return r;
+  } else {
+    // verify authorizer reply
+    auto p = bl.begin();
+    if (!auth_meta->authorizer->verify_reply(p, &auth_meta->connection_secret)) {
+      logger().error("failed verifying authorizer reply");
+      return -EACCES;
+    }
+    auth_meta->session_key = auth_meta->authorizer->session_key;
+    return 0;
+  }
+}
+
+ // Handle server's indication that the previous auth attempt failed
+int Client::handle_auth_bad_method(ceph::net::ConnectionRef conn,
+                                   AuthConnectionMetaRef auth_meta,
+                                   uint32_t old_auth_method,
+                                   int result,
+                                   const std::vector<uint32_t>& allowed_methods,
+                                   const std::vector<uint32_t>& allowed_modes)
+{
+  if (conn->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
+    auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
+                              [peer_addr = conn->get_peer_addr()](auto& mc) {
+                                return mc.is_my_peer(peer_addr);
+                              });
+    if (found != pending_conns.end()) {
+      return found->handle_auth_bad_method(old_auth_method, result,
+                                           allowed_methods, allowed_modes);
+    } else {
+      return -ENOENT;
+    }
+  } else {
+    // huh...
+    logger().info("hmm, they didn't like {} result {}",
+                  old_auth_method, cpp_strerror(result));
+    return -EACCES;
+  }
+}
+
 seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
                                         Ref<MMonMap> m)
 {
@@ -617,20 +875,23 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = monmap.get_addrs(rank).legacy_addr();
     logger().info("connecting to mon.{}", rank);
-    return msgr.connect(peer, CEPH_ENTITY_TYPE_MON)
-    .then([this] (auto xconn) {
+    return msgr.connect(peer, CEPH_ENTITY_TYPE_MON).then([this] (auto xconn) {
       // sharded-messenger compatible mode assumes all connections running
       // in one shard.
       ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
       ceph::net::ConnectionRef conn = xconn->release();
-      auto& mc = pending_conns.emplace_back(conn, &keyring);
-      return mc.authenticate_v1(
-        monmap.get_epoch(), entity_name,
-        *auth_methods, want_keys).handle_exception([conn](auto ep) {
-        return conn->close().then([ep = std::move(ep)] {
-          std::rethrow_exception(ep);
-        });
-      });
+      auto& mc = pending_conns.emplace_back(&auth_registry, conn, &keyring);
+      if (conn->get_peer_addr().is_msgr2()) {
+        return mc.authenticate_v2();
+      } else {
+        return mc.authenticate_v1(monmap.get_epoch(), entity_name,
+                                  *auth_methods, want_keys)
+          .handle_exception([conn](auto ep) {
+            return conn->close().then([ep = std::move(ep)] {
+              std::rethrow_exception(ep);
+            });
+          });
+      }
     }).then([peer, this] {
       if (!is_hunting()) {
         return seastar::now();
