@@ -454,15 +454,12 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
   // first try me
   dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
 
-  //snapid_t num;
-  //if (n[0] == '~') num = atoll(n.c_str()+1);
-
   bool actual = (atino == inode->ino());
   string pname;
   inodeno_t pino;
   if (n.length() && n[0] == '_') {
-    int next_ = n.find('_', 1);
-    if (next_ > 1) {
+    size_t next_ = n.find_last_of('_');
+    if (next_ > 1 && next_ + 1 < n.length()) {
       pname = n.substr(1, next_ - 1);
       pino = atoll(n.data() + next_ + 1);
       dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pino << dendl;
