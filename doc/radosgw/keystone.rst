@@ -137,6 +137,32 @@ configurable ``rgw keystone verify ssl`` to false.
 
 .. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
+Cross Project(Tenant) Access
+----------------------------
+
+In order to let a project (earlier called a 'tenant') access buckets belonging to a different project, the following config option needs to be enabled::
+
+   rgw swift account in url = true
+
+The Keystone object-store endpoint must accordingly be configured to include the AUTH_%(project_id)s suffix::
+
+   openstack endpoint create --region RegionOne \
+       --publicurl   "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       --adminurl    "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       --internalurl "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       swift
+  +--------------+--------------------------------------------------------------+
+  | Field        | Value                                                        |
+  +--------------+--------------------------------------------------------------+
+  | adminurl     | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | id           | e4249d2b60e44743a67b5e5b38c18dd3                             |
+  | internalurl  | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | publicurl    | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | region       | RegionOne                                                    |
+  | service_id   | 37c4c0e79571404cb4644201a4a6e5ee                             |
+  | service_name | swift                                                        |
+  | service_type | object-store                                                 |
+  +--------------+--------------------------------------------------------------+
 
 Keystone integration with the S3 API
 ------------------------------------
