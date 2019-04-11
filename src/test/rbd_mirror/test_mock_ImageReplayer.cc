@@ -396,6 +396,18 @@ public:
         }));
   }
 
+  void expect_flush_repeatedly(MockReplay& mock_replay,
+                               journal::MockJournaler& mock_journal) {
+    EXPECT_CALL(mock_replay, flush(_))
+      .WillRepeatedly(Invoke([this](Context* ctx) {
+                        m_threads->work_queue->queue(ctx, 0);
+                      }));
+    EXPECT_CALL(mock_journal, flush_commit_position(_))
+      .WillRepeatedly(Invoke([this](Context* ctx) {
+                        m_threads->work_queue->queue(ctx, 0);
+                      }));
+  }
+
   void expect_trash_move(MockImageDeleter& mock_image_deleter,
                          const std::string& global_image_id,
                          bool ignore_orphan, int r) {
@@ -624,6 +636,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
   MockEventPreprocessor mock_event_preprocessor;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
@@ -999,6 +1012,7 @@ TEST_F(TestMockImageReplayer, StopError) {
   MockEventPreprocessor mock_event_preprocessor;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
@@ -1067,6 +1081,7 @@ TEST_F(TestMockImageReplayer, Replay) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
@@ -1176,6 +1191,7 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
@@ -1277,6 +1293,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
