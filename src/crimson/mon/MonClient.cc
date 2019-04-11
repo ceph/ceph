@@ -12,6 +12,7 @@
 
 #include "common/hostname.h"
 
+#include "crimson/auth/AuthClient.h"
 #include "crimson/auth/KeyRing.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
@@ -67,9 +68,10 @@ private:
   seastar::future<> setup_session(epoch_t epoch,
 				  const AuthMethodList& auth_methods,
 				  const EntityName& name);
-  std::unique_ptr<AuthClientHandler> create_auth(Ref<MAuthReply> m,
-						 const EntityName& name,
-						 uint32_t want_keys);
+  std::unique_ptr<AuthClientHandler> create_auth(ceph::auth::method_t,
+                                                 uint64_t global_id,
+                                                 const EntityName& name,
+                                                 uint32_t want_keys);
   seastar::future<bool> do_auth();
 
 private:
@@ -120,29 +122,24 @@ KeyStore& Connection::get_keys() {
 }
 
 std::unique_ptr<AuthClientHandler>
-Connection::create_auth(Ref<MAuthReply> m,
+Connection::create_auth(ceph::auth::method_t protocol,
+                        uint64_t global_id,
                         const EntityName& name,
                         uint32_t want_keys)
 {
   static CephContext cct;
   std::unique_ptr<AuthClientHandler> auth;
   auth.reset(AuthClientHandler::create(&cct,
-                                       m->protocol,
+                                       protocol,
                                        &rotating_keyring));
   if (!auth) {
-    logger().error("no handler for protocol {}", m->protocol);
+    logger().error("no handler for protocol {}", protocol);
     throw std::system_error(make_error_code(
       ceph::net::error::negotiation_failure));
   }
   auth->init(name);
   auth->set_want_keys(want_keys);
   auth->set_global_id(global_id);
-
-  if (m->global_id != global_id) {
-    // it's a new session
-    auth->set_global_id(global_id);
-    auth->reset();
-  }
   return auth;
 }
 
@@ -206,7 +203,13 @@ Connection::authenticate(epoch_t epoch,
     return reply.get_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
     reply = decltype(reply){};
-    auth = create_auth(m, name, want_keys);
+    if (m->global_id != global_id) {
+      // it's a new session
+      global_id = m->global_id;
+      auth->set_global_id(global_id);
+      auth->reset();
+    }
+    auth = create_auth(m->protocol, m->global_id, name, want_keys);
     global_id = m->global_id;
     switch (auto p = m->result_bl.cbegin();
             auth->handle_response(m->result, p,
