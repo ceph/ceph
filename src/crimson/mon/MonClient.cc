@@ -205,7 +205,7 @@ seastar::future<bool> Connection::do_auth()
     logger().info("mon {} => {} returns {}: {}",
                    conn->get_messenger()->get_myaddr(),
                    conn->get_peer_addr(), *m, m->result);
-    reply = decltype(reply){};
+    reply = {};
     auto p = m->result_bl.cbegin();
     auto ret = auth->handle_response(m->result, p,
 #warning fix crimson: session_key, connection_secret
@@ -228,7 +228,7 @@ Connection::authenticate_v1(epoch_t epoch,
   }).then([this] {
     return reply.get_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
-    reply = decltype(reply){};
+    reply = {};
     if (m->global_id != global_id) {
       // it's a new session
       global_id = m->global_id;
