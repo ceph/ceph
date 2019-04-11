@@ -41,6 +41,12 @@ enum io_type_t {
   IO_TYPE_NUM,
 };
 
+enum io_pattern_t {
+  IO_PATTERN_RAND,
+  IO_PATTERN_SEQ,
+  IO_PATTERN_FULL_SEQ
+};
+
 struct IOType {};
 struct Size {};
 struct IOPattern {};
@@ -63,9 +69,11 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
   if (s == "rand") {
-    v = boost::any(true);
+    v = IO_PATTERN_RAND;
   } else if (s == "seq") {
-    v = boost::any(false);
+    v = IO_PATTERN_SEQ;
+  } else if (s == "full-seq") {
+    v = IO_PATTERN_FULL_SEQ;
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -204,7 +212,8 @@ bool should_read(uint64_t read_proportion)
 
 int do_bench(librbd::Image& image, io_type_t io_type,
 		   uint64_t io_size, uint64_t io_threads,
-		   uint64_t io_bytes, bool random, uint64_t read_proportion)
+		   uint64_t io_bytes, io_pattern_t io_pattern,
+                   uint64_t read_proportion)
 {
   uint64_t size = 0;
   image.size(&size);
@@ -235,8 +244,22 @@ int do_bench(librbd::Image& image, io_type_t io_type,
        << " io_size " << io_size
        << " io_threads " << io_threads
        << " bytes " << io_bytes
-       << " pattern " << (random ? "random" : "sequential")
-       << std::endl;
+       << " pattern ";
+  switch (io_pattern) {
+  case IO_PATTERN_RAND:
+    std::cout << "random";
+    break;
+  case IO_PATTERN_SEQ:
+    std::cout << "sequential";
+    break;
+  case IO_PATTERN_FULL_SEQ:
+    std::cout << "full sequential";
+    break;
+  default:
+    ceph_assert(false);
+    break;
+  }
+  std::cout << std::endl;
 
   srand(time(NULL) % (unsigned long) -1);
 
@@ -246,15 +269,23 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   vector<uint64_t> thread_offset;
   uint64_t i;
-  uint64_t start_pos;
+  uint64_t seq_chunk_length = (size / io_size / io_threads) * io_size;;
 
-  uint64_t unit_len = size/io_size/io_threads;
   // disturb all thread's offset
   for (i = 0; i < io_threads; i++) {
-    if (random) {
+    uint64_t start_pos = 0;
+    switch (io_pattern) {
+    case IO_PATTERN_RAND:
       start_pos = (rand() % (size / io_size)) * io_size;
-    } else {
-      start_pos = unit_len * i * io_size;
+      break;
+    case IO_PATTERN_SEQ:
+      start_pos = seq_chunk_length * i;
+      break;
+    case IO_PATTERN_FULL_SEQ:
+      start_pos = i * io_size;
+      break;
+    default:
+      break;
     }
     thread_offset.push_back(start_pos);
   }
@@ -274,7 +305,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   uint64_t cur_off = 0;
 
   int op_flags;
-  if  (random) {
+  if  (io_pattern == IO_PATTERN_RAND) {
     op_flags = LIBRADOS_OP_FLAG_FADVISE_RANDOM;
   } else {
     op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL;
@@ -317,18 +348,30 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
     // Set the thread_offsets of next I/O
     for (i = 0; i < io_threads; ++i) {
-      if (random) {
+      switch (io_pattern) {
+      case IO_PATTERN_RAND:
         thread_offset[i] = (rand() % (size / io_size)) * io_size;
         continue;
+      case IO_PATTERN_SEQ:
+        if (off < (seq_chunk_length * io_threads)) {
+          thread_offset[i] += io_size;
+        } else {
+          // thread_offset is adjusted to the chunks unassigned to threads.
+          thread_offset[i] = off + (i * io_size);
+        }
+        if (thread_offset[i] + io_size > size) {
+          thread_offset[i] = seq_chunk_length * i;
+        }
+        break;
+      case IO_PATTERN_FULL_SEQ:
+        thread_offset[i] += (io_size * io_threads);
+        if (thread_offset[i] >= size) {
+          thread_offset[i] = i * io_size;
+        }
+        break;
+      default:
+        break;
       }
-      if (off < (io_size * unit_len * io_threads) ) {
-        thread_offset[i] += io_size;
-      } else {
-        // thread_offset is adjusted to the chunks unassigned to threads.
-        thread_offset[i] = off + (i * io_size);
-      }
-      if (thread_offset[i] + io_size > size)
-        thread_offset[i] = unit_len * i * io_size;
     }
 
     coarse_mono_time now = coarse_mono_clock::now();
@@ -389,7 +432,7 @@ void add_bench_common_options(po::options_description *positional,
     ("io-size", po::value<Size>(), "IO size (in B/K/M/G/T) [default: 4K]")
     ("io-threads", po::value<uint32_t>(), "ios in flight [default: 16]")
     ("io-total", po::value<Size>(), "total size for IO (in B/K/M/G/T) [default: 1G]")
-    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand or seq) [default: seq]")
+    ("io-pattern", po::value<IOPattern>(), "IO pattern (rand, seq, or full-seq) [default: seq]")
     ("rw-mix-read", po::value<uint64_t>(), "read proportion in readwrite (<= 100) [default: 50]");
 }
 
@@ -403,7 +446,7 @@ void get_arguments_for_bench(po::options_description *positional,
   add_bench_common_options(positional, options);
 
   options->add_options()
-    ("io-type", po::value<IOType>()->required(), "IO type (read , write, or readwrite(rw))");
+    ("io-type", po::value<IOType>()->required(), "IO type (read, write, or readwrite(rw))");
 }
 
 int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
@@ -452,11 +495,11 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
     bench_bytes = 1 << 30;
   }
 
-  bool bench_random;
+  io_pattern_t bench_pattern;
   if (vm.count("io-pattern")) {
-    bench_random = vm["io-pattern"].as<bool>();
+    bench_pattern = vm["io-pattern"].as<io_pattern_t>();
   } else {
-    bench_random = false;
+    bench_pattern = IO_PATTERN_SEQ;
   }
 
   uint64_t bench_read_proportion;
@@ -492,7 +535,7 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
-		     bench_bytes, bench_random, bench_read_proportion);
+		     bench_bytes, bench_pattern, bench_read_proportion);
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_signal);
