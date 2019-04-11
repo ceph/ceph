@@ -601,8 +601,10 @@ You may set values for the following keys:
 
 ``recovery_priority``
 
-:Description: When a value is set it will boost the computed reservation priority
-              by this amount. This value should be less than 30.
+:Description: When a value is set it will increase or decrease the computed
+              reservation priority. This value must be in the range -10 to
+              10.  Use a negative priority for less important pools so they
+              have lower priority than any new pools.
 
 :Type: Integer
 :Default: ``0``

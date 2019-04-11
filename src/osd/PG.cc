@@ -2455,10 +2455,21 @@ bool PG::set_force_backfill(bool b)
   return did;
 }
 
-inline int PG::clamp_recovery_priority(int priority)
+int PG::clamp_recovery_priority(int priority, int pool_recovery_priority)
 {
   static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
   static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
+
+  // User can't set this too high anymore, but might be a legacy value
+  if (pool_recovery_priority > OSD_POOL_PRIORITY_MAX)
+    pool_recovery_priority = OSD_POOL_PRIORITY_MAX;
+  if (pool_recovery_priority < OSD_POOL_PRIORITY_MIN)
+    pool_recovery_priority = OSD_POOL_PRIORITY_MIN;
+  // Shift range from min to max to 0 to max - min
+  pool_recovery_priority += (0 - OSD_POOL_PRIORITY_MIN);
+  ceph_assert(pool_recovery_priority >= 0 && pool_recovery_priority <= (OSD_POOL_PRIORITY_MAX - OSD_POOL_PRIORITY_MIN));
+
+  priority += pool_recovery_priority;
 
   // Clamp to valid range
   if (priority > OSD_RECOVERY_PRIORITY_MAX) {
@@ -2487,7 +2498,7 @@ unsigned PG::get_recovery_priority()
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(pool_recovery_priority + ret);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority);
   }
   dout(20) << __func__ << " recovery priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
@@ -2518,7 +2529,7 @@ unsigned PG::get_backfill_priority()
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(pool_recovery_priority + ret);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority);
   }
 
   dout(20) << __func__ << " backfill priority is " << ret << dendl;
