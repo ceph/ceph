@@ -441,12 +441,12 @@ int main(int argc, char** argv)
     auto rounds = config["rounds"].as<unsigned>();
     auto keepalive_ratio = config["keepalive-ratio"].as<double>();
     return test_echo(rounds, keepalive_ratio, false)
-    .then([rounds, keepalive_ratio] {
-      return test_echo(rounds, keepalive_ratio, true);
-    }).then([] {
+    //.then([rounds, keepalive_ratio] {
+    //  return test_echo(rounds, keepalive_ratio, true);
+    .then([] {
       return test_concurrent_dispatch(false);
-    }).then([] {
-      return test_concurrent_dispatch(true);
+    //}).then([] {
+    //  return test_concurrent_dispatch(true);
     }).then([] {
       std::cout << "All tests succeeded" << std::endl;
     }).handle_exception([] (auto eptr) {
