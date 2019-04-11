@@ -65,6 +65,7 @@ public:
 	      int = 0)
     : CephContext{}
   {}
+  CephContext(CephContext&&) = default;
   ~CephContext();
 
   uint32_t get_module_type() const;
