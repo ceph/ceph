@@ -42,16 +42,12 @@ class CounterHandler(ResponseHandler):
 
 class ReqTypeCounterHandler(ResponseHandler):
     '''
-    For the lack of a better name!
+    A response handler that aggregates by req type and then by path
+
     '''
     def __init__(self, req_list):
-        #TODO: req dict -> type
-
-        c = defaultdict(dict)
-        for req in req_list:
-            path = urllib.parse.urlparse(req["req_url"]).path
-            c[req["req_type"]][path] = Counter()
-
+        #TODO: handle per req urls
+        c = defaultdict(lambda : defaultdict(Counter))
         self.counter = c
 
     def handle_response(self, response, *_):
@@ -64,10 +60,7 @@ class ReqTypeCounterHandler(ResponseHandler):
 class PathCountHandler(ResponseHandler):
 
     def __init__(self):
-        #TODO: req dict -> type
-
         self.counter = defaultdict(int)
-
 
     def handle_response(self, response, *_):
         self.counter[response.url.path] += 1
@@ -75,13 +68,13 @@ class PathCountHandler(ResponseHandler):
     def needs_data(self):
         return True
 
-def make_response_handler_from_str(handler_str):
-    if handler_str == 'simple':
-        return CounterHandler()
+def make_response_handler_from_str(handler_str, *args):
+    if handler_str == 'req_type':
+        return ReqTypeCounterHandler(*args)
     elif handler_str == 'path':
         return PathCountHandler()
-    # default to reqtype counter
-    return ReqTypeCounterHandler(ctx.arg_list)
+    # default to counter
+    return CounterHandler()
 
-def make_response_handler(ctx):
-    return make_response_handler_from_str(ctx.response_handler)
+def make_response_handler(c):
+    return make_response_handler_from_str(c.response_handler, c.arg_list)
