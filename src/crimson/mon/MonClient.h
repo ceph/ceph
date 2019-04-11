@@ -30,7 +30,6 @@ namespace ceph::net {
 }
 
 struct AuthAuthorizeHandler;
-class AuthMethodList;
 class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
@@ -50,7 +49,6 @@ class Client : public ceph::net::Dispatcher,
 {
   EntityName entity_name;
   KeyRing keyring;
-  std::unique_ptr<AuthMethodList> auth_methods;
   const uint32_t want_keys;
 
   MonMap monmap;

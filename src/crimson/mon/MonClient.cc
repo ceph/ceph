@@ -7,7 +7,6 @@
 #include <seastar/util/log.hh>
 
 #include "auth/AuthClientHandler.h"
-#include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
 #include "common/hostname.h"
@@ -57,7 +56,6 @@ public:
   // v1
   seastar::future<> authenticate_v1(epoch_t epoch,
                                     const EntityName& name,
-                                    const AuthMethodList& auth_methods,
                                     uint32_t want_keys);
   // v2
   seastar::future<> authenticate_v2();
@@ -85,8 +83,7 @@ public:
 
 private:
   seastar::future<> setup_session(epoch_t epoch,
-				  const AuthMethodList& auth_methods,
-				  const EntityName& name);
+                                  const EntityName& name);
   std::unique_ptr<AuthClientHandler> create_auth(ceph::auth::method_t,
                                                  uint64_t global_id,
                                                  const EntityName& name,
@@ -102,8 +99,8 @@ private:
   clock_t::time_point auth_start;
   ceph::auth::method_t auth_method = 0;
   seastar::promise<> auth_done;
-  AuthRegistry* auth_registry;
   // v1 and v2
+  AuthRegistry* auth_registry;
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
   RotatingKeyRing rotating_keyring;
@@ -174,7 +171,6 @@ Connection::create_auth(ceph::auth::method_t protocol,
 
 seastar::future<>
 Connection::setup_session(epoch_t epoch,
-                          const AuthMethodList& auth_methods,
                           const EntityName& name)
 {
   auto m = make_message<MAuth>();
@@ -182,7 +178,9 @@ Connection::setup_session(epoch_t epoch,
   m->monmap_epoch = epoch;
   __u8 struct_v = 1;
   encode(struct_v, m->auth_payload);
-  encode(auth_methods.get_supported_set(), m->auth_payload);
+  std::vector<ceph::auth::method_t> auth_methods;
+  auth_registry->get_supported_methods(conn->get_peer_type(), &auth_methods);
+  encode(auth_methods, m->auth_payload);
   encode(name, m->auth_payload);
   encode(global_id, m->auth_payload);
   return conn->send(m);
@@ -223,11 +221,10 @@ seastar::future<bool> Connection::do_auth()
 seastar::future<>
 Connection::authenticate_v1(epoch_t epoch,
                             const EntityName& name,
-                            const AuthMethodList& auth_methods,
                             uint32_t want_keys)
 {
-  return conn->keepalive().then([epoch, auth_methods, name, this] {
-    return setup_session(epoch, auth_methods, name);
+  return conn->keepalive().then([epoch, name, this] {
+    return setup_session(epoch, name);
   }).then([this] {
     return reply.get_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
@@ -387,26 +384,6 @@ ceph::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
 
-namespace {
-auto create_auth_methods(uint32_t entity_type)
-{
-  auto& conf = ceph::common::local_conf();
-  std::string method;
-  const auto auth_supported = conf.get_val<std::string>("auth_supported");
-  if (!auth_supported.empty()) {
-    method = auth_supported;
-  } else if (entity_type & (CEPH_ENTITY_TYPE_OSD |
-                            CEPH_ENTITY_TYPE_MDS |
-                            CEPH_ENTITY_TYPE_MON |
-                            CEPH_ENTITY_TYPE_MGR)) {
-    method = conf.get_val<std::string>("auth_cluster_required");
-  } else {
-    method = conf.get_val<std::string>("auth_client_required");
-  }
-  return std::make_unique<AuthMethodList>(nullptr, method);
-}
-}
-
 Client::Client(ceph::net::Messenger& messenger,
                ceph::common::AuthHandler& auth_handler)
   // currently, crimson is OSD-only
@@ -423,9 +400,6 @@ Client::Client(Client&&) = default;
 Client::~Client() = default;
 
 seastar::future<> Client::start() {
-  entity_name = ceph::common::local_conf()->name;
-  // should always be OSD, though
-  auth_methods = create_auth_methods(entity_name.get_type());
   auth_registry.refresh_config();
   return load_keyring().then([this] {
     return monmap.build_initial(ceph::common::local_conf(), false);
@@ -436,7 +410,7 @@ seastar::future<> Client::start() {
 
 seastar::future<> Client::load_keyring()
 {
-  if (!auth_methods->is_supported_auth(CEPH_AUTH_CEPHX)) {
+  if (!auth_registry.is_supported_method(msgr.get_mytype(), CEPH_AUTH_CEPHX)) {
     return seastar::now();
   } else {
     return ceph::auth::load_from_keyring(&keyring).then([](KeyRing* keyring) {
@@ -884,8 +858,7 @@ seastar::future<> Client::reopen_session(int rank)
       if (conn->get_peer_addr().is_msgr2()) {
         return mc.authenticate_v2();
       } else {
-        return mc.authenticate_v1(monmap.get_epoch(), entity_name,
-                                  *auth_methods, want_keys)
+        return mc.authenticate_v1(monmap.get_epoch(), entity_name, want_keys)
           .handle_exception([conn](auto ep) {
             return conn->close().then([ep = std::move(ep)] {
               std::rethrow_exception(ep);
