@@ -23,3 +23,6 @@ def main():
     futures = [ asyncio.ensure_future(client.run(**kwargs)) for kwargs in client_ctx.arg_list ]
     ev_loop.run_until_complete(asyncio.gather(*futures))
     resp_handler.print_stats()
+
+if __name__ == "__main__":
+    main()

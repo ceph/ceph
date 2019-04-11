@@ -12,7 +12,7 @@ setup(
     author_email='abhishek@suse.com',
     entry_points = dict(
         console_scripts = [
-            'rbench = rbench.rbench:main'
+            'rbench = rbench.main:main'
         ]
     ),
     setup_requires=[
