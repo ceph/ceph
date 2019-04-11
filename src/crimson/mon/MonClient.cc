@@ -10,7 +10,6 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
-#include "common/Clock.h"
 #include "common/hostname.h"
 
 #include "crimson/auth/KeyRing.h"
@@ -99,7 +98,8 @@ private:
   // v1
   seastar::promise<Ref<MAuthReply>> reply;
   // v2
-  utime_t auth_start;
+  using clock_t = seastar::lowres_system_clock;
+  clock_t::time_point auth_start;
   ceph::auth::method_t auth_method = 0;
   seastar::promise<> auth_done;
   AuthRegistry* auth_registry;
@@ -265,7 +265,7 @@ Connection::authenticate_v1(epoch_t epoch,
 
 seastar::future<> Connection::authenticate_v2()
 {
-  auth_start = ceph_clock_now();
+  auth_start = seastar::lowres_system_clock::now();
   return conn->send(make_message<MMonGetMap>()).then([this] {
     return auth_done.get_future();
   });

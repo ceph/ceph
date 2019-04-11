@@ -4,6 +4,8 @@
 #include "ProtocolV2.h"
 
 #include <seastar/core/lowres_clock.hh>
+#include <fmt/format.h>
+#include <fmt/time.h>
 
 #include "include/msgr.h"
 #include "include/random.h"
@@ -56,6 +58,36 @@ inline seastar::future<> unexpected_tag(const Tag& unexpected,
 }
 
 } // namespace anonymous
+
+namespace fmt {
+template <>
+struct formatter<seastar::lowres_system_clock::time_point> {
+  // ignore the format string
+  template <typename ParseContext>
+  constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const seastar::lowres_system_clock::time_point& t,
+	      FormatContext& ctx) {
+    struct tm bdt;
+    time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
+      t.time_since_epoch()).count();
+    localtime_r(&tt, &bdt);
+    auto milliseconds = (t.time_since_epoch() %
+			 std::chrono::seconds(1)).count();
+    return format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
+		     bdt, milliseconds);
+  }
+};
+}
+
+namespace std {
+inline ostream& operator<<(
+  ostream& out, const seastar::lowres_system_clock::time_point& t)
+{
+  return out << fmt::format("{}", t);
+}
+}
 
 namespace ceph::net {
 
@@ -1496,14 +1528,15 @@ void ProtocolV2::execute_ready()
               last_keepalive_ack_to_send = keepalive_frame.timestamp();
               logger().debug("{} got KEEPALIVE2 {}",
                              conn, last_keepalive_ack_to_send);
-              conn.last_keepalive = utime_t{seastar::lowres_system_clock::now()};
+              conn.set_last_keepalive(seastar::lowres_system_clock::now());
               notify_keepalive_ack();
             });
           case Tag::KEEPALIVE2_ACK:
             return read_frame_payload().then([this] {
               // handle_keepalive2_ack() logic
               auto keepalive_ack_frame = KeepAliveFrameAck::Decode(rx_segments_data.back());
-              conn.last_keepalive_ack = keepalive_ack_frame.timestamp();
+              conn.set_last_keepalive_ack(
+                seastar::lowres_system_clock::time_point{keepalive_ack_frame.timestamp()});
               logger().debug("{} got KEEPALIVE_ACK {}",
                              conn, conn.last_keepalive_ack);
             });

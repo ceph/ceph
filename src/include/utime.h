@@ -88,6 +88,11 @@ public:
     tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(
         t.time_since_epoch() % std::chrono::seconds(1)).count();
   }
+  explicit operator seastar::lowres_system_clock::time_point() const noexcept {
+    using clock_t = seastar::lowres_system_clock;
+    return clock_t::time_point{std::chrono::duration_cast<clock_t::duration>(
+      std::chrono::seconds{tv.tv_sec} + std::chrono::nanoseconds{tv.tv_nsec})};
+  }
 #endif
 
   utime_t(const struct timeval &v) {
