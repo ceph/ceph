@@ -234,21 +234,29 @@ class LocalRemote(object):
     def put_file(self, src, dst, sudo=False):
         shutil.copy(src, dst)
 
-    def run(self, args, check_status=True, wait=True,
-            stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None, timeout=None, omit_sudo=True):
-        if str(type(args)).find('str') != -1:
+    def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
+        # Since Python's shell simulation can only work when commands are
+        # provided as a list of argumensts...
+        if isinstance(args, str):
             args = args.split()
 
+        # We'll let sudo be a part of command even omit flag says otherwise in
+        # cases of commands which can normally be ran only by root.
         try:
             if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
                 omit_sudo = False
         except ValueError:
             pass
 
-        # We don't need no stinkin' sudo
         if omit_sudo:
             args = [a for a in args if a != "sudo"]
+
+        return args
+
+    def run(self, args, check_status=True, wait=True,
+            stdout=None, stderr=None, cwd=None, stdin=None,
+            logger=None, label=None, env=None, timeout=None, omit_sudo=True):
+        args = self._perform_checks_and_return_list_of_args(args, omit_sudo)
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
         shell = any([a for a in args if isinstance(a, Raw)])
