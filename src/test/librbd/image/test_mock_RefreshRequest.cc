@@ -264,8 +264,6 @@ public:
       expect.WillOnce(Return(r));
     } else {
       expect.WillOnce(DoDefault());
-      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(RBD_INFO, _, StrEq("rbd"), StrEq("metadata_list"), _, _, _));
       EXPECT_CALL(*mock_image_ctx.image_watcher, is_unregistered())
         .WillOnce(Return(false));
     }

@@ -50,11 +50,13 @@ static std::set<std::string> EXCLUDE_IMAGE_OPTIONS {
   };
 
 struct Options : Parent {
-  librados::IoCtx& io_ctx;
+  librados::IoCtx m_io_ctx;
 
-  Options(librados::IoCtx& io_ctx, bool image_apply_only_options)
-    : io_ctx(io_ctx) {
-    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  Options(librados::IoCtx& io_ctx, bool image_apply_only_options) {
+    m_io_ctx.dup(io_ctx);
+    m_io_ctx.set_namespace("");
+
+    CephContext *cct = reinterpret_cast<CephContext *>(m_io_ctx.cct());
 
     const std::string rbd_key_prefix("rbd_");
     const std::string rbd_mirror_key_prefix("rbd_mirror_");
@@ -77,7 +79,7 @@ struct Options : Parent {
   }
 
   int init() {
-    CephContext *cct = (CephContext *)io_ctx.cct();
+    CephContext *cct = (CephContext *)m_io_ctx.cct();
 
     for (auto &it : *this) {
       int r = cct->_conf.get_val(it.first.c_str(), &it.second.first);
@@ -91,7 +93,7 @@ struct Options : Parent {
     while (more_results) {
       std::map<std::string, bufferlist> pairs;
 
-      int r = librbd::api::PoolMetadata<>::list(io_ctx, last_key, MAX_KEYS,
+      int r = librbd::api::PoolMetadata<>::list(m_io_ctx, last_key, MAX_KEYS,
                                                 &pairs);
       if (r < 0) {
         return r;
