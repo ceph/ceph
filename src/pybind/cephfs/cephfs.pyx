@@ -720,13 +720,11 @@ cdef class LibCephFS(object):
         if not dirent:
             return None
 
-        d_name = dirent.d_name if sys.version[0:2] == '2.' else dirent.d_name.\
-                 decode()
         return DirEntry(d_ino=dirent.d_ino,
                         d_off=dirent.d_off,
                         d_reclen=dirent.d_reclen,
                         d_type=dirent.d_type,
-                        d_name=d_name)
+                        d_name=dirent.d_name)
 
     def closedir(self, DirResult dir_handler):
         """
