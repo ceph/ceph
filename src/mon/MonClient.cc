@@ -49,7 +49,6 @@
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
 #include "auth/AuthClientHandler.h"
-#include "auth/AuthMethodList.h"
 #include "auth/AuthRegistry.h"
 #include "auth/RotatingKeyRing.h"
 

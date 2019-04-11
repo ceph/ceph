@@ -38,7 +38,6 @@ struct MAuthReply;
 class LogClient;
 class AuthAuthorizer;
 class AuthClientHandler;
-class AuthMethodList;
 class AuthRegistry;
 class KeyRing;
 class RotatingKeyRing;
