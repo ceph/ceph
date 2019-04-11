@@ -733,61 +733,41 @@ seastar::future<> ProtocolV1::maybe_throttle()
   if (!conn.policy.throttler_bytes) {
     return seastar::now();
   }
-  const auto to_read = (m.header.front_len +
-                        m.header.middle_len +
-                        m.header.data_len);
+  const auto to_read = (m->header.front_len +
+                        m->header.middle_len +
+                        m->header.data_len);
   return conn.policy.throttler_bytes->get(to_read);
 }
 
 seastar::future<> ProtocolV1::read_message()
 {
-  return socket->read(sizeof(m.header))
+  m = &in_messages_space[msgs_index];
+  msgs_index = (msgs_index + 1) % msgs_max;
+  return socket->read(sizeof(m->header))
     .then([this] (bufferlist bl) {
       // throttle the traffic, maybe
       auto p = bl.cbegin();
-      ::decode(m.header, p);
+      ::decode(m->header, p);
       return maybe_throttle();
     }).then([this] {
       // read front
-      return socket->read(m.header.front_len);
+      return socket->read(m->header.front_len);
     }).then([this] (bufferlist bl) {
-      m.front = std::move(bl);
+      m->front = std::move(bl);
       // read middle
-      return socket->read(m.header.middle_len);
+      return socket->read(m->header.middle_len);
     }).then([this] (bufferlist bl) {
-      m.middle = std::move(bl);
+      m->middle = std::move(bl);
       // read data
-      return socket->read(m.header.data_len);
+      return socket->read(m->header.data_len);
     }).then([this] (bufferlist bl) {
-      m.data = std::move(bl);
+      m->data = std::move(bl);
       // read footer
-      return socket->read(sizeof(m.footer));
+      return socket->read(sizeof(ceph_msg_footer));
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
-      ::decode(m.footer, p);
-      auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
-                                  m.front, m.middle, m.data, nullptr);
-      // TODO: set time stamps
-      msg->set_byte_throttler(conn.policy.throttler_bytes);
-
-      if (!conn.update_rx_seq(msg->get_seq())) {
-        // skip this message
-        return;
-      }
-
-      constexpr bool add_ref = false; // Message starts with 1 ref
-      // TODO: change MessageRef with foreign_ptr
-      auto msg_ref = MessageRef{msg, add_ref};
-      // start dispatch, ignoring exceptions from the application layer
-      seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-          logger().debug("{} <= {}@{} === {}", messenger,
-                msg->get_source(), conn.peer_addr, *msg);
-          return dispatcher.ms_dispatch(&conn, std::move(msg))
-            .handle_exception([this] (std::exception_ptr eptr) {
-              logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-              ceph_assert(false);
-            });
-        });
+      ::decode(m->footer, p);
+      return in_messages.push_eventually(std::move(m));
     });
 }
 
@@ -820,11 +800,71 @@ seastar::future<> ProtocolV1::handle_tags()
     });
 }
 
+void ProtocolV1::do_decode_messages()
+{
+  logger().debug("{} do_decode_messages() started", conn);
+  seastar::with_gate(pending_dispatch, [this] {
+    return seastar::keep_doing([this] {
+      return in_messages.not_empty().then([this] {
+        auto batch_size = in_messages.size();
+        while (batch_size) {
+          MessageReader* raw_msg = in_messages.pop();
+          auto msg = ::decode_message(nullptr, 0, raw_msg->header, raw_msg->footer,
+              raw_msg->front, raw_msg->middle, raw_msg->data, nullptr);
+
+          if (unlikely(!msg)) {
+            logger().warn("{} decode message failed", conn);
+            in_messages.abort(
+                std::make_exception_ptr(std::system_error{make_error_code(error::negotiation_failure)}));
+            throw std::system_error{make_error_code(error::read_eof)};
+          }
+
+          // TODO: set time stamps
+          msg->set_byte_throttler(conn.policy.throttler_bytes);
+
+          if (likely(conn.update_rx_seq(msg->get_seq()))) {
+            // dispatch this message
+            constexpr bool add_ref = false; // Message starts with 1 ref
+            // TODO: change MessageRef with foreign_ptr
+            auto msg_ref = MessageRef{msg, add_ref};
+            // start dispatch, ignoring exceptions from the application layer
+            seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+              logger().debug("{} <= {}@{} === {}", messenger,
+                    msg->get_source(), conn.peer_addr, *msg);
+              return dispatcher.ms_dispatch(&conn, std::move(msg))
+                .handle_exception([this] (std::exception_ptr eptr) {
+                  logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+                  ceph_assert(false);
+                });
+            });
+          } else {
+            msg->put();
+          }
+          --batch_size;
+        }
+      }); // in_messages.not_empty()
+    }).handle_exception_type([this] (const std::system_error& e) {
+      if (e.code() == error::read_eof) {
+        logger().debug("{} do_decode_messages() aborted with eof, at state {}",
+                       conn, static_cast<int>(state));
+      } else {
+        throw e;
+      }
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} do_decode_messages() got unexpected exception {}, at state {}",
+                     conn, eptr, static_cast<int>(state));
+      ceph_assert(false);
+    }); // seastar::keep_doing()
+  }); // seastar::with_gate()
+}
+
 void ProtocolV1::execute_open()
 {
   logger().debug("{} trigger open, was {}", conn, static_cast<int>(state));
   state = state_t::open;
   set_write_state(write_state_t::open);
+
+  do_decode_messages();
 
   seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
@@ -861,6 +901,12 @@ void ProtocolV1::trigger_close()
 {
   logger().debug("{} trigger closing, was {}",
                  conn, static_cast<int>(state));
+
+  // TODO: should do this whenever leave the open state
+  if (state == state_t::open) {
+    in_messages.abort(
+        std::make_exception_ptr(std::system_error{make_error_code(error::read_eof)}));
+  }
 
   if (state == state_t::accepting) {
     messenger.unaccept_conn(seastar::static_pointer_cast<SocketConnection>(

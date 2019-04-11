@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <seastar/core/queue.hh>
 #include "Protocol.h"
 
 class AuthAuthorizer;
@@ -63,11 +64,16 @@ class ProtocolV1 final : public Protocol {
   // state for an incoming message
   struct MessageReader {
     ceph_msg_header header;
-    ceph_msg_footer footer;
     bufferlist front;
     bufferlist middle;
     bufferlist data;
-  } m;
+    ceph_msg_footer footer;
+  };
+  const size_t msgs_max = 128;
+  seastar::queue<MessageReader*> in_messages = seastar::queue<MessageReader*>(msgs_max-1);
+  std::unique_ptr<MessageReader[]> in_messages_space = std::make_unique<MessageReader[]>(msgs_max);
+  size_t msgs_index = 0;
+  MessageReader* m = nullptr;
 
   struct Keepalive {
     struct {
@@ -108,6 +114,7 @@ class ProtocolV1 final : public Protocol {
   seastar::future<> maybe_throttle();
   seastar::future<> read_message();
   seastar::future<> handle_tags();
+  void do_decode_messages();
   void execute_open();
 
   // replacing
