@@ -30,8 +30,8 @@ function run() {
     export objects=50
     export poolprefix=test
     export FORCE_PRIO="254"     # See OSD_BACKFILL_PRIORITY_FORCED
-    export DEGRADED_PRIO="140"  # See OSD_BACKFILL_DEGRADED_PRIORITY_BASE
-    export NORMAL_PRIO="100"    # See OSD_BACKFILL_PRIORITY_BASE
+    export DEGRADED_PRIO="150"  # See OSD_BACKFILL_DEGRADED_PRIORITY_BASE + 10
+    export NORMAL_PRIO="110"    # See OSD_BACKFILL_PRIORITY_BASE + 10
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
