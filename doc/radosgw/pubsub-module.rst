@@ -336,7 +336,7 @@ Request parameters:
 
 - topic-name: name of topic
 
-.. note:: when the bucket is deleted, any notification defined on it is also deleted
+.. note:: When the bucket is deleted, any notification defined on it is also deleted
 
 List Notifications
 ``````````````````
