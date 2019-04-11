@@ -2525,7 +2525,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
   return reuse_connection(existing, exproto);
 }
 
-CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
+CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing) {
   ldout(cct, 20) << __func__ << " existing=" << existing << dendl;
 
   std::lock_guard<std::mutex> l(existing->lock);
@@ -2626,7 +2626,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
   }
 }
 
-CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
+CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
                                    ProtocolV2 *exproto) {
   ldout(cct, 20) << __func__ << " existing=" << existing
                  << " reconnect=" << reconnecting << dendl;
