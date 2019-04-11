@@ -75,6 +75,7 @@ class Client : public ceph::net::Dispatcher,
 
 public:
   Client(ceph::net::Messenger&, ceph::common::AuthHandler&);
+  Client(Client&&);
   ~Client();
   seastar::future<> start();
   seastar::future<> stop();
