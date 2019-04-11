@@ -2473,15 +2473,23 @@ inline int PG::clamp_recovery_priority(int priority)
 unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
-  int64_t ret = 0;
+  int ret = OSD_RECOVERY_PRIORITY_BASE;
 
   if (state & PG_STATE_FORCED_RECOVERY) {
     ret = OSD_RECOVERY_PRIORITY_FORCED;
   } else {
-    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &ret);
-    ret = clamp_recovery_priority(OSD_RECOVERY_PRIORITY_BASE + ret);
+    // XXX: This priority boost isn't so much about inactive, but about data-at-risk
+    if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
+      // inactive: no. of replicas < min_size, highest priority since it blocks IO
+      ret = OSD_RECOVERY_INACTIVE_PRIORITY_BASE + (pool.info.min_size - info.stats.avail_no_missing.size());
+    }
+
+    int64_t pool_recovery_priority = 0;
+    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+
+    ret = clamp_recovery_priority(pool_recovery_priority + ret);
   }
-  dout(20) << __func__ << " recovery priority for " << *this << " is " << ret << ", state is " << state << dendl;
+  dout(20) << __func__ << " recovery priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
 }
 
@@ -2513,6 +2521,7 @@ unsigned PG::get_backfill_priority()
     ret = clamp_recovery_priority(pool_recovery_priority + ret);
   }
 
+  dout(20) << __func__ << " backfill priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
 }
 
@@ -3203,6 +3212,7 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
+  info.stats.avail_no_missing.clear();
 
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
@@ -3236,6 +3246,8 @@ void PG::_update_calc_stats()
         acting_source_objects.insert(make_pair(missing, pg_whoami));
       }
       info.stats.stats.sum.num_objects_missing_on_primary = missing;
+      if (missing == 0)
+        info.stats.avail_no_missing.push_back(pg_whoami);
       dout(20) << __func__ << " shard " << pg_whoami
                << " primary objects " << num_objects
                << " missing " << missing
@@ -3269,6 +3281,8 @@ void PG::_update_calc_stats()
 	acting_source_objects.insert(make_pair(missing, peer.first));
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
+      if (missing == 0)
+        info.stats.avail_no_missing.push_back(peer.first);
       dout(20) << __func__ << " shard " << peer.first
                << " objects " << peer_num_objects
                << " missing " << missing
