@@ -46,7 +46,7 @@ def download_ceph_deploy(ctx, config):
         system_type = teuthology.get_system_type(ceph_admin)
 
         if system_type == 'rpm':
-            package = 'python34' if py_ver == '3' else 'python'
+            package = 'python36' if py_ver == '3' else 'python'
             ctx.cluster.run(args=[
                 'sudo', 'yum', '-y', 'install',
                 package, 'python-virtualenv'
