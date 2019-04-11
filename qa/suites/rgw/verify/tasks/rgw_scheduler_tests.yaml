@@ -7,7 +7,6 @@ overrides:
 tasks:
   - rgw_scheduler_tests:
       client.0:
-        git_remote: git://github.com/theanalyst/
         default:
           req_count: 25
           create_buckets: bucket1, bucket2
