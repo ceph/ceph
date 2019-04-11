@@ -117,16 +117,16 @@ class EstimateThread : public Thread
   bool m_stop = false;
   uint64_t total_bytes = 0;
   uint64_t examined_objects = 0;
-  uint64_t total_objects = 0;
+  uint64_t total_objects;
   uint64_t max_read_size = 0;
   bool debug = false;
 #define COND_WAIT_INTERVAL 10
 
 public:
   EstimateThread(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, int32_t timeout,
-		uint64_t max_read_size = default_op_size):
+		uint64_t num_objects, uint64_t max_read_size = default_op_size):
     io_ctx(io_ctx), n(n), m(m), begin(begin), end(end), m_lock("EstimateThread::Locker"), 
-    timeout(timeout), max_read_size(max_read_size)
+    timeout(timeout), total_objects(num_objects), max_read_size(max_read_size)
   {}
   void signal(int signum) {
     Mutex::Locker l(m_lock);
@@ -134,7 +134,6 @@ public:
     m_cond.Signal();
   }
   virtual void print_status(Formatter *f, ostream &out) = 0;
-  uint64_t count_objects(IoCtx &ioctx, ObjectCursor &begin, ObjectCursor &end);
   uint64_t get_examined_objects() { return examined_objects; }
   uint64_t get_total_bytes() { return total_bytes; }
   uint64_t get_total_objects() { return total_objects; }
@@ -153,12 +152,11 @@ class EstimateDedupRatio : public EstimateThread
 public:
   EstimateDedupRatio(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
 		string chunk_algo, string fp_algo, uint64_t chunk_size, int32_t timeout,
-		uint64_t max_read_size):
-    EstimateThread(io_ctx, n, m, begin, end, timeout, max_read_size), chunk_algo(chunk_algo),
-    fp_algo(fp_algo), chunk_size(chunk_size) { }
+		uint64_t num_objects, uint64_t max_read_size):
+    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects, max_read_size), 
+		chunk_algo(chunk_algo), fp_algo(fp_algo), chunk_size(chunk_size) { }
 
   void* entry() {
-    count_objects(io_ctx, begin, end);
     estimate_dedup_ratio();
     return NULL;
   }
@@ -180,11 +178,10 @@ class ChunkScrub: public EstimateThread
 
 public:
   ChunkScrub(IoCtx& io_ctx, int n, int m, ObjectCursor begin, ObjectCursor end, 
-	     IoCtx& chunk_io_ctx, int32_t timeout):
-    EstimateThread(io_ctx, n, m, begin, end, timeout), chunk_io_ctx(chunk_io_ctx)
+	     IoCtx& chunk_io_ctx, int32_t timeout, uint64_t num_objects):
+    EstimateThread(io_ctx, n, m, begin, end, timeout, num_objects), chunk_io_ctx(chunk_io_ctx)
     { }
   void* entry() {
-    count_objects(chunk_io_ctx, begin, end);
     chunk_scrub_common();
     return NULL;
   }
@@ -194,35 +191,6 @@ public:
 };
 
 vector<std::unique_ptr<EstimateThread>> estimate_threads;
-
-uint64_t EstimateThread::count_objects(IoCtx &ioctx, ObjectCursor &begin, ObjectCursor &end) 
-{
-  ObjectCursor shard_start;
-  ObjectCursor shard_end;
-  uint64_t count = 0;
-
-  ioctx.object_list_slice(
-    begin,
-    end,
-    n,
-    m,
-    &shard_start,
-    &shard_end);
-
-  ObjectCursor c(shard_start);
-  while (c < shard_end)
-  {
-    std::vector<ObjectItem> result;
-    int r = ioctx.object_list(c, shard_end, 12, {}, &result, &c);
-    if (r < 0 ) {
-      cerr << "error object_list : " << cpp_strerror(r) << std::endl;
-      return 0;
-    }
-    count += result.size();
-    total_objects += result.size();
-  }
-  return count;
-}
 
 static void print_dedup_estimate(bool debug = false)
 {
@@ -580,6 +548,9 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   bool debug = false;
   ObjectCursor begin;
   ObjectCursor end;
+  librados::pool_stat_t s; 
+  list<string> pool_names;
+  map<string, librados::pool_stat_t> stats;
 
   i = opts.find("pool");
   if (i != opts.end()) {
@@ -711,10 +682,24 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   glock.Lock();
   begin = io_ctx.object_list_begin();
   end = io_ctx.object_list_end();
+  pool_names.push_back(pool_name);
+  ret = rados.get_pool_stats(pool_names, stats);
+  if (ret < 0) {
+    cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
+    glock.Unlock();
+    return ret;
+  }
+  if (stats.find(pool_name) == stats.end()) {
+    cerr << "stats can not find pool name: " << pool_name << std::endl;
+    glock.Unlock();
+    return ret;
+  }
+  s = stats[pool_name];
+
   for (unsigned i = 0; i < max_thread; i++) {
     std::unique_ptr<EstimateThread> ptr (new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
 							    chunk_algo, fp_algo, chunk_size, 
-							    report_period, max_read_size));
+							    report_period, s.num_objects, max_read_size));
     if (chunk_algo == "rabin") {
       EstimateDedupRatio *ratio = NULL;
       ratio = dynamic_cast<EstimateDedupRatio*>(ptr.get());
@@ -767,6 +752,9 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   uint32_t report_period = default_report_period;
   ObjectCursor begin;
   ObjectCursor end;
+  librados::pool_stat_t s; 
+  list<string> pool_names;
+  map<string, librados::pool_stat_t> stats;
 
   i = opts.find("pool");
   if (i != opts.end()) {
@@ -894,9 +882,24 @@ int chunk_scrub_common(const std::map < std::string, std::string > &opts,
   glock.Lock();
   begin = io_ctx.object_list_begin();
   end = io_ctx.object_list_end();
+  pool_names.push_back(pool_name);
+  ret = rados.get_pool_stats(pool_names, stats);
+  if (ret < 0) {
+    cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
+    glock.Unlock();
+    return ret;
+  }
+  if (stats.find(pool_name) == stats.end()) {
+    cerr << "stats can not find pool name: " << pool_name << std::endl;
+    glock.Unlock();
+    return ret;
+  }
+  //librados::pool_stat_t& s = stats[pool_name];
+  s = stats[pool_name];
+
   for (unsigned i = 0; i < max_thread; i++) {
     std::unique_ptr<EstimateThread> ptr (new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
-							report_period));
+							report_period, s.num_objects));
     ptr->create("estimate_thread");
     estimate_threads.push_back(move(ptr));
   }
