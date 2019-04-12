@@ -473,27 +473,67 @@ exists.')
         """
         root_src_dir = args.local_path
         root_dst_dir = args.remote_path
-        if args.local_path == '.':
+        if args.local_path == '.' or args.local_path == './':
             root_src_dir = os.getcwd()
+        elif len(args.local_path.rsplit('/', 1)) < 2:
+            root_src_dir = os.path.join(os.getcwd(), args.local_path)
+        else:
+            p = args.local_path.split('/')
+            if p[0] == '.':
+                root_src_dir = os.getcwd()
+                p.pop(0)
+                while len(p) > 0:
+                    root_src_dir += '/' + p.pop(0)
+
         if root_dst_dir == '.':
-            root_dst_dir = root_src_dir.rsplit('/', 1)[1]
-        elif root_dst_dir[-1] != '/':
+            if args.local_path != '-':
+                root_dst_dir = root_src_dir.rsplit('/', 1)[1]
+                if root_dst_dir == "":
+                    root_dst_dir = root_src_dir.rsplit('/', 1)[0]
+                    a = root_dst_dir.rsplit('/', 1)
+                    if len(a) > 1:
+                        root_dst_dir = a[1]
+                    else:
+                        root_dst_dir = a[0]
+            else:
+                self.poutput("error: no filename specified for destination")
+                return
+
+        if root_dst_dir[-1] != '/':
             root_dst_dir += '/'
+
         if args.local_path == '-' or os.path.isfile(root_src_dir):
+            if not args.force:
+                if os.path.isfile(root_src_dir):
+                    dst_file = root_dst_dir
+                    if is_file_exists(dst_file):
+                        self.poutput("%s: file exists! use --force to overwrite" % dst_file)
+                        return
+            if args.local_path == '-':
+                root_src_dir = '-'
             copy_from_local(root_src_dir, root_dst_dir)
         else:
             for src_dir, dirs, files in os.walk(root_src_dir):
                 dst_dir = src_dir.replace(root_src_dir, root_dst_dir, 1)
                 dst_dir = re.sub('\/+', '/', cephfs.getcwd().decode('utf-8') + dst_dir)
                 if args.force and dst_dir != '/' and not is_dir_exists(dst_dir[:-1]) and len(locate_file(dst_dir)) == 0:
-                    cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                if not args.force and dst_dir != '/' and not is_dir_exists(dst_dir) and not os.path.isfile(root_src_dir):
-                    args.force = True
-                    cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                    try:
+                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                    except:
+                        pass
+                if (not args.force) and dst_dir != '/' and not is_dir_exists(dst_dir) and not os.path.isfile(root_src_dir):
+                    try:
+                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                    except:
+                        pass
+
                 for dir_ in dirs:
                     if not is_dir_exists(os.path.join(dst_dir, dir_)):
-                        cephfs.mkdirs(
-                            to_bytes(os.path.join(dst_dir, dir_)), 0o777)
+                        try:
+                            cephfs.mkdirs(to_bytes(os.path.join(dst_dir, dir_)), 0o777)
+                        except:
+                            pass
+
                 for file_ in files:
                     src_file = os.path.join(src_dir, file_)
                     dst_file = re.sub('\/+', '/', '/' + dst_dir + '/' + file_)
