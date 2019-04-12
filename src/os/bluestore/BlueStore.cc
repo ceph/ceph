@@ -4822,6 +4822,19 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t)
     fm = NULL;
     return r;
   }
+  // if space size tracked by free list manager is that higher than actual
+  // dev size one can hit out-of-space allocation which will result
+  // in data loss and/or assertions
+  // Probably user altered the device size somehow.
+  // The only fix for now is to redeploy OSD.
+  if (fm->get_size() >= bdev->get_size() + min_alloc_size) {
+    ostringstream ss;
+    ss << "slow device size mismatch detected, "
+	<< " fm size(" << fm->get_size()
+	<< ") > slow device size(" << bdev->get_size()
+	<< "), Please stop using this OSD as it might cause data loss.";
+    _set_disk_size_mismatch_alert(ss.str());
+  }
   return 0;
 }
 
@@ -13809,6 +13822,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
+  if (!disk_size_mismatch_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_DISK_SIZE_MISMATCH",
+      disk_size_mismatch_alert);
+  }
   if (!legacy_statfs_alert.empty()) {
     alerts.emplace(
       "BLUESTORE_LEGACY_STATFS",
