@@ -281,6 +281,7 @@ Client::Client(ceph::net::Messenger& messenger,
     auth_handler{auth_handler}
 {}
 
+Client::Client(Client&&) = default;
 Client::~Client() = default;
 
 seastar::future<> Client::start() {
