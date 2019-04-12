@@ -431,7 +431,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
       http(http), observer(observer),
       bucket_instance(bucket_instance),
       zone_id(store->get_zone().id),
-      peer_status(store->zone_conn_map.size())
+      peer_status(store->get_zone_data_notify_to_map().size())
   {}
 
   int operate() override;
@@ -455,7 +455,7 @@ int BucketTrimInstanceCR::operate()
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->zone_conn_map) {
+      for (auto& c : store->get_zone_data_notify_to_map()) {
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
               false);
