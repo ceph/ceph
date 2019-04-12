@@ -24,6 +24,7 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket chown               update object owner ACL after bucket link
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
