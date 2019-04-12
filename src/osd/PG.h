@@ -1265,8 +1265,6 @@ protected:
   void check_past_interval_bounds() const;
   PastIntervals::PriorSet build_prior();
 
-  void remove_down_peer_info(const OSDMapRef osdmap);
-
   bool adjust_need_up_thru(const OSDMapRef osdmap);
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
@@ -1299,9 +1297,6 @@ protected:
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, pg_shard_t from);
-  bool proc_replica_info(
-    pg_shard_t from, const pg_info_t &info, epoch_t send_epoch);
-
   struct PGLogEntryHandler : public PGLog::LogEntryHandler {
     PG *pg;
     ObjectStore::Transaction *t;
@@ -1431,7 +1426,7 @@ protected:
 
   void purge_strays();
 
-  void update_heartbeat_peers();
+  void update_heartbeat_peers(set<int> peers) override;
 
   Context *finish_sync_event;
 
