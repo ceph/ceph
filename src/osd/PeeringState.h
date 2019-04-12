@@ -1536,6 +1536,14 @@ public:
     last_persisted_osdmap = 0;
   }
 
+  void shutdown() {
+    deleting = true;
+  }
+
+  void set_delete_complete() {
+    deleted = true;
+  }
+
   template <typename Func>
   void adjust_purged_snaps(Func f) {
     f(info.purged_snaps);
