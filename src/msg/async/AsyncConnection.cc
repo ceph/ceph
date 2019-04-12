@@ -152,8 +152,14 @@ AsyncConnection::~AsyncConnection()
   ceph_assert(!delay_state);
 }
 
-int AsyncConnection::get_con_mode() const {
+int AsyncConnection::get_con_mode() const
+{
   return protocol->get_con_mode();
+}
+
+bool AsyncConnection::is_msgr2() const
+{
+  return protocol->proto_type == 2;
 }
 
 void AsyncConnection::maybe_start_delay_thread()

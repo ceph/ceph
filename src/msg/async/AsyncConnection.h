@@ -228,6 +228,8 @@ class AsyncConnection : public Connection {
     return logger;
   }
 
+  bool is_msgr2() const override;
+
   friend class Protocol;
   friend class ProtocolV1;
   friend class ProtocolV2;

@@ -110,6 +110,10 @@ public:
    */
   virtual bool is_connected() = 0;
 
+  virtual bool is_msgr2() const {
+    return false;
+  }
+
   Messenger *get_messenger() {
     return msgr;
   }
