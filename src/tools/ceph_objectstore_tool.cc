@@ -1501,7 +1501,7 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   }
 }
 
-int ObjectStoreTool::dump_import(Formatter *formatter)
+int ObjectStoreTool::dump_export(Formatter *formatter)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1556,7 +1556,7 @@ int ObjectStoreTool::dump_import(Formatter *formatter)
       return ret;
 
     if (debug) {
-      cerr << "dump_import: Section type " << std::to_string(type) << std::endl;
+      cerr << "dump_export: Section type " << std::to_string(type) << std::endl;
     }
     if (type >= END_OF_TYPES) {
       cerr << "Skipping unknown section type" << std::endl;
@@ -3020,7 +3020,7 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3077,6 +3077,10 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  // Compatibility with previous option name
+  if (op == "dump-import")
+    op = "dump-export";
+
   debug = (vm.count("debug") > 0);
 
   force = (vm.count("force") > 0);
@@ -3125,7 +3129,7 @@ int main(int argc, char **argv)
     type = "filestore";
   }
   if (!vm.count("data-path") &&
-     op != "dump-import" &&
+     op != "dump-export" &&
      !(op == "dump-journal" && type == "filestore")) {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
@@ -3174,7 +3178,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "dump-import" || op == "set-osdmap" || op == "set-inc-osdmap") {
+  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -3189,7 +3193,7 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, dump-import, export, export-remove, "
+    cerr << "--file option only applies to import, dump-export, export, export-remove, "
 	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     return 1;
   }
@@ -3238,10 +3242,10 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  if (op == "dump-import") {
-    int ret = tool.dump_import(formatter);
+  if (op == "dump-export") {
+    int ret = tool.dump_export(formatter);
     if (ret < 0) {
-      cerr << "dump-import: "
+      cerr << "dump-export: "
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
@@ -3740,7 +3744,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete" && op != "trim-pg-log") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-export, trim-pg-log)"
 	 << std::endl;
     usage(desc);
     ret = 1;
