@@ -2282,6 +2282,35 @@ void PeeringState::activate(
   }
 }
 
+void PeeringState::share_pg_info()
+{
+  psdout(10) << "share_pg_info" << dendl;
+
+  // share new pg_info_t with replicas
+  ceph_assert(!acting_recovery_backfill.empty());
+  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+       i != acting_recovery_backfill.end();
+       ++i) {
+    if (*i == pg_whoami) continue;
+    auto pg_shard = *i;
+    auto peer = peer_info.find(pg_shard);
+    if (peer != peer_info.end()) {
+      peer->second.last_epoch_started = info.last_epoch_started;
+      peer->second.last_interval_started = info.last_interval_started;
+      peer->second.history.merge(info.history);
+    }
+    MOSDPGInfo *m = new MOSDPGInfo(get_osdmap_epoch());
+    m->pg_list.emplace_back(
+      pg_notify_t(
+	pg_shard.shard, pg_whoami.shard,
+	get_osdmap_epoch(),
+	get_osdmap_epoch(),
+	info),
+      past_intervals);
+    pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
+  }
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \
@@ -3638,7 +3667,7 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     // purged snaps and (b) perhaps share more snaps that we have purged
     // but didn't fit in pg_stat_t.
     need_publish = true;
-    pg->share_pg_info();
+    ps->share_pg_info();
   }
 
   for (size_t i = 0; i < ps->want_acting.size(); i++) {
@@ -3887,7 +3916,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   ps->info.history.last_interval_started = ps->info.last_interval_started;
   ps->dirty_info = true;
 
-  pg->share_pg_info();
+  ps->share_pg_info();
   pl->publish_stats_to_osd();
 
   pl->on_activate_complete();

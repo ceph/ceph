@@ -1336,6 +1336,7 @@ public:
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
     PeeringCtx *ctx);
+  void share_pg_info();
 
 public:
   PeeringState(

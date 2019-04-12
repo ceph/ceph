@@ -1531,10 +1531,6 @@ protected:
   bool queue_scrub();
   unsigned get_scrub_priority();
 
-  /// share pg info after a pg is active
-  void share_pg_info();
-
-
   bool append_log_entries_update_missing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,

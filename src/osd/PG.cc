@@ -597,7 +597,7 @@ void PG::try_mark_clean()
 
   state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
 
-  share_pg_info();
+  recovery_state.share_pg_info();
   publish_stats_to_osd();
   requeue_ops(waiting_for_clean_to_primary_repair);
 }
@@ -4163,36 +4163,7 @@ void PG::scrub_finish()
   scrub_unreserve_replicas();
 
   if (is_active() && is_primary()) {
-    share_pg_info();
-  }
-}
-
-void PG::share_pg_info()
-{
-  dout(10) << "share_pg_info" << dendl;
-
-  // share new pg_info_t with replicas
-  ceph_assert(!acting_recovery_backfill.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
-       ++i) {
-    if (*i == pg_whoami) continue;
-    auto pg_shard = *i;
-    auto peer = peer_info.find(pg_shard);
-    if (peer != peer_info.end()) {
-      peer->second.last_epoch_started = info.last_epoch_started;
-      peer->second.last_interval_started = info.last_interval_started;
-      peer->second.history.merge(info.history);
-    }
-    MOSDPGInfo *m = new MOSDPGInfo(get_osdmap_epoch());
-    m->pg_list.emplace_back(
-	pg_notify_t(
-	  pg_shard.shard, pg_whoami.shard,
-	  get_osdmap_epoch(),
-	  get_osdmap_epoch(),
-	  info),
-	past_intervals);
-    osd->send_message_osd_cluster(pg_shard.osd, m, get_osdmap_epoch());
+    recovery_state.share_pg_info();
   }
 }
 
