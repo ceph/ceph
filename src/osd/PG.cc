@@ -424,100 +424,6 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
     newhead, info, &rollbacker, dirty_info, dirty_big_info);
 }
 
-/*
- * Process information from a replica to determine if it could have any
- * objects that i need.
- *
- * TODO: if the missing set becomes very large, this could get expensive.
- * Instead, we probably want to just iterate over our unfound set.
- */
-bool PG::search_for_missing(
-  const pg_info_t &oinfo, const pg_missing_t &omissing,
-  pg_shard_t from,
-  PeeringCtx *ctx)
-{
-  uint64_t num_unfound_before = missing_loc.num_unfound();
-  bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing, ctx->handle);
-  if (found_missing && num_unfound_before != missing_loc.num_unfound())
-    publish_stats_to_osd();
-  // avoid doing this if the peer is empty.  This is abit of paranoia
-  // to avoid doing something rash if add_source_info() above
-  // incorrectly decided we found something new. (if the peer has
-  // last_update=0'0 that's impossible.)
-  if (found_missing &&
-      oinfo.last_update != eversion_t()) {
-    pg_info_t tinfo(oinfo);
-    tinfo.pgid.shard = pg_whoami.shard;
-    (*(ctx->info_map))[from.osd].emplace_back(
-	pg_notify_t(
-	  from.shard, pg_whoami.shard,
-	  get_osdmap_epoch(),
-	  get_osdmap_epoch(),
-	  tinfo),
-	past_intervals);
-  }
-  return found_missing;
-}
-
-void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
-{
-  auto &missing = pg_log.get_missing();
-  uint64_t unfound = get_num_unfound();
-
-  dout(10) << __func__ << " "
-	   << missing.num_missing() << " missing, "
-	   << unfound << " unfound"
-	   << dendl;
-
-  std::set<pg_shard_t>::const_iterator m = might_have_unfound.begin();
-  std::set<pg_shard_t>::const_iterator mend = might_have_unfound.end();
-  for (; m != mend; ++m) {
-    pg_shard_t peer(*m);
-    
-    if (!get_osdmap()->is_up(peer.osd)) {
-      dout(20) << __func__ << " skipping down osd." << peer << dendl;
-      continue;
-    }
-
-    map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
-    if (iter != peer_info.end() &&
-        (iter->second.is_empty() || iter->second.dne())) {
-      // ignore empty peers
-      continue;
-    }
-
-    // If we've requested any of this stuff, the pg_missing_t information
-    // should be on its way.
-    // TODO: coalsce requested_* into a single data structure
-    if (peer_missing.find(peer) != peer_missing.end()) {
-      dout(20) << __func__ << ": osd." << peer
-	       << ": we already have pg_missing_t" << dendl;
-      continue;
-    }
-    if (peer_log_requested.find(peer) != peer_log_requested.end()) {
-      dout(20) << __func__ << ": osd." << peer
-	       << ": in peer_log_requested" << dendl;
-      continue;
-    }
-    if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
-      dout(20) << __func__ << ": osd." << peer
-	       << ": in peer_missing_requested" << dendl;
-      continue;
-    }
-
-    // Request missing
-    dout(10) << __func__ << ": osd." << peer << ": requesting pg_missing_t"
-	     << dendl;
-    peer_missing_requested.insert(peer);
-    query_map[peer.osd][spg_t(info.pgid.pgid, peer.shard)] =
-      pg_query_t(
-	pg_query_t::FULLLOG,
-	peer.shard, pg_whoami.shard,
-	info.history, get_osdmap_epoch());
-  }
-}
-
 /******* PG ***********/
 void PG::clear_primary_state()
 {
@@ -550,36 +456,6 @@ PG::Scrubber::Scrubber()
 {}
 
 PG::Scrubber::~Scrubber() {}
-
-/* Build the might_have_unfound set.
- *
- * This is used by the primary OSD during recovery.
- *
- * This set tracks the OSDs which might have unfound objects that the primary
- * OSD needs. As we receive pg_missing_t from each OSD in might_have_unfound, we
- * will remove the OSD from the set.
- */
-void PG::build_might_have_unfound()
-{
-  ceph_assert(might_have_unfound.empty());
-  ceph_assert(is_primary());
-
-  dout(10) << __func__ << dendl;
-
-  recovery_state.check_past_interval_bounds();
-
-  might_have_unfound = past_intervals.get_might_have_unfound(
-    pg_whoami,
-    pool.info.is_erasure());
-
-  // include any (stray) peers
-  for (map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
-       p != peer_info.end();
-       ++p)
-    might_have_unfound.insert(p->first);
-
-  dout(15) << __func__ << ": built " << might_have_unfound << dendl;
-}
 
 bool PG::op_has_sufficient_caps(OpRequestRef& op)
 {
@@ -2209,7 +2085,7 @@ void PG::read_state(ObjectStore *store)
     osd->clog->error() << oss.str();
 
   // log any weirdness
-  log_weirdness();
+  recovery_state.log_weirdness();
 
   if (info_struct_v < latest_struct_v) {
     upgrade(store);
@@ -2240,35 +2116,6 @@ void PG::read_state(ObjectStore *store)
   write_if_dirty(*rctx.transaction);
   store->queue_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
-}
-
-void PG::log_weirdness()
-{
-  if (pg_log.get_tail() != info.log_tail)
-    osd->clog->error() << info.pgid
-		       << " info mismatch, log.tail " << pg_log.get_tail()
-		       << " != info.log_tail " << info.log_tail;
-  if (pg_log.get_head() != info.last_update)
-    osd->clog->error() << info.pgid
-		       << " info mismatch, log.head " << pg_log.get_head()
-		       << " != info.last_update " << info.last_update;
-
-  if (!pg_log.get_log().empty()) {
-    // sloppy check
-    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
-      osd->clog->error() << info.pgid
-			<< " log bound mismatch, info (tail,head] ("
-			<< pg_log.get_tail() << "," << pg_log.get_head() << "]"
-			<< " actual ["
-			<< pg_log.get_log().log.begin()->version << ","
-			 << pg_log.get_log().log.rbegin()->version << "]";
-  }
-  
-  if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
-    osd->clog->error() << info.pgid
-		      << " caller_ops.size " << pg_log.get_log().caller_ops.size()
-		       << " > log size " << pg_log.get_log().log.size();
-  }
 }
 
 void PG::update_snap_map(
@@ -4918,7 +4765,7 @@ void PG::find_unfound(epoch_t queued, PeeringCtx *rctx)
     * It may be that our initial locations were bad and we errored
     * out while trying to pull.
     */
-  discover_all_missing(*rctx->query_map);
+  recovery_state.discover_all_missing(*rctx->query_map);
   if (rctx->query_map->empty()) {
     string action;
     if (state_test(PG_STATE_BACKFILLING)) {
