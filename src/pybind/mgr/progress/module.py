@@ -149,10 +149,17 @@ class PgRecoveryEvent(Event):
 
         if self._original_bytes_recovered is None:
             self._original_bytes_recovered = {}
+            missing_pgs = []
             for pg in self._pgs:
                 pg_str = str(pg)
-                self._original_bytes_recovered[pg] = \
-                    pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                if pg_str in pg_to_state:
+                    self._original_bytes_recovered[pg] = \
+                        pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                else:
+                    missing_pgs.append(pg)
+            if pg_dump.get('pg_ready', False):
+                for pg in missing_pgs:
+                    self._pgs.remove(pg)
 
         complete_accumulate = 0.0
 
