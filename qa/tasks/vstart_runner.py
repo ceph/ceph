@@ -263,6 +263,15 @@ class LocalRemote(object):
                     raise RuntimeError("Don't surround commands by "
                                        "single/double quotes")
 
+        # ['sudo', '-u', 'user', '-s', 'path-to-shell', '-c', 'ls', 'a']
+        # and ['sudo', '-u', user, '-s', path_to_shell, '-c', 'ls a'] are
+        # treated differently by Python's shell simulation. Only latter has
+        # the desired effect.
+        if 'sudo' in args and '-c' in args:
+            if args.index('-c') != len(args) - 2:
+                raise RuntimeError("All args after '-c' should be a single "
+                                   "string")
+
         if omit_sudo:
             args = [a for a in args if a != "sudo"]
 
