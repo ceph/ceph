@@ -73,7 +73,7 @@ bool WriteAroundObjectDispatch<I>::discard(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
 
-  return dispatch_io(object_no, object_off, object_len, dispatch_result,
+  return dispatch_io(object_no, object_off, object_len, 0, dispatch_result,
                      on_finish, on_dispatched);
 }
 
@@ -88,8 +88,8 @@ bool WriteAroundObjectDispatch<I>::write(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << data.length() << dendl;
 
-  return dispatch_io(object_no, object_off, data.length(), dispatch_result,
-                     on_finish, on_dispatched);
+  return dispatch_io(object_no, object_off, data.length(), op_flags,
+                     dispatch_result, on_finish, on_dispatched);
 }
 
 template <typename I>
@@ -104,7 +104,7 @@ bool WriteAroundObjectDispatch<I>::write_same(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
 
-  return dispatch_io(object_no, object_off, object_len, dispatch_result,
+  return dispatch_io(object_no, object_off, object_len, 0, dispatch_result,
                      on_finish, on_dispatched);
 }
 
@@ -194,7 +194,7 @@ bool WriteAroundObjectDispatch<I>::dispatch_unoptimized_io(
 template <typename I>
 bool WriteAroundObjectDispatch<I>::dispatch_io(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    io::DispatchResult* dispatch_result, Context** on_finish,
+    int op_flags, io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
 
@@ -203,6 +203,13 @@ bool WriteAroundObjectDispatch<I>::dispatch_io(
     // write-through mode is active -- no-op the cache
     m_lock.Unlock();
     return false;
+  }
+
+  if ((op_flags & LIBRADOS_OP_FLAG_FADVISE_FUA) != 0) {
+    // force unit access flag is set -- disable write-around
+    m_lock.Unlock();
+    return dispatch_unoptimized_io(object_no, object_off, object_len,
+                                   dispatch_result, on_dispatched);
   }
 
   auto tid = ++m_last_tid;

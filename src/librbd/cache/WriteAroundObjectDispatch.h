@@ -168,8 +168,9 @@ private:
                                io::DispatchResult* dispatch_result,
                                Context* on_dispatched);
   bool dispatch_io(uint64_t object_no, uint64_t object_off,
-                   uint64_t object_len, io::DispatchResult* dispatch_result,
-                   Context** on_finish, Context* on_dispatch);
+                   uint64_t object_len, int op_flags,
+                   io::DispatchResult* dispatch_result, Context** on_finish,
+                   Context* on_dispatch);
 
   bool block_overlapping_io(InFlightObjectExtents* in_flight_object_extents,
                             uint64_t object_off, uint64_t object_len);
