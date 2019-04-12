@@ -344,6 +344,7 @@ public:
   static void generate_test_instances(list<RGWAccessControlList*>& o);
 
   void add_grant(ACLGrant *grant);
+  void remove_canon_user_grant(rgw_user& user_id);
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
   const multimap<string, ACLGrant>& get_grant_map() const { return grant_map; }
@@ -460,6 +461,10 @@ public:
   }
   const RGWAccessControlList& get_acl() const {
     return acl;
+  }
+
+  void set_acl(RGWAccessControlList& acl) {
+    this->acl = acl;
   }
 
   virtual bool compare_group_name(string& id, ACLGroupTypeEnum group) { return false; }

@@ -35,6 +35,7 @@ extern "C" {
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_otp.h"
+#include "rgw_op.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -5509,6 +5510,12 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_CHOWN) {
+
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+      return EINVAL;
+    }
+
     int ret = 0;
     std::string tenant;
     std::vector<rgw_bucket_dir_entry> objs;
@@ -5527,6 +5534,10 @@ int main(int argc, const char **argv)
       bucket_name = bucket_name.substr(pos + 1);
     }
 
+    //Get bucket info
+    RGWBucketInfo bucket_info;
+    RGWSysObjectCtx sys_ctx = store->svc.sysobj->init_obj_ctx();
+    map<string, bufferlist> attrs;
     ret = store->get_bucket_info(sys_ctx, tenant, bucket_name, bucket_info, NULL, &attrs);
     if (ret < 0) {
       cerr << " Bucket info failed: tenant: "<< tenant << "bucket_name: " << bucket_name << " " << ret << std::endl;
@@ -5547,6 +5558,7 @@ int main(int argc, const char **argv)
 
     list_op.params.list_versions = true;
     list_op.params.allow_unordered = true;
+    list_op.params.marker = marker;
 
     bool is_truncated = false;
 
@@ -5557,34 +5569,63 @@ int main(int argc, const char **argv)
         cerr << " List objects failed: "<< ret << std::endl;
         return ret;
       }
+
       //Loop through the results
       for (const auto& obj : objs) {
-        const auto& aiter = attrs.find(RGW_ATTR_ACL);
-        bufferlist& bl = aiter->second;
-        RGWAccessControlPolicy policy;
-        ACLOwner owner;
-        try {
-          decode(policy, bl);
-          owner = policy.get_owner();
-        } catch (buffer::error& err) {
-          cerr << " Decode policy failed: " << std::endl;
-          return -EIO;
-        }
-
-        owner.set_id(bucket_info.owner);
-        owner.set_name(user_info.display_name);
-        policy.set_owner(owner);
-
-        bl.clear();
-        encode(policy, bl);
 
         const rgw_obj r_obj(bucket_info.bucket, obj.key);
-        ret = modify_obj_attr(store, obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
-        if (ret < 0) {
-          cerr << " Modify attr failed: "<< ret << std::endl;
-          return ret;
+        ret = get_obj_attrs(store, obj_ctx, bucket_info, r_obj, attrs);
+        if (ret < 0){
+          cerr << "Get object attrs failed" << ret << std::endl;
+          return (ret);
+        }
+        const auto& aiter = attrs.find(RGW_ATTR_ACL);
+        if (aiter == attrs.end()){
+          cerr << "No acls found for object. Continuing with the next object" << std::endl;
+          continue;
+        } else {
+          bufferlist& bl = aiter->second;
+          RGWAccessControlPolicy policy(g_ceph_context);
+          ACLOwner owner;
+          try {
+            decode(policy, bl);
+            owner = policy.get_owner();
+          } catch (buffer::error& err) {
+            cerr << " Decode policy failed: " << std::endl;
+            return -EIO;
+          }
+
+          //Get the ACL from the policy
+          RGWAccessControlList& acl = policy.get_acl();
+
+          //Remove grant that is set to old owner
+          acl.remove_canon_user_grant(owner.get_id());
+
+          //Create a grant and add grant
+          ACLGrant grant;
+          grant.set_canon(bucket_info.owner, user_info.display_name, RGW_PERM_FULL_CONTROL);
+          acl.add_grant(&grant);
+
+          //Add the ACL back to policy
+          policy.set_acl(acl);
+
+          //Update the ACL owner to the new user
+          owner.set_id(bucket_info.owner);
+          owner.set_name(user_info.display_name);
+          policy.set_owner(owner);
+
+          bl.clear();
+          encode(policy, bl);
+
+          ret = modify_obj_attr(store, obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
+          if (ret < 0) {
+            cerr << " Modify attr failed: "<< ret << std::endl;
+            return ret;
+          }
         }
       }// for loop
+      cerr << objs.size() << " number of objects are processed." << std::endl;
+      list_op.params.marker = list_op.get_next_marker();
     } while(is_truncated);
   } // if
 
