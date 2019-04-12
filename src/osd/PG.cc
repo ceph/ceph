@@ -2455,10 +2455,12 @@ bool PG::set_force_backfill(bool b)
   return did;
 }
 
-int PG::clamp_recovery_priority(int priority, int pool_recovery_priority)
+int PG::clamp_recovery_priority(int priority, int pool_recovery_priority, int max)
 {
   static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
   static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
+
+  ceph_assert(max <= OSD_RECOVERY_PRIORITY_MAX);
 
   // User can't set this too high anymore, but might be a legacy value
   if (pool_recovery_priority > OSD_POOL_PRIORITY_MAX)
@@ -2472,8 +2474,8 @@ int PG::clamp_recovery_priority(int priority, int pool_recovery_priority)
   priority += pool_recovery_priority;
 
   // Clamp to valid range
-  if (priority > OSD_RECOVERY_PRIORITY_MAX) {
-    return OSD_RECOVERY_PRIORITY_MAX;
+  if (priority > max) {
+    return max;
   } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
     return OSD_RECOVERY_PRIORITY_MIN;
   } else {
@@ -2485,20 +2487,22 @@ unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
   int ret = OSD_RECOVERY_PRIORITY_BASE;
+  int base = ret;
 
   if (state & PG_STATE_FORCED_RECOVERY) {
     ret = OSD_RECOVERY_PRIORITY_FORCED;
   } else {
     // XXX: This priority boost isn't so much about inactive, but about data-at-risk
     if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
+      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = OSD_RECOVERY_INACTIVE_PRIORITY_BASE + (pool.info.min_size - info.stats.avail_no_missing.size());
+      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
     }
 
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(ret, pool_recovery_priority);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
   }
   dout(20) << __func__ << " recovery priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
@@ -2508,28 +2512,32 @@ unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
   int ret = OSD_BACKFILL_PRIORITY_BASE;
+  int base = ret;
+
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
     if (acting.size() < pool.info.min_size) {
+      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+      ret = base + (pool.info.min_size - acting.size());
 
     } else if (is_undersized()) {
       // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
       ceph_assert(pool.info.size > actingset.size());
-      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
+      base = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
+      ret = base + (pool.info.size - actingset.size());
 
     } else if (is_degraded()) {
       // degraded: baseline degraded
-      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
+      base = ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
     }
 
     // Adjust with pool's recovery priority
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(ret, pool_recovery_priority);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
   }
 
   dout(20) << __func__ << " backfill priority is " << ret << dendl;
