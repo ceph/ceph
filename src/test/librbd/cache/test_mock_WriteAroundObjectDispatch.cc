@@ -632,5 +632,28 @@ TEST_F(TestMockCacheWriteAroundObjectDispatch, UnoptimizedIOBlockedIO) {
   finish_ctx_ptr2->complete(0);
 }
 
+TEST_F(TestMockCacheWriteAroundObjectDispatch, FUA) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockWriteAroundObjectDispatch object_dispatch(&mock_image_ctx, 16384, false);
+
+  InSequence seq;
+
+  bufferlist data;
+  data.append(std::string(4096, '1'));
+
+  io::DispatchResult dispatch_result;
+  MockContext finish_ctx;
+  MockContext dispatch_ctx;
+  Context* finish_ctx_ptr = &finish_ctx;
+  ASSERT_FALSE(object_dispatch.write("oid", 0, 0, std::move(data), {},
+                                     LIBRADOS_OP_FLAG_FADVISE_FUA, {},
+                                     nullptr, nullptr, &dispatch_result,
+                                     &finish_ctx_ptr, &dispatch_ctx));
+  ASSERT_EQ(finish_ctx_ptr, &finish_ctx);
+}
+
 } // namespace cache
 } // namespace librbd
