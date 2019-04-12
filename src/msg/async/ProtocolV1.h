@@ -115,14 +115,13 @@ protected:
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> ack_left{0};
 
-  CryptoKey session_key;
   std::shared_ptr<AuthSessionHandler> session_security;
-  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;  // accept side
 
   // Open state
   ceph_msg_connect connect_msg;
   ceph_msg_connect_reply connect_reply;
-  bufferlist authorizer_buf;
+  bufferlist authorizer_buf;  // auth(orizer) payload read off the wire
+  bufferlist authorizer_more;  // connect-side auth retry (we added challenge)
 
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -227,7 +226,6 @@ public:
   // Client Protocol
 private:
   int global_seq;
-  AuthAuthorizer *authorizer;
 
   CONTINUATION_DECL(ProtocolV1, send_client_banner);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner_write);
