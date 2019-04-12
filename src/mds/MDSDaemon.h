@@ -106,9 +106,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
  private:
   bool ms_dispatch2(const ref_t<Message> &m) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
   int ms_handle_authentication(Connection *con) override;
-  KeyStore *ms_get_auth1_authorizer_keystore() override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
