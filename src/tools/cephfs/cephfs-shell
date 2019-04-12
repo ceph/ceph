@@ -554,6 +554,8 @@ exists.')
                             help='Path of the file in the remote system')
     get_parser.add_argument(
         'local_path', type=str, help='Path of the file in the local system',  nargs='?', default='.')
+    get_parser.add_argument('-f', '--force', action='store_true',
+                            help='Overwrites the destination if it already exists.')
 
     @with_argparser(get_parser)
     def do_get(self, args):
@@ -567,6 +569,9 @@ exists.')
         if args.remote_path == '.':
             root_src_dir = cephfs.getcwd().decode('utf-8')
         if args.local_path == '-':
+            if args.remote_path == '.' or args.remote_path == './':
+                self.poutput("error: no remote file name specified")
+                return
             copy_to_local(root_src_dir, '-')
         elif is_file_exists(args.remote_path):
             copy_to_local(root_src_dir,
@@ -576,19 +581,37 @@ exists.')
         else:
             files = list(reversed(sorted(dirwalk(root_src_dir))))
             if len(files) == 0:
-                os.makedirs(root_dst_dir + '/' + root_src_dir)
+                try:
+                    os.makedirs(root_dst_dir + '/' + root_src_dir)
+                except:
+                    if args.force:
+                        pass
+                    else:
+                        self.poutput("%s: already exists! use --force to overwrite" % root_src_dir)
+                        return
+
             for file_ in files:
                 dst_dirpath, dst_file = file_.rsplit('/', 1)
                 if dst_dirpath in files:
                     files.remove(dst_dirpath)
                 dst_path = os.path.join(root_dst_dir, dst_dirpath, dst_file)
                 dst_path = os.path.normpath(dst_path)
-                if os.path.exists(dst_path):
-                    continue
                 if is_dir_exists(file_):
-                    os.makedirs(dst_path)
+                    try:
+                        os.makedirs(dst_path)
+                    except:
+                        pass
                 else:
-                    copy_to_local(file_, dst_path)
+                    if not args.force:
+                        try:
+                            os.stat(dst_path)
+                            self.poutput("%s: file already exists! use --force to override" % file_)
+                            return
+                        except:
+                            copy_to_local(file_, dst_path)
+                    else:
+                        copy_to_local(file_, dst_path)
+
         return 0
 
     def complete_ls(self, text, line, begidx, endidx):
