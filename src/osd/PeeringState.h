@@ -1134,6 +1134,11 @@ public:
 
   void write_if_dirty(ObjectStore::Transaction& t);
 
+  void update_heartbeat_peers();
+  bool proc_replica_info(
+    pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
+  void remove_down_peer_info(const OSDMapRef osdmap);
+
 public:
   PeeringState(
     CephContext *cct,
@@ -1206,4 +1211,86 @@ public:
   void reset_last_persisted() {
     last_persisted_osdmap = 0;
   }
+
+  bool is_deleting() const {
+    return deleting;
+  }
+  bool is_deleted() const {
+    return deleted;
+  }
+  bool is_acting_recovery_backfill(pg_shard_t osd) const {
+    return acting_recovery_backfill.count(osd);
+  }
+  bool is_acting(pg_shard_t osd) const {
+    return has_shard(pool.info.is_erasure(), acting, osd);
+  }
+  bool is_up(pg_shard_t osd) const {
+    return has_shard(pool.info.is_erasure(), up, osd);
+  }
+  static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
+    if (ec) {
+      return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
+    } else {
+      return std::find(v.begin(), v.end(), osd.osd) != v.end();
+    }
+  }
+  const PastIntervals& get_past_intervals() const {
+    return past_intervals;
+  }
+  bool is_replica() const {
+    return role > 0;
+  }
+  bool is_primary() const {
+    return pg_whoami == primary;
+  }
+  bool pg_has_reset_since(epoch_t e) {
+    return deleted || e < get_last_peering_reset();
+  }
+
+  bool is_ec_pg() const {
+    return pool.info.is_erasure();
+  }
+  int get_role() const {
+    return role;
+  }
+  const vector<int> get_acting() const {
+    return acting;
+  }
+  int get_acting_primary() const {
+    return primary.osd;
+  }
+  pg_shard_t get_primary() const {
+    return primary;
+  }
+  const vector<int> &get_up() const {
+    return up;
+  }
+  int get_up_primary() const {
+    return up_primary.osd;
+  }
+
+  bool state_test(uint64_t m) const { return (state & m) != 0; }
+  void state_set(uint64_t m) { state |= m; }
+  void state_clear(uint64_t m) { state &= ~m; }
+
+  bool is_complete() const { return info.last_complete == info.last_update; }
+  bool should_send_notify() const { return send_notify; }
+
+  int get_state() const { return state; }
+  bool is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
+  bool is_peering() const { return state_test(PG_STATE_PEERING); }
+  bool is_down() const { return state_test(PG_STATE_DOWN); }
+  bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
+  bool is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
+  bool is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
+  bool is_remapped() const { return state_test(PG_STATE_REMAPPED); }
+  bool is_peered() const {
+    return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
+  }
+  bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
+  bool is_repair() const { return state_test(PG_STATE_REPAIR); }
+  bool is_empty() const { return info.last_update == eversion_t(0,0); }
+
 };
