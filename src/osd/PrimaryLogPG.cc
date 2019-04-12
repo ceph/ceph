@@ -15180,7 +15180,7 @@ void PrimaryLogPG::_scrub_finish()
       info.stats.pin_stats_invalid = false;
       info.stats.manifest_stats_invalid = false;
       publish_stats_to_osd();
-      share_pg_info();
+      recovery_state.share_pg_info();
     }
   }
   // Clear object context cache to get repair information
@@ -15373,7 +15373,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
     ceph_assert(tr == 0);
 
-    pg->share_pg_info();
+    pg->recovery_state.share_pg_info();
     post_event(KickTrim());
     return transit< NotTrimming >();
   }
