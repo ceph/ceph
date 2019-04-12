@@ -348,7 +348,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
                     std::vector<std::string> *status)
 {
   status->clear();
-  boost::optional<size_t> num_shards;
+  std::optional<uint64_t> num_shards;
   for (auto peer = first; peer != last; ++peer) {
     const size_t peer_shards = peer->size();
     if (!num_shards) {
