@@ -1478,6 +1478,10 @@ public:
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
 
+  void update_stats(
+    std::function<bool(pg_history_t &, pg_stat_t &)> f,
+    ObjectStore::Transaction *t = nullptr);
+
   std::optional<pg_stat_t> prepare_stats_for_publish(
     bool pg_stats_publish_valid,
     const pg_stat_t &pg_stats_publish,

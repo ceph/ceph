@@ -3315,6 +3315,20 @@ void PeeringState::dump_peering_state(Formatter *f)
   }
 }
 
+void PeeringState::update_stats(
+  std::function<bool(pg_history_t &, pg_stat_t &)> f,
+  ObjectStore::Transaction *t) {
+  if (f(info.history, info.stats)) {
+    pl->publish_stats_to_osd();
+  }
+  pl->on_info_history_change();
+
+  if (t) {
+    dirty_info = true;
+    write_if_dirty(*t);
+  }
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \

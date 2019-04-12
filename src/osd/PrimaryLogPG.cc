@@ -15318,7 +15318,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 		       << pg->snap_trimq << dendl;
 
     ObjectStore::Transaction t;
-    pg->dirty_big_info = true;
+    pg->recovery_state.dirty_big_info = true;
     pg->write_if_dirty(t);
     int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
     ceph_assert(tr == 0);
