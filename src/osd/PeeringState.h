@@ -55,6 +55,7 @@ struct PGPool {
 class PeeringState : public MissingLoc::MappingInfo {
 public:
   struct PeeringListener : public EpochSource {
+    /// Prepare t with written information
     virtual void prepare_write(
       pg_info_t &info,
       pg_info_t &last_written_info,
@@ -64,60 +65,102 @@ public:
       bool dirty_big_info,
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
-    virtual void update_heartbeat_peers(set<int> peers) = 0;
 
+    /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
+    /// Notify that a scrub has been requested
     virtual void scrub_requested(bool deep, bool repair) = 0;
 
+    /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
 
+    /// Send cluster message to osd
     virtual void send_cluster_message(
       int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
+    /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
-    // Flush state
+    // ============ Flush state ==================
+    /**
+     * try_flush_or_schedule_async()
+     *
+     * If true, caller may assume all past operations on this pg
+     * have been flushed.  Else, caller will receive an on_flushed()
+     * call once the flush has completed.
+     */
     virtual bool try_flush_or_schedule_async() = 0;
+    /// Arranges for a commit on t to call on_flushed() once flushed.
     virtual void start_flush_on_transaction(
       ObjectStore::Transaction *t) = 0;
+    /// Notification that all outstanding flushes for interval have completed
     virtual void on_flushed() = 0;
 
-    // Recovery
+    //============= Recovery ====================
+    /// Arrange for even to be queued after delay
     virtual void schedule_event_after(
       PGPeeringEventRef event,
       float delay) = 0;
+    /**
+     * request_local_background_io_reservation
+     *
+     * Request reservation at priority with on_grant queued on grant
+     * and on_preempt on preempt
+     */
     virtual void request_local_background_io_reservation(
       unsigned priority,
       PGPeeringEventRef on_grant,
       PGPeeringEventRef on_preempt) = 0;
+    /// Modify pending local background reservation request priority
     virtual void update_local_background_io_priority(
       unsigned priority) = 0;
+    /// Cancel pending local background reservation request
     virtual void cancel_local_background_io_reservation() = 0;
 
+    /**
+     * request_remote_background_io_reservation
+     *
+     * Request reservation at priority with on_grant queued on grant
+     * and on_preempt on preempt
+     */
     virtual void request_remote_recovery_reservation(
       unsigned priority,
       PGPeeringEventRef on_grant,
       PGPeeringEventRef on_preempt) = 0;
+    /// Cancel pending remote background reservation request
     virtual void cancel_remote_recovery_reservation() = 0;
 
+    /// Arrange for on_commit to be queued upon commit of t
     virtual void schedule_event_on_commit(
       ObjectStore::Transaction &t,
       PGPeeringEventRef on_commit) = 0;
 
-    // HB
+    //============================ HB =============================
+    /// Update hb set to peers
+    virtual void update_heartbeat_peers(set<int> peers) = 0;
+
+    /// Set targets being probed in this interval
     virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
+    /// Clear targets being probed in this interval
     virtual void clear_probe_targets() = 0;
 
+    /// Queue for a pg_temp of wanted
     virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
+    /// Clear queue for a pg_temp of wanted
     virtual void clear_want_pg_temp() = 0;
 
+    /// Arrange for stats to be shipped to mon to be updated for this pg
     virtual void publish_stats_to_osd() = 0;
+    /// Clear stats to be shipped to mon for this pg
     virtual void clear_publish_stats() = 0;
 
+    /// Notification to check outstanding operation targets
     virtual void check_recovery_sources(const OSDMapRef& newmap) = 0;
+    /// Notification to check outstanding blacklist
     virtual void check_blacklisted_watchers() = 0;
+    /// Notification to clear state associated with primary
     virtual void clear_primary_state() = 0;
 
-    // Event notification
+    // =================== Event notification ====================
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction *t) = 0;
@@ -126,53 +169,53 @@ public:
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
     virtual void on_activate_committed() = 0;
-
     virtual void on_active_exit() = 0;
 
-    // PG deletion
+    // ====================== PG deletion =======================
+    /// Notification of removal complete, t must be populated to complete removal
     virtual void on_removal(ObjectStore::Transaction *t) = 0;
+    /// Perform incremental removal work
     virtual void do_delete_work(ObjectStore::Transaction *t) = 0;
 
-    // PG Merge
+    // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
     virtual void set_not_ready_to_merge_target(pg_t pgid, pg_t src) = 0;
     virtual void set_not_ready_to_merge_source(pg_t pgid) = 0;
     virtual void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) = 0;
     virtual void set_ready_to_merge_source(eversion_t lu) = 0;
 
-    // active map notifications
+    // ==================== Map notifications ===================
     virtual void on_active_actmap() = 0;
     virtual void on_active_advmap(const OSDMapRef &osdmap) = 0;
+    virtual epoch_t oldest_stored_osdmap() = 0;
 
-    // recovery reservation notifications
+    // ============ recovery reservation notifications ==========
     virtual void on_backfill_reserved() = 0;
     virtual void on_backfill_canceled() = 0;
     virtual void on_recovery_reserved() = 0;
 
-    // recovery space accounting
+    // ================recovery space accounting ================
     virtual bool try_reserve_recovery_space(
       int64_t primary_num_bytes, int64_t local_num_bytes) = 0;
     virtual void unreserve_recovery_space() = 0;
 
-    // Peering log events
+    // ================== Peering log events ====================
+    /// Get handler for rolling forward/back log entries
     virtual PGLog::LogEntryHandlerRef get_log_handler(
       ObjectStore::Transaction *t) = 0;
 
-    virtual void dump_recovery_info(Formatter *f) const = 0;
-
-    virtual epoch_t oldest_stored_osdmap() = 0;
-    virtual LogChannel &get_clog() = 0;
-
-    // On disk representation changes
+    // ============ On disk representation changes ==============
     virtual void rebuild_missing_set_with_deletes(PGLog &pglog) = 0;
 
-    // Logging
+    // ======================= Logging ==========================
     virtual PerfCounters &get_peering_perf() = 0;
     virtual PerfCounters &get_perf_logger() = 0;
     virtual void log_state_enter(const char *state) = 0;
     virtual void log_state_exit(
       const char *state_name, utime_t enter_time,
       uint64_t events, utime_t event_dur) = 0;
+    virtual void dump_recovery_info(Formatter *f) const = 0;
+    virtual LogChannel &get_clog() = 0;
 
     virtual ~PeeringListener() {}
   };
@@ -1411,25 +1454,7 @@ public:
     DoutPrefixProvider *dpp,
     PeeringListener *pl);
 
-  void set_backend_predicates(
-    IsPGReadablePredicate *is_readable,
-    IsPGRecoverablePredicate *is_recoverable) {
-    missing_loc.set_backend_predicates(is_readable, is_recoverable);
-  }
-
-  // MissingLoc::MappingInfo
-  const set<pg_shard_t> &get_upset() const override {
-    return upset;
-  }
-
-  bool is_ec_pg() const override {
-    return pool.info.is_erasure();
-  }
-
-  int get_pg_size() const override {
-    return pool.info.size;
-  }
-
+  /// Process evt
   void handle_event(const boost::statechart::event_base &evt,
 	      PeeringCtx *rctx) {
     start_handle(rctx);
@@ -1437,6 +1462,7 @@ public:
     end_handle();
   }
 
+  /// Process evt
   void handle_event(PGPeeringEventRef evt,
 	      PeeringCtx *rctx) {
     start_handle(rctx);
@@ -1444,6 +1470,7 @@ public:
     end_handle();
   }
 
+  /// Init fresh instance of PG
   void init(
     int role,
     const vector<int>& newup, int new_up_primary,
@@ -1453,6 +1480,7 @@ public:
     bool backfill,
     ObjectStore::Transaction *t);
 
+  /// Init pg instance from disk state
   template <typename F>
   void init_from_disk_state(
     pg_info_t &&info_from_disk,
@@ -1465,35 +1493,88 @@ public:
     log_weirdness();
   }
 
+  /// Set initial primary/acting
   void init_primary_up_acting(
     const vector<int> &newup,
     const vector<int> &newacting,
     int new_up_primary,
     int new_acting_primary);
 
+  /// Set initial role
+  void set_role(int r) {
+    role = r;
+  }
+
+  /// Set predicates used for determining readable and recoverable
+  void set_backend_predicates(
+    IsPGReadablePredicate *is_readable,
+    IsPGRecoverablePredicate *is_recoverable) {
+    missing_loc.set_backend_predicates(is_readable, is_recoverable);
+  }
+
+  /// Send current pg_info to peers
   void share_pg_info();
 
+  /// Get stats for child pgs
   void start_split_stats(
     const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
+
+  /// Update new child with stats
   void finish_split_stats(
     const object_stat_sum_t& stats, ObjectStore::Transaction *t);
+
+  /// Split state for child_pgid into *child
   void split_into(
     pg_t child_pgid, PeeringState *child, unsigned split_bits);
+
+  /// Merge state from sources
   void merge_from(
     map<spg_t,PeeringState *>& sources,
     PeeringCtx *rctx,
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
 
+  /// Permit stray replicas to purge now unnecessary state
   void purge_strays();
 
+  /**
+   * update_stats
+   *
+   * Mechanism for updating stats and/or history.  Pass t to mark
+   * dirty and write out.  Return true if stats should be published
+   * to the osd.
+   */
   void update_stats(
     std::function<bool(pg_history_t &, pg_stat_t &)> f,
     ObjectStore::Transaction *t = nullptr);
 
+  /**
+   * adjust_purged_snaps
+   *
+   * Mechanism for updating purged_snaps.  Marks dirty_info, big_dirty_info.
+   */
+  void adjust_purged_snaps(
+    std::function<void(interval_set<snapid_t> &snaps)> f);
+
+  /// Updates info.hit_set to hset_history, does not dirty
   void update_hset(const pg_hit_set_history_t &hset_history);
+
+  /**
+   * update_history
+   *
+   * Merges new_history into info.history clearing past_intervals and
+   * dirtying as needed.
+   *
+   * Calls PeeringListener::on_info_history_change()
+   */
   void update_history(const pg_history_t& new_history);
 
+  /**
+   * prepare_stats_for_publish
+   *
+   * Returns updated pg_stat_t if stats have changed since
+   * pg_stats_publish adding in unstable_stats.
+   */
   std::optional<pg_stat_t> prepare_stats_for_publish(
     bool pg_stats_publish_valid,
     const pg_stat_t &pg_stats_publish,
@@ -1509,6 +1590,9 @@ public:
     boost::optional<eversion_t> trim_to,
     boost::optional<eversion_t> roll_forward_to);
 
+  /**
+   * Updates local log to reflect new write from primary.
+   */
   void append_log(
     const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
@@ -1517,16 +1601,21 @@ public:
     bool transaction_applied,
     bool async);
 
+  /**
+   * Updates local log/missing to reflect new oob log update from primary
+   */
   void merge_new_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     boost::optional<eversion_t> trim_to,
     boost::optional<eversion_t> roll_forward_to);
 
+  /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
     pg_log.missing_add_next_entry(e);
   }
 
+  /// Update log trim boundary
   void update_trim_to() {
     bool hard_limit = (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
     if (hard_limit)
@@ -1535,27 +1624,33 @@ public:
       calc_trim_to();
   }
 
+  /// Pre-process pending update on hoid represented by logv
   void pre_submit_op(
     const hobject_t &hoid,
     const vector<pg_log_entry_t>& logv,
     eversion_t at_version);
 
+  /// Signal that oid has been locally recovered to version v
   void recover_got(
     const hobject_t &oid, eversion_t v,
     bool is_delete,
     ObjectStore::Transaction &t);
 
+  /// Signal that oid has been recovered on peer to version
   void on_peer_recover(
     pg_shard_t peer,
     const hobject_t &soid,
     const eversion_t &version);
 
+  /// Notify that soid is being recovered on peer
   void begin_peer_recover(
     pg_shard_t peer,
     const hobject_t soid);
 
+  /// Pull missing sets from all candidate peers
   void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
 
+  /// Notify that hoid has been fully recocovered
   void object_recovered(
     const hobject_t &hoid,
     const object_stat_sum_t &stat_diff) {
@@ -1563,97 +1658,87 @@ public:
     missing_loc.recovered(hoid);
   }
 
+  /// Update info/stats to reflect backfill progress
   void update_backfill_progress(
     const hobject_t &updated_backfill,
     const pg_stat_t &updated_stats,
     bool preserve_local_num_bytes,
     ObjectStore::Transaction &t);
 
+  /// Update info/stats to reflect completed backfill on hoid
   void update_complete_backfill_object_stats(
     const hobject_t &hoid,
     const pg_stat_t &stats);
 
+  /// Update last_backfill for peer to new_last_backfill
   void update_peer_last_backfill(
     pg_shard_t peer,
     const hobject_t &new_last_backfill);
 
+  /// Update info.stats with delta_stats for operation on soid
   void apply_op_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats);
 
+  /**
+   * force_object_missing
+   *
+   * Force oid on peer to be missing at version.  If the object does not
+   * currently need recovery, either candidates if provided or the remainder
+   * of the acting set will be deemed to have the object.
+   */
   void force_object_missing(
     pg_shard_t peer,
     const hobject_t &oid,
     eversion_t version,
     const set<pg_shard_t> *candidates=nullptr);
 
+  /// Update state prior to backfilling soid on targets
   void prepare_backfill_for_missing(
     const hobject_t &soid,
     const eversion_t &version,
     const vector<pg_shard_t> &targets);
 
+  /// Set targets with the right version for revert (see recover_primary)
   void set_revert_with_targets(
     const hobject_t &soid,
     const set<pg_shard_t> &good_peers);
 
+  /// Update lcod for fromosd
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) {
     peer_last_complete_ondisk[fromosd] = lcod;
   }
 
+  /// Update lcod
   void update_last_complete_ondisk(
     eversion_t lcod) {
     last_complete_ondisk = lcod;
   }
 
+  /// Update state to reflect recovery up to version
   void recovery_committed_to(eversion_t version);
 
+  /// Mark recovery complete
   void local_recovery_complete() {
     info.last_complete = info.last_update;
   }
 
+  /// Update last_requested pointer to v
   void set_last_requested(version_t v) {
     pg_log.set_last_requested(v);
   }
 
+  /// Write dirty state to t
   void write_if_dirty(ObjectStore::Transaction& t);
 
+  /// Mark write completed to v with persisted lc
   void complete_write(eversion_t v, eversion_t lc);
+
+  /// Update local write applied pointer
   void local_write_applied(eversion_t v) {
     last_update_applied = v;
-  }
-
-  void dump_history(Formatter *f) const {
-    state_history.dump(f);
-  }
-
-  const char *get_current_state() const {
-    return state_history.get_current_state();
-  }
-
-  epoch_t get_last_peering_reset() const {
-    return last_peering_reset;
-  }
-
-  eversion_t get_last_rollback_info_trimmed_to_applied() const {
-    return last_rollback_info_trimmed_to_applied;
-  }
-
-  /// Returns stable reference to internal pool structure
-  const PGPool &get_pool() const {
-    return pool;
-  }
-
-  /// Returns reference to current osdmap
-  const OSDMapRef &get_osdmap() const {
-    ceph_assert(osdmap_ref);
-    return osdmap_ref;
-  }
-
-  /// Returns epoch of current osdmap
-  epoch_t get_osdmap_epoch() const {
-    return get_osdmap()->get_epoch();
   }
 
   /// Updates peering state with new map
@@ -1679,29 +1764,61 @@ public:
     dirty_big_info = true;
   }
 
+  /// Signal shutdown beginning
   void shutdown() {
     deleting = true;
   }
 
+  /// Signal shutdown complete
   void set_delete_complete() {
     deleted = true;
   }
 
-  void adjust_purged_snaps(
-    std::function<void(interval_set<snapid_t> &snaps)> f);
-
-
+  /// Dirty info and write out
   void force_write_state(ObjectStore::Transaction &t) {
     dirty_info = true;
     dirty_big_info = true;
     write_if_dirty(t);
   }
 
+  //============================ const helpers ================================
+  const char *get_current_state() const {
+    return state_history.get_current_state();
+  }
+  epoch_t get_last_peering_reset() const {
+    return last_peering_reset;
+  }
+  eversion_t get_last_rollback_info_trimmed_to_applied() const {
+    return last_rollback_info_trimmed_to_applied;
+  }
+  /// Returns stable reference to internal pool structure
+  const PGPool &get_pool() const {
+    return pool;
+  }
+  /// Returns reference to current osdmap
+  const OSDMapRef &get_osdmap() const {
+    ceph_assert(osdmap_ref);
+    return osdmap_ref;
+  }
+  /// Returns epoch of current osdmap
+  epoch_t get_osdmap_epoch() const {
+    return get_osdmap()->get_epoch();
+  }
+
+  bool is_ec_pg() const override {
+    return pool.info.is_erasure();
+  }
+  int get_pg_size() const override {
+    return pool.info.size;
+  }
   bool is_deleting() const {
     return deleting;
   }
   bool is_deleted() const {
     return deleted;
+  }
+  const set<pg_shard_t> &get_upset() const override {
+    return upset;
   }
   bool is_acting_recovery_backfill(pg_shard_t osd) const {
     return acting_recovery_backfill.count(osd);
@@ -1728,13 +1845,10 @@ public:
   bool is_primary() const {
     return pg_whoami == primary;
   }
-  bool pg_has_reset_since(epoch_t e) {
+  bool pg_has_reset_since(epoch_t e) const {
     return deleted || e < get_last_peering_reset();
   }
 
-  void set_role(int r) {
-    role = r;
-  }
   int get_role() const {
     return role;
   }
@@ -1852,6 +1966,11 @@ public:
 
   bool needs_recovery() const;
   bool needs_backfill() const;
+
+  /**
+   * Returns whether all peers which might have unfound objects have been
+   * queried or marked lost.
+   */
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
   bool all_missing_unfound() const {
     const auto& missing = pg_log.get_missing();
@@ -1911,34 +2030,55 @@ public:
     return pg_state_string(state);
   }
 
+  /// Dump representation of past_intervals to out
   void print_past_intervals(ostream &out) const {
     out << "[" << past_intervals.get_bounds()
 	<< ")/" << past_intervals.size();
   }
 
+  void dump_history(Formatter *f) const {
+    state_history.dump(f);
+  }
+
+  /// Dump formatted peering status
   void dump_peering_state(Formatter *f);
 
 private:
+  /// Mask feature vector with feature set from new peer
   void apply_peer_features(uint64_t f) { peer_features &= f; }
+
+  /// Reset feature vector to default
   void reset_min_peer_features() {
     peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   }
 public:
+  /// Get feature vector common to all known peers with this pg
   uint64_t get_min_peer_features() const { return peer_features; }
+
+  /// Get feature vector common to acting set
   uint64_t get_min_acting_features() const { return acting_features; }
+
+  /// Get feature vector common to up/acting set
   uint64_t get_min_upacting_features() const { return upacting_features; }
 
 
   // Flush control interface
 private:
+  /**
+   * Start additional flush (blocks needs_flush/activation until
+   * complete_flush is called once for each start_flush call as
+   * required by start_flush_on_transaction).
+   */
   void start_flush(ObjectStore::Transaction *t) {
     flushes_in_progress++;
     pl->start_flush_on_transaction(t);
   }
 public:
+  /// True if there are outstanding flushes
   bool needs_flush() const {
     return flushes_in_progress > 0;
   }
+  /// Must be called once per start_flush
   void complete_flush();
 
   friend ostream &operator<<(ostream &out, const PeeringState &ps);
