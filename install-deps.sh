@@ -359,6 +359,7 @@ else
                 ;;
         esac
         munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then
