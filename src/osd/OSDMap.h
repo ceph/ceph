@@ -827,6 +827,8 @@ public:
     return !is_out(osd);
   }
 
+  unsigned get_crush_node_flags(int osd) const;
+
   bool is_noup(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
   }
