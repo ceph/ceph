@@ -5613,7 +5613,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     }
 
     if (pg->is_primary()) {
-      pg->unreg_next_scrub();
       const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
       double pool_scrub_max_interval = 0;
       double scrub_max_interval;
@@ -5638,8 +5637,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       } else {
         pg->set_last_scrub_stamp(stamp);
       }
-      pg->reg_next_scrub();
-      pg->publish_stats_to_osd();
       ss << "ok - set" << (deep ? " deep" : "" ) << " stamp " << stamp;
     } else {
       ss << "Not primary";

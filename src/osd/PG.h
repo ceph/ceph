@@ -282,14 +282,32 @@ public:
     return info.history.same_interval_since;
   }
 
+  static void set_last_scrub_stamp(
+    utime_t t, pg_history_t &history, pg_stat_t &stats) {
+    stats.last_scrub_stamp = t;
+    history.last_scrub_stamp = t;
+  }
+
   void set_last_scrub_stamp(utime_t t) {
-    info.stats.last_scrub_stamp = t;
-    info.history.last_scrub_stamp = t;
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	set_last_scrub_stamp(t, history, stats);
+	return true;
+      });
+  }
+
+  static void set_last_deep_scrub_stamp(
+    utime_t t, pg_history_t &history, pg_stat_t &stats) {
+    stats.last_deep_scrub_stamp = t;
+    history.last_deep_scrub_stamp = t;
   }
 
   void set_last_deep_scrub_stamp(utime_t t) {
-    info.stats.last_deep_scrub_stamp = t;
-    info.history.last_deep_scrub_stamp = t;
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	set_last_deep_scrub_stamp(t, history, stats);
+	return true;
+      });
   }
 
   bool is_deleting() const {
