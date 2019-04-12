@@ -1057,22 +1057,14 @@ protected:
     ObjectStore::Transaction& t, pg_info_t &oinfo,
     pg_log_t &olog, pg_shard_t from);
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
-  bool search_for_missing(
-    const pg_info_t &oinfo, const pg_missing_t &omissing,
-    pg_shard_t fromosd,
-    PeeringCtx*);
-
-  void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
-  
-  void build_might_have_unfound();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
   bool have_unfound() const { 
-    return missing_loc.have_unfound();
+    return recovery_state.have_unfound();
   }
   uint64_t get_num_unfound() const {
-    return missing_loc.num_unfound();
+    return recovery_state.get_num_unfound();
   }
 
   virtual void check_local() = 0;
@@ -1419,9 +1411,6 @@ protected:
 
   uint64_t get_min_acting_features() const { return acting_features; }
   uint64_t get_min_upacting_features() const { return upacting_features; }
-  bool perform_deletes_during_peering() const {
-    return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
-  }
 
   bool hard_limit_pglog() const {
     return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
@@ -1534,8 +1523,6 @@ protected:
     ObjectStore::Transaction& t);
 
   void filter_snapc(vector<snapid_t> &snaps);
-
-  void log_weirdness();
 
   virtual void kick_snap_trim() = 0;
   virtual void snap_trimmer_scrub_complete() = 0;
