@@ -366,44 +366,6 @@ void PG::proc_replica_log(
   peer_missing[from].claim(omissing);
 }
 
-bool PG::proc_replica_info(
-  pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
-{
-  map<pg_shard_t, pg_info_t>::iterator p = peer_info.find(from);
-  if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
-    dout(10) << " got dup osd." << from << " info " << oinfo << ", identical to ours" << dendl;
-    return false;
-  }
-
-  if (!get_osdmap()->has_been_up_since(from.osd, send_epoch)) {
-    dout(10) << " got info " << oinfo << " from down osd." << from
-	     << " discarding" << dendl;
-    return false;
-  }
-
-  dout(10) << " got osd." << from << " " << oinfo << dendl;
-  ceph_assert(is_primary());
-  peer_info[from] = oinfo;
-  might_have_unfound.insert(from);
-
-  update_history(oinfo.history);
-  
-  // stray?
-  if (!is_up(from) && !is_acting(from)) {
-    dout(10) << " osd." << from << " has stray content: " << oinfo << dendl;
-    stray_set.insert(from);
-    if (is_clean()) {
-      purge_strays();
-    }
-  }
-
-  // was this a new info?  if so, update peers!
-  if (p == peer_info.end())
-    update_heartbeat_peers();
-
-  return true;
-}
-
 void PG::remove_snap_mapped_object(
   ObjectStore::Transaction &t, const hobject_t &soid)
 {
@@ -858,30 +820,6 @@ bool PG::adjust_need_up_thru(const OSDMapRef osdmap)
     return true;
   }
   return false;
-}
-
-void PG::remove_down_peer_info(const OSDMapRef osdmap)
-{
-  // Remove any downed osds from peer_info
-  bool removed = false;
-  map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
-  while (p != peer_info.end()) {
-    if (!osdmap->is_up(p->first.osd)) {
-      dout(10) << " dropping down osd." << p->first << " info " << p->second << dendl;
-      peer_missing.erase(p->first);
-      peer_log_requested.erase(p->first);
-      peer_missing_requested.erase(p->first);
-      peer_purged.erase(p->first); // so we can re-purge if necessary
-      peer_info.erase(p++);
-      removed = true;
-    } else
-      ++p;
-  }
-
-  // if we removed anyone, update peers (which include peer_info)
-  if (removed)
-    update_heartbeat_peers();
-  check_recovery_sources(osdmap);
 }
 
 /*
@@ -3020,7 +2958,7 @@ void PG::purge_strays()
 
   // if we removed anyone, update peers (which include peer_info)
   if (removed)
-    update_heartbeat_peers();
+    recovery_state.update_heartbeat_peers();
 
   stray_set.clear();
 
@@ -3047,27 +2985,8 @@ void PG::clear_probe_targets()
   probe_targets.clear();
 }
 
-void PG::update_heartbeat_peers()
+void PG::update_heartbeat_peers(set<int> new_peers)
 {
-  ceph_assert(is_locked());
-
-  if (!is_primary())
-    return;
-
-  set<int> new_peers;
-  for (unsigned i=0; i<acting.size(); i++) {
-    if (acting[i] != CRUSH_ITEM_NONE)
-      new_peers.insert(acting[i]);
-  }
-  for (unsigned i=0; i<up.size(); i++) {
-    if (up[i] != CRUSH_ITEM_NONE)
-      new_peers.insert(up[i]);
-  }
-  for (map<pg_shard_t,pg_info_t>::iterator p = peer_info.begin();
-    p != peer_info.end();
-    ++p)
-    new_peers.insert(p->first.osd);
-
   bool need_update = false;
   heartbeat_peer_lock.Lock();
   if (new_peers == heartbeat_peers) {
