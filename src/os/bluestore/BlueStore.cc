@@ -6587,8 +6587,9 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     // we can bypass db open exclusively in case of kv_only mode
     ceph_assert(kv_only);
     r = _open_db(false, true);
-    if (r < 0)
-      goto out_bdev;
+  }
+  if (r < 0) {
+    goto out_bdev;
   }
 
   if (kv_only)
