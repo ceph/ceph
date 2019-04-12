@@ -204,14 +204,16 @@ class OpenStackProvisioner(base.Provisioner):
         self.conf = util.combine_dicts(confs, lambda x, y: x > y)
 
     def _create(self):
+        userdata = self.userdata
         log.debug("Creating node: %s", self)
         log.debug("Selected size: %s", self.size)
         log.debug("Selected image: %s", self.image)
+        log.debug("Using userdata: %s", userdata)
         create_args = dict(
             name=self.name,
             size=self.size,
             image=self.image,
-            ex_userdata=self.userdata,
+            ex_userdata=userdata,
         )
         networks = self.provider.networks
         if networks:
