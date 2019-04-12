@@ -1045,48 +1045,6 @@ protected:
 
   void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
   
-  map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
-    const map<pg_shard_t, pg_info_t> &infos,
-    bool restrict_to_up_acting,
-    bool *history_les_bound) const;
-  static void calc_ec_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
-    unsigned size,
-    const vector<int> &acting,
-    const vector<int> &up,
-    const map<pg_shard_t, pg_info_t> &all_info,
-    bool restrict_to_up_acting,
-    vector<int> *want,
-    set<pg_shard_t> *backfill,
-    set<pg_shard_t> *acting_backfill,
-    ostream &ss);
-  static void calc_replicated_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
-    uint64_t force_auth_primary_missing_objects,
-    unsigned size,
-    const vector<int> &acting,
-    const vector<int> &up,
-    pg_shard_t up_primary,
-    const map<pg_shard_t, pg_info_t> &all_info,
-    bool restrict_to_up_acting,
-    vector<int> *want,
-    set<pg_shard_t> *backfill,
-    set<pg_shard_t> *acting_backfill,
-    const OSDMapRef osdmap,
-    ostream &ss);
-  void choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
-                                const pg_info_t &auth_info,
-                                vector<int> *want,
-                                set<pg_shard_t> *async_recovery) const;
-  void choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_info,
-                                        const pg_info_t &auth_info,
-                                        vector<int> *want,
-                                        set<pg_shard_t> *async_recovery) const;
-
-  bool recoverable_and_ge_min_size(const vector<int> &want) const;
-  bool choose_acting(pg_shard_t &auth_log_shard,
-		     bool restrict_to_up_acting,
-		     bool *history_les_bound);
   void build_might_have_unfound();
   void activate(
     ObjectStore::Transaction& t,

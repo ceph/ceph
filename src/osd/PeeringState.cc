@@ -1101,6 +1101,689 @@ void PeeringState::reject_reservation()
     get_osdmap_epoch());
 }
 
+/**
+ * find_best_info
+ *
+ * Returns an iterator to the best info in infos sorted by:
+ *  1) Prefer newer last_update
+ *  2) Prefer longer tail if it brings another info into contiguity
+ *  3) Prefer current primary
+ */
+map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
+  const map<pg_shard_t, pg_info_t> &infos,
+  bool restrict_to_up_acting,
+  bool *history_les_bound) const
+{
+  ceph_assert(history_les_bound);
+  /* See doc/dev/osd_internals/last_epoch_started.rst before attempting
+   * to make changes to this process.  Also, make sure to update it
+   * when you find bugs! */
+  eversion_t min_last_update_acceptable = eversion_t::max();
+  epoch_t max_last_epoch_started_found = 0;
+  for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
+       i != infos.end();
+       ++i) {
+    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
+	max_last_epoch_started_found < i->second.history.last_epoch_started) {
+      *history_les_bound = true;
+      max_last_epoch_started_found = i->second.history.last_epoch_started;
+    }
+    if (!i->second.is_incomplete() &&
+	max_last_epoch_started_found < i->second.last_epoch_started) {
+      *history_les_bound = false;
+      max_last_epoch_started_found = i->second.last_epoch_started;
+    }
+  }
+  for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
+       i != infos.end();
+       ++i) {
+    if (max_last_epoch_started_found <= i->second.last_epoch_started) {
+      if (min_last_update_acceptable > i->second.last_update)
+	min_last_update_acceptable = i->second.last_update;
+    }
+  }
+  if (min_last_update_acceptable == eversion_t::max())
+    return infos.end();
+
+  map<pg_shard_t, pg_info_t>::const_iterator best = infos.end();
+  // find osd with newest last_update (oldest for ec_pool).
+  // if there are multiples, prefer
+  //  - a longer tail, if it brings another peer into log contiguity
+  //  - the current primary
+  for (map<pg_shard_t, pg_info_t>::const_iterator p = infos.begin();
+       p != infos.end();
+       ++p) {
+    if (restrict_to_up_acting && !is_up(p->first) &&
+	!is_acting(p->first))
+      continue;
+    // Only consider peers with last_update >= min_last_update_acceptable
+    if (p->second.last_update < min_last_update_acceptable)
+      continue;
+    // Disqualify anyone with a too old last_epoch_started
+    if (p->second.last_epoch_started < max_last_epoch_started_found)
+      continue;
+    // Disqualify anyone who is incomplete (not fully backfilled)
+    if (p->second.is_incomplete())
+      continue;
+    if (best == infos.end()) {
+      best = p;
+      continue;
+    }
+    // Prefer newer last_update
+    if (pool.info.require_rollback()) {
+      if (p->second.last_update > best->second.last_update)
+	continue;
+      if (p->second.last_update < best->second.last_update) {
+	best = p;
+	continue;
+      }
+    } else {
+      if (p->second.last_update < best->second.last_update)
+	continue;
+      if (p->second.last_update > best->second.last_update) {
+	best = p;
+	continue;
+      }
+    }
+
+    // Prefer longer tail
+    if (p->second.log_tail > best->second.log_tail) {
+      continue;
+    } else if (p->second.log_tail < best->second.log_tail) {
+      best = p;
+      continue;
+    }
+
+    if (!p->second.has_missing() && best->second.has_missing()) {
+      psdout(10) << __func__ << " prefer osd." << p->first
+               << " because it is complete while best has missing"
+               << dendl;
+      best = p;
+      continue;
+    } else if (p->second.has_missing() && !best->second.has_missing()) {
+      psdout(10) << __func__ << " skipping osd." << p->first
+               << " because it has missing while best is complete"
+               << dendl;
+      continue;
+    } else {
+      // both are complete or have missing
+      // fall through
+    }
+
+    // prefer current primary (usually the caller), all things being equal
+    if (p->first == pg_whoami) {
+      psdout(10) << "calc_acting prefer osd." << p->first
+		 << " because it is current primary" << dendl;
+      best = p;
+      continue;
+    }
+  }
+  return best;
+}
+
+void PeeringState::calc_ec_acting(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  unsigned size,
+  const vector<int> &acting,
+  const vector<int> &up,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool restrict_to_up_acting,
+  vector<int> *_want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  ostream &ss)
+{
+  vector<int> want(size, CRUSH_ITEM_NONE);
+  map<shard_id_t, set<pg_shard_t> > all_info_by_shard;
+  for (map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
+       i != all_info.end();
+       ++i) {
+    all_info_by_shard[i->first.shard].insert(i->first);
+  }
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    ss << "For position " << (unsigned)i << ": ";
+    if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
+	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
+	auth_log_shard->second.log_tail) {
+      ss << " selecting up[i]: " << pg_shard_t(up[i], shard_id_t(i)) << std::endl;
+      want[i] = up[i];
+      continue;
+    }
+    if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
+      ss << " backfilling up[i]: " << pg_shard_t(up[i], shard_id_t(i))
+	 << " and ";
+      backfill->insert(pg_shard_t(up[i], shard_id_t(i)));
+    }
+
+    if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
+	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
+	auth_log_shard->second.log_tail) {
+      ss << " selecting acting[i]: " << pg_shard_t(acting[i], shard_id_t(i)) << std::endl;
+      want[i] = acting[i];
+    } else if (!restrict_to_up_acting) {
+      for (set<pg_shard_t>::iterator j = all_info_by_shard[shard_id_t(i)].begin();
+	   j != all_info_by_shard[shard_id_t(i)].end();
+	   ++j) {
+	ceph_assert(j->shard == i);
+	if (!all_info.find(*j)->second.is_incomplete() &&
+	    all_info.find(*j)->second.last_update >=
+	    auth_log_shard->second.log_tail) {
+	  ss << " selecting stray: " << *j << std::endl;
+	  want[i] = j->osd;
+	  break;
+	}
+      }
+      if (want[i] == CRUSH_ITEM_NONE)
+	ss << " failed to fill position " << (int)i << std::endl;
+    }
+  }
+
+  for (uint8_t i = 0; i < want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      acting_backfill->insert(pg_shard_t(want[i], shard_id_t(i)));
+    }
+  }
+  acting_backfill->insert(backfill->begin(), backfill->end());
+  _want->swap(want);
+}
+
+/**
+ * calculate the desired acting set.
+ *
+ * Choose an appropriate acting set.  Prefer up[0], unless it is
+ * incomplete, or another osd has a longer tail that allows us to
+ * bring other up nodes up to date.
+ */
+void PeeringState::calc_replicated_acting(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  uint64_t force_auth_primary_missing_objects,
+  unsigned size,
+  const vector<int> &acting,
+  const vector<int> &up,
+  pg_shard_t up_primary,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool restrict_to_up_acting,
+  vector<int> *want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
+  ostream &ss)
+{
+  pg_shard_t auth_log_shard_id = auth_log_shard->first;
+
+  ss << __func__ << " newest update on osd." << auth_log_shard_id
+     << " with " << auth_log_shard->second
+     << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
+
+  // select primary
+  auto primary = all_info.find(up_primary);
+  if (up.size() &&
+      !primary->second.is_incomplete() &&
+      primary->second.last_update >=
+        auth_log_shard->second.log_tail) {
+    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
+      auto approx_missing_objects =
+        primary->second.stats.stats.sum.num_objects_missing;
+      auto auth_version = auth_log_shard->second.last_update.version;
+      auto primary_version = primary->second.last_update.version;
+      if (auth_version > primary_version) {
+        approx_missing_objects += auth_version - primary_version;
+      } else {
+        approx_missing_objects += primary_version - auth_version;
+      }
+      if ((uint64_t)approx_missing_objects >
+          force_auth_primary_missing_objects) {
+        primary = auth_log_shard;
+        ss << "up_primary: " << up_primary << ") has approximate "
+           << approx_missing_objects
+           << "(>" << force_auth_primary_missing_objects <<") "
+           << "missing objects, osd." << auth_log_shard_id
+           << " selected as primary instead"
+           << std::endl;
+      } else {
+        ss << "up_primary: " << up_primary << ") selected as primary"
+           << std::endl;
+      }
+    } else {
+      ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
+    }
+  } else {
+    ceph_assert(!auth_log_shard->second.is_incomplete());
+    ss << "up[0] needs backfill, osd." << auth_log_shard_id
+       << " selected as primary instead" << std::endl;
+    primary = auth_log_shard;
+  }
+
+  ss << __func__ << " primary is osd." << primary->first
+     << " with " << primary->second << std::endl;
+  want->push_back(primary->first.osd);
+  acting_backfill->insert(primary->first);
+
+  /* We include auth_log_shard->second.log_tail because in GetLog,
+   * we will request logs back to the min last_update over our
+   * acting_backfill set, which will result in our log being extended
+   * as far backwards as necessary to pick up any peers which can
+   * be log recovered by auth_log_shard's log */
+  eversion_t oldest_auth_log_entry =
+    std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
+
+  // select replicas that have log contiguity with primary.
+  // prefer up, then acting, then any peer_info osds
+  for (auto i : up) {
+    pg_shard_t up_cand = pg_shard_t(i, shard_id_t::NO_SHARD);
+    if (up_cand == primary->first)
+      continue;
+    const pg_info_t &cur_info = all_info.find(up_cand)->second;
+    if (cur_info.is_incomplete() ||
+        cur_info.last_update < oldest_auth_log_entry) {
+      ss << " shard " << up_cand << " (up) backfill " << cur_info << std::endl;
+      backfill->insert(up_cand);
+      acting_backfill->insert(up_cand);
+    } else {
+      want->push_back(i);
+      acting_backfill->insert(up_cand);
+      ss << " osd." << i << " (up) accepted " << cur_info << std::endl;
+    }
+    if (want->size() >= size) {
+      break;
+    }
+  }
+
+  if (want->size() >= size) {
+    return;
+  }
+
+  std::vector<std::pair<eversion_t, int>> candidate_by_last_update;
+  candidate_by_last_update.reserve(acting.size());
+  // This no longer has backfill OSDs, but they are covered above.
+  for (auto i : acting) {
+    pg_shard_t acting_cand(i, shard_id_t::NO_SHARD);
+    // skip up osds we already considered above
+    if (acting_cand == primary->first)
+      continue;
+    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i);
+    if (up_it != up.end())
+      continue;
+
+    const pg_info_t &cur_info = all_info.find(acting_cand)->second;
+    if (cur_info.is_incomplete() ||
+	cur_info.last_update < oldest_auth_log_entry) {
+      ss << " shard " << acting_cand << " (acting) REJECTED "
+	 << cur_info << std::endl;
+    } else {
+      candidate_by_last_update.emplace_back(cur_info.last_update, i);
+    }
+  }
+
+  auto sort_by_eversion =[](const std::pair<eversion_t, int> &lhs,
+                            const std::pair<eversion_t, int> &rhs) {
+    return lhs.first > rhs.first;
+  };
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(),
+            candidate_by_last_update.end(), sort_by_eversion);
+  for (auto &p: candidate_by_last_update) {
+    ceph_assert(want->size() < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (acting) accepted "
+       << all_info.find(s)->second << std::endl;
+    if (want->size() >= size) {
+      return;
+    }
+  }
+
+  if (restrict_to_up_acting) {
+    return;
+  }
+  candidate_by_last_update.clear();
+  candidate_by_last_update.reserve(all_info.size()); // overestimate but fine
+  // continue to search stray to find more suitable peers
+  for (auto &i : all_info) {
+    // skip up osds we already considered above
+    if (i.first == primary->first)
+      continue;
+    vector<int>::const_iterator up_it = find(up.begin(), up.end(), i.first.osd);
+    if (up_it != up.end())
+      continue;
+    vector<int>::const_iterator acting_it = find(
+      acting.begin(), acting.end(), i.first.osd);
+    if (acting_it != acting.end())
+      continue;
+
+    if (i.second.is_incomplete() ||
+	i.second.last_update < oldest_auth_log_entry) {
+      ss << " shard " << i.first << " (stray) REJECTED " << i.second
+         << std::endl;
+    } else {
+      candidate_by_last_update.emplace_back(
+        i.second.last_update, i.first.osd);
+    }
+  }
+
+  if (candidate_by_last_update.empty()) {
+    // save us some effort
+    return;
+  }
+
+  // sort by last_update, in descending order.
+  std::sort(candidate_by_last_update.begin(),
+            candidate_by_last_update.end(), sort_by_eversion);
+
+  for (auto &p: candidate_by_last_update) {
+    ceph_assert(want->size() < size);
+    want->push_back(p.second);
+    pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
+    acting_backfill->insert(s);
+    ss << " shard " << s << " (stray) accepted "
+       << all_info.find(s)->second << std::endl;
+    if (want->size() >= size) {
+      return;
+    }
+  }
+}
+
+bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
+{
+  unsigned num_want_acting = 0;
+  set<pg_shard_t> have;
+  for (int i = 0; i < (int)want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      ++num_want_acting;
+      have.insert(
+        pg_shard_t(
+          want[i],
+          pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
+  }
+  // We go incomplete if below min_size for ec_pools since backfill
+  // does not currently maintain rollbackability
+  // Otherwise, we will go "peered", but not "active"
+  if (num_want_acting < pool.info.min_size &&
+      (pool.info.is_erasure() ||
+       !cct->_conf->osd_allow_recovery_below_min_size)) {
+    psdout(10) << __func__ << " failed, below min size" << dendl;
+    return false;
+  }
+
+  /* Check whether we have enough acting shards to later perform recovery */
+  if (!missing_loc.get_recoverable_predicate()(have)) {
+    psdout(10) << __func__ << " failed, not recoverable" << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+void PeeringState::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
+					    const pg_info_t &auth_info,
+					    vector<int> *want,
+					    set<pg_shard_t> *async_recovery) const
+{
+  set<pair<int, pg_shard_t> > candidates_by_cost;
+  for (uint8_t i = 0; i < want->size(); ++i) {
+    if ((*want)[i] == CRUSH_ITEM_NONE)
+      continue;
+
+    // Considering log entries to recover is accurate enough for
+    // now. We could use minimum_to_decode_with_cost() later if
+    // necessary.
+    pg_shard_t shard_i((*want)[i], shard_id_t(i));
+    // do not include strays
+    if (stray_set.find(shard_i) != stray_set.end())
+      continue;
+    // Do not include an osd that is not up, since choosing it as
+    // an async_recovery_target will move it out of the acting set.
+    // This results in it being identified as a stray during peering,
+    // because it is no longer in the up or acting set.
+    if (!is_up(shard_i))
+      continue;
+    auto shard_info = all_info.find(shard_i)->second;
+    // for ec pools we rollback all entries past the authoritative
+    // last_update *before* activation. This is relatively inexpensive
+    // compared to recovery, since it is purely local, so treat shards
+    // past the authoritative last_update the same as those equal to it.
+    version_t auth_version = auth_info.last_update.version;
+    version_t candidate_version = shard_info.last_update.version;
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects) >
+	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
+    }
+  }
+
+  psdout(20) << __func__ << " candidates by cost are: " << candidates_by_cost
+	     << dendl;
+
+  // take out as many osds as we can for async recovery, in order of cost
+  for (auto rit = candidates_by_cost.rbegin();
+       rit != candidates_by_cost.rend(); ++rit) {
+    pg_shard_t cur_shard = rit->second;
+    vector<int> candidate_want(*want);
+    candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
+    if (recoverable_and_ge_min_size(candidate_want)) {
+      want->swap(candidate_want);
+      async_recovery->insert(cur_shard);
+    }
+  }
+  psdout(20) << __func__ << " result want=" << *want
+	     << " async_recovery=" << *async_recovery << dendl;
+}
+
+void PeeringState::choose_async_recovery_replicated(
+  const map<pg_shard_t, pg_info_t> &all_info,
+  const pg_info_t &auth_info,
+  vector<int> *want,
+  set<pg_shard_t> *async_recovery) const
+{
+  set<pair<int, pg_shard_t> > candidates_by_cost;
+  for (auto osd_num : *want) {
+    pg_shard_t shard_i(osd_num, shard_id_t::NO_SHARD);
+    // do not include strays
+    if (stray_set.find(shard_i) != stray_set.end())
+      continue;
+    // Do not include an osd that is not up, since choosing it as
+    // an async_recovery_target will move it out of the acting set.
+    // This results in it being identified as a stray during peering,
+    // because it is no longer in the up or acting set.
+    if (!is_up(shard_i))
+      continue;
+    auto shard_info = all_info.find(shard_i)->second;
+    // use the approximate magnitude of the difference in length of
+    // logs plus historical missing objects as the cost of recovery
+    version_t auth_version = auth_info.last_update.version;
+    version_t candidate_version = shard_info.last_update.version;
+    auto approx_missing_objects =
+      shard_info.stats.stats.sum.num_objects_missing;
+    if (auth_version > candidate_version) {
+      approx_missing_objects += auth_version - candidate_version;
+    } else {
+      approx_missing_objects += candidate_version - auth_version;
+    }
+    if (static_cast<uint64_t>(approx_missing_objects)  >
+	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+      candidates_by_cost.emplace(approx_missing_objects, shard_i);
+    }
+  }
+
+  psdout(20) << __func__ << " candidates by cost are: " << candidates_by_cost
+	     << dendl;
+  // take out as many osds as we can for async recovery, in order of cost
+  for (auto rit = candidates_by_cost.rbegin();
+       rit != candidates_by_cost.rend(); ++rit) {
+    if (want->size() <= pool.info.min_size) {
+      break;
+    }
+    pg_shard_t cur_shard = rit->second;
+    vector<int> candidate_want(*want);
+    for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
+      if (*it == cur_shard.osd) {
+        candidate_want.erase(it);
+	want->swap(candidate_want);
+	async_recovery->insert(cur_shard);
+        break;
+      }
+    }
+  }
+  psdout(20) << __func__ << " result want=" << *want
+	     << " async_recovery=" << *async_recovery << dendl;
+}
+
+
+
+/**
+ * choose acting
+ *
+ * calculate the desired acting, and request a change with the monitor
+ * if it differs from the current acting.
+ *
+ * if restrict_to_up_acting=true, we filter out anything that's not in
+ * up/acting.  in order to lift this restriction, we need to
+ *  1) check whether it's worth switching the acting set any time we get
+ *     a new pg info (not just here, when recovery finishes)
+ *  2) check whether anything in want_acting went down on each new map
+ *     (and, if so, calculate a new want_acting)
+ *  3) remove the assertion in PG::PeeringState::Active::react(const AdvMap)
+ * TODO!
+ */
+bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
+				 bool restrict_to_up_acting,
+				 bool *history_les_bound)
+{
+  map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
+  all_info[pg_whoami] = info;
+
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
+    for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
+         p != all_info.end();
+         ++p) {
+      psdout(10) << __func__ << " all_info osd." << p->first << " "
+		 << p->second << dendl;
+    }
+  }
+
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =
+    find_best_info(all_info, restrict_to_up_acting, history_les_bound);
+
+  if (auth_log_shard == all_info.end()) {
+    if (up != acting) {
+      psdout(10) << __func__ << " no suitable info found (incomplete backfills?),"
+		 << " reverting to up" << dendl;
+      want_acting = up;
+      vector<int> empty;
+      pl->queue_want_pg_temp(empty);
+    } else {
+      psdout(10) << __func__ << " failed" << dendl;
+      ceph_assert(want_acting.empty());
+    }
+    return false;
+  }
+
+  ceph_assert(!auth_log_shard->second.is_incomplete());
+  auth_log_shard_id = auth_log_shard->first;
+
+  set<pg_shard_t> want_backfill, want_acting_backfill;
+  vector<int> want;
+  stringstream ss;
+  if (pool.info.is_replicated())
+    calc_replicated_acting(
+      auth_log_shard,
+      cct->_conf.get_val<uint64_t>(
+        "osd_force_auth_primary_missing_objects"),
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      up,
+      up_primary,
+      all_info,
+      restrict_to_up_acting,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      get_osdmap(),
+      ss);
+  else
+    calc_ec_acting(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      up,
+      all_info,
+      restrict_to_up_acting,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      ss);
+  psdout(10) << ss.str() << dendl;
+
+  if (!recoverable_and_ge_min_size(want)) {
+    want_acting.clear();
+    return false;
+  }
+
+  set<pg_shard_t> want_async_recovery;
+  if (HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_MIMIC)) {
+    if (pool.info.is_erasure()) {
+      choose_async_recovery_ec(all_info, auth_log_shard->second, &want, &want_async_recovery);
+    } else {
+      choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery);
+    }
+  }
+  if (want != acting) {
+    psdout(10) << __func__ << " want " << want << " != acting " << acting
+	       << ", requesting pg_temp change" << dendl;
+    want_acting = want;
+
+    if (!cct->_conf->osd_debug_no_acting_change) {
+      if (want_acting == up) {
+	// There can't be any pending backfill if
+	// want is the same as crush map up OSDs.
+	ceph_assert(want_backfill.empty());
+	vector<int> empty;
+	pl->queue_want_pg_temp(empty);
+      } else
+	pl->queue_want_pg_temp(want);
+    }
+    return false;
+  }
+  want_acting.clear();
+  acting_recovery_backfill = want_acting_backfill;
+  psdout(10) << "acting_recovery_backfill is "
+	     << acting_recovery_backfill << dendl;
+  ceph_assert(
+    backfill_targets.empty() ||
+    backfill_targets == want_backfill);
+  if (backfill_targets.empty()) {
+    // Caller is GetInfo
+    backfill_targets = want_backfill;
+  }
+  // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
+  ceph_assert(
+    async_recovery_targets.empty() ||
+    async_recovery_targets == want_async_recovery ||
+    !needs_recovery());
+  if (async_recovery_targets.empty() || !needs_recovery()) {
+    async_recovery_targets = want_async_recovery;
+  }
+  // Will not change if already set because up would have had to change
+  // Verify that nothing in backfill is in stray_set
+  for (set<pg_shard_t>::iterator i = want_backfill.begin();
+      i != want_backfill.end();
+      ++i) {
+    ceph_assert(stray_set.find(*i) == stray_set.end());
+  }
+  psdout(10) << "choose_acting want=" << want << " backfill_targets="
+           << want_backfill << " async_recovery_targets="
+           << async_recovery_targets << dendl;
+  return true;
+}
+
 
 
 /*------------ Peering State Machine----------------*/
@@ -2331,11 +3014,11 @@ PeeringState::Recovered::Recovered(my_context ctx)
 
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
-  if (ps->acting != ps->up && !pg->choose_acting(auth_log_shard,
+  if (ps->acting != ps->up && !ps->choose_acting(auth_log_shard,
 						 true, &history_les_bound)) {
     ceph_assert(ps->want_acting.size());
   } else if (!ps->async_recovery_targets.empty()) {
-    pg->choose_acting(auth_log_shard, true, &history_les_bound);
+    ps->choose_acting(auth_log_shard, true, &history_les_bound);
   }
 
   if (context< Active >().all_replicas_activated  &&
@@ -3180,7 +3863,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   DECLARE_LOCALS
 
   // adjust acting?
-  if (!pg->choose_acting(auth_log_shard, false,
+  if (!ps->choose_acting(auth_log_shard, false,
 			 &context< Peering >().history_les_bound)) {
     if (!ps->want_acting.empty()) {
       post_event(NeedActingChange());

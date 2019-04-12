@@ -3276,7 +3276,7 @@ public:
     std::map<int, epoch_t> blocked_by;  ///< current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool pg_down = false;   ///< some down osds are included in @a cur; the DOWN pg state bit should be set.
-    std::unique_ptr<IsPGRecoverablePredicate> pcontdec;
+    const IsPGRecoverablePredicate* pcontdec = nullptr;
 
     PriorSet() = default;
     PriorSet(PriorSet &&) = default;
@@ -3304,7 +3304,7 @@ public:
       std::set<int> down,
       std::map<int, epoch_t> blocked_by,
       bool pg_down,
-      IsPGRecoverablePredicate *pcontdec)
+      const IsPGRecoverablePredicate *pcontdec)
       : ec_pool(ec_pool), probe(probe), down(down), blocked_by(blocked_by),
 	pg_down(pg_down), pcontdec(pcontdec) {}
 
@@ -3314,7 +3314,7 @@ public:
       const PastIntervals &past_intervals,
       bool ec_pool,
       epoch_t last_epoch_started,
-      IsPGRecoverablePredicate *c,
+      const IsPGRecoverablePredicate *c,
       F f,
       const std::vector<int> &up,
       const std::vector<int> &acting,
@@ -3339,7 +3339,7 @@ PastIntervals::PriorSet::PriorSet(
   const PastIntervals &past_intervals,
   bool ec_pool,
   epoch_t last_epoch_started,
-  IsPGRecoverablePredicate *c,
+  const IsPGRecoverablePredicate *c,
   F f,
   const std::vector<int> &up,
   const std::vector<int> &acting,
