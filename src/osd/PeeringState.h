@@ -11,6 +11,7 @@
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
+#include <atomic>
 
 #include "PGLog.h"
 #include "PGStateUtils.h"
@@ -62,6 +63,7 @@ public:
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
     virtual void update_store_with_options(const pool_opts_t &opts) = 0;
+    virtual void update_heartbeat_peers(set<int> peers) = 0;
 
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
@@ -260,8 +262,8 @@ public:
   /* States */
   struct Initial;
   class PeeringMachine : public boost::statechart::state_machine< PeeringMachine, Initial > {
-    PeeringState *state;
   public:
+    PeeringState *state;
     PGStateHistory *state_history;
     CephContext *cct;
     spg_t spgid;
@@ -1137,7 +1139,7 @@ public:
   void update_heartbeat_peers();
   bool proc_replica_info(
     pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
-  void remove_down_peer_info(const OSDMapRef osdmap);
+  void remove_down_peer_info(const OSDMapRef &osdmap);
 
 public:
   PeeringState(
