@@ -324,6 +324,28 @@ Instructions
 
 #. Verify the cluster is healthy with ``ceph health``.
 
+   If your CRUSH tunables are older than Hammer, Ceph will now issue a
+   health warning.  If you see a health alert to that effect, you can
+   revert this change with::
+
+     ceph config set mon mon_crush_min_required_version firefly
+
+   If Ceph does not complain, however, then we recommend you also
+   switch any existing CRUSH buckets to straw2, which was added back
+   in the Hammer release.  If you have any 'straw' buckets, this will
+   result in a modest amount of data movement, but generally nothing
+   too severe.::
+
+     ceph osd getcrushmap -o backup-crushmap
+     ceph osd crush set-all-straw-buckets-to-straw2
+
+   If there are problems, you can easily revert with::
+
+     ceph osd setcrushmap -i backup-crushmap
+
+   Moving to 'straw2' buckets will unlock a few recent features, like
+   the `crush-compat` :ref:`balancer <balancer>` mode added back in Luminous.
+
 #. To enable the new :ref:`v2 network protocol <msgr2>`, issue the
    following command::
 
