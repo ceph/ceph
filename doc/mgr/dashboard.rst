@@ -280,8 +280,10 @@ Finally, provide the credentials to the dashboard::
   $ ceph dashboard set-rgw-api-access-key <access_key>
   $ ceph dashboard set-rgw-api-secret-key <secret_key>
 
-This is all you have to do to get the Object Gateway management functionality
-working. The host and port of the Object Gateway are determined automatically.
+In a typical default configuration with a single RGW endpoint, this is all you
+have to do to get the Object Gateway management functionality working. The
+dashboard will try to automatically determine the host and port of the Object
+Gateway by obtaining this information from the Ceph Manager's service map.
 
 If multiple zones are used, it will automatically determine the host within the
 master zone group and master zone. This should be sufficient for most setups,
