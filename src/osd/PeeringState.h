@@ -19,6 +19,7 @@
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
+#include "MissingLoc.h"
 
 class PG;
 
@@ -52,7 +53,7 @@ struct PGPool {
 };
 
   /* Encapsulates PG recovery process */
-class PeeringState {
+class PeeringState : public MissingLoc::MappingInfo {
 public:
   struct PeeringListener : public EpochSource {
     virtual void prepare_write(
@@ -1158,6 +1159,19 @@ public:
     PeeringListener *pl,
     PG *pg);
 
+  // MissingLoc::MappingInfo
+  const set<pg_shard_t> &get_upset() const override {
+    return upset;
+  }
+
+  bool is_ec_pg() const override {
+    return pool.info.is_erasure();
+  }
+
+  int get_pg_size() const override {
+    return pool.info.size;
+  }
+
   void handle_event(const boost::statechart::event_base &evt,
 	      PeeringCtx *rctx) {
     start_handle(rctx);
@@ -1256,9 +1270,6 @@ public:
     return deleted || e < get_last_peering_reset();
   }
 
-  bool is_ec_pg() const {
-    return pool.info.is_erasure();
-  }
   int get_role() const {
     return role;
   }
