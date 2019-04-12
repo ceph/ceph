@@ -1323,6 +1323,13 @@ public:
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
 
+  bool search_for_missing(
+    const pg_info_t &oinfo, const pg_missing_t &omissing,
+    pg_shard_t fromosd,
+    PeeringCtx*);
+  void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
+  void build_might_have_unfound();
+  void log_weirdness();
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
@@ -1546,6 +1553,18 @@ public:
         return false;
     }
     return true;
+  }
+
+  bool perform_deletes_during_peering() const {
+    return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
+  }
+
+
+  bool have_unfound() const {
+    return missing_loc.have_unfound();
+  }
+  uint64_t get_num_unfound() const {
+    return missing_loc.num_unfound();
   }
 
   // Flush control interface

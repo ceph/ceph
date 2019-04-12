@@ -1787,6 +1787,162 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
   return true;
 }
 
+void PeeringState::log_weirdness()
+{
+  if (pg_log.get_tail() != info.log_tail)
+    pl->get_clog().error() << info.pgid
+			   << " info mismatch, log.tail " << pg_log.get_tail()
+			   << " != info.log_tail " << info.log_tail;
+  if (pg_log.get_head() != info.last_update)
+    pl->get_clog().error() << info.pgid
+			   << " info mismatch, log.head " << pg_log.get_head()
+			   << " != info.last_update " << info.last_update;
+
+  if (!pg_log.get_log().empty()) {
+    // sloppy check
+    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
+      pl->get_clog().error() << info.pgid
+			     << " log bound mismatch, info (tail,head] ("
+			     << pg_log.get_tail() << ","
+			     << pg_log.get_head() << "]"
+			     << " actual ["
+			     << pg_log.get_log().log.begin()->version << ","
+			     << pg_log.get_log().log.rbegin()->version << "]";
+  }
+
+  if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
+    pl->get_clog().error() << info.pgid
+			   << " caller_ops.size "
+			   << pg_log.get_log().caller_ops.size()
+			   << " > log size " << pg_log.get_log().log.size();
+  }
+}
+
+/*
+ * Process information from a replica to determine if it could have any
+ * objects that i need.
+ *
+ * TODO: if the missing set becomes very large, this could get expensive.
+ * Instead, we probably want to just iterate over our unfound set.
+ */
+bool PeeringState::search_for_missing(
+  const pg_info_t &oinfo, const pg_missing_t &omissing,
+  pg_shard_t from,
+  PeeringCtx *ctx)
+{
+  uint64_t num_unfound_before = missing_loc.num_unfound();
+  bool found_missing = missing_loc.add_source_info(
+    from, oinfo, omissing, ctx->handle);
+  if (found_missing && num_unfound_before != missing_loc.num_unfound())
+    pl->publish_stats_to_osd();
+  // avoid doing this if the peer is empty.  This is abit of paranoia
+  // to avoid doing something rash if add_source_info() above
+  // incorrectly decided we found something new. (if the peer has
+  // last_update=0'0 that's impossible.)
+  if (found_missing &&
+      oinfo.last_update != eversion_t()) {
+    pg_info_t tinfo(oinfo);
+    tinfo.pgid.shard = pg_whoami.shard;
+    (*(ctx->info_map))[from.osd].emplace_back(
+      pg_notify_t(
+	from.shard, pg_whoami.shard,
+	get_osdmap_epoch(),
+	get_osdmap_epoch(),
+	tinfo),
+      past_intervals);
+  }
+  return found_missing;
+}
+
+void PeeringState::discover_all_missing(
+  map<int, map<spg_t,pg_query_t> > &query_map)
+{
+  auto &missing = pg_log.get_missing();
+  uint64_t unfound = get_num_unfound();
+
+  psdout(10) << __func__ << " "
+	     << missing.num_missing() << " missing, "
+	     << unfound << " unfound"
+	     << dendl;
+
+  std::set<pg_shard_t>::const_iterator m = might_have_unfound.begin();
+  std::set<pg_shard_t>::const_iterator mend = might_have_unfound.end();
+  for (; m != mend; ++m) {
+    pg_shard_t peer(*m);
+
+    if (!get_osdmap()->is_up(peer.osd)) {
+      psdout(20) << __func__ << " skipping down osd." << peer << dendl;
+      continue;
+    }
+
+    map<pg_shard_t, pg_info_t>::const_iterator iter = peer_info.find(peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne())) {
+      // ignore empty peers
+      continue;
+    }
+
+    // If we've requested any of this stuff, the pg_missing_t information
+    // should be on its way.
+    // TODO: coalsce requested_* into a single data structure
+    if (peer_missing.find(peer) != peer_missing.end()) {
+      psdout(20) << __func__ << ": osd." << peer
+		 << ": we already have pg_missing_t" << dendl;
+      continue;
+    }
+    if (peer_log_requested.find(peer) != peer_log_requested.end()) {
+      psdout(20) << __func__ << ": osd." << peer
+		 << ": in peer_log_requested" << dendl;
+      continue;
+    }
+    if (peer_missing_requested.find(peer) != peer_missing_requested.end()) {
+      psdout(20) << __func__ << ": osd." << peer
+		 << ": in peer_missing_requested" << dendl;
+      continue;
+    }
+
+    // Request missing
+    psdout(10) << __func__ << ": osd." << peer << ": requesting pg_missing_t"
+	       << dendl;
+    peer_missing_requested.insert(peer);
+    query_map[peer.osd][spg_t(info.pgid.pgid, peer.shard)] =
+      pg_query_t(
+	pg_query_t::FULLLOG,
+	peer.shard, pg_whoami.shard,
+	info.history, get_osdmap_epoch());
+  }
+}
+
+/* Build the might_have_unfound set.
+ *
+ * This is used by the primary OSD during recovery.
+ *
+ * This set tracks the OSDs which might have unfound objects that the primary
+ * OSD needs. As we receive pg_missing_t from each OSD in might_have_unfound, we
+ * will remove the OSD from the set.
+ */
+void PeeringState::build_might_have_unfound()
+{
+  ceph_assert(might_have_unfound.empty());
+  ceph_assert(is_primary());
+
+  psdout(10) << __func__ << dendl;
+
+  check_past_interval_bounds();
+
+  might_have_unfound = past_intervals.get_might_have_unfound(
+    pg_whoami,
+    pool.info.is_erasure());
+
+  // include any (stray) peers
+  for (map<pg_shard_t, pg_info_t>::iterator p = peer_info.begin();
+       p != peer_info.end();
+       ++p)
+    might_have_unfound.insert(p->first);
+
+  psdout(15) << __func__ << ": built " << might_have_unfound << dendl;
+}
+
 void PeeringState::activate(
   ObjectStore::Transaction& t,
   epoch_t activation_epoch,
@@ -1858,7 +2014,7 @@ void PeeringState::activate(
     pg_log.activate_not_complete(info);
   }
 
-  pg->log_weirdness();
+  log_weirdness();
 
   if (is_primary()) {
     // initialize snap_trimq
@@ -2013,7 +2169,7 @@ void PeeringState::activate(
              ++p) {
 	  if (p->soid <= pi.last_backfill &&
 	      !p->is_error()) {
-	    if (pg->perform_deletes_during_peering() && p->is_delete()) {
+	    if (perform_deletes_during_peering() && p->is_delete()) {
 	      pm.rm(p->soid, p->version);
 	    } else {
 	      pm.add_next_event(*p);
@@ -2097,17 +2253,17 @@ void PeeringState::activate(
 	if (is_acting_recovery_backfill(i->first))
 	  continue;
 	ceph_assert(peer_info.count(i->first));
-	pg->search_for_missing(
+	search_for_missing(
 	  peer_info[i->first],
 	  i->second,
 	  i->first,
 	  ctx);
       }
 
-      pg->build_might_have_unfound();
+      build_might_have_unfound();
 
       // Always call now so _update_calc_stats() will be accurate
-      pg->discover_all_missing(query_map);
+      discover_all_missing(query_map);
 
     }
 
@@ -3528,9 +3684,9 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
 
   pl->on_active_actmap();
 
-  if (pg->have_unfound()) {
+  if (ps->have_unfound()) {
     // object may have become unfound
-    pg->discover_all_missing(*context< PeeringMachine >().get_query_map());
+    ps->discover_all_missing(*context< PeeringMachine >().get_query_map());
   }
 
   uint64_t unfound = ps->missing_loc.num_unfound();
@@ -3568,8 +3724,8 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
 		       << dendl;
     ps->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-    if (pg->have_unfound() || (pg->is_degraded() && pg->might_have_unfound.count(notevt.from))) {
-      pg->discover_all_missing(*context< PeeringMachine >().get_query_map());
+    if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
+      ps->discover_all_missing(*context< PeeringMachine >().get_query_map());
     }
   }
   return discard_event();
@@ -3619,7 +3775,7 @@ boost::statechart::result PeeringState::Active::react(const MLogRec& logevt)
 		     << " log for unfound items" << dendl;
   pg->proc_replica_log(
     logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
-  bool got_missing = pg->search_for_missing(
+  bool got_missing = ps->search_for_missing(
     ps->peer_info[logevt.from],
     ps->peer_missing[logevt.from],
     logevt.from,
@@ -4608,7 +4764,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
     // has the correct semantics even if we don't need to get a
     // missing set from a shard. This way later additions due to
     // lost+unfound delete work properly.
-    ps->peer_missing[*i].may_include_deletes = !pg->perform_deletes_during_peering();
+    ps->peer_missing[*i].may_include_deletes = !ps->perform_deletes_during_peering();
 
     if (pi.is_empty())
       continue;                                // no pg data, nothing divergent
