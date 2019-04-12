@@ -10542,8 +10542,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     vector<string> idvec;
     cmd_getval(cct, cmdmap, "ids", idvec);
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
-
       set<int> osds;
+      set<int> crush_nodes;
 
       // wildcard?
       if (j == 0 &&
@@ -10551,21 +10551,43 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         osdmap.get_all_osds(osds);
         stop = true;
       } else {
-        // try traditional single osd way
-
-        long osd = parse_osd_id(idvec[j].c_str(), &ss);
-        if (osd < 0) {
-          // ss has reason for failure
-          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
-          err = -EINVAL;
-          continue;
-        }
-
-        osds.insert(osd);
+	if (osdmap.crush->name_exists(idvec[j])) {
+	  crush_nodes.insert(osdmap.crush->get_item_id(idvec[j]));
+	} else if (long osd = parse_osd_id(idvec[j].c_str(), &ss);
+		   osd >= 0) {
+	  osds.insert(osd);
+	} else {
+	  // ss has reason for failure
+	  ss << ", unable to parse osd id or crush node:\"" << idvec[j]
+	     << "\". ";
+	  err = -EINVAL;
+	  continue;
+	}
       }
 
+      for (auto &i : crush_nodes) {
+	auto q = osdmap.crush_node_flags.find(i);
+	if (pending_inc.new_crush_node_flags.count(i) == 0 &&
+	    q != osdmap.crush_node_flags.end()) {
+	  pending_inc.new_crush_node_flags[i] = q->second;
+	}
+	switch (option) {
+	case OP_NOUP:
+	  pending_inc.new_crush_node_flags[i] |= CEPH_OSD_NOUP;
+	  break;
+	case OP_NODOWN:
+	  pending_inc.new_crush_node_flags[i] |= CEPH_OSD_NODOWN;
+	  break;
+	case OP_NOIN:
+	  pending_inc.new_crush_node_flags[i] |= CEPH_OSD_NOIN;
+	  break;
+	case OP_NOOUT:
+	  pending_inc.new_crush_node_flags[i] |= CEPH_OSD_NOOUT;
+	  break;
+	}
+	any = true;
+      }
       for (auto &osd : osds) {
-
         if (!osdmap.exists(osd)) {
           ss << "osd." << osd << " does not exist. ";
           continue;
@@ -10677,8 +10699,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cct, cmdmap, "ids", idvec);
 
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
-
       vector<int> osds;
+      set<int> crush_nodes;
 
       // wildcard?
       if (j == 0 &&
@@ -10743,21 +10765,43 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
         stop = true;
       } else {
-        // try traditional single osd way
-
-        long osd = parse_osd_id(idvec[j].c_str(), &ss);
-        if (osd < 0) {
-          // ss has reason for failure
-          ss << ", unable to parse osd id:\"" << idvec[j] << "\". ";
-          err = -EINVAL;
-          continue;
-        }
-
-        osds.push_back(osd);
+	if (osdmap.crush->name_exists(idvec[j])) {
+	  crush_nodes.insert(osdmap.crush->get_item_id(idvec[j]));
+	} else if (long osd = parse_osd_id(idvec[j].c_str(), &ss);
+		   osd >= 0) {
+	  osds.push_back(osd);
+	} else {
+	  // ss has reason for failure
+	  ss << ", unable to parse osd id or crush node:\"" << idvec[j]
+	     << "\". ";
+	  err = -EINVAL;
+	  continue;
+	}
       }
 
+      for (auto &i : crush_nodes) {
+	auto q = osdmap.crush_node_flags.find(i);
+	if (pending_inc.new_crush_node_flags.count(i) == 0 &&
+	    q != osdmap.crush_node_flags.end()) {
+	  pending_inc.new_crush_node_flags[i] = q->second;
+	}
+	switch (option) {
+	case OP_NOUP:
+	  pending_inc.new_crush_node_flags[i] &= ~CEPH_OSD_NOUP;
+	  break;
+	case OP_NODOWN:
+	  pending_inc.new_crush_node_flags[i] &= ~CEPH_OSD_NODOWN;
+	  break;
+	case OP_NOIN:
+	  pending_inc.new_crush_node_flags[i] &= ~CEPH_OSD_NOIN;
+	  break;
+	case OP_NOOUT:
+	  pending_inc.new_crush_node_flags[i] &= ~CEPH_OSD_NOOUT;
+	  break;
+	}
+	any = true;
+      }
       for (auto &osd : osds) {
-
         if (!osdmap.exists(osd)) {
           ss << "osd." << osd << " does not exist. ";
           continue;
