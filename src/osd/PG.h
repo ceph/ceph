@@ -183,7 +183,7 @@ protected:
    * Peering state information being moved to PeeringState
    */
   pg_shard_t pg_whoami;
-  pg_info_t &info;
+  const pg_info_t &info;
 
 public:
   // -- members --
@@ -844,20 +844,28 @@ public:
   void add_num_bytes(int64_t num_bytes) {
     ceph_assert(_lock.is_locked_by_me());
     if (num_bytes) {
-      info.stats.stats.sum.num_bytes += num_bytes;
-      if (info.stats.stats.sum.num_bytes < 0) {
-        info.stats.stats.sum.num_bytes = 0;
-      }
+      recovery_state.update_stats(
+	[num_bytes](auto &history, auto &stats) {
+	  stats.stats.sum.num_bytes += num_bytes;
+	  if (stats.stats.sum.num_bytes < 0) {
+	    stats.stats.sum.num_bytes = 0;
+	  }
+	  return false;
+	});
     }
   }
   void sub_num_bytes(int64_t num_bytes) {
     ceph_assert(_lock.is_locked_by_me());
     ceph_assert(num_bytes >= 0);
     if (num_bytes) {
-      info.stats.stats.sum.num_bytes -= num_bytes;
-      if (info.stats.stats.sum.num_bytes < 0) {
-        info.stats.stats.sum.num_bytes = 0;
-      }
+      recovery_state.update_stats(
+	[num_bytes](auto &history, auto &stats) {
+	  stats.stats.sum.num_bytes -= num_bytes;
+	  if (stats.stats.sum.num_bytes < 0) {
+	    stats.stats.sum.num_bytes = 0;
+	  }
+	  return false;
+	});
     }
   }
 
