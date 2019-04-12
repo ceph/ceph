@@ -95,6 +95,10 @@ public:
       PGPeeringEventRef on_preempt) = 0;
     virtual void cancel_remote_recovery_reservation() = 0;
 
+    virtual void schedule_event_on_commit(
+      ObjectStore::Transaction &t,
+      PGPeeringEventRef on_commit) = 0;
+
     // HB
     virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
     virtual void clear_probe_targets() = 0;
@@ -120,6 +124,7 @@ public:
     virtual void on_activate() = 0;
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
+    virtual void on_activate_committed() = 0;
 
     virtual void on_active_exit() = 0;
 
@@ -255,6 +260,17 @@ public:
 			  activation_epoch(q) {}
     void print(std::ostream *out) const {
       *out << "Activate from " << activation_epoch;
+    }
+  };
+  struct ActivateCommitted : boost::statechart::event< ActivateCommitted > {
+    epoch_t epoch;
+    epoch_t activation_epoch;
+    explicit ActivateCommitted(epoch_t e, epoch_t ae)
+      : boost::statechart::event< ActivateCommitted >(),
+	activation_epoch(ae) {}
+    void print(std::ostream *out) const {
+      *out << "ActivateCommitted from " << activation_epoch
+	   << " processed at " << epoch;
     }
   };
 public:
@@ -601,6 +617,7 @@ public:
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< MTrim >,
       boost::statechart::custom_reaction< Backfilled >,
+      boost::statechart::custom_reaction< ActivateCommitted >,
       boost::statechart::custom_reaction< AllReplicasActivated >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< DeferBackfill >,
@@ -620,6 +637,7 @@ public:
     boost::statechart::result react(const Backfilled&) {
       return discard_event();
     }
+    boost::statechart::result react(const ActivateCommitted&);
     boost::statechart::result react(const AllReplicasActivated&);
     boost::statechart::result react(const DeferRecovery& evt) {
       return discard_event();
@@ -642,6 +660,7 @@ public:
     boost::statechart::result react(const DoRecovery&) {
       return discard_event();
     }
+    void all_activated_and_committed();
   };
 
   struct Clean : boost::statechart::state< Clean, Active >, NamedState {
@@ -764,6 +783,7 @@ public:
       boost::statechart::custom_reaction< MLogRec >,
       boost::statechart::custom_reaction< MTrim >,
       boost::statechart::custom_reaction< Activate >,
+      boost::statechart::custom_reaction< ActivateCommitted >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< DeferBackfill >,
       boost::statechart::custom_reaction< UnfoundRecovery >,
@@ -780,6 +800,7 @@ public:
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const MQuery&);
     boost::statechart::result react(const Activate&);
+    boost::statechart::result react(const ActivateCommitted&);
     boost::statechart::result react(const RecoveryDone&) {
       return discard_event();
     }
@@ -1300,6 +1321,13 @@ public:
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
+
+  void activate(
+    ObjectStore::Transaction& t,
+    epoch_t activation_epoch,
+    map<int, map<spg_t,pg_query_t> >& query_map,
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
+    PeeringCtx *ctx);
 
 public:
   PeeringState(
