@@ -49,13 +49,6 @@ DISTRO_CODENAME_MAP = {
         "12.2": "sle",
         "12.3": "sle",
     },
-    "opensuse-leap": {
-        "42.1": "leap",
-        "42.2": "leap",
-        "42.3": "leap",
-        "15.0": "leap",
-        "15.1": "leap",
-    },
 }
 
 DEFAULT_OS_VERSION = dict(
@@ -80,7 +73,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap', 'sle')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'sle')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
