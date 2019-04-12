@@ -786,8 +786,9 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       int started = bc->start_pushes(i.hoid, obc, h);
       if (started < 0) {
 	bc->pushing[i.hoid].clear();
-	bc->get_parent()->primary_failed(i.hoid);
-	bc->get_parent()->primary_error(i.hoid, obc->obs.oi.version);
+	bc->get_parent()->on_failed_pull(
+	  { bc->get_parent()->whoami_shard() },
+	  i.hoid, obc->obs.oi.version);
       } else if (!started) {
 	bc->get_parent()->on_global_recover(
 	  i.hoid, i.stat, false);
@@ -2103,7 +2104,10 @@ done:
 	if (!error)
 	  get_parent()->on_global_recover(soid, stat, false);
 	else
-	  get_parent()->on_primary_error(soid, v);
+	  get_parent()->on_failed_pull(
+	    std::set<pg_shard_t>{ get_parent()->whoami_shard() },
+	    soid,
+	    v);
 	pushing.erase(soid);
       } else {
 	// This looks weird, but we erased the current peer and need to remember
@@ -2193,10 +2197,12 @@ void ReplicatedBackend::trim_pushed_data(
 void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 {
   dout(20) << __func__ << ": " << soid << " from " << from << dendl;
-  list<pg_shard_t> fl = { from };
   auto it = pulling.find(soid);
   assert(it != pulling.end());
-  get_parent()->failed_push(fl, soid, it->second.recovery_info.version);
+  get_parent()->on_failed_pull(
+    { from },
+    soid,
+    it->second.obc->obs.oi.version);
 
   clear_pull(it);
 }

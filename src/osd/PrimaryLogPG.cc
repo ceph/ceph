@@ -505,16 +505,6 @@ void PrimaryLogPG::send_message_osd_cluster(
   osd->send_message_osd_cluster(m, con);
 }
 
-void PrimaryLogPG::on_primary_error(
-  const hobject_t &oid,
-  eversion_t v)
-{
-  dout(0) << __func__ << ": oid " << oid << " version " << v << dendl;
-  primary_failed(oid);
-  primary_error(oid, v);
-  backfill_add_missing(oid, v);
-}
-
 void PrimaryLogPG::backfill_add_missing(
   const hobject_t &oid,
   eversion_t v)
@@ -11420,14 +11410,10 @@ void PrimaryLogPG::_applied_recovered_object_replica()
   }
 }
 
-void PrimaryLogPG::primary_failed(const hobject_t &soid)
-{
-  list<pg_shard_t> fl = { pg_whoami };
-  failed_push(fl, soid);
-}
-
-void PrimaryLogPG::failed_push(const list<pg_shard_t> &from,
-  const hobject_t &soid, const eversion_t &need)
+void PrimaryLogPG::on_failed_pull(
+  const set<pg_shard_t> &from,
+  const hobject_t &soid,
+  const eversion_t &v)
 {
   dout(20) << __func__ << ": " << soid << dendl;
   ceph_assert(recovering.count(soid));
@@ -11452,6 +11438,12 @@ void PrimaryLogPG::failed_push(const list<pg_shard_t> &from,
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
   finish_recovery_op(soid);  // close out this attempt,
+  finish_degraded_object(soid);
+
+  if (from.count(pg_whoami)) {
+    primary_error(soid, v);
+    backfill_add_missing(soid, v);
+  }
 }
 
 eversion_t PrimaryLogPG::pick_newest_available(const hobject_t& oid)
@@ -12558,8 +12550,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
     h);
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << soid << dendl;
-    primary_failed(soid);
-    primary_error(soid, v);
+    on_failed_pull({ pg_whoami }, soid, v);
     return 0;
   }
   return 1;
@@ -13115,10 +13106,7 @@ int PrimaryLogPG::prep_backfill_object_push(
     h);
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
-    primary_failed(oid);
-    primary_error(oid, v);
-    backfills_in_flight.erase(oid);
-    missing_loc.add_missing(oid, v, eversion_t());
+    on_failed_pull({ pg_whoami }, oid, v);
   }
   return r;
 }

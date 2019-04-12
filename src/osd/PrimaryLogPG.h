@@ -294,17 +294,18 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     bool is_delete) override;
-  void failed_push(const list<pg_shard_t> &from,
-                   const hobject_t &soid,
-                   const eversion_t &need = eversion_t()) override;
-  void primary_failed(const hobject_t &soid) override;
-  bool primary_error(const hobject_t& soid, eversion_t v) override;
+  void on_failed_pull(
+    const set<pg_shard_t> &from,
+    const hobject_t &soid,
+    const eversion_t &version) override;
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
-  void on_primary_error(const hobject_t &oid, eversion_t v) override;
-  void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
+
+  bool primary_error(const hobject_t& soid, eversion_t v);
+
+  void backfill_add_missing(const hobject_t &oid, eversion_t v);
   void remove_missing_object(const hobject_t &oid,
 			     eversion_t v,
 			     Context *on_complete) override;
@@ -1134,7 +1135,7 @@ protected:
 				  PGBackend::RecoveryHandle *h,
 				  bool *work_started);
 
-  void finish_degraded_object(const hobject_t& oid) override;
+  void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef& map) override ;
