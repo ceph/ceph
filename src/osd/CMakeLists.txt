@@ -35,6 +35,7 @@ set(osd_srcs
   OpQueueItem.cc
   PeeringState.cc
   PGStateUtils.cc
+  MissingLoc.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/objclass/class_api.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
