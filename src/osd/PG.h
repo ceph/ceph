@@ -208,8 +208,6 @@ protected:
   set<pg_shard_t> &backfill_targets;
   set<pg_shard_t> &async_recovery_targets;
   set<pg_shard_t> &might_have_unfound;
-  bool &deleting;
-  atomic<bool> &deleted;
   MissingLoc &missing_loc;
 
 public:

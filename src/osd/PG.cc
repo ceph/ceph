@@ -211,8 +211,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_targets(recovery_state.backfill_targets),
   async_recovery_targets(recovery_state.async_recovery_targets),
   might_have_unfound(recovery_state.might_have_unfound),
-  deleting(recovery_state.deleting),
-  deleted(recovery_state.deleted),
   missing_loc(recovery_state.missing_loc),
   pg_id(p),
   coll(p),
@@ -503,7 +501,7 @@ void PG::_finish_recovery(Context *c)
   lock();
   // When recovery is initiated by a repair, that flag is left on
   state_clear(PG_STATE_REPAIR);
-  if (deleting) {
+  if (recovery_state.is_deleting()) {
     unlock();
     return;
   }
@@ -898,6 +896,7 @@ void PG::shutdown()
 {
   ch->flush();
   lock();
+  recovery_state.shutdown();
   on_shutdown();
   unlock();
 }
@@ -4078,7 +4077,7 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
       dirty_info = true;
       dirty_big_info = true;
     } else {
-      deleted = true;
+      recovery_state.set_delete_complete();
 
       // cancel reserver here, since the PG is about to get deleted and the
       // exit() methods don't run when that happens.
