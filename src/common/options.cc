@@ -354,41 +354,49 @@ std::vector<Option> get_global_options() {
     Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
     .set_description("cluster fsid (uuid)")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("service"),
 
     Option("public_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
     .set_description("public-facing address to bind to")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "mds", "osd", "mgr"}),
 
     Option("public_bind_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
     .set_default(entity_addr_t())
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("mon")
     .set_description(""),
 
     Option("cluster_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
     .set_description("cluster-facing address to bind to")
     .add_service("osd")
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network"),
 
     Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Network(s) from which to choose a public address to bind to"),
 
     Option("public_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
     .add_tag("network")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Interface name(s) from which to choose an address from a public_network to bind to; public_network must also be specified.")
     .add_see_also("public_network"),
 
     Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service("osd")
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Network(s) from which to choose a cluster address to bind to"),
 
     Option("cluster_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Interface name(s) from which to choose an address from a cluster_network to bind to; cluster_network must also be specified.")
     .add_see_also("cluster_network"),
@@ -408,12 +416,14 @@ std::vector<Option> get_global_options() {
   			"resolved via DNS and all A or AAAA records are "
   			"included in the search list.")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common"),
 
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("network")
     .add_see_also("mon_host"),
@@ -422,15 +432,18 @@ std::vector<Option> get_global_options() {
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common"),
 
     Option("lockdep_force_backtrace", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("always gather current backtrace at every lock")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_see_also("lockdep"),
 
     Option("run_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/run/ceph")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path for the 'run' directory for storing pid and socket files")
     .add_service("common")
     .add_see_also("admin_socket"),
@@ -438,11 +451,13 @@ std::vector<Option> get_global_options() {
     Option("admin_socket", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_daemon_default("$run_dir/$cluster-$name.asok")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path for the runtime control socket file, used by the 'ceph daemon' command")
     .add_service("common"),
 
     Option("admin_socket_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("file mode to set for the admin socket file, e.g, '0755'")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_see_also("admin_socket"),
 
@@ -451,12 +466,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_daemon_default(true)
     .set_description("whether to daemonize (background) after startup")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also({"pid_file", "chdir"}),
 
     Option("setuser", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("uid or user name to switch to on startup")
     .set_long_description("This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -464,6 +481,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("setgroup"),
 
     Option("setgroup", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("gid or group name to switch to on startup")
     .set_long_description("This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -471,6 +489,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("setuser"),
 
     Option("setuser_match_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("if set, setuser/setgroup is condition on this path matching ownership")
     .set_long_description("If setuser or setgroup are specified, and this option is non-empty, then the uid/gid of the daemon will only be changed if the file or directory specified by this option has a matching uid and/or gid.  This exists primarily to allow switching to user ceph for OSDs to be conditional on whether the osd data contents have also been chowned after an upgrade.  This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -478,12 +497,14 @@ std::vector<Option> get_global_options() {
     .add_see_also({"setuser", "setgroup"}),
 
     Option("pid_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path to write a pid file (if any)")
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
     Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to chdir(2) to after daemonizing")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
@@ -491,12 +512,14 @@ std::vector<Option> get_global_options() {
 
     Option("fatal_signal_handlers", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("whether to register signal handlers for SIGABRT etc that dump a stack trace")
     .set_long_description("This is normally true for daemons and values for libraries.")
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
     Option("crash_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_default("/var/lib/ceph/crash")
     .set_description("Directory where crash reports are archived"),
 
@@ -509,6 +532,7 @@ std::vector<Option> get_global_options() {
 
     Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR"/erasure-code")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("directory where erasure-code plugins can be found")
     .add_service({"mon", "osd"}),
 
