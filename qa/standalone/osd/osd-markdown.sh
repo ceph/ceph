@@ -48,7 +48,7 @@ function markdown_N_impl() {
     # override any dup setting in the environment to ensure we do this
     # exactly once (modulo messenger failures, at least; we can't *actually*
     # provide exactly-once semantics for mon commands).
-    CEPH_CLI_TEST_DUP_COMMAND=0 ceph osd down 0
+    ( unset CEPH_CLI_TEST_DUP_COMMAND ; ceph osd down 0 )
     sleep $sleeptime
   done
 }
