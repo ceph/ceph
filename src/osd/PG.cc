@@ -581,343 +581,6 @@ void PG::build_might_have_unfound()
   dout(15) << __func__ << ": built " << might_have_unfound << dendl;
 }
 
-void PG::activate(ObjectStore::Transaction& t,
-		  epoch_t activation_epoch,
-		  map<int, map<spg_t,pg_query_t> >& query_map,
-		  map<int,
-		      vector<
-			pair<pg_notify_t,
-			     PastIntervals> > > *activator_map,
-                  PeeringCtx *ctx)
-{
-  ceph_assert(!is_peered());
-  ceph_assert(scrubber.callbacks.empty());
-  ceph_assert(callbacks_for_degraded_object.empty());
-
-  // twiddle pg state
-  state_clear(PG_STATE_DOWN);
-
-  send_notify = false;
-
-  if (is_primary()) {
-    // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size) {
-      ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
-	     info.last_epoch_started <= activation_epoch);
-      info.last_epoch_started = activation_epoch;
-      info.last_interval_started = info.history.same_interval_since;
-    }
-  } else if (is_acting(pg_whoami)) {
-    /* update last_epoch_started on acting replica to whatever the primary sent
-     * unless it's smaller (could happen if we are going peered rather than
-     * active, see doc/dev/osd_internals/last_epoch_started.rst) */
-    if (info.last_epoch_started < activation_epoch) {
-      info.last_epoch_started = activation_epoch;
-      info.last_interval_started = info.history.same_interval_since;
-    }
-  }
-
-  auto &missing = pg_log.get_missing();
-
-  if (is_primary()) {
-    last_update_ondisk = info.last_update;
-    min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
-  }
-  last_update_applied = info.last_update;
-  last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
-
-  need_up_thru = false;
-
-  // write pg info, log
-  dirty_info = true;
-  dirty_big_info = true; // maybe
-
-  // find out when we commit
-  t.register_on_complete(
-    new C_PG_ActivateCommitted(
-      this,
-      get_osdmap_epoch(),
-      activation_epoch));
-  
-  if (is_primary()) {
-    // initialize snap_trimq
-    if (get_osdmap()->require_osd_release < CEPH_RELEASE_MIMIC) {
-      dout(20) << "activate - purged_snaps " << info.purged_snaps
-	       << " cached_removed_snaps " << pool.cached_removed_snaps
-	       << dendl;
-      snap_trimq = pool.cached_removed_snaps;
-    } else {
-      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
-      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
-      snap_trimq.clear();
-      if (p != removed_snaps_queue.end()) {
-	dout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " removed_snaps " << p->second
-		 << dendl;
-	for (auto q : p->second) {
-	  snap_trimq.insert(q.first, q.second);
-	}
-      }
-    }
-    interval_set<snapid_t> purged;
-    purged.intersection_of(snap_trimq, info.purged_snaps);
-    snap_trimq.subtract(purged);
-
-    if (get_osdmap()->require_osd_release >= CEPH_RELEASE_MIMIC) {
-      // adjust purged_snaps: PG may have been inactive while snaps were pruned
-      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
-      // reflect only those snaps that we thought were pruned and were still in
-      // the queue.
-      info.purged_snaps.swap(purged);
-    }
-  }
-
-  // init complete pointer
-  if (missing.num_missing() == 0) {
-    dout(10) << "activate - no missing, moving last_complete " << info.last_complete 
-	     << " -> " << info.last_update << dendl;
-    info.last_complete = info.last_update;
-    info.stats.stats.sum.num_objects_missing = 0;
-    pg_log.reset_recovery_pointers();
-  } else {
-    dout(10) << "activate - not complete, " << missing << dendl;
-    info.stats.stats.sum.num_objects_missing = missing.num_missing();
-    pg_log.activate_not_complete(info);
-  }
-    
-  log_weirdness();
-
-  // if primary..
-  if (is_primary()) {
-    ceph_assert(ctx);
-    // start up replicas
-
-    ceph_assert(!acting_recovery_backfill.empty());
-    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	 i != acting_recovery_backfill.end();
-	 ++i) {
-      if (*i == pg_whoami) continue;
-      pg_shard_t peer = *i;
-      ceph_assert(peer_info.count(peer));
-      pg_info_t& pi = peer_info[peer];
-
-      dout(10) << "activate peer osd." << peer << " " << pi << dendl;
-
-      MOSDPGLog *m = 0;
-      ceph_assert(peer_missing.count(peer));
-      pg_missing_t& pm = peer_missing[peer];
-
-      bool needs_past_intervals = pi.dne();
-
-      /*
-       * cover case where peer sort order was different and
-       * last_backfill cannot be interpreted
-       */
-      bool force_restart_backfill =
-	!pi.last_backfill.is_max() &&
-	!pi.last_backfill_bitwise;
-
-      if (pi.last_update == info.last_update && !force_restart_backfill) {
-        // empty log
-	if (!pi.last_backfill.is_max())
-	  osd->clog->info() << info.pgid << " continuing backfill to osd."
-			    << peer
-			    << " from (" << pi.log_tail << "," << pi.last_update
-			    << "] " << pi.last_backfill
-			    << " to " << info.last_update;
-	if (!pi.is_empty() && activator_map) {
-	  dout(10) << "activate peer osd." << peer << " is up to date, queueing in pending_activators" << dendl;
-	  (*activator_map)[peer.osd].emplace_back(
-	      pg_notify_t(
-		peer.shard, pg_whoami.shard,
-		get_osdmap_epoch(),
-		get_osdmap_epoch(),
-		info),
-	      past_intervals);
-	} else {
-	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
-	  m = new MOSDPGLog(
-	    i->shard, pg_whoami.shard,
-	    get_osdmap_epoch(), info,
-	    last_peering_reset);
-	}
-      } else if (
-	pg_log.get_tail() > pi.last_update ||
-	pi.last_backfill == hobject_t() ||
-	force_restart_backfill ||
-	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
-	/* ^ This last case covers a situation where a replica is not contiguous
-	 * with the auth_log, but is contiguous with this replica.  Reshuffling
-	 * the active set to handle this would be tricky, so instead we just go
-	 * ahead and backfill it anyway.  This is probably preferrable in any
-	 * case since the replica in question would have to be significantly
-	 * behind.
-	 */
-	// backfill
-	osd->clog->debug() << info.pgid << " starting backfill to osd." << peer
-			 << " from (" << pi.log_tail << "," << pi.last_update
-			  << "] " << pi.last_backfill
-			 << " to " << info.last_update;
-
-	pi.last_update = info.last_update;
-	pi.last_complete = info.last_update;
-	pi.set_last_backfill(hobject_t());
-	pi.last_epoch_started = info.last_epoch_started;
-	pi.last_interval_started = info.last_interval_started;
-	pi.history = info.history;
-	pi.hit_set = info.hit_set;
-        // Save num_bytes for reservation request, can't be negative
-        peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
-        pi.stats.stats.clear();
-
-	// initialize peer with our purged_snaps.
-	pi.purged_snaps = info.purged_snaps;
-
-	m = new MOSDPGLog(
-	  i->shard, pg_whoami.shard,
-	  get_osdmap_epoch(), pi,
-	  last_peering_reset /* epoch to create pg at */);
-
-	// send some recent log, so that op dup detection works well.
-	m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
-	m->info.log_tail = m->log.tail;
-	pi.log_tail = m->log.tail;  // sigh...
-
-	pm.clear();
-      } else {
-	// catch up
-	ceph_assert(pg_log.get_tail() <= pi.last_update);
-	m = new MOSDPGLog(
-	  i->shard, pg_whoami.shard,
-	  get_osdmap_epoch(), info,
-	  last_peering_reset /* epoch to create pg at */);
-	// send new stuff to append to replicas log
-	m->log.copy_after(pg_log.get_log(), pi.last_update);
-      }
-
-      // share past_intervals if we are creating the pg on the replica
-      // based on whether our info for that peer was dne() *before*
-      // updating pi.history in the backfill block above.
-      if (m && needs_past_intervals)
-	m->past_intervals = past_intervals;
-
-      // update local version of peer's missing list!
-      if (m && pi.last_backfill != hobject_t()) {
-        for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
-             p != m->log.log.end();
-             ++p) {
-	  if (p->soid <= pi.last_backfill &&
-	      !p->is_error()) {
-	    if (perform_deletes_during_peering() && p->is_delete()) {
-	      pm.rm(p->soid, p->version);
-	    } else {
-	      pm.add_next_event(*p);
-	    }
-	  }
-	}
-      }
-
-      if (m) {
-	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
-	//m->log.print(cout);
-	osd->send_message_osd_cluster(peer.osd, m, get_osdmap_epoch());
-      }
-
-      // peer now has 
-      pi.last_update = info.last_update;
-
-      // update our missing
-      if (pm.num_missing() == 0) {
-	pi.last_complete = pi.last_update;
-        dout(10) << "activate peer osd." << peer << " " << pi << " uptodate" << dendl;
-      } else {
-        dout(10) << "activate peer osd." << peer << " " << pi << " missing " << pm << dendl;
-      }
-    }
-
-    // Set up missing_loc
-    set<pg_shard_t> complete_shards;
-    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	 i != acting_recovery_backfill.end();
-	 ++i) {
-      dout(20) << __func__ << " setting up missing_loc from shard " << *i << " " << dendl;
-      if (*i == get_primary()) {
-	missing_loc.add_active_missing(missing);
-        if (!missing.have_missing())
-          complete_shards.insert(*i);
-      } else {
-	auto peer_missing_entry = peer_missing.find(*i);
-	ceph_assert(peer_missing_entry != peer_missing.end());
-	missing_loc.add_active_missing(peer_missing_entry->second);
-        if (!peer_missing_entry->second.have_missing() &&
-	    peer_info[*i].last_backfill.is_max())
-	  complete_shards.insert(*i);
-      }
-    }
-
-    // If necessary, create might_have_unfound to help us find our unfound objects.
-    // NOTE: It's important that we build might_have_unfound before trimming the
-    // past intervals.
-    might_have_unfound.clear();
-    if (needs_recovery()) {
-      // If only one shard has missing, we do a trick to add all others as recovery
-      // source, this is considered safe since the PGLogs have been merged locally,
-      // and covers vast majority of the use cases, like one OSD/host is down for
-      // a while for hardware repairing
-      if (complete_shards.size() + 1 == acting_recovery_backfill.size()) {
-        missing_loc.add_batch_sources_info(complete_shards, ctx->handle);
-      } else {
-        missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(),
-				    ctx->handle);
-        for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-	     i != acting_recovery_backfill.end();
-	     ++i) {
-	  if (*i == pg_whoami) continue;
-	  dout(10) << __func__ << ": adding " << *i << " as a source" << dendl;
-	  ceph_assert(peer_missing.count(*i));
-	  ceph_assert(peer_info.count(*i));
-	  missing_loc.add_source_info(
-	    *i,
-	    peer_info[*i],
-	    peer_missing[*i],
-            ctx->handle);
-        }
-      }
-      for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
-	   i != peer_missing.end();
-	   ++i) {
-	if (is_acting_recovery_backfill(i->first))
-	  continue;
-	ceph_assert(peer_info.count(i->first));
-	search_for_missing(
-	  peer_info[i->first],
-	  i->second,
-	  i->first,
-	  ctx);
-      }
-
-      build_might_have_unfound();
-
-      // Always call now so _update_calc_stats() will be accurate
-      discover_all_missing(query_map);
-    }
-
-    // num_objects_degraded if calculated should reflect this too, unless no
-    // missing and we are about to go clean.
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
-      state_set(PG_STATE_UNDERSIZED);
-    }
-
-    state_set(PG_STATE_ACTIVATING);
-    release_pg_backoffs();
-    projected_last_update = info.last_update;
-  }
-  if (acting.size() >= pool.info.min_size) {
-    PGLogEntryHandler handler{this, &t};
-    pg_log.roll_forward(&handler);
-  }
-}
-
 bool PG::op_has_sufficient_caps(OpRequestRef& op)
 {
   // only check MOSDOp
@@ -959,89 +622,6 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 	   << " -> " << (cap ? "yes" : "NO")
 	   << dendl;
   return cap;
-}
-
-void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
-{
-  lock();
-  if (pg_has_reset_since(epoch)) {
-    dout(10) << "_activate_committed " << epoch
-	     << ", that was an old interval" << dendl;
-  } else if (is_primary()) {
-    ceph_assert(!peer_activated.count(pg_whoami));
-    peer_activated.insert(pg_whoami);
-    dout(10) << "_activate_committed " << epoch
-	     << " peer_activated now " << peer_activated
-	     << " last_interval_started " << info.history.last_interval_started
-	     << " last_epoch_started " << info.history.last_epoch_started
-	     << " same_interval_since " << info.history.same_interval_since << dendl;
-    ceph_assert(!acting_recovery_backfill.empty());
-    if (peer_activated.size() == acting_recovery_backfill.size())
-      all_activated_and_committed();
-  } else {
-    dout(10) << "_activate_committed " << epoch << " telling primary" << dendl;
-    MOSDPGInfo *m = new MOSDPGInfo(epoch);
-    pg_notify_t i = pg_notify_t(
-      get_primary().shard, pg_whoami.shard,
-      get_osdmap_epoch(),
-      get_osdmap_epoch(),
-      info);
-
-    i.info.history.last_epoch_started = activation_epoch;
-    i.info.history.last_interval_started = i.info.history.same_interval_since;
-    if (acting.size() >= pool.info.min_size) {
-      state_set(PG_STATE_ACTIVE);
-    } else {
-      state_set(PG_STATE_PEERED);
-    }
-
-    m->pg_list.emplace_back(i, PastIntervals());
-    osd->send_message_osd_cluster(get_primary().osd, m, get_osdmap_epoch());
-
-    // waiters
-    if (recovery_state.needs_flush() == 0) {
-      requeue_ops(waiting_for_peered);
-    } else if (!waiting_for_peered.empty()) {
-      dout(10) << __func__ << " flushes in progress, moving "
-	       << waiting_for_peered.size() << " items to waiting_for_flush"
-	       << dendl;
-      ceph_assert(waiting_for_flush.empty());
-      waiting_for_flush.swap(waiting_for_peered);
-    }
-  }
-
-  ceph_assert(!dirty_info);
-
-  unlock();
-}
-
-/*
- * update info.history.last_epoch_started ONLY after we and all
- * replicas have activated AND committed the activate transaction
- * (i.e. the peering results are stable on disk).
- */
-void PG::all_activated_and_committed()
-{
-  dout(10) << "all_activated_and_committed" << dendl;
-  ceph_assert(is_primary());
-  ceph_assert(peer_activated.size() == acting_recovery_backfill.size());
-  ceph_assert(!acting_recovery_backfill.empty());
-  ceph_assert(blocked_by.empty());
-
-  // Degraded?
-  _update_calc_stats();
-  if (info.stats.stats.sum.num_objects_degraded) {
-    state_set(PG_STATE_DEGRADED);
-  } else {
-    state_clear(PG_STATE_DEGRADED);
-  }
-
-  queue_peering_event(
-    PGPeeringEventRef(
-      std::make_shared<PGPeeringEvent>(
-        get_osdmap_epoch(),
-        get_osdmap_epoch(),
-        PeeringState::AllReplicasActivated())));
 }
 
 bool PG::requeue_scrub(bool high_priority)
@@ -3130,6 +2710,13 @@ void PG::cancel_remote_recovery_reservation() {
     pg_id);
 }
 
+void PG::schedule_event_on_commit(
+  ObjectStore::Transaction &t,
+  PGPeeringEventRef on_commit)
+{
+  t.register_on_commit(new QueuePeeringEvt(this, on_commit));
+}
+
 void PG::on_active_exit()
 {
   backfill_reserving = false;
@@ -3258,6 +2845,21 @@ void PG::on_recovery_reserved()
   queue_recovery();
 }
 
+void PG::on_activate_committed()
+{
+  if (!is_primary()) {
+    // waiters
+    if (recovery_state.needs_flush() == 0) {
+      requeue_ops(waiting_for_peered);
+    } else if (!waiting_for_peered.empty()) {
+      dout(10) << __func__ << " flushes in progress, moving "
+	       << waiting_for_peered.size() << " items to waiting_for_flush"
+	       << dendl;
+      ceph_assert(waiting_for_flush.empty());
+      waiting_for_flush.swap(waiting_for_peered);
+    }
+  }
+}
 
 void PG::do_replica_scrub_map(OpRequestRef op)
 {
