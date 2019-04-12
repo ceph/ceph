@@ -19,7 +19,6 @@
 #include "krb/KrbSessionHandler.hpp"
 #endif
 #include "none/AuthNoneSessionHandler.h"
-#include "unknown/AuthUnknownSessionHandler.h"
 
 #include "common/ceph_crypto.h"
 #define dout_subsys ceph_subsys_auth
@@ -44,8 +43,6 @@ AuthSessionHandler *get_auth_session_handler(
     return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler();
-  case CEPH_AUTH_UNKNOWN:
-    return new AuthUnknownSessionHandler();
 #ifdef HAVE_GSSAPI
   case CEPH_AUTH_GSS: 
     return new KrbSessionHandler();
