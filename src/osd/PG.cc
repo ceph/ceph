@@ -579,7 +579,7 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 bool PG::search_for_missing(
   const pg_info_t &oinfo, const pg_missing_t &omissing,
   pg_shard_t from,
-  RecoveryCtx *ctx)
+  PeeringCtx *ctx)
 {
   uint64_t num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
@@ -1700,7 +1700,7 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
  *     a new pg info (not just here, when recovery finishes)
  *  2) check whether anything in want_acting went down on each new map
  *     (and, if so, calculate a new want_acting)
- *  3) remove the assertion in PG::RecoveryState::Active::react(const AdvMap)
+ *  3) remove the assertion in PG::PeeringState::Active::react(const AdvMap)
  * TODO!
  */
 bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
@@ -1864,7 +1864,7 @@ void PG::activate(ObjectStore::Transaction& t,
 		      vector<
 			pair<pg_notify_t,
 			     PastIntervals> > > *activator_map,
-                  RecoveryCtx *ctx)
+                  PeeringCtx *ctx)
 {
   ceph_assert(!is_peered());
   ceph_assert(scrubber.callbacks.empty());
@@ -2758,7 +2758,7 @@ void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transac
   write_if_dirty(*t);
 }
 
-void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
+void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
 		    unsigned split_bits,
 		    const pg_merge_meta_t& last_pg_merge_meta)
 {
@@ -4133,7 +4133,7 @@ void PG::read_state(ObjectStore *store)
       set_role(-1);
   }
 
-  PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
+  PG::PeeringCtx rctx(0, 0, 0, new ObjectStore::Transaction);
   handle_initialize(&rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.
@@ -6134,7 +6134,7 @@ void PG::fulfill_log(
   osd->send_message_osd_cluster(mlog, con.get());
 }
 
-void PG::fulfill_query(const MQuery& query, RecoveryCtx *rctx)
+void PG::fulfill_query(const MQuery& query, PeeringCtx *rctx)
 {
   if (query.query.type == pg_query_t::INFO) {
     pair<pg_shard_t, pg_info_t> notify_info;
@@ -6801,7 +6801,7 @@ void PG::take_waiters()
   requeue_map_waiters();
 }
 
-void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
+void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx *rctx)
 {
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
@@ -6831,7 +6831,7 @@ void PG::queue_null(epoch_t msg_epoch,
 					 NullEvt())));
 }
 
-void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
+void PG::find_unfound(epoch_t queued, PeeringCtx *rctx)
 {
   /*
     * if we couldn't start any recovery ops and things are still
@@ -6872,7 +6872,7 @@ void PG::handle_advance_map(
   OSDMapRef osdmap, OSDMapRef lastmap,
   vector<int>& newup, int up_primary,
   vector<int>& newacting, int acting_primary,
-  RecoveryCtx *rctx)
+  PeeringCtx *rctx)
 {
   ceph_assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   ceph_assert(lastmap == osdmap_ref);
@@ -6896,7 +6896,7 @@ void PG::handle_advance_map(
   last_require_osd_release = osdmap->require_osd_release;
 }
 
-void PG::handle_activate_map(RecoveryCtx *rctx)
+void PG::handle_activate_map(PeeringCtx *rctx)
 {
   dout(10) << "handle_activate_map " << dendl;
   ActMap evt;
@@ -6918,7 +6918,7 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   write_if_dirty(*rctx->transaction);
 }
 
-void PG::handle_initialize(RecoveryCtx *rctx)
+void PG::handle_initialize(PeeringCtx *rctx)
 {
   dout(10) << __func__ << dendl;
   Initialize evt;
@@ -7100,80 +7100,80 @@ int PG::pg_stat_adjust(osd_stat_t *ns)
 
 /*------------ Recovery State Machine----------------*/
 #undef dout_prefix
-#define dout_prefix (context< RecoveryMachine >().pg->gen_prefix(*_dout) \
+#define dout_prefix (context< PeeringMachine >().pg->gen_prefix(*_dout) \
 		     << "state<" << get_state_name() << ">: ")
 
 /*------Crashed-------*/
-PG::RecoveryState::Crashed::Crashed(my_context ctx)
+PG::PeeringState::Crashed::Crashed(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Crashed")
+    NamedState(context< PeeringMachine >().pg, "Crashed")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
   ceph_abort_msg("we got a bad state machine event");
 }
 
 
 /*------Initial-------*/
-PG::RecoveryState::Initial::Initial(my_context ctx)
+PG::PeeringState::Initial::Initial(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Initial")
+    NamedState(context< PeeringMachine >().pg, "Initial")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
-boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
+boost::statechart::result PG::PeeringState::Initial::react(const MNotifyRec& notify)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->proc_replica_info(
     notify.from, notify.notify.info, notify.notify.epoch_sent);
   pg->set_last_peering_reset();
   return transit< Primary >();
 }
 
-boost::statechart::result PG::RecoveryState::Initial::react(const MInfoRec& i)
+boost::statechart::result PG::PeeringState::Initial::react(const MInfoRec& i)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-boost::statechart::result PG::RecoveryState::Initial::react(const MLogRec& i)
+boost::statechart::result PG::PeeringState::Initial::react(const MLogRec& i)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->is_primary());
   post_event(i);
   return transit< Stray >();
 }
 
-void PG::RecoveryState::Initial::exit()
+void PG::PeeringState::Initial::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_initial_latency, dur);
 }
 
 /*------Started-------*/
-PG::RecoveryState::Started::Started(my_context ctx)
+PG::PeeringState::Started::Started(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started")
+    NamedState(context< PeeringMachine >().pg, "Started")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
 boost::statechart::result
-PG::RecoveryState::Started::react(const IntervalFlush&)
+PG::PeeringState::Started::react(const IntervalFlush&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Ending blocked outgoing recovery messages" << dendl;
-  context< RecoveryMachine >().pg->recovery_state.end_block_outgoing();
+  context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap)
+boost::statechart::result PG::PeeringState::Started::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Started advmap" << dendl;
   pg->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (pg->should_restart_peering(
@@ -7192,7 +7192,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::Started::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -7201,38 +7201,38 @@ boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
   return discard_event();
 }
 
-void PG::RecoveryState::Started::exit()
+void PG::PeeringState::Started::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_started_latency, dur);
 }
 
 /*--------Reset---------*/
-PG::RecoveryState::Reset::Reset(my_context ctx)
+PG::PeeringState::Reset::Reset(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Reset")
+    NamedState(context< PeeringMachine >().pg, "Reset")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
 }
 
 boost::statechart::result
-PG::RecoveryState::Reset::react(const IntervalFlush&)
+PG::PeeringState::Reset::react(const IntervalFlush&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Ending blocked outgoing recovery messages" << dendl;
-  context< RecoveryMachine >().pg->recovery_state.end_block_outgoing();
+  context< PeeringMachine >().pg->recovery_state.end_block_outgoing();
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
+boost::statechart::result PG::PeeringState::Reset::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Reset advmap" << dendl;
 
   pg->check_full_transition(advmap.lastmap, advmap.osdmap);
@@ -7250,18 +7250,18 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
       advmap.lastmap,
       advmap.newup, advmap.up_primary,
       advmap.newacting, advmap.acting_primary,
-      context< RecoveryMachine >().get_cur_transaction());
+      context< PeeringMachine >().get_cur_transaction());
   }
   pg->remove_down_peer_info(advmap.osdmap);
   pg->check_past_interval_bounds();
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
+boost::statechart::result PG::PeeringState::Reset::react(const ActMap&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->should_send_notify() && pg->get_primary().osd >= 0) {
-    context< RecoveryMachine >().send_notify(
+    context< PeeringMachine >().send_notify(
       pg->get_primary(),
       pg_notify_t(
 	pg->get_primary().shard, pg->pg_whoami.shard,
@@ -7277,7 +7277,7 @@ boost::statechart::result PG::RecoveryState::Reset::react(const ActMap&)
   return transit< Started >();
 }
 
-boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::Reset::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -7286,22 +7286,22 @@ boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
   return discard_event();
 }
 
-void PG::RecoveryState::Reset::exit()
+void PG::PeeringState::Reset::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_reset_latency, dur);
 }
 
 /*-------Start---------*/
-PG::RecoveryState::Start::Start(my_context ctx)
+PG::PeeringState::Start::Start(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Start")
+    NamedState(context< PeeringMachine >().pg, "Start")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->is_primary()) {
     ldout(pg->cct, 1) << "transitioning to Primary" << dendl;
     post_event(MakePrimary());
@@ -7311,21 +7311,21 @@ PG::RecoveryState::Start::Start(my_context ctx)
   }
 }
 
-void PG::RecoveryState::Start::exit()
+void PG::PeeringState::Start::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_start_latency, dur);
 }
 
 /*---------Primary--------*/
-PG::RecoveryState::Primary::Primary(my_context ctx)
+PG::PeeringState::Primary::Primary(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(pg->want_acting.empty());
 
   // set CREATING bit until we have peered for the first time.
@@ -7348,44 +7348,44 @@ PG::RecoveryState::Primary::Primary(my_context ctx)
   }
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& notevt)
+boost::statechart::result PG::PeeringState::Primary::react(const MNotifyRec& notevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
   pg->proc_replica_info(
     notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
+boost::statechart::result PG::PeeringState::Primary::react(const ActMap&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 7) << "handle ActMap primary" << dendl;
   pg->publish_stats_to_osd();
   pg->take_waiters();
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(
+boost::statechart::result PG::PeeringState::Primary::react(
   const SetForceRecovery&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->set_force_recovery(true);
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(
+boost::statechart::result PG::PeeringState::Primary::react(
   const UnsetForceRecovery&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->set_force_recovery(false);
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(
+boost::statechart::result PG::PeeringState::Primary::react(
   const RequestScrub& evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->is_primary()) {
     pg->unreg_next_scrub();
     pg->scrubber.must_scrub = true;
@@ -7397,26 +7397,26 @@ boost::statechart::result PG::RecoveryState::Primary::react(
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(
+boost::statechart::result PG::PeeringState::Primary::react(
   const SetForceBackfill&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->set_force_backfill(true);
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Primary::react(
+boost::statechart::result PG::PeeringState::Primary::react(
   const UnsetForceBackfill&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->set_force_backfill(false);
   return discard_event();
 }
 
-void PG::RecoveryState::Primary::exit()
+void PG::PeeringState::Primary::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
@@ -7425,23 +7425,23 @@ void PG::RecoveryState::Primary::exit()
 }
 
 /*---------Peering--------*/
-PG::RecoveryState::Peering::Peering(my_context ctx)
+PG::PeeringState::Peering::Peering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering"),
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering"),
     history_les_bound(false)
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->is_peered());
   ceph_assert(!pg->is_peering());
   ceph_assert(pg->is_primary());
   pg->state_set(PG_STATE_PEERING);
 }
 
-boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap) 
+boost::statechart::result PG::PeeringState::Peering::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Peering advmap" << dendl;
   if (prior_set.affected_by_map(*(advmap.osdmap), pg)) {
     ldout(pg->cct, 1) << "Peering, affected_by_map, going to Reset" << dendl;
@@ -7454,9 +7454,9 @@ boost::statechart::result PG::RecoveryState::Peering::react(const AdvMap& advmap
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::Peering::react(const QueryState& q)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -7507,11 +7507,11 @@ boost::statechart::result PG::RecoveryState::Peering::react(const QueryState& q)
   return forward_event();
 }
 
-void PG::RecoveryState::Peering::exit()
+void PG::PeeringState::Peering::exit()
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Leaving Peering" << dendl;
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  context< PeeringMachine >().log_exit(state_name, enter_time);
   pg->state_clear(PG_STATE_PEERING);
   pg->clear_probe_targets();
 
@@ -7521,12 +7521,12 @@ void PG::RecoveryState::Peering::exit()
 
 
 /*------Backfilling-------*/
-PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
+PG::PeeringState::Backfilling::Backfilling(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/Backfilling")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Backfilling")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->backfill_reserved = true;
   pg->queue_recovery();
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
@@ -7535,9 +7535,9 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-void PG::RecoveryState::Backfilling::backfill_release_reservations()
+void PG::PeeringState::Backfilling::backfill_release_reservations()
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
        it != pg->backfill_targets.end();
@@ -7556,9 +7556,9 @@ void PG::RecoveryState::Backfilling::backfill_release_reservations()
   }
 }
 
-void PG::RecoveryState::Backfilling::cancel_backfill()
+void PG::PeeringState::Backfilling::cancel_backfill()
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   backfill_release_reservations();
   if (!pg->waiting_on_backfill.empty()) {
     pg->waiting_on_backfill.clear();
@@ -7567,16 +7567,16 @@ void PG::RecoveryState::Backfilling::cancel_backfill()
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const Backfilled &c)
+PG::PeeringState::Backfilling::react(const Backfilled &c)
 {
   backfill_release_reservations();
   return transit<Recovered>();
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
+PG::PeeringState::Backfilling::react(const DeferBackfill &c)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "defer backfill, retry delay " << c.delay << dendl;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_BACKFILLING);
@@ -7586,9 +7586,9 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
+PG::PeeringState::Backfilling::react(const UnfoundBackfill &c)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_BACKFILL_UNFOUND);
   pg->state_clear(PG_STATE_BACKFILLING);
@@ -7597,9 +7597,9 @@ PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
+PG::PeeringState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
@@ -7608,9 +7608,9 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 }
 
 boost::statechart::result
-PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
+PG::PeeringState::Backfilling::react(const RemoteReservationRevoked &)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   cancel_backfill();
   if (pg->needs_backfill()) {
@@ -7621,10 +7621,10 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
   }
 }
 
-void PG::RecoveryState::Backfilling::exit()
+void PG::PeeringState::Backfilling::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_BACKFILLING);
@@ -7635,22 +7635,22 @@ void PG::RecoveryState::Backfilling::exit()
 
 /*--WaitRemoteBackfillReserved--*/
 
-PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
+PG::PeeringState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/WaitRemoteBackfillReserved"),
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitRemoteBackfillReserved"),
     backfill_osd_it(context< Active >().remote_shards_to_reserve_backfill.begin())
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   pg->publish_stats_to_osd();
   post_event(RemoteBackfillReserved());
 }
 
 boost::statechart::result
-PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &evt)
+PG::PeeringState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   int64_t num_bytes = pg->info.stats.stats.sum.num_bytes;
   ldout(pg->cct, 10) << __func__ << " num_bytes " << num_bytes << dendl;
@@ -7678,17 +7678,17 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
   return discard_event();
 }
 
-void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
+void PG::PeeringState::WaitRemoteBackfillReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitremotebackfillreserved_latency, dur);
 }
 
-void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
+void PG::PeeringState::WaitRemoteBackfillReserved::retry()
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   // Send CANCEL to all previously acquired reservations
@@ -7719,26 +7719,26 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
 }
 
 boost::statechart::result
-PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
+PG::PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
 {
   retry();
   return transit<NotBackfilling>();
 }
 
 boost::statechart::result
-PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationRevoked &evt)
+PG::PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRevoked &evt)
 {
   retry();
   return transit<NotBackfilling>();
 }
 
 /*--WaitLocalBackfillReserved--*/
-PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ctx)
+PG::PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/WaitLocalBackfillReserved")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitLocalBackfillReserved")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   pg->osd->local_reserver.request_reservation(
     pg->info.pgid,
@@ -7752,102 +7752,102 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
   pg->publish_stats_to_osd();
 }
 
-void PG::RecoveryState::WaitLocalBackfillReserved::exit()
+void PG::PeeringState::WaitLocalBackfillReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitlocalbackfillreserved_latency, dur);
 }
 
 /*----NotBackfilling------*/
-PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
+PG::PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/NotBackfilling")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/NotBackfilling")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_REPAIR);
   pg->publish_stats_to_osd();
 }
 
 boost::statechart::result
-PG::RecoveryState::NotBackfilling::react(const RemoteBackfillReserved &evt)
+PG::PeeringState::NotBackfilling::react(const RemoteBackfillReserved &evt)
 {
   return discard_event();
 }
 
 boost::statechart::result
-PG::RecoveryState::NotBackfilling::react(const RemoteReservationRejected &evt)
+PG::PeeringState::NotBackfilling::react(const RemoteReservationRejected &evt)
 {
   return discard_event();
 }
 
-void PG::RecoveryState::NotBackfilling::exit()
+void PG::PeeringState::NotBackfilling::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_BACKFILL_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
 
 /*----NotRecovering------*/
-PG::RecoveryState::NotRecovering::NotRecovering(my_context ctx)
+PG::PeeringState::NotRecovering::NotRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/NotRecovering")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/NotRecovering")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->publish_stats_to_osd();
 }
 
-void PG::RecoveryState::NotRecovering::exit()
+void PG::PeeringState::NotRecovering::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
 }
 
 /*---RepNotRecovering----*/
-PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
+PG::PeeringState::RepNotRecovering::RepNotRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepNotRecovering")
+    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepNotRecovering")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
 boost::statechart::result
-PG::RecoveryState::RepNotRecovering::react(const RejectRemoteReservation &evt)
+PG::PeeringState::RepNotRecovering::react(const RejectRemoteReservation &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->reject_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }
 
-void PG::RecoveryState::RepNotRecovering::exit()
+void PG::PeeringState::RepNotRecovering::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_repnotrecovering_latency, dur);
 }
 
 /*---RepWaitRecoveryReserved--*/
-PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
+PG::PeeringState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepWaitRecoveryReserved")
+    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepWaitRecoveryReserved")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
+PG::PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
     new MRecoveryReserve(
@@ -7859,35 +7859,35 @@ PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitRecoveryReserved::react(
+PG::PeeringState::RepWaitRecoveryReserved::react(
   const RemoteReservationCanceled &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
 
-void PG::RecoveryState::RepWaitRecoveryReserved::exit()
+void PG::PeeringState::RepWaitRecoveryReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_repwaitrecoveryreserved_latency, dur);
 }
 
 /*-RepWaitBackfillReserved*/
-PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
+PG::PeeringState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepWaitBackfillReserved")
+    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepWaitBackfillReserved")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
 boost::statechart::result
-PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
+PG::PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
@@ -7964,9 +7964,9 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
+PG::PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   // fall back to a local reckoning of priority of primary doesn't pass one
   // (pre-mimic compat)
@@ -7990,18 +7990,18 @@ PG::RecoveryState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
   return transit<RepWaitRecoveryReserved>();
 }
 
-void PG::RecoveryState::RepWaitBackfillReserved::exit()
+void PG::PeeringState::RepWaitBackfillReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_repwaitbackfillreserved_latency, dur);
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
+PG::PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->osd->send_message_osd_cluster(
       pg->primary.osd,
@@ -8014,47 +8014,47 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(
+PG::PeeringState::RepWaitBackfillReserved::react(
   const RejectRemoteReservation &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->reject_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(
+PG::PeeringState::RepWaitBackfillReserved::react(
   const RemoteReservationRejected &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
 
 boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(
+PG::PeeringState::RepWaitBackfillReserved::react(
   const RemoteReservationCanceled &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
 
 /*---RepRecovering-------*/
-PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
+PG::PeeringState::RepRecovering::RepRecovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive/RepRecovering")
+    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive/RepRecovering")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
 boost::statechart::result
-PG::RecoveryState::RepRecovering::react(const RemoteRecoveryPreempted &)
+PG::PeeringState::RepRecovering::react(const RemoteRecoveryPreempted &)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
@@ -8067,9 +8067,9 @@ PG::RecoveryState::RepRecovering::react(const RemoteRecoveryPreempted &)
 }
 
 boost::statechart::result
-PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
+PG::PeeringState::RepRecovering::react(const BackfillTooFull &)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
@@ -8082,9 +8082,9 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 }
 
 boost::statechart::result
-PG::RecoveryState::RepRecovering::react(const RemoteBackfillPreempted &)
+PG::PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
@@ -8096,10 +8096,10 @@ PG::RecoveryState::RepRecovering::react(const RemoteBackfillPreempted &)
   return discard_event();
 }
 
-void PG::RecoveryState::RepRecovering::exit()
+void PG::PeeringState::RepRecovering::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
@@ -8107,27 +8107,27 @@ void PG::RecoveryState::RepRecovering::exit()
 }
 
 /*------Activating--------*/
-PG::RecoveryState::Activating::Activating(my_context ctx)
+PG::PeeringState::Activating::Activating(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/Activating")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Activating")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
-void PG::RecoveryState::Activating::exit()
+void PG::PeeringState::Activating::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_activating_latency, dur);
 }
 
-PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
+PG::PeeringState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/WaitLocalRecoveryReserved")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitLocalRecoveryReserved")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
 
   // Make sure all nodes that part of the recovery aren't full
   if (!pg->cct->_conf->osd_debug_skip_full_check_in_recovery &&
@@ -8151,34 +8151,34 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
 }
 
 boost::statechart::result
-PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
+PG::PeeringState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_set(PG_STATE_RECOVERY_TOOFULL);
   pg->schedule_recovery_retry(pg->cct->_conf->osd_recovery_retry_interval);
   return transit<NotRecovering>();
 }
 
-void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
+void PG::PeeringState::WaitLocalRecoveryReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitlocalrecoveryreserved_latency, dur);
 }
 
-PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
+PG::PeeringState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
     remote_recovery_reservation_it(context< Active >().remote_shards_to_reserve_recovery.begin())
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
   post_event(RemoteRecoveryReserved());
 }
 
 boost::statechart::result
-PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &evt) {
-  PG *pg = context< RecoveryMachine >().pg;
+PG::PeeringState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &evt) {
+  PG *pg = context< PeeringMachine >().pg;
 
   if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
     ceph_assert(*remote_recovery_reservation_it != pg->pg_whoami);
@@ -8200,21 +8200,21 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
   return discard_event();
 }
 
-void PG::RecoveryState::WaitRemoteRecoveryReserved::exit()
+void PG::PeeringState::WaitRemoteRecoveryReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitremoterecoveryreserved_latency, dur);
 }
 
-PG::RecoveryState::Recovering::Recovering(my_context ctx)
+PG::PeeringState::Recovering::Recovering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/Recovering")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Recovering")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERING);
@@ -8223,9 +8223,9 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   pg->queue_recovery();
 }
 
-void PG::RecoveryState::Recovering::release_reservations(bool cancel)
+void PG::PeeringState::Recovering::release_reservations(bool cancel)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(cancel || !pg->pg_log.get_missing().have_missing());
 
   // release remote reservations
@@ -8249,9 +8249,9 @@ void PG::RecoveryState::Recovering::release_reservations(bool cancel)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
+PG::PeeringState::Recovering::react(const AllReplicasRecovered &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -8259,9 +8259,9 @@ PG::RecoveryState::Recovering::react(const AllReplicasRecovered &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
+PG::PeeringState::Recovering::react(const RequestBackfill &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_FORCED_RECOVERY);
   release_reservations();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -8271,9 +8271,9 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
+PG::PeeringState::Recovering::react(const DeferRecovery &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (!pg->state_test(PG_STATE_RECOVERING)) {
     // we may have finished recovery and have an AllReplicasRecovered
     // event queued to move us to the next state.
@@ -8289,9 +8289,9 @@ PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 }
 
 boost::statechart::result
-PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
+PG::PeeringState::Recovering::react(const UnfoundRecovery &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
   pg->state_set(PG_STATE_RECOVERY_UNFOUND);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
@@ -8299,24 +8299,24 @@ PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
   return transit<NotRecovering>();
 }
 
-void PG::RecoveryState::Recovering::exit()
+void PG::PeeringState::Recovering::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->state_clear(PG_STATE_RECOVERING);
   pg->osd->recoverystate_perf->tinc(rs_recovering_latency, dur);
 }
 
-PG::RecoveryState::Recovered::Recovered(my_context ctx)
+PG::PeeringState::Recovered::Recovered(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/Recovered")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Recovered")
 {
   pg_shard_t auth_log_shard;
 
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   ceph_assert(!pg->needs_recovery());
 
@@ -8343,35 +8343,35 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
     post_event(GoClean());
 }
 
-void PG::RecoveryState::Recovered::exit()
+void PG::PeeringState::Recovered::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_recovered_latency, dur);
 }
 
-PG::RecoveryState::Clean::Clean(my_context ctx)
+PG::PeeringState::Clean::Clean(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active/Clean")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active/Clean")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   if (pg->info.last_complete != pg->info.last_update) {
     ceph_abort();
   }
   Context *c = pg->finish_recovery();
-  context< RecoveryMachine >().get_cur_transaction()->register_on_commit(c);
+  context< PeeringMachine >().get_cur_transaction()->register_on_commit(c);
 
   pg->try_mark_clean();
 }
 
-void PG::RecoveryState::Clean::exit()
+void PG::PeeringState::Clean::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->state_clear(PG_STATE_CLEAN);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
@@ -8394,33 +8394,33 @@ set<pg_shard_t> unique_osd_shard_set(const pg_shard_t & skip, const T &in)
 }
 
 /*---------Active---------*/
-PG::RecoveryState::Active::Active(my_context ctx)
+PG::PeeringState::Active::Active(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Active"),
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Active"),
     remote_shards_to_reserve_recovery(
       unique_osd_shard_set(
-	context< RecoveryMachine >().pg->pg_whoami,
-	context< RecoveryMachine >().pg->acting_recovery_backfill)),
+	context< PeeringMachine >().pg->pg_whoami,
+	context< PeeringMachine >().pg->acting_recovery_backfill)),
     remote_shards_to_reserve_backfill(
       unique_osd_shard_set(
-	context< RecoveryMachine >().pg->pg_whoami,
-	context< RecoveryMachine >().pg->backfill_targets)),
+	context< PeeringMachine >().pg->pg_whoami,
+	context< PeeringMachine >().pg->backfill_targets)),
     all_replicas_activated(false)
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   ceph_assert(!pg->backfill_reserving);
   ceph_assert(!pg->backfill_reserved);
   ceph_assert(pg->is_primary());
   ldout(pg->cct, 10) << "In Active, about to call activate" << dendl;
-  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
-  pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
+  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
+  pg->activate(*context< PeeringMachine >().get_cur_transaction(),
 	       pg->get_osdmap_epoch(),
-	       *context< RecoveryMachine >().get_query_map(),
-	       context< RecoveryMachine >().get_info_map(),
-	       context< RecoveryMachine >().get_recovery_ctx());
+	       *context< PeeringMachine >().get_query_map(),
+	       context< PeeringMachine >().get_info_map(),
+	       context< PeeringMachine >().get_recovery_ctx());
 
   // everyone has to commit/ack before we are truly active
   pg->blocked_by.clear();
@@ -8435,9 +8435,9 @@ PG::RecoveryState::Active::Active(my_context ctx)
   ldout(pg->cct, 10) << "Activate Finished" << dendl;
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
+boost::statechart::result PG::PeeringState::Active::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
@@ -8572,15 +8572,15 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
   return forward_event();
 }
     
-boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
+boost::statechart::result PG::PeeringState::Active::react(const ActMap&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Active: handling ActMap" << dendl;
   ceph_assert(pg->is_primary());
 
   if (pg->have_unfound()) {
     // object may have become unfound
-    pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
+    pg->discover_all_missing(*context< PeeringMachine >().get_query_map());
   }
 
   if (pg->cct->_conf->osd_check_for_log_corruption)
@@ -8613,9 +8613,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& notevt)
+boost::statechart::result PG::PeeringState::Active::react(const MNotifyRec& notevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(pg->is_primary());
   if (pg->peer_info.count(notevt.from)) {
     ldout(pg->cct, 10) << "Active: got notify from " << notevt.from
@@ -8632,15 +8632,15 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
     pg->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     if (pg->have_unfound() || (pg->is_degraded() && pg->might_have_unfound.count(notevt.from))) {
-      pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
+      pg->discover_all_missing(*context< PeeringMachine >().get_query_map());
     }
   }
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const MTrim& trim)
+boost::statechart::result PG::PeeringState::Active::react(const MTrim& trim)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(pg->is_primary());
 
   // peer is informing us of their last_complete_ondisk
@@ -8652,9 +8652,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const MTrim& trim)
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
+boost::statechart::result PG::PeeringState::Active::react(const MInfoRec& infoevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(pg->is_primary());
 
   ceph_assert(!pg->acting_recovery_backfill.empty());
@@ -8675,9 +8675,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::Active::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
   pg->proc_replica_log(
@@ -8686,7 +8686,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
     pg->peer_info[logevt.from],
     pg->peer_missing[logevt.from],
     logevt.from,
-    context< RecoveryMachine >().get_recovery_ctx());
+    context< PeeringMachine >().get_recovery_ctx());
   // If there are missing AND we are "fully" active then start recovery now
   if (got_missing && pg->state_test(PG_STATE_ACTIVE)) {
     post_event(DoRecovery());
@@ -8694,9 +8694,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::Active::react(const QueryState& q)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -8754,9 +8754,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActivated &evt)
+boost::statechart::result PG::PeeringState::Active::react(const AllReplicasActivated &evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg_t pgid = pg->info.pgid.pgid;
 
   all_replicas_activated = true;
@@ -8816,10 +8816,10 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
   return discard_event();
 }
 
-void PG::RecoveryState::Active::exit()
+void PG::PeeringState::Active::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
   pg->blocked_by.clear();
@@ -8838,62 +8838,62 @@ void PG::RecoveryState::Active::exit()
 }
 
 /*------ReplicaActive-----*/
-PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
+PG::PeeringState::ReplicaActive::ReplicaActive(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ReplicaActive")
+    NamedState(context< PeeringMachine >().pg, "Started/ReplicaActive")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
+  PG *pg = context< PeeringMachine >().pg;
+  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
 }
 
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(
+boost::statechart::result PG::PeeringState::ReplicaActive::react(
   const Activate& actevt) {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "In ReplicaActive, about to call activate" << dendl;
   map<int, map<spg_t, pg_query_t> > query_map;
-  pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
+  pg->activate(*context< PeeringMachine >().get_cur_transaction(),
 	       actevt.activation_epoch,
 	       query_map, NULL, NULL);
   ldout(pg->cct, 10) << "Activate Finished" << dendl;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MInfoRec& infoevt)
+boost::statechart::result PG::PeeringState::ReplicaActive::react(const MInfoRec& infoevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->proc_primary_info(*context<RecoveryMachine>().get_cur_transaction(),
+  PG *pg = context< PeeringMachine >().pg;
+  pg->proc_primary_info(*context<PeeringMachine>().get_cur_transaction(),
 			infoevt.info);
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::ReplicaActive::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "received log from " << logevt.from << dendl;
-  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   ceph_assert(pg->pg_log.get_head() == pg->info.last_update);
 
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MTrim& trim)
+boost::statechart::result PG::PeeringState::ReplicaActive::react(const MTrim& trim)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   // primary is instructing us to trim
   pg->pg_log.trim(trim.trim_to, pg->info);
   pg->dirty_info = true;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
+boost::statechart::result PG::PeeringState::ReplicaActive::react(const ActMap&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->should_send_notify() && pg->get_primary().osd >= 0) {
-    context< RecoveryMachine >().send_notify(
+    context< PeeringMachine >().send_notify(
       pg->get_primary(),
       pg_notify_t(
 	pg->get_primary().shard, pg->pg_whoami.shard,
@@ -8906,15 +8906,15 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const ActMap&)
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(
+boost::statechart::result PG::PeeringState::ReplicaActive::react(
   const MQuery& query)
 {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->fulfill_query(query, context<RecoveryMachine>().get_recovery_ctx());
+  PG *pg = context< PeeringMachine >().pg;
+  pg->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::ReplicaActive::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -8923,10 +8923,10 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const QuerySta
   return forward_event();
 }
 
-void PG::RecoveryState::ReplicaActive::exit()
+void PG::PeeringState::ReplicaActive::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
@@ -8934,13 +8934,13 @@ void PG::RecoveryState::ReplicaActive::exit()
 }
 
 /*-------Stray---*/
-PG::RecoveryState::Stray::Stray(my_context ctx) 
+PG::PeeringState::Stray::Stray(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Stray")
+    NamedState(context< PeeringMachine >().pg, "Started/Stray")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->is_peered());
   ceph_assert(!pg->is_peering());
   ceph_assert(!pg->is_primary());
@@ -8949,17 +8949,17 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
     ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
     post_event(DeleteStart());
   } else {
-    pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
+    pg->start_flush(context< PeeringMachine >().get_cur_transaction());
   }
 }
 
-boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::Stray::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   MOSDPGLog *msg = logevt.msg.get();
   ldout(pg->cct, 10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
-  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     pg->unreg_next_scrub();
@@ -8982,14 +8982,14 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   return transit<ReplicaActive>();
 }
 
-boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoevt)
+boost::statechart::result PG::PeeringState::Stray::react(const MInfoRec& infoevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "got info from osd." << infoevt.from << " " << infoevt.info << dendl;
 
   if (pg->info.last_update > infoevt.info.last_update) {
     // rewind divergent log entries
-    ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+    ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
     pg->rewind_divergent_log(*t, infoevt.info.last_update);
     pg->info.stats = infoevt.info.stats;
     pg->info.hit_set = infoevt.info.hit_set;
@@ -9002,18 +9002,18 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
   return transit<ReplicaActive>();
 }
 
-boost::statechart::result PG::RecoveryState::Stray::react(const MQuery& query)
+boost::statechart::result PG::PeeringState::Stray::react(const MQuery& query)
 {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->fulfill_query(query, context<RecoveryMachine>().get_recovery_ctx());
+  PG *pg = context< PeeringMachine >().pg;
+  pg->fulfill_query(query, context<PeeringMachine>().get_recovery_ctx());
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
+boost::statechart::result PG::PeeringState::Stray::react(const ActMap&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->should_send_notify() && pg->get_primary().osd >= 0) {
-    context< RecoveryMachine >().send_notify(
+    context< PeeringMachine >().send_notify(
       pg->get_primary(),
       pg_notify_t(
 	pg->get_primary().shard, pg->pg_whoami.shard,
@@ -9026,29 +9026,29 @@ boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
   return discard_event();
 }
 
-void PG::RecoveryState::Stray::exit()
+void PG::PeeringState::Stray::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_stray_latency, dur);
 }
 
 
 /*--------ToDelete----------*/
-PG::RecoveryState::ToDelete::ToDelete(my_context ctx)
+PG::PeeringState::ToDelete::ToDelete(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete")
+    NamedState(context< PeeringMachine >().pg, "Started/ToDelete")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->osd->logger->inc(l_osd_pg_removing);
 }
 
-void PG::RecoveryState::ToDelete::exit()
+void PG::PeeringState::ToDelete::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   // note: on a successful removal, this path doesn't execute. see
   // _delete_some().
   pg->osd->logger->dec(l_osd_pg_removing);
@@ -9056,13 +9056,13 @@ void PG::RecoveryState::ToDelete::exit()
 }
 
 /*----WaitDeleteReserved----*/
-PG::RecoveryState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
+PG::PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg,
+    NamedState(context< PeeringMachine >().pg,
 	       "Started/ToDelete/WaitDeleteReseved")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   context<ToDelete>().priority = pg->get_delete_priority();
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->osd->local_reserver.request_reservation(
@@ -9076,10 +9076,10 @@ PG::RecoveryState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
       DeleteInterrupted()));
 }
 
-boost::statechart::result PG::RecoveryState::ToDelete::react(
+boost::statechart::result PG::PeeringState::ToDelete::react(
   const ActMap& evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (pg->get_delete_priority() != priority) {
     ldout(pg->cct,10) << __func__ << " delete priority changed, resetting"
 		      << dendl;
@@ -9088,48 +9088,48 @@ boost::statechart::result PG::RecoveryState::ToDelete::react(
   return discard_event();
 }
 
-void PG::RecoveryState::WaitDeleteReserved::exit()
+void PG::PeeringState::WaitDeleteReserved::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  context< PeeringMachine >().log_exit(state_name, enter_time);
 }
 
 /*----Deleting-----*/
-PG::RecoveryState::Deleting::Deleting(my_context ctx)
+PG::PeeringState::Deleting::Deleting(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete/Deleting")
+    NamedState(context< PeeringMachine >().pg, "Started/ToDelete/Deleting")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
   pg->deleting = true;
-  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
   pg->on_removal(t);
   t->register_on_commit(new C_DeleteMore(pg, pg->get_osdmap_epoch()));
 }
 
-boost::statechart::result PG::RecoveryState::Deleting::react(
+boost::statechart::result PG::PeeringState::Deleting::react(
   const DeleteSome& evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->_delete_some(context<RecoveryMachine>().get_cur_transaction());
+  PG *pg = context< PeeringMachine >().pg;
+  pg->_delete_some(context<PeeringMachine>().get_cur_transaction());
   return discard_event();
 }
 
-void PG::RecoveryState::Deleting::exit()
+void PG::PeeringState::Deleting::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   pg->deleting = false;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 }
 
 /*--------GetInfo---------*/
-PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
+PG::PeeringState::GetInfo::GetInfo(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering/GetInfo")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/GetInfo")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   pg->check_past_interval_bounds();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
@@ -9146,9 +9146,9 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   }
 }
 
-void PG::RecoveryState::GetInfo::get_infos()
+void PG::PeeringState::GetInfo::get_infos()
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
   pg->blocked_by.clear();
@@ -9170,7 +9170,7 @@ void PG::RecoveryState::GetInfo::get_infos()
       ldout(pg->cct, 10) << " not querying info from down osd." << peer << dendl;
     } else {
       ldout(pg->cct, 10) << " querying info from osd." << peer << dendl;
-      context< RecoveryMachine >().send_query(
+      context< PeeringMachine >().send_query(
 	peer, pg_query_t(pg_query_t::INFO,
 			 it->shard, pg->pg_whoami.shard,
 			 pg->info.history,
@@ -9183,9 +9183,9 @@ void PG::RecoveryState::GetInfo::get_infos()
   pg->publish_stats_to_osd();
 }
 
-boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& infoevt) 
+boost::statechart::result PG::PeeringState::GetInfo::react(const MNotifyRec& infoevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   set<pg_shard_t>::iterator p = peer_info_requested.find(infoevt.from);
   if (p != peer_info_requested.end()) {
@@ -9231,9 +9231,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::GetInfo::react(const QueryState& q)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
@@ -9257,25 +9257,25 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
   return forward_event();
 }
 
-void PG::RecoveryState::GetInfo::exit()
+void PG::PeeringState::GetInfo::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
   pg->blocked_by.clear();
 }
 
 /*------GetLog------------*/
-PG::RecoveryState::GetLog::GetLog(my_context ctx)
+PG::PeeringState::GetLog::GetLog(my_context ctx)
   : my_base(ctx),
     NamedState(
-      context< RecoveryMachine >().pg, "Started/Primary/Peering/GetLog"),
+      context< PeeringMachine >().pg, "Started/Primary/Peering/GetLog"),
     msg(0)
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   // adjust acting?
   if (!pg->choose_acting(auth_log_shard, false,
@@ -9318,7 +9318,7 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
 
   // how much?
   ldout(pg->cct, 10) << " requesting log from osd." << auth_log_shard << dendl;
-  context<RecoveryMachine>().send_query(
+  context<PeeringMachine>().send_query(
     auth_log_shard,
     pg_query_t(
       pg_query_t::LOG,
@@ -9331,9 +9331,9 @@ PG::RecoveryState::GetLog::GetLog(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
+boost::statechart::result PG::PeeringState::GetLog::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   // make sure our log source didn't go down.  we need to check
   // explicitly because it may not be part of the prior set, which
   // means the Peering state check won't catch it going down.
@@ -9348,9 +9348,9 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const AdvMap& advmap)
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::GetLog::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!msg);
   if (logevt.from != auth_log_shard) {
     ldout(pg->cct, 10) << "GetLog: discarding log from "
@@ -9364,21 +9364,21 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const MLogRec& logevt
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
+boost::statechart::result PG::PeeringState::GetLog::react(const GotLog&)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "leaving GetLog" << dendl;
   if (msg) {
     ldout(pg->cct, 10) << "processing master log" << dendl;
-    pg->proc_master_log(*context<RecoveryMachine>().get_cur_transaction(),
+    pg->proc_master_log(*context<PeeringMachine>().get_cur_transaction(),
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
-  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
+  pg->start_flush(context< PeeringMachine >().get_cur_transaction());
   return transit< GetMissing >();
 }
 
-boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::GetLog::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -9388,26 +9388,26 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
   return forward_event();
 }
 
-void PG::RecoveryState::GetLog::exit()
+void PG::PeeringState::GetLog::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
   pg->blocked_by.clear();
 }
 
 /*------WaitActingChange--------*/
-PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
+PG::PeeringState::WaitActingChange::WaitActingChange(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/WaitActingChange")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/WaitActingChange")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
-boost::statechart::result PG::RecoveryState::WaitActingChange::react(const AdvMap& advmap)
+boost::statechart::result PG::PeeringState::WaitActingChange::react(const AdvMap& advmap)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   OSDMapRef osdmap = advmap.osdmap;
 
   ldout(pg->cct, 10) << "verifying no want_acting " << pg->want_acting << " targets didn't go down" << dendl;
@@ -9421,28 +9421,28 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const AdvMa
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::WaitActingChange::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "In WaitActingChange, ignoring MLocRec" << dendl;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MInfoRec& evt)
+boost::statechart::result PG::PeeringState::WaitActingChange::react(const MInfoRec& evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "In WaitActingChange, ignoring MInfoRec" << dendl;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitActingChange::react(const MNotifyRec& evt)
+boost::statechart::result PG::PeeringState::WaitActingChange::react(const MNotifyRec& evt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "In WaitActingChange, ignoring MNotifyRec" << dendl;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitActingChange::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::WaitActingChange::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -9452,21 +9452,21 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const Query
   return forward_event();
 }
 
-void PG::RecoveryState::WaitActingChange::exit()
+void PG::PeeringState::WaitActingChange::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitactingchange_latency, dur);
 }
 
 /*------Down--------*/
-PG::RecoveryState::Down::Down(my_context ctx)
+PG::PeeringState::Down::Down(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering/Down")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/Down")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_PEERING);
   pg->state_set(PG_STATE_DOWN);
@@ -9477,10 +9477,10 @@ PG::RecoveryState::Down::Down(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-void PG::RecoveryState::Down::exit()
+void PG::PeeringState::Down::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_DOWN);
   utime_t dur = ceph_clock_now() - enter_time;
@@ -9489,7 +9489,7 @@ void PG::RecoveryState::Down::exit()
   pg->blocked_by.clear();
 }
 
-boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::Down::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -9500,9 +9500,9 @@ boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::Down::react(const MNotifyRec& infoevt)
+boost::statechart::result PG::PeeringState::Down::react(const MNotifyRec& infoevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   ceph_assert(pg->is_primary());
   epoch_t old_start = pg->info.history.last_epoch_started;
@@ -9523,12 +9523,12 @@ boost::statechart::result PG::RecoveryState::Down::react(const MNotifyRec& infoe
 
 
 /*------Incomplete--------*/
-PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
+PG::PeeringState::Incomplete::Incomplete(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering/Incomplete")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/Incomplete")
 {
-  context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_enter(state_name);
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_PEERING);
   pg->state_set(PG_STATE_INCOMPLETE);
@@ -9539,8 +9539,8 @@ PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
   pg->publish_stats_to_osd();
 }
 
-boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &advmap) {
-  PG *pg = context< RecoveryMachine >().pg;
+boost::statechart::result PG::PeeringState::Incomplete::react(const AdvMap &advmap) {
+  PG *pg = context< PeeringMachine >().pg;
   int64_t poolnum = pg->info.pgid.pool();
 
   // Reset if min_size turn smaller than previous value, pg might now be able to go active
@@ -9554,8 +9554,8 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
-  PG *pg = context< RecoveryMachine >().pg;
+boost::statechart::result PG::PeeringState::Incomplete::react(const MNotifyRec& notevt) {
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 7) << "handle_pg_notify from osd." << notevt.from << dendl;
   if (pg->proc_replica_info(
     notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
@@ -9566,7 +9566,7 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec&
   }
 }
 
-boost::statechart::result PG::RecoveryState::Incomplete::react(
+boost::statechart::result PG::PeeringState::Incomplete::react(
   const QueryState& q)
 {
   q.f->open_object_section("state");
@@ -9577,10 +9577,10 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(
   return forward_event();
 }
 
-void PG::RecoveryState::Incomplete::exit()
+void PG::PeeringState::Incomplete::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
 
   pg->state_clear(PG_STATE_INCOMPLETE);
   utime_t dur = ceph_clock_now() - enter_time;
@@ -9590,13 +9590,13 @@ void PG::RecoveryState::Incomplete::exit()
 }
 
 /*------GetMissing--------*/
-PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
+PG::PeeringState::GetMissing::GetMissing(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering/GetMissing")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/GetMissing")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ceph_assert(!pg->acting_recovery_backfill.empty());
   eversion_t since;
   for (set<pg_shard_t>::iterator i = pg->acting_recovery_backfill.begin();
@@ -9641,7 +9641,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
     ceph_assert(pi.last_update >= pg->info.log_tail);  // or else choose_acting() did a bad thing
     if (pi.log_tail <= since) {
       ldout(pg->cct, 10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
-      context< RecoveryMachine >().send_query(
+      context< PeeringMachine >().send_query(
 	*i,
 	pg_query_t(
 	  pg_query_t::LOG,
@@ -9652,7 +9652,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       ldout(pg->cct, 10) << " requesting fulllog+missing from osd." << *i
 			 << " (want since " << since << " < log.tail "
 			 << pi.log_tail << ")" << dendl;
-      context< RecoveryMachine >().send_query(
+      context< PeeringMachine >().send_query(
 	*i, pg_query_t(
 	  pg_query_t::FULLLOG,
 	  i->shard, pg->pg_whoami.shard,
@@ -9677,9 +9677,9 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
   }
 }
 
-boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::GetMissing::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
 
   peer_missing_requested.erase(logevt.from);
   pg->proc_replica_log(logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
@@ -9698,9 +9698,9 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const MLogRec& lo
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::GetMissing::react(const QueryState& q)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
   q.f->dump_stream("enter_time") << enter_time;
@@ -9724,42 +9724,42 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState&
   return forward_event();
 }
 
-void PG::RecoveryState::GetMissing::exit()
+void PG::PeeringState::GetMissing::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
   pg->blocked_by.clear();
 }
 
 /*------WaitUpThru--------*/
-PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
+PG::PeeringState::WaitUpThru::WaitUpThru(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Primary/Peering/WaitUpThru")
+    NamedState(context< PeeringMachine >().pg, "Started/Primary/Peering/WaitUpThru")
 {
-  context< RecoveryMachine >().log_enter(state_name);
+  context< PeeringMachine >().log_enter(state_name);
 }
 
-boost::statechart::result PG::RecoveryState::WaitUpThru::react(const ActMap& am)
+boost::statechart::result PG::PeeringState::WaitUpThru::react(const ActMap& am)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   if (!pg->need_up_thru) {
     post_event(Activate(pg->get_osdmap_epoch()));
   }
   return forward_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitUpThru::react(const MLogRec& logevt)
+boost::statechart::result PG::PeeringState::WaitUpThru::react(const MLogRec& logevt)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 10) << "Noting missing from osd." << logevt.from << dendl;
   pg->peer_missing[logevt.from].claim(logevt.msg->missing);
   pg->peer_info[logevt.from] = logevt.msg->info;
   return discard_event();
 }
 
-boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState& q)
+boost::statechart::result PG::PeeringState::WaitUpThru::react(const QueryState& q)
 {
   q.f->open_object_section("state");
   q.f->dump_string("name", state_name);
@@ -9769,29 +9769,29 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState&
   return forward_event();
 }
 
-void PG::RecoveryState::WaitUpThru::exit()
+void PG::PeeringState::WaitUpThru::exit()
 {
-  context< RecoveryMachine >().log_exit(state_name, enter_time);
-  PG *pg = context< RecoveryMachine >().pg;
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< PeeringMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_waitupthru_latency, dur);
 }
 
-/*----RecoveryState::RecoveryMachine Methods-----*/
+/*----PeeringState::PeeringMachine Methods-----*/
 #undef dout_prefix
 #define dout_prefix pg->gen_prefix(*_dout)
 
-void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
+void PG::PeeringState::PeeringMachine::log_enter(const char *state_name)
 {
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 5) << "enter " << state_name << dendl;
   pg->osd->pg_recovery_stats.log_enter(state_name);
 }
 
-void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_t enter_time)
+void PG::PeeringState::PeeringMachine::log_exit(const char *state_name, utime_t enter_time)
 {
   utime_t dur = ceph_clock_now() - enter_time;
-  PG *pg = context< RecoveryMachine >().pg;
+  PG *pg = context< PeeringMachine >().pg;
   ldout(pg->cct, 5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
   pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now() - enter_time,
 				      event_count, event_time);
@@ -9804,13 +9804,13 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 #undef dout_prefix
 #define dout_prefix ((debug_pg ? debug_pg->gen_prefix(*_dout) : *_dout) << " PriorSet: ")
 
-void PG::RecoveryState::start_handle(RecoveryCtx *new_ctx) {
+void PG::PeeringState::start_handle(PeeringCtx *new_ctx) {
   ceph_assert(!rctx);
   ceph_assert(!orig_ctx);
   orig_ctx = new_ctx;
   if (new_ctx) {
     if (messages_pending_flush) {
-      rctx = RecoveryCtx(*messages_pending_flush, *new_ctx);
+      rctx = PeeringCtx(*messages_pending_flush, *new_ctx);
     } else {
       rctx = *new_ctx;
     }
@@ -9818,38 +9818,38 @@ void PG::RecoveryState::start_handle(RecoveryCtx *new_ctx) {
   }
 }
 
-void PG::RecoveryState::begin_block_outgoing() {
+void PG::PeeringState::begin_block_outgoing() {
   ceph_assert(!messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
   messages_pending_flush = BufferedRecoveryMessages();
-  rctx = RecoveryCtx(*messages_pending_flush, *orig_ctx);
+  rctx = PeeringCtx(*messages_pending_flush, *orig_ctx);
 }
 
-void PG::RecoveryState::clear_blocked_outgoing() {
+void PG::PeeringState::clear_blocked_outgoing() {
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
   messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
 }
 
-void PG::RecoveryState::end_block_outgoing() {
+void PG::PeeringState::end_block_outgoing() {
   ceph_assert(messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
 
-  rctx = RecoveryCtx(*orig_ctx);
+  rctx = PeeringCtx(*orig_ctx);
   rctx->accept_buffered_messages(*messages_pending_flush);
   messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
 }
 
-void PG::RecoveryState::end_handle() {
+void PG::PeeringState::end_handle() {
   if (rctx) {
     utime_t dur = ceph_clock_now() - rctx->start_time;
     machine.event_time += dur;
   }
 
   machine.event_count++;
-  rctx = boost::optional<RecoveryCtx>();
+  rctx = boost::optional<PeeringCtx>();
   orig_ctx = NULL;
 }
 
