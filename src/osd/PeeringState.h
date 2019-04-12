@@ -67,6 +67,8 @@ public:
     virtual void on_info_history_change() = 0;
     virtual void scrub_requested(bool deep, bool repair) = 0;
 
+    virtual uint64_t get_snap_trimq_size() const = 0;
+
     virtual void send_cluster_message(
       int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
     virtual void send_pg_created(pg_t pgid) = 0;
@@ -1396,6 +1398,8 @@ public:
 
   void try_mark_clean();
 
+  void update_blocked_by();
+  void update_calc_stats();
 public:
   PeeringState(
     CephContext *cct,
@@ -1449,6 +1453,11 @@ public:
     PeeringCtx *rctx,
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
+
+  std::optional<pg_stat_t> prepare_stats_for_publish(
+    bool pg_stats_publish_valid,
+    const pg_stat_t &pg_stats_publish,
+    const object_stat_collection_t &unstable_stats);
 
   void dump_history(Formatter *f) const {
     state_history.dump(f);
