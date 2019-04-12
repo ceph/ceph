@@ -4636,7 +4636,7 @@ void PrimaryLogPG::snap_trimmer_scrub_complete()
 
 void PrimaryLogPG::snap_trimmer(epoch_t queued)
 {
-  if (deleting || pg_has_reset_since(queued)) {
+  if (recovery_state.is_deleting() || pg_has_reset_since(queued)) {
     return;
   }
 
@@ -11593,7 +11593,7 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (!deleting && active_pushes == 0
+  if (!recovery_state.is_deleting() && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
     requeue_scrub(ops_blocked_by_scrub());
   }
@@ -11606,7 +11606,7 @@ void PrimaryLogPG::_applied_recovered_object_replica()
   --active_pushes;
 
   // requeue an active chunky scrub waiting on recovery ops
-  if (!deleting && active_pushes == 0 &&
+  if (!recovery_state.is_deleting() && active_pushes == 0 &&
       scrubber.active_rep_scrub && static_cast<const MOSDRepScrub*>(
 	scrubber.active_rep_scrub->get_req())->chunky) {
     auto& op = scrubber.active_rep_scrub;
@@ -12047,9 +12047,6 @@ void PrimaryLogPG::on_shutdown()
 {
   dout(10) << __func__ << dendl;
 
-  // handles queue races
-  deleting = true;
-
   if (recovery_queued) {
     recovery_queued = false;
     osd->clear_queued_recovery(this);
@@ -12378,7 +12375,7 @@ bool PrimaryLogPG::start_recovery_ops(
   bool recovery_started = false;
   ceph_assert(is_primary());
   ceph_assert(is_peered());
-  ceph_assert(!is_deleting());
+  ceph_assert(!recovery_state.is_deleting());
 
   ceph_assert(recovery_queued);
   recovery_queued = false;
@@ -13916,7 +13913,7 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
     return true;
   }
 
-  ceph_assert(!deleting);
+  ceph_assert(!recovery_state.is_deleting());
 
   if (agent_state->is_idle()) {
     dout(10) << __func__ << " idle, stopping" << dendl;
