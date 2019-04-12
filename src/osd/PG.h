@@ -448,12 +448,17 @@ public:
     PGPeeringEventRef on_preempt) override;
   void cancel_remote_recovery_reservation() override;
 
+  void schedule_event_on_commit(
+    ObjectStore::Transaction &t,
+    PGPeeringEventRef on_commit) override;
+
   void on_active_exit() override;
 
   Context *on_clean() override {
     try_mark_clean();
     return finish_recovery();
   }
+  void on_activate_committed() override;
 
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
@@ -1051,26 +1056,6 @@ protected:
   void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
   
   void build_might_have_unfound();
-  void activate(
-    ObjectStore::Transaction& t,
-    epoch_t activation_epoch,
-    map<int, map<spg_t,pg_query_t> >& query_map,
-    map<int,
-      vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
-    PeeringCtx *ctx);
-
-  struct C_PG_ActivateCommitted : public Context {
-    PGRef pg;
-    epoch_t epoch;
-    epoch_t activation_epoch;
-    C_PG_ActivateCommitted(PG *p, epoch_t e, epoch_t ae)
-      : pg(p), epoch(e), activation_epoch(ae) {}
-    void finish(int r) override {
-      pg->_activate_committed(epoch, activation_epoch);
-    }
-  };
-  void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
-  void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
 
