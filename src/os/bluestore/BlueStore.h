@@ -2698,6 +2698,7 @@ private:
   set<string> failed_compressors;
   string spillover_alert;
   string legacy_statfs_alert;
+  string disk_size_mismatch_alert;
 
   void _log_alerts(osd_alert_list_t& alerts);
   bool _set_compression_alert(bool cmode, const char* s) {
@@ -2725,6 +2726,10 @@ private:
   }
 
   void _check_legacy_statfs_alert();
+  void _set_disk_size_mismatch_alert(const string& s) {
+    std::lock_guard l(qlock);
+    disk_size_mismatch_alert = s;
+  }
 
 private:
 
