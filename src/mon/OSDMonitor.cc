@@ -2448,6 +2448,13 @@ bool OSDMonitor::can_mark_down(int i)
     return false;
   }
 
+  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NODOWN) {
+    dout(5) << __func__ << " osd." << i
+	    << " is marked as nodown via a crush node flag, "
+            << "will not mark it down" << dendl;
+    return false;
+  }
+
   int num_osds = osdmap.get_num_osds();
   if (num_osds == 0) {
     dout(5) << __func__ << " no osds" << dendl;
@@ -2478,6 +2485,13 @@ bool OSDMonitor::can_mark_up(int i)
     return false;
   }
 
+  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOUP) {
+    dout(5) << __func__ << " osd." << i
+	    << " is marked as noup via a crush node flag, "
+            << "will not mark it up" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -2494,6 +2508,13 @@ bool OSDMonitor::can_mark_out(int i)
 
   if (osdmap.is_noout(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as noout, "
+            << "will not mark it out" << dendl;
+    return false;
+  }
+
+  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOOUT) {
+    dout(5) << __func__ << " osd." << i
+	    << " is marked as noout via a crush node flag, "
             << "will not mark it out" << dendl;
     return false;
   }
@@ -2530,6 +2551,13 @@ bool OSDMonitor::can_mark_in(int i)
 
   if (osdmap.is_noin(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as noin, "
+            << "will not mark it in" << dendl;
+    return false;
+  }
+
+  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOIN) {
+    dout(5) << __func__ << " osd." << i
+	    << " is marked as noin via a crush node flag, "
             << "will not mark it in" << dendl;
     return false;
   }
