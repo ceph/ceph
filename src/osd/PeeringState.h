@@ -1498,6 +1498,8 @@ public:
     std::function<bool(pg_history_t &, pg_stat_t &)> f,
     ObjectStore::Transaction *t = nullptr);
 
+  void update_hset(const pg_hit_set_history_t &hset_history);
+
   std::optional<pg_stat_t> prepare_stats_for_publish(
     bool pg_stats_publish_valid,
     const pg_stat_t &pg_stats_publish,
@@ -1553,7 +1555,9 @@ public:
     const hobject_t soid);
 
   void object_recovered(
-    const hobject_t &hoid) {
+    const hobject_t &hoid,
+    const object_stat_sum_t &stat_diff) {
+    info.stats.stats.sum.add(stat_diff);
     missing_loc.recovered(hoid);
   }
 
@@ -1602,6 +1606,10 @@ public:
   }
 
   void recovery_committed_to(eversion_t version);
+
+  void local_recovery_complete() {
+    info.last_complete = info.last_update;
+  }
 
   void set_last_requested(version_t v) {
     pg_log.set_last_requested(v);

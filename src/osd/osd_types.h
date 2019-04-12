@@ -425,12 +425,12 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
-  bool contains(int bits, const ghobject_t& oid) {
+  bool contains(int bits, const ghobject_t& oid) const {
     return
       (int64_t)m_pool == oid.hobj.get_logical_pool() &&
       oid.match(bits, ps());
   }
-  bool contains(int bits, const hobject_t& oid) {
+  bool contains(int bits, const hobject_t& oid) const {
     return
       (int64_t)m_pool == oid.get_logical_pool() &&
       oid.match(bits, ps());

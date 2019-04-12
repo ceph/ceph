@@ -3886,6 +3886,11 @@ void PeeringState::prepare_backfill_for_missing(
   }
 }
 
+void PeeringState::update_hset(const pg_hit_set_history_t &hset_history)
+{
+  info.hit_set = hset_history;
+}
+
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix
 #define dout_prefix (context< PeeringMachine >().dpp->gen_prefix(*_dout) \

@@ -445,8 +445,7 @@ void PrimaryLogPG::on_global_recover(
   const object_stat_sum_t &stat_diff,
   bool is_delete)
 {
-  info.stats.stats.sum.add(stat_diff);
-  recovery_state.object_recovered(soid);
+  recovery_state.object_recovered(soid, stat_diff);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
   map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
@@ -3702,7 +3701,12 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
 
   if (op)
     wait_for_blocked_object(obc->obs.oi.soid, op);
-  info.stats.stats.sum.num_promote++;
+
+  recovery_state.update_stats(
+    [](auto &history, auto &stats) {
+      stats.stats.sum.num_promote++;
+      return false;
+    });
 }
 
 void PrimaryLogPG::execute_ctx(OpContext *ctx)
@@ -9931,8 +9935,13 @@ int PrimaryLogPG::start_flush(
   fop->objecter_tid = tid;
 
   flush_ops[soid] = fop;
-  info.stats.stats.sum.num_flush++;
-  info.stats.stats.sum.num_flush_kb += shift_round_up(oi.size, 10);
+
+  recovery_state.update_stats(
+    [&oi](auto &history, auto &stats) {
+      stats.stats.sum.num_flush++;
+      stats.stats.sum.num_flush_kb += shift_round_up(oi.size, 10);
+      return false;
+    });
   return -EINPROGRESS;
 }
 
@@ -11652,7 +11661,11 @@ void PrimaryLogPG::mark_all_unfound_lost(
     }
   }
 
-  info.stats.stats_invalid = true;
+  recovery_state.update_stats(
+    [](auto &history, auto &stats) {
+      stats.stats_invalid = true;
+      return false;
+    });
 
   submit_log_entries(
     log_entries,
@@ -11664,7 +11677,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
 	    // clear old locations - merge_new_log_entries will have
 	    // handled rebuilding missing_loc for each of these
 	    // objects if we have the RECOVERY_DELETES flag
-	    recovery_state.object_recovered(oid);
+	    recovery_state.object_recovered(oid, object_stat_sum_t());
 	  }
 	}
 
@@ -12137,8 +12150,8 @@ bool PrimaryLogPG::start_recovery_ops(
 
   uint64_t num_unfound = get_num_unfound();
 
-  if (!missing.have_missing()) {
-    info.last_complete = info.last_update;
+  if (!recovery_state.have_missing()) {
+    recovery_state.local_recovery_complete();
   }
 
   if (!missing.have_missing() || // Primary does not have missing
@@ -13307,7 +13320,7 @@ void PrimaryLogPG::hit_set_setup()
 void PrimaryLogPG::hit_set_remove_all()
 {
   // If any archives are degraded we skip this
-  for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+  for (auto p = info.hit_set.history.begin();
        p != info.hit_set.history.end();
        ++p) {
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
@@ -13320,7 +13333,7 @@ void PrimaryLogPG::hit_set_remove_all()
   }
 
   if (!info.hit_set.history.empty()) {
-    list<pg_hit_set_info_t>::reverse_iterator p = info.hit_set.history.rbegin();
+    auto p = info.hit_set.history.rbegin();
     ceph_assert(p != info.hit_set.history.rend());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
     ceph_assert(!is_degraded_or_backfilling_object(oid));
@@ -13336,7 +13349,7 @@ void PrimaryLogPG::hit_set_remove_all()
     simple_opc_submit(std::move(ctx));
   }
 
-  info.hit_set = pg_hit_set_history_t();
+  recovery_state.update_hset(pg_hit_set_history_t());
   if (agent_state) {
     agent_state->discard_hit_sets();
   }
@@ -13427,7 +13440,7 @@ void PrimaryLogPG::hit_set_persist()
 
   // If any archives are degraded we skip this persist request
   // account for the additional entry being added below
-  for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+  for (auto p = info.hit_set.history.begin();
        p != info.hit_set.history.end();
        ++p) {
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
@@ -13810,7 +13823,7 @@ void PrimaryLogPG::agent_load_hit_sets()
 
   if (agent_state->hit_set_map.size() < info.hit_set.history.size()) {
     dout(10) << __func__ << dendl;
-    for (list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+    for (auto p = info.hit_set.history.begin();
 	 p != info.hit_set.history.end(); ++p) {
       if (agent_state->hit_set_map.count(p->begin.sec()) == 0) {
 	dout(10) << __func__ << " loading " << p->begin << "-"
@@ -14205,18 +14218,22 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	    << " -> "
 	    << TierAgentState::get_flush_mode_name(flush_mode)
 	    << dendl;
-    if (flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
-      osd->agent_inc_high_count();
-      info.stats.stats.sum.num_flush_mode_high = 1;
-    } else if (flush_mode == TierAgentState::FLUSH_MODE_LOW) {
-      info.stats.stats.sum.num_flush_mode_low = 1;
-    }
-    if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
-      osd->agent_dec_high_count();
-      info.stats.stats.sum.num_flush_mode_high = 0;
-    } else if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW) {
-      info.stats.stats.sum.num_flush_mode_low = 0;
-    }
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	if (flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
+	  osd->agent_inc_high_count();
+	  stats.stats.sum.num_flush_mode_high = 1;
+	} else if (flush_mode == TierAgentState::FLUSH_MODE_LOW) {
+	  stats.stats.sum.num_flush_mode_low = 1;
+	}
+	if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_HIGH) {
+	  osd->agent_dec_high_count();
+	  stats.stats.sum.num_flush_mode_high = 0;
+	} else if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW) {
+	  stats.stats.sum.num_flush_mode_low = 0;
+	}
+	return false;
+      });
     agent_state->flush_mode = flush_mode;
   }
   if (evict_mode != agent_state->evict_mode) {
@@ -14236,16 +14253,20 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
       objects_blocked_on_cache_full.clear();
       requeued = true;
     }
-    if (evict_mode == TierAgentState::EVICT_MODE_SOME) {
-      info.stats.stats.sum.num_evict_mode_some = 1;
-    } else if (evict_mode == TierAgentState::EVICT_MODE_FULL) {
-      info.stats.stats.sum.num_evict_mode_full = 1;
-    }
-    if (agent_state->evict_mode == TierAgentState::EVICT_MODE_SOME) {
-      info.stats.stats.sum.num_evict_mode_some = 0;
-    } else if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
-      info.stats.stats.sum.num_evict_mode_full = 0;
-    }
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	if (evict_mode == TierAgentState::EVICT_MODE_SOME) {
+	  stats.stats.sum.num_evict_mode_some = 1;
+	} else if (evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	  stats.stats.sum.num_evict_mode_full = 1;
+	}
+	if (agent_state->evict_mode == TierAgentState::EVICT_MODE_SOME) {
+	  stats.stats.sum.num_evict_mode_some = 0;
+	} else if (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	  stats.stats.sum.num_evict_mode_full = 0;
+	}
+	return false;
+      });
     agent_state->evict_mode = evict_mode;
   }
   uint64_t old_effort = agent_state->evict_effort;
@@ -14799,8 +14820,12 @@ void PrimaryLogPG::_scrub_finish()
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
   if (info.stats.stats_invalid) {
-    info.stats.stats = scrub_cstat;
-    info.stats.stats_invalid = false;
+    recovery_state.update_stats(
+      [=](auto &history, auto &stats) {
+	stats.stats = scrub_cstat;
+	stats.stats_invalid = false;
+	return false;
+      });
 
     if (agent_state)
       agent_choose_mode();
@@ -14850,13 +14875,17 @@ void PrimaryLogPG::_scrub_finish()
 
     if (repair) {
       ++scrubber.fixed;
-      info.stats.stats = scrub_cstat;
-      info.stats.dirty_stats_invalid = false;
-      info.stats.omap_stats_invalid = false;
-      info.stats.hitset_stats_invalid = false;
-      info.stats.hitset_bytes_stats_invalid = false;
-      info.stats.pin_stats_invalid = false;
-      info.stats.manifest_stats_invalid = false;
+      recovery_state.update_stats(
+	[this](auto &history, auto &stats) {
+	  stats.stats = scrub_cstat;
+	  stats.dirty_stats_invalid = false;
+	  stats.omap_stats_invalid = false;
+	  stats.hitset_stats_invalid = false;
+	  stats.hitset_bytes_stats_invalid = false;
+	  stats.pin_stats_invalid = false;
+	  stats.manifest_stats_invalid = false;
+	  return false;
+	});
       publish_stats_to_osd();
       recovery_state.share_pg_info();
     }
