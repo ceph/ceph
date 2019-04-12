@@ -1027,7 +1027,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-export, trim-pg-log)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1771,11 +1771,11 @@ def main(argv):
             for pg in PGS:
                 file = os.path.join(dir, pg)
                 # Make sure this doesn't crash
-                cmd = (CFSD_PREFIX + "--op dump-import --file {file}").format(osd=osd, file=file)
+                cmd = (CFSD_PREFIX + "--op dump-export --file {file}").format(osd=osd, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
-                    logging.error("Dump-import failed from {file} with {ret}".format(file=file, ret=ret))
+                    logging.error("Dump-export failed from {file} with {ret}".format(file=file, ret=ret))
                     IMP_ERRORS += 1
                 # This should do nothing
                 cmd = (CFSD_PREFIX + "--op import --file {file} --dry-run").format(osd=osd, file=file)
