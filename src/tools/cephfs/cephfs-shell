@@ -668,22 +668,23 @@ exists.')
                     self.poutput(dir_name, ':\n')
                 items = sorted(list_items(dir_name),
                                key=lambda item: item.d_name)
-            if not args.all and len(items) >= 2:
-                items = [i for i in items if not i.d_name.decode('utf-8').startswith('.')]
+            if not args.all:
+                items = [i for i in items if not i.d_name.startswith('.')]
+
             flag = 0
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
-                    to_bytes(dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
+                    to_bytes(dir_name + '/' + item.d_name)).st_size)
+
             if args.reverse:
                 items = reversed(items)
             for item in items:
                 path = item
+                is_dir = False
                 if not isinstance(item, str):
-                    path = item.d_name.decode('utf-8')
-                    if item.is_dir():
-                        is_dir = True
-                    else:
-                        is_dir = False
+                    path = item.d_name
+                    is_dir = item.is_dir()
+
                 if args.long and args.H:
                     print_long(cephfs.getcwd().decode(
                         'utf-8') + dir_name + '/' + path, is_dir, True)
@@ -691,7 +692,7 @@ exists.')
                     print_long(cephfs.getcwd().decode(
                         'utf-8') + dir_name + '/' + path, is_dir, False)
                 elif is_dir:
-                    values.append(colorama.Style.BRIGHT + colorama.Fore.CYAN + path + '/')
+                    values.append(colorama.Style.BRIGHT + colorama.Fore.CYAN + path + '/' + colorama.Style.RESET_ALL)
                 else:
                     values.append(path)
             if not args.long:
