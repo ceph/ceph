@@ -29,7 +29,8 @@ We can generate an object corpus for a particular version of ceph like so.
 #. Build with flag to dump objects to /tmp/foo::
 
 	rm -rf /tmp/foo ; mkdir /tmp/foo
-	./do_autogen.sh -e /tmp/foo
+	do_cmake.sh -DCMAKE_CXX_FLAGS="-DENCODE_DUMP_PATH=/tmp/foo"
+	cd build
 	make
 
 #. Start via vstart::
@@ -57,8 +58,8 @@ Do some more stuff with rgw if you know how.
 
 #. Import the corpus (this will take a few minutes)::
 
-	test/encoding/import.sh /tmp/foo `./ceph-dencoder version` ../ceph-object-corpus/archive
-	test/encoding/import-generated.sh ../ceph-object-corpus/archive
+	../src/test/encoding/import.sh /tmp/foo `bin/ceph-dencoder version` ../ceph-object-corpus/archive
+	../src/test/encoding/import-generated.sh ../ceph-object-corpus/archive
 
 #. Prune it!  There will be a bazillion copies of various objects, and we only want a representative sample.::
 
@@ -68,7 +69,7 @@ Do some more stuff with rgw if you know how.
 
 #. Verify the tests pass::
 
-	make check-local
+	ctest -R readable.sh
 
 #. Commit it to the corpus repo and push::
 
@@ -86,8 +87,8 @@ Do some more stuff with rgw if you know how.
 	cd ceph-object-corpus
 	git fetch origin
 	git checkout wip-new
-	cd ../src
-	make check-local
+	cd ../build
+	ctest -R readable.sh
 
 #. If everything looks good, update the submodule master branch, and commit the submodule in ceph.git.
 
