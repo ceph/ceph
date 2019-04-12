@@ -10,8 +10,7 @@ set(auth_srcs
   cephx/CephxClientHandler.cc
   cephx/CephxProtocol.cc
   cephx/CephxSessionHandler.cc
-  none/AuthNoneAuthorizeHandler.cc
-  unknown/AuthUnknownAuthorizeHandler.cc)
+  none/AuthNoneAuthorizeHandler.cc)
 
 if(HAVE_GSSAPI)
   list(APPEND auth_srcs
