@@ -789,43 +789,6 @@ public:
   }
 
   /**
-   * Get the AuthAuthorizer for a new outgoing Connection.
-   *
-   * @param peer_type The peer type for the new Connection
-   * @param force_new True if we want to wait for new keys, false otherwise.
-   * @return A pointer to the AuthAuthorizer, if we have one; NULL otherwise
-   */
-  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type) {
-    AuthAuthorizer *a = 0;
-    for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_get_authorizer(peer_type, &a))
-	return a;
-    }
-    return NULL;
-  }
-  /**
-   * Verify that the authorizer on a new incoming Connection is correct.
-   *
-   * @param con The new incoming Connection
-   * @param peer_type The type of the endpoint on the new Connection
-   * @param protocol The ID of the protocol in use (at time of writing, cephx or none)
-   * @param authorizer The authorization string supplied by the remote
-   * @param authorizer_reply Output param: The string we should send back to
-   * the remote to authorize ourselves. Only filled in if isvalid
-   * @param isvalid Output param: True if authorizer is valid, false otherwise
-   *
-   * @return True if we were able to prove or disprove correctness of
-   * authorizer, false otherwise.
-   */
-  bool ms_deliver_verify_authorizer(
-    Connection *con, int peer_type,
-    int protocol, ceph::buffer::list& authorizer, ceph::buffer::list& authorizer_reply,
-    bool& isvalid,
-    CryptoKey& session_key,
-    std::string *connection_secret,
-    std::unique_ptr<AuthAuthorizerChallenge> *challenge);
-
-  /**
    * @} // Dispatcher Interfacing
    */
 };

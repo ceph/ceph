@@ -1163,20 +1163,6 @@ bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
   }
 }
 
-bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  dout(10) << "MDSDaemon::ms_get_authorizer type="
-           << ceph_entity_type_name(dest_type) << dendl;
-
-  /* monitor authorization is being handled on different layer */
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
-
 /*
  * high priority messages we always process
  */
@@ -1275,11 +1261,6 @@ bool MDSDaemon::ms_handle_refused(Connection *con)
 {
   // do nothing for now
   return false;
-}
-
-KeyStore *MDSDaemon::ms_get_auth1_authorizer_keystore()
-{
-  return monc->rotating_secrets.get();
 }
 
 bool MDSDaemon::parse_caps(const AuthCapsInfo& info, MDSAuthCaps& caps)
