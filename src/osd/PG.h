@@ -298,45 +298,57 @@ public:
   }
 
   bool is_deleting() const {
-    return deleting;
+    return recovery_state.is_deleting();
   }
   bool is_deleted() const {
-    return deleted;
+    return recovery_state.is_deleted();
   }
   bool is_replica() const {
-    return role > 0;
+    return recovery_state.is_replica();
   }
   bool is_primary() const {
-    return pg_whoami == primary;
+    return recovery_state.is_primary();
   }
   bool pg_has_reset_since(epoch_t e) {
     ceph_assert(is_locked());
-    return deleted || e < get_last_peering_reset();
+    return recovery_state.pg_has_reset_since(e);
   }
 
   bool is_ec_pg() const {
-    return pool.info.is_erasure();
+    return recovery_state.is_ec_pg();
   }
   int get_role() const {
-    return role;
+    return recovery_state.get_role();
   }
   const vector<int> get_acting() const {
-    return acting;
+    return recovery_state.get_acting();
   }
   int get_acting_primary() const {
-    return primary.osd;
+    return recovery_state.get_acting_primary();
   }
   pg_shard_t get_primary() const {
-    return primary;
+    return recovery_state.get_primary();
   }
   const vector<int> get_up() const {
-    return up;
+    return recovery_state.get_up();
   }
   int get_up_primary() const {
-    return up_primary.osd;
+    return recovery_state.get_up_primary();
   }
   const PastIntervals& get_past_intervals() const {
-    return past_intervals;
+    return recovery_state.past_intervals;
+  }
+  bool is_acting_recovery_backfill(pg_shard_t osd) const {
+    return recovery_state.is_acting_recovery_backfill(osd);
+  }
+  bool is_acting(pg_shard_t osd) const {
+    return recovery_state.is_acting(osd);
+  }
+  bool is_up(pg_shard_t osd) const {
+    return recovery_state.is_up(osd);
+  }
+  static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
+    return PeeringState::has_shard(ec, v, osd);
   }
 
   /// initialize created PG
@@ -1223,23 +1235,6 @@ protected:
 
   void clear_primary_state();
 
-  bool is_acting_recovery_backfill(pg_shard_t osd) const {
-    return acting_recovery_backfill.count(osd);
-  }
-  bool is_acting(pg_shard_t osd) const {
-    return has_shard(pool.info.is_erasure(), acting, osd);
-  }
-  bool is_up(pg_shard_t osd) const {
-    return has_shard(pool.info.is_erasure(), up, osd);
-  }
-  static bool has_shard(bool ec, const vector<int>& v, pg_shard_t osd) {
-    if (ec) {
-      return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
-    } else {
-      return std::find(v.begin(), v.end(), osd.osd) != v.end();
-    }
-  }
-  
   bool needs_recovery() const;
   bool needs_backfill() const;
 
@@ -1841,34 +1836,36 @@ protected:
     role = r;
   }
 
-  bool state_test(uint64_t m) const { return (state & m) != 0; }
-  void state_set(uint64_t m) { state |= m; }
-  void state_clear(uint64_t m) { state &= ~m; }
+  bool state_test(uint64_t m) const { return recovery_state.state_test(m); }
+  void state_set(uint64_t m) { recovery_state.state_set(m); }
+  void state_clear(uint64_t m) { recovery_state.state_clear(m); }
 
-  bool is_complete() const { return info.last_complete == info.last_update; }
-  bool should_send_notify() const { return send_notify; }
+  bool is_complete() const {
+    return recovery_state.is_complete();
+  }
+  bool should_send_notify() const {
+    return recovery_state.should_send_notify();
+  }
 
-  uint64_t get_state() const { return state; }
-  bool is_active() const { return state_test(PG_STATE_ACTIVE); }
-  bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
-  bool is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool is_down() const { return state_test(PG_STATE_DOWN); }
+  int get_state() const { return state; }
+  bool is_active() const { return recovery_state.is_active(); }
+  bool is_activating() const { return recovery_state.is_activating(); }
+  bool is_peering() const { return recovery_state.is_peering(); }
+  bool is_down() const { return recovery_state.is_down(); }
   bool is_recovery_unfound() const { return state_test(PG_STATE_RECOVERY_UNFOUND); }
   bool is_backfill_unfound() const { return state_test(PG_STATE_BACKFILL_UNFOUND); }
-  bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
-  bool is_clean() const { return state_test(PG_STATE_CLEAN); }
-  bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
+  bool is_incomplete() const { return recovery_state.is_incomplete(); }
+  bool is_clean() const { return recovery_state.is_clean(); }
+  bool is_degraded() const { return recovery_state.is_degraded(); }
+  bool is_undersized() const { return recovery_state.is_undersized(); }
   bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
-  bool is_remapped() const { return state_test(PG_STATE_REMAPPED); }
-  bool is_peered() const {
-    return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
-  }
+  bool is_remapped() const { return recovery_state.is_remapped(); }
+  bool is_peered() const { return recovery_state.is_peered(); }
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
-  bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
-  bool is_repair() const { return state_test(PG_STATE_REPAIR); }
+  bool is_premerge() const { return recovery_state.is_premerge(); }
+  bool is_repair() const { return recovery_state.is_repair(); }
 
-  bool is_empty() const { return info.last_update == eversion_t(0,0); }
+  bool is_empty() const { return recovery_state.is_empty(); }
 
   // pg on-disk state
   void do_pending_flush();
