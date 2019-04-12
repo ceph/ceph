@@ -45,7 +45,7 @@ class RookCluster(object):
 
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
-            self.rook_env.crd_version, self.rook_env.cluster_ns)
+            self.rook_env.crd_version, self.rook_env.namespace)
         return urljoin(prefix, path)
 
     def rook_api_call(self, verb, path, **kwargs):
@@ -87,7 +87,7 @@ class RookCluster(object):
 
         try:
             result = self.k8s.list_namespaced_config_map(
-                self.rook_env.operator_ns,
+                self.rook_env.operator_namespace,
                 label_selector=label_selector)
         except ApiException as e:
             log.exception("Failed to fetch device metadata: {0}".format(e))
@@ -165,7 +165,7 @@ class RookCluster(object):
             field_filter = "spec.nodeName={0}".format(nodename)
 
         pods = self.k8s.list_namespaced_pod(
-            self.rook_env.cluster_ns,
+            self.rook_env.namespace,
             label_selector=label_filter,
             field_selector=field_filter)
 
@@ -208,7 +208,7 @@ class RookCluster(object):
             "kind": "CephFilesystem",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_env.cluster_ns
+                "namespace": self.rook_env.namespace
             },
             "spec": {
                 "onlyManageDaemons": True,
@@ -233,7 +233,7 @@ class RookCluster(object):
             "kind": "CephNFS",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_env.cluster_ns
+                "namespace": self.rook_env.namespace
             },
             "spec": {
                 "rados": {
@@ -257,7 +257,7 @@ class RookCluster(object):
             "kind": "CephObjectStore",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_env.cluster_ns
+                "namespace": self.rook_env.namespace
             },
             "spec": {
                 "metaDataPool": {
