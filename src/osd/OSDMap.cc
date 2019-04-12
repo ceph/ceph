@@ -5825,3 +5825,20 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
     ceph_abort_msg("unrecognized pool type");
   }
 }
+
+unsigned OSDMap::get_crush_node_flags(int osd) const
+{
+  unsigned flags = 0;
+  if (!crush_node_flags.empty()) {
+    // the map will contain type -> name
+    std::map<std::string,std::string> ploc = crush->get_full_location(osd);
+    for (auto& i : ploc) {
+      int id = crush->get_item_id(i.second);
+      auto p = crush_node_flags.find(id);
+      if (p != crush_node_flags.end()) {
+	flags |= p->second;
+      }
+    }
+  }
+  return flags;
+}
