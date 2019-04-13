@@ -220,7 +220,11 @@ class Module(MgrModule):
         return metadata
 
     def compile_report(self):
-        report = {'leaderboard': False, 'report_version': 1}
+        report = {
+            'leaderboard': False,
+            'report_version': 1,
+            'report_timestamp': datetime.utcnow().isoformat()
+        }
 
         if self.str_to_bool(self.config['leaderboard']):
             report['leaderboard'] = True
