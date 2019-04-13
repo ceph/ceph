@@ -475,6 +475,11 @@ void decode_json_obj(utime_t& val, JSONObj *obj)
   }
 }
 
+void encode_json(const char *name, std::string_view val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);
