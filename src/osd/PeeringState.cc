@@ -11,6 +11,7 @@
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGTrim.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -797,6 +798,7 @@ void PeeringState::clear_primary_state()
 
   clear_recovery_state();
 
+  last_update_ondisk = eversion_t();
   pl->clear_primary_state();
 }
 
@@ -3742,6 +3744,136 @@ void PeeringState::pre_submit_op(
     }
   }
 }
+
+void PeeringState::recovery_committed_to(eversion_t version)
+{
+  psdout(10) << __func__ << " version " << version
+	     << " now ondisk" << dendl;
+  last_complete_ondisk = version;
+
+  if (last_complete_ondisk == info.last_update) {
+    if (!is_primary()) {
+      // Either we are a replica or backfill target.
+      // we are fully up to date.  tell the primary!
+      pl->send_cluster_message(
+	get_primary().osd,
+	new MOSDPGTrim(
+	  get_osdmap_epoch(),
+	  spg_t(info.pgid.pgid, primary.shard),
+	  last_complete_ondisk),
+	get_osdmap_epoch());
+    } else {
+      calc_min_last_complete_ondisk();
+    }
+  }
+}
+
+void PeeringState::complete_write(eversion_t v, eversion_t lc)
+{
+  last_update_ondisk = v;
+  last_complete_ondisk = lc;
+  calc_min_last_complete_ondisk();
+}
+
+void PeeringState::calc_trim_to()
+{
+  size_t target = cct->_conf->osd_min_pg_log_entries;
+  if (is_degraded() ||
+      state_test(PG_STATE_RECOVERING |
+                 PG_STATE_RECOVERY_WAIT |
+                 PG_STATE_BACKFILLING |
+                 PG_STATE_BACKFILL_WAIT |
+                 PG_STATE_BACKFILL_TOOFULL)) {
+    target = cct->_conf->osd_max_pg_log_entries;
+  }
+
+  eversion_t limit = std::min(
+    min_last_complete_ondisk,
+    pg_log.get_can_rollback_to());
+  if (limit != eversion_t() &&
+      limit != pg_trim_to &&
+      pg_log.get_log().approx_size() > target) {
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+                             cct->_conf->osd_pg_log_trim_max);
+    if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
+        cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+      return;
+    }
+    list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
+    eversion_t new_trim_to;
+    for (size_t i = 0; i < num_to_trim; ++i) {
+      new_trim_to = it->version;
+      ++it;
+      if (new_trim_to > limit) {
+        new_trim_to = limit;
+        psdout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        break;
+      }
+    }
+    psdout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
+    pg_trim_to = new_trim_to;
+    assert(pg_trim_to <= pg_log.get_head());
+    assert(pg_trim_to <= min_last_complete_ondisk);
+  }
+}
+
+void PeeringState::calc_trim_to_aggressive()
+{
+  size_t target = cct->_conf->osd_min_pg_log_entries;
+  if (is_degraded() ||
+      state_test(PG_STATE_RECOVERING |
+		 PG_STATE_RECOVERY_WAIT |
+		 PG_STATE_BACKFILLING |
+		 PG_STATE_BACKFILL_WAIT |
+		 PG_STATE_BACKFILL_TOOFULL)) {
+    target = cct->_conf->osd_max_pg_log_entries;
+  }
+  // limit pg log trimming up to the can_rollback_to value
+  eversion_t limit = std::min(
+    pg_log.get_head(),
+    pg_log.get_can_rollback_to());
+  psdout(10) << __func__ << " limit = " << limit << dendl;
+
+  if (limit != eversion_t() &&
+      limit != pg_trim_to &&
+      pg_log.get_log().approx_size() > target) {
+    psdout(10) << __func__ << " approx pg log length =  "
+             << pg_log.get_log().approx_size() << dendl;
+    uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
+                                              cct->_conf->osd_pg_log_trim_max);
+    psdout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
+    if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
+	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+      return;
+    }
+    auto it = pg_log.get_log().log.begin(); // oldest log entry
+    auto rit = pg_log.get_log().log.rbegin();
+    eversion_t by_n_to_keep; // start from tail
+    eversion_t by_n_to_trim = eversion_t::max(); // start from head
+    for (size_t i = 0; it != pg_log.get_log().log.end(); ++it, ++rit) {
+      i++;
+      if (i > target && by_n_to_keep == eversion_t()) {
+        by_n_to_keep = rit->version;
+      }
+      if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
+        by_n_to_trim = it->version;
+      }
+      if (by_n_to_keep != eversion_t() &&
+          by_n_to_trim != eversion_t::max()) {
+        break;
+      }
+    }
+
+    if (by_n_to_keep == eversion_t()) {
+      return;
+    }
+
+    pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
+    psdout(10) << __func__ << " pg_trim_to now " << pg_trim_to << dendl;
+    ceph_assert(pg_trim_to <= pg_log.get_head());
+  }
+}
+
 
 /*------------ Peering State Machine----------------*/
 #undef dout_prefix

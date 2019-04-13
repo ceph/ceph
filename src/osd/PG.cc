@@ -188,13 +188,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   pg_whoami(recovery_state.pg_whoami),
   info(recovery_state.info),
   pg_log(recovery_state.pg_log),
-  last_update_ondisk(recovery_state.last_update_ondisk),
-  last_complete_ondisk(recovery_state.last_complete_ondisk),
-  last_update_applied(recovery_state.last_update_applied),
   peer_info(recovery_state.peer_info),
-  peer_last_complete_ondisk(recovery_state.peer_last_complete_ondisk),
-  min_last_complete_ondisk(recovery_state.min_last_complete_ondisk),
-  pg_trim_to(recovery_state.pg_trim_to),
   missing_loc(recovery_state.missing_loc),
   pg_id(p),
   coll(p),
@@ -332,8 +326,6 @@ void PG::update_object_snap_mapping(
 /******* PG ***********/
 void PG::clear_primary_state()
 {
-  last_update_ondisk = eversion_t();
-
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
@@ -2814,7 +2806,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::WAIT_LAST_UPDATE:
-        if (last_update_applied < scrubber.subset_last_update) {
+        if (recovery_state.get_last_update_applied() <
+	  scrubber.subset_last_update) {
           // will be requeued by op_applied
           dout(15) << "wait for EC read/modify/writes to queue" << dendl;
           done = true;
@@ -2842,7 +2835,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::BUILD_MAP:
-        ceph_assert(last_update_applied >= scrubber.subset_last_update);
+        ceph_assert(recovery_state.get_last_update_applied() >=
+	  scrubber.subset_last_update);
 
         // build my own scrub map
 	if (scrub_preempted) {
@@ -2898,7 +2892,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::COMPARE_MAPS:
-        ceph_assert(last_update_applied >= scrubber.subset_last_update);
+        ceph_assert(recovery_state.get_last_update_applied() >=
+	  scrubber.subset_last_update);
         ceph_assert(scrubber.waiting_on_whom.empty());
 
         scrub_compare_maps();
