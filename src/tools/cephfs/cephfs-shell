@@ -951,14 +951,25 @@ sub-directories, files')
         Lists all files and folders in the current local directory
         """
 
-        if len(args.paths) == 1 and args.paths[0] == '':
-            args.paths.pop(0)
+        if len(args.paths) == 0 or (len(args.paths) == 1 and
+                                    args.paths[0] == ''):
+            if len(args.paths) > 0:
+                args.paths.pop(0)
             args.paths.append(os.getcwd())
         for path in args.paths:
-            if os.path.isabs(path):
-                path = os.path.relpath(os.getcwd(), '/' + path)
-            items = os.listdir(path)
-            print_list(items)
+            if not os.path.isabs(path):
+                path = os.path.relpath(path)
+            if os.path.isdir(path):
+                self.poutput("%s:" % path)
+                items = os.listdir(path)
+                print_list(items)
+            else:
+                self.poutput("%s: no such directory" % path)
+        # Arguments to the with_argpaser decorator function are sticky.
+        # The items in args.path do not get overwritten in subsequent calls.
+        # The arguments remain in args.paths after the function exits and we
+        # neeed to clean it up to ensure the next call works as expected.
+        args.paths.clear()
 
     def do_lpwd(self, arglist):
         """
