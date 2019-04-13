@@ -94,7 +94,7 @@ inline constexpr bool denc_supported = denc_traits<T>::supported;
     if (bits > 2)							\
       break;								\
     char fn[PATH_MAX];							\
-    snprintf(fn, sizeof(fn),						\
+    ::snprintf(fn, sizeof(fn),						\
 	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
 	     getpid(), i++);						\
     int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);		\
