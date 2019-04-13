@@ -1533,105 +1533,6 @@ int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
   return r;
 }
 
-void PrimaryLogPG::calc_trim_to()
-{
-  size_t target = cct->_conf->osd_min_pg_log_entries;
-  if (is_degraded() ||
-      state_test(PG_STATE_RECOVERING |
-                 PG_STATE_RECOVERY_WAIT |
-                 PG_STATE_BACKFILLING |
-                 PG_STATE_BACKFILL_WAIT |
-                 PG_STATE_BACKFILL_TOOFULL)) {
-    target = cct->_conf->osd_max_pg_log_entries;
-  }
-
-  eversion_t limit = std::min(
-    min_last_complete_ondisk,
-    pg_log.get_can_rollback_to());
-  if (limit != eversion_t() &&
-      limit != pg_trim_to &&
-      pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
-                             cct->_conf->osd_pg_log_trim_max);
-    if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
-        cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
-      return;
-    }
-    list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
-    eversion_t new_trim_to;
-    for (size_t i = 0; i < num_to_trim; ++i) {
-      new_trim_to = it->version;
-      ++it;
-      if (new_trim_to > limit) {
-        new_trim_to = limit;
-        dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
-        break;
-      }
-    }
-    dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
-    pg_trim_to = new_trim_to;
-    assert(pg_trim_to <= pg_log.get_head());
-    assert(pg_trim_to <= min_last_complete_ondisk);
-  }
-}
-
-void PrimaryLogPG::calc_trim_to_aggressive()
-{
-  size_t target = cct->_conf->osd_min_pg_log_entries;
-  if (is_degraded() ||
-      state_test(PG_STATE_RECOVERING |
-		 PG_STATE_RECOVERY_WAIT |
-		 PG_STATE_BACKFILLING |
-		 PG_STATE_BACKFILL_WAIT |
-		 PG_STATE_BACKFILL_TOOFULL)) {
-    target = cct->_conf->osd_max_pg_log_entries;
-  }
-  // limit pg log trimming up to the can_rollback_to value
-  eversion_t limit = std::min(
-    pg_log.get_head(),
-    pg_log.get_can_rollback_to());
-  dout(10) << __func__ << " limit = " << limit << dendl;
-
-  if (limit != eversion_t() &&
-      limit != pg_trim_to &&
-      pg_log.get_log().approx_size() > target) {
-    dout(10) << __func__ << " approx pg log length =  "
-             << pg_log.get_log().approx_size() << dendl;
-    uint64_t num_to_trim = std::min<uint64_t>(pg_log.get_log().approx_size() - target,
-                                              cct->_conf->osd_pg_log_trim_max);
-    dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
-    if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
-	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
-      return;
-    }
-    auto it = pg_log.get_log().log.begin(); // oldest log entry
-    auto rit = pg_log.get_log().log.rbegin();
-    eversion_t by_n_to_keep; // start from tail
-    eversion_t by_n_to_trim = eversion_t::max(); // start from head
-    for (size_t i = 0; it != pg_log.get_log().log.end(); ++it, ++rit) {
-      i++;
-      if (i > target && by_n_to_keep == eversion_t()) {
-        by_n_to_keep = rit->version;
-      }
-      if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
-        by_n_to_trim = it->version;
-      }
-      if (by_n_to_keep != eversion_t() &&
-          by_n_to_trim != eversion_t::max()) {
-        break;
-      }
-    }
-
-    if (by_n_to_keep == eversion_t()) {
-      return;
-    }
-
-    pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
-    dout(10) << __func__ << " pg_trim_to now " << pg_trim_to << dendl;
-    ceph_assert(pg_trim_to <= pg_log.get_head());
-  }
-}
-
 PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 			   const PGPool &_pool,
 			   const map<string,string>& ec_profile, spg_t p) :
@@ -3944,10 +3845,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   ceph_assert(op->may_write() || op->may_cache());
 
   // trim log?
-  if (hard_limit_pglog())
-    calc_trim_to_aggressive();
-  else
-    calc_trim_to();
+  recovery_state.update_trim_to();
 
   // verify that we are doing this in order?
   if (cct->_conf->osd_debug_op_order && m->get_source().is_client() &&
@@ -10344,8 +10242,7 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
   repop->all_committed = true;
   if (!repop->rep_aborted) {
     if (repop->v != eversion_t()) {
-      last_update_ondisk = repop->v;
-      last_complete_ondisk = repop->pg_local_last_complete;
+      recovery_state.complete_write(repop->v, repop->pg_local_last_complete);
     }
     eval_repop(repop);
   }
@@ -10356,10 +10253,11 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   dout(10) << "op_applied version " << applied_version << dendl;
   ceph_assert(applied_version != eversion_t());
   ceph_assert(applied_version <= info.last_update);
-  last_update_applied = applied_version;
+  recovery_state.local_write_applied(applied_version);
   if (is_primary()) {
     if (scrubber.active) {
-      if (last_update_applied >= scrubber.subset_last_update) {
+      if (recovery_state.get_last_update_applied() >=
+	scrubber.subset_last_update) {
 	requeue_scrub(ops_blocked_by_scrub());
       }
     } else {
@@ -10403,7 +10301,6 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
     }
 
     publish_stats_to_osd();
-    recovery_state.calc_min_last_complete_ondisk();
 
     dout(10) << " removing " << *repop << dendl;
     ceph_assert(!repop_queue.empty());
@@ -10460,8 +10357,8 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     ctx->delta_stats,
     ctx->at_version,
     std::move(ctx->op_t),
-    pg_trim_to,
-    min_last_complete_ondisk,
+    recovery_state.get_pg_trim_to(),
+    recovery_state.get_min_last_complete_ondisk(),
     ctx->log,
     ctx->updated_hset_history,
     on_all_commit,
@@ -10553,10 +10450,7 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
-  if (hard_limit_pglog())
-    calc_trim_to_aggressive();
-  else
-    calc_trim_to();
+  recovery_state.update_trim_to();
   repop->put();
 }
 
@@ -10595,8 +10489,8 @@ void PrimaryLogPG::submit_log_entries(
       ObjectStore::Transaction t;
       eversion_t old_last_update = info.last_update;
       recovery_state.merge_new_log_entries(
-	entries, t, pg_trim_to, min_last_complete_ondisk);
-
+	entries, t, recovery_state.get_pg_trim_to(),
+	recovery_state.get_min_last_complete_ondisk());
 
       set<pg_shard_t> waiting_on;
       for (set<pg_shard_t>::const_iterator i = get_acting_recovery_backfill().begin();
@@ -10615,8 +10509,8 @@ void PrimaryLogPG::submit_log_entries(
 	    get_osdmap_epoch(),
 	    get_last_peering_reset(),
 	    repop->rep_tid,
-	    pg_trim_to,
-	    min_last_complete_ondisk);
+	    recovery_state.get_pg_trim_to(),
+	    recovery_state.get_min_last_complete_ondisk());
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap_epoch());
 	  waiting_on.insert(peer);
@@ -10671,10 +10565,7 @@ void PrimaryLogPG::submit_log_entries(
       op_applied(info.last_update);
     });
 
-  if (hard_limit_pglog())
-    calc_trim_to_aggressive();
-  else
-    calc_trim_to();
+  recovery_state.update_trim_to();
 }
 
 void PrimaryLogPG::cancel_log_updates()
@@ -11484,27 +11375,10 @@ void PrimaryLogPG::_committed_pushed_object(
 {
   lock();
   if (!pg_has_reset_since(epoch)) {
-    dout(10) << __func__ << " last_complete " << last_complete << " now ondisk" << dendl;
-    last_complete_ondisk = last_complete;
-
-    if (last_complete_ondisk == info.last_update) {
-      if (!is_primary()) {
-        // Either we are a replica or backfill target.
-	// we are fully up to date.  tell the primary!
-	osd->send_message_osd_cluster(
-	  get_primary().osd,
-	  new MOSDPGTrim(
-	    get_osdmap_epoch(),
-	    spg_t(info.pgid.pgid, get_primary().shard),
-	    last_complete_ondisk),
-	  get_osdmap_epoch());
-      } else {
-	recovery_state.calc_min_last_complete_ondisk();
-      }
-    }
-
+    recovery_state.recovery_committed_to(last_complete);
   } else {
-    dout(10) << __func__ << " pg has changed, not touching last_complete_ondisk" << dendl;
+    dout(10) << __func__
+	     << " pg has changed, not touching last_complete_ondisk" << dendl;
   }
 
   unlock();

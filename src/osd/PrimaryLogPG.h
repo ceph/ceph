@@ -482,12 +482,12 @@ public:
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) override {
-    peer_last_complete_ondisk[fromosd] = lcod;
+    recovery_state.update_peer_last_complete_ondisk(fromosd, lcod);
   }
 
   void update_last_complete_ondisk(
     eversion_t lcod) override {
-    last_complete_ondisk = lcod;
+    recovery_state.update_last_complete_ondisk(lcod);
   }
 
   void update_stats(
@@ -1382,8 +1382,6 @@ protected:
                    unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  void calc_trim_to() override;
-  void calc_trim_to_aggressive() override;
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
