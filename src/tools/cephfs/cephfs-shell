@@ -874,8 +874,10 @@ sub-directories, files')
         Print contents of a file
         """
         for file_name in args.file_names:
-            self.poutput(file_name)
-            copy_to_local(file_name, '-')
+            if is_file_exists(file_name):
+                copy_to_local(file_name, '-')
+            else:
+                self.poutput('%s: no such file' % file_name)
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
     umask_parser.add_argument(
