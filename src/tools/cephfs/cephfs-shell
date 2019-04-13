@@ -825,7 +825,10 @@ sub-directories, files')
             else:
                 cephfs.chdir(b'/')
         else:
-            cephfs.chdir(to_bytes(args.dir_name))
+            try:
+                cephfs.chdir(to_bytes(args.dir_name))
+            except:
+                self.poutput("%s: no such directory" % args.dir_name)
         self.working_dir = cephfs.getcwd().decode('utf-8')
         self.set_prompt()
 
