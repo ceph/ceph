@@ -34,6 +34,12 @@ enum class RGWMDLogStatus : uint32_t {
   Abort,
 };
 
+enum class RGWMDLogOp : uint8_t {
+  Unknown,
+  Write,
+  Remove,
+};
+
 class RGWMetadataObject {
 protected:
   obj_version objv;
@@ -259,6 +265,7 @@ struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;
   RGWMDLogStatus status = RGWMDLogStatus::Unknown;
+  RGWMDLogOp op = RGWMDLogOp::Unknown;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -301,9 +308,9 @@ class RGWMetadataManager {
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
   int pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
-                 RGWMDLogStatus op_type);
+                 RGWMDLogOp op, RGWMDLogStatus status);
   int post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
-                 RGWObjVersionTracker *objv_tracker, int ret);
+                 RGWObjVersionTracker *objv_tracker, RGWMDLogOp op, int ret);
 
   string heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv);
   int store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
@@ -349,8 +356,7 @@ public:
   template <typename F>
   int mutate(RGWMetadataHandler *handler, const string& key,
              const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
-             RGWMDLogStatus op_type,
-             RGWMetadataHandler::sync_type_t sync_mode,
+             RGWMDLogOp op, RGWMetadataHandler::sync_type_t sync_mode,
              F&& f);
 
   RGWMetadataHandler *get_handler(const string& type);
@@ -387,7 +393,7 @@ public:
 template <typename F>
 int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
                                const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
-                               RGWMDLogStatus op_type,
+                               RGWMDLogOp op,
                                RGWMetadataHandler::sync_type_t sync_mode,
                                F&& f)
 {
@@ -405,7 +411,7 @@ int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
   string section;
   RGWMetadataLogData log_data;
   ret = pre_modify(handler, section, key, log_data, objv_tracker,
-                   RGWMDLogStatus::Write);
+                   op, RGWMDLogStatus::Write);
   if (ret < 0) {
     return ret;
   }
@@ -413,12 +419,7 @@ int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
   ret = std::forward<F>(f)();
 
   /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return post_modify(handler, section, key, log_data, objv_tracker, op, ret);
 }
 
 #endif

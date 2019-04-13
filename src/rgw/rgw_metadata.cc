@@ -37,22 +37,37 @@ void LogStatusDump::dump(Formatter *f) const {
   encode_json("status", mdlog_status_string(status), f);
 }
 
+std::string_view mdlog_op_string(RGWMDLogOp op) {
+  switch (op) {
+    case RGWMDLogOp::Write: return "write";
+    case RGWMDLogOp::Remove: return "remove";
+    default: return "unknown";
+  }
+}
+
 void RGWMetadataLogData::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(read_version, bl);
   encode(write_version, bl);
   auto s = static_cast<uint32_t>(status);
   encode(s, bl);
+  auto o = static_cast<std::underlying_type<RGWMDLogOp>::type>(op);
+  encode(o, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWMetadataLogData::decode(bufferlist::const_iterator& bl) {
-   DECODE_START(1, bl);
+   DECODE_START(2, bl);
    decode(read_version, bl);
    decode(write_version, bl);
    uint32_t s;
    decode(s, bl);
    status = static_cast<RGWMDLogStatus>(s);
+   if (struct_v >= 2) {
+     std::underlying_type<RGWMDLogOp>::type o;
+     decode(o, bl);
+     op = static_cast<RGWMDLogOp>(o);
+   }
    DECODE_FINISH(bl);
 }
 
@@ -60,6 +75,7 @@ void RGWMetadataLogData::dump(Formatter *f) const {
   encode_json("read_version", read_version, f);
   encode_json("write_version", write_version, f);
   encode_json("status", LogStatusDump(status), f);
+  encode_json("op", mdlog_op_string(op), f);
 }
 
 void decode_json_obj(RGWMDLogStatus& status, JSONObj *obj) {
@@ -84,6 +100,15 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("read_version", read_version, obj);
   JSONDecoder::decode_json("write_version", write_version, obj);
   JSONDecoder::decode_json("status", status, obj);
+  string o;
+  JSONDecoder::decode_json("op", o, obj);
+  if (o == "write") {
+    op = RGWMDLogOp::Write;
+  } else if (o == "remove") {
+    op = RGWMDLogOp::Remove;
+  } else {
+    op = RGWMDLogOp::Unknown;
+  }
 }
 
 
@@ -965,7 +990,7 @@ void RGWMetadataManager::get_sections(list<string>& sections)
 
 int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                                    RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
-                                   RGWMDLogStatus op_type)
+                                   RGWMDLogOp op, RGWMDLogStatus status)
 {
   section = handler->get_type();
 
@@ -981,7 +1006,8 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
     log_data.write_version = objv_tracker->write_version;
   }
 
-  log_data.status = op_type;
+  log_data.op = op;
+  log_data.status = status;
 
   bufferlist logbl;
   encode(log_data, logbl);
@@ -995,8 +1021,10 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
 }
 
 int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
-                                    RGWObjVersionTracker *objv_tracker, int ret)
+                                    RGWObjVersionTracker *objv_tracker,
+                                    RGWMDLogOp op, int ret)
 {
+  log_data.op = op;
   if (ret >= 0)
     log_data.status = RGWMDLogStatus::Complete;
   else 
@@ -1080,8 +1108,9 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
 {
   string section;
   RGWMetadataLogData log_data;
+  const auto op = RGWMDLogOp::Write;
   int ret = pre_modify(handler, section, key, log_data, objv_tracker,
-                       RGWMDLogStatus::Write);
+                       op, RGWMDLogStatus::Write);
   if (ret < 0)
     return ret;
 
@@ -1107,12 +1136,7 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
   }
 done:
   /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return post_modify(handler, section, key, log_data, objv_tracker, op, ret);
 }
 
 int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
@@ -1121,8 +1145,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
 {
   string section;
   RGWMetadataLogData log_data;
+  const auto op = RGWMDLogOp::Remove;
   int ret = pre_modify(handler, section, key, log_data, objv_tracker,
-                      RGWMDLogStatus::Remove);
+                      op, RGWMDLogStatus::Remove);
   if (ret < 0) {
       return ret;
   }
@@ -1140,13 +1165,7 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
               .set_objv_tracker(objv_tracker)
               .remove(null_yield);
   /* cascading ret into post_modify() */
-
-  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0) {
-      return ret;
-  }
-
-  return 0;
+  return post_modify(handler, section, key, log_data, objv_tracker, op, ret);
 }
 
 int RGWMetadataManager::get_log_shard_id(const string& section,
