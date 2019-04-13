@@ -845,7 +845,7 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     chmod_parser = argparse.ArgumentParser(description='Create Directory.')
-    chmod_parser.add_argument('mode', type=int, help='Mode')
+    chmod_parser.add_argument('mode', type=str, action=ModeAction, help='Mode')
     chmod_parser.add_argument('file_name', type=str, help='Name of the file')
 
     @with_argparser(chmod_parser)
@@ -853,7 +853,11 @@ sub-directories, files')
         """
         Change permission of a file
         """
-        cephfs.chmod(args.file_name, args.mode)
+        mode = int(args.mode, base=8)
+        try:
+            cephfs.chmod(args.file_name, mode)
+        except:
+            self.poutput('%s: no such file or directory' % args.file_name)
 
     def complete_cat(self, text, line, begidx, endidx):
         """
