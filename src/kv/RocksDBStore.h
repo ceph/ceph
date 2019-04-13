@@ -79,6 +79,8 @@ class RocksDBStore : public KeyValueDB {
   rocksdb::Env *env;
   std::shared_ptr<rocksdb::Statistics> dbstats;
   rocksdb::BlockBasedTableOptions bbt_opts;
+  std::unordered_map<string, rocksdb::BlockBasedTableOptions> cf_bbt_opts;
+
   string options_str;
 
   uint64_t cache_size = 0;
@@ -93,6 +95,7 @@ class RocksDBStore : public KeyValueDB {
   int do_open(ostream &out, bool create_if_missing, bool open_readonly,
 	      const vector<ColumnFamily>* cfs = nullptr);
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
+  int init_block_cache(uint64_t size, rocksdb::BlockBasedTableOptions& bbto);
 
   // manage async compactions
   Mutex compact_queue_lock;
@@ -487,6 +490,14 @@ err:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
 
+  virtual int64_t get_cache_usage(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end()) {
+      return static_cast<int64_t>(it->second.block_cache->GetUsage());
+    }
+    return -EINVAL;
+  }
+
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
@@ -496,11 +507,22 @@ err:
   int set_cache_capacity(int64_t capacity);
   int64_t get_cache_capacity();
 
-  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
-      const override {
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache() const override {
     return dynamic_pointer_cast<PriorityCache::PriCache>(
         bbt_opts.block_cache);
   }
+
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end()) {
+      return dynamic_pointer_cast<PriorityCache::PriCache>(
+          it->second.block_cache);
+    }
+    return nullptr;
+  }
+  
 
   WholeSpaceIterator get_wholespace_iterator() override;
 };

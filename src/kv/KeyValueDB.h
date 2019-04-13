@@ -31,8 +31,12 @@ public:
   struct ColumnFamily {
     string name;      //< name of this individual column family
     string option;    //< configure option string for this CF
+    bool share_cache = true; //< should this column family share the default block_cache?
+
     ColumnFamily(const string &name, const string &option)
       : name(name), option(option) {}
+    ColumnFamily(const string &name, const string &option, bool share_cache)
+      : name(name), option(option), share_cache(share_cache) {}
   };
 
   class TransactionImpl {
@@ -357,9 +361,19 @@ public:
     return -EOPNOTSUPP;
   }
 
+  virtual int64_t get_cache_usage(std::string prefix) const {
+    return -EOPNOTSUPP;
+  }
+
   virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
     return nullptr;
   }
+
+  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache(std::string prefix) const {
+    return nullptr;
+  }
+
+
 
   virtual ~KeyValueDB() {}
 

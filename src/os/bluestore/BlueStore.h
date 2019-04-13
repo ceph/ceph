@@ -1997,6 +1997,7 @@ private:
   uint64_t cache_size = 0;       ///< total cache size
   double cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
   double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
+  double cache_kv_onode_ratio = 0; ///< cache ratio dedicated to kv onodes (e.g., rocksdb onode CF)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
@@ -2023,6 +2024,7 @@ private:
     bool stop = false;
     uint64_t autotune_cache_size = 0;
     std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
+    std::shared_ptr<PriorityCache::PriCache> binned_kv_onode_cache = nullptr;
     std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
 
     struct MempoolCache : public PriorityCache::PriCache {
