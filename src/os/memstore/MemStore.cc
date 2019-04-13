@@ -442,6 +442,7 @@ int MemStore::collection_list(CollectionHandle& ch,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
   Collection *c = static_cast<Collection*>(ch.get());
+  ls->reserve(max);
   std::shared_lock l{c->lock};
 
   dout(10) << __func__ << " cid " << ch->cid << " start " << start

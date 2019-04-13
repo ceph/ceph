@@ -3542,15 +3542,22 @@ TEST_P(StoreTest, ManyObjectTest) {
 
   set<ghobject_t> listed, listed2;
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
-  ASSERT_EQ(r, 0);
+  {
+    ghobject_t next, current;
+    while (!next.is_max()) {
+      r = store->collection_list(ch, current, ghobject_t::get_max(), 50, &objects, &next);
+      ASSERT_EQ(r, 0);
 
-  cerr << "objects.size() is " << objects.size() << std::endl;
-  for (vector<ghobject_t> ::iterator i = objects.begin();
-       i != objects.end();
-       ++i) {
-    listed.insert(*i);
-    ASSERT_TRUE(created.count(*i));
+      cerr << "objects.size() is " << objects.size() << std::endl;
+      for (vector<ghobject_t> ::iterator i = objects.begin();
+	  i != objects.end();
+	  ++i) {
+	listed.insert(*i);
+	ASSERT_TRUE(created.count(*i));
+      }
+      objects.clear();
+      current = next;
+    }
   }
   ASSERT_TRUE(listed.size() == created.size());
 
@@ -4444,10 +4451,17 @@ public:
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
     }
 
-    int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-				   INT_MAX, &objects, 0);
-    ASSERT_EQ(r, 0);
-    objects_set2.insert(objects.begin(), objects.end());
+    {
+      ghobject_t next, current;
+      while (!next.is_max()) {
+	int r = store->collection_list(ch, current, ghobject_t::get_max(),
+	    50, &objects, &next);
+	ASSERT_EQ(r, 0);
+	objects_set2.insert(objects.begin(), objects.end());
+	objects.clear();
+	current = next;
+      }
+    }
     ASSERT_EQ(objects_set2.size(), available_objects.size());
     for (set<ghobject_t>::iterator i = objects_set2.begin();
 	 i != objects_set2.end();
@@ -4859,14 +4873,23 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   }
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
-  ASSERT_EQ(r, 0);
-  set<ghobject_t> listed(objects.begin(), objects.end());
-  cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
-  ASSERT_TRUE(listed.size() == created.size());
+  set<ghobject_t> listed;
+  ghobject_t current, next;
+  {
+    while (!next.is_max()) {
+      r = store->collection_list(ch, current, ghobject_t::get_max(), 60, &objects, &next);
+      ASSERT_EQ(r, 0);
+      listed.insert(objects.begin(), objects.end());
+      objects.clear();
+      current = next;
+    }
+    cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
+    ASSERT_TRUE(listed.size() == created.size());
+  }
+
   objects.clear();
   listed.clear();
-  ghobject_t current, next;
+  current = next = ghobject_t();
   while (1) {
     r = store->collection_list(ch, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
@@ -4957,15 +4980,24 @@ TEST_P(StoreTest, ScrubTest) {
   }
 
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
-  ASSERT_EQ(r, 0);
-  set<ghobject_t> listed(objects.begin(), objects.end());
-  cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
-  ASSERT_TRUE(listed.size() == created.size());
+  set<ghobject_t> listed;
+  ghobject_t current, next;
+  {
+    while (!next.is_max()) {
+      r = store->collection_list(ch, current, ghobject_t::get_max(),
+	  60, &objects, &next);
+      ASSERT_EQ(r, 0);
+      listed.insert(objects.begin(), objects.end());
+      objects.clear();
+      current = next;
+    }
+    cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
+    ASSERT_TRUE(listed.size() == created.size());
+  }
+
   objects.clear();
   listed.clear();
-  ghobject_t current, next;
+  current = next = ghobject_t();
   while (1) {
     r = store->collection_list(ch, current, ghobject_t::get_max(), 60,
 			       &objects, &next);
@@ -5434,26 +5466,40 @@ void colsplittest(
 
   // check
   vector<ghobject_t> objects;
-  r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(objects.size(), num_objects);
-  for (vector<ghobject_t>::iterator i = objects.begin();
-       i != objects.end();
-       ++i) {
-    ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+  ghobject_t current, next;
+  unsigned count = 0;
+  while (!next.is_max()) {
+    r = store->collection_list(ch, current, ghobject_t::get_max(),
+				60, &objects, &next);
+    ASSERT_EQ(r, 0);
+    count +=  objects.size();
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	i != objects.end();
+	++i) {
+      ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+    }
+    objects.clear();
+    current = next;
   }
+  ASSERT_EQ(count, num_objects);
 
   objects.clear();
-  r = store->collection_list(tch, ghobject_t(), ghobject_t::get_max(),
-			     INT_MAX, &objects, 0);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(objects.size(), num_objects);
-  for (vector<ghobject_t>::iterator i = objects.begin();
-       i != objects.end();
-       ++i) {
-    ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+  current = next = ghobject_t();
+  count = 0;
+  while (!next.is_max()) {
+    r = store->collection_list(tch, current, ghobject_t::get_max(),
+				60, &objects, &next);
+    ASSERT_EQ(r, 0);
+    count += objects.size();
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	i != objects.end();
+	++i) {
+      ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+    }
+    objects.clear();
+    current = next;
   }
+  ASSERT_EQ(count, num_objects);
 
   // merge them again!
   {
@@ -5467,22 +5513,29 @@ void colsplittest(
   ObjectStore::Transaction t;
   {
     vector<ghobject_t> objects;
-    r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			       INT_MAX, &objects, 0);
-    ASSERT_EQ(r, 0);
-    ASSERT_EQ(objects.size(), num_objects * 2); // both halves
-    unsigned size = 0;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end();
-	 ++i) {
-      t.remove(cid, *i);
-      if (++size > 100) {
-	size = 0;
-	r = queue_transaction(store, ch, std::move(t));
-	ASSERT_EQ(r, 0);
-	t = ObjectStore::Transaction();
+    ghobject_t current, next;
+    unsigned count = 0;
+    while (!next.is_max()) {
+      r = store->collection_list(ch, current, ghobject_t::get_max(),
+				  200, &objects, &next);
+      ASSERT_EQ(r, 0);
+      count += objects.size();
+      unsigned size = 0;
+      for (vector<ghobject_t>::iterator i = objects.begin();
+	  i != objects.end();
+	  ++i) {
+	t.remove(cid, *i);
+	if (++size > 100) {
+	  size = 0;
+	  r = queue_transaction(store, ch, std::move(t));
+	  ASSERT_EQ(r, 0);
+	  t = ObjectStore::Transaction();
+	}
       }
+      objects.clear();
+      current = next;
     }
+    ASSERT_EQ(count, num_objects * 2); // both halves
   }
   t.remove_collection(cid);
   r = queue_transaction(store, ch, std::move(t));
@@ -5605,12 +5658,17 @@ void test_merge_skewed(ObjectStore *store,
   // verify
   {
     vector<ghobject_t> got;
-    store->collection_list(cha, ghobject_t(), ghobject_t::get_max(), INT_MAX,
-			   &got, 0);
     set<ghobject_t> gotset;
-    for (auto& o : got) {
-      ASSERT_TRUE(aobjects.count(o) || bobjects.count(o));
-      gotset.insert(o);
+    ghobject_t current, next;
+    while (!next.is_max()) {
+      store->collection_list(cha, current, ghobject_t::get_max(), 60,
+	  &got, &next);
+      for (auto& o : got) {
+	ASSERT_TRUE(aobjects.count(o) || bobjects.count(o));
+	gotset.insert(o);
+      }
+      got.clear();
+      current = next;
     }
     // check both listing and stat-ability (different code paths!)
     struct stat st;
@@ -5915,7 +5973,7 @@ TEST_P(StoreTest, BigRGWObjectName) {
   {
     vector<ghobject_t> objects;
     r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			       INT_MAX, &objects, 0);
+			       60, &objects, 0);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(objects.size(), 1u);
     ASSERT_EQ(objects[0], oid2);

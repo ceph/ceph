@@ -389,7 +389,7 @@ int PGBackend::objects_list_range(
     ch,
     ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    INT_MAX,
+    store->get_ideal_list_max(),
     &objects,
     NULL);
   ls->reserve(objects.size());

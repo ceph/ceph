@@ -4197,7 +4197,6 @@ void OSD::recursive_remove_collection(CephContext* cct,
   ghobject_t next;
   int max = cct->_conf->osd_target_transaction_size;
   vector<ghobject_t> objects;
-  objects.reserve(max);
   while (true) {
     objects.clear();
     store->collection_list(ch, next, ghobject_t::get_max(),

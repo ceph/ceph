@@ -1142,6 +1142,7 @@ int HashIndex::list_by_hash_bitwise(
 					    &objects);
   if (r < 0)
     return r;
+  out->reserve(max_count);
   for (set<string, CmpHexdigitStringBitwise>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {

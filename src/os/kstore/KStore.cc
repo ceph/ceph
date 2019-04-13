@@ -1542,6 +1542,7 @@ int KStore::_collection_list(
     }
   }
   dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
+  ls->reserve(max);
   while (true) {
     if (!it->valid() || it->key() >= pend) {
       if (!it->valid())

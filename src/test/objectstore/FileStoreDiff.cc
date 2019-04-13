@@ -136,131 +136,137 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
   bool ret = false;
 
   int err;
-  std::vector<ghobject_t> b_objects, a_objects;
-  err = b_store->collection_list(coll, ghobject_t(), ghobject_t::get_max(),
-				 INT_MAX, &b_objects, NULL);
-  if (err < 0) {
-    cout << "diff_objects list on verify coll " << coll.to_str()
-	    << " returns " << err << std::endl;
-    return true;
+  ghobject_t a_current, b_current, a_next, b_next;
+  while (!(a_next.is_max() && b_next.is_max())) {
+    std::vector<ghobject_t> b_objects, a_objects;
+    err = b_store->collection_list(coll, b_current, ghobject_t::get_max(),
+	500, &b_objects, &b_next);
+    if (err < 0) {
+      cout << "diff_objects list on verify coll " << coll.to_str()
+	<< " returns " << err << std::endl;
+      return true;
+    }
+    err = a_store->collection_list(coll, a_current, ghobject_t::get_max(),
+	500, &a_objects, &a_next);
+    if (err < 0) {
+      cout << "diff_objects list on store coll " << coll.to_str()
+	<< " returns " << err << std::endl;
+      return true;
+    }
+
+    if (b_objects.size() != a_objects.size()) {
+      cout << "diff_objects " << coll << " num objs mismatch (A: " << a_objects.size()
+	<< ", B: " << b_objects.size() << ")" << std::endl;
+      ret = true;
+      cout << "a: " << a_objects << std::endl;
+      cout << "b: " << b_objects << std::endl;
+      return ret;
+    }
+
+    a_current = a_next;
+    b_current = b_next;
+
+    auto a_ch = a_store->open_collection(coll);
+    auto b_ch = b_store->open_collection(coll);
+    std::vector<ghobject_t>::iterator b_it = b_objects.begin();
+    std::vector<ghobject_t>::iterator a_it = b_objects.begin();
+    for (; b_it != b_objects.end() ; ++b_it, ++a_it) {
+      ghobject_t b_obj = *b_it, a_obj = *a_it;
+      if (b_obj.hobj.oid.name != a_obj.hobj.oid.name) {
+	cout << "diff_objects name mismatch on A object "
+	  << coll << "/" << a_obj << " and B object "
+	  << coll << "/" << b_obj << std::endl;
+	ret = true;
+	continue;
+      }
+
+      struct stat b_stat, a_stat;
+      err = b_store->stat(b_ch, b_obj, &b_stat);
+      if (err < 0) {
+	cout << "diff_objects error stating B object "
+	  << coll.to_str() << "/" << b_obj.hobj.oid.name << std::endl;
+	ret = true;
+      }
+      err = a_store->stat(a_ch, a_obj, &a_stat);
+      if (err < 0) {
+	cout << "diff_objects error stating A object "
+	  << coll << "/" << a_obj << std::endl;
+	ret = true;
+      }
+
+      if (diff_objects_stat(a_stat, b_stat)) {
+	cout << "diff_objects stat mismatch on "
+	  << coll << "/" << b_obj << std::endl;
+	ret = true;
+      }
+
+      bufferlist a_obj_bl, b_obj_bl;
+      b_store->read(b_ch, b_obj, 0, b_stat.st_size, b_obj_bl);
+      a_store->read(a_ch, a_obj, 0, a_stat.st_size, a_obj_bl);
+
+      if (!a_obj_bl.contents_equal(b_obj_bl)) {
+	cout << "diff_objects content mismatch on "
+	  << coll << "/" << b_obj << std::endl;
+	ret = true;
+      }
+
+      std::map<std::string, bufferptr> a_obj_attrs_map, b_obj_attrs_map;
+      err = a_store->getattrs(a_ch, a_obj, a_obj_attrs_map);
+      if (err < 0) {
+	cout << "diff_objects getattrs on A object " << coll << "/" << a_obj
+	  << " returns " << err << std::endl;
+	ret = true;
+      }
+      err = b_store->getattrs(b_ch, b_obj, b_obj_attrs_map);
+      if (err < 0) {
+	cout << "diff_objects getattrs on B object " << coll << "/" << b_obj
+	  << "returns " << err << std::endl;
+	ret = true;
+      }
+
+      if (diff_attrs(b_obj_attrs_map, a_obj_attrs_map)) {
+	cout << "diff_objects attrs mismatch on A object "
+	  << coll << "/" << a_obj << " and B object "
+	  << coll << "/" << b_obj << std::endl;
+	ret = true;
+      }
+
+      std::map<std::string, bufferlist> a_obj_omap, b_obj_omap;
+      std::set<std::string> a_omap_keys, b_omap_keys;
+      err = a_store->omap_get_keys(a_ch, a_obj, &a_omap_keys);
+      if (err < 0) {
+	cout << "diff_objects getomap on A object " << coll << "/" << a_obj
+	  << " returns " << err << std::endl;
+	ret = true;
+      }
+      err = a_store->omap_get_values(a_ch, a_obj, a_omap_keys, &a_obj_omap);
+      if (err < 0) {
+	cout << "diff_objects getomap on A object " << coll << "/" << a_obj
+	  << " returns " << err << std::endl;
+	ret = true;
+      }
+      err = b_store->omap_get_keys(b_ch, b_obj, &b_omap_keys);
+      if (err < 0) {
+	cout << "diff_objects getomap on A object " << coll << "/" << b_obj
+	  << " returns " << err << std::endl;
+	ret = true;
+      }
+      err = b_store->omap_get_values(b_ch, b_obj, b_omap_keys, &b_obj_omap);
+      if (err < 0) {
+	cout << "diff_objects getomap on A object " << coll << "/" << b_obj
+	  << " returns " << err << std::endl;
+	ret = true;
+      }
+      if (diff_omap(a_obj_omap, b_obj_omap)) {
+	cout << "diff_objects omap mismatch on A object "
+	  << coll << "/" << a_obj << " and B object "
+	  << coll << "/" << b_obj << std::endl;
+	cout << "a: " << a_obj_omap << std::endl;
+	cout << "b: " << b_obj_omap << std::endl;
+	ret = true;
+      }
+    }
   }
-  err = a_store->collection_list(coll, ghobject_t(), ghobject_t::get_max(),
-				 INT_MAX, &a_objects, NULL);
-  if (err < 0) {
-    cout << "diff_objects list on store coll " << coll.to_str()
-              << " returns " << err << std::endl;
-    return true;
-  }
-
-  if (b_objects.size() != a_objects.size()) {
-    cout << "diff_objects " << coll << " num objs mismatch (A: " << a_objects.size()
-        << ", B: " << b_objects.size() << ")" << std::endl;
-    ret = true;
-    cout << "a: " << a_objects << std::endl;
-    cout << "b: " << b_objects << std::endl;
-  }
-
-  auto a_ch = a_store->open_collection(coll);
-  auto b_ch = b_store->open_collection(coll);
-  std::vector<ghobject_t>::iterator b_it = b_objects.begin();
-  std::vector<ghobject_t>::iterator a_it = b_objects.begin();
-  for (; b_it != b_objects.end(); ++b_it, ++a_it) {
-    ghobject_t b_obj = *b_it, a_obj = *a_it;
-    if (b_obj.hobj.oid.name != a_obj.hobj.oid.name) {
-      cout << "diff_objects name mismatch on A object "
-          << coll << "/" << a_obj << " and B object "
-          << coll << "/" << b_obj << std::endl;
-      ret = true;
-      continue;
-    }
-
-    struct stat b_stat, a_stat;
-    err = b_store->stat(b_ch, b_obj, &b_stat);
-    if (err < 0) {
-      cout << "diff_objects error stating B object "
-	      << coll.to_str() << "/" << b_obj.hobj.oid.name << std::endl;
-      ret = true;
-    }
-    err = a_store->stat(a_ch, a_obj, &a_stat);
-    if (err < 0) {
-      cout << "diff_objects error stating A object "
-          << coll << "/" << a_obj << std::endl;
-      ret = true;
-    }
-
-    if (diff_objects_stat(a_stat, b_stat)) {
-      cout << "diff_objects stat mismatch on "
-          << coll << "/" << b_obj << std::endl;
-      ret = true;
-    }
-
-    bufferlist a_obj_bl, b_obj_bl;
-    b_store->read(b_ch, b_obj, 0, b_stat.st_size, b_obj_bl);
-    a_store->read(a_ch, a_obj, 0, a_stat.st_size, a_obj_bl);
-
-    if (!a_obj_bl.contents_equal(b_obj_bl)) {
-      cout << "diff_objects content mismatch on "
-          << coll << "/" << b_obj << std::endl;
-      ret = true;
-    }
-
-    std::map<std::string, bufferptr> a_obj_attrs_map, b_obj_attrs_map;
-    err = a_store->getattrs(a_ch, a_obj, a_obj_attrs_map);
-    if (err < 0) {
-      cout << "diff_objects getattrs on A object " << coll << "/" << a_obj
-              << " returns " << err << std::endl;
-      ret = true;
-    }
-    err = b_store->getattrs(b_ch, b_obj, b_obj_attrs_map);
-    if (err < 0) {
-      cout << "diff_objects getattrs on B object " << coll << "/" << b_obj
-              << "returns " << err << std::endl;
-      ret = true;
-    }
-
-    if (diff_attrs(b_obj_attrs_map, a_obj_attrs_map)) {
-      cout << "diff_objects attrs mismatch on A object "
-          << coll << "/" << a_obj << " and B object "
-          << coll << "/" << b_obj << std::endl;
-      ret = true;
-    }
-
-    std::map<std::string, bufferlist> a_obj_omap, b_obj_omap;
-    std::set<std::string> a_omap_keys, b_omap_keys;
-    err = a_store->omap_get_keys(a_ch, a_obj, &a_omap_keys);
-    if (err < 0) {
-      cout << "diff_objects getomap on A object " << coll << "/" << a_obj
-              << " returns " << err << std::endl;
-      ret = true;
-    }
-    err = a_store->omap_get_values(a_ch, a_obj, a_omap_keys, &a_obj_omap);
-    if (err < 0) {
-      cout << "diff_objects getomap on A object " << coll << "/" << a_obj
-              << " returns " << err << std::endl;
-      ret = true;
-    }
-    err = b_store->omap_get_keys(b_ch, b_obj, &b_omap_keys);
-    if (err < 0) {
-      cout << "diff_objects getomap on A object " << coll << "/" << b_obj
-              << " returns " << err << std::endl;
-      ret = true;
-    }
-    err = b_store->omap_get_values(b_ch, b_obj, b_omap_keys, &b_obj_omap);
-    if (err < 0) {
-      cout << "diff_objects getomap on A object " << coll << "/" << b_obj
-              << " returns " << err << std::endl;
-      ret = true;
-    }
-    if (diff_omap(a_obj_omap, b_obj_omap)) {
-      cout << "diff_objects omap mismatch on A object "
-	      << coll << "/" << a_obj << " and B object "
-	      << coll << "/" << b_obj << std::endl;
-      cout << "a: " << a_obj_omap << std::endl;
-      cout << "b: " << b_obj_omap << std::endl;
-      ret = true;
-    }
-  }
-
   return ret;
 }
 
