@@ -23,7 +23,6 @@
 #include "rgw_metadata.h"
 #include "rgw_sync_counters.h"
 #include "rgw_sync_module.h"
-#include "rgw_sync_log_trim.h"
 
 #include "cls/lock/cls_lock_client.h"
 
