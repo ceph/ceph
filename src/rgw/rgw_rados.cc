@@ -68,6 +68,7 @@ using namespace librados;
 #include "rgw_sync.h"
 #include "rgw_sync_counters.h"
 #include "rgw_sync_trace.h"
+#include "rgw_trim_datalog.h"
 #include "rgw_trim_mdlog.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
