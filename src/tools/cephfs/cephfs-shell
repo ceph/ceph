@@ -778,7 +778,10 @@ sub-directories, files')
                 files.extend([i for i in get_all_possible_paths(
                     file_path) if is_file_exists(i)])
             else:
-                cephfs.unlink(to_bytes(file_path))
+                try:
+                    cephfs.unlink(to_bytes(file_path))
+                except:
+                    self.poutput('%s: no such file' % file_path)
 
     def complete_mv(self, text, line, begidx, endidx):
         """
