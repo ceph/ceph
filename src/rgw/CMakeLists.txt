@@ -74,6 +74,7 @@ set(librgw_common_srcs
   rgw_sync_module_pubsub_rest.cc
   rgw_sync_log_trim.cc
   rgw_sync_trace.cc
+  rgw_trim_datalog.cc
   rgw_trim_mdlog.cc
   rgw_period_history.cc
   rgw_period_puller.cc

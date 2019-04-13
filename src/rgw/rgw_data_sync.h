@@ -611,15 +611,4 @@ public:
   int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
-// DataLogTrimCR factory function
-extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
-                                             RGWHTTPManager *http,
-                                             int num_shards, utime_t interval);
-
-// factory function for datalog trim via radosgw-admin
-RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
-                                            RGWHTTPManager *http,
-                                            int num_shards,
-                                            std::vector<std::string>& markers);
-
 #endif
