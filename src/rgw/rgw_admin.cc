@@ -44,6 +44,7 @@ extern "C" {
 #include "rgw_usage.h"
 #include "rgw_orphan.h"
 #include "rgw_sync.h"
+#include "rgw_trim_mdlog.h"
 #include "rgw_sync_log_trim.h"
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
