@@ -796,7 +796,10 @@ sub-directories, files')
         """
         Rename a file or Move a file from source path to the destination
         """
-        cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+        try:
+            cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+        except:
+            self.poutput("error: need a file name to move to")
 
     def complete_cd(self, text, line, begidx, endidx):
         """
