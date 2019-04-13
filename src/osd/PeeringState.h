@@ -1412,6 +1412,9 @@ public:
 
   void add_log_entry(const pg_log_entry_t& e, bool applied);
 
+  void calc_trim_to();
+  void calc_trim_to_aggressive();
+
 public:
   PeeringState(
     CephContext *cct,
@@ -1515,6 +1518,14 @@ public:
     bool transaction_applied,
     bool async);
 
+  void update_trim_to() {
+    bool hard_limit = (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
+    if (hard_limit)
+      calc_trim_to_aggressive();
+    else
+      calc_trim_to();
+  }
+
   void pre_submit_op(
     const hobject_t &hoid,
     const vector<pg_log_entry_t>& logv,
@@ -1544,6 +1555,24 @@ public:
     pg_shard_t peer,
     const hobject_t &oid,
     eversion_t version);
+
+  void update_peer_last_complete_ondisk(
+    pg_shard_t fromosd,
+    eversion_t lcod) {
+    peer_last_complete_ondisk[fromosd] = lcod;
+  }
+
+  void update_last_complete_ondisk(
+    eversion_t lcod) {
+    last_complete_ondisk = lcod;
+  }
+
+  void recovery_committed_to(eversion_t version);
+
+  void complete_write(eversion_t v, eversion_t lc);
+  void local_write_applied(eversion_t v) {
+    last_update_applied = v;
+  }
 
   void dump_history(Formatter *f) const {
     state_history.dump(f);
@@ -1798,6 +1827,14 @@ public:
 
   eversion_t get_min_last_complete_ondisk() const {
     return min_last_complete_ondisk;
+  }
+
+  eversion_t get_pg_trim_to() const {
+    return pg_trim_to;
+  }
+
+  eversion_t get_last_update_applied() const {
+    return last_update_applied;
   }
 
   bool debug_has_dirty_state() const {
