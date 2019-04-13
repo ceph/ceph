@@ -931,6 +931,8 @@ sub-directories, files')
         if os.path.isdir(path):
             os.chdir(path)
             # self.poutput(get_all_possible_paths(args.path))
+        else:
+            self.poutput("%s: no such directory" % path)
 
     def complete_lls(self, text, line, begidx, endidx):
         """
