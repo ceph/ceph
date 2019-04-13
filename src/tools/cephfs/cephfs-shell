@@ -880,8 +880,8 @@ sub-directories, files')
                 self.poutput('%s: no such file' % file_name)
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
-    umask_parser.add_argument(
-        'mode', help='Mode', action='store', nargs='?', default='')
+    umask_parser.add_argument('mode', help='Mode', type=str, action=ModeAction,
+                              nargs='?', default='')
 
     @with_argparser(umask_parser)
     def do_umask(self, args):
