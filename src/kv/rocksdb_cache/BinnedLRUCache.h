@@ -171,7 +171,7 @@ class BinnedLRUHandleTable {
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
  public:
-  BinnedLRUCacheShard(size_t capacity, bool strict_capacity_limit,
+  BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
                 double high_pri_pool_ratio);
   virtual ~BinnedLRUCacheShard();
 
@@ -225,6 +225,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   size_t GetHighPriPoolUsage() const;
 
  private:
+  CephContext *cct;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
 

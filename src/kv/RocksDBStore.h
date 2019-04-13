@@ -115,7 +115,8 @@ private:
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
   std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
-
+  std::unordered_map<std::string, rocksdb::BlockBasedTableOptions> cf_bbt_opts;
+  
   void add_column_family(const std::string& cf_name, uint32_t hash_l, uint32_t hash_h,
 			 size_t shard_idx, rocksdb::ColumnFamilyHandle *handle);
   bool is_column_family(const std::string& prefix);
@@ -149,6 +150,7 @@ private:
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
+  int init_block_cache(uint64_t size, rocksdb::BlockBasedTableOptions& bbto);
 
   // manage async compactions
   ceph::mutex compact_queue_lock =
@@ -460,6 +462,14 @@ err:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
 
+  virtual int64_t get_cache_usage(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end()) {
+      return static_cast<int64_t>(it->second.block_cache->GetUsage());
+    }
+    return -EINVAL;
+  }
+
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
@@ -494,6 +504,26 @@ public:
     bool   unittest_fail_after_successful_processing = false;
   };
   int reshard(const std::string& new_sharding, const resharding_ctrl* ctrl = nullptr);
+
+  int set_cache_capacity(int64_t capacity);
+  int64_t get_cache_capacity();
+
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache() const override {
+    return dynamic_pointer_cast<PriorityCache::PriCache>(
+        bbt_opts.block_cache);
+  }
+
+  virtual std::shared_ptr<PriorityCache::PriCache>
+      get_priority_cache(string prefix) const override {
+    auto it = cf_bbt_opts.find(prefix);
+    if (it != cf_bbt_opts.end()) {
+      return dynamic_pointer_cast<PriorityCache::PriCache>(
+          it->second.block_cache);
+    }
+    return nullptr;
+  }
+
 };
 
 #endif
