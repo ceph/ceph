@@ -91,7 +91,7 @@ public:
   }
 };
 
-void Migrator::dispatch(const Message::const_ref &m)
+void Migrator::dispatch(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
     // import
@@ -1174,7 +1174,7 @@ void Migrator::child_export_finish(std::shared_ptr<export_base_t>& parent, bool 
  * called on receipt of MExportDirDiscoverAck
  * the importer now has the directory's _inode_ in memory, and pinned.
  */
-void Migrator::handle_export_discover_ack(const MExportDirDiscoverAck::const_ref &m)
+void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   mds_rank_t dest(m->get_source().num());
@@ -1432,7 +1432,7 @@ void Migrator::get_export_client_set(CInode *in, set<client_t>& client_set)
   }
 }
 
-void Migrator::handle_export_prep_ack(const MExportDirPrepAck::const_ref &m)
+void Migrator::handle_export_prep_ack(const cref_t<MExportDirPrepAck> &m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   mds_rank_t dest(m->get_source().num());
@@ -1853,7 +1853,7 @@ public:
 /*
  * i should get an export_ack from the export target.
  */
-void Migrator::handle_export_ack(const MExportDirAck::const_ref &m)
+void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   mds_rank_t dest(m->get_source().num());
@@ -2061,7 +2061,7 @@ void Migrator::export_logged_finish(CDir *dir)
  *  i'll get an ack from each bystander.
  *  when i get them all, unfreeze and send the finish.
  */
-void Migrator::handle_export_notify_ack(const MExportDirNotifyAck::const_ref &m)
+void Migrator::handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   mds_rank_t dest(m->get_source().num());
@@ -2211,29 +2211,29 @@ void Migrator::export_finish(CDir *dir)
 
 class C_MDS_ExportDiscover : public MigratorContext {
 public:
-  C_MDS_ExportDiscover(Migrator *mig, const MExportDirDiscover::const_ref& m) : MigratorContext(mig), m(m) {}
+  C_MDS_ExportDiscover(Migrator *mig, const cref_t<MExportDirDiscover>& m) : MigratorContext(mig), m(m) {}
   void finish(int r) override {
     mig->handle_export_discover(m, true);
   }
 private:
-  MExportDirDiscover::const_ref m;
+  cref_t<MExportDirDiscover> m;
 };
 
 class C_MDS_ExportDiscoverFactory : public MDSContextFactory {
 public:
-  C_MDS_ExportDiscoverFactory(Migrator *mig, MExportDirDiscover::const_ref m) : mig(mig), m(m) {}
+  C_MDS_ExportDiscoverFactory(Migrator *mig, cref_t<MExportDirDiscover> m) : mig(mig), m(m) {}
   MDSContext *build() {
     return new C_MDS_ExportDiscover(mig, m);
   }
 private:
   Migrator *mig;
-  MExportDirDiscover::const_ref m;
+  cref_t<MExportDirDiscover> m;
 };
 
 // ==========================================================
 // IMPORT
 
-void Migrator::handle_export_discover(const MExportDirDiscover::const_ref &m, bool started)
+void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool started)
 {
   mds_rank_t from = m->get_source_mds();
   ceph_assert(from != mds->get_nodeid());
@@ -2331,7 +2331,7 @@ void Migrator::import_reverse_prepping(CDir *dir, import_state_t& stat)
   import_reverse_final(dir);
 }
 
-void Migrator::handle_export_cancel(const MExportDirCancel::const_ref &m)
+void Migrator::handle_export_cancel(const cref_t<MExportDirCancel> &m)
 {
   dout(7) << "handle_export_cancel on " << m->get_dirfrag() << dendl;
   dirfrag_t df = m->get_dirfrag();
@@ -2364,26 +2364,26 @@ void Migrator::handle_export_cancel(const MExportDirCancel::const_ref &m)
 
 class C_MDS_ExportPrep : public MigratorContext {
 public:
-  C_MDS_ExportPrep(Migrator *mig, const MExportDirPrep::const_ref& m) : MigratorContext(mig), m(m) {}
+  C_MDS_ExportPrep(Migrator *mig, const cref_t<MExportDirPrep>& m) : MigratorContext(mig), m(m) {}
   void finish(int r) override {
     mig->handle_export_prep(m, true);
   }
 private:
-  MExportDirPrep::const_ref m;
+  cref_t<MExportDirPrep> m;
 };
 
 class C_MDS_ExportPrepFactory : public MDSContextFactory {
 public:
-  C_MDS_ExportPrepFactory(Migrator *mig, MExportDirPrep::const_ref m) : mig(mig), m(m) {}
+  C_MDS_ExportPrepFactory(Migrator *mig, cref_t<MExportDirPrep> m) : mig(mig), m(m) {}
   MDSContext *build() {
     return new C_MDS_ExportPrep(mig, m);
   }
 private:
   Migrator *mig;
-  MExportDirPrep::const_ref m;
+  cref_t<MExportDirPrep> m;
 };
 
-void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_assim)
+void Migrator::handle_export_prep(const cref_t<MExportDirPrep> &m, bool did_assim)
 {
   mds_rank_t oldauth = mds_rank_t(m->get_source().num());
   ceph_assert(oldauth != mds->get_nodeid());
@@ -2605,7 +2605,7 @@ public:
   }
 };
 
-void Migrator::handle_export_dir(const MExportDir::const_ref &m)
+void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 {
   assert (g_conf()->mds_kill_import_at != 5);
   CDir *dir = cache->get_dirfrag(m->dirfrag);
@@ -3005,7 +3005,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   cache->show_subtrees();
 }
 
-void Migrator::handle_export_finish(const MExportDirFinish::const_ref &m)
+void Migrator::handle_export_finish(const cref_t<MExportDirFinish> &m)
 {
   CDir *dir = cache->get_dirfrag(m->get_dirfrag());
   ceph_assert(dir);
@@ -3393,7 +3393,7 @@ int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 
 // authority bystander
 
-void Migrator::handle_export_notify(const MExportDirNotify::const_ref &m)
+void Migrator::handle_export_notify(const cref_t<MExportDirNotify> &m)
 {
   if (!(mds->is_clientreplay() || mds->is_active() || mds->is_stopping())) {
     return;
@@ -3452,7 +3452,7 @@ void Migrator::export_caps(CInode *in)
   mds->send_message_mds(ex, dest);
 }
 
-void Migrator::handle_export_caps_ack(const MExportCapsAck::const_ref &ack)
+void Migrator::handle_export_caps_ack(const cref_t<MExportCapsAck> &ack)
 {
   mds_rank_t from = ack->get_source().num();
   CInode *in = cache->get_inode(ack->ino);
@@ -3489,7 +3489,7 @@ void Migrator::handle_export_caps_ack(const MExportCapsAck::const_ref &ack)
   }
 }
 
-void Migrator::handle_gather_caps(const MGatherCaps::const_ref &m)
+void Migrator::handle_gather_caps(const cref_t<MGatherCaps> &m)
 {
   CInode *in = cache->get_inode(m->ino);
   if (!in)
@@ -3518,7 +3518,7 @@ public:
   }  
 };
 
-void Migrator::handle_export_caps(const MExportCaps::const_ref &ex)
+void Migrator::handle_export_caps(const cref_t<MExportCaps> &ex)
 {
   dout(10) << "handle_export_caps " << *ex << " from " << ex->get_source() << dendl;
   CInode *in = cache->get_inode(ex->ino);

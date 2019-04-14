@@ -89,7 +89,7 @@ Locker::Locker(MDSRank *m, MDCache *c) :
   mds(m), mdcache(c), need_snapflush_inodes(member_offset(CInode, item_caps)) {}
 
 
-void Locker::dispatch(const Message::const_ref &m)
+void Locker::dispatch(const cref_t<Message> &m)
 {
 
   switch (m->get_type()) {
@@ -2256,7 +2256,7 @@ void Locker::request_inode_file_caps(CInode *in)
   }
 }
 
-void Locker::handle_inode_file_caps(const MInodeFileCaps::const_ref &m)
+void Locker::handle_inode_file_caps(const cref_t<MInodeFileCaps> &m)
 {
   // nobody should be talking to us during recovery.
   if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
@@ -2659,7 +2659,7 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
   return (in->is_freezing() && in->get_num_auth_pins() == 0) || in->is_frozen();
 }
 
-void Locker::handle_client_caps(const MClientCaps::const_ref &m)
+void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 {
   client_t client = m->get_source().num();
   snapid_t follows = m->get_snap_follows();
@@ -3110,7 +3110,7 @@ void Locker::kick_cap_releases(MDRequestRef& mdr)
 /**
  * m and ack might be NULL, so don't dereference them unless dirty != 0
  */
-void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const MClientCaps::const_ref &m, const MClientCaps::ref &ack)
+void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const MClientCaps::ref &ack)
 {
   dout(10) << "_do_snap_update dirty " << ccap_string(dirty)
 	   << " follows " << follows << " snap " << snap
@@ -3198,7 +3198,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 							      ack, client));
 }
 
-void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_ref &m, CInode::mempool_inode *pi)
+void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi)
 {
   if (dirty == 0)
     return;
@@ -3301,7 +3301,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const MClientCaps::const_
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
 			    int dirty, snapid_t follows,
-			    const MClientCaps::const_ref &m, const MClientCaps::ref &ack,
+			    const cref_t<MClientCaps> &m, const MClientCaps::ref &ack,
 			    bool *need_flush)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)
@@ -3481,7 +3481,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   return true;
 }
 
-void Locker::handle_client_cap_release(const MClientCapRelease::const_ref &m)
+void Locker::handle_client_cap_release(const cref_t<MClientCapRelease> &m)
 {
   client_t client = m->get_source().num();
   dout(10) << "handle_client_cap_release " << *m << dendl;
@@ -3693,7 +3693,7 @@ void Locker::caps_tick()
 }
 
 
-void Locker::handle_client_lease(const MClientLease::const_ref &m)
+void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 {
   dout(10) << "handle_client_lease " << *m << dendl;
 
@@ -3896,7 +3896,7 @@ SimpleLock *Locker::get_lock(int lock_type, const MDSCacheObjectInfo &info)
   return 0;  
 }
 
-void Locker::handle_lock(const MLock::const_ref &m)
+void Locker::handle_lock(const cref_t<MLock> &m)
 {
   // nobody should be talking to us during recovery.
   ceph_assert(mds->is_rejoin() || mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
@@ -3943,7 +3943,7 @@ void Locker::handle_lock(const MLock::const_ref &m)
 
 /** This function may take a reference to m if it needs one, but does
  * not put references. */
-void Locker::handle_reqrdlock(SimpleLock *lock, const MLock::const_ref &m)
+void Locker::handle_reqrdlock(SimpleLock *lock, const cref_t<MLock> &m)
 {
   MDSCacheObject *parent = lock->get_parent();
   if (parent->is_auth() &&
@@ -3966,7 +3966,7 @@ void Locker::handle_reqrdlock(SimpleLock *lock, const MLock::const_ref &m)
   }
 }
 
-void Locker::handle_simple_lock(SimpleLock *lock, const MLock::const_ref &m)
+void Locker::handle_simple_lock(SimpleLock *lock, const cref_t<MLock> &m)
 {
   int from = m->get_asker();
   
@@ -5192,7 +5192,7 @@ void Locker::file_recover(ScatterLock *lock)
 
 
 // messenger
-void Locker::handle_file_lock(ScatterLock *lock, const MLock::const_ref &m)
+void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   int from = m->get_asker();

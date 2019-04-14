@@ -62,7 +62,7 @@ public:
     mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
   virtual ~MDSTableClient() {}
 
-  void handle_request(const MMDSTableRequest::const_ref &m);
+  void handle_request(const cref_t<MMDSTableRequest> &m);
 
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSContext *onfinish);
   void commit(version_t tid, LogSegment *ls);
@@ -92,8 +92,8 @@ public:
 
   // child must implement
   virtual void resend_queries() = 0;
-  virtual void handle_query_result(const MMDSTableRequest::const_ref &m) = 0;
-  virtual void handle_notify_prep(const MMDSTableRequest::const_ref &m) = 0;
+  virtual void handle_query_result(const cref_t<MMDSTableRequest> &m) = 0;
+  virtual void handle_notify_prep(const cref_t<MMDSTableRequest> &m) = 0;
   virtual void notify_commit(version_t tid) = 0;
 
   // and friendly front-end for _prepare.

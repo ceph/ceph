@@ -2906,7 +2906,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 	add_ambiguous_slave_update(p->first, mdr->slave_to_mds);
       }
     } else if (mdr->slave_request) {
-      const MMDSSlaveRequest::const_ref &slave_req = mdr->slave_request;
+      const cref_t<MMDSSlaveRequest> &slave_req = mdr->slave_request;
       // FIXME: Slave rename request can arrive after we notice mds failure.
       // 	This can cause mds to crash (does not affect integrity of FS).
       if (slave_req->get_op() == MMDSSlaveRequest::OP_RENAMEPREP &&
@@ -3085,7 +3085,7 @@ void MDCache::set_recovery_set(set<mds_rank_t>& s)
  *
  * This functions puts the passed message before returning
  */
-void MDCache::handle_resolve(const MMDSResolve::const_ref &m)
+void MDCache::handle_resolve(const cref_t<MMDSResolve> &m)
 {
   dout(7) << "handle_resolve from " << m->get_source() << dendl;
   mds_rank_t from = mds_rank_t(m->get_source().num());
@@ -3270,7 +3270,7 @@ void MDCache::handle_resolve(const MMDSResolve::const_ref &m)
 void MDCache::process_delayed_resolve()
 {
   dout(10) << "process_delayed_resolve" << dendl;
-  map<mds_rank_t, MMDSResolve::const_ref> tmp;
+  map<mds_rank_t, cref_t<MMDSResolve>> tmp;
   tmp.swap(delayed_resolve);
   for (auto &p : tmp) {
     handle_resolve(p.second);
@@ -3308,7 +3308,7 @@ void MDCache::maybe_resolve_finish()
   }
 }
 
-void MDCache::handle_resolve_ack(const MMDSResolveAck::const_ref &ack)
+void MDCache::handle_resolve_ack(const cref_t<MMDSResolveAck> &ack)
 {
   dout(10) << "handle_resolve_ack " << *ack << " from " << ack->get_source() << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
@@ -4242,7 +4242,7 @@ void MDCache::rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin)
  * if i am active|stopping, 
  *  - remove source from replica list for everything not referenced here.
  */
-void MDCache::handle_cache_rejoin(const MMDSCacheRejoin::const_ref &m)
+void MDCache::handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m)
 {
   dout(7) << "handle_cache_rejoin " << *m << " from " << m->get_source() 
 	  << " (" << m->get_payload().length() << " bytes)"
@@ -4278,7 +4278,7 @@ void MDCache::handle_cache_rejoin(const MMDSCacheRejoin::const_ref &m)
  *  - may have deleted/purged inodes
  * and i may have to go to disk to get accurate inode contents.  yuck.
  */
-void MDCache::handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &weak)
+void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
 {
   mds_rank_t from = mds_rank_t(weak->get_source().num());
 
@@ -4503,7 +4503,7 @@ void MDCache::handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &weak)
  * all validated replicas are acked with a strong nonce, etc.  if that isn't in the
  * ack, the replica dne, and we can remove it from our replica maps.
  */
-void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, const MMDSCacheRejoin::const_ref &ack,
+void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, const cref_t<MMDSCacheRejoin> &ack,
 					     set<vinodeno_t>& acked_inodes,
 					     set<SimpleLock *>& gather_locks)
 {
@@ -4585,7 +4585,7 @@ CDir *MDCache::rejoin_invent_dirfrag(dirfrag_t df)
   return dir;
 }
 
-void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &strong)
+void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 {
   mds_rank_t from = mds_rank_t(strong->get_source().num());
 
@@ -4854,7 +4854,7 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
   }
 }
 
-void MDCache::handle_cache_rejoin_ack(const MMDSCacheRejoin::const_ref &ack)
+void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 {
   dout(7) << "handle_cache_rejoin_ack from " << ack->get_source() << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
@@ -7193,7 +7193,7 @@ void MDCache::standby_trim_segment(LogSegment *ls)
   }
 }
 
-void MDCache::handle_cache_expire(const MCacheExpire::const_ref &m)
+void MDCache::handle_cache_expire(const cref_t<MCacheExpire> &m)
 {
   mds_rank_t from = mds_rank_t(m->get_from());
   
@@ -7877,7 +7877,7 @@ done:
 
 // ========= messaging ==============
 
-void MDCache::dispatch(const Message::const_ref &m)
+void MDCache::dispatch(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
 
@@ -8451,10 +8451,10 @@ class C_IO_MDC_OpenInoBacktraceFetched : public MDCacheIOContext {
 
 struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
   inodeno_t ino;
-  MMDSOpenIno::const_ref msg;
+  cref_t<MMDSOpenIno> msg;
   bool parent;
   public:
-  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i, const MMDSOpenIno::const_ref &m,  bool p) :
+  C_MDC_OpenInoTraverseDir(MDCache *c, inodeno_t i, const cref_t<MMDSOpenIno> &m,  bool p) :
     MDCacheContext(c), ino(i), msg(m), parent(p) {}
   void finish(int r) override {
     if (r < 0 && !parent)
@@ -8604,7 +8604,7 @@ void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int r
   do_open_ino(ino, info, ret);
 }
 
-void MDCache::_open_ino_fetch_dir(inodeno_t ino, const MMDSOpenIno::const_ref &m, CDir *dir, bool parent)
+void MDCache::_open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, CDir *dir, bool parent)
 {
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     ceph_assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
@@ -8613,7 +8613,7 @@ void MDCache::_open_ino_fetch_dir(inodeno_t ino, const MMDSOpenIno::const_ref &m
     mds->logger->inc(l_mds_openino_dir_fetch);
 }
 
-int MDCache::open_ino_traverse_dir(inodeno_t ino, const MMDSOpenIno::const_ref &m,
+int MDCache::open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 				   const vector<inode_backpointer_t>& ancestors,
 				   bool discover, bool want_xlocked, mds_rank_t *hint)
 {
@@ -8807,7 +8807,7 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
   }
 }
 
-void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
+void MDCache::handle_open_ino(const cref_t<MMDSOpenIno> &m, int err)
 {
   if (mds->get_state() < MDSMap::STATE_REJOIN &&
       mds->get_want_state() != CEPH_MDS_STATE_REJOIN) {
@@ -8849,7 +8849,7 @@ void MDCache::handle_open_ino(const MMDSOpenIno::const_ref &m, int err)
   mds->send_message_mds(reply, from);
 }
 
-void MDCache::handle_open_ino_reply(const MMDSOpenInoReply::const_ref &m)
+void MDCache::handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m)
 {
   dout(10) << "handle_open_ino_reply " << *m << dendl;
 
@@ -9022,7 +9022,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
   }
 }
 
-void MDCache::handle_find_ino(const MMDSFindIno::const_ref &m)
+void MDCache::handle_find_ino(const cref_t<MMDSFindIno> &m)
 {
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
     return;
@@ -9039,7 +9039,7 @@ void MDCache::handle_find_ino(const MMDSFindIno::const_ref &m)
 }
 
 
-void MDCache::handle_find_ino_reply(const MMDSFindInoReply::const_ref &m)
+void MDCache::handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m)
 {
   map<ceph_tid_t, find_ino_peer_info_t>::iterator p = find_ino_peer.find(m->tid);
   if (p != find_ino_peer.end()) {
@@ -9113,7 +9113,7 @@ int MDCache::get_num_client_requests()
   return count;
 }
 
-MDRequestRef MDCache::request_start(const MClientRequest::const_ref& req)
+MDRequestRef MDCache::request_start(const cref_t<MClientRequest>& req)
 {
   // did we win a forward race against a slave?
   if (active_requests.count(req->get_reqid())) {
@@ -9146,7 +9146,7 @@ MDRequestRef MDCache::request_start(const MClientRequest::const_ref& req)
   return mdr;
 }
 
-MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const Message::const_ref &m)
+MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const cref_t<Message> &m)
 {
   int by = m->get_source().num();
   MDRequestImpl::Params params;
@@ -9577,7 +9577,7 @@ void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
     notify_global_snaprealm_update(snap_op);
 }
 
-void MDCache::handle_snap_update(const MMDSSnapUpdate::const_ref &m)
+void MDCache::handle_snap_update(const cref_t<MMDSSnapUpdate> &m)
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
   dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
@@ -9868,7 +9868,7 @@ void MDCache::kick_discovers(mds_rank_t who)
 }
 
 
-void MDCache::handle_discover(const MDiscover::const_ref &dis) 
+void MDCache::handle_discover(const cref_t<MDiscover> &dis) 
 {
   mds_rank_t whoami = mds->get_nodeid();
   mds_rank_t from = mds_rank_t(dis->get_source().num());
@@ -10164,7 +10164,7 @@ void MDCache::handle_discover(const MDiscover::const_ref &dis)
   mds->send_message(reply, dis->get_connection());
 }
 
-void MDCache::handle_discover_reply(const MDiscoverReply::const_ref &m) 
+void MDCache::handle_discover_reply(const cref_t<MDiscoverReply> &m)
 {
   /*
   if (mds->get_state() < MDSMap::STATE_ACTIVE) {
@@ -10507,7 +10507,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   return 0;
 }
 
-void MDCache::handle_dir_update(const MDirUpdate::const_ref &m)
+void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
 {
   dirfrag_t df = m->get_dirfrag();
   CDir *dir = get_dirfrag(df);
@@ -10587,7 +10587,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
   }
 }
 
-void MDCache::handle_dentry_link(const MDentryLink::const_ref &m)
+void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 {
   CDentry *dn = NULL;
   CDir *dir = get_dirfrag(m->get_dirfrag());
@@ -10666,7 +10666,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
   }
 }
 
-void MDCache::handle_dentry_unlink(const MDentryUnlink::const_ref &m)
+void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 {
   // straydn
   CDentry *straydn = NULL;
@@ -11666,7 +11666,7 @@ void MDCache::fragment_maybe_finish(const fragment_info_iterator& it)
 }
 
 
-void MDCache::handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &ack)
+void MDCache::handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &ack)
 {
   dout(10) << "handle_fragment_notify_ack " << *ack << " from " << ack->get_source() << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
@@ -11689,7 +11689,7 @@ void MDCache::handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref 
   }
 }
 
-void MDCache::handle_fragment_notify(const MMDSFragmentNotify::const_ref &notify)
+void MDCache::handle_fragment_notify(const cref_t<MMDSFragmentNotify> &notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
   mds_rank_t from = mds_rank_t(notify->get_source().num());

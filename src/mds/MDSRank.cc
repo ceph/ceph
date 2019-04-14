@@ -1009,7 +1009,7 @@ void MDSRank::ProgressThread::shutdown()
   }
 }
 
-bool MDSRankDispatcher::ms_dispatch(const Message::const_ref &m)
+bool MDSRankDispatcher::ms_dispatch(const cref_t<Message> &m)
 {
   if (m->get_source().is_client()) {
     Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
@@ -1023,7 +1023,7 @@ bool MDSRankDispatcher::ms_dispatch(const Message::const_ref &m)
   return ret;
 }
 
-bool MDSRank::_dispatch(const Message::const_ref &m, bool new_msg)
+bool MDSRank::_dispatch(const cref_t<Message> &m, bool new_msg)
 {
   if (is_stale_message(m)) {
     return true;
@@ -1154,7 +1154,7 @@ void MDSRank::update_mlogger()
 /*
  * lower priority messages we defer if we seem laggy
  */
-bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
+bool MDSRank::handle_deferrable_message(const cref_t<Message> &m)
 {
   int port = m->get_type() & 0xff00;
 
@@ -1193,7 +1193,7 @@ bool MDSRank::handle_deferrable_message(const Message::const_ref &m)
     case MSG_MDS_TABLE_REQUEST:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       {
-        const MMDSTableRequest::const_ref &req = MMDSTableRequest::msgref_cast(m);
+        const cref_t<MMDSTableRequest> &req = MMDSTableRequest::msgref_cast(m);
         if (req->op < 0) {
           MDSTableClient *client = get_table_client(req->table);
           client->handle_request(req);
@@ -1253,7 +1253,7 @@ void MDSRank::_advance_queues()
     if (beacon.is_laggy())
       break;
 
-    Message::const_ref old = waiting_for_nolaggy.front();
+    cref_t<Message> old = waiting_for_nolaggy.front();
     waiting_for_nolaggy.pop_front();
 
     if (!is_stale_message(old)) {
@@ -1288,7 +1288,7 @@ void MDSRank::heartbeat_reset()
   g_ceph_context->get_heartbeat_map()->reset_timeout(hb, grace, 0);
 }
 
-bool MDSRank::is_stale_message(const Message::const_ref &m) const
+bool MDSRank::is_stale_message(const cref_t<Message> &m) const
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
@@ -1328,7 +1328,7 @@ bool MDSRank::is_stale_message(const Message::const_ref &m) const
   return false;
 }
 
-Session *MDSRank::get_session(const Message::const_ref &m)
+Session *MDSRank::get_session(const cref_t<Message> &m)
 {
   // do not carry ref
   auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
@@ -1364,14 +1364,14 @@ Session *MDSRank::get_session(const Message::const_ref &m)
   return session;
 }
 
-void MDSRank::send_message(const Message::ref& m, const ConnectionRef& c)
+void MDSRank::send_message(const ref_t<Message>& m, const ConnectionRef& c)
 {
   ceph_assert(c);
   c->send_message2(m);
 }
 
 
-void MDSRank::send_message_mds(const Message::ref& m, mds_rank_t mds)
+void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
@@ -1386,10 +1386,10 @@ void MDSRank::send_message_mds(const Message::ref& m, mds_rank_t mds)
   }
 
   // send message
-  messenger->send_to_mds(Message::ref(m).detach(), mdsmap->get_addrs(mds));
+  messenger->send_to_mds(ref_t<Message>(m).detach(), mdsmap->get_addrs(mds));
 }
 
-void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t mds)
+void MDSRank::forward_message_mds(const cref_t<MClientRequest>& m, mds_rank_t mds)
 {
   ceph_assert(mds != whoami);
 
@@ -1408,7 +1408,7 @@ void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t
   send_message_client(f, session);
 }
 
-void MDSRank::send_message_client_counted(const Message::ref& m, client_t client)
+void MDSRank::send_message_client_counted(const ref_t<Message>& m, client_t client)
 {
   Session *session = sessionmap.get_session(entity_name_t::CLIENT(client.v));
   if (session) {
@@ -1418,7 +1418,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, client_t client
   }
 }
 
-void MDSRank::send_message_client_counted(const Message::ref& m, const ConnectionRef& connection)
+void MDSRank::send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection)
 {
   // do not carry ref
   auto session = static_cast<Session *>(connection->get_priv().get());
@@ -1430,7 +1430,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, const Connectio
   }
 }
 
-void MDSRank::send_message_client_counted(const Message::ref& m, Session* session)
+void MDSRank::send_message_client_counted(const ref_t<Message>& m, Session* session)
 {
   version_t seq = session->inc_push_seq();
   dout(10) << "send_message_client_counted " << session->info.inst.name << " seq "
@@ -1442,7 +1442,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, Session* sessio
   }
 }
 
-void MDSRank::send_message_client(const Message::ref& m, Session* session)
+void MDSRank::send_message_client(const ref_t<Message>& m, Session* session)
 {
   dout(10) << "send_message_client " << session->info.inst << " " << *m << dendl;
   if (session->get_connection()) {
@@ -1465,7 +1465,7 @@ void MDSRank::set_osd_epoch_barrier(epoch_t e)
   osd_epoch_barrier = e;
 }
 
-void MDSRank::retry_dispatch(const Message::const_ref &m)
+void MDSRank::retry_dispatch(const cref_t<Message> &m)
 {
   inc_dispatch_depth();
   _dispatch(m, false);
@@ -2120,7 +2120,7 @@ void MDSRank::stopping_done()
 }
 
 void MDSRankDispatcher::handle_mds_map(
-    const MMDSMap::const_ref &m,
+    const cref_t<MMDSMap> &m,
     const MDSMap &oldmap)
 {
   // I am only to be passed MDSMaps in which I hold a rank
@@ -2594,9 +2594,9 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
 
 class C_MDS_Send_Command_Reply : public MDSInternalContext {
 protected:
-  MCommand::const_ref m;
+  cref_t<MCommand> m;
 public:
-  C_MDS_Send_Command_Reply(MDSRank *_mds, const MCommand::const_ref &_m) :
+  C_MDS_Send_Command_Reply(MDSRank *_mds, const cref_t<MCommand> &_m) :
     MDSInternalContext(_mds), m(_m) {}
 
   void send(int r, std::string_view ss) {
@@ -2617,7 +2617,7 @@ public:
 
 class C_ExecAndReply : public C_MDS_Send_Command_Reply {
 public:
-  C_ExecAndReply(MDSRank *mds, const MCommand::const_ref &m)
+  C_ExecAndReply(MDSRank *mds, const cref_t<MCommand> &m)
     : C_MDS_Send_Command_Reply(mds, m), f(true) {
   }
 
@@ -2641,7 +2641,7 @@ protected:
 
 class C_CacheDropExecAndReply : public C_ExecAndReply {
 public:
-  C_CacheDropExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+  C_CacheDropExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
                           uint64_t timeout)
     : C_ExecAndReply(mds, m), timeout(timeout) {
   }
@@ -2656,7 +2656,7 @@ private:
 
 class C_ScrubExecAndReply : public C_ExecAndReply {
 public:
-  C_ScrubExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+  C_ScrubExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
                       const std::string &path, const std::string &tag,
                       const std::vector<std::string> &scrubop)
     : C_ExecAndReply(mds, m), path(path), tag(tag), scrubop(scrubop) {
@@ -2674,7 +2674,7 @@ private:
 
 class C_ScrubControlExecAndReply : public C_ExecAndReply {
 public:
-  C_ScrubControlExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+  C_ScrubControlExecAndReply(MDSRank *mds, const cref_t<MCommand> &m,
                              const std::string &command)
     : C_ExecAndReply(mds, m), command(command) {
   }
@@ -2705,7 +2705,7 @@ private:
  * MDSRank after calling it (we could have gone into shutdown): just
  * send your result back to the calling client and finish.
  */
-void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const MCommand::const_ref &m)
+void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const cref_t<MCommand> &m)
 {
   C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
 
@@ -3474,7 +3474,7 @@ MDSRankDispatcher::MDSRankDispatcher(
 
 bool MDSRankDispatcher::handle_command(
   const cmdmap_t &cmdmap,
-  const MCommand::const_ref &m,
+  const cref_t<MCommand> &m,
   int *r,
   std::stringstream *ds,
   std::stringstream *ss,

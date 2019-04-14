@@ -197,7 +197,7 @@ Server::Server(MDSRank *m) :
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
 
-void Server::dispatch(const Message::const_ref &m)
+void Server::dispatch(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_RECONNECT:
@@ -325,7 +325,7 @@ Session* Server::find_session_by_uuid(std::string_view uuid)
   return session;
 }
 
-void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &m)
+void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
 {
   if (!session->is_open() && !session->is_stale()) {
     dout(10) << "session not open, dropping this req" << dendl;
@@ -409,7 +409,7 @@ void Server::finish_reclaim_session(Session *session, const MClientReclaimReply:
   }
 }
 
-void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
+void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
 {
   Session *session = mds->get_session(m);
   dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
@@ -432,7 +432,7 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
   }
 }
 
-void Server::handle_client_session(const MClientSession::const_ref &m)
+void Server::handle_client_session(const cref_t<MClientSession> &m)
 {
   version_t pv;
   Session *session = mds->get_session(m);
@@ -1193,7 +1193,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   mds->sessionmap.dump();
 }
 
-void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
+void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 {
   dout(7) << "handle_client_reconnect " << m->get_source()
 	  << (m->has_more() ? " (more)" : "") << dendl;
@@ -1730,7 +1730,7 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
 }
 
 // statistics mds req op number and latency 
-void Server::perf_gather_op_latency(const MClientRequest::const_ref &req, utime_t lat)
+void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat)
 {
   int code = l_mdss_first;
   switch(req->get_op()) {
@@ -1843,7 +1843,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
     return;
   }
 
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   entity_inst_t client_inst = req->get_source_inst();
   if (client_inst.name.is_mds())
     return;
@@ -1903,7 +1903,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply)
 {
   ceph_assert(mdr.get());
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   
   dout(7) << "reply_client_request " << reply->get_result()
 	   << " (" << cpp_strerror(reply->get_result())
@@ -2092,7 +2092,7 @@ void Server::set_trace_dist(Session *session, const MClientReply::ref &reply,
   reply->set_trace(bl);
 }
 
-void Server::handle_client_request(const MClientRequest::const_ref &req)
+void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
 
@@ -2250,7 +2250,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     return;
   }
 
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   if (logger) logger->inc(l_mdss_dispatch_client_request);
 
@@ -2401,7 +2401,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 // ---------------------------------------
 // SLAVE REQUESTS
 
-void Server::handle_slave_request(const MMDSSlaveRequest::const_ref &m)
+void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
 {
   dout(4) << "handle_slave_request " << m->get_reqid() << " from " << m->get_source() << dendl;
   mds_rank_t from = mds_rank_t(m->get_source().num());
@@ -2496,7 +2496,7 @@ void Server::handle_slave_request(const MMDSSlaveRequest::const_ref &m)
   dispatch_slave_request(mdr);
 }
 
-void Server::handle_slave_request_reply(const MMDSSlaveRequest::const_ref &m)
+void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
   
@@ -2831,7 +2831,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   return;
 }
 
-void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const MMDSSlaveRequest::const_ref &ack)
+void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack)
 {
   dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
@@ -3134,7 +3134,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   in->inode.change_attr = 0;
 
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   if (req->get_data().length()) {
     auto p = req->get_data().cbegin();
 
@@ -3495,7 +3495,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 
 void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   if (req->get_filepath().depth() == 0 && is_lookup) {
     // refpath can't be empty for lookup but it can for
@@ -3588,7 +3588,7 @@ struct C_MDS_LookupIno2 : public ServerContext {
 void Server::handle_client_lookup_ino(MDRequestRef& mdr,
 				      bool want_parent, bool want_dentry)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   if ((uint64_t)req->head.args.lookupino.snapid > 0)
     return _lookup_snap_ino(mdr);
@@ -3681,7 +3681,7 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
 
 void Server::_lookup_snap_ino(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   vinodeno_t vino;
   vino.ino = req->get_filepath().get_ino();
@@ -3779,7 +3779,7 @@ void Server::_lookup_ino_2(MDRequestRef& mdr, int r)
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_open(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   dout(7) << "open on " << req->get_filepath() << dendl;
 
   int flags = req->head.args.open.flags;
@@ -4001,7 +4001,7 @@ public:
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_openc(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
   dout(7) << "open w/ O_CREAT on " << req->get_filepath() << dendl;
@@ -4184,7 +4184,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
 void Server::handle_client_readdir(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = req->get_source().num();
   MutationImpl::LockOpVec lov;
   CInode *diri = rdlock_path_pin_ref(mdr, 0, lov, false, true);
@@ -4476,7 +4476,7 @@ public:
 
 void Server::handle_client_file_setlock(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
 
   // get the inode to operate on, and set up any locks needed for that
@@ -4579,7 +4579,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
 
 void Server::handle_client_file_readlock(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
 
   // get the inode to operate on, and set up any locks needed for that
@@ -4632,7 +4632,7 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
 
 void Server::handle_client_setattr(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
   CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true);
   if (!cur) return;
@@ -4832,7 +4832,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 /* This function cleans up the passed mdr */
 void Server::handle_client_setlayout(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
   CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true);
   if (!cur) return;
@@ -4921,7 +4921,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
 
 void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
   file_layout_t *dir_layout = nullptr;
   CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, &dir_layout);
@@ -5146,7 +5146,7 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
                                 string value,
                                 file_layout_t *layout)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   epoch_t epoch;
   int r;
 
@@ -5208,7 +5208,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			       file_layout_t *dir_layout,
 			       MutationImpl::LockOpVec& lov)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
   bufferlist bl = req->get_data();
   string value (bl.c_str(), bl.length());
@@ -5368,7 +5368,7 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
 				  file_layout_t *dir_layout,
 				  MutationImpl::LockOpVec& lov)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
 
   dout(10) << __func__ << " " << name << " on " << *cur << dendl;
@@ -5443,7 +5443,7 @@ public:
 
 void Server::handle_client_setxattr(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   string name(req->get_path2());
   MutationImpl::LockOpVec lov;
   CInode *cur;
@@ -5542,7 +5542,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 
 void Server::handle_client_removexattr(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   std::string name(req->get_path2());
 
   MutationImpl::LockOpVec lov;
@@ -5656,7 +5656,7 @@ public:
 
 void Server::handle_client_mknod(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
   MutationImpl::LockOpVec lov;
   file_layout_t *dir_layout = nullptr;
@@ -5752,7 +5752,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   if (req->get_filepath().is_last_dot_or_dotdot()) {
     respond_to_request(mdr, -EEXIST);
     return;
@@ -5839,7 +5839,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
 void Server::handle_client_symlink(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
   CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, false);
   if (!dn) return;
@@ -5895,7 +5895,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
 
 void Server::handle_client_link(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   dout(7) << "handle_client_link " << req->get_filepath()
 	  << " to " << req->get_filepath2()
@@ -6503,7 +6503,7 @@ void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
 }
 
 
-void Server::handle_slave_link_prep_ack(MDRequestRef& mdr, const MMDSSlaveRequest::const_ref &m)
+void Server::handle_slave_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m)
 {
   dout(10) << "handle_slave_link_prep_ack " << *mdr 
 	   << " " << *m << dendl;
@@ -6537,7 +6537,7 @@ void Server::handle_slave_link_prep_ack(MDRequestRef& mdr, const MMDSSlaveReques
 
 void Server::handle_client_unlink(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
 
   // rmdir or unlink?
@@ -7058,7 +7058,7 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   }
 }
 
-void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, const MMDSSlaveRequest::const_ref &ack)
+void Server::handle_slave_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack)
 {
   dout(10) << "handle_slave_rmdir_prep_ack " << *mdr 
 	   << " " << *ack << dendl;
@@ -7309,7 +7309,7 @@ public:
  */
 void Server::handle_client_rename(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   dout(7) << "handle_client_rename " << *req << dendl;
 
   filepath destpath = req->get_filepath();
@@ -9336,7 +9336,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
   mut->cleanup();
 }
 
-void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, const MMDSSlaveRequest::const_ref &ack)
+void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack)
 {
   dout(10) << "handle_slave_rename_prep_ack " << *mdr 
 	   << " witnessed by " << ack->get_source()
@@ -9382,7 +9382,7 @@ void Server::handle_slave_rename_prep_ack(MDRequestRef& mdr, const MMDSSlaveRequ
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
-void Server::handle_slave_rename_notify_ack(MDRequestRef& mdr, const MMDSSlaveRequest::const_ref &ack)
+void Server::handle_slave_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &ack)
 {
   dout(10) << "handle_slave_rename_notify_ack " << *mdr << " from mds."
 	   << ack->get_source() << dendl;
@@ -9421,7 +9421,7 @@ void Server::_slave_rename_sessions_flushed(MDRequestRef& mdr)
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_lssnap(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   // traverse to path
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
@@ -9536,7 +9536,7 @@ struct C_MDS_mksnap_finish : public ServerLogContext {
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   // make sure we have as new a map as the client
   if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
     mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
@@ -9704,7 +9704,7 @@ struct C_MDS_rmsnap_finish : public ServerLogContext {
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_rmsnap(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
 
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
   if (!diri || diri->state_test(CInode::STATE_PURGING)) {
@@ -9838,7 +9838,7 @@ struct C_MDS_renamesnap_finish : public ServerLogContext {
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_renamesnap(MDRequestRef& mdr)
 {
-  const MClientRequest::const_ref &req = mdr->client_request;
+  const cref_t<MClientRequest> &req = mdr->client_request;
   if (req->get_filepath().get_ino() != req->get_filepath2().get_ino()) {
     respond_to_request(mdr, -EINVAL);
     return;

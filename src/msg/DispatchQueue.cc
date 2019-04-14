@@ -61,7 +61,7 @@ void DispatchQueue::post_dispatch(const Message::ref& m, uint64_t msize)
   ldout(cct,20) << "done calling dispatch on " << m << dendl;
 }
 
-bool DispatchQueue::can_fast_dispatch(const Message::const_ref &m) const
+bool DispatchQueue::can_fast_dispatch(const cref_t<Message> &m) const
 {
   return msgr->ms_can_fast_dispatch(m);
 }

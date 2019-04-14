@@ -49,7 +49,7 @@ public:
   int      retry_attempt;
   std::atomic<uint64_t> ref = { 1 };
   
-  MClientReply::const_ref reply;         // the reply
+  ceph::cref_t<MClientReply> reply;         // the reply
   bool kick;
   bool success;
   

@@ -642,7 +642,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const Message::const_ref& m) {
+  bool ms_can_fast_dispatch(const cref_t<Message>& m) {
     for (const auto &dispatcher : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m))
 	return true;
