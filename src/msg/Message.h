@@ -573,10 +573,24 @@ template<typename... Args>
 };
 
 namespace ceph {
-template<typename T>
-using ref_t = boost::intrusive_ptr<T>;
-template<typename T>
-using cref_t = boost::intrusive_ptr<T const>;
+template<typename T> using ref_t = boost::intrusive_ptr<T>;
+template<typename T> using cref_t = boost::intrusive_ptr<const T>;
+template<class T, class U>
+boost::intrusive_ptr<T> ref_cast(const boost::intrusive_ptr<U>& r) noexcept {
+  return static_cast<T*>(r.get());
+}
+template<class T, class U>
+boost::intrusive_ptr<T> ref_cast(boost::intrusive_ptr<U>&& r) noexcept {
+  return {static_cast<T*>(r.detach()), false};
+}
+template<class T, class U>
+boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
+  return static_cast<const T*>(r.get());
+}
+template<class T, class U>
+boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>&& r) noexcept {
+  return {static_cast<const T*>(r.detach()), false};
+}
 }
 
 #endif
