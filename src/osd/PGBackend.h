@@ -270,7 +270,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual spg_t primary_spg_t() const = 0;
      virtual pg_shard_t primary_shard() const = 0;
-
+     virtual uint64_t min_peer_features() const = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 

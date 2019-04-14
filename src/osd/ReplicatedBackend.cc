@@ -1143,6 +1143,14 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
+  if (HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS)) {
+    const auto it = missing.get_items().find(head);
+    assert(it != missing.get_items().end());
+    data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
+    dout(10) << "calc_head_subsets " << head
+             << " data_subset " << data_subset << dendl;
+  }
+
   if (get_parent()->get_pool().allow_incomplete_clones()) {
     dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
     return;
@@ -1156,11 +1164,11 @@ void ReplicatedBackend::calc_head_subsets(
 
   interval_set<uint64_t> cloning;
   interval_set<uint64_t> prev;
+  hobject_t c = head;
   if (size)
     prev.insert(0, size);
 
   for (int j=snapset.clones.size()-1; j>=0; j--) {
-    hobject_t c = head;
     c.snap = snapset.clones[j];
     prev.intersection_of(snapset.clone_overlap[snapset.clones[j]]);
     if (!missing.is_missing(c) &&
@@ -1168,23 +1176,29 @@ void ReplicatedBackend::calc_head_subsets(
 	get_parent()->try_lock_for_read(c, manager)) {
       dout(10) << "calc_head_subsets " << head << " has prev " << c
 	       << " overlap " << prev << dendl;
-      clone_subsets[c] = prev;
-      cloning.union_of(prev);
+      cloning = prev;
       break;
     }
     dout(10) << "calc_head_subsets " << head << " does not have prev " << c
 	     << " overlap " << prev << dendl;
   }
 
+  cloning.intersection_of(data_subset);
+  if (cloning.empty()) {
+    dout(10) << "skipping clone, nothing needs to clone" << dendl;
+    return;
+  }
 
   if (cloning.num_intervals() > cct->_conf->osd_recover_clone_overlap_limit) {
     dout(10) << "skipping clone, too many holes" << dendl;
     get_parent()->release_locks(manager);
     clone_subsets.clear();
     cloning.clear();
+    return;
   }
 
   // what's left for us to push?
+  clone_subsets[c] = cloning;
   data_subset.subtract(cloning);
 
   dout(10) << "calc_head_subsets " << head
@@ -1287,9 +1301,9 @@ void ReplicatedBackend::prepare_pull(
   ObjectContextRef headctx,
   RPGHandle *h)
 {
-  ceph_assert(get_parent()->get_local_missing().get_items().count(soid));
-  eversion_t _v = get_parent()->get_local_missing().get_items().find(
-    soid)->second.need;
+  const auto missing_iter = get_parent()->get_local_missing().get_items().find(soid);
+  ceph_assert(missing_iter != get_parent()->get_local_missing().get_items().end());
+  eversion_t _v = missing_iter->second.need;
   ceph_assert(_v == v);
   const map<hobject_t, set<pg_shard_t>> &missing_loc(
     get_parent()->get_missing_loc_shards());
@@ -1363,11 +1377,15 @@ void ReplicatedBackend::prepare_pull(
 
     ceph_assert(ssc->snapset.clone_size.count(soid.snap));
     recovery_info.size = ssc->snapset.clone_size[soid.snap];
+    recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.
     recovery_info.copy_subset.insert(0, (uint64_t)-1);
+    if (HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS))
+      recovery_info.copy_subset.intersection_of(missing_iter->second.clean_regions.get_dirty_regions());
     recovery_info.size = ((uint64_t)-1);
+    recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
   }
 
   h->pulls[fromshard].push_back(PullOp());
@@ -1378,7 +1396,8 @@ void ReplicatedBackend::prepare_pull(
   op.recovery_info.soid = soid;
   op.recovery_info.version = v;
   op.recovery_progress.data_complete = false;
-  op.recovery_progress.omap_complete = false;
+  op.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() 
+                                && HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS);
   op.recovery_progress.data_recovered_to = 0;
   op.recovery_progress.first = true;
 
@@ -1491,6 +1510,9 @@ int ReplicatedBackend::prep_push(
   ObcLockManager &&lock_manager)
 {
   get_parent()->begin_peer_recover(peer, soid);
+  const auto pmissing_iter = get_parent()->get_shard_missing().find(peer);
+  const auto missing_iter = pmissing_iter->second.get_items().find(soid);
+  assert(missing_iter != pmissing_iter->second.get_items().end());
   // take note.
   PushInfo &pi = pushing[soid][peer];
   pi.obc = obc;
@@ -1501,6 +1523,9 @@ int ReplicatedBackend::prep_push(
   pi.recovery_info.oi = obc->obs.oi;
   pi.recovery_info.ss = pop->recovery_info.ss;
   pi.recovery_info.version = version;
+  pi.recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
+  pi.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() &&
+    HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS);
   pi.lock_manager = std::move(lock_manager);
 
   ObjectRecoveryProgress new_progress;
@@ -1519,7 +1544,9 @@ void ReplicatedBackend::submit_push_data(
   const ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
+  bool clear_omap,
   bool cache_dont_need,
+  interval_set<uint64_t> &data_zeros,
   const interval_set<uint64_t> &intervals_included,
   bufferlist data_included,
   bufferlist omap_header,
@@ -1541,25 +1568,43 @@ void ReplicatedBackend::submit_push_data(
   }
 
   if (first) {
-    t->remove(coll, ghobject_t(target_oid));
-    t->touch(coll, ghobject_t(target_oid));
+    if (!complete) {
+      t->remove(coll, ghobject_t(target_oid));
+      t->touch(coll, ghobject_t(target_oid));
+      bufferlist bv = attrs.at(OI_ATTR);
+      object_info_t oi(bv);
+      t->set_alloc_hint(coll, ghobject_t(target_oid),
+		        oi.expected_object_size,
+		        oi.expected_write_size,
+		        oi.alloc_hint_flags);
+      } else {
+        if (!recovery_info.object_exist) {
+	  t->remove(coll, ghobject_t(target_oid));
+          t->touch(coll, ghobject_t(target_oid));
+          bufferlist bv = attrs.at(OI_ATTR);
+          object_info_t oi(bv);
+          t->set_alloc_hint(coll, ghobject_t(target_oid),
+                            oi.expected_object_size,
+                            oi.expected_write_size,
+                            oi.alloc_hint_flags);
+        }
+        //remove xattr and update later if overwrite on original object
+        t->rmattrs(coll, ghobject_t(target_oid));
+        //if need update omap, clear the previous content first
+        if (clear_omap)
+          t->omap_clear(coll, ghobject_t(target_oid));
+      }
+
     t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
-    if (omap_header.length()) 
+    if (omap_header.length())
       t->omap_setheader(coll, ghobject_t(target_oid), omap_header);
 
-    bufferlist bv = attrs.at(OI_ATTR);
-    object_info_t oi(bv);
-    t->set_alloc_hint(coll, ghobject_t(target_oid),
-		      oi.expected_object_size,
-		      oi.expected_write_size,
-		      oi.alloc_hint_flags);
+    struct stat st;
+    int r = store->stat(ch, ghobject_t(recovery_info.soid), &st);
     if (get_parent()->pg_is_remote_backfilling()) {
-      struct stat st;
       uint64_t size = 0;
-      int r = store->stat(ch, ghobject_t(recovery_info.soid), &st);
-      if (r == 0) {
+      if (r == 0)
         size = st.st_size;
-      }
       // Don't need to do anything if object is still the same size
       if (size != recovery_info.oi.size) {
         get_parent()->pg_add_local_num_bytes((int64_t)recovery_info.oi.size - (int64_t)size);
@@ -1571,11 +1616,46 @@ void ReplicatedBackend::submit_push_data(
                << dendl;
       }
     }
+    if (!complete) {
+      //clone overlap content in local object
+      if (recovery_info.object_exist) {
+        assert(r == 0);
+        uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
+        interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
+        if (local_size) {
+          local_intervals_included.insert(0, local_size);
+          local_intervals_excluded.intersection_of(local_intervals_included, recovery_info.copy_subset);
+          local_intervals_included.subtract(local_intervals_excluded);
+        }
+       for (interval_set<uint64_t>::const_iterator q = local_intervals_included.begin();
+          q != local_intervals_included.end();
+         ++q) {
+         dout(15) << " clone_range " << recovery_info.soid << " "
+                  << q.get_start() << "~" << q.get_len() << dendl;
+         t->clone_range(coll, ghobject_t(recovery_info.soid), ghobject_t(target_oid),
+             q.get_start(), q.get_len(), q.get_start());
+        }
+      }
+    }
   }
   uint64_t off = 0;
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
   if (cache_dont_need)
     fadvise_flags |= CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+  // Punch zeros for data, if fiemap indicates nothing but it is marked dirty
+  if (data_zeros.size() > 0) {
+    data_zeros.intersection_of(recovery_info.copy_subset);
+    assert(intervals_included.subset_of(data_zeros));
+    data_zeros.subtract(intervals_included);
+
+    dout(20) << __func__ <<" recovering object " << recovery_info.soid
+             << " copy_subset: " << recovery_info.copy_subset
+             << " intervals_inlcuded: " << intervals_included
+             << " data_zeros: " << data_zeros << dendl;
+
+    for (auto p = data_zeros.begin(); p != data_zeros.end(); ++p)
+      t->zero(coll, ghobject_t(target_oid), p.get_start(), p.get_len());
+  }
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
        p != intervals_included.end();
        ++p) {
@@ -1594,14 +1674,15 @@ void ReplicatedBackend::submit_push_data(
   if (complete) {
     if (!first) {
       dout(10) << __func__ << ": Removing oid "
-	       << target_oid << " from the temp collection" << dendl;
+               << target_oid << " from the temp collection" << dendl;
       clear_temp_obj(target_oid);
       t->remove(coll, ghobject_t(recovery_info.soid));
       t->collection_move_rename(coll, ghobject_t(target_oid),
-				coll, ghobject_t(recovery_info.soid));
+                                coll, ghobject_t(recovery_info.soid));
     }
 
     submit_push_complete(recovery_info, t);
+
   }
 }
 
@@ -1666,7 +1747,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   const hobject_t &hoid = pop.soid;
   ceph_assert((data_included.empty() && data.length() == 0) ||
-	 (!data_included.empty() && data.length() > 0));
+         (!data_included.empty() && data.length() > 0));
 
   auto piter = pulling.find(hoid);
   if (piter == pulling.end()) {
@@ -1719,18 +1800,28 @@ bool ReplicatedBackend::handle_pull_response(
   pi.recovery_progress = pop.after_progress;
 
   dout(10) << "new recovery_info " << pi.recovery_info
-	   << ", new progress " << pi.recovery_progress
-	   << dendl;
-
+           << ", new progress " << pi.recovery_progress
+           << dendl;
+  interval_set<uint64_t> data_zeros;
+  uint64_t z_offset = pop.before_progress.data_recovered_to;
+  uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
+  if(z_length)
+    data_zeros.insert(z_offset, z_length);
   bool complete = pi.is_complete();
+  bool clear_omap = !pop.before_progress.omap_complete;
 
-  submit_push_data(pi.recovery_info, first,
-		   complete, pi.cache_dont_need,
-		   data_included, data,
-		   pop.omap_header,
-		   pop.attrset,
-		   pop.omap_entries,
-		   t);
+  submit_push_data(pi.recovery_info,
+                  first,
+                  complete,
+                  clear_omap,
+                  pi.cache_dont_need,
+                  data_zeros,
+                  data_included,
+                  data,
+                  pop.omap_header,
+                  pop.attrset,
+                  pop.omap_entries,
+                  t);
 
   pi.stat.num_keys_recovered += pop.omap_entries.size();
   pi.stat.num_bytes_recovered += data.length();
@@ -1769,12 +1860,20 @@ void ReplicatedBackend::handle_push(
   bool first = pop.before_progress.first;
   bool complete = pop.after_progress.data_complete &&
     pop.after_progress.omap_complete;
-
+  bool clear_omap = !pop.before_progress.omap_complete;
+  interval_set<uint64_t> data_zeros;
+  uint64_t z_offset = pop.before_progress.data_recovered_to;
+  uint64_t z_length = pop.after_progress.data_recovered_to - pop.before_progress.data_recovered_to;
+  if(z_length)
+    data_zeros.insert(z_offset, z_length);
   response->soid = pop.recovery_info.soid;
+
   submit_push_data(pop.recovery_info,
 		   first,
 		   complete,
+		   clear_omap,
 		   true, // must be replicate
+		   data_zeros,
 		   pop.data_included,
 		   data,
 		   pop.omap_header,
@@ -2025,6 +2124,9 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       if (get_parent()->pg_is_repair())
         stat->num_objects_repaired++;
     }
+  } else if (progress.first && progress.omap_complete) {
+    // If omap is not changed, we need recovery omap when recovery cannot be completed once
+    new_progress.omap_complete = false;
   }
 
   if (stat) {
@@ -2138,10 +2240,14 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
     if (progress.first && recovery_info.size == ((uint64_t)-1)) {
       // Adjust size and copy_subset
       recovery_info.size = st.st_size;
-      recovery_info.copy_subset.clear();
-      if (st.st_size)
-        recovery_info.copy_subset.insert(0, st.st_size);
-      ceph_assert(recovery_info.clone_subset.empty());
+      if (st.st_size) {
+        interval_set<uint64_t> object_range;
+        object_range.insert(0, st.st_size);
+        recovery_info.copy_subset.intersection_of(object_range);
+      } else {
+        recovery_info.copy_subset.clear();
+      }
+      assert(recovery_info.clone_subset.empty());
     }
 
     r = build_push_op(recovery_info, progress, 0, reply);
