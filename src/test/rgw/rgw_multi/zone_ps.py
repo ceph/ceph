@@ -74,6 +74,13 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     return data, status
 
 
+def print_connection_info(conn):
+    """print info of connection"""
+    print("Host: " + conn.host+':'+str(conn.port))
+    print("AWS Secret Key: " + conn.aws_secret_access_key)
+    print("AWS Access Key: " + conn.aws_access_key_id)
+
+
 class PSTopic:
     """class to set/get/delete a topic
     PUT /topics/<topic name>[?push-endpoint=<endpoint>&[<arg1>=<value1>...]]
