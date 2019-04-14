@@ -46,7 +46,7 @@ public:
 };
 
 
-void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
+void MDSTableClient::handle_request(const cref_t<MMDSTableRequest> &m)
 {
   dout(10) << "handle_request " << *m << dendl;
   ceph_assert(m->table == table);

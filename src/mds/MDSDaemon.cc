@@ -578,7 +578,7 @@ void MDSDaemon::tick()
   }
 }
 
-void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_rank,
+void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
 				   std::string_view outs)
 {
@@ -607,7 +607,7 @@ void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_ra
   m->get_connection()->send_message2(reply);
 }
 
-void MDSDaemon::handle_command(const MCommand::const_ref &m)
+void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
@@ -687,7 +687,7 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
-    const MCommand::const_ref &m,
+    const cref_t<MCommand> &m,
     bufferlist *outbl,
     std::string *outs,
     Context **run_later,
@@ -869,7 +869,7 @@ out:
   return r;
 }
 
-void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
+void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {
   version_t epoch = m->get_epoch();
 
@@ -1180,7 +1180,7 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 /*
  * high priority messages we always process
  */
-bool MDSDaemon::handle_core_message(const Message::const_ref &m)
+bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:

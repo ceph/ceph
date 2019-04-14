@@ -24,7 +24,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".tableserver(" << get_mdstable_name(table) << ") "
 
-void MDSTableServer::handle_request(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::handle_request(const cref_t<MMDSTableRequest> &req)
 {
   ceph_assert(req->op >= 0);
   switch (req->op) {
@@ -39,19 +39,19 @@ void MDSTableServer::handle_request(const MMDSTableRequest::const_ref &req)
 
 class C_Prepare : public MDSLogContextBase {
   MDSTableServer *server;
-  MMDSTableRequest::const_ref req;
+  cref_t<MMDSTableRequest> req;
   version_t tid;
   MDSRank *get_mds() override { return server->mds; }
 public:
 
-  C_Prepare(MDSTableServer *s, const MMDSTableRequest::const_ref r, version_t v) : server(s), req(r), tid(v) {}
+  C_Prepare(MDSTableServer *s, const cref_t<MMDSTableRequest> r, version_t v) : server(s), req(r), tid(v) {}
   void finish(int r) override {
     server->_prepare_logged(req, tid);
   }
 };
 
 // prepare
-void MDSTableServer::handle_prepare(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::handle_prepare(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
@@ -68,7 +68,7 @@ void MDSTableServer::handle_prepare(const MMDSTableRequest::const_ref &req)
   mds->mdlog->flush();
 }
 
-void MDSTableServer::_prepare_logged(const MMDSTableRequest::const_ref &req, version_t tid)
+void MDSTableServer::_prepare_logged(const cref_t<MMDSTableRequest> &req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
@@ -93,7 +93,7 @@ void MDSTableServer::_prepare_logged(const MMDSTableRequest::const_ref &req, ver
   }
 }
 
-void MDSTableServer::handle_notify_ack(const MMDSTableRequest::const_ref &m)
+void MDSTableServer::handle_notify_ack(const cref_t<MMDSTableRequest> &m)
 {
   dout(7) << __func__ << " " << *m << dendl;
   mds_rank_t from = mds_rank_t(m->get_source().num());
@@ -118,17 +118,17 @@ void MDSTableServer::handle_notify_ack(const MMDSTableRequest::const_ref &m)
 
 class C_Commit : public MDSLogContextBase {
   MDSTableServer *server;
-  MMDSTableRequest::const_ref req;
+  cref_t<MMDSTableRequest> req;
   MDSRank *get_mds() override { return server->mds; }
 public:
-  C_Commit(MDSTableServer *s, const MMDSTableRequest::const_ref &r) : server(s), req(r) {}
+  C_Commit(MDSTableServer *s, const cref_t<MMDSTableRequest> &r) : server(s), req(r) {}
   void finish(int r) override {
     server->_commit_logged(req);
   }
 };
 
 // commit
-void MDSTableServer::handle_commit(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::handle_commit(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "handle_commit " << *req << dendl;
 
@@ -163,7 +163,7 @@ void MDSTableServer::handle_commit(const MMDSTableRequest::const_ref &req)
   }
 }
 
-void MDSTableServer::_commit_logged(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::_commit_logged(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "_commit_logged, sending ACK" << dendl;
 
@@ -182,17 +182,17 @@ void MDSTableServer::_commit_logged(const MMDSTableRequest::const_ref &req)
 
 class C_Rollback : public MDSLogContextBase {
   MDSTableServer *server;
-  MMDSTableRequest::const_ref req;
+  cref_t<MMDSTableRequest> req;
   MDSRank *get_mds() override { return server->mds; }
 public:
-  C_Rollback(MDSTableServer *s, const MMDSTableRequest::const_ref &r) : server(s), req(r) {}
+  C_Rollback(MDSTableServer *s, const cref_t<MMDSTableRequest> &r) : server(s), req(r) {}
   void finish(int r) override {
     server->_rollback_logged(req);
   }
 };
 
 // ROLLBACK
-void MDSTableServer::handle_rollback(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::handle_rollback(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
 
@@ -209,7 +209,7 @@ void MDSTableServer::handle_rollback(const MMDSTableRequest::const_ref &req)
 				 new C_Rollback(this, req));
 }
 
-void MDSTableServer::_rollback_logged(const MMDSTableRequest::const_ref &req)
+void MDSTableServer::_rollback_logged(const cref_t<MMDSTableRequest> &req)
 {
   dout(7) << "_rollback_logged " << *req << dendl;
 

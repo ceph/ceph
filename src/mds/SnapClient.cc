@@ -40,7 +40,7 @@ void SnapClient::resend_queries()
   }
 }
 
-void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
+void SnapClient::handle_query_result(const cref_t<MMDSTableRequest> &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
 
@@ -111,7 +111,7 @@ void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
   }
 }
 
-void SnapClient::handle_notify_prep(const MMDSTableRequest::const_ref &m)
+void SnapClient::handle_notify_prep(const cref_t<MMDSTableRequest> &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
   handle_query_result(m);

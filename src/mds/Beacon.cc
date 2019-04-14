@@ -87,7 +87,7 @@ void Beacon::init(const MDSMap &mdsmap)
   });
 }
 
-bool Beacon::ms_can_fast_dispatch2(const Message::const_ref& m) const
+bool Beacon::ms_can_fast_dispatch2(const cref_t<Message>& m) const
 {
   return m->get_type() == MSG_MDS_BEACON;
 }
@@ -116,7 +116,7 @@ bool Beacon::ms_dispatch2(const Message::ref& m)
  *
  * This function puts the passed message before returning
  */
-void Beacon::handle_mds_beacon(const MMDSBeacon::const_ref &m)
+void Beacon::handle_mds_beacon(const cref_t<MMDSBeacon> &m)
 {
   std::unique_lock lock(mutex);
 
