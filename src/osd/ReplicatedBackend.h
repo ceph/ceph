@@ -268,7 +268,9 @@ private:
   void submit_push_data(const ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
+			bool clear_omap,
 			bool cache_dont_need,
+			interval_set<uint64_t> &data_zeros,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
@@ -335,7 +337,7 @@ private:
       ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
       : RefCountedObject(nullptr, 0),
-	tid(tid), on_commit(on_commit),
+      tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
     bool done() const {
       return waiting_for_commit.empty();

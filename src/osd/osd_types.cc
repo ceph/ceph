@@ -5891,7 +5891,7 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
 
 void ObjectRecoveryInfo::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(soid, bl);
   encode(version, bl);
   encode(size, bl);
@@ -5899,13 +5899,14 @@ void ObjectRecoveryInfo::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(ss, bl);
   encode(copy_subset, bl);
   encode(clone_subset, bl);
+  encode(object_exist, bl);
   ENCODE_FINISH(bl);
 }
 
 void ObjectRecoveryInfo::decode(ceph::buffer::list::const_iterator &bl,
 				int64_t pool)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   decode(soid, bl);
   decode(version, bl);
   decode(size, bl);
@@ -5913,8 +5914,9 @@ void ObjectRecoveryInfo::decode(ceph::buffer::list::const_iterator &bl,
   decode(ss, bl);
   decode(copy_subset, bl);
   decode(clone_subset, bl);
+  if (struct_v > 2)
+    decode(object_exist, bl);
   DECODE_FINISH(bl);
-
   if (struct_v < 2) {
     if (!soid.is_max() && soid.pool == -1)
       soid.pool = pool;
@@ -5936,6 +5938,7 @@ void ObjectRecoveryInfo::generate_test_instances(
   o.back()->soid = hobject_t(sobject_t("key", CEPH_NOSNAP));
   o.back()->version = eversion_t(0,0);
   o.back()->size = 100;
+  o.back()->object_exist = false;
 }
 
 
@@ -5956,6 +5959,7 @@ void ObjectRecoveryInfo::dump(Formatter *f) const
   }
   f->dump_stream("copy_subset") << copy_subset;
   f->dump_stream("clone_subset") << clone_subset;
+  f->dump_stream("object_exist") << object_exist;
 }
 
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)
@@ -5971,6 +5975,7 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 	     << ", copy_subset: " << copy_subset
 	     << ", clone_subset: " << clone_subset
 	     << ", snapset: " << ss
+	     << ", object_exist: " << object_exist
 	     << ")";
 }
 

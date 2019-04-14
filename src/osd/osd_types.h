@@ -5421,8 +5421,9 @@ struct ObjectRecoveryInfo {
   SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   std::map<hobject_t, interval_set<uint64_t>> clone_subset;
+  bool object_exist;
 
-  ObjectRecoveryInfo() : size(0) { }
+  ObjectRecoveryInfo() : size(0), object_exist(true) { }
 
   static void generate_test_instances(std::list<ObjectRecoveryInfo*>& o);
   void encode(ceph::buffer::list &bl, uint64_t features) const;
