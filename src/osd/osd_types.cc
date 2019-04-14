@@ -4275,6 +4275,118 @@ void ObjectModDesc::decode(ceph::buffer::list::const_iterator &_bl)
   DECODE_FINISH(_bl);
 }
 
+void ObjectCleanRegions::trim()
+{
+  while(clean_offsets.num_intervals() > max_num_intervals) {
+    typename interval_set<uint64_t>::iterator shortest_interval = clean_offsets.begin();
+    if (shortest_interval == clean_offsets.end())
+      break;
+    for (typename interval_set<uint64_t>::iterator it = clean_offsets.begin();
+        it != clean_offsets.end();
+        ++it) {
+      if (it.get_len() < shortest_interval.get_len())
+        shortest_interval = it;
+    }
+    clean_offsets.erase(shortest_interval);
+  }
+}
+
+void ObjectCleanRegions::merge(const ObjectCleanRegions &other)
+{
+  clean_offsets.intersection_of(other.clean_offsets);
+  clean_omap = clean_omap && other.clean_omap;
+  trim();
+}
+
+void ObjectCleanRegions::mark_data_region_dirty(uint64_t offset, uint64_t len)
+{
+  interval_set<uint64_t> clean_region;
+  clean_region.insert(0, (uint64_t)-1);
+  clean_region.erase(offset, len);
+  clean_offsets.intersection_of(clean_region);
+  trim();
+}
+
+void ObjectCleanRegions::mark_omap_dirty()
+{
+  clean_omap = false;
+}
+
+void ObjectCleanRegions::mark_object_new()
+{
+  new_object = true;
+}
+
+void ObjectCleanRegions::mark_fully_dirty()
+{
+  mark_data_region_dirty(0, (uint64_t)-1);
+  mark_omap_dirty();
+  mark_object_new();
+}
+
+interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
+{
+   interval_set<uint64_t> dirty_region;
+   dirty_region.insert(0, (uint64_t)-1);
+   dirty_region.subtract(clean_offsets);
+   return dirty_region;
+}
+
+bool ObjectCleanRegions::omap_is_dirty() const
+{
+  return !clean_omap;
+}
+
+bool ObjectCleanRegions::object_is_exist() const
+{
+  return !new_object;
+}
+
+void ObjectCleanRegions::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  using ceph::encode;
+  encode(clean_offsets, bl);
+  encode(clean_omap, bl);
+  encode(new_object, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ObjectCleanRegions::decode(bufferlist::const_iterator &bl)
+{
+  DECODE_START(1, bl);
+  using ceph::decode;
+  decode(clean_offsets, bl);
+  decode(clean_omap, bl);
+  decode(new_object, bl);
+  DECODE_FINISH(bl);
+}
+
+void ObjectCleanRegions::dump(Formatter *f) const
+{
+  f->open_object_section("object_clean_regions");
+  f->dump_stream("clean_offsets") << clean_offsets;
+  f->dump_bool("clean_omap", clean_omap);
+  f->dump_bool("object_new", new_object);
+  f->close_section();
+}
+
+void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
+{
+  o.push_back(new ObjectCleanRegions());
+  o.push_back(new ObjectCleanRegions());
+  o.back()->mark_data_region_dirty(4096, 40960);
+  o.back()->mark_omap_dirty();
+  o.back()->mark_object_new();
+}
+
+ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
+{
+  return out << "clean_offsets: " << ocr.clean_offsets
+             << ", clean_omap: " << ocr.clean_omap
+             << ", object_new: " << ocr.new_object;
+}
+
 // -- pg_log_entry_t --
 
 string pg_log_entry_t::get_key_name() const
