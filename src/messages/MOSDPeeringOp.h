@@ -7,11 +7,10 @@
 #include "osd/osd_types.h"
 #include "osd/PGPeeringEvent.h"
 
-class MOSDPeeringOp : public MessageSubType<MOSDPeeringOp> {
+class MOSDPeeringOp : public Message {
 public:
-
-template<typename... Args>
-  MOSDPeeringOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+  MOSDPeeringOp(int t, int version, int compat_version)
+    : Message{t, version, compat_version} {}
 
   void print(std::ostream& out) const override final {
     out << get_type_name() << "("

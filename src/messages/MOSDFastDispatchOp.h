@@ -7,12 +7,11 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDFastDispatchOp : public MessageSubType<MOSDFastDispatchOp> {
+class MOSDFastDispatchOp : public Message {
 public:
-
-template<typename... Args>
-  MOSDFastDispatchOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
-
+  MOSDFastDispatchOp(int t, int version, int compat_version)
+    : Message{t, version, compat_version}
+  {}
   virtual epoch_t get_map_epoch() const = 0;
   virtual epoch_t get_min_epoch() const {
     return get_map_epoch();
