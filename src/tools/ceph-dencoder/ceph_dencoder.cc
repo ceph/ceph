@@ -214,8 +214,8 @@ public:
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
-  typename T::ref m_object;
-  list<typename T::ref> m_list;
+  ref_t<T> m_object;
+  list<ref_t<T>> m_list;
 
 public:
   MessageDencoderImpl() : m_object(T::create()) {}
@@ -225,7 +225,7 @@ public:
     auto p = bl.cbegin();
     p.seek(seek);
     try {
-      Message::ref n(decode_message(g_ceph_context, 0, p), false);
+      ref_t<Message> n(decode_message(g_ceph_context, 0, p), false);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {

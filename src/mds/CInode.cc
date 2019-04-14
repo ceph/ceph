@@ -3686,7 +3686,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   return valid;
 }
 
-void CInode::encode_cap_message(const MClientCaps::ref &m, Capability *cap)
+void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
 {
   ceph_assert(cap);
 

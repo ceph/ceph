@@ -346,7 +346,7 @@ void MDSTableServer::handle_mds_failure_or_stop(mds_rank_t who)
 
   active_clients.erase(who);
 
-  list<MMDSTableRequest::ref> rollback;
+  list<ref_t<MMDSTableRequest>> rollback;
   for (auto p = pending_notifies.begin(); p != pending_notifies.end(); ) {
     auto q = p++;
     if (q->second.mds == who) {

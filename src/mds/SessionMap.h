@@ -175,7 +175,7 @@ public:
   entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
-  list<Message::ref> preopen_out_queue;  ///< messages for client, queued before they connect
+  list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
   elist<MDRequestImpl*> requests;
   size_t get_request_count();

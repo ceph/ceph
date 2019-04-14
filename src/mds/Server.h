@@ -156,7 +156,7 @@ public:
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
   Session *find_session_by_uuid(std::string_view uuid);
   void reclaim_session(Session *session, const cref_t<MClientReclaim> &m);
-  void finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply=nullptr);
+  void finish_reclaim_session(Session *session, const ref_t<MClientReclaimReply> &reply=nullptr);
   void handle_client_reclaim(const cref_t<MClientReclaim> &m);
 
   void reconnect_clients(MDSContext *reconnect_done_);
@@ -188,7 +188,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
-  void set_trace_dist(Session *session, const MClientReply::ref &reply, CInode *in, CDentry *dn,
+  void set_trace_dist(Session *session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
 		      MDRequestRef& mdr);
@@ -285,7 +285,7 @@ public:
   void handle_slave_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSSlaveRequest> &m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
   void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
-			     map<client_t,MClientSnap::ref>& split);
+			     map<client_t,ref_t<MClientSnap>>& split);
 
   // unlink
   void handle_client_unlink(MDRequestRef& mdr);
@@ -339,7 +339,7 @@ public:
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
-			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap::ref> splits[2],
+			       CDentry *destdn, CDentry *staydn, map<client_t,ref_t<MClientSnap>> splits[2],
 			       bool finish_mdr);
 
   void evict_cap_revoke_non_responders();
@@ -347,7 +347,7 @@ public:
                           const std::set <std::string> &changed);
 
 private:
-  void reply_client_request(MDRequestRef& mdr, const MClientReply::ref &reply);
+  void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);
 
   DecayCounter recall_throttle;
