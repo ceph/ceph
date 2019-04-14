@@ -17,6 +17,7 @@
 #define CEPH_MOSDPGLOG_H
 
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
 class MOSDPGLog : public MOSDPeeringOp {
 private:
