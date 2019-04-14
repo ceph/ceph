@@ -572,4 +572,11 @@ template<typename... Args>
   virtual ~MessageInstance() override {}
 };
 
+namespace ceph {
+template<typename T>
+using ref_t = boost::intrusive_ptr<T>;
+template<typename T>
+using cref_t = boost::intrusive_ptr<T const>;
+}
+
 #endif
