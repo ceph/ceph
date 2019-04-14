@@ -1264,7 +1264,7 @@ public:
 protected:
   int dump_cache(std::string_view fn, Formatter *f);
 public:
-  int dump_cache() { return dump_cache(NULL, NULL); }
+  int dump_cache() { return dump_cache({}, nullptr); }
   int dump_cache(std::string_view filename);
   int dump_cache(Formatter *f);
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
