@@ -1190,12 +1190,12 @@ bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
     // MDS
   case CEPH_MSG_MDS_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
-    handle_mds_map(MMDSMap::msgref_cast(m));
+    handle_mds_map(ref_cast<MMDSMap>(m));
     break;
 
     // OSD
   case MSG_COMMAND:
-    handle_command(MCommand::msgref_cast(m));
+    handle_command(ref_cast<MCommand>(m));
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);

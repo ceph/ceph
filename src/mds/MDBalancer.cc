@@ -64,7 +64,7 @@ int MDBalancer::proc_message(const cref_t<Message> &m)
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(MHeartbeat::msgref_cast(m));
+    handle_heartbeat(ref_cast<MHeartbeat>(m));
     break;
 
   default:

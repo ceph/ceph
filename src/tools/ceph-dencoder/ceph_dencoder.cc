@@ -233,7 +233,7 @@ public:
 	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
 	throw std::runtime_error(ss.str());
       }
-      m_object = boost::static_pointer_cast<typename T::ref::element_type, std::remove_reference<decltype(n)>::type::element_type>(n);
+      m_object = ref_cast<T>(n);
     }
     catch (buffer::error& e) {
       return e.what();
