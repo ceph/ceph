@@ -521,44 +521,6 @@ extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl
 extern Message *decode_message(CephContext *cct, int crcflags,
                                ceph::buffer::list::const_iterator& bl);
 
-template <class MessageType>
-class MessageFactory {
-public:
-template<typename... Args>
-  static typename MessageType::ref build(Args&&... args) {
-    return typename MessageType::ref(new MessageType(std::forward<Args>(args)...), false);
-  }
-};
-
-template<class T, class M = Message>
-class MessageSubType : public M {
-public:
-  typedef boost::intrusive_ptr<T> ref;
-  typedef boost::intrusive_ptr<T const> const_ref;
-
-protected:
-template<typename... Args>
-  MessageSubType(Args&&... args) : M(std::forward<Args>(args)...) {}
-  virtual ~MessageSubType() override {}
-};
-
-
-template<class T, class M = Message>
-class MessageInstance : public MessageSubType<T, M> {
-public:
-  using factory = MessageFactory<T>;
-
-  template<typename... Args>
-  static auto create(Args&&... args) {
-    return MessageFactory<T>::build(std::forward<Args>(args)...);
-  }
-
-protected:
-template<typename... Args>
-  MessageInstance(Args&&... args) : MessageSubType<T,M>(std::forward<Args>(args)...) {}
-  virtual ~MessageInstance() override {}
-};
-
 namespace ceph {
 template<typename T> using ref_t = boost::intrusive_ptr<T>;
 template<typename T> using cref_t = boost::intrusive_ptr<const T>;
