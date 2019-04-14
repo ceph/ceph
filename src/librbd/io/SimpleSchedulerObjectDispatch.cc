@@ -312,8 +312,8 @@ bool SimpleSchedulerObjectDispatch<I>::compare_and_write(
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::flush(
     io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-    io::DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
+    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 

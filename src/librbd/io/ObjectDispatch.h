@@ -74,8 +74,8 @@ public:
 
   bool flush(
       FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) override {
+      uint64_t* journal_tid, DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) override {
     return false;
   }
 
