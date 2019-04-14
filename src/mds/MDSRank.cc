@@ -1193,7 +1193,7 @@ bool MDSRank::handle_deferrable_message(const cref_t<Message> &m)
     case MSG_MDS_TABLE_REQUEST:
       ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MDS);
       {
-        const cref_t<MMDSTableRequest> &req = MMDSTableRequest::msgref_cast(m);
+        const cref_t<MMDSTableRequest> &req = ref_cast<MMDSTableRequest>(m);
         if (req->op < 0) {
           MDSTableClient *client = get_table_client(req->table);
           client->handle_request(req);

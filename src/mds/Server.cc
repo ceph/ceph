@@ -201,14 +201,14 @@ void Server::dispatch(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_RECONNECT:
-    handle_client_reconnect(MClientReconnect::msgref_cast(m));
+    handle_client_reconnect(ref_cast<MClientReconnect>(m));
     return;
   }
 
   // active?
   // handle_slave_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
-    const auto &req = MClientRequest::msgref_cast(m);
+    const auto &req = ref_cast<MClientRequest>(m);
     if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
       Session *session = mds->get_session(req);
       if (!session || session->is_closed()) {
@@ -259,16 +259,16 @@ void Server::dispatch(const cref_t<Message> &m)
 
   switch (m->get_type()) {
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session(MClientSession::msgref_cast(m));
+    handle_client_session(ref_cast<MClientSession>(m));
     return;
   case CEPH_MSG_CLIENT_REQUEST:
-    handle_client_request(MClientRequest::msgref_cast(m));
+    handle_client_request(ref_cast<MClientRequest>(m));
     return;
   case CEPH_MSG_CLIENT_RECLAIM:
-    handle_client_reclaim(MClientReclaim::msgref_cast(m));
+    handle_client_reclaim(ref_cast<MClientReclaim>(m));
     return;
   case MSG_MDS_SLAVE_REQUEST:
-    handle_slave_request(MMDSSlaveRequest::msgref_cast(m));
+    handle_slave_request(ref_cast<MMDSSlaveRequest>(m));
     return;
   default:
     derr << "server unknown message " << m->get_type() << dendl;
