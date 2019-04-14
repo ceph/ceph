@@ -129,7 +129,6 @@ NOTIFICATION_SUFFIX = "_notif"
 # pubsub tests
 ##############
 
-
 def test_ps_info():
     """ log information for manual testing """
     return SkipTest("only used in manual testing")
