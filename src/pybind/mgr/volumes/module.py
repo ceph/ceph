@@ -9,7 +9,7 @@ except ImportError:
 from mgr_module import MgrModule
 import orchestrator
 
-from ceph_volume_client import CephFSVolumeClient, VolumePath
+from .subvolume import SubvolumePath, SubvolumeClient
 
 class PurgeJob(object):
     def __init__(self, volume_fscid, subvolume_path):
@@ -222,12 +222,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # TODO: validate that subvol size fits in volume size
 
-        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
+        with SubvolumeClient(rados=self.rados, fs_name=vol_name) as svc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
-            vp = VolumePath(sub_name, sub_name)
+            svp = SubvolumePath(sub_name, sub_name)
 
-            vc.create_volume(vp, size)
+            svc.create_subvolume(svp, size)
 
         return 0, "", ""
 
@@ -241,15 +241,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         vol_fscid = fs['id']
 
-        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
+        with SubvolumeClient(rados=self.rados, fs_name=vol_name) as svc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
-            vp = VolumePath(sub_name, sub_name)
+            svp = SubvolumePath(sub_name, sub_name)
 
-            vc.delete_volume(vp)
+            vc.delete_volume(svp)
 
         # TODO: create a progress event
-        self._background_jobs.put(PurgeJob(vol_fscid, vp))
+        self._background_jobs.put(PurgeJob(vol_fscid, svp))
 
         return 0, "", ""
 
