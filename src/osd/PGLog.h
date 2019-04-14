@@ -1425,11 +1425,12 @@ public:
 	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	     i != log.log.rend();
 	     ++i) {
-	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
 	  if (i->soid > info.last_backfill)
 	    continue;
 	  if (i->is_error())
 	    continue;
+    if (!i->is_delete())
+        missing.merge(*i);
 	  if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
@@ -1446,7 +1447,9 @@ public:
 	    object_info_t oi(bv);
 	    if (oi.version < i->version) {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i
-				 << " (have " << oi.version << ")" << dendl;
+                           << " (have " << oi.version << ")"
+                           << " clean_regions " << i->clean_regions << dendl;
+
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		ceph_assert(miter != missing.get_items().end());
@@ -1456,7 +1459,8 @@ public:
 		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
 		checked.insert(i->soid);
 	      } else {
-		missing.add(i->soid, i->version, oi.version, i->is_delete());
+		missing.add(i->soid, i->version, oi.version, i->is_delete(), false);
+		missing.merge(*i);
 	      }
 	    }
 	  } else {
@@ -1474,7 +1478,8 @@ public:
 	      }
 	      checked.insert(i->soid);
 	    } else {
-	      missing.add(i->soid, i->version, eversion_t(), i->is_delete());
+	      missing.add(i->soid, i->version, eversion_t(), i->is_delete(), false);
+	      missing.merge(*i);
 	    }
 	  }
 	}
