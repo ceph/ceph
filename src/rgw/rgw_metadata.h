@@ -25,14 +25,13 @@ struct RGWObjVersionTracker;
 
 struct obj_version;
 
-
-enum RGWMDLogStatus {
-  MDLOG_STATUS_UNKNOWN,
-  MDLOG_STATUS_WRITE,
-  MDLOG_STATUS_SETATTRS,
-  MDLOG_STATUS_REMOVE,
-  MDLOG_STATUS_COMPLETE,
-  MDLOG_STATUS_ABORT,
+enum class RGWMDLogStatus : uint32_t {
+  Unknown,
+  Write,
+  SetAttrs,
+  Remove,
+  Complete,
+  Abort,
 };
 
 class RGWMetadataObject {
@@ -259,9 +258,7 @@ struct LogStatusDump {
 struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;
-  RGWMDLogStatus status;
-  
-  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
+  RGWMDLogStatus status = RGWMDLogStatus::Unknown;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -407,7 +404,8 @@ int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
 
   string section;
   RGWMetadataLogData log_data;
-  ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
+  ret = pre_modify(handler, section, key, log_data, objv_tracker,
+                   RGWMDLogStatus::Write);
   if (ret < 0) {
     return ret;
   }

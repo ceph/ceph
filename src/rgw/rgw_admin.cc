@@ -7665,7 +7665,7 @@ next:
     string oid = store->get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      RGWMDLogStatus::Write, RGWMetadataHandler::APPLY_ALWAYS,
                                       [&] {
       return store->create_mfa(user_id, config, &objv_tracker, mtime);
     });
@@ -7700,7 +7700,7 @@ next:
     string oid = store->get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      RGWMDLogStatus::Write, RGWMetadataHandler::APPLY_ALWAYS,
                                       [&] {
       return store->remove_mfa(user_id, totp_serial, &objv_tracker, mtime);
     });
@@ -7843,7 +7843,7 @@ next:
     string oid = store->get_mfa_oid(user_id);
 
     ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                  MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                  RGWMDLogStatus::Write, RGWMetadataHandler::APPLY_ALWAYS,
                                   [&] {
       return store->create_mfa(user_id, config, &objv_tracker, mtime);
     });

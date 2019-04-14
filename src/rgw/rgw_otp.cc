@@ -71,7 +71,7 @@ public:
     }
 
     int ret = store->meta_mgr->mutate(this, entry, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, sync_mode,
+                                      RGWMDLogStatus::Write, sync_mode,
                                       [&] {
          return store->set_mfa(entry, devices, true, &objv_tracker, mtime);
     });

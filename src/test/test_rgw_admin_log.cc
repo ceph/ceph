@@ -1071,19 +1071,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Write);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Complete);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Write);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Complete);
   }
 
   sleep(1); /*To get a modified time*/
@@ -1105,19 +1105,19 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Write);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Complete);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Write);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Complete);
   }
 
   sleep(1);
@@ -1141,18 +1141,18 @@ TEST(TestRGWAdmin, mdlog_list) {
     list<cls_log_entry_json>::iterator it = entries.begin();
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_REMOVE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Remove);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_WRITE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Write);
     ++it;
     EXPECT_TRUE(it->section.compare("user") == 0);
     EXPECT_TRUE(it->name.compare(uid) == 0);
-    EXPECT_TRUE(it->log_data.status == MDLOG_STATUS_COMPLETE);
+    EXPECT_TRUE(it->log_data.status == RGWMDLogStatus::Complete);
   }
 
   sleep(1);

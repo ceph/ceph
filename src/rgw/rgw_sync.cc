@@ -1246,7 +1246,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
       return set_cr_error(-EIO);
     }
 
-    if (op_status != MDLOG_STATUS_COMPLETE) {
+    if (op_status != RGWMDLogStatus::Complete) {
       tn->log(20, "skipping pending operation");
       yield call(marker_tracker->finish(entry_marker));
       if (retcode < 0) {
@@ -1595,7 +1595,7 @@ public:
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, RGWMDLogStatus::Complete, marker_tracker, tn), false);
               // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = marker;
               pos_to_prev[marker] = marker;
