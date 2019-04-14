@@ -6,10 +6,11 @@ try:
 except ImportError:
     import Queue
 
+import cephfs
 from mgr_module import MgrModule
 import orchestrator
 
-from ceph_volume_client import CephFSVolumeClient, VolumePath
+from .fs.subvolume import SubvolumePath, SubvolumeClient
 
 class PurgeJob(object):
     def __init__(self, volume_fscid, subvolume_path):
@@ -47,15 +48,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume create '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=size,type=CephString,req=false ',
-            'desc': "Create a CephFS subvolume within an existing volume",
+                   'name=size,type=CephInt,req=false ',
+            'desc': "Create a CephFS subvolume in a volume, and "
+                    "optionally with a specific size(in bytes)",
             'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume rm '
                    'name=vol_name,type=CephString '
-                   'name=sub_name,type=CephString',
-            'desc': "Delete a CephFS subvolume",
+                   'name=sub_name,type=CephString '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Delete a CephFS subvolume in a volume",
             'perm': 'rw'
         },
 
@@ -210,6 +213,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self._volume_get_fs(vol_name) is not None
 
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
+        """
+        :return: a 3-tuple of return code(int), empty string(str), error message (str)
+        """
         vol_name = cmd['vol_name']
         sub_name = cmd['sub_name']
 
@@ -217,39 +223,54 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         if not self._volume_exists(vol_name):
             return -errno.ENOENT, "", \
-                   "Volume not found, create it with `ceph volume create` " \
-                   "before trying to create subvolumes"
+                   "Volume '{0}' not found, create it with `ceph fs volume create` " \
+                   "before trying to create subvolumes".format(vol_name)
 
         # TODO: validate that subvol size fits in volume size
 
-        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
-            vp = VolumePath(sub_name, sub_name)
-
-            vc.create_volume(vp, size)
+            svp = SubvolumePath(sub_name, sub_name)
+            svc.create_subvolume(svp, size)
 
         return 0, "", ""
 
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
+        """
+        :return: a 3-tuple of return code(int), empty string(str), error message (str)
+        """
         vol_name = cmd['vol_name']
         sub_name = cmd['sub_name']
 
+        force = cmd.get('force', False)
+
         fs = self._volume_get_fs(vol_name)
         if fs is None:
-            return 0, "", "Volume '{0}' already deleted".format(vol_name)
+            if force:
+                return 0, "", ""
+            else:
+                return -errno.ENOENT, "", \
+                       "Volume '{0}' not found, cannot remove subvolume '{1}'".format(vol_name, sub_name)
 
         vol_fscid = fs['id']
 
-        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
-            vp = VolumePath(sub_name, sub_name)
+            svp = SubvolumePath(sub_name, sub_name)
+            try:
+                svc.delete_subvolume(svp)
+            except cephfs.ObjectNotFound:
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume '{0}' not found, cannot remove it".format(sub_name)
+            svc.purge_subvolume(svp)
 
-            vc.delete_volume(vp)
-
-        # TODO: create a progress event
-        self._background_jobs.put(PurgeJob(vol_fscid, vp))
+        # TODO: purge subvolume asynchronously
+        # self._background_jobs.put(PurgeJob(vol_fscid, svp))
 
         return 0, "", ""
 
