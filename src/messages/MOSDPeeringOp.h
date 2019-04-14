@@ -5,7 +5,8 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
-#include "osd/PGPeeringEvent.h"
+
+class PGPeeringEvent;
 
 class MOSDPeeringOp : public Message {
 public:
