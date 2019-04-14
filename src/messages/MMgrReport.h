@@ -71,11 +71,8 @@ public:
 };
 WRITE_CLASS_ENCODER(PerfCounterType)
 
-class MMgrReport : public MessageInstance<MMgrReport> {
-public:
-  friend factory;
+class MMgrReport : public Message {
 private:
-
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -168,8 +165,11 @@ public:
   }
 
   MMgrReport()
-    : MessageInstance(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION}
   {}
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

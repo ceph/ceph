@@ -17,9 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotify : public MessageInstance<MMDSFragmentNotify> {
-public:
-  friend factory;
+class MMDSFragmentNotify : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -40,9 +38,9 @@ private:
 
 protected:
   MMDSFragmentNotify() :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
+    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }
@@ -69,7 +67,9 @@ public:
     if (header.version >= 2)
       decode(ack_wanted, p);
   }
-  
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);  
 };
 
 #endif

@@ -332,7 +332,7 @@ void Server::reclaim_session(Session *session, const cref_t<MClientReclaim> &m)
     return;
   }
 
-  auto reply = MClientReclaimReply::create(0);
+  auto reply = make_message<MClientReclaimReply>(0);
   if (m->get_uuid().empty()) {
     dout(10) << __func__ << " invalid message (no uuid)" << dendl;
     reply->set_result(-EINVAL);
@@ -507,7 +507,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       };
 
       auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str) {
-	auto m = MClientSession::create(CEPH_SESSION_REJECT);
+	auto m = make_message<MClientSession>(CEPH_SESSION_REJECT);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
 	  m->metadata["error_string"] = err_str;
 	mds->send_message_client(m, session);
@@ -607,7 +607,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
-      auto reply = MClientSession::create(CEPH_SESSION_RENEWCAPS, m->get_seq());
+      auto reply = make_message<MClientSession>(CEPH_SESSION_RENEWCAPS, m->get_seq());
       mds->send_message_client(reply, session);
     } else {
       dout(10) << "ignoring renewcaps on non open|stale session (" << session->get_state_name() << ")" << dendl;
@@ -672,7 +672,7 @@ void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
 
   version_t seq = session->wait_for_flush(gather->new_sub());
   mds->send_message_client(
-    MClientSession::create(CEPH_SESSION_FLUSHMSG, seq), session);
+    make_message<MClientSession>(CEPH_SESSION_FLUSHMSG, seq), session);
 }
 
 void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather)
@@ -717,12 +717,12 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
     ceph_assert(session->get_connection());
-    auto reply = MClientSession::create(CEPH_SESSION_OPEN);
+    auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
       reply->supported_features = supported_features;
     mds->send_message_client(reply, session);
     if (mdcache->is_readonly()) {
-      auto m = MClientSession::create(CEPH_SESSION_FORCE_RO);
+      auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
       mds->send_message_client(m, session);
     }
   } else if (session->is_closing() ||
@@ -769,7 +769,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       }
 
       // reset session
-      mds->send_message_client(MClientSession::create(CEPH_SESSION_CLOSE), session);
+      mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
       mds->sessionmap.remove_session(session);
@@ -866,13 +866,13 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
 
-	auto reply = MClientSession::create(CEPH_SESSION_OPEN);
+	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
 	  reply->supported_features = supported_features;
 	mds->send_message_client(reply, session);
 
 	if (mdcache->is_readonly())
-	  mds->send_message_client(MClientSession::create(CEPH_SESSION_FORCE_RO), session);
+	  mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_FORCE_RO), session);
       }
     } else {
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
@@ -985,7 +985,7 @@ void Server::find_idle_sessions()
       mds->sessionmap.set_state(session, Session::STATE_STALE);
       mds->locker->revoke_stale_caps(session);
       mds->locker->remove_stale_leases(session);
-      mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
+      mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq()), session);
       finish_flush_session(session, session->get_push_seq());
     }
   }
@@ -1248,7 +1248,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   }
 
   if (deny) {
-    auto r = MClientSession::create(CEPH_SESSION_CLOSE);
+    auto r = make_message<MClientSession>(CEPH_SESSION_CLOSE);
     mds->send_message_client(r, session);
     if (session->is_open())
       kill_session(session, nullptr);
@@ -1257,7 +1257,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
   if (!m->has_more()) {
     // notify client of success with an OPEN
-    auto reply = MClientSession::create(CEPH_SESSION_OPEN);
+    auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
       reply->supported_features = supported_features;
     mds->send_message_client(reply, session);
@@ -1636,7 +1636,7 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
 
       dout(7) << "  recalling " << recall << " caps; session_recall_throttle = " << session_recall_throttle << "; global_recall_throttle = " << global_recall_throttle << dendl;
 
-      auto m = MClientSession::create(CEPH_SESSION_RECALL_STATE);
+      auto m = make_message<MClientSession>(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
       mds->send_message_client(m, session);
       if (gather) {
@@ -1664,7 +1664,7 @@ void Server::force_clients_readonly()
     if (!session->info.inst.name.is_client() ||
 	!(session->is_open() || session->is_stale()))
       continue;
-    mds->send_message_client(MClientSession::create(CEPH_SESSION_FORCE_RO), session);
+    mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_FORCE_RO), session);
   }
 }
 
@@ -1719,7 +1719,7 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestR
 void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
-    reply_client_request(mdr, MClientReply::create(*mdr->client_request, r));
+    reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
@@ -1854,7 +1854,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   }
 
 
-  auto reply = MClientReply::create(*req, 0);
+  auto reply = make_message<MClientReply>(*req, 0);
   reply->set_unsafe();
 
   // mark xlocks "done", indicating that we are exposing uncommitted changes.
@@ -2146,7 +2146,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 	   req->get_op() != CEPH_MDS_OP_OPEN &&
 	   req->get_op() != CEPH_MDS_OP_CREATE)) {
 	dout(5) << "already completed " << req->get_reqid() << dendl;
-        auto reply = MClientReply::create(*req, 0);
+        auto reply = make_message<MClientReply>(*req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
 	  encode(created, extra);
@@ -2415,7 +2415,7 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
   // the purpose of rename notify is enforcing causal message ordering. making sure
   // bystanders have received all messages from rename srcdn's auth MDS.
   if (m->get_op() == MMDSSlaveRequest::OP_RENAMENOTIFY) {
-    auto reply = MMDSSlaveRequest::create(m->get_reqid(), m->get_attempt(), MMDSSlaveRequest::OP_RENAMENOTIFYACK);
+    auto reply = make_message<MMDSSlaveRequest>(m->get_reqid(), m->get_attempt(), MMDSSlaveRequest::OP_RENAMENOTIFYACK);
     mds->send_message(reply, m->get_connection());
     return;
   }
@@ -2645,7 +2645,7 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
 	  return;
 	
 	// ack
-	auto r = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, replycode);
+	auto r = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, replycode);
 	r->set_lock_type(lock->get_type());
 	lock->get_parent()->set_object_info(r->get_object_info());
 	if (replycode == MMDSSlaveRequest::OP_XLOCKACK)
@@ -2808,7 +2808,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   }
 
   // ack!
-  auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
+  auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
   
   // return list of my auth_pins (if any)
   for (const auto &p : mdr->auth_pins) {
@@ -5126,7 +5126,7 @@ void Server::create_quota_realm(CInode *in)
 {
   dout(10) << __func__ << " " << *in << dendl;
 
-  auto req = MClientRequest::create(CEPH_MDS_OP_SETXATTR);
+  auto req = make_message<MClientRequest>(CEPH_MDS_OP_SETXATTR);
   req->set_filepath(filepath(in->ino()));
   req->set_string2("ceph.quota");
   // empty vxattr value
@@ -6091,7 +6091,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
       op = MMDSSlaveRequest::OP_LINKPREP;
     else 
       op = MMDSSlaveRequest::OP_UNLINKPREP;
-    auto req = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, op);
+    auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
     if (auto& desti_srnode = mdr->more()->desti_srnode)
@@ -6338,7 +6338,7 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_
 
   // ack
   if (!mdr->aborted) {
-    auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_LINKPREPACK);
+    auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_LINKPREPACK);
     mds->send_message_mds(reply, mdr->slave_to_mds);
   } else {
     dout(10) << " abort flag set, finishing" << dendl;
@@ -6383,7 +6383,7 @@ void Server::_committed_slave(MDRequestRef& mdr)
 
   ceph_assert(g_conf()->mds_kill_link_at != 8);
 
-  auto req = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_COMMITTED);
+  auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_COMMITTED);
   mds->send_message_mds(req, mdr->slave_to_mds);
   mdcache->request_finish(mdr);
 }
@@ -6899,7 +6899,7 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CD
   }
   
   dout(10) << "_rmdir_prepare_witness mds." << who << dendl;
-  auto req = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RMDIRPREP);
+  auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RMDIRPREP);
   req->srcdnpath = filepath(trace.front()->get_dir()->ino());
   for (auto dn : trace)
     req->srcdnpath.push_dentry(dn->get_name());
@@ -7048,7 +7048,7 @@ void Server::_logged_slave_rmdir(MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   mdr->straydn = 0;
 
   if (!mdr->aborted) {
-    auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RMDIRPREPACK);
+    auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RMDIRPREPACK);
     if (!mdr->more()->slave_update_journaled)
       reply->mark_not_journaled();
     mds->send_message_mds(reply, mdr->slave_to_mds);
@@ -7818,7 +7818,7 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
   }
 
   dout(10) << "_rename_prepare_witness mds." << who << dendl;
-  auto req = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREP);
+  auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREP);
 
   req->srcdnpath = filepath(srctrace.front()->get_dir()->ino());
   for (auto dn : srctrace)
@@ -8488,7 +8488,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 
   if (mdr->slave_request->is_interrupted()) {
     dout(10) << " slave request interrupted, sending noop reply" << dendl;
-    auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+    auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
     reply->mark_interrupted();
     mds->send_message_mds(reply, mdr->slave_to_mds);
     mdr->reset_slave_request();
@@ -8592,7 +8592,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 	    (mds->is_cluster_degraded() &&
 	     !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p)))
 	  continue;
-	auto notify = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMENOTIFY);
+	auto notify = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMENOTIFY);
 	mds->send_message_mds(notify, *p);
 	mdr->more()->waiting_on_slave.insert(*p);
       }
@@ -8621,7 +8621,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 
     if (reply_witness) {
       ceph_assert(!srcdnrep.empty());
-      auto reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+      auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
       reply->witnesses.swap(srcdnrep);
       mds->send_message_mds(reply, mdr->slave_to_mds);
       mdr->reset_slave_request();
@@ -8724,7 +8724,7 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   // prepare ack
   ref_t<MMDSSlaveRequest> reply;
   if (!mdr->aborted) {
-    reply = MMDSSlaveRequest::create(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
+    reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_RENAMEPREPACK);
     if (!mdr->more()->slave_update_journaled)
       reply->mark_not_journaled();
   }

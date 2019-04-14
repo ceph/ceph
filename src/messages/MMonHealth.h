@@ -18,10 +18,8 @@
 #include "messages/MMonQuorumService.h"
 #include "mon/mon_types.h"
 
-class MMonHealth : public MessageInstance<MMonHealth, MMonQuorumService> {
+class MMonHealth : public MMonQuorumService {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
 
   int service_type = 0;
@@ -30,7 +28,7 @@ public:
   // service specific data
   DataStats data_stats;
 
-  MMonHealth() : MessageInstance(MSG_MON_HEALTH, HEAD_VERSION) { }
+  MMonHealth() : MMonQuorumService{MSG_MON_HEALTH, HEAD_VERSION} { }
 
 private:
   ~MMonHealth() override { }
@@ -59,7 +57,6 @@ public:
     encode(service_op, payload);
     encode(data_stats, payload);
   }
-
 };
 
 #endif /* CEPH_MMON_HEALTH_H */

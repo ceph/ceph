@@ -659,7 +659,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   filepath dst;
   rdn->make_path(dst);
 
-  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
+  auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());
@@ -688,7 +688,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   dst.push_dentry(src[0]);
   dst.push_dentry(src[1]);
 
-  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
+  auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());

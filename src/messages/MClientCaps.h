@@ -19,9 +19,7 @@
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
-class MClientCaps : public MessageInstance<MClientCaps> {
-public:
-  friend factory;
+class MClientCaps : public Message {
 private:
 
   static constexpr int HEAD_VERSION = 11;
@@ -131,7 +129,7 @@ private:
 
 protected:
   MClientCaps()
-    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION} {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -142,7 +140,7 @@ protected:
 	      int dirty,
 	      int mseq,
               epoch_t oeb)
-    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -159,7 +157,7 @@ protected:
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
-    : MessageInstance(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION},
       osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -331,6 +329,9 @@ public:
     encode(nfiles, payload);
     encode(nsubdirs, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

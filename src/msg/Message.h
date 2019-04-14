@@ -574,9 +574,9 @@ template<class T, class U>
 boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
   return static_cast<const T*>(r.get());
 }
-template<class T, class U>
-boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>&& r) noexcept {
-  return {static_cast<const T*>(r.detach()), false};
+template<class T, typename... Args>
+boost::intrusive_ptr<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), false};
 }
 }
 

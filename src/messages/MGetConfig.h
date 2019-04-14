@@ -5,10 +5,8 @@
 
 #include "msg/Message.h"
 
-class MGetConfig : public MessageInstance<MGetConfig> {
+class MGetConfig : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -16,9 +14,9 @@ public:
   std::string host;      ///< our hostname
   std::string device_class;
 
-  MGetConfig() : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MGetConfig() : Message{MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION} { }
   MGetConfig(const EntityName& n, const std::string& h)
-    : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION},
       name(n),
       host(h) {}
 

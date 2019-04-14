@@ -2057,7 +2057,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       mempool_inode *pi = get_projected_inode();
       fnode_t *pf = dir->project_fnode();
 
-      std::string_view ename = 0;
+      std::string_view ename;
       switch (lock->get_type()) {
       case CEPH_LOCK_IFILE:
 	pf->fragstat.version = pi->dirstat.version;

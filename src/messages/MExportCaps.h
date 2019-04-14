@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 
 
-class MExportCaps : public MessageInstance<MExportCaps> {
-public:
-  friend factory;
+class MExportCaps : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -33,7 +31,7 @@ public:
 
 protected:
   MExportCaps() :
-    MessageInstance(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    Message{MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION} {}
   ~MExportCaps() override {}
 
 public:
@@ -57,7 +55,9 @@ public:
     if (header.version >= 2)
       decode(client_metadata_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

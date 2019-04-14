@@ -17,13 +17,11 @@
 
 #include "osd/osd_types.h"
 
-class MPGStatsAck : public MessageInstance<MPGStatsAck> {
+class MPGStatsAck : public Message {
 public:
-  friend factory;
-
   map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
-  MPGStatsAck() : MessageInstance(MSG_PGSTATSACK) {}
+  MPGStatsAck() : Message{MSG_PGSTATSACK} {}
 
 private:
   ~MPGStatsAck() override {}
@@ -42,6 +40,9 @@ public:
     auto p = payload.cbegin();
     decode(pg_stat, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

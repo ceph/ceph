@@ -17,9 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPushReply : public MessageInstance<MOSDPGPushReply, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDPGPushReply : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 2;
@@ -29,7 +27,7 @@ public:
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   vector<PushReplyOp> replies;
-  uint64_t cost;
+  uint64_t cost = 0;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -42,8 +40,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MessageInstance(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
+    : MOSDFastDispatchOp{MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION}
     {}
 
   void compute_cost(CephContext *cct) {

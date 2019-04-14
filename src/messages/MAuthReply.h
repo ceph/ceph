@@ -18,19 +18,17 @@
 #include "msg/Message.h"
 #include "common/errno.h"
 
-class MAuthReply : public MessageInstance<MAuthReply> {
+class MAuthReply : public Message {
 public:
-  friend factory;
-
   __u32 protocol;
   errorcode32_t result;
   uint64_t global_id;      // if zero, meaningless
   std::string result_msg;
   ceph::buffer::list result_bl;
 
-  MAuthReply() : MessageInstance(CEPH_MSG_AUTH_REPLY), protocol(0), result(0), global_id(0) {}
+  MAuthReply() : Message(CEPH_MSG_AUTH_REPLY), protocol(0), result(0), global_id(0) {}
   MAuthReply(__u32 p, ceph::buffer::list *bl = NULL, int r = 0, uint64_t gid=0, const char *msg = "") :
-    MessageInstance(CEPH_MSG_AUTH_REPLY),
+    Message(CEPH_MSG_AUTH_REPLY),
     protocol(p), result(r), global_id(gid),
     result_msg(msg) {
     if (bl)

@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaim: public MessageInstance<MClientReclaim> {
+class MClientReclaim: public Message {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -48,17 +48,19 @@ public:
   }
 
 protected:
-  friend factory;
   MClientReclaim() :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION) {}
+    Message{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION} {}
   MClientReclaim(std::string_view _uuid, uint32_t _flags) :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION),
+    Message{CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION},
     uuid(_uuid), flags(_flags) {}
 private:
   ~MClientReclaim() override {}
 
   std::string uuid;
   uint32_t flags = 0;
+
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

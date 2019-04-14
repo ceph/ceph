@@ -18,10 +18,8 @@
 
 #include "msg/Message.h"
 
-class MDirUpdate : public MessageInstance<MDirUpdate> {
+class MDirUpdate : public Message {
 public:
-  friend factory;
-
   mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   int get_dir_rep() const { return dir_rep; }
@@ -59,19 +57,19 @@ public:
 
 protected:
   ~MDirUpdate() {}
-  MDirUpdate() : MessageInstance(MSG_MDS_DIRUPDATE) {}
+  MDirUpdate() : Message{MSG_MDS_DIRUPDATE} {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    MessageInstance(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
+    Message{MSG_MDS_DIRUPDATE}, from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
   MDirUpdate(const MDirUpdate& m)
-  : MessageInstance(MSG_MDS_DIRUPDATE),
+  : Message{MSG_MDS_DIRUPDATE},
     from_mds(m.from_mds),
     dirfrag(m.dirfrag),
     dir_rep(m.dir_rep),
@@ -88,6 +86,10 @@ protected:
   std::set<int32_t> dir_rep_by;
   filepath path;
   mutable int tried_discover = 0; // XXX HACK
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

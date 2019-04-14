@@ -32,9 +32,7 @@
 
 class OSD;
 
-class MOSDOp : public MessageInstance<MOSDOp, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDOp : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 3;
@@ -170,14 +168,14 @@ public:
   }
 
   MOSDOp()
-    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true),
       bdata_encode(false) { }
   MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
-    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
       hobj(ho),
@@ -595,6 +593,10 @@ struct ceph_osd_request_head {
     }
     out << ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

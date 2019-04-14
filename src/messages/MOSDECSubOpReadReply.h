@@ -18,9 +18,7 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/ECMsgTypes.h"
 
-class MOSDECSubOpReadReply : public MessageInstance<MOSDECSubOpReadReply, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDECSubOpReadReply : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -44,7 +42,7 @@ public:
   }
 
   MOSDECSubOpReadReply()
-    : MessageInstance(MSG_OSD_EC_READ_REPLY, HEAD_VERSION, COMPAT_VERSION)
+    : MOSDFastDispatchOp{MSG_OSD_EC_READ_REPLY, HEAD_VERSION, COMPAT_VERSION}
     {}
 
   void decode_payload() override {
@@ -77,6 +75,9 @@ public:
 	<< " " << op;
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

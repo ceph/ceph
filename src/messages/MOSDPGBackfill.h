@@ -17,9 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGBackfill : public MessageInstance<MOSDPGBackfill, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDPGBackfill : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -91,9 +89,9 @@ public:
   }
 
   MOSDPGBackfill()
-    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
-    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION},
       op(o),
       map_epoch(e), query_epoch(e),
       pgid(p) {}
@@ -109,6 +107,10 @@ public:
 	<< " lb " << last_backfill
 	<< ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

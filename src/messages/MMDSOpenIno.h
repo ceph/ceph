@@ -17,17 +17,15 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenIno : public MessageInstance<MMDSOpenIno> {
+class MMDSOpenIno : public Message {
 public:
-  friend factory;
-
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
 
 protected:
-  MMDSOpenIno() : MessageInstance(MSG_MDS_OPENINO) {}
+  MMDSOpenIno() : Message{MSG_MDS_OPENINO} {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
-    MessageInstance(MSG_MDS_OPENINO), ino(i) {
+    Message{MSG_MDS_OPENINO}, ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;
@@ -50,6 +48,9 @@ public:
     decode(ino, p);
     decode(ancestors, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -197,7 +197,7 @@ bool Beacon::_send()
 
   ceph_assert(want_state != MDSMap::STATE_NULL);
   
-  auto beacon = MMDSBeacon::create(
+  auto beacon = make_message<MMDSBeacon>(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,

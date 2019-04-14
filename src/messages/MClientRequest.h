@@ -48,9 +48,7 @@
 
 // metadata ops.
 
-class MClientRequest : public MessageInstance<MClientRequest> {
-public:
-  friend factory;
+class MClientRequest : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
@@ -91,9 +89,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
@@ -281,7 +279,9 @@ public:
     out << '}'
 	<< ")";
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 WRITE_CLASS_ENCODER(MClientRequest::Release)

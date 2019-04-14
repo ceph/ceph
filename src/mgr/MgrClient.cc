@@ -184,7 +184,7 @@ void MgrClient::reconnect()
 void MgrClient::_send_open()
 {
   if (session && session->con) {
-    auto open = new MMgrOpen();
+    auto open = make_message<MMgrOpen>();
     if (!service_name.empty()) {
       open->service_name = service_name;
       open->daemon_name = daemon_name;
@@ -197,7 +197,7 @@ void MgrClient::_send_open()
     }
     cct->_conf.get_config_bl(0, &open->config_bl, &last_config_bl_version);
     cct->_conf.get_defaults_bl(&open->config_defaults_bl);
-    session->con->send_message(open);
+    session->con->send_message2(open);
   }
 }
 
@@ -258,7 +258,7 @@ void MgrClient::_send_report()
   ceph_assert(session);
   report_callback = nullptr;
 
-  auto report = new MMgrReport();
+  auto report = make_message<MMgrReport>();
   auto pcc = cct->get_perfcounters_collection();
 
   pcc->with_counters([this, report](
@@ -359,7 +359,7 @@ void MgrClient::_send_report()
     get_perf_report_cb(&report->osd_perf_metric_reports);
   }
 
-  session->con->send_message(report);
+  session->con->send_message2(report);
 }
 
 void MgrClient::send_pgstats()

@@ -21,10 +21,8 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-class MOSDRepScrubMap : public MessageInstance<MOSDRepScrubMap, MOSDFastDispatchOp> {
+class MOSDRepScrubMap : public MOSDFastDispatchOp {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -42,10 +40,10 @@ public:
   }
 
   MOSDRepScrubMap()
-    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION} {}
 
   MOSDRepScrubMap(spg_t pgid, epoch_t map_epoch, pg_shard_t from)
-    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid),
       map_epoch(map_epoch),
       from(from) {}
@@ -77,7 +75,9 @@ public:
       decode(preempted, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
 
 #endif

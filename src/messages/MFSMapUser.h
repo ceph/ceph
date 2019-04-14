@@ -19,22 +19,20 @@
 #include "mds/FSMapUser.h"
 #include "include/ceph_features.h"
 
-class MFSMapUser : public MessageInstance<MFSMapUser> {
+class MFSMapUser : public Message {
 public:
-  friend factory;
-
   epoch_t epoch;
 
   version_t get_epoch() const { return epoch; }
   const FSMapUser& get_fsmap() const { return fsmap; }
 
   MFSMapUser() :
-    MessageInstance(CEPH_MSG_FS_MAP_USER), epoch(0) {}
+    Message{CEPH_MSG_FS_MAP_USER}, epoch(0) {}
   MFSMapUser(const uuid_d &f, const FSMapUser &fsmap_) :
-    MessageInstance(CEPH_MSG_FS_MAP_USER), epoch(fsmap_.epoch)
-  {
-    fsmap = fsmap_;
-  }
+    Message{CEPH_MSG_FS_MAP_USER},
+    epoch(fsmap_.epoch),
+    fsmap{fsmap_}
+  {}
 private:
   FSMapUser fsmap;
 
@@ -57,6 +55,9 @@ public:
     encode(epoch, payload);
     encode(fsmap, payload, features);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif
