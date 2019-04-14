@@ -2249,7 +2249,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   session->con->send_message2(std::move(r));
 }
 
-MClientRequest::ref Client::build_client_request(MetaRequest *request)
+ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
 {
   auto req = MClientRequest::create(request->get_op());
   req->set_tid(request->tid);

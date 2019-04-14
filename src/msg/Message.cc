@@ -331,7 +331,7 @@ Message *decode_message(CephContext *cct, int crcflags,
   }
 
   // make message
-  Message::ref m;
+  ref_t<Message> m;
   int type = header.type;
   switch (type) {
 

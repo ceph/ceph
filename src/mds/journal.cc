@@ -1866,7 +1866,7 @@ void ETableServer::replay(MDSRank *mds)
     break;
   }
   case TABLESERVER_OP_COMMIT:
-    server->_commit(tid, MMDSTableRequest::ref());
+    server->_commit(tid, ref_t<MMDSTableRequest>());
     server->_note_commit(tid, true);
     break;
   case TABLESERVER_OP_ROLLBACK:

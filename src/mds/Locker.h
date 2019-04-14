@@ -191,10 +191,10 @@ protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(const cref_t<MClientCaps> &m);
   void _update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps> &m, CInode::mempool_inode *pi);
-  void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const MClientCaps::ref &ack);
+  void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const cref_t<MClientCaps> &m,
-		      const MClientCaps::ref &ack, bool *need_flush=NULL);
+		      const ref_t<MClientCaps> &ack, bool *need_flush=NULL);
   void handle_client_cap_release(const cref_t<MClientCapRelease> &m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
@@ -253,7 +253,7 @@ protected:
   void handle_inode_file_caps(const cref_t<MInodeFileCaps> &m);
 
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
-			  client_t client, const MClientCaps::ref &ack);
+			  client_t client, const ref_t<MClientCaps> &ack);
 private:
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:

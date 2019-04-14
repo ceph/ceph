@@ -1136,7 +1136,7 @@ void MDSDaemon::respawn()
 
 
 
-bool MDSDaemon::ms_dispatch2(const Message::ref &m)
+bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
   std::lock_guard l(mds_lock);
   if (stopping) {

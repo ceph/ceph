@@ -124,7 +124,7 @@ class MDCache {
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-  typedef std::map<mds_rank_t, MCacheExpire::ref> expiremap;
+  typedef std::map<mds_rank_t, ref_t<MCacheExpire>> expiremap;
 
   // my master
   MDSRank *mds;
@@ -622,7 +622,7 @@ protected:
   list<SimpleLock*> rejoin_eval_locks;
   MDSContext::vec rejoin_waiters;
 
-  void rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin);
+  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
   void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
   void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
@@ -719,12 +719,12 @@ public:
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
-			   map<client_t,MClientSnap::ref>& splits);
-  void prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm, map<client_t,MClientSnap::ref>& splits);
-  void send_snaps(map<client_t,MClientSnap::ref>& splits);
+			   map<client_t,ref_t<MClientSnap>>& splits);
+  void prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm, map<client_t,ref_t<MClientSnap>>& splits);
+  void send_snaps(map<client_t,ref_t<MClientSnap>>& splits);
   Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
-				  map<client_t,MClientSnap::ref>& updates);
+				  map<client_t,ref_t<MClientSnap>>& updates);
   Capability* try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
 

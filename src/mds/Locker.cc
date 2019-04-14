@@ -1805,10 +1805,10 @@ class C_Locker_FileUpdate_finish : public LockerLogContext {
   MutationRef mut;
   unsigned flags;
   client_t client;
-  MClientCaps::ref ack;
+  ref_t<MClientCaps> ack;
 public:
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m, unsigned f,
-                             const MClientCaps::ref &ack, client_t c=-1)
+                             const ref_t<MClientCaps> &ack, client_t c=-1)
     : LockerLogContext(l), in(i), mut(m), flags(f), client(c), ack(ack) {
     in->get(CInode::PIN_PTRWAITER);
   }
@@ -1825,7 +1825,7 @@ enum {
 };
 
 void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
-				client_t client, const MClientCaps::ref &ack)
+				client_t client, const ref_t<MClientCaps> &ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
   in->pop_and_dirty_projected_inode(mut->ls);
@@ -2466,7 +2466,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
   mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
-      UPDATE_SHAREMAX, MClientCaps::ref()));
+      UPDATE_SHAREMAX, ref_t<MClientCaps>()));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
@@ -2634,7 +2634,7 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
       CInode *sin = mdcache->pick_inode_snap(head_in, snapid - 1);
       ceph_assert(sin);
       ceph_assert(sin->first <= snapid);
-      _do_snap_update(sin, snapid, 0, sin->first - 1, client, MClientCaps::ref(), MClientCaps::ref());
+      _do_snap_update(sin, snapid, 0, sin->first - 1, client, ref_t<MClientCaps>(), ref_t<MClientCaps>());
       head_in->remove_need_snapflush(sin, snapid, client);
     }
   }
@@ -2697,7 +2697,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       session->have_completed_flush(m->get_client_tid())) {
     dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
 	    << " for client." << client << dendl;
-    MClientCaps::ref ack;
+    ref_t<MClientCaps> ack;
     if (op == CEPH_CAP_OP_FLUSHSNAP) {
       ack = MClientCaps::create(CEPH_CAP_OP_FLUSHSNAP_ACK, m->get_ino(), 0, 0, 0, 0, 0, dirty, 0, mds->get_osd_epoch_barrier());
     } else {
@@ -2821,7 +2821,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
     // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
     // case we get a dup response, so whatever.)
-    MClientCaps::ref ack;
+    ref_t<MClientCaps> ack;
     if (dirty) {
       ack = MClientCaps::create(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, 0, dirty, 0, mds->get_osd_epoch_barrier());
       ack->set_snap_follows(follows);
@@ -2862,14 +2862,14 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 	ceph_assert(in->last != CEPH_NOSNAP);
 	if (in->is_auth() && dirty) {
 	  dout(10) << " updating intermediate snapped inode " << *in << dendl;
-	  _do_cap_update(in, NULL, dirty, follows, m, MClientCaps::ref());
+	  _do_cap_update(in, NULL, dirty, follows, m, ref_t<MClientCaps>());
 	}
 	in = mdcache->pick_inode_snap(head_in, in->last);
       }
     }
  
     // head inode, and cap
-    MClientCaps::ref ack;
+    ref_t<MClientCaps> ack;
 
     int caps = m->get_caps();
     if (caps & ~cap->issued()) {
@@ -3110,7 +3110,7 @@ void Locker::kick_cap_releases(MDRequestRef& mdr)
 /**
  * m and ack might be NULL, so don't dereference them unless dirty != 0
  */
-void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const MClientCaps::ref &ack)
+void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack)
 {
   dout(10) << "_do_snap_update dirty " << ccap_string(dirty)
 	   << " follows " << follows << " snap " << snap
@@ -3301,7 +3301,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
  */
 bool Locker::_do_cap_update(CInode *in, Capability *cap,
 			    int dirty, snapid_t follows,
-			    const cref_t<MClientCaps> &m, const MClientCaps::ref &ack,
+			    const cref_t<MClientCaps> &m, const ref_t<MClientCaps> &ack,
 			    bool *need_flush)
 {
   dout(10) << "_do_cap_update dirty " << ccap_string(dirty)

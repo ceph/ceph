@@ -2660,7 +2660,7 @@ void MDCache::send_slave_resolves()
 {
   dout(10) << "send_slave_resolves" << dendl;
 
-  map<mds_rank_t, MMDSResolve::ref> resolves;
+  map<mds_rank_t, ref_t<MMDSResolve>> resolves;
 
   if (mds->is_resolve()) {
     for (map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> >::iterator p = uncommitted_slave_updates.begin();
@@ -2727,7 +2727,7 @@ void MDCache::send_subtree_resolves()
     return;  // not now
   }
 
-  map<mds_rank_t, MMDSResolve::ref> resolves;
+  map<mds_rank_t, ref_t<MMDSResolve>> resolves;
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
        ++p) {
@@ -2810,7 +2810,7 @@ void MDCache::send_subtree_resolves()
 
   // send
   for (auto &p : resolves) {
-    const MMDSResolve::ref &m = p.second;
+    const ref_t<MMDSResolve> &m = p.second;
     if (mds->is_resolve()) {
       m->add_table_commits(TABLE_SNAP, resolve_snapclient_commits);
     } else {
@@ -3911,7 +3911,7 @@ void MDCache::rejoin_send_rejoins()
     disambiguate_other_imports();
   }
 
-  map<mds_rank_t, MMDSCacheRejoin::ref> rejoins;
+  map<mds_rank_t, ref_t<MMDSCacheRejoin>> rejoins;
 
 
   // if i am rejoining, send a rejoin to everyone.
@@ -4049,7 +4049,7 @@ void MDCache::rejoin_send_rejoins()
 	if (!q.first->is_auth()) {
 	  ceph_assert(q.second == q.first->authority().first);
 	  if (rejoins.count(q.second) == 0) continue;
-	  const MMDSCacheRejoin::ref &rejoin = rejoins[q.second];
+	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[q.second];
 	  
 	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
@@ -4072,7 +4072,7 @@ void MDCache::rejoin_send_rejoins()
 	if (q.is_xlock() && !obj->is_auth()) {
 	  mds_rank_t who = obj->authority().first;
 	  if (rejoins.count(who) == 0) continue;
-	  const MMDSCacheRejoin::ref &rejoin = rejoins[who];
+	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
 	  
 	  dout(15) << " " << *mdr << " xlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4086,7 +4086,7 @@ void MDCache::rejoin_send_rejoins()
 	} else if (q.is_remote_wrlock()) {
 	  mds_rank_t who = q.wrlock_target;
 	  if (rejoins.count(who) == 0) continue;
-	  const MMDSCacheRejoin::ref &rejoin = rejoins[who];
+	  const ref_t<MMDSCacheRejoin> &rejoin = rejoins[who];
 
 	  dout(15) << " " << *mdr << " wrlock on " << *lock << " " << *obj << dendl;
 	  MDSCacheObjectInfo i;
@@ -4133,7 +4133,7 @@ void MDCache::rejoin_send_rejoins()
  *  strong dentries (no connectivity!)
  *  strong inodes
  */
-void MDCache::rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin)
+void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
 {
   dout(10) << "rejoin_walk " << *dir << dendl;
 
@@ -4283,7 +4283,7 @@ void MDCache::handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &weak)
   mds_rank_t from = mds_rank_t(weak->get_source().num());
 
   // possible response(s)
-  MMDSCacheRejoin::ref ack;      // if survivor
+  ref_t<MMDSCacheRejoin> ack;      // if survivor
   set<vinodeno_t> acked_inodes;  // if survivor
   set<SimpleLock *> gather_locks;  // if survivor
   bool survivor = false;  // am i a survivor?
@@ -5494,9 +5494,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 }
 
 void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
-				  map<client_t,MClientSnap::ref>& splits)
+				  map<client_t,ref_t<MClientSnap>>& splits)
 {
-  MClientSnap::ref snap;
+  ref_t<MClientSnap> snap;
   auto it = splits.find(client);
   if (it != splits.end()) {
     snap = it->second;
@@ -5514,7 +5514,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
 }
 
 void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
-				  map<client_t,MClientSnap::ref>& splits)
+				  map<client_t,ref_t<MClientSnap>>& splits)
 {
   ceph_assert(parent_realm);
 
@@ -5544,7 +5544,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
   }
 }
 
-void MDCache::send_snaps(map<client_t,MClientSnap::ref>& splits)
+void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
 {
   dout(10) << "send_snaps" << dendl;
   
@@ -5766,7 +5766,7 @@ void MDCache::open_snaprealms()
 	realm->open_parents(gather.new_sub())) {
       dout(10) << " past parents now open on " << *in << dendl;
 
-      map<client_t,MClientSnap::ref> splits;
+      map<client_t,ref_t<MClientSnap>> splits;
       // finish off client snaprealm reconnects?
       map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
       if (q != reconnected_snaprealms.end()) {
@@ -5919,7 +5919,7 @@ void MDCache::opened_undef_inode(CInode *in) {
 }
 
 void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
-					 map<client_t,MClientSnap::ref>& updates)
+					 map<client_t,ref_t<MClientSnap>>& updates)
 {
   if (seq < realm->get_newest_seq()) {
     dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
@@ -5974,7 +5974,7 @@ void MDCache::rejoin_send_acks()
   rejoin_unlinked_inodes.clear();
   
   // send acks to everyone in the recovery set
-  map<mds_rank_t,MMDSCacheRejoin::ref> acks;
+  map<mds_rank_t,ref_t<MMDSCacheRejoin>> acks;
   for (set<mds_rank_t>::iterator p = recovery_set.begin();
        p != recovery_set.end();
        ++p) {
@@ -8818,7 +8818,7 @@ void MDCache::handle_open_ino(const cref_t<MMDSOpenIno> &m, int err)
 
   auto from = mds_rank_t(m->get_source().num());
   inodeno_t ino = m->ino;
-  MMDSOpenInoReply::ref reply;
+  ref_t<MMDSOpenInoReply> reply;
   CInode *in = get_inode(ino);
   if (in) {
     dout(10) << " have " << *in << dendl;
@@ -9465,7 +9465,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
   }
 
   set<SnapRealm*> past_children;
-  map<client_t, MClientSnap::ref> updates;
+  map<client_t, ref_t<MClientSnap>> updates;
   list<SnapRealm*> q;
   q.push_back(in->snaprealm);
   while (!q.empty()) {

@@ -32,7 +32,7 @@ private:
   struct notify_info_t {
     set<mds_rank_t> notify_ack_gather;
     mds_rank_t mds;
-    MMDSTableRequest::ref reply;
+    ref_t<MMDSTableRequest> reply;
     MDSContext *onfinish;
     notify_info_t() : reply(NULL), onfinish(NULL) {}
   };

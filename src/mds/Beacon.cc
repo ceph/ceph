@@ -92,13 +92,13 @@ bool Beacon::ms_can_fast_dispatch2(const cref_t<Message>& m) const
   return m->get_type() == MSG_MDS_BEACON;
 }
 
-void Beacon::ms_fast_dispatch2(const Message::ref& m)
+void Beacon::ms_fast_dispatch2(const ref_t<Message>& m)
 {
   bool handled = ms_dispatch2(m);
   ceph_assert(handled);
 }
 
-bool Beacon::ms_dispatch2(const Message::ref& m)
+bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
