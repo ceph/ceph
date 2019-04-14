@@ -8,6 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
+#include "librbd/cache/WriteAroundObjectDispatch.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -524,15 +525,31 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  auto cache = cache::ObjectCacherObjectDispatch<I>::create(m_image_ctx);
-  cache->init();
+  size_t max_dirty = m_image_ctx->config.template get_val<Option::size_t>(
+    "rbd_cache_max_dirty");
+  auto writethrough_until_flush = m_image_ctx->config.template get_val<bool>(
+    "rbd_cache_writethrough_until_flush");
+  auto cache_policy = m_image_ctx->config.template get_val<std::string>(
+    "rbd_cache_policy");
+  if (cache_policy == "writearound") {
+    auto cache = cache::WriteAroundObjectDispatch<I>::create(
+      m_image_ctx, max_dirty, writethrough_until_flush);
+    cache->init();
+  } else if (cache_policy == "writethrough" || cache_policy == "writeback") {
+    if (cache_policy == "writethrough") {
+      max_dirty = 0;
+    }
 
-  // readahead requires the cache
-  m_image_ctx->readahead.set_trigger_requests(
-    m_image_ctx->config.template get_val<uint64_t>("rbd_readahead_trigger_requests"));
-  m_image_ctx->readahead.set_max_readahead_size(
-    m_image_ctx->config.template get_val<Option::size_t>("rbd_readahead_max_bytes"));
+    auto cache = cache::ObjectCacherObjectDispatch<I>::create(
+      m_image_ctx, max_dirty, writethrough_until_flush);
+    cache->init();
 
+    // readahead requires the object cacher cache
+    m_image_ctx->readahead.set_trigger_requests(
+      m_image_ctx->config.template get_val<uint64_t>("rbd_readahead_trigger_requests"));
+    m_image_ctx->readahead.set_max_readahead_size(
+      m_image_ctx->config.template get_val<Option::size_t>("rbd_readahead_max_bytes"));
+  }
   return send_register_watch(result);
 }
 

@@ -16,7 +16,6 @@ set(librbd_internal_srcs
   internal.cc
   Journal.cc
   LibrbdAdminSocketHook.cc
-  LibrbdWriteback.cc
   ManagedLock.cc
   MirroringWatcher.cc
   ObjectMap.cc
@@ -37,7 +36,9 @@ set(librbd_internal_srcs
   api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
+  cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc
+  cache/WriteAroundObjectDispatch.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc

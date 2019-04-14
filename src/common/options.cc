@@ -6990,6 +6990,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("whether to enable caching (writeback unless rbd_cache_max_dirty is 0)"),
 
+    Option("rbd_cache_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"writethrough", "writeback", "writearound"})
+    .set_default("writearound")
+    .set_description("cache policy for handling writes."),
+
     Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("whether to make writeback caching writethrough until "
@@ -7290,7 +7295,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
 
     Option("rbd_io_scheduler", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("none")
+    .set_default("simple")
     .set_enum_allowed({"none", "simple"})
     .set_description("RBD IO scheduler"),
 

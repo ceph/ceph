@@ -167,6 +167,7 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   bool operator()(ObjectDispatchSpec::FlushRequest& flush) const {
     return object_dispatch->flush(
       flush.flush_source, object_dispatch_spec->parent_trace,
+      &flush.journal_tid,
       &object_dispatch_spec->dispatch_result,
       &object_dispatch_spec->dispatcher_ctx.on_finish,
       &object_dispatch_spec->dispatcher_ctx);
