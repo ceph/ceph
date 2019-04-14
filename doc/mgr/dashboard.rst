@@ -551,7 +551,7 @@ twice if you use both sources.
    should not disturb each other through annoying duplicated notifications
    popping up.
 
-Accessing the dashboard
+Accessing the Dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 You can now access the dashboard using your (JavaScript-enabled) web browser, by
@@ -734,11 +734,33 @@ view and create Ceph pools, and have read-only access to any other scopes.
    $ ceph dashboard ac-user-set-roles bob rbd/pool-manager read-only
 
 
-Reverse Proxies
----------------
+Proxy Configuration
+-------------------
+
+In a Ceph cluster with multiple ceph-mgr instances, only the dashboard running
+on the currently active ceph-mgr daemon will serve incoming requests. Accessing
+the dashboard's TCP port on any of the other ceph-mgr instances that are
+currently on standby will perform a HTTP redirect (303) to the currently active
+manager's dashboard URL. This way, you can point your browser to any of the
+ceph-mgr instances in order to access the dashboard.
+
+If you want to establish a fixed URL to reach the dashboard or if you don't want
+to allow direct connections to the manager nodes, you could set up a proxy that
+automatically forwards incoming requests to the currently active ceph-mgr
+instance.
+
+.. note::
+  Note that putting the dashboard behind a load-balancing proxy like `HAProxy
+  <https://www.haproxy.org/>`_ currently has some limitations, particularly if
+  you require the traffic between the proxy and the dashboard to be encrypted
+  via SSL/TLS. See `BUG#24662 <https://tracker.ceph.com/issues/24662>`_ for
+  details.
+
+Configuring a URL Prefix
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you are accessing the dashboard via a reverse proxy configuration,
-you may wish to service it under a URL prefix.  To get the dashboard
+you may wish to service it under a URL prefix. To get the dashboard
 to use hyperlinks that include your prefix, you can set the
 ``url_prefix`` setting:
 
@@ -747,6 +769,7 @@ to use hyperlinks that include your prefix, you can set the
   ceph config set mgr mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
+
 
 .. _dashboard-auditing:
 
