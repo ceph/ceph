@@ -17,9 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPull : public MessageInstance<MOSDPGPull, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDPGPull : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 2;
@@ -30,7 +28,7 @@ public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
-  uint64_t cost;
+  uint64_t cost = 0;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -50,9 +48,8 @@ public:
   }
 
   MOSDPGPull()
-    : MessageInstance(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
-    {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION}
+  {}
 
   void compute_cost(CephContext *cct) {
     cost = 0;
@@ -101,6 +98,10 @@ public:
 	<< " cost " << cost
 	<< ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

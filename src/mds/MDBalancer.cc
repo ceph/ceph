@@ -400,7 +400,7 @@ void MDBalancer::send_heartbeat()
   for (const auto& r : up) {
     if (r == mds->get_nodeid())
       continue;
-    auto hb = MHeartbeat::create(load, beat_epoch);
+    auto hb = make_message<MHeartbeat>(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->send_message_mds(hb, r);
   }

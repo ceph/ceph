@@ -18,9 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public MessageInstance<MExportDirDiscover> {
-public:
-  friend factory;
+class MExportDirDiscover : public Message {
 private:
   mds_rank_t from = -1;
   dirfrag_t dirfrag;
@@ -36,10 +34,10 @@ private:
 
 protected:
   MExportDirDiscover() :     
-    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
+    Message{MSG_MDS_EXPORTDIRDISCOVER},
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
+    Message{MSG_MDS_EXPORTDIRDISCOVER},
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }
@@ -64,6 +62,9 @@ public:
     encode(dirfrag, payload);
     encode(path, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

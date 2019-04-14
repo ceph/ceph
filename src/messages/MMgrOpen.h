@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMgrOpen : public MessageInstance<MMgrOpen> {
-public:
-  friend factory;
+class MMgrOpen : public Message {
 private:
-
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -87,9 +84,12 @@ public:
     out << ")";
   }
 
+private:
   MMgrOpen()
-    : MessageInstance(MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION}
   {}
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

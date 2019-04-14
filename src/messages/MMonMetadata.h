@@ -18,10 +18,8 @@
 #include "mon/mon_types.h"
 #include "msg/Message.h"
 
-class MMonMetadata : public MessageInstance<MMonMetadata> {
+class MMonMetadata : public Message {
 public:
-  friend factory;
-
   Metadata data;
 
 private:
@@ -30,10 +28,10 @@ private:
 
 public:
   MMonMetadata() :
-    MessageInstance(CEPH_MSG_MON_METADATA)
+    Message{CEPH_MSG_MON_METADATA}
   {}
   MMonMetadata(const Metadata& metadata) :
-    MessageInstance(CEPH_MSG_MON_METADATA, HEAD_VERSION),
+    Message{CEPH_MSG_MON_METADATA, HEAD_VERSION},
     data(metadata)
   {}
 
@@ -50,6 +48,9 @@ public:
     auto p = payload.cbegin();
     decode(data, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -19,10 +19,8 @@
 
 #include "include/types.h"
 
-class MMDSResolve : public MessageInstance<MMDSResolve> {
+class MMDSResolve : public Message {
 public:
-  friend factory;
-
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
 
@@ -68,7 +66,8 @@ public:
   list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : MessageInstance(MSG_MDS_RESOLVE) {}
+  MMDSResolve() : Message{MSG_MDS_RESOLVE}
+ {}
   ~MMDSResolve() override {}
 
 public:
@@ -118,6 +117,9 @@ public:
     decode(slave_requests, p);
     decode(table_clients, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 inline ostream& operator<<(ostream& out, const MMDSResolve::slave_request&) {

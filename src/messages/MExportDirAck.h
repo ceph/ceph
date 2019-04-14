@@ -18,19 +18,17 @@
 #include "MExportDir.h"
 #include "msg/Message.h"
 
-class MExportDirAck : public MessageInstance<MExportDirAck> {
+class MExportDirAck : public Message {
 public:
-  friend factory;
-
   dirfrag_t dirfrag;
   bufferlist imported_caps;
 
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
 protected:
-  MExportDirAck() : MessageInstance(MSG_MDS_EXPORTDIRACK) {}
+  MExportDirAck() : Message{MSG_MDS_EXPORTDIRACK} {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIRACK}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirAck() override {}
@@ -51,7 +49,9 @@ public:
     encode(dirfrag, payload);
     encode(imported_caps, payload);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

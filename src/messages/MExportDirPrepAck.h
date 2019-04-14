@@ -18,9 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrepAck : public MessageInstance<MExportDirPrepAck> {
-public:
-  friend factory;
+class MExportDirPrepAck : public Message {
 private:
   dirfrag_t dirfrag;
   bool success = false;
@@ -31,7 +29,7 @@ private:
 protected:
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
+    Message{MSG_MDS_EXPORTDIRPREPACK}, dirfrag(df), success(s) {
     set_tid(tid);
   }
   ~MExportDirPrepAck() override {}
@@ -54,6 +52,9 @@ public:
     encode(dirfrag, payload);
     encode(success, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

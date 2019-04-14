@@ -601,7 +601,7 @@ void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
   }
   priv.reset();
 
-  auto reply = MCommandReply::create(r, outs);
+  auto reply = make_message<MCommandReply>(r, outs);
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message2(reply);

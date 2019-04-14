@@ -20,9 +20,7 @@
 #include "mds/locks.h"
 #include "mds/SimpleLock.h"
 
-class MLock : public MessageInstance<MLock> {
-public:
-  friend factory;
+class MLock : public Message {
 private:
   int32_t     action = 0;  // action type
   mds_rank_t  asker = 0;  // who is initiating this request
@@ -45,19 +43,19 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : MessageInstance(MSG_MDS_LOCK) {}
+  MLock() : Message{MSG_MDS_LOCK} {}
   MLock(int ac, mds_rank_t as) :
-    MessageInstance(MSG_MDS_LOCK),
+    Message{MSG_MDS_LOCK},
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    MessageInstance(MSG_MDS_LOCK),
+    Message{MSG_MDS_LOCK},
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
   MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
-    MessageInstance(MSG_MDS_LOCK),
+    Message{MSG_MDS_LOCK},
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
@@ -97,7 +95,9 @@ public:
     encode(object_info, payload);
     encode(lockdata, payload);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

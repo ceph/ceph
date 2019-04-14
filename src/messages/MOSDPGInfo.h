@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public MessageInstance<MOSDPGInfo> {
-public:
-  friend factory;
+class MOSDPGInfo : public Message {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 5;
@@ -41,7 +39,7 @@ public:
     : MOSDPGInfo(mv, {})
   {}
   MOSDPGInfo(epoch_t mv, pg_list_t&& l)
-    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION},
       epoch{mv},
       pg_list{std::move(l)}
   {
@@ -75,6 +73,9 @@ public:
     decode(epoch, p);
     decode(pg_list, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

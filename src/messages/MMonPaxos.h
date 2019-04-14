@@ -20,9 +20,7 @@
 #include "mon/mon_types.h"
 #include "include/ceph_features.h"
 
-class MMonPaxos : public MessageInstance<MMonPaxos> {
-public:
-  friend factory;
+class MMonPaxos : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;
@@ -67,9 +65,9 @@ private:
 
   bufferlist feature_map;
 
-  MMonPaxos() : MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonPaxos() : Message{MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION} { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
-    MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION},
     epoch(e),
     op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
@@ -128,6 +126,9 @@ public:
       decode(feature_map, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

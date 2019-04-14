@@ -11,10 +11,8 @@
 // future this message could be generalized to other state bits, but
 // for now name it for its sole application.
 
-class MOSDFull : public MessageInstance<MOSDFull, PaxosServiceMessage> {
+class MOSDFull : public PaxosServiceMessage {
 public:
-  friend factory;
-
   epoch_t map_epoch = 0;
   uint32_t state = 0;
 
@@ -23,9 +21,9 @@ private:
 
 public:
   MOSDFull(epoch_t e, unsigned s)
-    : MessageInstance(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
+    : PaxosServiceMessage{MSG_OSD_FULL, e}, map_epoch(e), state(s) { }
   MOSDFull()
-    : MessageInstance(MSG_OSD_FULL, 0) {}
+    : PaxosServiceMessage{MSG_OSD_FULL, 0} {}
 
 public:
   void encode_payload(uint64_t features) {
@@ -47,7 +45,9 @@ public:
     OSDMap::calc_state_set(state, states);
     out << "osd_full(e" << map_epoch << " " << states << " v" << version << ")";
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

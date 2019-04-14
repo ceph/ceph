@@ -20,16 +20,14 @@
 #include <vector>
 #include <string>
 
-class MMonCommand : public MessageInstance<MMonCommand, PaxosServiceMessage> {
+class MMonCommand : public PaxosServiceMessage {
 public:
-  friend factory;
-
   uuid_d fsid;
   std::vector<std::string> cmd;
 
-  MMonCommand() : MessageInstance(MSG_MON_COMMAND, 0) {}
+  MMonCommand() : PaxosServiceMessage{MSG_MON_COMMAND, 0} {}
   MMonCommand(const uuid_d &f)
-    : MessageInstance(MSG_MON_COMMAND, 0),
+    : PaxosServiceMessage{MSG_MON_COMMAND, 0},
       fsid(f)
   { }
 
@@ -60,6 +58,9 @@ public:
     decode(fsid, p);
     decode(cmd, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -22,11 +22,8 @@
 #include <string>
 
 
-class MDiscover : public MessageInstance<MDiscover> {
-public:
-  friend factory;
+class MDiscover : public Message {
 private:
-
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 
@@ -50,14 +47,14 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : MessageInstance(MSG_MDS_DISCOVER) { }
+  MDiscover() : Message{MSG_MDS_DISCOVER} { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,
             filepath& want_path_,
             bool want_base_dir_ = true,
 	    bool discover_xlocks_ = false) :
-    MessageInstance(MSG_MDS_DISCOVER),
+    Message{MSG_MDS_DISCOVER},
     base_ino(base_ino_),
     base_dir_frag(base_frag_),
     snapid(s),
@@ -91,7 +88,9 @@ public:
     encode(want_base_dir, payload);
     encode(want_xlocked, payload);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

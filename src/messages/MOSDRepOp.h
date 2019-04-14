@@ -22,9 +22,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MessageInstance<MOSDRepOp, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDRepOp : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -143,13 +141,13 @@ public:
   }
 
   MOSDRepOp()
-    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
-    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(mape),
       min_epoch(min_epoch),
       reqid(r),
@@ -176,7 +174,9 @@ public:
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
 
 #endif

@@ -36,11 +36,6 @@ namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
   }
-  template<typename Message, typename... Args>
-  Ref<Message> make_message(Args&&... args)
-  {
-    return {new Message{std::forward<Args>(args)...}, false};
-  }
 }
 
 using recovery::AdvMap;

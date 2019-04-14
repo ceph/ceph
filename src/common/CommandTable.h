@@ -31,7 +31,7 @@ class CommandOp
 
   MCommand::ref get_message(const uuid_d &fsid) const
   {
-    auto m = MCommand::create(fsid);
+    auto m = make_message<MCommand>(fsid);
     m->cmd = cmd;
     m->set_data(inbl);
     m->set_tid(tid);

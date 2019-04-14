@@ -20,14 +20,12 @@
 #include "osd/OSDMap.h"
 #include "include/ceph_features.h"
 
-class MOSDMap : public MessageInstance<MOSDMap> {
-public:
-  friend factory;
+class MOSDMap : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;
 
- public:
+public:
   uuid_d fsid;
   uint64_t encode_features = 0;
   std::map<epoch_t, ceph::buffer::list> maps;
@@ -65,9 +63,9 @@ private:
   }
 
 
-  MOSDMap() : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDMap() : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION} { }
   MOSDMap(const uuid_d &f, const uint64_t features)
-    : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
@@ -165,6 +163,9 @@ public:
       out << " +gap_removed_snaps";
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

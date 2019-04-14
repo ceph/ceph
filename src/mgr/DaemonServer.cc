@@ -2767,7 +2767,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
 {
   ceph_assert(lock.is_locked_by_me());
 
-  auto configure = new MMgrConfigure();
+  auto configure = make_message<MMgrConfigure>();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
   configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
 
@@ -2776,7 +2776,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
         osd_perf_metric_collector.get_queries();
   }
 
-  c->send_message(configure);
+  c->send_message2(configure);
 }
 
 OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(

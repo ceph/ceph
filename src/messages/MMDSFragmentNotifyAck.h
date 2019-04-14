@@ -17,9 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotifyAck : public MessageInstance<MMDSFragmentNotifyAck> {
-public:
-  friend factory;
+class MMDSFragmentNotifyAck : public Message {
 private:
   dirfrag_t base_dirfrag;
   int8_t bits = 0;
@@ -31,9 +29,9 @@ private:
   bufferlist basebl;
 
 protected:
-  MMDSFragmentNotifyAck() : MessageInstance(MSG_MDS_FRAGMENTNOTIFYACK) {}
+  MMDSFragmentNotifyAck() : Message{MSG_MDS_FRAGMENTNOTIFYACK} {}
   MMDSFragmentNotifyAck(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFYACK),
+    Message{MSG_MDS_FRAGMENTNOTIFYACK},
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }
@@ -55,6 +53,9 @@ public:
     decode(base_dirfrag, p);
     decode(bits, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

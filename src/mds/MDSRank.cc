@@ -648,7 +648,7 @@ void MDSRank::update_targets()
 
   if (send) {
     dout(15) << "updating export_targets, now " << new_map_targets.size() << " ranks are targets" << dendl;
-    auto m = MMDSLoadTargets::create(mds_gid_t(monc->get_global_id()), new_map_targets);
+    auto m = make_message<MMDSLoadTargets>(mds_gid_t(monc->get_global_id()), new_map_targets);
     monc->send_mon_message(m.detach());
   }
 }
@@ -1380,7 +1380,7 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
 
   // send mdsmap first?
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    auto _m = MMDSMap::create(monc->get_fsid(), *mdsmap);
+    auto _m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
     messenger->send_to_mds(_m.detach(), mdsmap->get_addrs(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
@@ -1404,7 +1404,7 @@ void MDSRank::forward_message_mds(const cref_t<MClientRequest>& m, mds_rank_t md
 
   // tell the client where it should go
   auto session = get_session(m);
-  auto f = MClientRequestForward::create(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend);
+  auto f = make_message<MClientRequestForward>(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend);
   send_message_client(f, session);
 }
 
@@ -3445,7 +3445,7 @@ void MDSRank::bcast_mds_map()
   set<Session*> clients;
   sessionmap.get_client_session_set(clients);
   for (const auto &session : clients) {
-    auto m = MMDSMap::create(monc->get_fsid(), *mdsmap);
+    auto m = make_message<MMDSMap>(monc->get_fsid(), *mdsmap);
     session->get_connection()->send_message2(std::move(m));
   }
   last_client_mdsmap_bcast = mdsmap->get_epoch();
