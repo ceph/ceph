@@ -2257,5 +2257,33 @@ TEST(LibCephFS, SnapXattrs) {
   utime_t new_btime = utime_t(strtoull(gxattrv2, NULL, 10), strtoull(s + 1, NULL, 10));
   ASSERT_LT(btime, new_btime);
 
+  // check that the snap.btime vxattr appears in listxattr()
+  char xattrlist[512];
+  int len = ceph_listxattr(cmount, c_temp, xattrlist, sizeof(xattrlist));
+  ASSERT_GT(len, 0);
+  ASSERT_GE(sizeof(xattrlist), (size_t)len);
+  char *p = xattrlist;
+  int found = 0;
+  while (len > 0) {
+    if (strcmp(p, "ceph.snap.btime") == 0)
+      found++;
+    len -= strlen(p) + 1;
+    p += strlen(p) + 1;
+  }
+  ASSERT_EQ(found, 1);
+
+  // listxattr() shouldn't return snap.btime vxattr for non-snaps
+  len = ceph_listxattr(cmount, test_snap_xattr_file, xattrlist, sizeof(xattrlist));
+  ASSERT_GE(sizeof(xattrlist), (size_t)len);
+  p = xattrlist;
+  found = 0;
+  while (len > 0) {
+    if (strcmp(p, "ceph.snap.btime") == 0)
+      found++;
+    len -= strlen(p) + 1;
+    p += strlen(p) + 1;
+  }
+  ASSERT_EQ(found, 0);
+
   ceph_shutdown(cmount);
 }
