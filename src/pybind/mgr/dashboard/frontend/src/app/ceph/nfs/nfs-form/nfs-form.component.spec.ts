@@ -115,8 +115,8 @@ describe('NfsFormComponent', () => {
     component.onClusterChange();
 
     expect(component.daemonsSelections).toEqual([
-      { description: '', name: 'node1', selected: false },
-      { description: '', name: 'node2', selected: false }
+      { description: '', name: 'node1', selected: false, enabled: true },
+      { description: '', name: 'node2', selected: false, enabled: true }
     ]);
   });
 
