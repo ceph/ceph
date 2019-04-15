@@ -6,6 +6,7 @@
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 #include "common/utf8.h"
@@ -13,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_zone.h"
+#include "rgw_auth_s3.h"
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
