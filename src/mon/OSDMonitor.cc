@@ -4352,6 +4352,8 @@ void OSDMonitor::tick()
    * ratio set by g_conf()->mon_osd_min_in_ratio. So it's not really up to us.
    */
   if (can_mark_out(-1)) {
+    string down_out_subtree_limit = g_conf().get_val<string>(
+      "mon_osd_down_out_subtree_limit");
     set<int> down_cache;  // quick cache of down subtrees
 
     map<int,utime_t>::iterator i = down_pending_out.begin();
@@ -4381,12 +4383,13 @@ void OSDMonitor::tick()
 	}
 
 	// is this an entire large subtree down?
-	if (g_conf()->mon_osd_down_out_subtree_limit.length()) {
-	  int type = osdmap.crush->get_type_id(g_conf()->mon_osd_down_out_subtree_limit);
+	if (down_out_subtree_limit.length()) {
+	  int type = osdmap.crush->get_type_id(down_out_subtree_limit);
 	  if (type > 0) {
 	    if (osdmap.containing_subtree_is_down(cct, o, type, &down_cache)) {
-	      dout(10) << "tick entire containing " << g_conf()->mon_osd_down_out_subtree_limit
-		       << " subtree for osd." << o << " is down; resetting timer" << dendl;
+	      dout(10) << "tick entire containing " << down_out_subtree_limit
+		       << " subtree for osd." << o
+		       << " is down; resetting timer" << dendl;
 	      // reset timer, too.
 	      down_pending_out[o] = now;
 	      continue;
