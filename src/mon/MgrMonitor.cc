@@ -234,7 +234,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 void MgrMonitor::prime_mgr_client()
 {
   dout(10) << __func__ << dendl;
-  mon->mgr_client.ms_dispatch(new MMgrMap(map));
+  mon->mgr_client.ms_dispatch2(make_message<MMgrMap>(map));
 }
 
 void MgrMonitor::create_pending()

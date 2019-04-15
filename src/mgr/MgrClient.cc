@@ -69,10 +69,10 @@ void MgrClient::shutdown()
       session->con &&
       HAVE_FEATURE(session->con->get_features(), SERVER_MIMIC)) {
     ldout(cct, 10) << "closing mgr session" << dendl;
-    MMgrClose *m = new MMgrClose();
+    auto m = make_message<MMgrClose>();
     m->daemon_name = daemon_name;
     m->service_name = service_name;
-    session->con->send_message(m);
+    session->con->send_message2(m);
     utime_t timeout;
     timeout.set_from_double(cct->_conf.get_val<double>(
 			      "mgr_client_service_daemon_unregister_timeout"));
@@ -86,20 +86,20 @@ void MgrClient::shutdown()
   }
 }
 
-bool MgrClient::ms_dispatch(Message *m)
+bool MgrClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
 
   switch(m->get_type()) {
   case MSG_MGR_MAP:
-    return handle_mgr_map(static_cast<MMgrMap*>(m));
+    return handle_mgr_map(ref_cast<MMgrMap>(m));
   case MSG_MGR_CONFIGURE:
-    return handle_mgr_configure(static_cast<MMgrConfigure*>(m));
+    return handle_mgr_configure(ref_cast<MMgrConfigure>(m));
   case MSG_MGR_CLOSE:
-    return handle_mgr_close(static_cast<MMgrClose*>(m));
+    return handle_mgr_close(ref_cast<MMgrClose>(m));
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MGR) {
-      handle_command_reply(static_cast<MCommandReply*>(m));
+      handle_command_reply(ref_cast<MCommandReply>(m));
       return true;
     } else {
       return false;
@@ -201,7 +201,7 @@ void MgrClient::_send_open()
   }
 }
 
-bool MgrClient::handle_mgr_map(MMgrMap *m)
+bool MgrClient::handle_mgr_map(ref_t<MMgrMap> m)
 {
   ceph_assert(lock.is_locked_by_me());
 
@@ -209,7 +209,6 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
 
   map = m->get_map();
   ldout(cct, 4) << "Got map version " << map.epoch << dendl;
-  m->put();
 
   ldout(cct, 4) << "Active mgr is now " << map.get_active_addrs() << dendl;
 
@@ -375,7 +374,7 @@ void MgrClient::_send_pgstats()
   }
 }
 
-bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
+bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
 {
   ceph_assert(lock.is_locked_by_me());
 
@@ -383,7 +382,6 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
 
   if (!session) {
     lderr(cct) << "dropping unexpected configure message" << dendl;
-    m->put();
     return true;
   }
 
@@ -404,15 +402,13 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
     _send_stats();
   }
 
-  m->put();
   return true;
 }
 
-bool MgrClient::handle_mgr_close(MMgrClose *m)
+bool MgrClient::handle_mgr_close(ref_t<MMgrClose> m)
 {
   service_daemon = false;
   shutdown_cond.Signal();
-  m->put();
   return true;
 }
 
@@ -446,7 +442,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   return 0;
 }
 
-bool MgrClient::handle_command_reply(MCommandReply *m)
+bool MgrClient::handle_command_reply(ref_t<MCommandReply> m)
 {
   ceph_assert(lock.is_locked_by_me());
 
@@ -456,7 +452,6 @@ bool MgrClient::handle_command_reply(MCommandReply *m)
   if (!command_table.exists(tid)) {
     ldout(cct, 4) << "handle_command_reply tid " << m->get_tid()
             << " not found" << dendl;
-    m->put();
     return true;
   }
 
@@ -474,8 +469,6 @@ bool MgrClient::handle_command_reply(MCommandReply *m)
   }
 
   command_table.erase(tid);
-
-  m->put();
   return true;
 }
 
