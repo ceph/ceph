@@ -276,9 +276,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 {
   _reset_faked_inos();
 
-  _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
-  _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
-
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
 
@@ -11950,17 +11947,6 @@ const Client::VXattr *Client::_match_vxattr(Inode *in, const char *name)
     }
   }
   return NULL;
-}
-
-size_t Client::_vxattrs_calcu_name_size(const VXattr *vxattr)
-{
-  size_t len = 0;
-  while (!vxattr->name.empty()) {
-    if (!vxattr->hidden)
-      len += vxattr->name.length() + 1;
-    vxattr++;
-  }
-  return len;
 }
 
 int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& perms)
