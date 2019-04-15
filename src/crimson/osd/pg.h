@@ -127,10 +127,13 @@ private:
 			    int new_up_primary,
 			    const std::vector<int>& new_acting,
 			    int new_acting_primary);
+public:
+  // public because of execution stage
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
-  seastar::future<> do_osd_op(const object_info_t& oi, OSDOp* op);
 
 private:
+  seastar::future<> do_osd_op(const object_info_t& oi, OSDOp* op);
+
   const spg_t pgid;
   pg_shard_t whoami;
   pg_pool_t pool;

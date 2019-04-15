@@ -12,6 +12,8 @@
 #include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
 
+#include <seastar/core/execution_stage.hh>
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDPGInfo.h"
@@ -1023,6 +1025,9 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   });
 }
 
+thread_local auto do_osd_ops_stage = \
+  seastar::make_execution_stage("do_osd_ops_stage", &PG::do_osd_ops);
+
 seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
                                 Ref<MOSDOp> m)
 {
@@ -1030,7 +1035,7 @@ seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
     if (m->finish_decode()) {
       m->clear_payload();
     }
-    return do_osd_ops(m);
+    return do_osd_ops_stage(this, m);
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
