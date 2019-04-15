@@ -306,11 +306,8 @@ class RGWMetadataManager {
   RGWMetadataLog* current_log = nullptr;
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
-  int pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
-                 RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
-                 RGWMDLogOp op, RGWMDLogStatus status);
-  int post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
-                 RGWObjVersionTracker *objv_tracker, RGWMDLogOp op, int ret);
+  int post_modify(RGWMetadataHandler *handler, const string& key,
+                 RGWObjVersionTracker *objv_tracker, RGWMDLogOp op);
 
   string heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv);
   int store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
@@ -408,18 +405,11 @@ int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
     return ret;
   }
 
-  string section;
-  RGWMetadataLogData log_data;
-  ret = pre_modify(handler, section, key, log_data, objv_tracker,
-                   op, RGWMDLogStatus::Write);
+  ret = std::forward<F>(f)();
   if (ret < 0) {
     return ret;
   }
-
-  ret = std::forward<F>(f)();
-
-  /* cascading ret into post_modify() */
-  return post_modify(handler, section, key, log_data, objv_tracker, op, ret);
+  return post_modify(handler, key, objv_tracker, op);
 }
 
 #endif
