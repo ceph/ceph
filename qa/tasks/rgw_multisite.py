@@ -374,7 +374,7 @@ def create_zonegroup(cluster, gateways, period, config):
 def create_zone(ctx, cluster, gateways, creds, zonegroup, config):
     """ create a zone with the given configuration """
     zone = multisite.Zone(config['name'], zonegroup, cluster)
-    if config.pop('is_master', False):
+    if config.pop('is_pubsub', False):
         zone = PSZone(config['name'], zonegroup, cluster)
     else:
         zone = RadosZone(config['name'], zonegroup, cluster)
