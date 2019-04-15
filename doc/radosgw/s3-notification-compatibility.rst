@@ -32,7 +32,10 @@ REST API Extension
 
 Ceph's bucket notification API follows has the following extensions:
 
-- Deletion of a specific notification, or all notifications on a bucket, without deletion of the bucket
+- Deletion of a specific notification, or all notifications on a bucket, using the ``DELETE`` verb
+
+ - In S3, all notifications are deleted when the bucket is deleted, or when an empty notification is set on the bucket
+
 - Getting the information on a specific notification (when some exists on a bucket)  
 
 Unsupported Fields in the Event Record
