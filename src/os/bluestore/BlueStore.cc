@@ -6428,11 +6428,16 @@ int BlueStore::expand_devices(ostream& out)
     if (devid == bluefs_shared_bdev ) {
       continue;
     }
+    uint64_t size = bluefs->get_block_device_size(devid);
+    if (size == 0) {
+      // no bdev
+      continue;
+    }
+
     interval_set<uint64_t> before;
     bluefs->get_block_extents(devid, &before);
     ceph_assert(!before.empty());
     uint64_t end = before.range_end();
-    uint64_t size = bluefs->get_block_device_size(devid);
     if (end < size) {
       out << devid
 	  <<" : expanding " << " from 0x" << std::hex
