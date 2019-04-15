@@ -264,31 +264,31 @@ void DaemonStateIndex::cull(const std::string& svc_name,
   }
 }
 
-void DaemonPerfCounters::update(MMgrReport *report)
+void DaemonPerfCounters::update(const MMgrReport& report)
 {
-  dout(20) << "loading " << report->declare_types.size() << " new types, "
-	   << report->undeclare_types.size() << " old types, had "
+  dout(20) << "loading " << report.declare_types.size() << " new types, "
+	   << report.undeclare_types.size() << " old types, had "
 	   << types.size() << " types, got "
-           << report->packed.length() << " bytes of data" << dendl;
+           << report.packed.length() << " bytes of data" << dendl;
 
   // Retrieve session state
-  auto priv = report->get_connection()->get_priv();
+  auto priv = report.get_connection()->get_priv();
   auto session = static_cast<MgrSession*>(priv.get());
 
   // Load any newly declared types
-  for (const auto &t : report->declare_types) {
+  for (const auto &t : report.declare_types) {
     types.insert(std::make_pair(t.path, t));
     session->declared_types.insert(t.path);
   }
   // Remove any old types
-  for (const auto &t : report->undeclare_types) {
+  for (const auto &t : report.undeclare_types) {
     session->declared_types.erase(t);
   }
 
   const auto now = ceph_clock_now();
 
   // Parse packed data according to declared set of types
-  auto p = report->packed.cbegin();
+  auto p = report.packed.cbegin();
   DECODE_START(1, p);
   for (const auto &t_path : session->declared_types) {
     const auto &t = types.at(t_path);
