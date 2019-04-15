@@ -48,6 +48,8 @@ private:
     Message{MSG_MGR_DIGEST} {}
   ~MMgrDigest() override {}
 
+  using RefCountedObject::put;
+  using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
