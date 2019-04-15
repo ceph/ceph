@@ -260,7 +260,7 @@ class RookCluster(object):
                 "namespace": self.rook_env.cluster_ns
             },
             "spec": {
-                "metaDataPool": {
+                "metadataPool": {
                     "failureDomain": "host",
                     "replicated": {
                         "size": 1
