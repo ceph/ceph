@@ -518,8 +518,18 @@ TEST(LibCephFS, Xattrs) {
     ASSERT_EQ(ceph_setxattr(cmount, test_xattr_file, xattrk, (void *) xattrv, len, XATTR_CREATE), 0);
   }
 
+  // zero size should return required buffer length
+  int len_needed = ceph_listxattr(cmount, test_xattr_file, NULL, 0);
+  ASSERT_GT(len_needed, 0);
+
+  // buffer size smaller than needed should fail
   char xattrlist[128*26];
-  int len = ceph_listxattr(cmount, test_xattr_file, xattrlist, sizeof(xattrlist));
+  ASSERT_GT(sizeof(xattrlist), (size_t)len_needed);
+  int len = ceph_listxattr(cmount, test_xattr_file, xattrlist, len_needed - 1);
+  ASSERT_EQ(-ERANGE, len);
+
+  len = ceph_listxattr(cmount, test_xattr_file, xattrlist, sizeof(xattrlist));
+  ASSERT_EQ(len, len_needed);
   char *p = xattrlist;
   char *n;
   i = 'a';
