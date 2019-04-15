@@ -6,11 +6,11 @@ call methods.
 
 This module is runnable outside of ceph-mgr, useful for testing.
 """
-
-from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 import logging
 import json
 from contextlib import contextmanager
+
+from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
@@ -21,15 +21,13 @@ except ImportError:
 
 try:
     import orchestrator
+    from rook.module import RookEnv
+    from typing import List
 except ImportError:
     pass  # just used for type checking.
 
 
-ROOK_SYSTEM_NS = "rook-ceph-system"
-ROOK_API_VERSION = "v1"
-ROOK_API_NAME = "ceph.rook.io/%s" % ROOK_API_VERSION
-
-log = logging.getLogger('rook')
+log = logging.getLogger(__name__)
 
 
 class ApplyException(Exception):
@@ -41,20 +39,13 @@ class ApplyException(Exception):
 
 
 class RookCluster(object):
-    def __init__(self, k8s, cluster_name):
-        self.cluster_name = cluster_name
+    def __init__(self, k8s, rook_env):
+        self.rook_env = rook_env  # type: RookEnv
         self.k8s = k8s
-
-    @property
-    def rook_namespace(self):
-        # For the moment, assume Rook NS always equal to cluster name
-        # (this is also assumed some places in Rook source, may
-        #  be formalized at some point)
-        return self.cluster_name
 
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
-            ROOK_API_VERSION, self.rook_namespace)
+            self.rook_env.crd_version, self.rook_env.cluster_ns)
         return urljoin(prefix, path)
 
     def rook_api_call(self, verb, path, **kwargs):
@@ -96,10 +87,10 @@ class RookCluster(object):
 
         try:
             result = self.k8s.list_namespaced_config_map(
-                ROOK_SYSTEM_NS,
+                self.rook_env.operator_ns,
                 label_selector=label_selector)
         except ApiException as e:
-            log.warning("Failed to fetch device metadata: {0}".format(e))
+            log.exception("Failed to fetch device metadata: {0}".format(e))
             raise
 
         nodename_to_devices = {}
@@ -149,7 +140,7 @@ class RookCluster(object):
         # Label filter is rook_cluster=<cluster name>
         #                 rook_file_system=<self.fs_name>
 
-        label_filter = "rook_cluster={0}".format(self.cluster_name)
+        label_filter = "rook_cluster={0}".format(self.rook_env.cluster_name)
         if service_type != None:
             label_filter += ",app=rook-ceph-{0}".format(service_type)
             if service_id != None:
@@ -171,10 +162,10 @@ class RookCluster(object):
 
         field_filter = ""
         if nodename != None:
-            field_filter = "spec.nodeName={0}".format(nodename);
+            field_filter = "spec.nodeName={0}".format(nodename)
 
         pods = self.k8s.list_namespaced_pod(
-            self.rook_namespace,
+            self.rook_env.cluster_ns,
             label_selector=label_filter,
             field_selector=field_filter)
 
@@ -213,11 +204,11 @@ class RookCluster(object):
         #      to action.
 
         rook_fs = {
-            "apiVersion": ROOK_API_NAME,
+            "apiVersion": self.rook_env.api_name,
             "kind": "CephFilesystem",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_namespace
+                "namespace": self.rook_env.cluster_ns
             },
             "spec": {
                 "onlyManageDaemons": True,
@@ -238,11 +229,11 @@ class RookCluster(object):
         #      to action.
 
         rook_nfsgw = {
-            "apiVersion": ROOK_API_NAME,
+            "apiVersion": self.rook_env.api_name,
             "kind": "CephNFS",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_namespace
+                "namespace": self.rook_env.cluster_ns
             },
             "spec": {
                 "rados": {
@@ -262,11 +253,11 @@ class RookCluster(object):
 
     def add_objectstore(self, spec):
         rook_os = {
-            "apiVersion": ROOK_API_NAME,
+            "apiVersion": self.rook_env.api_name,
             "kind": "CephObjectStore",
             "metadata": {
                 "name": spec.name,
-                "namespace": self.rook_namespace
+                "namespace": self.rook_env.cluster_ns
             },
             "spec": {
                 "metaDataPool": {
@@ -316,7 +307,7 @@ class RookCluster(object):
 
     def can_create_osd(self):
         current_cluster = self.rook_api_get(
-            "cephclusters/{0}".format(self.cluster_name))
+            "cephclusters/{0}".format(self.rook_env.cluster_name))
         use_all_nodes = current_cluster['spec'].get('useAllNodes', False)
 
         # If useAllNodes is set, then Rook will not be paying attention
@@ -325,7 +316,7 @@ class RookCluster(object):
 
     def node_exists(self, node_name):
         try:
-            self.k8s.read_node(node_name)
+            self.k8s.read_node(node_name, exact=False, export=True)
         except ApiException as e:
             if e.status == 404:
                 return False
@@ -339,7 +330,7 @@ class RookCluster(object):
 
         try:
             self.rook_api_patch(
-                "cephclusters/{0}".format(self.cluster_name),
+                "cephclusters/{0}".format(self.rook_env.cluster_name),
                 body=patch)
         except ApiException as e:
             log.exception("API exception: {0}".format(e))
@@ -362,7 +353,7 @@ class RookCluster(object):
         return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
 
     def add_osds(self, drive_group, all_hosts):
-        # type: (orchestrator.DriveGroupSpec, List[str]) -> None
+        # type: (orchestrator.DriveGroupSpec, List[str]) -> str
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
@@ -381,7 +372,7 @@ class RookCluster(object):
         #           storeType: bluestore
 
         current_cluster = self.rook_api_get(
-            "cephclusters/{0}".format(self.cluster_name))
+            "cephclusters/{0}".format(self.rook_env.cluster_name))
 
         patch = []
 
@@ -440,7 +431,7 @@ class RookCluster(object):
 
         try:
             self.rook_api_patch(
-                "cephclusters/{0}".format(self.cluster_name),
+                "cephclusters/{0}".format(self.rook_env.cluster_name),
                 body=patch)
         except ApiException as e:
             log.exception("API exception: {0}".format(e))
