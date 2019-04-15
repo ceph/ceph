@@ -769,14 +769,6 @@ std::string gcp_to_s3_event(const std::string& event) {
 std::string topic_to_unique(const std::string& topic, const std::string& notification) {
   return notification + "_" + topic;
 }
-
-// extract the topic from a unique topic of the form: <notification>_<topic>
-std::string unique_to_topic(const std::string& unique_topic, const std::string& notification) {
-  if (unique_topic.find(notification + "_") == string::npos) {
-    return "";
-  }
-  return unique_topic.substr(notification.length() + 1);
-}
 }
 
 // command (S3 compliant): PUT /<bucket name>?notification
