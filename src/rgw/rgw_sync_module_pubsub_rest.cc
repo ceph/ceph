@@ -771,7 +771,7 @@ std::string topic_to_unique(const std::string& topic, const std::string& notific
 }
 
 // extract the topic from a unique topic of the form: <notification>_<topic>
-std::string unique_to_topic(const std::string& unique_topic, const std::string& notification) {
+[[maybe_unused]] std::string unique_to_topic(const std::string& unique_topic, const std::string& notification) {
   if (unique_topic.find(notification + "_") == string::npos) {
     return "";
   }
