@@ -114,7 +114,7 @@ class DaemonPerfCounters
 
   std::map<std::string, PerfCounterInstance> instances;
 
-  void update(MMgrReport *report);
+  void update(const MMgrReport& report);
 
   void clear()
   {

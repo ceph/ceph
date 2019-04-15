@@ -593,7 +593,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
   {
     std::lock_guard l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
-    daemon_counters.update(m);
+    daemon_counters.update(*m.get());
 
     auto p = m->config_bl.cbegin();
     if (p != m->config_bl.end()) {
