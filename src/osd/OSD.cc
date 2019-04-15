@@ -8241,6 +8241,9 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       dout(0) << "map says i do not exist.  shutting down." << dendl;
       do_shutdown = true;   // don't call shutdown() while we have
 			    // everything paused
+    } else if (osdmap->is_stop(whoami)) {
+      dout(0) << "map says i am stopped by admin. shutting down." << dendl;
+      do_shutdown = true;
     } else if (!osdmap->is_up(whoami) ||
 	       !osdmap->get_addrs(whoami).legacy_equals(
 		 client_messenger->get_myaddrs()) ||

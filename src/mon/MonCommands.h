@@ -817,6 +817,10 @@ COMMAND("osd down " \
 	"set osd(s) <id> [<id>...] down, " \
         "or use <any|all> to set all osds down", \
         "osd", "rw")
+COMMAND("osd stop " \
+        "type=CephString,name=ids,n=N", \
+        "stop the corresponding osd daemons and mark them as down", \
+        "osd", "rw")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
 	"set osd(s) <id> [<id>...] out, " \
