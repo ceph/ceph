@@ -560,6 +560,7 @@ enum TrashImageSource {
   TRASH_IMAGE_SOURCE_MIRRORING = 1,
   TRASH_IMAGE_SOURCE_MIGRATION = 2,
   TRASH_IMAGE_SOURCE_REMOVING = 3,
+  TRASH_IMAGE_SOURCE_USER_PARENT= 4,
 };
 
 inline std::ostream& operator<<(std::ostream& os,

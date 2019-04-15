@@ -576,6 +576,21 @@ test_clone_v2() {
     rbd snap list --all test1 | wc -l | grep '^0$'
     rbd rm test1
     rbd rm test2
+
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd snap create test1@1
+    rbd snap create test1@2
+    rbd clone test1@1 test2 --rbd-default-clone-format 2
+    rbd clone test1@2 test3 --rbd-default-clone-format 2
+    rbd snap rm test1@1
+    rbd snap rm test1@2
+    expect_fail rbd rm test1
+    rbd rm test1 --rbd-move-parent-to-trash-on-remove=true
+    rbd trash ls -a | grep test1
+    rbd rm test2
+    rbd trash ls -a | grep test1
+    rbd rm test3
+    rbd trash ls -a | expect_fail grep test1
 }
 
 test_thick_provision() {

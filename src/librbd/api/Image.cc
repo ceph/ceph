@@ -767,7 +767,15 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
       // attempt to pre-validate the removal before moving to trash and
       // removing
       r = pre_remove_image<I>(io_ctx, image_id);
-      if (r < 0 && r != -ENOENT) {
+      if (r == -ECHILD) {
+        if (config.get_val<bool>("rbd_move_parent_to_trash_on_remove")) {
+          // keep the image in the trash until the last child is removed
+          trash_image_source = RBD_TRASH_IMAGE_SOURCE_USER_PARENT;
+        } else {
+          lderr(cct) << "image has snapshots - not removing" << dendl;
+          return -ENOTEMPTY;
+        }
+      } else if (r < 0 && r != -ENOENT) {
         return r;
       }
     }

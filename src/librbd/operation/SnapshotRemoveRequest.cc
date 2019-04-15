@@ -55,7 +55,7 @@ bool SnapshotRemoveRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << "r=" << r << dendl;
-  if (r < 0) {
+  if (r < 0 && r != -EBUSY) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
   }
   return true;

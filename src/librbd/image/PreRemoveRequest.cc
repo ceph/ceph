@@ -143,7 +143,7 @@ void PreRemoveRequest<I>::check_image_snaps() {
     } else {
       m_image_ctx->snap_lock.put_read();
 
-      lderr(cct) << "image has snapshots - not removing" << dendl;
+      ldout(cct, 5) << "image has snapshots - not removing" << dendl;
       finish(-ENOTEMPTY);
       return;
     }
@@ -272,14 +272,15 @@ void PreRemoveRequest<I>::handle_remove_snapshot(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  if (r < 0 && r != -ENOENT) {
+  if (r == -EBUSY) {
+    ldout(cct, 5) << "skipping attached child" << dendl;
+    if (m_ret_val == 0) {
+      m_ret_val = -ECHILD;
+    }
+  } else if (r < 0 && r != -ENOENT) {
     auto snap_id = m_snap_infos.begin()->first;
     lderr(cct) << "failed to auto-prune snapshot " << snap_id << ": "
                << cpp_strerror(r) << dendl;
-
-    if (r == -EBUSY) {
-      r = -ENOTEMPTY;
-    }
     finish(r);
     return;
   }
@@ -295,7 +296,11 @@ void PreRemoveRequest<I>::finish(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  m_on_finish->complete(r);
+  if (m_ret_val == 0) {
+    m_ret_val = r;
+  }
+
+  m_on_finish->complete(m_ret_val);
   delete this;
 }
 
