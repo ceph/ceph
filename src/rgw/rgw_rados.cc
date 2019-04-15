@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <boost/algorithm/string.hpp>
+#include <string_view>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
@@ -13,7 +14,6 @@
 #include <boost/utility/in_place_factory.hpp>
 
 #include "common/ceph_json.h"
-#include "common/utf8.h"
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -2424,13 +2424,31 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * marker: if filled in, begin the listing with this object.
  * end_marker: if filled in, end the listing with this object.
  * result: the objects are put in here.
- * common_prefixes: if delim is filled in, any matching prefixes are placed here.
- * is_truncated: if number of objects in the bucket is bigger than max, then truncated.
+ * common_prefixes: if delim is filled in, any matching prefixes are
+ * placed here.
+ * is_truncated: if number of objects in the bucket is bigger than
+ * max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
-						 vector<rgw_bucket_dir_entry> *result,
-						 map<string, bool> *common_prefixes,
-						 bool *is_truncated)
+static inline std::string after_delim(std::string_view delim)
+{
+  // assert: ! delim.empty()
+  char e = delim.back();
+  delim.remove_suffix(1);
+  std::string result{delim.data(), delim.length()};
+  if (e < 255) {
+    result += char(++e);
+  } else {
+    result += e;
+    result += char(255);
+  }
+  return result;
+}
+
+int RGWRados::Bucket::List::list_objects_ordered(
+  int64_t max,
+  vector<rgw_bucket_dir_entry> *result,
+  map<string, bool> *common_prefixes,
+  bool *is_truncated)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -2455,27 +2473,16 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
   rgw_obj_key prefix_obj(params.prefix);
   prefix_obj.ns = params.ns;
   string cur_prefix = prefix_obj.get_index_key_name();
-
-  string bigger_than_delim;
+  string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
-    unsigned long val = decode_utf8((unsigned char *)params.delim.c_str(),
-				    params.delim.size());
-    char buf[params.delim.size() + 16];
-    int r = encode_utf8(val + 1, (unsigned char *)buf);
-    if (r < 0) {
-      ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
-      return -EINVAL;
-    }
-    buf[r] = '\0';
-
-    bigger_than_delim = buf;
-
-    /* if marker points at a common prefix, fast forward it into its upperbound string */
+    /* if marker points at a common prefix, fast forward it into its
+     * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
-      s.append(bigger_than_delim);
+      after_delim_s = after_delim(params.delim);
+      s.append(after_delim_s);
       cur_marker = s;
     }
   }
@@ -2484,7 +2491,11 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
   while (truncated && count <= max) {
     if (skip_after_delim > cur_marker.name) {
       cur_marker = skip_after_delim;
-      ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
+
+      ldout(cct, 20) << "setting cur_marker="
+		     << cur_marker.name
+		     << "[" << cur_marker.instance << "]"
+		     << dendl;
     }
     std::map<string, rgw_bucket_dir_entry> ent_map;
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
@@ -2554,7 +2565,9 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
         int delim_pos = obj.name.find(params.delim, params.prefix.size());
 
         if (delim_pos >= 0) {
-          string prefix_key = obj.name.substr(0, delim_pos + 1);
+	  /* extract key -with trailing delimiter- for CommonPrefix */
+          string prefix_key =
+	    obj.name.substr(0, delim_pos + params.delim.length());
 
           if (common_prefixes &&
               common_prefixes->find(prefix_key) == common_prefixes->end()) {
@@ -2565,10 +2578,11 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max,
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+            int marker_delim_pos = cur_marker.name.find(
+	      params.delim, cur_prefix.size());
 
             skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
-            skip_after_delim.append(bigger_than_delim);
+            skip_after_delim.append(after_delim_s);
 
             ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
 
