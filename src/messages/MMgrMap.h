@@ -49,6 +49,8 @@ public:
     encode(map, payload, features);
   }
 private:
+  using RefCountedObject::put;
+  using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
