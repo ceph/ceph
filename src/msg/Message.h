@@ -257,9 +257,6 @@ protected:
   boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
-  using ref = MessageRef;
-  using const_ref = MessageConstRef;
-
   // zipkin tracing
   ZTracer::Trace trace;
   void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
