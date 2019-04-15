@@ -563,10 +563,6 @@ public:
     state_flags &= ~LEASED;
   }
 
-  bool is_used() const {
-    return is_xlocked() || is_rdlocked() || is_wrlocked() || is_leased();
-  }
-
   bool needs_recover() const {
     return state_flags & NEED_RECOVER;
   }
@@ -657,15 +653,6 @@ public:
     state = get_replica_state();
   }
 
-  /** replicate_relax
-   * called on first replica creation.
-   */
-  void replicate_relax() {
-    ceph_assert(parent->is_auth());
-    ceph_assert(!parent->is_replicated());
-    if (state == LOCK_LOCK && !is_used())
-      state = LOCK_SYNC;
-  }
   bool remove_replica(int from) {
     if (is_gathering(from)) {
       remove_gather(from);
