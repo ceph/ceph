@@ -2601,6 +2601,22 @@ void DaemonServer::adjust_pgs()
 	      }
 	      dout(20) << " room " << room << " estmax " << estmax
 		       << " delta " << delta << " next " << next << dendl;
+	      if (p.get_pgp_num_target() == p.get_pg_num_target()) {
+		// since pgp_num is tracking pg_num, ceph is handling
+		// pgp_num.  so, be responsible: don't let pgp_num get
+		// too far out ahead of merges (if we are merging).
+		// this avoids moving lots of unmerged pgs onto a
+		// small number of OSDs where we might blow out the
+		// per-osd pg max.
+		unsigned max_outpace_merges =
+		  std::max<unsigned>(8, p.get_pg_num() * max_misplaced);
+		if (next + max_outpace_merges < p.get_pg_num()) {
+		  next = p.get_pg_num() - max_outpace_merges;
+		  dout(10) << "  using next " << next
+			   << " to avoid outpacing merges (max_outpace_merges "
+			   << max_outpace_merges << ")" << dendl;
+		}
+	      }
 	    }
 	    dout(10) << "pool " << i.first
 		     << " pgp_num_target " << p.get_pgp_num_target()
