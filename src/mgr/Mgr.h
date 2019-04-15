@@ -80,16 +80,16 @@ public:
     return server.get_myaddrs();
   }
 
-  void handle_mgr_digest(MMgrDigest* m);
-  void handle_fs_map(MFSMap* m);
+  void handle_mgr_digest(ceph::ref_t<MMgrDigest> m);
+  void handle_fs_map(ceph::ref_t<MFSMap> m);
   void handle_osd_map();
-  void handle_log(MLog *m);
-  void handle_service_map(MServiceMap *m);
+  void handle_log(ceph::ref_t<MLog> m);
+  void handle_service_map(ceph::ref_t<MServiceMap> m);
   void handle_mon_map();
 
   bool got_mgr_map(const MgrMap& m);
 
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch2(const ceph::ref_t<Message>& m);
 
   void background_init(Context *completion);
   void shutdown();
