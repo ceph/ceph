@@ -747,6 +747,7 @@ std::vector<Option> get_global_options() {
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
 
@@ -776,6 +777,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Authentication key")
     .set_long_description("A CephX authentication key, base64 encoded.  It normally looks something like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("keyfile")
     .add_see_also("keyring"),
@@ -784,6 +786,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Path to a file containing a key")
     .set_long_description("The file should contain a CephX authentication key and optionally a trailing newline, but nothing else.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key"),
 
@@ -799,16 +802,19 @@ std::vector<Option> get_global_options() {
     )
     .set_description("Path to a keyring file.")
     .set_long_description("A keyring file is an INI-style formatted file where the section names are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property with CephX authentication key as the value.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key")
     .add_see_also("keyfile"),
 
     Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Frequency of internal heartbeat checks (seconds)"),
 
     Option("heartbeat_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("File to touch on successful internal heartbeat")
     .set_long_description("If set, this file will be touched every time an internal heartbeat check succeeds.")
     .add_see_also("heartbeat_interval"),
