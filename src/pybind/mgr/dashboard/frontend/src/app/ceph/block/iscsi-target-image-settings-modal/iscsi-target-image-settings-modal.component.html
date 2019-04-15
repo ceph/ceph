@@ -10,17 +10,17 @@
          i18n>Changing these parameters from their default values is usually not necessary.</p>
 
       <!-- BACKSTORE -->
-      <div class="form-group row"
-           *ngIf="backstores.length > 1">
+      <div class="form-group row">
         <div class="col-sm-12">
           <label class="control-label"
                  i18n>Backstore</label>
           <select id="backstore"
                   name="backstore"
                   class="form-control"
-                  [(ngModel)]="model.backstore">
+                  [(ngModel)]="model.backstore"
+                  [disabled]="backstores.length == 1">
             <option *ngFor="let bs of backstores"
-                    [value]="bs">{{ bs }}</option>
+                    [value]="bs">{{ bs | iscsiBackstore }}</option>
           </select>
         </div>
       </div>

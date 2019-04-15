@@ -194,10 +194,6 @@
           <context context-type="sourcefile">app/ceph/block/mirroring/overview/overview.component.html</context>
           <context context-type="linenumber">5</context>
         </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
-          <context context-type="linenumber">3</context>
-        </context-group>
       </trans-unit><trans-unit id="4d13a9cd5ed3dcee0eab22cb25198d43886942be" datatype="html">
         <source>Users</source>
         <context-group purpose="location">
@@ -2329,6 +2325,12 @@
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">40</context>
         </context-group>
+      </trans-unit><trans-unit id="8a9910cd114c1deb9af74f6f99b4173403965bf2" datatype="html">
+        <source>Gateways</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
       </trans-unit><trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
         <source>Overview</source>
         <context-group purpose="location">
@@ -2847,7 +2849,7 @@
         <source>Backstore</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
-          <context context-type="linenumber">17</context>
+          <context context-type="linenumber">16</context>
         </context-group>
       </trans-unit><trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
         <source>Confirm</source>
@@ -2923,8 +2925,8 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">106</context>
         </context-group>
-      </trans-unit><trans-unit id="6c1c7f516d021abaf155aab1e9c2fe96e2c4ff40" datatype="html">
-        <source>Backstore: <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore }}"/>. </source>
+      </trans-unit><trans-unit id="9aff25be088f0efe3eaaf62edf2bff41cc41a617" datatype="html">
+        <source>Backstore: <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. </source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">147</context>
@@ -4250,49 +4252,44 @@
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-list/iscsi-target-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
-      </trans-unit>
-      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
-        <source>Hostname</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/daemon-list/daemon-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="32b73dd480452aed3c8df00055279a110b3e633c" datatype="html">
-        <source># Active/Optimized</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="26a3d69b872abf67663ba7473606ea32d6128531" datatype="html">
-        <source># Active/Non-Optimized</source>
+      <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
+        <source>State</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
-      </trans-unit>
-      <trans-unit id="2cd86fc9c2dc1b4398514266a08e507140fe5ba8" datatype="html">
-        <source>Active/Optimized</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
+          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-detail/cephfs-detail.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="c74c467d73caf2b951bc1a1d52d6e93f9c5e795b" datatype="html">
-        <source>Active/Non-Optimized</source>
+      <trans-unit id="02b75464c0dc0cf49ea0208211b6fbcad3bf728a" datatype="html">
+        <source># Targets</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi/iscsi.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -4340,37 +4337,25 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
+        <source>Hostname</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/mirroring/daemon-list/daemon-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/hosts/hosts.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="36fad7995cadfb3a6f0d43ef2db280146b3ca022" datatype="html">
         <source>Issue</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
-        <source>State</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/mirroring/image-list/image-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-detail/cephfs-detail.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
