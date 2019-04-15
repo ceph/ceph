@@ -33,8 +33,8 @@ describe('SelectBadgesComponent', () => {
   it('should reflect the attributes into CdSelect', () => {
     const data = ['a', 'b'];
     const options = [
-      { name: 'option1', description: '', selected: false },
-      { name: 'option2', description: '', selected: false }
+      { name: 'option1', description: '', selected: false, enabled: true },
+      { name: 'option2', description: '', selected: false, enabled: true }
     ];
     const i18n = TestBed.get(I18n);
     const messages = new SelectMessages({ empty: 'foo bar' }, i18n);

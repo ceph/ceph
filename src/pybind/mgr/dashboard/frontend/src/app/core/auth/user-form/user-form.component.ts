@@ -93,7 +93,10 @@ export class UserFormComponent implements OnInit {
     }
 
     this.roleService.list().subscribe((roles: Array<UserFormRoleModel>) => {
-      this.allRoles = roles;
+      this.allRoles = _.map(roles, (role) => {
+        role.enabled = true;
+        return role;
+      });
     });
     if (this.mode === this.userFormMode.editing) {
       this.initEdit();

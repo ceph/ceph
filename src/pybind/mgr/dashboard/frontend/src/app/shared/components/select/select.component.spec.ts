@@ -29,9 +29,9 @@ describe('SelectComponent', () => {
     component = fixture.componentInstance;
     fixture.detectChanges();
     component.options = [
-      { name: 'option1', description: '', selected: false },
-      { name: 'option2', description: '', selected: false },
-      { name: 'option3', description: '', selected: false }
+      { name: 'option1', description: '', selected: false, enabled: true },
+      { name: 'option2', description: '', selected: false, enabled: true },
+      { name: 'option3', description: '', selected: false, enabled: true }
     ];
   });
 
@@ -214,7 +214,8 @@ describe('SelectComponent', () => {
       expect(component.options[0]).toEqual({
         name: 'customOption',
         description: '',
-        selected: true
+        selected: true,
+        enabled: true
       });
       expect(component.options.length).toBe(4);
       expect(component.data).toEqual(['customOption']);
@@ -235,7 +236,8 @@ describe('SelectComponent', () => {
       expect(component.options[0]).toEqual({
         name: 'customOption',
         description: '',
-        selected: false
+        selected: false,
+        enabled: true
       });
     });
 
