@@ -88,6 +88,8 @@ private:
   MMgrOpen()
     : Message{MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION}
   {}
+  using RefCountedObject::put;
+  using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

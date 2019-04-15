@@ -164,10 +164,12 @@ public:
     out << ")";
   }
 
+private:
   MMgrReport()
     : Message{MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION}
   {}
-private:
+  using RefCountedObject::put;
+  using RefCountedObject::get;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
