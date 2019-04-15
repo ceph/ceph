@@ -43,10 +43,8 @@ overrides:
         mon debug unsafe allow tier with nonempty snaps: true
       osd:
         osd map max advance: 1000
-        osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
-                              replica_log rgw sdk statelog timeindex user version otp"
-        osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
-                                 replica_log rgw sdk statelog timeindex user version otp"
+        osd_class_default_list: "*"
+        osd_class_load_list: "*" 
       client:
         rgw_crypt_require_ssl: false
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
