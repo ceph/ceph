@@ -11343,44 +11343,52 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 int Client::_listxattr(Inode *in, char *name, size_t size,
 		       const UserPerm& perms)
 {
+  bool len_only = (size == 0);
   int r = _getattr(in, CEPH_STAT_CAP_XATTR, perms, in->xattr_version == 0);
-  if (r == 0) {
-    for (map<string,bufferptr>::iterator p = in->xattrs.begin();
-	 p != in->xattrs.end();
-	 ++p)
-      r += p->first.length() + 1;
-
-    const VXattr *vxattrs = _get_vxattrs(in);
-    r += _vxattrs_name_size(vxattrs);
-
-    if (size != 0) {
-      if (size >= (unsigned)r) {
-	for (map<string,bufferptr>::iterator p = in->xattrs.begin();
-	     p != in->xattrs.end();
-	     ++p) {
-	  memcpy(name, p->first.c_str(), p->first.length());
-	  name += p->first.length();
-	  *name = '\0';
-	  name++;
-	}
-	if (vxattrs) {
-	  for (int i = 0; !vxattrs[i].name.empty(); i++) {
-	    const VXattr& vxattr = vxattrs[i];
-	    if (vxattr.hidden)
-	      continue;
-	    // call pointer-to-member function
-	    if(vxattr.exists_cb && !(this->*(vxattr.exists_cb))(in))
-	      continue;
-	    memcpy(name, vxattr.name.c_str(), vxattr.name.length());
-	    name += vxattr.name.length();
-	    *name = '\0';
-	    name++;
-	  }
-	}
-      } else
-	r = -ERANGE;
-    }
+  if (r != 0) {
+    goto out;
   }
+
+  r = 0;
+  for (const auto& p : in->xattrs) {
+    size_t this_len = p.first.length() + 1;
+    r += this_len;
+    if (len_only)
+      continue;
+
+    if (this_len > size) {
+      r = -ERANGE;
+      goto out;
+    }
+
+    memcpy(name, p.first.c_str(), this_len);
+    name += this_len;
+    size -= this_len;
+  }
+
+  const VXattr *vxattr;
+  for (vxattr = _get_vxattrs(in); vxattr && !vxattr->name.empty(); vxattr++) {
+    if (vxattr->hidden)
+      continue;
+    // call pointer-to-member function
+    if (vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))
+      continue;
+
+    size_t this_len = vxattr->name.length() + 1;
+    r += this_len;
+    if (len_only)
+      continue;
+
+    if (this_len > size) {
+      r = -ERANGE;
+      goto out;
+    }
+
+    memcpy(name, vxattr->name.c_str(), this_len);
+    name += this_len;
+    size -= this_len;
+  }
+out:
   ldout(cct, 8) << __func__ << "(" << in->ino << ", " << size << ") = " << r << dendl;
   return r;
 }
