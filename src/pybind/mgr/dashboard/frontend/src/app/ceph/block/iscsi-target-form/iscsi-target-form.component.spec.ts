@@ -229,6 +229,7 @@ describe('IscsiTargetFormComponent', () => {
     beforeEach(() => {
       component.targetForm.patchValue({ disks: ['rbd/disk_2'], acl_enabled: true });
       component.addGroup().patchValue({ name: 'group_1' });
+      component.addGroup().patchValue({ name: 'group_2' });
       component.onImageSelection({ option: { name: 'rbd/disk_2', selected: true } });
 
       component.addInitiator();
@@ -250,12 +251,14 @@ describe('IscsiTargetFormComponent', () => {
         [{ description: '', name: 'rbd/disk_2', selected: false, enabled: true }]
       ]);
       expect(component.groupMembersSelections).toEqual([
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }],
         [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }]
       ]);
     });
 
     it('should update data when changing an initiator name', () => {
       expect(component.groupMembersSelections).toEqual([
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }],
         [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }]
       ]);
 
@@ -265,6 +268,7 @@ describe('IscsiTargetFormComponent', () => {
       component.updatedInitiatorSelector();
 
       expect(component.groupMembersSelections).toEqual([
+        [{ description: '', name: 'iqn.initiator_new', selected: false, enabled: true }],
         [{ description: '', name: 'iqn.initiator_new', selected: false, enabled: true }]
       ]);
     });
@@ -288,7 +292,7 @@ describe('IscsiTargetFormComponent', () => {
         group_id: 'foo',
         members: []
       });
-      expect(component.groupMembersSelections).toEqual([[]]);
+      expect(component.groupMembersSelections).toEqual([[], []]);
       expect(component.imagesInitiatorSelections).toEqual([]);
     });
 
@@ -321,6 +325,21 @@ describe('IscsiTargetFormComponent', () => {
         client_iqn: 'iqn.initiator',
         luns: []
       });
+    });
+
+    it('should disabled the initiator when selected', () => {
+      expect(component.groupMembersSelections).toEqual([
+        [{ description: '', enabled: true, name: 'iqn.initiator', selected: false }],
+        [{ description: '', enabled: true, name: 'iqn.initiator', selected: false }]
+      ]);
+
+      component.groupMembersSelections[0][0].selected = true;
+      component.onGroupMemberSelection({ option: { name: 'iqn.initiator', selected: true } });
+
+      expect(component.groupMembersSelections).toEqual([
+        [{ description: '', enabled: false, name: 'iqn.initiator', selected: true }],
+        [{ description: '', enabled: false, name: 'iqn.initiator', selected: false }]
+      ]);
     });
   });
 
