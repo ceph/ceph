@@ -762,9 +762,6 @@ MESSAGE(MMonSubscribe)
 #include "messages/MMonSubscribeAck.h"
 MESSAGE(MMonSubscribeAck)
 
-#include "messages/MNop.h"
-MESSAGE(MNop)
-
 #include "messages/MOSDAlive.h"
 MESSAGE(MOSDAlive)
 
