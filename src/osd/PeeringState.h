@@ -236,7 +236,7 @@ public:
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
     ObjectStore::Transaction *transaction;
-    ThreadPool::TPHandle* handle;
+    HBHandle* handle;
     PeeringCtx(map<int, map<spg_t, pg_query_t> > *query_map,
 		map<int,
 		    vector<pair<pg_notify_t, PastIntervals> > > *info_map,
