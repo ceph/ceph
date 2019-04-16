@@ -5,7 +5,6 @@
 #include "common/ceph_releases.h"
 #include "common/dout.h"
 #include "PeeringState.h"
-#include "OSD.h"
 
 #include "messages/MOSDPGRemove.h"
 #include "messages/MBackfillReserve.h"
