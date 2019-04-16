@@ -49,7 +49,7 @@ namespace ceph::mon {
 
 class Connection {
 public:
-  Connection(AuthRegistry* auth_registry,
+  Connection(const AuthRegistry& auth_registry,
              ceph::net::ConnectionRef conn,
              KeyRing* keyring);
   seastar::future<> handle_auth_reply(Ref<MAuthReply> m);
@@ -100,14 +100,14 @@ private:
   ceph::auth::method_t auth_method = 0;
   seastar::promise<> auth_done;
   // v1 and v2
-  AuthRegistry* auth_registry;
+  const AuthRegistry& auth_registry;
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
   RotatingKeyRing rotating_keyring;
   uint64_t global_id;
 };
 
-Connection::Connection(AuthRegistry* auth_registry,
+Connection::Connection(const AuthRegistry& auth_registry,
                        ceph::net::ConnectionRef conn,
                        KeyRing* keyring)
   : auth_registry{auth_registry},
@@ -179,7 +179,7 @@ Connection::setup_session(epoch_t epoch,
   __u8 struct_v = 1;
   encode(struct_v, m->auth_payload);
   std::vector<ceph::auth::method_t> auth_methods;
-  auth_registry->get_supported_methods(conn->get_peer_type(), &auth_methods);
+  auth_registry.get_supported_methods(conn->get_peer_type(), &auth_methods);
   encode(auth_methods, m->auth_payload);
   encode(name, m->auth_payload);
   encode(global_id, m->auth_payload);
@@ -273,7 +273,7 @@ Connection::get_auth_request(const EntityName& entity_name,
   // choose method
   auth_method = [&] {
     std::vector<ceph::auth::method_t> methods;
-    auth_registry->get_supported_methods(conn->get_peer_type(), &methods);
+    auth_registry.get_supported_methods(conn->get_peer_type(), &methods);
     if (methods.empty()) {
       logger().info("get_auth_request no methods is supported");
       throw ceph::auth::error("no methods is supported");
@@ -282,8 +282,8 @@ Connection::get_auth_request(const EntityName& entity_name,
   }();
 
   std::vector<uint32_t> modes;
-  auth_registry->get_supported_modes(conn->get_peer_type(), auth_method,
-                                     &modes);
+  auth_registry.get_supported_modes(conn->get_peer_type(), auth_method,
+                                    &modes);
   logger().info("method {} preferred_modes {}", auth_method, modes);
   if (modes.empty()) {
     throw ceph::auth::error("no modes is supported");
@@ -346,7 +346,7 @@ int Connection::handle_auth_bad_method(uint32_t old_auth_method,
   logger().info("old_auth_method {} result {} allowed_methods {}",
                 old_auth_method, cpp_strerror(result), allowed_methods);
   std::vector<uint32_t> auth_supported;
-  auth_registry->get_supported_methods(conn->get_peer_type(), &auth_supported);
+  auth_registry.get_supported_methods(conn->get_peer_type(), &auth_supported);
   auto p = std::find(auth_supported.begin(), auth_supported.end(),
                      old_auth_method);
   assert(p != auth_supported.end());
@@ -852,7 +852,7 @@ seastar::future<> Client::reopen_session(int rank)
       // in one shard.
       ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
       ceph::net::ConnectionRef conn = xconn->release();
-      auto& mc = pending_conns.emplace_back(&auth_registry, conn, &keyring);
+      auto& mc = pending_conns.emplace_back(auth_registry, conn, &keyring);
       if (conn->get_peer_addr().is_msgr2()) {
         return mc.authenticate_v2();
       } else {
