@@ -183,7 +183,7 @@ class User(object):
             self.lastUpdate = lastUpdate
 
     def refreshLastUpdate(self):
-        self.lastUpdate = int(time.mktime(time.gmtime()))
+        self.lastUpdate = int(time.time())
 
     def set_password(self, password):
         self.password = password_hash(password)
