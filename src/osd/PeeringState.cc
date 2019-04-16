@@ -12,6 +12,7 @@
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGLog.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
