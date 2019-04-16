@@ -222,6 +222,19 @@ class TestOS(object):
         HOME_URL="https://www.opensuse.org/"
     """)
 
+    str_opensuse_15_1_os_release = dedent("""
+        NAME="openSUSE Leap"
+        VERSION="15.1"
+        ID="opensuse-leap"
+        ID_LIKE="suse opensuse"
+        VERSION_ID="15.1"
+        PRETTY_NAME="openSUSE Leap 15.1"
+        ANSI_COLOR="0;32"
+        CPE_NAME="cpe:/o:opensuse:leap:15.1"
+        BUG_REPORT_URL="https://bugs.opensuse.org"
+        HOME_URL="https://www.opensuse.org/"
+    """)
+
     def test_centos_7_os_release(self):
         os = OS.from_os_release(self.str_centos_7_os_release)
         assert os.name == 'centos'
@@ -343,8 +356,15 @@ class TestOS(object):
 
     def test_opensuse_15_0_os_release(self):
         os = OS.from_os_release(self.str_opensuse_15_0_os_release)
-        assert os.name == 'opensuse-leap'
+        assert os.name == 'opensuse'
         assert os.version == '15.0'
+        assert os.codename == 'leap'
+        assert os.package_type == 'rpm'
+
+    def test_opensuse_15_1_os_release(self):
+        os = OS.from_os_release(self.str_opensuse_15_1_os_release)
+        assert os.name == 'opensuse'
+        assert os.version == '15.1'
         assert os.codename == 'leap'
         assert os.package_type == 'rpm'
 
