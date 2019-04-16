@@ -1573,7 +1573,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mon_crush_min_required_version"),
 
     Option("mon_crush_min_required_version", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("firefly")
+    .set_default("hammer")
     .add_service("mgr")
     .set_description("minimum ceph release to use for mon_warn_on_legacy_crush_tunables")
     .add_see_also("mon_warn_on_legacy_crush_tunables"),
