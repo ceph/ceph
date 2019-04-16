@@ -273,7 +273,7 @@ class RgwClient(RestClient):
                  secret_key,
                  host=None,
                  port=None,
-                 admin_path='admin',
+                 admin_path=None,
                  ssl=False):
 
         if not host and not RgwClient._host:
