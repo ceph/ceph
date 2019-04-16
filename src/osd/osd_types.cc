@@ -2645,6 +2645,14 @@ void pg_stat_t::dump(Formatter *f) const
   for (auto p = avail_no_missing.cbegin(); p != avail_no_missing.cend(); ++p)
     f->dump_stream("shard") << *p;
   f->close_section();
+  f->open_array_section("object_location_counts");
+  for (auto p = object_location_counts.cbegin(); p != object_location_counts.cend(); ++p) {
+    f->open_object_section("entry");
+    f->dump_stream("shards") << p->first;
+    f->dump_int("objects", p->second);
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("blocked_by");
   for (vector<int32_t>::const_iterator p = blocked_by.begin();
        p != blocked_by.end(); ++p)
@@ -2728,6 +2736,7 @@ void pg_stat_t::encode(bufferlist &bl) const
   encode(purged_snaps, bl);
   encode(manifest_stats_invalid, bl);
   encode(avail_no_missing, bl);
+  encode(object_location_counts, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2800,6 +2809,7 @@ void pg_stat_t::decode(bufferlist::const_iterator &bl)
     }
     if (struct_v >= 26) {
       decode(avail_no_missing, bl);
+      decode(object_location_counts, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -2843,6 +2853,10 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.up_primary = 123;
   a.acting.push_back(456);
   a.avail_no_missing.push_back(pg_shard_t(456, shard_id_t::NO_SHARD));
+  set<pg_shard_t> sset = { pg_shard_t(0), pg_shard_t(1) };
+  a.object_location_counts.insert(make_pair(sset, 10));
+  sset.insert(pg_shard_t(2));
+  a.object_location_counts.insert(make_pair(sset, 5));
   a.acting_primary = 456;
   o.push_back(new pg_stat_t(a));
 
@@ -2888,6 +2902,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.up == r.up &&
     l.acting == r.acting &&
     l.avail_no_missing == r.avail_no_missing &&
+    l.object_location_counts == r.object_location_counts &&
     l.mapping_epoch == r.mapping_epoch &&
     l.blocked_by == r.blocked_by &&
     l.last_became_active == r.last_became_active &&

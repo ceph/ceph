@@ -3232,6 +3232,7 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
   info.stats.avail_no_missing.clear();
+  info.stats.object_location_counts.clear();
 
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
@@ -3307,6 +3308,25 @@ void PG::_update_calc_stats()
                << " missing " << missing
                << dendl;
     }
+
+    // Compute object_location_counts
+    for (auto& ml: missing_loc.get_missing_locs()) {
+      info.stats.object_location_counts[ml.second]++;
+      dout(30) << __func__ << " " << ml.first << " object_location_counts["
+	       << ml.second << "]=" << info.stats.object_location_counts[ml.second]
+	       << dendl;
+    }
+    int64_t not_missing = num_objects - missing_loc.get_missing_locs().size();
+    if (not_missing) {
+	// During recovery we know upset == actingset and is being populated
+	// During backfill we know that all non-missing objects are in the actingset
+        info.stats.object_location_counts[actingset] = not_missing;
+    }
+    dout(30) << __func__ << " object_location_counts["
+	     << upset << "]=" << info.stats.object_location_counts[upset]
+	     << dendl;
+    dout(20) << __func__ << " object_location_counts "
+	     << info.stats.object_location_counts << dendl;
 
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;

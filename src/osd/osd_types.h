@@ -2093,6 +2093,7 @@ struct pg_stat_t {
 
   vector<int32_t> up, acting;
   vector<pg_shard_t> avail_no_missing;
+  map< std::set<pg_shard_t>, int32_t > object_location_counts;
   epoch_t mapping_epoch;
 
   vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
