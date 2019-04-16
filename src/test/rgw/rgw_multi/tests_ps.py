@@ -9,7 +9,7 @@ from rgw_multi.tests import get_realm, \
     zone_data_checkpoint, \
     check_bucket_eq, \
     gen_bucket_name
-from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3
+from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3, print_connection_info
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 
@@ -126,6 +126,26 @@ NOTIFICATION_SUFFIX = "_notif"
 # pubsub tests
 ##############
 
+def test_ps_info():
+    """ log information for manual testing """
+    return SkipTest("only used in manual testing")
+    zones, ps_zones = init_env()
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    print('Zonegroup: ' + zonegroup.name)
+    print('Master Zone')
+    print_connection_info(zones[0].conn)
+    print('PubSub Zone')
+    print_connection_info(ps_zones[0].conn)
+    print('Bucket: ' + bucket_name)
 
 def test_ps_s3_notification_low_level():
     """ test low level implementation of s3 notifications """
@@ -855,6 +875,7 @@ def test_ps_versioned_deletion():
 
 def test_ps_push_http():
     """ test pushing to http endpoint """
+    return SkipTest("PubSub push tests are only manual")
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
@@ -901,6 +922,7 @@ def test_ps_push_http():
 
 def test_ps_s3_push_http():
     """ test pushing to http endpoint n s3 record format"""
+    return SkipTest("PubSub push tests are only manual")
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
@@ -946,6 +968,7 @@ def test_ps_s3_push_http():
 
 def test_ps_push_amqp():
     """ test pushing to amqp endpoint """
+    return SkipTest("PubSub push tests are only manual")
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
@@ -995,6 +1018,7 @@ def test_ps_push_amqp():
 
 def test_ps_s3_push_amqp():
     """ test pushing to amqp endpoint n s3 record format"""
+    return SkipTest("PubSub push tests are only manual")
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
@@ -1104,3 +1128,29 @@ def test_ps_delete_bucket():
     # cleanup
     sub_conf.del_config()
     topic_conf.del_config()
+
+
+def test_ps_missing_topic():
+    """ test creating a subscription when no topic info exists"""
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create bucket on the first of the rados zones
+    zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_arn = 'arn:aws:sns:::' + topic_name
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
+                                            notification_name, topic_arn, ['s3:ObjectCreated:*'])
+    try:
+        s3_notification_conf.set_config()
+    except:
+        print('missing topic is expected')
+    else:
+        assert 'missing topic is expected'
+
+    # cleanup
+    zones[0].delete_bucket(bucket_name)
