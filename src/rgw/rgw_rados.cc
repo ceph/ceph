@@ -916,12 +916,12 @@ public:
 
   // implements DoutPrefixProvider
   CephContext *get_cct() const override { return store->ctx(); }
-  unsigned get_subsys() const
+  unsigned get_subsys() const override
   {
     return dout_subsys;
   }
 
-  std::ostream& gen_prefix(std::ostream& out) const
+  std::ostream& gen_prefix(std::ostream& out) const override
   {
     return out << "sync log trim: ";
   }
@@ -6828,7 +6828,7 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->submit(obj, &op, cost, id);
+  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op)), cost, id);
 
   return d->flush(std::move(completed));
 }

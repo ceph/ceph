@@ -303,6 +303,18 @@ inline namespace v14_2_0 {
     ObjectOperation();
     virtual ~ObjectOperation();
 
+    ObjectOperation(const ObjectOperation&) = delete;
+    ObjectOperation& operator=(const ObjectOperation&) = delete;
+
+    /**
+     * Move constructor.
+     * \warning A moved from ObjectOperation is invalid and may not be used for
+     *          any purpose. This is a hard contract violation and will
+     *          kill your program.
+     */
+    ObjectOperation(ObjectOperation&&);
+    ObjectOperation& operator =(ObjectOperation&&);
+
     size_t size();
     void set_op_flags(ObjectOperationFlags flags) __attribute__((deprecated));
     //flag mean ObjectOperationFlags
@@ -349,9 +361,7 @@ inline namespace v14_2_0 {
       int *prval);
 
   protected:
-    ObjectOperationImpl *impl;
-    ObjectOperation(const ObjectOperation& rhs);
-    ObjectOperation& operator=(const ObjectOperation& rhs);
+    ObjectOperationImpl* impl;
     friend class IoCtx;
     friend class Rados;
   };
@@ -368,6 +378,9 @@ inline namespace v14_2_0 {
   public:
     ObjectWriteOperation() : unused(NULL) {}
     ~ObjectWriteOperation() override {}
+
+    ObjectWriteOperation(ObjectWriteOperation&&) = default;
+    ObjectWriteOperation& operator =(ObjectWriteOperation&&) = default;
 
     void mtime(time_t *pt);
     void mtime2(struct timespec *pts);
@@ -495,6 +508,9 @@ inline namespace v14_2_0 {
   public:
     ObjectReadOperation() {}
     ~ObjectReadOperation() override {}
+
+    ObjectReadOperation(ObjectReadOperation&&) = default;
+    ObjectReadOperation& operator =(ObjectReadOperation&&) = default;
 
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
