@@ -399,6 +399,8 @@ public:
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
+    mempool::osdmap::map<int32_t,uint32_t> new_crush_node_flags;
+
     string cluster_snapshot;
 
     float new_nearfull_ratio = -1;
@@ -510,6 +512,8 @@ private:
 
   int32_t max_osd;
   vector<uint32_t> osd_state;
+
+  mempool::osdmap::map<int32_t,uint32_t> crush_node_flags; // crush node -> CEPH_OSD_* flags
 
   utime_t last_up_change, last_in_change;
 
