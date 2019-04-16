@@ -1,13 +1,10 @@
 $(function() {
-  var releases_url = "/docs/master/releases.json";
+  var releases_url = "http://docs.ceph.com/docs/master/releases.json";
+  //var releases_url = "/releases.json";
 
   function is_eol(branch, data) {
     if (data && data.releases && branch in data.releases) {
-      var eol = ("actual_eol" in data.releases[branch]);
-      if (eol) {
-        $("#eol-warning").show();
-      }
-      return eol;
+      return ("actual_eol" in data.releases[branch]);
     }
     return false;
   }
@@ -27,6 +24,9 @@ $(function() {
     var releases = [];
 
     for(var release in data.releases) {
+      if (is_eol(release, data)) {
+        continue;
+      }
       // try to avoid modern JS: https://stackoverflow.com/a/36411645
       if(data.releases.hasOwnProperty(release)) {
         releases.push({
@@ -47,16 +47,27 @@ $(function() {
       return 0;
     });
 
+    releases.unshift({
+      release_name: "master",
+      released: 0
+    })
+
     var select = $("#ceph-release-select");
 
-    select.append('<option value="master">master</option>');
+    var found = false;
+    select.append('<option selected disabled>Select branch</option>');
     for (var i = 0; i < releases.length; i++) {
       var release = releases[i].release_name;
       var option = '<option value="' + release + '">' + release + '</option>';
       select.append(option);
+      if (branch === release) {
+        found = true;
+      }
     }
-    // choose the current release
-    select.val(branch);
+    if (found) {
+      // choose the current release
+      select.val(branch);
+    }
 
     select.change(function (){
       var tgt_branch = select.val();
@@ -64,53 +75,30 @@ $(function() {
 
       var tgt_path = pathname.replace(/^\/docs\/([a-z]+)\/?/i, '/docs/' + tgt_branch + '/');
 
+      console.log(tgt_path)
+
       window.location.pathname = tgt_path;
     });
 
     $("#ceph-releases").show()
   }
 
-  // show horizontal color line to easy distinguish the releases
-  // even in the middle of the page
-  function draw_release_line(branch) {
-    var color_map = {
-      // colors are got from https://github.com/d3/d3-scale-chromatic#schemeSet3
-      "dumpling": "#8dd3c7",
-      "emperor": "#ffffb3",
-      "firefly": "#bebada",
-      "giant": "#fb8072",
-      "hammer": "#80b1d3",
-      "infernalis": "#fdb462",
-      "jewel": "#b3de69",
-      "kraken": "#fccde5",
-      "luminous": "#d9d9d9",
-      "mimic": "#bc80bd",
-      // free colors:
-      // "": "#ccebc5",
-      // "": "#ffed6f",
-      // development documentation is always red to attract attention
-      "master": "#FF0000",
-    };
-    var color = (branch in color_map) ? color_map[branch] : "#000";
-    $(".body").css("border-left", "5px solid " + color);
-  }
-
   $.getJSON(releases_url, function(data) {
     var branch = get_branch();
 
+    show_releases_select(branch, data);
+
     if (branch === null) {
       $("#dev-warning").show();
-      return;
     }
+
     if (branch === "master") {
       $("#dev-warning").show();
     }
 
-    // show select and color line regardless of eol release
-    show_releases_select(branch, data);
-    draw_release_line(branch);
-
-    if (!is_eol(branch, data)) {
+    if (is_eol(branch, data)) {
+      $("#eol-warning").show();
+    } else {
       // patch the edit-on-github URL for correct branch
       var url = $("#edit-on-github").attr("href");
       url = url.replace("master", branch);
@@ -118,6 +106,5 @@ $(function() {
 
       $("#docubetter").show();
     }
-
   });
 });
