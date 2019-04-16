@@ -21,7 +21,10 @@
     "fix:prettier": "prettier --write \"{src,e2e}/**/*.{ts,scss}\"",
     "fix:tslint": "npm run lint:tslint -- --fix",
     "fixmod": "prettier --write $(git rev-parse --show-toplevel)/$(git status --porcelain | grep -E '^(\\sM|\\?\\?|A)' | sed -e 's/^...//' | grep -E '^(src|e2e).*\\.(ts|scss)$') 1>/dev/null 2>&1 && echo 'done' || echo 'no changes found'",
-    "fix": "npm run fix:tslint; npm run fix:prettier"
+    "fix": "npm run fix:tslint; npm run fix:prettier",
+    "compodoc": "compodoc",
+    "doc-build": "compodoc -p src/tsconfig.app.json",
+    "doc-serve": "compodoc --port 8444 -s src/tsconfig.app.json"
   },
   "private": true,
   "jest": {
@@ -87,6 +90,7 @@
     "@angular/cli": "7.3.3",
     "@angular/compiler-cli": "7.2.6",
     "@angular/language-service": "7.2.6",
+    "@compodoc/compodoc": "^1.1.9",
     "@types/jasmine": "3.3.9",
     "@types/jasminewd2": "2.0.6",
     "@types/jest": "24.0.9",
