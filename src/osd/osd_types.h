@@ -2724,6 +2724,7 @@ struct pg_info_t {
   eversion_t last_complete;    ///< last version pg was complete through.
   epoch_t last_epoch_started;  ///< last epoch at which this pg started on this osd
   epoch_t last_interval_started; ///< first epoch of last_epoch_started interval
+  epoch_t flushed_thru;		///< the last epoch occured flush
   
   version_t last_user_version; ///< last user object version applied to store
 
@@ -2753,12 +2754,14 @@ struct pg_info_t {
       l.purged_snaps == r.purged_snaps &&
       l.stats == r.stats &&
       l.history == r.history &&
-      l.hit_set == r.hit_set;
+      l.hit_set == r.hit_set &&
+      l.flushed_thru == r.flushed_thru;
   }
 
   pg_info_t()
     : last_epoch_started(0),
       last_interval_started(0),
+      flushed_thru(0),
       last_user_version(0),
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
@@ -2768,6 +2771,7 @@ struct pg_info_t {
     : pgid(p),
       last_epoch_started(0),
       last_interval_started(0),
+      flushed_thru(0),
       last_user_version(0),
       last_backfill(hobject_t::get_max()),
       last_backfill_bitwise(false)
