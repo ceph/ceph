@@ -116,9 +116,7 @@ private:
   ceph::common::AuthHandler& auth_handler;
 
   // AuthClient methods
-  std::tuple<ceph::auth::method_t,  // auth method
-	     std::vector<uint32_t>, // preferred modes
-	     ceph::bufferlist>	    // auth bl
+  ceph::auth::AuthClient::auth_request_t
   get_auth_request(ceph::net::ConnectionRef conn,
 		   AuthConnectionMetaRef auth_meta) final;
 
