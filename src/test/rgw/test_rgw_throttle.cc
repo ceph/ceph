@@ -33,7 +33,7 @@ struct RadosEnv : public ::testing::Environment {
       r = 0;
     ASSERT_EQ(0, r);
   }
-  void TearDown() {
+  void TearDown() override {
     rados.reset();
   }
 };
@@ -61,16 +61,16 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   auto obj = make_obj(__PRETTY_FUNCTION__);
   {
     librados::ObjectWriteOperation op1;
-    auto c1 = throttle.submit(obj, &op1, 1, 0);
+    auto c1 = throttle.get(obj, rgw::Aio::librados_op(std::move(op1)), 1, 0);
     EXPECT_TRUE(c1.empty());
     librados::ObjectWriteOperation op2;
-    auto c2 = throttle.submit(obj, &op2, 1, 0);
+    auto c2 = throttle.get(obj, rgw::Aio::librados_op(std::move(op2)), 1, 0);
     EXPECT_TRUE(c2.empty());
     librados::ObjectWriteOperation op3;
-    auto c3 = throttle.submit(obj, &op3, 1, 0);
+    auto c3 = throttle.get(obj, rgw::Aio::librados_op(std::move(op3)), 1, 0);
     EXPECT_TRUE(c3.empty());
     librados::ObjectWriteOperation op4;
-    auto c4 = throttle.submit(obj, &op4, 1, 0);
+    auto c4 = throttle.get(obj, rgw::Aio::librados_op(std::move(op4)), 1, 0);
     EXPECT_TRUE(c4.empty());
     // no completions because no ops had to wait
     auto c5 = throttle.poll();
@@ -88,7 +88,7 @@ TEST_F(Aio_Throttle, CostOverWindow)
   auto obj = make_obj(__PRETTY_FUNCTION__);
 
   librados::ObjectWriteOperation op;
-  auto c = throttle.submit(obj, &op, 8, 0);
+  auto c = throttle.get(obj, rgw::Aio::librados_op(std::move(op)), 8, 0);
   ASSERT_EQ(1u, c.size());
   EXPECT_EQ(-EDEADLK, c.front().result);
 }
@@ -107,7 +107,7 @@ TEST_F(Aio_Throttle, ThrottleOverMax)
 
   for (uint64_t i = 0; i < total; i++) {
     librados::ObjectWriteOperation op;
-    auto c = throttle.submit(obj, &op, 1, 0);
+    auto c = throttle.get(obj, rgw::Aio::librados_op(std::move(op)), 1, 0);
     outstanding++;
     outstanding -= c.size();
     if (max_outstanding < outstanding) {

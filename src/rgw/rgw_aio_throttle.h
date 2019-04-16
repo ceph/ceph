@@ -38,7 +38,6 @@ class AioThrottle : public Aio {
   struct Pending : AioResultEntry {
     AioThrottle *parent = nullptr;
     uint64_t cost = 0;
-    librados::AioCompletion *completion = nullptr;
   };
   OwningList<Pending> pending;
   AioResultList completed;
@@ -51,11 +50,6 @@ class AioThrottle : public Aio {
   ceph::mutex mutex = ceph::make_mutex("AioThrottle");
   ceph::condition_variable cond;
 
-  void get(Pending& p);
-  void put(Pending& p);
-
-  static void aio_cb(void *cb, void *arg);
-
  public:
   AioThrottle(uint64_t window) : window(window) {}
 
@@ -65,13 +59,11 @@ class AioThrottle : public Aio {
     ceph_assert(completed.empty());
   }
 
-  AioResultList submit(RGWSI_RADOS::Obj& obj,
-                       librados::ObjectReadOperation *op,
-                       uint64_t cost, uint64_t id) override;
+  AioResultList get(const RGWSI_RADOS::Obj& obj,
+		    OpFunc&& f,
+		    uint64_t cost, uint64_t id) override;
+  void put(AioResult& r) override;
 
-  AioResultList submit(RGWSI_RADOS::Obj& obj,
-                       librados::ObjectWriteOperation *op,
-                       uint64_t cost, uint64_t id) override;
 
   AioResultList poll() override;
 
