@@ -10,6 +10,11 @@ class CryptoKey;
 
 namespace ceph::auth {
 
+class error : public std::logic_error {
+public:
+  using std::logic_error::logic_error;
+};
+
 // TODO: revisit interfaces for non-dummy implementations
 class AuthClient {
 public:
