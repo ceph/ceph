@@ -749,6 +749,7 @@ OPTION(osd_backoff_on_peering, OPT_BOOL)  // [debug] pg peering
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_inject_dispatch_delay_probability, OPT_DOUBLE)
 OPTION(osd_debug_inject_dispatch_delay_duration, OPT_DOUBLE)
+OPTION(osd_debug_repop_crash, OPT_BOOL) 
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE)
 OPTION(osd_debug_drop_ping_duration, OPT_INT)
 OPTION(osd_debug_op_order, OPT_BOOL)

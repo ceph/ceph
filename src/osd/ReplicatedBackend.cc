@@ -1010,6 +1010,10 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 	   << " " << m->logbl.length()
 	   << dendl;
 
+  if (cct->_conf->osd_debug_repop_crash) {
+    assert(0 == "debuging... crash before repop submit");
+  }
+
   // sanity checks
   ceph_assert(m->map_epoch >= get_info().history.same_interval_since);
 
@@ -1065,6 +1069,10 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(soid)) {
     async = true;
+
+    // sanity checks
+    ceph_assert(!rm->opt.get_num_ops());
+
     dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
     for (auto &&e: log) {
       dout(30) << " add_next_event entry " << e << dendl;

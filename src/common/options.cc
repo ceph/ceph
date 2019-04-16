@@ -3559,6 +3559,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Turn up debug levels during shutdown"),
 
+    Option("osd_debug_repop_crash", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Turn up to simulate repop submit crash"),
+
     Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
