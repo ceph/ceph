@@ -263,8 +263,9 @@ void Elector::handle_propose(MonOpRequestRef op)
     return;
   } else if (mon->monmap->min_mon_release > m->mon_release) {
     dout(5) << " ignoring propose from mon" << from
-	    << " release " << m->mon_release
-	    << " < min_mon_release " << mon->monmap->min_mon_release << dendl;
+	    << " release " << (int)m->mon_release
+	    << " < min_mon_release " << (int)mon->monmap->min_mon_release
+	    << dendl;
     nak_old_peer(op);
     return;
   } else if (!m->mon_features.contains_all(required_mon_features)) {
@@ -427,8 +428,8 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   dout(10) << "sending nak to peer " << m->get_source()
 	   << " supports " << supported_features << " " << m->mon_features
 	   << ", required " << required_features << " " << required_mon_features
-	   << ", release " << m->mon_release
-	   << " vs required " << mon->monmap->min_mon_release
+	   << ", release " << (int)m->mon_release
+	   << " vs required " << (int)mon->monmap->min_mon_release
 	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
                                          mon->monmap);
@@ -446,12 +447,12 @@ void Elector::handle_nak(MonOpRequestRef op)
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features
           << " " << m->mon_features
-	  << " min_mon_release " << m->mon_release
+	  << " min_mon_release " << (int)m->mon_release
           << dendl;
 
   if (m->mon_release > ceph_release()) {
-    derr << "Shutting down because I am release " << ceph_release()
-	 << " < min_mon_release " << m->mon_release << dendl;
+    derr << "Shutting down because I am release " << (int)ceph_release()
+	 << " < min_mon_release " << (int)m->mon_release << dendl;
   } else {
     CompatSet other;
     auto bi = m->sharing_bl.cbegin();
