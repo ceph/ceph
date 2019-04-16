@@ -59,7 +59,7 @@ public:
                                     uint32_t want_keys);
   // v2
   seastar::future<> authenticate_v2();
-  tuple<ceph::auth::method_t, vector<uint32_t>, bufferlist>
+  auth::AuthClient::auth_request_t
   get_auth_request(const EntityName& name,
                    uint32_t want_keys);
   using secret_t = string;
@@ -266,7 +266,7 @@ seastar::future<> Connection::authenticate_v2()
   });
 }
 
-tuple<ceph::auth::method_t, vector<uint32_t>, ceph::bufferlist>
+auth::AuthClient::auth_request_t
 Connection::get_auth_request(const EntityName& entity_name,
                              uint32_t want_keys)
 {
@@ -567,7 +567,7 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   }
 }
 
-tuple<uint32_t, vector<uint32_t>, ceph::bufferlist>
+auth::AuthClient::auth_request_t
 Client::get_auth_request(ceph::net::ConnectionRef con,
                          AuthConnectionMetaRef auth_meta)
 {

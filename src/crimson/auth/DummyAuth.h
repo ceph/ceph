@@ -31,7 +31,7 @@ public:
     return nullptr;
   }
 
-  std::tuple<uint32_t, std::vector<uint32_t>, bufferlist> get_auth_request(
+  AuthClient::auth_request_t get_auth_request(
     ceph::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta) override {
     return {CEPH_AUTH_NONE, {CEPH_CON_MODE_CRC}, {}};

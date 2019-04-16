@@ -26,14 +26,16 @@ class AuthClient {
 public:
   virtual ~AuthClient() {}
 
+  struct auth_request_t {
+    method_t auth_method;
+    std::vector<uint32_t> preferred_modes;
+    ceph::bufferlist auth_bl;
+  };
   /// Build an authentication request to begin the handshake
   ///
   /// @throw auth::error if unable to build the request
-  virtual std::tuple<method_t,		     // auth method
-		     std::vector<uint32_t>,  // preferred modes
-		     ceph::bufferlist>	     // auth bl
-  get_auth_request(ceph::net::ConnectionRef conn,
-		   AuthConnectionMetaRef auth_meta) = 0;
+  virtual auth_request_t get_auth_request(ceph::net::ConnectionRef conn,
+					  AuthConnectionMetaRef auth_meta) = 0;
 
   /// Handle server's request to continue the handshake
   ///
