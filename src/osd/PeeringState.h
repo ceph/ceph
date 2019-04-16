@@ -23,6 +23,7 @@
 #include "OSDMap.h"
 #include "MissingLoc.h"
 #include "common/LogClient.h"
+#include "osd/osd_perf_counters.h"
 
 struct PGPool {
   CephContext* cct;
