@@ -7,7 +7,7 @@
 #include <set>
 
 #include "OSDMap.h"
-#include "common/WorkQueue.h"
+#include "common/HBHandle.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
 #include "osd_types.h"
@@ -258,13 +258,13 @@ class MissingLoc {
     pg_shard_t source,           ///< [in] source
     const pg_info_t &oinfo,      ///< [in] info
     const pg_missing_t &omissing, ///< [in] (optional) missing
-    ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
+    HBHandle *handle             ///< [in] ThreadPool handle
     ); ///< @return whether a new object location was discovered
 
   /// Adds recovery sources in batch
   void add_batch_sources_info(
     const set<pg_shard_t> &sources,  ///< [in] a set of resources which can be used for all objects
-    ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
+    HBHandle *handle  ///< [in] ThreadPool handle
     );
 
   /// Uses osdmap to update structures for now down sources
