@@ -828,7 +828,7 @@ int KernelDevice::aio_write(
   int write_hint)
 {
   uint64_t len = bl.length();
-  dout(20) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+  dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
 	   << (buffered ? " (buffered)" : " (direct)")
 	   << dendl;
   ceph_assert(is_valid_io(off, len));
@@ -845,11 +845,11 @@ int KernelDevice::aio_write(
 
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
-    ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
-    ++ioc->num_pending;
-    aio_t& aio = ioc->pending_aios.back();
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
+      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ++ioc->num_pending;
+      auto& aio = ioc->pending_aios.back();
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
 	   << off << "~" << len << std::dec
 	   << dendl;
@@ -858,13 +858,45 @@ int KernelDevice::aio_write(
       aio.pread(off, len);
       ++injecting_crash;
     } else {
-      bl.prepare_iov(&aio.iov);
-      dout(30) << aio << dendl;
-      aio.bl.claim_append(bl);
-      aio.pwritev(off, len);
+      if (bl.length() <= RW_IO_MAX) {
+        ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+        ++ioc->num_pending;
+        auto& aio = ioc->pending_aios.back();
+        bl.prepare_iov(&aio.iov);
+        aio.bl.claim_append(bl);
+        aio.pwritev(off, len);
+        dout(30) << aio << dendl;
+        dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
+                << std::dec << " aio " << &aio << dendl;
+
+      } else {
+        vector<bufferlist> blv;
+        blv.resize(bl.length() / RW_IO_MAX + 1);
+        uint64_t prev_len = 0;
+        for (auto& tmp: blv) {
+
+          if(prev_len + RW_IO_MAX < bl.length()) {
+            tmp.substr_of(bl, prev_len, RW_IO_MAX);
+          } else {
+            tmp.substr_of(bl, prev_len, bl.length() - prev_len);
+          }
+
+          ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+          ++ioc->num_pending;
+          auto& aio = ioc->pending_aios.back();
+
+          tmp.prepare_iov(&aio.iov);
+          aio.bl.claim_append(tmp);
+          aio.pwritev(off + prev_len, tmp.length());
+
+          dout(30) << aio << dendl;
+          dout(5) << __func__ << " 0x" << std::hex << off + prev_len << "~" << tmp.length()
+                  << std::dec << " aio " << &aio << dendl;
+
+          prev_len += tmp.length();
+        }
+      }
     }
-    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	    << std::dec << " aio " << &aio << dendl;
   } else
 #endif
   {
