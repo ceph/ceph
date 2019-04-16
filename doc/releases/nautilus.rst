@@ -400,8 +400,8 @@ Instructions
 
      ceph telemetry on
 
-   For more information about the telemetry module, see `the
-   documentation <telemetry>`_.
+   For more information about the telemetry module, see :ref:`the
+   documentation <telemetry>`.
 
 
 Upgrading from pre-Luminous releases (like Jewel)
