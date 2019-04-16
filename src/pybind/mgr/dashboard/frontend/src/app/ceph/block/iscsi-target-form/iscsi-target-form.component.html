@@ -244,7 +244,7 @@
                            for="user"
                            i18n>User</label>
                     <div class="col-sm-9">
-                      <input id="user"
+                      <input [id]="'user' + ii"
                              class="form-control"
                              formControlName="user"
                              type="text">
@@ -267,7 +267,7 @@
                            i18n>Password</label>
                     <div class="col-sm-9">
                       <div class="input-group">
-                        <input id="password"
+                        <input [id]="'password' + ii"
                                class="form-control"
                                formControlName="password"
                                type="password">
@@ -275,11 +275,11 @@
                         <span class="input-group-btn">
                           <button type="button"
                                   class="btn btn-default"
-                                  cdPasswordButton="password">
+                                  [cdPasswordButton]="'password' + ii">
                           </button>
                           <button type="button"
                                   class="btn btn-default"
-                                  cdCopy2ClipboardButton="password">
+                                  [cdCopy2ClipboardButton]="'password' + ii">
                           </button>
                         </span>
                       </div>
@@ -303,7 +303,7 @@
                       <ng-container i18n>Mutual User</ng-container>
                     </label>
                     <div class="col-sm-9">
-                      <input id="mutual_user"
+                      <input [id]="'mutual_user' + ii"
                              class="form-control"
                              formControlName="mutual_user"
                              type="text">
@@ -327,7 +327,7 @@
                            i18n>Mutual Password</label>
                     <div class="col-sm-9">
                       <div class="input-group">
-                        <input id="mutual_password"
+                        <input [id]="'mutual_password' + ii"
                                class="form-control"
                                formControlName="mutual_password"
                                type="password">
@@ -335,11 +335,11 @@
                         <span class="input-group-btn">
                           <button type="button"
                                   class="btn btn-default"
-                                  cdPasswordButton="mutual_password">
+                                  [cdPasswordButton]="'mutual_password' + ii">
                           </button>
                           <button type="button"
                                   class="btn btn-default"
-                                  cdCopy2ClipboardButton="mutual_password">
+                                  [cdCopy2ClipboardButton]="'mutual_password' + ii">
                           </button>
                         </span>
                       </div>
