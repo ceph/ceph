@@ -518,6 +518,18 @@ extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl
 extern Message *decode_message(CephContext *cct, int crcflags,
                                ceph::buffer::list::const_iterator& bl);
 
+/// this is a "safe" version of Message. it does not allow calling get/put
+/// methods on its derived classes. This is intended to prevent some accidental
+/// reference leaks by forcing . Instead, you must either cast the derived class to a
+/// RefCountedObject to do the get/put or detach a temporary reference.
+class SafeMessage : public Message {
+public:
+  using Message::Message;
+private:
+  using RefCountedObject::get;
+  using RefCountedObject::put;
+};
+
 namespace ceph {
 template<typename T> using ref_t = boost::intrusive_ptr<T>;
 template<typename T> using cref_t = boost::intrusive_ptr<const T>;
