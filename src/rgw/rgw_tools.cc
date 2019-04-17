@@ -439,10 +439,9 @@ int RGWDataAccess::Object::put(bufferlist& data,
   string req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
 
   using namespace rgw::putobj;
-  AtomicObjectProcessor processor(&aio, store, bucket_info,
-                                  nullptr,
-                                  owner.get_id(),
-                                  obj_ctx, obj, olh_epoch, req_id, dpp);
+  AtomicObjectProcessor processor(&aio, store, bucket_info, nullptr,
+                                  owner.get_id(), obj_ctx, obj, olh_epoch,
+                                  req_id, dpp, null_yield);
 
   int ret = processor.prepare();
   if (ret < 0)
