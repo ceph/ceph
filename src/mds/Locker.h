@@ -76,6 +76,8 @@ public:
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
+  bool derive_wrlock_from_excl_cap(MDRequestRef& mdr, SimpleLock *lock);
+  bool should_derive_auth_pin(MDRequestRef& mdr, MDSCacheObject* object);
 
   void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);
@@ -109,7 +111,7 @@ public:
   bool can_rdlock_set(MutationImpl::LockOpVec& lov);
   void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
-  void wrlock_force(SimpleLock *lock, MutationRef& mut);
+  void wrlock_force(SimpleLock *lock, const MutationRef& mut, bool ooo=false);
   bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait=false);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
@@ -211,7 +213,7 @@ public:
 
   // local
 public:
-  void local_wrlock_grab(LocalLock *lock, MutationRef& mut);
+  void local_wrlock_grab(LocalLock *lock, const MutationRef& mut);
 protected:
   bool local_wrlock_start(LocalLock *lock, MDRequestRef& mut);
   void local_wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut);

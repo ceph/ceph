@@ -67,7 +67,8 @@ public:
       WRLOCK		= 2,
       XLOCK		= 4,
       REMOTE_WRLOCK	= 8,
-      STATE_PIN		= 16, // no RW after locked, just pin lock state
+      OUTOFORDER	= 16, // Out of Order
+      STATE_PIN		= 32, // no RW after locked, just pin lock state
     };
     SimpleLock* lock;
     mutable unsigned flags;
@@ -86,6 +87,13 @@ public:
       flags &= ~REMOTE_WRLOCK;
       wrlock_target = MDS_RANK_NONE;
     }
+    void clear_outoforder() const {
+      if (flags & OUTOFORDER) {
+	flags &= ~OUTOFORDER;
+	lock->put_outoforder();
+      }
+    }
+    bool is_outoforder() const { return !!(flags & OUTOFORDER); }
     bool is_state_pin() const { return !!(flags & STATE_PIN); }
   };
 

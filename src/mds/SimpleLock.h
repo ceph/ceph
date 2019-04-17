@@ -199,7 +199,9 @@ private:
     set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
 
     // local state
-    int num_wrlock = 0, num_xlock = 0;
+    int num_wrlock = 0,
+	num_xlock = 0,
+	num_outoforder = 0;
     MutationRef xlock_by;
     client_t xlock_by_client = -1;
     client_t excl_client = -1;
@@ -483,13 +485,17 @@ public:
   }
 
   // wrlock
-  void get_wrlock() {
+  void get_wrlock(bool ooo=false) {
     if (more()->num_wrlock == 0)
       parent->get(MDSCacheObject::PIN_LOCK);
     ++more()->num_wrlock;
+    if (ooo)
+      ++more()->num_outoforder;
   }
-  void put_wrlock() {
+  void put_wrlock(bool ooo=false) {
     --more()->num_wrlock;
+    if (ooo)
+      --more()->num_outoforder;
     if (more()->num_wrlock == 0) {
       parent->put(MDSCacheObject::PIN_LOCK);
       try_clear_more();
@@ -500,6 +506,17 @@ public:
   }
   int get_num_wrlocks() const {
     return have_more() ? more()->num_wrlock : 0;
+  }
+  void put_outoforder() {
+    auto &num_ooo = more()->num_outoforder;
+    ceph_assert(num_ooo > 0);
+    --num_ooo;
+  }
+  int get_num_outoforder() const {
+    return have_more() ? more()->num_outoforder : 0;
+  }
+  bool is_any_outoforder() const {
+    return have_more() && more()->num_outoforder > 0;
   }
 
   // xlock
@@ -688,6 +705,9 @@ public:
       if (get_xlock_by())
 	out << " by " << get_xlock_by();
     }
+    if (is_any_outoforder())
+      out << " o=" << get_num_outoforder();
+
     /*if (is_stable())
       out << " stable";
     else

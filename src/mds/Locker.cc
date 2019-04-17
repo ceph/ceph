@@ -225,7 +225,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   set<MDSCacheObject*> mustpin;  // items to authpin
 
-  // xlocks
   for (int i = 0, size = lov.size(); i < size; ++i) {
     auto& p = lov[i];
     SimpleLock *lock = p.lock;
@@ -260,7 +259,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	if (wait) {
 	  dout(10) << " must xlock " << *lock << " " << *object
 		   << ", waiting for cluster recovered" << dendl;
-	  mds->locker->drop_locks(mdr.get(), NULL);
+	  drop_locks(mdr.get(), NULL);
 	  mdr->drop_local_auth_pins();
 	  mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
 	  return false;
@@ -355,8 +354,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
-      if (!mdr->locks.empty())
-	drop_locks(mdr.get());
+      ceph_assert(mdr->is_master());
+      drop_locks(mdr.get());
       if (object->is_ambiguous_auth()) {
 	// wait
 	marker.message = "waiting for single auth, object is being migrated";
@@ -369,7 +368,9 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       continue;
     }
     int err = 0;
-    if (!object->can_auth_pin(&err)) {
+    if (!object->can_auth_pin(&err) &&
+	!should_derive_auth_pin(mdr, object)) {
+      ceph_assert(mdr->is_master());
       // wait
       drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
@@ -457,6 +458,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   // caps i'll need to issue
   set<CInode*> issue_set;
   bool result = false;
+  bool drop_all = false;;
 
   // acquire locks.
   // make sure they match currently acquired locks.
@@ -473,6 +475,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
       if (have.is_xlock() && p.is_xlock()) {
 	dout(10) << " already xlocked " << *have.lock << " " << *have.lock->get_parent() << dendl;
+	// current lock is no longer out-of-order because we have taken all locks before it.
+	it->clear_outoforder();
 	continue;
       }
 
@@ -491,6 +495,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    dout(10) << " already wrlocked " << *have.lock << " " << *have.lock->get_parent() << dendl;
 	  if (need_remote_wrlock)
 	    dout(10) << " already remote_wrlocked " << *have.lock << " " << *have.lock->get_parent() << dendl;
+	  it->clear_outoforder(); // see comment above
 	  continue;
 	}
 
@@ -499,6 +504,8 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    dout(10) << " unlocking extra " << *have.lock << " " << *have.lock->get_parent() << dendl;
 	  else if (need_remote_wrlock) // acquire remote_wrlock first
 	    dout(10) << " unlocking out-of-order " << *have.lock << " " << *have.lock->get_parent() << dendl;
+	  // out-of-order lock is only allowed for simple opertions (no remote_wrlock);
+	  ceph_assert(!it->is_outoforder());
 	  bool need_issue = false;
 	  wrlock_finish(it, mdr.get(), &need_issue);
 	  if (need_issue)
@@ -506,13 +513,16 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	}
       } else if (have.is_rdlock() && p.is_rdlock()) {
 	dout(10) << " already rdlocked " << *have.lock << " " << *have.lock->get_parent() << dendl;
+	it->clear_outoforder(); // see comment above
 	continue;
       }
     }
     
-    // hose any stray locks
-    while (existing != mdr->locks.end()) {
+    // hose any stray locks before the current lock
+    while (existing != mdr->locks.end() &&
+	   mdr->locks.key_comp()(existing->lock, p.lock)) {
       auto it = existing++;
+      ceph_assert(!it->is_outoforder()); // out-of-order lock shouldn't be stray
       auto stray = *it; // don't reference
       dout(10) << " unlocking out-of-order " << *stray.lock << " " << *stray.lock->get_parent() << dendl;
       bool need_issue = false;
@@ -537,8 +547,14 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     if (p.is_xlock()) {
       marker.message = "failed to xlock, waiting";
-      if (!xlock_start(p.lock, mdr))
+      if (!xlock_start(p.lock, mdr)) {
+	if (p.lock->is_any_outoforder()) {
+	  // failed to take the lock that was out-of-order taken by other request.
+	  // to avoid deadlock, need to drop any lock taken so far.
+	  drop_all = true;
+	}
 	goto out;
+      }
       dout(10) << " got xlock on " << *p.lock << " " << *p.lock->get_parent() << dendl;
     } else if (need_wrlock || need_remote_wrlock) {
       if (need_remote_wrlock && !mdr->is_remote_wrlocked(p)) {
@@ -560,8 +576,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  goto out;
 	}
 	// nowait if we have already gotten remote wrlock
-	if (!wrlock_start(p, mdr, need_remote_wrlock))
+	if (!wrlock_start(p, mdr, need_remote_wrlock)) {
+	  if (p.lock->is_any_outoforder()) // see comment above
+	    drop_all = true;
 	  goto out;
+	}
 	dout(10) << " got wrlock on " << *p.lock << " " << *p.lock->get_parent() << dendl;
       }
     } else {
@@ -571,12 +590,12 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  if (!mdr->is_queued_for_replay()) {
 	    // see comments in SimpleLock::set_state_rejoin() and
 	    // ScatterLock::encode_state_for_rejoin()
-	    drop_locks(mdr.get());
+	    drop_all = true;
 	    mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
 	    dout(10) << " rejoin recovering " << *p.lock << " " << *p.lock->get_parent()
 		     << ", waiting for cluster recovered" << dendl;
 	    marker.message = "rejoin recovering lock, waiting for cluster recovered";
-	    return false;
+	    goto out;
 	  }
 	} else {
 	  p.lock->clear_need_recover();
@@ -584,41 +603,102 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
 
       marker.message = "failed to rdlock, waiting";
-      if (!rdlock_start(p, mdr))
+      if (!rdlock_start(p, mdr)) {
+	if (p.lock->is_any_outoforder()) // see comment above
+	  drop_all = true;
 	goto out;
+      }
       dout(10) << " got rdlock on " << *p.lock << " " << *p.lock->get_parent() << dendl;
     }
   }
     
-  // any extra unneeded locks?
-  while (existing != mdr->locks.end()) {
-    auto it = existing++;
-    auto stray = *it;
-    dout(10) << " unlocking extra " << *stray.lock << " " << *stray.lock->get_parent() << dendl;
-    bool need_issue = false;
-    if (stray.is_xlock()) {
-      xlock_finish(it, mdr.get(), &need_issue);
-    } else if (stray.is_rdlock()) {
-      rdlock_finish(it, mdr.get(), &need_issue);
-    } else {
-      // may have acquired both wrlock and remore wrlock
-      if (stray.is_wrlock())
-	wrlock_finish(it, mdr.get(), &need_issue);
-      if (stray.is_remote_wrlock())
-	remote_wrlock_finish(it, mdr.get());
-    }
-    if (need_issue)
-      issue_set.insert(static_cast<CInode*>(stray.lock->get_parent()));
-  }
 
   mdr->done_locking = true;
   mdr->set_mds_stamp(ceph_clock_now());
   result = true;
   marker.message = "acquired locks";
 
- out:
+out:
+  if (drop_all) {
+    ceph_assert(mdr->is_master());
+    _drop_locks(mdr.get(), &issue_set, true);
+  } else {
+    // any extra unneeded locks?
+    while (existing != mdr->locks.end()) {
+      auto it = existing++;
+      if (it->is_outoforder()) {
+	ceph_assert(!mdr->done_locking); // out-of-order lock shouldn't be stray
+	continue;
+      }
+
+      auto stray = *it;
+      dout(10) << " unlocking extra " << *stray.lock << " " << *stray.lock->get_parent() << dendl;
+      bool need_issue = false;
+      if (stray.is_xlock()) {
+	xlock_finish(it, mdr.get(), &need_issue);
+      } else if (stray.is_rdlock()) {
+	rdlock_finish(it, mdr.get(), &need_issue);
+      } else {
+	// may have acquired both wrlock and remore wrlock
+	if (stray.is_wrlock())
+	  wrlock_finish(it, mdr.get(), &need_issue);
+	if (stray.is_remote_wrlock())
+	  remote_wrlock_finish(it, mdr.get());
+      }
+      if (need_issue)
+	issue_set.insert(static_cast<CInode*>(stray.lock->get_parent()));
+    }
+  }
   issue_caps_set(issue_set);
   return result;
+}
+
+bool Locker::derive_wrlock_from_excl_cap(MDRequestRef& mdr, SimpleLock *lock)
+{
+  if (mdr->is_wrlocked(lock))
+      return true;
+
+  client_t client = mdr->get_client();
+  if (client >= 0 && client == lock->get_excl_client()) {
+    CInode *in = static_cast<CInode*>(lock->get_parent());
+    if (!in->is_auth())
+      return false;
+
+    if (should_defer_client_cap_frozen(in))
+      return false;
+
+    Capability *cap = in->get_client_cap(client);
+    if (cap && ((cap->issued() >> lock->get_cap_shift()) & CEPH_CAP_GEXCL) &&
+       (lock->can_wrlock(client) || lock->can_force_wrlock(client))) {
+      dout(10) << "derived wrlock on " << *lock << " " << *in << dendl;
+      wrlock_force(lock, mdr, true); // take wrlock out-of-order
+      mdr->auth_pin(in);
+
+      // wake up all waiters. they will drop locks when encountering the lock
+      if (!lock->is_stable()) {
+	MDSContext::vec finished;
+	lock->take_waiting(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK, finished);
+	mds->queue_waiters_front(finished);
+      }
+
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Locker::should_derive_auth_pin(MDRequestRef& mdr, MDSCacheObject *object)
+{
+  if (mdr->locks.empty() || object->is_frozen())
+    return false;
+
+  for (const auto& p : mdr->locks) {
+    if (!p.is_outoforder())
+      continue;
+    if(!p.lock->is_stable())
+      return true;
+  }
+  return false;
 }
 
 void Locker::notify_freeze_waiter(MDSCacheObject *o)
@@ -1436,7 +1516,7 @@ void Locker::rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut)
 // ------------------
 // wrlock
 
-void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
+void Locker::wrlock_force(SimpleLock *lock, const MutationRef& mut, bool ooo)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -1444,8 +1524,11 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
 
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
-  lock->get_wrlock();
-  mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+  lock->get_wrlock(ooo);
+  unsigned flags = MutationImpl::LockOp::WRLOCK;
+  if (ooo)
+    flags |= MutationImpl::LockOp::OUTOFORDER;
+  mut->locks.emplace(lock, flags);
 }
 
 bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait)
@@ -1529,7 +1612,7 @@ void Locker::wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
     return local_wrlock_finish(it, mut);
 
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
-  lock->put_wrlock();
+  lock->put_wrlock(it->is_outoforder());
 
   if (it->is_remote_wrlock())
     it->clear_wrlock();
@@ -4778,7 +4861,7 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
 // ==========================================================================
 // local lock
 
-void Locker::local_wrlock_grab(LocalLock *lock, MutationRef& mut)
+void Locker::local_wrlock_grab(LocalLock *lock, const MutationRef& mut)
 {
   dout(7) << "local_wrlock_grab  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
