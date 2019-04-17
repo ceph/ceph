@@ -6021,8 +6021,35 @@ void RGWGetHealthCheck::execute()
 
 int RGWDeleteMultiObj::verify_permission()
 {
+  if (s->iam_policy || ! s->iam_user_policies.empty()) {
+    auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
+                                              boost::none,
+                                              s->object.instance.empty() ?
+                                              rgw::IAM::s3DeleteObject :
+                                              rgw::IAM::s3DeleteObjectVersion,
+                                              ARN(s->bucket));
+    if (usr_policy_res == Effect::Deny) {
+      return -EACCES;
+    }
+
+    rgw::IAM::Effect r = Effect::Pass;
+    if (s->iam_policy) {
+      r = s->iam_policy->eval(s->env, *s->auth.identity,
+				 s->object.instance.empty() ?
+				 rgw::IAM::s3DeleteObject :
+				 rgw::IAM::s3DeleteObjectVersion,
+				 ARN(s->bucket));
+    }
+    if (r == Effect::Allow)
+      return 0;
+    else if (r == Effect::Deny)
+      return -EACCES;
+    else if (usr_policy_res == Effect::Allow)
+      return 0;
+  }
+
   acl_allowed = verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE);
-  if (!acl_allowed && !s->iam_policy && s->iam_user_policies.empty())
+  if (!acl_allowed)
     return -EACCES;
 
   return 0;
@@ -6112,7 +6139,7 @@ void RGWDeleteMultiObj::execute()
                                               iter->instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
-                                              obj);
+                                              ARN(obj));
       if (usr_policy_res == Effect::Deny) {
         send_partial_response(*iter, false, "", -EACCES);
         continue;
@@ -6125,7 +6152,7 @@ void RGWDeleteMultiObj::execute()
 				   iter->instance.empty() ?
 				   rgw::IAM::s3DeleteObject :
 				   rgw::IAM::s3DeleteObjectVersion,
-				   obj);
+				   ARN(obj));
       }
       if ((e == Effect::Deny) ||
 	  (usr_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
