@@ -216,7 +216,6 @@ OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL) // mark booting auto-marked-out 
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL)      // mark booting new osds 'in'
 OPTION(mon_osd_destroyed_out_interval, OPT_INT) // seconds
 OPTION(mon_osd_down_out_interval, OPT_INT) // seconds
-OPTION(mon_osd_down_out_subtree_limit, OPT_STR)   // smallest crush unit/type that we will not automatically mark out
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE)   // min osds required to be in to mark things out
 OPTION(mon_osd_warn_op_age, OPT_DOUBLE)     // max op age before we generate a warning (make it a power of 2)
