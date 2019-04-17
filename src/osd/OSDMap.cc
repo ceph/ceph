@@ -1255,10 +1255,10 @@ void OSDMap::get_up_osds(set<int32_t>& ls) const
   }
 }
 
-void OSDMap::get_out_osds(set<int32_t>& ls) const
+void OSDMap::get_out_existing_osds(set<int32_t>& ls) const
 {
   for (int i = 0; i < max_osd; i++) {
-    if (is_out(i))
+    if (exists(i) && get_weight(i) == CEPH_OSD_OUT)
       ls.insert(i);
   }
 }
