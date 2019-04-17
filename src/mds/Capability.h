@@ -183,8 +183,10 @@ public:
       while (!_revokes.empty() && _revokes.front().seq < seq)
 	_revokes.pop_front();
       if (!_revokes.empty()) {
-	if (_revokes.front().seq == seq)
+	if (_revokes.front().seq == seq) {
+	  was_revoking = true;
 	  _revokes.begin()->before = caps;
+	}
 	calc_issued();
       } else {
 	// seq < last_sent
