@@ -122,134 +122,6 @@ class RequestLoggingTool(cherrypy.Tool):
                       "{0:.3f}s".format(lat), length, req.path_info)
 
 
-# pylint: disable=too-many-instance-attributes
-class ViewCache(object):
-    VALUE_OK = 0
-    VALUE_STALE = 1
-    VALUE_NONE = 2
-
-    class GetterThread(threading.Thread):
-        def __init__(self, view, fn, args, kwargs):
-            super(ViewCache.GetterThread, self).__init__()
-            self._view = view
-            self.event = threading.Event()
-            self.fn = fn
-            self.args = args
-            self.kwargs = kwargs
-
-        # pylint: disable=broad-except
-        def run(self):
-            t0 = 0.0
-            t1 = 0.0
-            try:
-                t0 = time.time()
-                logger.debug("VC: starting execution of %s", self.fn)
-                val = self.fn(*self.args, **self.kwargs)
-                t1 = time.time()
-            except Exception as ex:
-                with self._view.lock:
-                    logger.exception("Error while calling fn=%s ex=%s", self.fn,
-                                     str(ex))
-                    self._view.value = None
-                    self._view.value_when = None
-                    self._view.getter_thread = None
-                    self._view.exception = ex
-            else:
-                with self._view.lock:
-                    self._view.latency = t1 - t0
-                    self._view.value = val
-                    self._view.value_when = datetime.now()
-                    self._view.getter_thread = None
-                    self._view.exception = None
-
-            logger.debug("VC: execution of %s finished in: %s", self.fn,
-                         t1 - t0)
-            self.event.set()
-
-    class RemoteViewCache(object):
-        # Return stale data if
-        STALE_PERIOD = 1.0
-
-        def __init__(self, timeout):
-            self.getter_thread = None
-            # Consider data within 1s old to be sufficiently fresh
-            self.timeout = timeout
-            self.event = threading.Event()
-            self.value_when = None
-            self.value = None
-            self.latency = 0
-            self.exception = None
-            self.lock = threading.Lock()
-
-        def reset(self):
-            with self.lock:
-                self.value_when = None
-                self.value = None
-
-        def run(self, fn, args, kwargs):
-            """
-            If data less than `stale_period` old is available, return it
-            immediately.
-            If an attempt to fetch data does not complete within `timeout`, then
-            return the most recent data available, with a status to indicate that
-            it is stale.
-
-            Initialization does not count towards the timeout, so the first call
-            on one of these objects during the process lifetime may be slower
-            than subsequent calls.
-
-            :return: 2-tuple of value status code, value
-            """
-            with self.lock:
-                now = datetime.now()
-                if self.value_when and now - self.value_when < timedelta(
-                        seconds=self.STALE_PERIOD):
-                    return ViewCache.VALUE_OK, self.value
-
-                if self.getter_thread is None:
-                    self.getter_thread = ViewCache.GetterThread(self, fn, args,
-                                                                kwargs)
-                    self.getter_thread.start()
-                else:
-                    logger.debug("VC: getter_thread still alive for: %s", fn)
-
-                ev = self.getter_thread.event
-
-            success = ev.wait(timeout=self.timeout)
-
-            with self.lock:
-                if success:
-                    # We fetched the data within the timeout
-                    if self.exception:
-                        # execution raised an exception
-                        # pylint: disable=raising-bad-type
-                        raise self.exception
-                    return ViewCache.VALUE_OK, self.value
-                if self.value_when is not None:
-                    # We have some data, but it doesn't meet freshness requirements
-                    return ViewCache.VALUE_STALE, self.value
-                # We have no data, not even stale data
-                raise ViewCacheNoDataException()
-
-    def __init__(self, timeout=5):
-        self.timeout = timeout
-        self.cache_by_args = {}
-
-    def __call__(self, fn):
-        def wrapper(*args, **kwargs):
-            rvc = self.cache_by_args.get(args, None)
-            if not rvc:
-                rvc = ViewCache.RemoteViewCache(self.timeout)
-                self.cache_by_args[args] = rvc
-            return rvc.run(fn, args, kwargs)
-        wrapper.reset = self.reset
-        return wrapper
-
-    def reset(self):
-        for _, rvc in self.cache_by_args.items():
-            rvc.reset()
-
-
 class NotificationQueue(threading.Thread):
     _ALL_TYPES_ = '__ALL__'
     _listeners = collections.defaultdict(set)
@@ -1017,3 +889,32 @@ class CacheObject(object):
                              self.cache_id)
                 self._cond.wait(timeout)
             return self.timestamp, self.value, self.exception
+
+
+class ViewCache(object):
+    VALUE_OK = 0
+    VALUE_STALE = 1
+    VALUE_NONE = 2
+
+    def __init__(self, timeout=5):
+        self.timeout = timeout
+
+    def __call__(self, fn):
+        def wrapper(*args, **kwargs):
+            cache_id = "viewcache/{}/{}".format(fn.__name__, args)
+
+            def fn_closure():
+                return fn(*args, **kwargs)
+            Cache.register(cache_id, fn_closure)
+
+            now = time.time()
+            ts, value, ex = Cache.get(cache_id, self.timeout)
+            if ex:
+                raise ex
+            if value is None:
+                raise ViewCacheNoDataException()
+            if ts < now:
+                # data is stale
+                return self.VALUE_STALE, value
+            return self.VALUE_OK, value
+        return wrapper

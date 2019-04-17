@@ -7,6 +7,7 @@ from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirroringSummary
+from ..tools import NotificationQueue, TaskManager, Cache
 
 
 mock_list_servers = [{
@@ -72,7 +73,14 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
         Summary._cp_config['tools.authenticate.on'] = False
         # pylint: enable=protected-access
 
+        NotificationQueue.start_queue()
+        TaskManager.init()
+        Cache.init()
         cls.setup_controllers([RbdMirroringSummary, Summary], '/test')
+
+    @classmethod
+    def tearDownClass(cls):
+        NotificationQueue.stop()
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613

@@ -6,7 +6,7 @@ import time
 from . import ControllerTestCase
 from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
-from ..tools import NotificationQueue, TaskManager
+from ..tools import NotificationQueue, TaskManager, Cache
 
 
 @Controller('/test/task', secure=False)
@@ -50,6 +50,7 @@ class TaskControllerTest(ControllerTestCase):
         # pylint: disable=protected-access
         NotificationQueue.start_queue()
         TaskManager.init()
+        Cache.init()
         TaskTest._cp_config['tools.authenticate.on'] = False
         TaskController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([TaskTest, TaskController])

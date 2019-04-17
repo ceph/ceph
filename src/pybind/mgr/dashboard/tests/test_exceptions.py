@@ -10,7 +10,7 @@ from ..services.ceph_service import SendCommandError
 from ..controllers import RESTController, Controller, Task, Endpoint
 from ..services.exception import handle_rados_error, handle_send_command_error, \
     serialize_dashboard_exception
-from ..tools import ViewCache, TaskManager, NotificationQueue
+from ..tools import ViewCache, TaskManager, NotificationQueue, Cache
 
 
 # pylint: disable=W0613
@@ -86,6 +86,7 @@ class RESTControllerTest(ControllerTestCase):
     def setup_server(cls):
         NotificationQueue.start_queue()
         TaskManager.init()
+        Cache.init()
         cls.setup_controllers([FooResource])
 
     def test_no_exception(self):

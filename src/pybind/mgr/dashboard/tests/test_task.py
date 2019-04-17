@@ -9,7 +9,7 @@ from collections import defaultdict
 from functools import partial
 
 from ..services.exception import serialize_dashboard_exception
-from ..tools import NotificationQueue, TaskManager, TaskExecutor
+from ..tools import NotificationQueue, TaskManager, TaskExecutor, Cache
 
 
 class MyTask(object):
@@ -111,6 +111,7 @@ class TaskTest(unittest.TestCase):
     def setUpClass(cls):
         NotificationQueue.start_queue()
         TaskManager.init()
+        Cache.init()
         NotificationQueue.register(cls._handle_task, 'cd_task_finished',
                                    priority=100)
 
