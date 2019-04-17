@@ -486,67 +486,27 @@ const uint8_t AES_256_CBC::IV[AES_256_CBC::AES_256_IVSIZE] =
     { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
 
 
-#ifdef USE_NSS
-
+#ifdef USE_OPENSSL
 bool AES_256_ECB_encrypt(CephContext* cct,
                          const uint8_t* key,
                          size_t key_size,
                          const uint8_t* data_in,
                          uint8_t* data_out,
-                         size_t data_size) {
-  bool result = false;
-  PK11SlotInfo *slot;
-  SECItem keyItem;
-  PK11SymKey *symkey;
-  SECItem *param;
-  SECStatus ret;
-  PK11Context *ectx;
-  int written;
-  unsigned int written2;
+                         size_t data_size)
+{
   if (key_size == AES_256_KEYSIZE) {
-    slot = PK11_GetBestSlot(CKM_AES_ECB, NULL);
-    if (slot) {
-      keyItem.type = siBuffer;
-      keyItem.data = const_cast<uint8_t*>(key);
-      keyItem.len = AES_256_KEYSIZE;
-
-      param = PK11_ParamFromIV(CKM_AES_ECB, NULL);
-      if (param) {
-        symkey = PK11_ImportSymKey(slot, CKM_AES_ECB, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
-        if (symkey) {
-          ectx = PK11_CreateContextBySymKey(CKM_AES_ECB, CKA_ENCRYPT, symkey, param);
-          if (ectx) {
-            ret = PK11_CipherOp(ectx,
-                                data_out, &written, data_size,
-                                data_in, data_size);
-            if (ret == SECSuccess) {
-              ret = PK11_DigestFinal(ectx,
-                                     data_out + written, &written2,
-                                     data_size - written);
-              if (ret == SECSuccess) {
-                result = true;
-              }
-            }
-            PK11_DestroyContext(ectx, PR_TRUE);
-          }
-          PK11_FreeSymKey(symkey);
-        }
-        SECITEM_FreeItem(param, PR_TRUE);
-      }
-      PK11_FreeSlot(slot);
-    }
-    if (result == false) {
-      ldout(cct, 5) << "Failed to perform AES-ECB encryption: " << PR_GetError() << dendl;
-    }
+    return evp_sym_transform<AES_256_KEYSIZE, 0 /* no IV in ECB */>(
+      cct, EVP_aes_256_ecb(),  data_out, data_in, data_size,
+      nullptr /* no IV in ECB */, key, true /* encrypt */);
   } else {
     ldout(cct, 5) << "Key size must be 256 bits long" << dendl;
+    return false;
   }
-  return result;
 }
 
 #else
 # error "No supported crypto implementation found."
-#endif
+#endif // USE_OPENSSL
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
