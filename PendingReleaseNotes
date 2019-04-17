@@ -1,3 +1,30 @@
+14.2.1
+------
+
+* The default value for `mon_crush_min_required_version` has been
+  changed from `firefly` to `hammer`, which means the cluster will
+  issue a health warning if your CRUSH tunables are older than hammer.
+  There is generally a small (but non-zero) amount of data that will
+  move around by making the switch to hammer tunables; for more information,
+  see :ref:`crush-map-tunables`.
+
+  If possible, we recommend that you set the oldest allowed client to `hammer`
+  or later.  You can tell what the current oldest allowed client is with::
+
+    ceph osd dump | min_compat_client
+
+  If the current value is older than hammer, you can tell whether it
+  is safe to make this change by verifying that there are no clients
+  older than hammer current connected to the cluster with::
+
+    ceph features
+
+  The newer `straw2` CRUSH bucket type was introduced in hammer, and
+  ensuring that all clients are hammer or newer allows new features
+  only supported for `straw2` buckets to be used, including the
+  `crush-compat` mode for the :ref:`balancer`.
+  
+
 >=15.0.0
 --------
 
