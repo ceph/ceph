@@ -171,7 +171,7 @@ class Module(MgrModule):
         return metadata
 
     def gather_crashinfo(self):
-        crashdict = dict()
+        crashlist = list()
         errno, crashids, err = self.remote('crash', 'do_ls', '', '')
         if errno:
             return ''
@@ -180,8 +180,8 @@ class Module(MgrModule):
             errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
             if errno:
                 continue
-            crashdict[crashid] = json.loads(crashinfo)
-        return crashdict
+            crashlist.append(json.loads(crashinfo))
+        return crashlist
 
     def compile_report(self):
         report = {
