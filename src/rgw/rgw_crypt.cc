@@ -16,6 +16,13 @@
 #include "include/str_map.h"
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
+
+#ifdef USE_OPENSSL
+# include <openssl/evp.h>
+#else
+# error "No supported crypto implementation found."
+#endif // USE_OPENSSL
+
 #ifdef USE_NSS
 # include <nspr.h>
 # include <nss.h>
@@ -218,63 +225,76 @@ public:
     return CHUNK_SIZE;
   }
 
-#ifdef USE_NSS
+#ifdef USE_OPENSSL
 
   bool cbc_transform(unsigned char* out,
                      const unsigned char* in,
-                     size_t size,
+                     const size_t size,
                      const unsigned char (&iv)[AES_256_IVSIZE],
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt)
   {
-    bool result = false;
-    PK11SlotInfo *slot;
-    SECItem keyItem;
-    PK11SymKey *symkey;
-    CK_AES_CBC_ENCRYPT_DATA_PARAMS ctr_params = {0};
-    SECItem ivItem;
-    SECItem *param;
-    SECStatus ret;
-    PK11Context *ectx;
-    int written;
+# if OPENSSL_VERSION_NUMBER < 0x10100000L
+    // In older OpenSSL versions putting EVP context on stack and ending
+    // its life with EVP_CIPHER_CTX_cleanup() was legit.
+    // XXX: do we really want this optimization?
+    EVP_CIPHER_CTX ctx;
 
-    slot = PK11_GetBestSlot(CKM_AES_CBC, NULL);
-    if (slot) {
-      keyItem.type = siBuffer;
-      keyItem.data = const_cast<unsigned char*>(&key[0]);
-      keyItem.len = AES_256_KEYSIZE;
-      symkey = PK11_ImportSymKey(slot, CKM_AES_CBC, PK11_OriginUnwrap, CKA_UNWRAP, &keyItem, NULL);
-      if (symkey) {
-        memcpy(ctr_params.iv, iv, AES_256_IVSIZE);
-        ivItem.type = siBuffer;
-        ivItem.data = (unsigned char*)&ctr_params;
-        ivItem.len = sizeof(ctr_params);
+    using pctx_t = \
+      std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_cleanup)>;
+    pctx_t pctx{ &ctx, EVP_CIPHER_CTX_cleanup };
+#else
+    using pctx_t = \
+      std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
+    pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
 
-        param = PK11_ParamFromIV(CKM_AES_CBC, &ivItem);
-        if (param) {
-          ectx = PK11_CreateContextBySymKey(CKM_AES_CBC, encrypt?CKA_ENCRYPT:CKA_DECRYPT, symkey, param);
-          if (ectx) {
-            ret = PK11_CipherOp(ectx,
-                                out, &written, size,
-                                in, size);
-            if ((ret == SECSuccess) && (written == (int)size)) {
-              result = true;
-            }
-            PK11_DestroyContext(ectx, PR_TRUE);
-          }
-          SECITEM_FreeItem(param, PR_TRUE);
-        }
-        PK11_FreeSymKey(symkey);
-      }
-      PK11_FreeSlot(slot);
+    if (!pctx) {
+      return false;
     }
-    if (result == false) {
-      ldout(cct, 5) << "Failed to perform AES-CBC encryption: " << PR_GetError() << dendl;
+#endif // OPENSSL_VERSION_NUMBER < 0x10100000L
+
+    if (1 != EVP_CipherInit_ex(pctx.get(), EVP_aes_256_cbc(),
+                               nullptr, nullptr, nullptr, encrypt)) {
+      ldout(cct, 5) << "AES-CBC: failed to 1st initialization stage" << dendl;
+      return false;
     }
-    return result;
+
+    ceph_assert(EVP_CIPHER_CTX_key_length(pctx.get()) == AES_256_KEYSIZE);
+    ceph_assert(EVP_CIPHER_CTX_iv_length(pctx.get()) == AES_256_IVSIZE);
+    ceph_assert(EVP_CIPHER_CTX_block_size(pctx.get()) == AES_256_IVSIZE);
+
+    if (1 != EVP_CipherInit_ex(pctx.get(), nullptr, nullptr, key, iv, encrypt)) {
+      ldout(cct, 5) << "AES-CBC: failed to 2nd initialization stage" << dendl;
+      return false;
+    }
+
+    // disable padding
+    if (1 != EVP_CIPHER_CTX_set_padding(pctx.get(), 0)) {
+      ldout(cct, 5) << "AES-CBC: cannot disable PKCS padding" << dendl;
+      return false;
+    }
+
+    // operate!
+    int written = 0;
+    ceph_assert(size <= std::numeric_limits<int>::max());
+    if (1 != EVP_CipherUpdate(pctx.get(), out, &written, in, size)) {
+      ldout(cct, 5) << "AES-CBC: EVP_CipherUpdate failed" << dendl;
+      return false;
+    }
+
+    int finally_written = 0;
+    static_assert(sizeof(*out) == 1);
+    if (1 != EVP_CipherFinal_ex(pctx.get(), out + written, &finally_written)) {
+      ldout(cct, 5) << "AES-CBC: EVP_CipherFinal_ex failed" << dendl;
+      return false;
+    }
+
+    // as padding is disabled EVP_CipherFinal_ex should not append anything
+    ceph_assert(finally_written == 0);
+    return (written + finally_written) == static_cast<int>(size);
   }
 
-#else
+#else // USE_OPENSSL
 # error "No supported crypto implementation found."
 #endif
 
