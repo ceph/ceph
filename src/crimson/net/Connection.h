@@ -29,7 +29,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   entity_addr_t peer_addr;
   peer_type_t peer_type = -1;
   int64_t peer_id = -1;
-  utime_t last_keepalive, last_keepalive_ack;
+  using clock_t = seastar::lowres_system_clock;
+  clock_t::time_point last_keepalive;
+  clock_t::time_point last_keepalive_ack;
 
  public:
   uint64_t peer_global_id = 0;
@@ -60,8 +62,14 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   virtual void print(ostream& out) const = 0;
 
-  utime_t get_last_keepalive() const { return last_keepalive; }
-  utime_t get_last_keepalive_ack() const { return last_keepalive_ack; }
+  void set_last_keepalive(clock_t::time_point when) {
+    last_keepalive = when;
+  }
+  void set_last_keepalive_ack(clock_t::time_point when) {
+    last_keepalive_ack = when;
+  }
+  auto get_last_keepalive() const { return last_keepalive; }
+  auto get_last_keepalive_ack() const { return last_keepalive_ack; }
 };
 
 inline ostream& operator<<(ostream& out, const Connection& conn) {

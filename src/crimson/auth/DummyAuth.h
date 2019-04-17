@@ -31,22 +31,16 @@ public:
     return nullptr;
   }
 
-  int get_auth_request(
+  AuthClient::auth_request_t get_auth_request(
     ceph::net::ConnectionRef conn,
-    AuthConnectionMetaRef auth_meta,
-    uint32_t *method,
-    std::vector<uint32_t> *preferred_modes,
-    bufferlist *out) override {
-    *method = CEPH_AUTH_NONE;
-    *preferred_modes = { CEPH_CON_MODE_CRC };
-    return 0;
+    AuthConnectionMetaRef auth_meta) override {
+    return {CEPH_AUTH_NONE, {CEPH_CON_MODE_CRC}, {}};
   }
 
-  int handle_auth_reply_more(
+  ceph::bufferlist handle_auth_reply_more(
     ceph::net::ConnectionRef conn,
     AuthConnectionMetaRef auth_meta,
-    const bufferlist& bl,
-    bufferlist *reply) override {
+    const bufferlist& bl) override {
     ceph_abort();
   }
 
@@ -55,9 +49,7 @@ public:
     AuthConnectionMetaRef auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
-    const bufferlist& bl,
-    CryptoKey *session_key,
-    std::string *connection_secret) {
+    const bufferlist& bl) override {
     return 0;
   }
 
