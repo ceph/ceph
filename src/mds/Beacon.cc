@@ -337,7 +337,7 @@ void Beacon::notify_health(MDSRank const *mds)
       }
 
       std::ostringstream oss;
-      oss << "Client " << s->get_human_name() << " failing to respond to capability release";
+      oss << "Client " << s->get_human_name() << " failing to respond to capability release. ";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
       m.metadata["client_id"] = stringify(client.v);
       late_cap_metrics.emplace_back(std::move(m));
@@ -349,7 +349,7 @@ void Beacon::notify_health(MDSRank const *mds)
     } else {
       std::ostringstream oss;
       oss << "Many clients (" << late_cap_metrics.size()
-          << ") failing to respond to capability release";
+          << ") failing to respond to capability release. ";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE_MANY, HEALTH_WARN, oss.str());
       m.metadata["client_count"] = stringify(late_cap_metrics.size());
       health.metrics.push_back(std::move(m));
@@ -376,7 +376,7 @@ void Beacon::notify_health(MDSRank const *mds)
              " is not releasing caps fast enough. Recalled caps at " << recall_caps
           << " > " << recall_warning_threshold << " (mds_recall_warning_threshold)." << dendl;
         std::ostringstream oss;
-        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
+        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure. ";
         MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
         m.metadata["client_id"] = stringify(session->get_client());
         late_recall_metrics.emplace_back(std::move(m));
@@ -399,7 +399,7 @@ void Beacon::notify_health(MDSRank const *mds)
     } else {
       std::ostringstream oss;
       oss << "Many clients (" << late_recall_metrics.size()
-          << ") failing to respond to cache pressure";
+          << ") failing to respond to cache pressure. ";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL_MANY, HEALTH_WARN, oss.str());
       m.metadata["client_count"] = stringify(late_recall_metrics.size());
       health.metrics.push_back(m);
@@ -412,7 +412,7 @@ void Beacon::notify_health(MDSRank const *mds)
     } else {
       std::ostringstream oss;
       oss << "Many clients (" << large_completed_requests_metrics.size()
-	<< ") failing to advance their oldest client/flush tid";
+	<< ") failing to advance their oldest client/flush tid. ";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID_MANY, HEALTH_WARN, oss.str());
       m.metadata["client_count"] = stringify(large_completed_requests_metrics.size());
       health.metrics.push_back(m);
