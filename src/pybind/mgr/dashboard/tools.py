@@ -412,11 +412,12 @@ class TaskManager(object):
         logger.info("TM: finished %s", task)
         with cls._lock:
             cls._executing_tasks.remove(task)
-            cls._finished_tasks.append(task)
+            if not task.private_task:
+                cls._finished_tasks.append(task)
 
     @classmethod
     def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None,
-            exception_handler=None):
+            exception_handler=None, private_task=False):
         if not args:
             args = []
         if not kwargs:
@@ -424,7 +425,7 @@ class TaskManager(object):
         if not executor:
             executor = ThreadedExecutor()
         task = Task(name, metadata, fn, args, kwargs, executor,
-                    exception_handler)
+                    exception_handler, private_task)
         with cls._lock:
             if task in cls._executing_tasks:
                 logger.debug("TM: task already executing: %s", task)
@@ -466,6 +467,8 @@ class TaskManager(object):
         finished_tasks = []
         with cls._lock:
             for task in cls._executing_tasks:
+                if task.private_task:
+                    continue
                 if not name_glob or fnmatch.fnmatch(task.name, name_glob):
                     executing_tasks.append(task)
             for idx, task in enumerate(cls._finished_tasks):
@@ -547,7 +550,7 @@ class ThreadedExecutor(TaskExecutor):
 
 class Task(object):
     def __init__(self, name, metadata, fn, args, kwargs, executor,
-                 exception_handler=None):
+                 exception_handler=None, private_task=False):
         self.name = name
         self.metadata = metadata
         self.fn = fn
@@ -555,6 +558,7 @@ class Task(object):
         self.fn_kwargs = kwargs
         self.executor = executor
         self.ex_handler = exception_handler
+        self.private_task = private_task
         self.running = False
         self.event = threading.Event()
         self.progress = None
