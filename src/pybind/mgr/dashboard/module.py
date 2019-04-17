@@ -72,7 +72,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
-                   prepare_url_prefix
+                   prepare_url_prefix, Cache
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.sso import SSO_COMMANDS, \
                           handle_sso_command
@@ -353,6 +353,10 @@ class Module(MgrModule, CherryPyConfig):
         # about to start serving
         self.set_uri(uri)
 
+        NotificationQueue.start_queue()
+        TaskManager.init()
+        Cache.init()
+
         mapper, parent_urls = generate_routes(self.url_prefix)
 
         config = {
@@ -371,8 +375,6 @@ class Module(MgrModule, CherryPyConfig):
         PLUGIN_MANAGER.hook.setup()
 
         cherrypy.engine.start()
-        NotificationQueue.start_queue()
-        TaskManager.init()
         logger.info('Engine started.')
         # wait for the shutdown event
         self.shutdown_event.wait()

@@ -549,6 +549,7 @@ class ThreadedExecutor(TaskExecutor):
 
 
 class Task(object):
+    # pylint: disable=too-many-instance-attributes
     def __init__(self, name, metadata, fn, args, kwargs, executor,
                  exception_handler=None, private_task=False):
         self.name = name
@@ -914,3 +915,105 @@ def find_object_in_list(key, value, iterable):
         if key in obj and obj[key] == value:
             return obj
     return None
+
+
+class Cache(object):
+    _cache_map = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def register(cls, cache_id, func, interval=None):
+        with cls._lock:
+            if cache_id in cls._cache_map:
+                return
+            logger.debug("[CH] creating cache object cache_id=%s interval=%s",
+                         cache_id, interval)
+            obj = CacheObject(cache_id, func, interval)
+            cls._cache_map[cache_id] = obj
+        if interval is not None:
+            obj.refresh()
+
+    @classmethod
+    def get(cls, cache_id, timeout=None):
+        with cls._lock:
+            obj = cls._cache_map[cache_id]
+        if obj.interval is None:
+            obj.refresh()
+        return obj.get(timeout)
+
+    @classmethod
+    def init(cls):
+        NotificationQueue.register(cls._handle_finished_task,
+                                   'cd_task_finished', priority=100)
+
+    @classmethod
+    def _handle_finished_task(cls, task):
+        if not task.name.startswith('cache/'):
+            # non cache task
+            return
+        logger.debug("[CH] cache task finished for: %s", task.name)
+        cache_id = task.name.replace('cache/', '', 1)
+        with cls._lock:
+            obj = cls._cache_map[cache_id]
+        obj.set_result(task)
+
+
+class CacheObject(object):
+    # pylint: disable=too-many-instance-attributes
+    def __init__(self, cache_id, func, interval=None):
+        self._lock = threading.Lock()
+        self._cond = threading.Condition(self._lock)
+        self.cache_id = cache_id
+        self.refreshing = False
+        self.timestamp = None
+        self.value = None
+        self.exception = None
+        self.func = func
+        self.interval = interval
+
+    def refresh(self):
+        with self._lock:
+            if self.refreshing:
+                # task still running, don't refresh
+                return
+            self.refreshing = True
+
+        logger.debug("[CO] refreshing cache_id=%s interval=%s", self.cache_id,
+                     self.interval)
+
+        if self.value is None or self.interval is None:
+            refresh_func = self.func
+        else:
+            def refresh_func():
+                time.sleep(self.interval)
+                return self.func()
+
+        TaskManager.run('cache/{}'.format(self.cache_id), {}, refresh_func,
+                        private_task=True)
+
+    def set_result(self, task):
+        logger.debug("[CO] setting result of task: %s", task.name)
+        with self._lock:
+            if not self.refreshing:
+                raise Exception("Invalid call to set_result. Object cache not"
+                                " refreshing")
+            self.refreshing = False
+            self.timestamp = time.time()
+            self.value = task.ret_value if not task.exception else None
+            self.exception = task.exception
+            logger.debug("[CO] new value timestamp=%s value=%s exception=%s",
+                         self.timestamp, str(self.value)[0:80], self.exception)
+            self._cond.notify_all()
+
+        if self.interval is not None:
+            self.refresh()
+
+    def get(self, timeout=None):
+        with self._lock:
+            if not self.refreshing:
+                return self.timestamp, self.value, self.exception
+            if timeout or self.interval is None:
+                logger.debug("[CO] waiting for new value for cache_id=%s",
+                             self.cache_id)
+                self._cond.wait(timeout)
+            return self.timestamp, self.value, self.exception

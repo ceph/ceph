@@ -263,7 +263,7 @@ or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
 
 In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
 been created, which provides translated labels for use in UI elements.
-    
+
 Frontend branding
 ~~~~~~~~~~~~~~~~~
 
@@ -1454,6 +1454,63 @@ Usage example:
   }
 
 
+Cache for computations
+~~~~~~~~~~~~~~~~~~~~~~
+
+The dashboard backend provides a cache infrastructure to store values of
+computations that might take a long time to process.
+
+We provide the ``Cache`` class to help developers interacting with the
+cache infrastructure in the following way::
+
+  from ..tools import Cache
+  # ...
+  Cache.register(cache_id, func, interval)
+  # ...
+  Cache.get(cache_id, timeout)
+
+Method ``register`` registers a new cache entry with the computation
+implemented by ``func`` and identified by ``cache_id``.
+
+* ``cache_id`` is a string that will be used as the key to register the
+  computation in the cache.
+
+* ``func`` is a python function that computes and returns values that are
+  stored in the cache.
+
+* ``interval`` the number of seconds between each execution of ``func``.
+  When seting this argument the cache will automatically refresh the cache
+  values by running the computation periodically.
+  If this argument is set to ``None`` (default value), the cache values are
+  only refreshed when consulting the cache values with the `Cache.get``
+  method.
+
+Method ``get`` returns the values present on the cache for the key
+``cache_id``.
+This method has different behaviors dependending if the cache entry is
+automatically refreshed or not (by setting the ``interval`` parameter when
+registering the cache entry).
+
+* When getting the values of an automatically refreshed cache entry, if
+  ``timeout`` is set to ``None`` the cache will return immediatly the values
+  that it currently has for that entry. These values might be stale. If
+  ``timeout`` parameter is set to some value, the ``get`` method will block
+  waiting for the most up-to-date values up to ``timeout`` seconds.
+
+* When getting the values of a non automatically refreshed cache entry, the
+  cache will refresh the values (run the associated computation) at that moment
+  and  if ``timeout`` is set to ``None`` then the ``get`` call will block until
+  the computation is finished and the most up-to-date values are returned.
+  If ``timeout`` parameter is set to some value, the ``get`` method will block
+  waiting for the most up-to-date values up to ``timeout`` seconds.
+
+The return value of ``Cache.get`` is tuple of the form
+``(timestamp, value, exception)`` where ``timestamp`` is the time when the
+values were computed, ``value`` is the values that resulted from running
+the computation, and ``exception`` is an exception object if and exception
+ocurred while running the computation.
+
+
 REST API documentation
 ~~~~~~~~~~~~~~~~~~~~~~
 There is an automatically generated Swagger UI page for documentation of the REST
@@ -1462,7 +1519,7 @@ decorators that can be used to add more information:
 
 * ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
   (explained below): ``description``, ``group``, ``parameters`` and``responses``.
-* ``@ControllerDoc()`` for documentation of controller or group associated with 
+* ``@ControllerDoc()`` for documentation of controller or group associated with
   the endpoints. It only takes the two first arguments: ``description`` and``group``.
 
 
@@ -1471,7 +1528,7 @@ decorators that can be used to add more information:
 
 ``group``: By default, an endpoint is grouped together with other endpoints
 within the same controller class. ``group`` is a string that can be used to
-assign an endpoint or all endpoints in a class to another controller or a 
+assign an endpoint or all endpoints in a class to another controller or a
 conceived group name.
 
 
@@ -1505,7 +1562,7 @@ for nested parameters).
       'item2': (str, 'Description of item2', True),  # item2 is optional
       'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
   }, 'Description of my_dictionary')})
- 
+
 If the parameter is a ``list`` of primitive types, the type should be
 surrounded with square brackets.
 
