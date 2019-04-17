@@ -354,7 +354,8 @@ Instructions
 
    To create a minimal but sufficient ceph.conf for each host,::
 
-     ceph config generate-minimal-conf > /etc/ceph/ceph.conf
+     ceph config generate-minimal-conf > /etc/ceph/ceph.conf.new
+     mv /etc/ceph/ceph.conf.new /etc/ceph/ceph.conf
 
    Be sure to use this new config--and, specifically, the new syntax
    for the ``mon_host`` option that lists both ``v2:`` and ``v1:``
