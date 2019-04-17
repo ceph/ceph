@@ -304,6 +304,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
      virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
      virtual bool maybe_preempt_replica_scrub(const hobject_t& oid) = 0;
+     virtual void pg_lock() = 0;
+     virtual void pg_unlock() = 0;    
      virtual ~Listener() {}
    };
    Listener *parent;

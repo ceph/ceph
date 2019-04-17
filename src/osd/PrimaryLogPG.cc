@@ -15511,6 +15511,16 @@ bool PrimaryLogPG::check_failsafe_full() {
     return osd->check_failsafe_full(get_dpp());
 }
 
+void PrimaryLogPG::pg_lock()
+{
+  lock();
+}
+
+ void PrimaryLogPG::pg_unlock()
+{
+  unlock();
+}
+
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(PrimaryLogPG *pg) { pg->put("intptr"); }
 

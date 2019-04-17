@@ -810,7 +810,9 @@ bool ECBackend::_handle_message(
     reply->pgid = get_parent()->primary_spg_t();
     reply->map_epoch = get_osdmap_epoch();
     reply->min_epoch = get_parent()->get_interval_start_epoch();
+    get_parent()->pg_unlock();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
+    get_parent()->pg_lock();
     reply->trace = _op->pg_trace;
     get_parent()->send_message_osd_cluster(
       op->op.from.osd, reply, get_osdmap_epoch());

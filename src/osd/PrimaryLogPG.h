@@ -1895,7 +1895,8 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
-
+  void pg_lock();
+  void pg_unlock();
 public:
   void set_dynamic_perf_stats_queries(
       const std::list<OSDPerfMetricQuery> &queries)  override;
