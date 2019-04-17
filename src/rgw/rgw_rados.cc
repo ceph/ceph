@@ -6713,9 +6713,11 @@ struct get_obj_data {
   rgw::Aio* aio;
   uint64_t offset; // next offset to write to client
   rgw::AioResultList completed; // completed read results, sorted by offset
+  optional_yield yield;
 
-  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio, uint64_t offset)
-    : store(store), client_cb(cb), aio(aio), offset(offset) {}
+  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio,
+               uint64_t offset, optional_yield yield)
+    : store(store), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
 
   int flush(rgw::AioResultList&& results) {
     int r = rgw::check_for_errors(results);
@@ -6828,7 +6830,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
   auto aio = rgw::make_throttle(window_size, y);
-  get_obj_data data(store, cb, &*aio, ofs);
+  get_obj_data data(store, cb, &*aio, ofs, y);
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data);
