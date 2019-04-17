@@ -174,6 +174,74 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 }
 
 
+#ifdef USE_OPENSSL
+template <std::size_t KeySizeV, std::size_t IvSizeV>
+static inline
+bool evp_sym_transform(CephContext* const cct,
+                       const EVP_CIPHER* const type,
+                       unsigned char* const out,
+                       const unsigned char* const in,
+                       const size_t size,
+                       const unsigned char* const iv,
+                       const unsigned char* const key,
+                       const bool encrypt)
+{
+  using pctx_t = \
+    std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
+  pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
+
+  if (!pctx) {
+    return false;
+  }
+
+  if (1 != EVP_CipherInit_ex(pctx.get(), type, nullptr,
+                             nullptr, nullptr, encrypt)) {
+    ldout(cct, 5) << "EVP: failed to 1st initialization stage" << dendl;
+    return false;
+  }
+
+  // we want to support ciphers that don't use IV at all like AES-256-ECB
+  if constexpr (IvSizeV) {
+    ceph_assert(EVP_CIPHER_CTX_iv_length(pctx.get()) == IvSizeV);
+    ceph_assert(EVP_CIPHER_CTX_block_size(pctx.get()) == IvSizeV);
+  }
+  ceph_assert(EVP_CIPHER_CTX_key_length(pctx.get()) == KeySizeV);
+
+  if (1 != EVP_CipherInit_ex(pctx.get(), nullptr, nullptr, key, iv, encrypt)) {
+    ldout(cct, 5) << "EVP: failed to 2nd initialization stage" << dendl;
+    return false;
+  }
+
+  // disable padding
+  if (1 != EVP_CIPHER_CTX_set_padding(pctx.get(), 0)) {
+    ldout(cct, 5) << "EVP: cannot disable PKCS padding" << dendl;
+    return false;
+  }
+
+  // operate!
+  int written = 0;
+  ceph_assert(size <= std::numeric_limits<int>::max());
+  if (1 != EVP_CipherUpdate(pctx.get(), out, &written, in, size)) {
+    ldout(cct, 5) << "EVP: EVP_CipherUpdate failed" << dendl;
+    return false;
+  }
+
+  int finally_written = 0;
+  static_assert(sizeof(*out) == 1);
+  if (1 != EVP_CipherFinal_ex(pctx.get(), out + written, &finally_written)) {
+    ldout(cct, 5) << "EVP: EVP_CipherFinal_ex failed" << dendl;
+    return false;
+  }
+
+  // padding is disabled so EVP_CipherFinal_ex should not append anything
+  ceph_assert(finally_written == 0);
+  return (written + finally_written) == static_cast<int>(size);
+}
+#else // USE_OPENSSL
+# error "No supported crypto implementation found."
+#endif
+
+
 /**
  * Encryption in CBC mode. Chunked to 4K blocks. Offset is used as IV for each 4K block.
  *
@@ -234,69 +302,13 @@ public:
                      const unsigned char (&key)[AES_256_KEYSIZE],
                      bool encrypt)
   {
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
-    // In older OpenSSL versions putting EVP context on stack and ending
-    // its life with EVP_CIPHER_CTX_cleanup() was legit.
-    // XXX: do we really want this optimization?
-    EVP_CIPHER_CTX ctx;
-
-    using pctx_t = \
-      std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_cleanup)>;
-    pctx_t pctx{ &ctx, EVP_CIPHER_CTX_cleanup };
-#else
-    using pctx_t = \
-      std::unique_ptr<EVP_CIPHER_CTX, decltype(&::EVP_CIPHER_CTX_free)>;
-    pctx_t pctx{ EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free };
-
-    if (!pctx) {
-      return false;
-    }
-#endif // OPENSSL_VERSION_NUMBER < 0x10100000L
-
-    if (1 != EVP_CipherInit_ex(pctx.get(), EVP_aes_256_cbc(),
-                               nullptr, nullptr, nullptr, encrypt)) {
-      ldout(cct, 5) << "AES-CBC: failed to 1st initialization stage" << dendl;
-      return false;
-    }
-
-    ceph_assert(EVP_CIPHER_CTX_key_length(pctx.get()) == AES_256_KEYSIZE);
-    ceph_assert(EVP_CIPHER_CTX_iv_length(pctx.get()) == AES_256_IVSIZE);
-    ceph_assert(EVP_CIPHER_CTX_block_size(pctx.get()) == AES_256_IVSIZE);
-
-    if (1 != EVP_CipherInit_ex(pctx.get(), nullptr, nullptr, key, iv, encrypt)) {
-      ldout(cct, 5) << "AES-CBC: failed to 2nd initialization stage" << dendl;
-      return false;
-    }
-
-    // disable padding
-    if (1 != EVP_CIPHER_CTX_set_padding(pctx.get(), 0)) {
-      ldout(cct, 5) << "AES-CBC: cannot disable PKCS padding" << dendl;
-      return false;
-    }
-
-    // operate!
-    int written = 0;
-    ceph_assert(size <= std::numeric_limits<int>::max());
-    if (1 != EVP_CipherUpdate(pctx.get(), out, &written, in, size)) {
-      ldout(cct, 5) << "AES-CBC: EVP_CipherUpdate failed" << dendl;
-      return false;
-    }
-
-    int finally_written = 0;
-    static_assert(sizeof(*out) == 1);
-    if (1 != EVP_CipherFinal_ex(pctx.get(), out + written, &finally_written)) {
-      ldout(cct, 5) << "AES-CBC: EVP_CipherFinal_ex failed" << dendl;
-      return false;
-    }
-
-    // as padding is disabled EVP_CipherFinal_ex should not append anything
-    ceph_assert(finally_written == 0);
-    return (written + finally_written) == static_cast<int>(size);
+    return evp_sym_transform<AES_256_KEYSIZE, AES_256_IVSIZE>(
+      cct, EVP_aes_256_cbc(), out, in, size, iv, key, encrypt);
   }
 
-#else // USE_OPENSSL
+#else
 # error "No supported crypto implementation found."
-#endif
+#endif // USE_OPENSSL
 
   bool cbc_transform(unsigned char* out,
                      const unsigned char* in,
