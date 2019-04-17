@@ -65,7 +65,9 @@ class Summary(BaseController):
     def _get_host(self):
         mgr_map = mgr.get('mgr_map')
         services = mgr_map['services']
-        return services['dashboard']
+        if services and 'dashboard' in services:
+            return services['dashboard']
+        return None
 
     @Endpoint()
     def __call__(self):
