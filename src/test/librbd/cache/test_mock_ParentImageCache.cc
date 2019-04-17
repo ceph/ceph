@@ -6,11 +6,9 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-
 #include "include/Context.h"
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "test/immutable_object_cache/MockCacheDaemon.h"
-
 #include "librbd/cache/SharedReadOnlyObjectDispatch.h"
 #include "librbd/cache/SharedPersistentObjectCacher.h"
 #include "test/librbd/test_mock_fixture.h"
@@ -255,7 +253,7 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   ASSERT_EQ(mock_parent_image_cache->compare_and_write(temp_oid, 0, 0, std::move(temp_bl), std::move(temp_bl), 
             *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid, 
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->flush(temp_flush_source, *temp_trace, 
+  ASSERT_EQ(mock_parent_image_cache->flush(temp_flush_source, *temp_trace, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->invalidate_cache(nullptr), false);
   ASSERT_EQ(mock_parent_image_cache->reset_existence_cache(nullptr), false);
