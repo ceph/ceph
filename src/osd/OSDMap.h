@@ -699,7 +699,7 @@ public:
 
   void get_all_osds(set<int32_t>& ls) const;
   void get_up_osds(set<int32_t>& ls) const;
-  void get_out_osds(set<int32_t>& ls) const;
+  void get_out_existing_osds(set<int32_t>& ls) const;
   unsigned get_num_pg_temp() const {
     return pg_temp->size();
   }
