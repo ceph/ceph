@@ -19,25 +19,25 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::SharedReadOnlyObjectDispatch: " \
                            << this << " " << __func__ << ": "
-using namespace ceph::immutable_obj_cache;
 
 namespace librbd {
 namespace cache {
 
-template <typename I>
-SharedReadOnlyObjectDispatch<I>::SharedReadOnlyObjectDispatch(
-    I* image_ctx) : m_image_ctx(image_ctx) {
+template <typename I, typename C>
+SharedReadOnlyObjectDispatch<I, C>::SharedReadOnlyObjectDispatch(
+    I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
+    m_initialzed(false) {
 }
 
-template <typename I>
-SharedReadOnlyObjectDispatch<I>::~SharedReadOnlyObjectDispatch() {
+template <typename I, typename C>
+SharedReadOnlyObjectDispatch<I, C>::~SharedReadOnlyObjectDispatch() {
     delete m_object_store;
     delete m_cache_client;
 }
 
 // TODO if connect fails, init will return error to high layer.
-template <typename I>
-void SharedReadOnlyObjectDispatch<I>::init() {
+template <typename I, typename C>
+void SharedReadOnlyObjectDispatch<I, C>::init() {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
@@ -49,7 +49,9 @@ void SharedReadOnlyObjectDispatch<I>::init() {
   ldout(cct, 5) << "parent image: setup SRO cache client" << dendl;
 
   std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("immutable_object_cache_sock");
-  m_cache_client = new ceph::immutable_obj_cache::CacheClient(controller_path.c_str(), m_image_ctx->cct);
+  if(m_cache_client == nullptr) {
+    m_cache_client = new C(controller_path.c_str(), m_image_ctx->cct);
+  }
   m_cache_client->run();
 
   int ret = m_cache_client->connect();
@@ -66,17 +68,19 @@ void SharedReadOnlyObjectDispatch<I>::init() {
     auto ctx = new FunctionContext([this](bool reg) {
       handle_register_client(reg);
     });
+
     ret = m_cache_client->register_client(ctx);
 
     if (ret >= 0) {
       // add ourself to the IO object dispatcher chain
       m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+      m_initialzed = true;
     }
   }
 }
 
-template <typename I>
-bool SharedReadOnlyObjectDispatch<I>::read(
+template <typename I, typename C>
+bool SharedReadOnlyObjectDispatch<I, C>::read(
     const std::string &oid, uint64_t object_no, uint64_t object_off,
     uint64_t object_len, librados::snap_t snap_id, int op_flags,
     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
@@ -120,8 +124,8 @@ bool SharedReadOnlyObjectDispatch<I>::read(
   return true;
 }
 
-template <typename I>
-int SharedReadOnlyObjectDispatch<I>::handle_read_cache(
+template <typename I, typename C>
+int SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
     const std::string file_path, uint64_t read_off,
     uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
@@ -144,8 +148,8 @@ int SharedReadOnlyObjectDispatch<I>::handle_read_cache(
   return false;
 }
 
-template <typename I>
-int SharedReadOnlyObjectDispatch<I>::handle_register_client(bool reg) {
+template <typename I, typename C>
+int SharedReadOnlyObjectDispatch<I, C>::handle_register_client(bool reg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -156,8 +160,8 @@ int SharedReadOnlyObjectDispatch<I>::handle_register_client(bool reg) {
   return 0;
 }
 
-template <typename I>
-void SharedReadOnlyObjectDispatch<I>::client_handle_request(std::string msg) {
+template <typename I, typename C>
+void SharedReadOnlyObjectDispatch<I, C>::client_handle_request(std::string msg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -166,4 +170,4 @@ void SharedReadOnlyObjectDispatch<I>::client_handle_request(std::string msg) {
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx>;
+template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
