@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 # run from ./ or from ../
+: ${CEPH_BUILD_DIR:=$PWD/.tox}
 : ${MGR_DASHBOARD_VIRTUALENV:=$CEPH_BUILD_DIR/mgr-dashboard-virtualenv}
 : ${WITH_PYTHON2:=ON}
 : ${WITH_PYTHON3:=ON}
-: ${CEPH_BUILD_DIR:=$PWD/.tox}
 test -d dashboard && cd dashboard
 
 if [ -e tox.ini ]; then

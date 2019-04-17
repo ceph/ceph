@@ -11,6 +11,7 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -31,6 +32,8 @@ export class IscsiTargetFormComponent implements OnInit {
   disk_default_controls: any;
   backstores: string[];
   default_backstore: string;
+  supported_rbd_features: any;
+  required_rbd_features: any;
 
   isEdit = false;
   target_iqn: string;
@@ -74,6 +77,8 @@ export class IscsiTargetFormComponent implements OnInit {
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
   USER_REGEX = /[\w\.:@_-]{8,64}/;
   PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  action: string;
+  resource: string;
 
   constructor(
     private iscsiService: IscsiService,
@@ -82,8 +87,11 @@ export class IscsiTargetFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private i18n: I18n,
-    private taskWrapper: TaskWrapperService
-  ) {}
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('target');
+  }
 
   ngOnInit() {
     const promises: any[] = [
@@ -100,6 +108,7 @@ export class IscsiTargetFormComponent implements OnInit {
         promises.push(this.iscsiService.getTarget(this.target_iqn));
       });
     }
+    this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
 
     forkJoin(promises).subscribe((data: any[]) => {
       // iscsiService.listTargets
@@ -109,14 +118,34 @@ export class IscsiTargetFormComponent implements OnInit {
         .map((image) => `${image.pool}/${image.image}`)
         .value();
 
+      // iscsiService.settings()
+      this.minimum_gateways = data[3].config.minimum_gateways;
+      this.target_default_controls = data[3].target_default_controls;
+      this.disk_default_controls = data[3].disk_default_controls;
+      this.backstores = data[3].backstores;
+      this.default_backstore = data[3].default_backstore;
+      this.supported_rbd_features = data[3].supported_rbd_features;
+      this.required_rbd_features = data[3].required_rbd_features;
+
       // rbdService.list()
       this.imagesAll = _(data[1])
         .flatMap((pool) => pool.value)
-        .map((image) => `${image.pool_name}/${image.name}`)
-        .filter((image) => usedImages.indexOf(image) === -1)
+        .filter((image) => {
+          const imageId = `${image.pool_name}/${image.name}`;
+          if (usedImages.indexOf(imageId) !== -1) {
+            return false;
+          }
+          const validBackstores = this.getValidBackstores(image);
+          if (validBackstores.length === 0) {
+            return false;
+          }
+          return true;
+        })
         .value();
 
-      this.imagesSelections = this.imagesAll.map((image) => new SelectOption(false, image, ''));
+      this.imagesSelections = this.imagesAll.map(
+        (image) => new SelectOption(false, `${image.pool_name}/${image.name}`, '')
+      );
 
       // iscsiService.portals()
       const portals: SelectOption[] = [];
@@ -126,13 +155,6 @@ export class IscsiTargetFormComponent implements OnInit {
         });
       });
       this.portalsSelections = [...portals];
-
-      // iscsiService.settings()
-      this.minimum_gateways = data[3].config.minimum_gateways;
-      this.target_default_controls = data[3].target_default_controls;
-      this.disk_default_controls = data[3].disk_default_controls;
-      this.backstores = data[3].backstores;
-      this.default_backstore = data[3].default_backstore;
 
       this.createForm();
 
@@ -273,15 +295,31 @@ export class IscsiTargetFormComponent implements OnInit {
     });
   }
 
+  getDefaultBackstore(imageId) {
+    let result = this.default_backstore;
+    const image = this.getImageById(imageId);
+    if (!this.validFeatures(image, this.default_backstore)) {
+      this.backstores.forEach((backstore) => {
+        if (backstore !== this.default_backstore) {
+          if (this.validFeatures(image, backstore)) {
+            result = backstore;
+          }
+        }
+      });
+    }
+    return result;
+  }
+
   onImageSelection($event) {
     const option = $event.option;
 
     if (option.selected) {
       if (!this.imagesSettings[option.name]) {
+        const defaultBackstore = this.getDefaultBackstore(option.name);
         this.imagesSettings[option.name] = {
-          backstore: this.default_backstore
+          backstore: defaultBackstore
         };
-        this.imagesSettings[option.name][this.default_backstore] = {};
+        this.imagesSettings[option.name][defaultBackstore] = {};
       }
 
       _.forEach(this.imagesInitiatorSelections, (selections, i) => {
@@ -506,7 +544,7 @@ export class IscsiTargetFormComponent implements OnInit {
   }
 
   submit() {
-    const formValue = this.targetForm.value;
+    const formValue = _.cloneDeep(this.targetForm.value);
 
     const request = {
       target_iqn: this.targetForm.getValue('target_iqn'),
@@ -543,17 +581,18 @@ export class IscsiTargetFormComponent implements OnInit {
     if (request.acl_enabled) {
       formValue.initiators.forEach((initiator) => {
         if (!initiator.auth.user) {
-          initiator.auth.user = null;
+          initiator.auth.user = '';
         }
         if (!initiator.auth.password) {
-          initiator.auth.password = null;
+          initiator.auth.password = '';
         }
         if (!initiator.auth.mutual_user) {
-          initiator.auth.mutual_user = null;
+          initiator.auth.mutual_user = '';
         }
         if (!initiator.auth.mutual_password) {
-          initiator.auth.mutual_password = null;
+          initiator.auth.mutual_password = '';
         }
+        delete initiator.cdIsInGroup;
 
         const newLuns = [];
         initiator.luns.forEach((lun) => {
@@ -628,11 +667,30 @@ export class IscsiTargetFormComponent implements OnInit {
       imagesSettings: this.imagesSettings,
       image: image,
       disk_default_controls: this.disk_default_controls,
-      backstores: this.backstores
+      backstores: this.getValidBackstores(this.getImageById(image))
     };
 
     this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {
       initialState
     });
+  }
+
+  validFeatures(image, backstore) {
+    const imageFeatures = image.features;
+    const requiredFeatures = this.required_rbd_features[backstore];
+    const supportedFeatures = this.supported_rbd_features[backstore];
+    // tslint:disable-next-line:no-bitwise
+    const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
+    // tslint:disable-next-line:no-bitwise
+    const validSupportedFeatures = (imageFeatures & supportedFeatures) === imageFeatures;
+    return validRequiredFeatures && validSupportedFeatures;
+  }
+
+  getImageById(imageId) {
+    return this.imagesAll.find((image) => imageId === `${image.pool_name}/${image.name}`);
+  }
+
+  getValidBackstores(image) {
+    return this.backstores.filter((backstore) => this.validFeatures(image, backstore));
   }
 }

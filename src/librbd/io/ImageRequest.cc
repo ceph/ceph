@@ -395,7 +395,7 @@ void AbstractImageWriteRequest<I>::send_request() {
     send_object_requests(object_extents, snapc, journal_tid);
   } else {
     // no IO to perform -- fire completion
-    aio_comp->unblock();
+    aio_comp->set_request_count(0);
   }
 
   update_stats(clip_len);
@@ -614,29 +614,20 @@ void ImageFlushRequest<I>::send_request() {
   // ensure no locks are held when flush is complete
   ctx = librbd::util::create_async_context_callback(image_ctx, ctx);
 
+  uint64_t journal_tid = 0;
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
-    uint64_t journal_tid = image_ctx.journal->append_io_event(
+    ceph_assert(image_ctx.journal != NULL);
+    journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()), 0, 0, false, 0);
-
-    ctx = new FunctionContext(
-      [&image_ctx, journal_tid, ctx](int r) {
-        image_ctx.journal->commit_io_event(journal_tid, r);
-        ctx->complete(r);
-      });
-    ctx = new FunctionContext(
-      [&image_ctx, journal_tid, ctx](int r) {
-        image_ctx.journal->flush_event(journal_tid, ctx);
-      });
-  } else {
-    // flush rbd cache only when journaling is not enabled
-    auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
-      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, this->m_trace,
-      ctx);
-    ctx = new FunctionContext([object_dispatch_spec](int r) {
-        object_dispatch_spec->send();
-      });
   }
+
+  auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, journal_tid,
+    this->m_trace, ctx);
+  ctx = new FunctionContext([object_dispatch_spec](int r) {
+      object_dispatch_spec->send();
+    });
 
   // ensure all in-flight IOs are settled if non-user flush request
   image_ctx.flush_async_operations(ctx);

@@ -141,9 +141,24 @@ public:
     return get_config().get_osd_pool_default_min_size(*values, size);
   }
 
-  seastar::future<> set_mon_vals(const std::map<std::string,std::string>& kv) {
+  seastar::future<>
+  set_mon_vals(const std::map<std::string,std::string,std::less<>>& kv) {
     return do_change([kv, this](ConfigValues& values) {
       get_config().set_mon_vals(nullptr, values, obs_mgr, kv, nullptr);
+    });
+  }
+
+  seastar::future<> parse_argv(std::vector<const char*>& argv) {
+    // we could pass whatever is unparsed to seastar, but seastar::app_template
+    // is used for driving the seastar application, and
+    // ceph::common::ConfigProxy is not available until seastar engine is up
+    // and running, so we have to feed the command line args to app_template
+    // first, then pass them to ConfigProxy.
+    return do_change([&argv, this](ConfigValues& values) {
+      get_config().parse_argv(values,
+			      obs_mgr,
+			      argv,
+			      CONF_CMDLINE);
     });
   }
 

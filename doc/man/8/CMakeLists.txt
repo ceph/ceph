@@ -68,6 +68,7 @@ if(WITH_RBD)
   endif()
 endif()
 
+list(APPEND man_srcs ceph-immutable-object-cache.rst)
 foreach(man ${man_srcs})
   list(APPEND sphinx_input ${CMAKE_CURRENT_SOURCE_DIR}/${man})
   # mount.ceph.rst => mount if we use

@@ -37,6 +37,23 @@
 #include "common/Clock.h"
 #include "mon/PGMap.h"
 
+using std::list;
+using std::make_pair;
+using std::map;
+using std::multimap;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::stringstream;
+using std::unordered_map;
+using std::vector;
+
+using ceph::decode;
+using ceph::encode;
+using ceph::Formatter;
+
 #define dout_subsys ceph_subsys_osd
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(OSDMap, osdmap, osdmap);
@@ -56,7 +73,7 @@ void osd_info_t::dump(Formatter *f) const
   f->dump_int("lost_at", lost_at);
 }
 
-void osd_info_t::encode(bufferlist& bl) const
+void osd_info_t::encode(ceph::buffer::list& bl) const
 {
   using ceph::encode;
   __u8 struct_v = 1;
@@ -69,7 +86,7 @@ void osd_info_t::encode(bufferlist& bl) const
   encode(lost_at, bl);
 }
 
-void osd_info_t::decode(bufferlist::const_iterator& bl)
+void osd_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   using ceph::decode;
   __u8 struct_v;
@@ -117,7 +134,7 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_unsigned("old_weight", old_weight);
 }
 
-void osd_xinfo_t::encode(bufferlist& bl) const
+void osd_xinfo_t::encode(ceph::buffer::list& bl) const
 {
   ENCODE_START(3, 1, bl);
   encode(down_stamp, bl);
@@ -129,7 +146,7 @@ void osd_xinfo_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void osd_xinfo_t::decode(bufferlist::const_iterator& bl)
+void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   DECODE_START(3, bl);
   decode(down_stamp, bl);
@@ -356,7 +373,7 @@ bool OSDMap::subtree_type_is_down(
   return true;
 }
 
-void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
+void OSDMap::Incremental::encode_client_old(ceph::buffer::list& bl) const
 {
   using ceph::encode;
   __u16 v = 5;
@@ -417,7 +434,7 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
   }
 }
 
-void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) const
+void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
   if ((features & CEPH_FEATURE_PGID64) == 0) {
@@ -469,7 +486,7 @@ void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) cons
 }
 
 template<class T>
-static void encode_addrvec_map_as_addr(const T& m, bufferlist& bl, uint64_t f)
+static void encode_addrvec_map_as_addr(const T& m, ceph::buffer::list& bl, uint64_t f)
 {
   uint32_t n = m.size();
   encode(n, bl);
@@ -480,7 +497,7 @@ static void encode_addrvec_map_as_addr(const T& m, bufferlist& bl, uint64_t f)
 }
 
 template<class T>
-static void encode_addrvec_pvec_as_addr(const T& m, bufferlist& bl, uint64_t f)
+static void encode_addrvec_pvec_as_addr(const T& m, ceph::buffer::list& bl, uint64_t f)
 {
   uint32_t n = m.size();
   encode(n, bl);
@@ -497,7 +514,7 @@ static void encode_addrvec_pvec_as_addr(const T& m, bufferlist& bl, uint64_t f)
  * introduced, please refer to
  *    doc/dev/osd_internals/osdmap_versions.txt
  */
-void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
+void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
   if ((features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
@@ -515,7 +532,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   size_t start_offset = bl.length();
   size_t tail_offset;
   size_t crc_offset;
-  std::optional<buffer::list::contiguous_filler> crc_filler;
+  std::optional<ceph::buffer::list::contiguous_filler> crc_filler;
 
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(8, 7, bl);
@@ -581,7 +598,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 7;
+    uint8_t target_v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -622,6 +639,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       encode(new_require_min_compat_client, bl);
       encode(new_require_osd_release, bl);
     }
+    if (target_v >= 8) {
+      encode(new_crush_node_flags, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -634,10 +654,10 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl); // meta-encoding wrapper
 
   // fill in crc
-  bufferlist front;
+  ceph::buffer::list front;
   front.substr_of(bl, start_offset, crc_offset - start_offset);
   inc_crc = front.crc32c(-1);
-  bufferlist tail;
+  ceph::buffer::list tail;
   tail.substr_of(bl, tail_offset, bl.length() - tail_offset);
   inc_crc = tail.crc32c(inc_crc);
   ceph_le32 crc_le;
@@ -646,7 +666,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   have_crc = true;
 }
 
-void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
+void OSDMap::Incremental::decode_classic(ceph::buffer::list::const_iterator &p)
 {
   using ceph::decode;
   __u32 n, t;
@@ -711,7 +731,7 @@ void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
     decode(n, p);
     while (n--) {
       old_pg_t opg;
-      ::decode_raw(opg, p);
+      ceph::decode_raw(opg, p);
       decode(new_pg_temp[pg_t(opg)], p);
     }
   } else {
@@ -750,7 +770,7 @@ void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
  * introduced, please refer to
  *    doc/dev/osd_internals/osdmap_versions.txt
  */
-void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
+void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
 {
   using ceph::decode;
   /**
@@ -762,7 +782,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
    */
   size_t start_offset = bl.get_off();
   size_t tail_offset = 0;
-  bufferlist crc_front, crc_tail;
+  ceph::buffer::list crc_front, crc_tail;
 
   DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
@@ -831,7 +851,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
   }
 
   {
-    DECODE_START(7, bl); // extended, osd-only data
+    DECODE_START(8, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -882,6 +902,9 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
 	new_require_osd_release = -1;
       }
     }
+    if (struct_v >= 8) {
+      decode(new_crush_node_flags, bl);
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -903,7 +926,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
     // verify crc
     uint32_t actual = crc_front.crc32c(-1);
     if (tail_offset < bl.get_off()) {
-      bufferlist tail;
+      ceph::buffer::list tail;
       tail.substr_of(bl.get_bl(), tail_offset, bl.get_off() - tail_offset);
       actual = tail.crc32c(actual);
     }
@@ -911,7 +934,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
       ostringstream ss;
       ss << "bad crc, actual " << actual << " != expected " << inc_crc;
       string s = ss.str();
-      throw buffer::malformed_input(s.c_str());
+      throw ceph::buffer::malformed_input(s.c_str());
     }
   }
 }
@@ -934,7 +957,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   if (fullmap.length()) {
     f->open_object_section("full_map");
     OSDMap full;
-    bufferlist fbl = fullmap;  // kludge around constness.
+    ceph::buffer::list fbl = fullmap;  // kludge around constness.
     auto p = fbl.cbegin();
     full.decode(p);
     full.dump(f);
@@ -943,7 +966,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
   if (crush.length()) {
     f->open_object_section("crush");
     CrushWrapper c;
-    bufferlist tbl = crush;  // kludge around constness.
+    ceph::buffer::list tbl = crush;  // kludge around constness.
     auto p = tbl.cbegin();
     c.decode(p);
     c.dump(f);
@@ -1185,6 +1208,18 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
     f->close_section();
   }
+  f->open_array_section("new_crush_node_flags");
+  for (auto& i : new_crush_node_flags) {
+    f->open_object_section("node");
+    f->dump_int("id", i.first);
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
   f->close_section();
 }
 
@@ -1636,7 +1671,7 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   }
 
   // does crush match?
-  bufferlist oc, nc;
+  ceph::buffer::list oc, nc;
   encode(*o->crush, oc, CEPH_FEATURES_SUPPORTED_DEFAULT);
   encode(*n->crush, nc, CEPH_FEATURES_SUPPORTED_DEFAULT);
   if (oc.contents_equal(nc)) {
@@ -1886,7 +1921,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   // full map?
   if (inc.fullmap.length()) {
-    bufferlist bl(inc.fullmap);
+    ceph::buffer::list bl(inc.fullmap);
     decode(bl);
     return 0;
   }
@@ -2087,6 +2122,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &addr : inc.old_blacklist)
     blacklist.erase(addr);
 
+  for (auto& i : inc.new_crush_node_flags) {
+    if (i.second) {
+      crush_node_flags[i.first] = i.second;
+    } else {
+      crush_node_flags.erase(i.first);
+    }
+  }
+
   // cluster snapshot?
   if (inc.cluster_snapshot.length()) {
     cluster_snapshot = inc.cluster_snapshot;
@@ -2124,7 +2167,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
-    bufferlist bl(inc.crush);
+    ceph::buffer::list bl(inc.crush);
     auto blp = bl.cbegin();
     crush.reset(new CrushWrapper);
     crush->decode(blp);
@@ -2528,6 +2571,9 @@ bool OSDMap::primary_changed(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < CEPH_RELEASE_OCTOPUS) {
+    f &= ~CEPH_FEATURE_SERVER_OCTOPUS;
+  }
   if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
     f &= ~CEPH_FEATURE_SERVER_NAUTILUS;
   }
@@ -2551,7 +2597,7 @@ uint64_t OSDMap::get_encoding_features() const
 }
 
 // serialize, unserialize
-void OSDMap::encode_client_old(bufferlist& bl) const
+void OSDMap::encode_client_old(ceph::buffer::list& bl) const
 {
   using ceph::encode;
   __u16 v = 5;
@@ -2607,12 +2653,12 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   }
 
   // crush
-  bufferlist cbl;
+  ceph::buffer::list cbl;
   crush->encode(cbl, 0 /* legacy (no) features */);
   encode(cbl, bl);
 }
 
-void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
+void OSDMap::encode_classic(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
   if ((features & CEPH_FEATURE_PGID64) == 0) {
@@ -2649,7 +2695,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   encode(*pg_temp, bl);
 
   // crush
-  bufferlist cbl;
+  ceph::buffer::list cbl;
   crush->encode(cbl, 0 /* legacy (no) features */);
   encode(cbl, bl);
 
@@ -2671,7 +2717,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
  * refer to
  *    doc/dev/osd_internals/osdmap_versions.txt
  */
-void OSDMap::encode(bufferlist& bl, uint64_t features) const
+void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
 {
   using ceph::encode;
   if ((features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
@@ -2689,7 +2735,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   size_t start_offset = bl.length();
   size_t tail_offset;
   size_t crc_offset;
-  std::optional<buffer::list::contiguous_filler> crc_filler;
+  std::optional<ceph::buffer::list::contiguous_filler> crc_filler;
 
   // meta-encoding: how we include client-used and osd-specific data
   ENCODE_START(8, 7, bl);
@@ -2756,7 +2802,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     }
 
     // crush
-    bufferlist cbl;
+    ceph::buffer::list cbl;
     crush->encode(cbl, features);
     encode(cbl, bl);
     encode(erasure_code_profiles, bl);
@@ -2785,7 +2831,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 7;
+    uint8_t target_v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2835,6 +2881,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (target_v >= 6) {
       encode(removed_snaps_queue, bl);
     }
+    if (target_v >= 8) {
+      encode(crush_node_flags, bl);
+    }
     ENCODE_FINISH(bl); // osd-only data
   }
 
@@ -2845,11 +2894,11 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl); // meta-encoding wrapper
 
   // fill in crc
-  bufferlist front;
+  ceph::buffer::list front;
   front.substr_of(bl, start_offset, crc_offset - start_offset);
   crc = front.crc32c(-1);
   if (tail_offset < bl.length()) {
-    bufferlist tail;
+    ceph::buffer::list tail;
     tail.substr_of(bl, tail_offset, bl.length() - tail_offset);
     crc = tail.crc32c(crc);
   }
@@ -2863,13 +2912,13 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
  * refer to
  *    doc/dev/osd_internals/osdmap_versions.txt
  */
-void OSDMap::decode(bufferlist& bl)
+void OSDMap::decode(ceph::buffer::list& bl)
 {
   auto p = bl.cbegin();
   decode(p);
 }
 
-void OSDMap::decode_classic(bufferlist::const_iterator& p)
+void OSDMap::decode_classic(ceph::buffer::list::const_iterator& p)
 {
   using ceph::decode;
   __u32 n, t;
@@ -2935,7 +2984,7 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
     decode(n, p);
     while (n--) {
       old_pg_t opg;
-      ::decode_raw(opg, p);
+      ceph::decode_raw(opg, p);
       mempool::osdmap::vector<int32_t> v;
       decode(v, p);
       pg_temp->set(pg_t(opg), v);
@@ -2945,7 +2994,7 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
   }
 
   // crush
-  bufferlist cbl;
+  ceph::buffer::list cbl;
   decode(cbl, p);
   auto cblp = cbl.cbegin();
   crush->decode(cblp);
@@ -2990,7 +3039,7 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
   post_decode();
 }
 
-void OSDMap::decode(bufferlist::const_iterator& bl)
+void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
 {
   using ceph::decode;
   /**
@@ -3002,7 +3051,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
    */
   size_t start_offset = bl.get_off();
   size_t tail_offset = 0;
-  bufferlist crc_front, crc_tail;
+  ceph::buffer::list crc_front, crc_tail;
 
   DECODE_START_LEGACY_COMPAT_LEN(8, 7, 7, bl); // wrapper
   if (struct_v < 7) {
@@ -3055,7 +3104,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     }
 
     // crush
-    bufferlist cbl;
+    ceph::buffer::list cbl;
     decode(cbl, bl);
     auto cblp = cbl.cbegin();
     crush->decode(cblp);
@@ -3095,7 +3144,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
   }
 
   {
-    DECODE_START(7, bl); // extended, osd-only data
+    DECODE_START(8, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blacklist, bl);
@@ -3151,6 +3200,11 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     if (struct_v >= 6) {
       decode(removed_snaps_queue, bl);
     }
+    if (struct_v >= 8) {
+      decode(crush_node_flags, bl);
+    } else {
+      crush_node_flags.clear();
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -3170,7 +3224,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     // verify crc
     uint32_t actual = crc_front.crc32c(-1);
     if (tail_offset < bl.get_off()) {
-      bufferlist tail;
+      ceph::buffer::list tail;
       tail.substr_of(bl.get_bl(), tail_offset, bl.get_off() - tail_offset);
       actual = tail.crc32c(actual);
     }
@@ -3178,7 +3232,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
       ostringstream ss;
       ss << "bad crc, actual " << actual << " != expected " << crc;
       string s = ss.str();
-      throw buffer::malformed_input(s.c_str());
+      throw ceph::buffer::malformed_input(s.c_str());
     }
   }
 
@@ -3392,6 +3446,19 @@ void OSDMap::dump(Formatter *f) const
       f->close_section();
     }
     f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("crush_node_flags");
+  for (auto& i : crush_node_flags) {
+    string s = crush->item_exists(i.first) ? crush->get_item_name(i.first)
+      : stringify(i.first);
+    f->open_array_section(s.c_str());
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
     f->close_section();
   }
   f->close_section();
@@ -3957,9 +4024,10 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
   crush.set_type_name(6, "pod");
   crush.set_type_name(7, "room");
   crush.set_type_name(8, "datacenter");
-  crush.set_type_name(9, "region");
-  crush.set_type_name(10, "root");
-  return 10;
+  crush.set_type_name(9, "zone");
+  crush.set_type_name(10, "region");
+  crush.set_type_name(11, "root");
+  return 11;
 }
 
 int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
@@ -4353,15 +4421,16 @@ int OSDMap::calc_pg_upmaps(
   map<int,float> osd_weight;
   for (auto& i : pools) {
     if (!only_pools.empty() && !only_pools.count(i.first))
-	continue;
+      continue;
     for (unsigned ps = 0; ps < i.second.get_pg_num(); ++ps) {
-	pg_t pg(ps, i.first);
-	vector<int> up;
-	tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
-	for (auto osd : up) {
-	  if (osd != CRUSH_ITEM_NONE)
-	    pgs_by_osd[osd].insert(pg);
-	}
+      pg_t pg(ps, i.first);
+      vector<int> up;
+      tmp.pg_to_up_acting_osds(pg, &up, nullptr, nullptr, nullptr);
+      ldout(cct, 20) << __func__ << " " << pg << " up " << up << dendl;
+      for (auto osd : up) {
+        if (osd != CRUSH_ITEM_NONE)
+	  pgs_by_osd[osd].insert(pg);
+      }
     }
     total_pgs += i.second.get_size() * i.second.get_pg_num();
 
@@ -4370,7 +4439,10 @@ int OSDMap::calc_pg_upmaps(
 				      i.second.get_type(),
 				      i.second.get_size());
     tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
-    ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
+    ldout(cct,20) << __func__ << " pool " << i.first
+                  << " ruleno " << ruleno
+                  << " weight-map " << pmap
+                  << dendl;
     for (auto p : pmap) {
       auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
       if (adjusted_weight == 0) {
@@ -4664,6 +4736,8 @@ int OSDMap::calc_pg_upmaps(
       candidates.reserve(tmp.pg_upmap_items.size());
       for (auto& i : tmp.pg_upmap_items) {
         if (to_skip.count(i.first))
+          continue;
+        if (!only_pools.empty() && !only_pools.count(i.first.pool()))
           continue;
         candidates.push_back(make_pair(i.first, i.second));
       }
@@ -5558,9 +5632,21 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	detail.push_back(ss.str());
       }
     }
+    for (auto& i : crush_node_flags) {
+      if (i.second && crush->item_exists(i.first)) {
+	ostringstream ss;
+	set<string> states;
+	OSDMap::calc_state_set(i.second, states);
+	int t = i.first >= 0 ? 0 : crush->get_bucket_type(i.first);
+	const char *tn = crush->get_type_name(t);
+	ss << (tn ? tn : "node") << " "
+	   << crush->get_item_name(i.first) << " has flags " << states;
+	detail.push_back(ss.str());
+      }
+    }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " osd(s) have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH nodes have {NOUP,NODOWN,NOIN,NOOUT} flags set";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
       d.detail.swap(detail);
     }
@@ -5592,9 +5678,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
   // CACHE_POOL_NO_HIT_SET
   if (g_conf()->mon_warn_on_cache_pools_without_hit_sets) {
     list<string> detail;
-    for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
-	 p != pools.end();
-	 ++p) {
+    for (auto p = pools.cbegin(); p != pools.cend(); ++p) {
       const pg_pool_t& info = p->second;
       if (info.cache_mode_requires_hit_set() &&
 	  info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
@@ -5758,4 +5842,21 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   default:
     ceph_abort_msg("unrecognized pool type");
   }
+}
+
+unsigned OSDMap::get_crush_node_flags(int osd) const
+{
+  unsigned flags = 0;
+  if (!crush_node_flags.empty()) {
+    // the map will contain type -> name
+    std::map<std::string,std::string> ploc = crush->get_full_location(osd);
+    for (auto& i : ploc) {
+      int id = crush->get_item_id(i.second);
+      auto p = crush_node_flags.find(id);
+      if (p != crush_node_flags.end()) {
+	flags |= p->second;
+      }
+    }
+  }
+  return flags;
 }

@@ -677,8 +677,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                               bool verbose, ostream *out, Formatter *formatter,
 			      RGWReshard* reshard_log)
 {
-  Clock::time_point now;
-
   int ret = reshard_lock.lock();
   if (ret < 0) {
     return ret;
@@ -1079,7 +1077,7 @@ int RGWReshard::process_all_logshards()
     string logshard;
     get_logshard_oid(i, &logshard);
 
-    ldout(store->ctx(), 20) << "proceeding logshard = " << logshard << dendl;
+    ldout(store->ctx(), 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i);
     if (ret <0) {

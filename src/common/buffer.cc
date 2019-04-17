@@ -35,10 +35,6 @@
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
-#if defined(HAVE_XIO)
-#include "msg/xio/XioMsg.h"
-#endif
-
 using namespace ceph;
 
 #define CEPH_BUFFER_ALLOC_UNIT  4096u
@@ -307,59 +303,6 @@ static ceph::spinlock debug_lock;
       return new buffer::raw_char(len);
     }
   };
-
-#if defined(HAVE_XIO)
-  class buffer::xio_msg_buffer : public buffer::raw {
-  private:
-    XioDispatchHook* m_hook;
-  public:
-    xio_msg_buffer(XioDispatchHook* _m_hook, const char *d,
-	unsigned l) :
-      raw((char*)d, l), m_hook(_m_hook->get()) {}
-
-    bool is_shareable() const override { return false; }
-    static void operator delete(void *p)
-    {
-      xio_msg_buffer *buf = static_cast<xio_msg_buffer*>(p);
-      // return hook ref (counts against pool);  it appears illegal
-      // to do this in our dtor, because this fires after that
-      buf->m_hook->put();
-    }
-    raw* clone_empty() {
-      return new buffer::raw_char(len);
-    }
-  };
-
-  class buffer::xio_mempool : public buffer::raw {
-  public:
-    struct xio_reg_mem *mp;
-    xio_mempool(struct xio_reg_mem *_mp, unsigned l) :
-      raw((char*)_mp->addr, l), mp(_mp)
-    { }
-    ~xio_mempool() {}
-    raw* clone_empty() {
-      return new buffer::raw_char(len);
-    }
-  };
-
-  struct xio_reg_mem* get_xio_mp(const buffer::ptr& bp)
-  {
-    buffer::xio_mempool *mb = dynamic_cast<buffer::xio_mempool*>(bp.get_raw());
-    if (mb) {
-      return mb->mp;
-    }
-    return NULL;
-  }
-
-  buffer::raw* buffer::create_msg(
-      unsigned len, char *buf, XioDispatchHook* m_hook) {
-    XioPool& pool = m_hook->get_pool();
-    buffer::raw* bp =
-      static_cast<buffer::raw*>(pool.alloc(sizeof(xio_msg_buffer)));
-    new (bp) xio_msg_buffer(m_hook, buf, len);
-    return bp;
-  }
-#endif /* HAVE_XIO */
 
   ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
     auto r = buffer::create_aligned(len, sizeof(size_t));
@@ -1781,7 +1724,64 @@ void buffer::list::decode_base64(buffer::list& e)
   push_back(std::move(bp));
 }
 
-  
+ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
+{
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  if (fd < 0) {
+    int err = errno;
+    std::ostringstream oss;
+    oss << "can't open " << fn << ": " << cpp_strerror(err);
+    *error = oss.str();
+    return -err;
+  }
+
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  if (::fstat(fd, &st) < 0) {
+    int err = errno;
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): stat error: "
+        << cpp_strerror(err);
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
+  }
+
+  if (off > (uint64_t)st.st_size) {
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return 0;
+  }
+
+  if (len > st.st_size - off) {
+    len = st.st_size - off;
+  }
+  ssize_t ret = lseek64(fd, off, SEEK_SET);
+  if (ret != (ssize_t)off) {
+    return -errno;
+  }
+
+  ret = read_fd(fd, len);
+  if (ret < 0) {
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): read error:"
+	<< cpp_strerror(ret);
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
+  } else if (ret != (ssize_t)len) {
+    // Premature EOF.
+    // Perhaps the file changed between stat() and read()?
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): warning: got premature EOF.";
+    *error = oss.str();
+    // not actually an error, but weird
+  }
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
+}
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
@@ -2082,26 +2082,38 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   out.fill('0');
 
   unsigned per = 16;
-  bool was_zeros = false, did_star = false;
+  char last_row_char = '\0';
+  bool was_same = false, did_star = false;
   for (unsigned o=0; o<length(); o += per) {
+    if (o == 0) {
+      last_row_char = (*this)[o];
+    }
+
     if (o + per < length()) {
-      bool row_is_zeros = true;
+      bool row_is_same = true;
       for (unsigned i=0; i<per && o+i<length(); i++) {
-	if ((*this)[o+i]) {
-	  row_is_zeros = false;
+        char current_char = (*this)[o+i];
+        if (current_char != last_row_char) {
+          if (i == 0) {
+            last_row_char = current_char;
+            was_same = false;
+            did_star = false;
+          } else {
+	    row_is_same = false;
+          }
 	}
       }
-      if (row_is_zeros) {
-	if (was_zeros) {
+      if (row_is_same) {
+	if (was_same) {
 	  if (!did_star) {
 	    out << "\n*";
 	    did_star = true;
 	  }
 	  continue;
 	}
-	was_zeros = true;
+	was_same = true;
       } else {
-	was_zeros = false;
+	was_same = false;
 	did_star = false;
       }
     }

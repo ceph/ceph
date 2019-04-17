@@ -54,12 +54,12 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 
 seastar::future<> SocketMessenger::bind(const entity_addrvec_t& addrs)
 {
-  ceph_assert(addrs.legacy_addr().get_family() == AF_INET);
+  ceph_assert(addrs.front().get_family() == AF_INET);
   auto my_addrs = addrs;
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
   }
-  logger().info("listening on {}", my_addrs.legacy_addr().in4_addr());
+  logger().info("listening on {}", my_addrs.front().in4_addr());
   return container().invoke_on_all([my_addrs](auto& msgr) {
       msgr.do_bind(my_addrs);
     });
@@ -69,7 +69,7 @@ seastar::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
-  auto addr = addrs.legacy_or_front_addr();
+  auto addr = addrs.front();
   if (addr.get_port() != 0) {
     return bind(addrs);
   }
@@ -112,6 +112,11 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& pe
     });
 }
 
+seastar::future<> SocketMessenger::stop()
+{
+  return do_shutdown();
+}
+
 seastar::future<> SocketMessenger::shutdown()
 {
   return container().invoke_on_all([](auto& msgr) {
@@ -128,7 +133,7 @@ void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
   Messenger::set_myaddrs(addrs);
 
   // TODO: v2: listen on multiple addresses
-  seastar::socket_address address(addrs.legacy_addr().in4_addr());
+  seastar::socket_address address(addrs.front().in4_addr());
   seastar::listen_options lo;
   lo.reuse_address = true;
   listener = seastar::listen(address, lo);
@@ -141,19 +146,16 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
   // start listening if bind() was called
   if (listener) {
     seastar::keep_doing([this] {
-        return listener->accept()
-          .then([this] (seastar::connected_socket socket,
-                        seastar::socket_address paddr) {
-            // allocate the connection
-            entity_addr_t peer_addr;
-            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        return Socket::accept(*listener)
+          .then([this] (SocketFRef socket,
+                        entity_addr_t peer_addr) {
             auto shard = locate_shard(peer_addr);
+            // don't wait before accepting another
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
-            auto sock = seastar::make_foreign(std::make_unique<Socket>(std::move(socket)));
-            // don't wait before accepting another
-            container().invoke_on(shard, [sock = std::move(sock), peer_addr, this](auto& msgr) mutable {
-                SocketConnectionRef conn = seastar::make_shared<SocketConnection>(msgr, *msgr.dispatcher);
+            container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
+                SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
+                    msgr, *msgr.dispatcher, get_myaddr().is_msgr2());
                 conn->start_accept(std::move(sock), peer_addr);
               });
           });
@@ -174,7 +176,8 @@ SocketMessenger::do_connect(const entity_addr_t& peer_addr, const entity_type_t&
   if (auto found = lookup_conn(peer_addr); found) {
     return seastar::make_foreign(found->shared_from_this());
   }
-  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(*this, *dispatcher);
+  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
+      *this, *dispatcher, peer_addr.is_msgr2());
   conn->start_connect(peer_addr, peer_type);
   return seastar::make_foreign(conn->shared_from_this());
 }
@@ -210,6 +213,16 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
   addr.set_type(peer_addr_for_me.get_type());
   addr.set_port(get_myaddr().get_port());
   return set_myaddrs(entity_addrvec_t{addr});
+}
+
+SocketPolicy SocketMessenger::get_policy(entity_type_t peer_type) const
+{
+  return policy_set.get(peer_type);
+}
+
+SocketPolicy SocketMessenger::get_default_policy() const
+{
+  return policy_set.get_default();
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)

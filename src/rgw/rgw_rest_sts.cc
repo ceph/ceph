@@ -17,7 +17,6 @@
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "rgw_rest_sts.h"
-#include "rgw_auth_s3.h"
 
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
@@ -64,7 +63,7 @@ WebTokenEngine::get_from_idp(const DoutPrefixProvider* dpp, const std::string& t
     introspect_req.set_post_data(post_data);
     introspect_req.set_send_length(post_data.length());
 
-    int res = introspect_req.process();
+    int res = introspect_req.process(null_yield);
     if (res < 0) {
       ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
       throw -EINVAL;
@@ -169,11 +168,11 @@ void RGWREST_STS::send_response()
 
 int RGWSTSGetSessionToken::verify_permission()
 {
-  rgw::IAM::Partition partition = rgw::IAM::Partition::aws;
-  rgw::IAM::Service service = rgw::IAM::Service::s3;
+  rgw::Partition partition = rgw::Partition::aws;
+  rgw::Service service = rgw::Service::s3;
   if (!verify_user_permission(this,
                               s,
-                              rgw::IAM::ARN(partition, service, "", s->user->user_id.tenant, ""),
+                              rgw::ARN(partition, service, "", s->user->user_id.tenant, ""),
                               rgw::IAM::stsGetSessionToken)) {
     return -EACCES;
   }
@@ -345,13 +344,7 @@ int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
 
 void RGWHandler_REST_STS::rgw_sts_parse_input()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-
-  int ret = 0;
-  bufferlist data;
-  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  string post_body = data.to_str();
-  if (data.length() > 0) {
+  if (post_body.size() > 0) {
     ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
@@ -365,7 +358,6 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
            if (key == "RoleArn") {
             value = url_decode(value);
            }
-           ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
            s->info.args.append(key, value);
          }
        }
@@ -422,7 +414,7 @@ int RGWHandler_REST_STS::init_from_header(struct req_state* s,
   string req;
   string first;
 
-  s->prot_flags |= RGW_REST_STS;
+  s->prot_flags = RGW_REST_STS;
 
   const char *p, *req_name;
   if (req_name = s->relative_uri.c_str(); *req_name == '?') {

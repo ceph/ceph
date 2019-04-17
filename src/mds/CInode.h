@@ -46,7 +46,6 @@
 #define dout_context g_ceph_context
 
 class Context;
-class CDentry;
 class CDir;
 class CInode;
 class MDCache;
@@ -560,7 +559,7 @@ public:
     } 
     return NULL;
   }
-  bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
+  std::pair<bool, std::vector<CDir*>> get_dirfrags_under(frag_t fg);
   CDir* get_approx_dirfrag(frag_t fg);
 
   template<typename Container>
@@ -571,27 +570,24 @@ public:
     for (const auto &p : dirfrags)
       ls.push_back(p.second);
   }
-  template<typename Container>
-  void get_nested_dirfrags(Container& ls) const {
-    // dirfrags in same subtree
-    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
-      ls.reserve(ls.size() + dirfrags.size() - num_subtree_roots);
-    for (const auto &p : dirfrags) {
-      typename Container::value_type dir = p.second;
-      if (!dir->is_subtree_root())
-        ls.push_back(dir);
-    }
+
+  auto get_dirfrags() const {
+    std::vector<CDir*> result;
+    get_dirfrags(result);
+    return result;
   }
-  template<typename Container>
-  void get_subtree_dirfrags(Container& ls) {
-    // dirfrags that are roots of new subtrees
-    if constexpr (std::is_same_v<Container, std::vector<CDir*>>)
-      ls.reserve(ls.size() + num_subtree_roots);
-    for (const auto &p : dirfrags) {
-      typename Container::value_type dir = p.second;
-      if (dir->is_subtree_root())
-        ls.push_back(dir);
-    }
+
+  void get_nested_dirfrags(std::vector<CDir*>&) const;
+  std::vector<CDir*> get_nested_dirfrags() const {
+    std::vector<CDir*> v;
+    get_nested_dirfrags(v);
+    return v;
+  }
+  void get_subtree_dirfrags(std::vector<CDir*>&) const;
+  std::vector<CDir*> get_subtree_dirfrags() const {
+    std::vector<CDir*> v;
+    get_subtree_dirfrags(v);
+    return v;
   }
 
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);
@@ -839,10 +835,6 @@ public:
   void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
     ceph_assert(is_auth());
     
-    // relax locks?
-    if (!is_replicated())
-      replicate_relax_locks();
-    
     __u32 nonce = add_replica(rep);
     using ceph::encode;
     encode(nonce, bl);
@@ -1050,7 +1042,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, mempool_inode *file_i) const;
+  int get_caps_allowed_for_client(Session *s, Capability *cap, mempool_inode *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
@@ -1058,7 +1050,6 @@ public:
   bool is_any_caps_wanted() const;
   int get_caps_wanted(int *ploner = 0, int *pother = 0, int shift = 0, int mask = -1) const;
   bool issued_caps_need_gather(SimpleLock *lock);
-  void replicate_relax_locks();
 
   // -- authority --
   mds_authority_t authority() const override;

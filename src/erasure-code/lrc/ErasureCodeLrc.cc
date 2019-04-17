@@ -15,7 +15,7 @@
  *
  */
 
-#include <errno.h>
+#include <cerrno>
 #include <algorithm>
 
 #include "include/str_map.h"
@@ -28,15 +28,13 @@
 
 #include "ErasureCodeLrc.h"
 
-// re-include our assert to clobber boost's
-#include "include/ceph_assert.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
 using namespace std;
+using namespace ceph;
 
 static ostream& _prefix(std::ostream* _dout)
 {

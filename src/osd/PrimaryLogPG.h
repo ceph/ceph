@@ -290,7 +290,9 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     bool is_delete) override;
-  void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
+  void failed_push(const list<pg_shard_t> &from,
+                   const hobject_t &soid,
+                   const eversion_t &need = eversion_t()) override;
   void primary_failed(const hobject_t &soid) override;
   bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid) override;
@@ -402,6 +404,12 @@ public:
     release_object_locks(manager);
   }
 
+  bool pg_is_repair() override {
+    return is_repair();
+  }
+  void inc_osd_stat_repaired() override {
+    osd->inc_osd_stat_repaired();
+  }
   bool pg_is_remote_backfilling() override {
     return is_remote_backfilling();
   }
@@ -454,6 +462,10 @@ public:
     return is_undersized();
   }
   
+  bool pg_is_repair() const override {
+    return is_repair();
+  }
+
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) override {

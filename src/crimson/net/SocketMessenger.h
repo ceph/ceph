@@ -91,6 +91,10 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
         << ") " << get_myaddr();
   }
 
+  SocketPolicy get_policy(entity_type_t peer_type) const override;
+
+  SocketPolicy get_default_policy() const override;
+
   void set_default_policy(const SocketPolicy& p) override;
 
   void set_policy(entity_type_t peer_type, const SocketPolicy& p) override;
@@ -107,9 +111,7 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   void unregister_conn(SocketConnectionRef);
 
   // required by sharded<>
-  seastar::future<> stop() {
-    return seastar::make_ready_future<>();
-  }
+  seastar::future<> stop();
 
   seastar::shard_id shard_id() const {
     return sid;

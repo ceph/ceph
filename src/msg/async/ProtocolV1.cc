@@ -257,16 +257,13 @@ void ProtocolV1::prepare_send_message(uint64_t features, Message *m,
   ldout(cct, 20) << __func__ << " m " << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
-  if (m->empty_payload()) {
-    ldout(cct, 20) << __func__ << " encoding features " << features << " " << m
-                   << " " << *m << dendl;
-  } else {
-    ldout(cct, 20) << __func__ << " half-reencoding features " << features
-                   << " " << m << " " << *m << dendl;
-  }
+  ldout(cct, 20) << __func__ << (m->empty_payload() ? " encoding features " : " half-reencoding features ")
+		 << features << " " << m  << " " << *m << dendl;
 
   // encode and copy out of *m
-  m->encode(features, messenger->crcflags);
+  // in write_message we update header.seq and need recalc crc
+  // so skip calc header in encode function.
+  m->encode(features, messenger->crcflags, true);
 
   bl.append(m->get_payload());
   bl.append(m->get_middle());
@@ -1141,7 +1138,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     if (messenger->crcflags & MSG_CRC_HEADER) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
     } else {
       old_footer.front_crc = old_footer.middle_crc = 0;
     }
@@ -1165,10 +1161,13 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
+
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
+#endif
   m->put();
 
   return rc;
@@ -1376,25 +1375,44 @@ CtPtr ProtocolV1::handle_server_banner_and_identify(char *buffer, int r) {
 
   ldout(cct, 20) << __func__ << " connect peer addr for me is "
                  << peer_addr_for_me << dendl;
-  connection->lock.unlock();
-  messenger->learned_addr(peer_addr_for_me);
-  if (cct->_conf->ms_inject_internal_delays &&
-      cct->_conf->ms_inject_socket_failures) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 10) << __func__ << " sleep for "
-                     << cct->_conf->ms_inject_internal_delays << dendl;
-      utime_t t;
-      t.set_from_double(cct->_conf->ms_inject_internal_delays);
-      t.sleep();
+  if (messenger->get_myaddrs().empty() ||
+      messenger->get_myaddrs().front().is_blank_ip()) {
+    sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    getsockname(connection->cs.fd(), (sockaddr *)&ss, &len);
+    entity_addr_t a;
+    if (cct->_conf->ms_learn_addr_from_peer) {
+      ldout(cct, 1) << __func__ << " peer " << connection->target_addr
+		    << " says I am " << peer_addr_for_me << " (socket says "
+		    << (sockaddr*)&ss << ")" << dendl;
+      a = peer_addr_for_me;
+    } else {
+      ldout(cct, 1) << __func__ << " socket to  " << connection->target_addr
+		    << " says I am " << (sockaddr*)&ss
+		    << " (peer says " << peer_addr_for_me << ")" << dendl;
+      a.set_sockaddr((sockaddr *)&ss);
     }
-  }
-
-  connection->lock.lock();
-  if (state != CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
-    ldout(cct, 1) << __func__
+    a.set_type(entity_addr_t::TYPE_LEGACY); // anything but NONE; learned_addr ignores this
+    a.set_port(0);
+    connection->lock.unlock();
+    messenger->learned_addr(a);
+    if (cct->_conf->ms_inject_internal_delays &&
+	cct->_conf->ms_inject_socket_failures) {
+      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+	ldout(cct, 10) << __func__ << " sleep for "
+		       << cct->_conf->ms_inject_internal_delays << dendl;
+	utime_t t;
+	t.set_from_double(cct->_conf->ms_inject_internal_delays);
+	t.sleep();
+      }
+    }
+    connection->lock.lock();
+    if (state != CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
+      ldout(cct, 1) << __func__
                   << " state changed while learned_addr, mark_down or "
-                  << " replacing must be happened just now" << dendl;
-    return nullptr;
+		    << " replacing must be happened just now" << dendl;
+      return nullptr;
+    }
   }
 
   bufferlist myaddrbl;
@@ -2194,7 +2212,7 @@ CtPtr ProtocolV1::handle_connect_message_reply_write(int r) {
   return CONTINUE(wait_connect_message);
 }
 
-CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
+CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
                           ceph_msg_connect_reply &reply,
                           bufferlist &authorizer_reply) {
   ldout(cct, 10) << __func__ << " accept replacing " << existing << dendl;
@@ -2295,6 +2313,12 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
             if (exproto->state == CLOSED) return;
             ceph_assert(exproto->state == NONE);
 
+            // we have called shutdown_socket above
+            ceph_assert(existing->last_tick_id == 0);
+            // restart timer since we are going to re-build connection
+            existing->last_connect_started = ceph::coarse_mono_clock::now();
+            existing->last_tick_id = existing->center->create_time_event(
+              existing->connect_timeout_us, existing->tick_handler);
             existing->state = AsyncConnection::STATE_CONNECTION_ESTABLISHED;
             exproto->state = ACCEPTING;
 

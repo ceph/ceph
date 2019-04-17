@@ -750,7 +750,7 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
        i != m->pushes.end();
        ++i) {
     replies.push_back(PushReplyOp());
-    handle_push(from, *i, &(replies.back()), &t);
+    handle_push(from, *i, &(replies.back()), &t, m->is_repair);
   }
 
   MOSDPGPushReply *reply = new MOSDPGPushReply;
@@ -1299,10 +1299,22 @@ void ReplicatedBackend::prepare_pull(
   ceph_assert(!q->second.empty());
 
   // pick a pullee
-  auto p = q->second.begin();
-  std::advance(p,
-               util::generate_random_number<int>(0,
-                                                 q->second.size() - 1));
+  auto p = q->second.end();
+  if (cct->_conf->osd_debug_feed_pullee >= 0) {
+    for (auto it = q->second.begin(); it != q->second.end(); it++) {
+      if (it->osd == cct->_conf->osd_debug_feed_pullee) {
+        p = it;
+        break;
+      }
+    }
+  }
+  if (p == q->second.end()) {
+    // probably because user feed a wrong pullee
+    p = q->second.begin();
+    std::advance(p,
+                 util::generate_random_number<int>(0,
+                                                   q->second.size() - 1));
+  }
   ceph_assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;
 
@@ -1725,6 +1737,11 @@ bool ReplicatedBackend::handle_pull_response(
 
   if (complete) {
     pi.stat.num_objects_recovered++;
+    // XXX: This could overcount if regular recovery is needed right after a repair
+    if (get_parent()->pg_is_repair()) {
+      pi.stat.num_objects_repaired++;
+      get_parent()->inc_osd_stat_repaired();
+    }
     clear_pull_from(piter);
     to_continue->push_back({hoid, pi.stat});
     get_parent()->on_local_recover(
@@ -1740,7 +1757,7 @@ bool ReplicatedBackend::handle_pull_response(
 
 void ReplicatedBackend::handle_push(
   pg_shard_t from, const PushOp &pop, PushReplyOp *response,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction *t, bool is_repair)
 {
   dout(10) << "handle_push "
 	   << pop.recovery_info
@@ -1764,13 +1781,18 @@ void ReplicatedBackend::handle_push(
 		   pop.omap_entries,
 		   t);
 
-  if (complete)
+  if (complete) {
+    if (is_repair) {
+      get_parent()->inc_osd_stat_repaired();
+      dout(20) << __func__ << " repair complete" << dendl;
+    }
     get_parent()->on_local_recover(
       pop.recovery_info.soid,
       pop.recovery_info,
       ObjectContextRef(), // ok, is replica
       false,
       t);
+  }
 }
 
 void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &pushes)
@@ -1793,6 +1815,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       msg->map_epoch = get_osdmap_epoch();
       msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
       msg->set_priority(prio);
+      msg->is_repair = get_parent()->pg_is_repair();
       for (;
            (j != i->second.end() &&
 	    cost < cct->_conf->osd_max_push_cost &&
@@ -1996,8 +2019,11 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
-    if (stat)
+    if (stat) {
       stat->num_objects_recovered++;
+      if (get_parent()->pg_is_repair())
+        stat->num_objects_repaired++;
+    }
   }
 
   if (stat) {
@@ -2168,9 +2194,11 @@ void ReplicatedBackend::_failed_pull(pg_shard_t from, const hobject_t &soid)
 {
   dout(20) << __func__ << ": " << soid << " from " << from << dendl;
   list<pg_shard_t> fl = { from };
-  get_parent()->failed_push(fl, soid);
+  auto it = pulling.find(soid);
+  assert(it != pulling.end());
+  get_parent()->failed_push(fl, soid, it->second.recovery_info.version);
 
-  clear_pull(pulling.find(soid));
+  clear_pull(it);
 }
 
 void ReplicatedBackend::clear_pull_from(

@@ -1,7 +1,7 @@
 <ol *ngIf="crumbs.length"
     class="breadcrumb">
   <li *ngFor="let crumb of crumbs; let last = last"
-      [ngClass]="{ 'active': last }"
+      [ngClass]="{ 'active': last && finished }"
       class="breadcrumb-item">
     <a *ngIf="!last && crumb.path !== null"
        [routerLink]="crumb.path">{{ crumb.text }}</a>

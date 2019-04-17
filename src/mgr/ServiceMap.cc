@@ -5,6 +5,9 @@
 
 #include "common/Formatter.h"
 
+using ceph::bufferlist;
+using ceph::Formatter;
+
 // Daemon
 
 void ServiceMap::Daemon::encode(bufferlist& bl, uint64_t features) const

@@ -166,9 +166,9 @@
     --io-size arg        IO size (in B/K/M/G/T) [default: 4K]
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
-    --io-pattern arg     IO pattern (rand or seq) [default: seq]
+    --io-pattern arg     IO pattern (rand, seq, or full-seq) [default: seq]
     --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
-    --io-type arg        IO type (read , write, or readwrite(rw))
+    --io-type arg        IO type (read, write, or readwrite(rw))
   
   rbd help children
   usage: rbd children [--pool <pool>] [--namespace <namespace>] 

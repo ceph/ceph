@@ -66,10 +66,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf.set_val_default("err_to_stderr", "false");
     conf.set_val_default("log_flush_on_exit", "false");
   }
-  if (code_env != CODE_ENVIRONMENT_DAEMON) {
-    // NOTE: disable ms subsystem gathering in clients by default
-    conf.set_val_default("debug_ms", "0/0");
-  }
 
   return cct;
 }
@@ -109,6 +105,10 @@ void common_init_finish(CephContext *cct)
   cct->_finished = true;
   cct->init_crypto();
   ZTracer::ztrace_init();
+
+  if (!cct->_log->is_started()) {
+    cct->_log->start();
+  }
 
   int flags = cct->get_init_flags();
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))

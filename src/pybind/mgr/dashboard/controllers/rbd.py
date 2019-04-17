@@ -8,7 +8,6 @@ from functools import partial
 from datetime import datetime
 
 import cherrypy
-import six
 
 import rbd
 
@@ -17,7 +16,7 @@ from . import ApiController, RESTController, Task, UpdatePermission, \
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from ..services.rbd import RbdConfiguration
+from ..services.rbd import RbdConfiguration, format_bitmask, format_features
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
                                  serialize_dashboard_exception
@@ -44,57 +43,6 @@ def _rbd_image_call(pool_name, image_name, func, *args, **kwargs):
             func(ioctx, img, *args, **kwargs)
 
     return _rbd_call(pool_name, _ioctx_func, image_name, func, *args, **kwargs)
-
-
-RBD_FEATURES_NAME_MAPPING = {
-    rbd.RBD_FEATURE_LAYERING: "layering",
-    rbd.RBD_FEATURE_STRIPINGV2: "striping",
-    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
-    rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
-    rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
-    rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
-    rbd.RBD_FEATURE_JOURNALING: "journaling",
-    rbd.RBD_FEATURE_DATA_POOL: "data-pool",
-    rbd.RBD_FEATURE_OPERATIONS: "operations",
-}
-
-
-def _format_bitmask(features):
-    """
-    Formats the bitmask:
-
-    >>> _format_bitmask(45)
-    ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
-    """
-    names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
-             if key & features == key]
-    return sorted(names)
-
-
-def _format_features(features):
-    """
-    Converts the features list to bitmask:
-
-    >>> _format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
-    45
-
-    >>> _format_features(None) is None
-    True
-
-    >>> _format_features('deep-flatten, exclusive-lock')
-    32
-    """
-    if isinstance(features, six.string_types):
-        features = features.split(',')
-
-    if not isinstance(features, list):
-        return None
-
-    res = 0
-    for key, value in RBD_FEATURES_NAME_MAPPING.items():
-        if value in features:
-            res = key | res
-    return res
 
 
 def _sort_features(features, enable=True):
@@ -161,7 +109,7 @@ class Rbd(RESTController):
             stat['pool_name'] = pool_name
             features = img.features()
             stat['features'] = features
-            stat['features_name'] = _format_bitmask(features)
+            stat['features_name'] = format_bitmask(features)
 
             # the following keys are deprecated
             del stat['parent_pool']
@@ -294,7 +242,7 @@ class Rbd(RESTController):
                 l_order = int(round(math.log(float(obj_size), 2)))
 
             # Set features
-            feature_bitmask = _format_features(features)
+            feature_bitmask = format_features(features)
 
             rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
                             features=feature_bitmask, stripe_unit=stripe_unit,
@@ -322,18 +270,18 @@ class Rbd(RESTController):
 
             # check enable/disable features
             if features is not None:
-                curr_features = _format_bitmask(image.features())
+                curr_features = format_bitmask(image.features())
                 # check disabled features
                 _sort_features(curr_features, enable=False)
                 for feature in curr_features:
                     if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
-                        f_bitmask = _format_features([feature])
+                        f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, False)
                 # check enabled features
                 _sort_features(features)
                 for feature in features:
                     if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
-                        f_bitmask = _format_features([feature])
+                        f_bitmask = format_features([feature])
                         image.update_features(f_bitmask, True)
 
             RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
@@ -359,7 +307,7 @@ class Rbd(RESTController):
                     l_order = int(round(math.log(float(obj_size), 2)))
 
                 # Set features
-                feature_bitmask = _format_features(features)
+                feature_bitmask = format_features(features)
 
                 if snapshot_name:
                     s_img.set_snap(snapshot_name)
@@ -386,7 +334,7 @@ class Rbd(RESTController):
     @RESTController.Collection('GET')
     def default_features(self):
         rbd_default_features = mgr.get('config')['rbd_default_features']
-        return _format_bitmask(int(rbd_default_features))
+        return format_bitmask(int(rbd_default_features))
 
     @RbdTask('trash/move', ['{pool_name}', '{image_name}'], 2.0)
     @RESTController.Resource('POST')
@@ -475,7 +423,7 @@ class RbdSnapshot(RESTController):
                     l_order = int(round(math.log(float(obj_size), 2)))
 
                 # Set features
-                feature_bitmask = _format_features(features)
+                feature_bitmask = format_features(features)
 
                 rbd_inst = rbd.RBD()
                 rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,

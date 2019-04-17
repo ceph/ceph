@@ -40,6 +40,7 @@ SAFE_OPTION(erasure_code_dir, OPT_STR) // default location for erasure-code plug
 OPTION(log_file, OPT_STR) // default changed by common_preinit()
 OPTION(log_max_new, OPT_INT) // default changed by common_preinit()
 OPTION(log_max_recent, OPT_INT) // default changed by common_preinit()
+OPTION(log_to_file, OPT_BOOL)
 OPTION(log_to_stderr, OPT_BOOL) // default changed by common_preinit()
 OPTION(err_to_stderr, OPT_BOOL) // default changed by common_preinit()
 OPTION(log_to_syslog, OPT_BOOL)
@@ -67,6 +68,7 @@ OPTION(clog_to_graylog_port, OPT_STR)
 OPTION(mon_cluster_log_to_syslog, OPT_STR)
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR)   // this level and above
 OPTION(mon_cluster_log_to_syslog_facility, OPT_STR)
+OPTION(mon_cluster_log_to_file, OPT_BOOL)
 OPTION(mon_cluster_log_file, OPT_STR)
 OPTION(mon_cluster_log_file_level, OPT_STR)
 OPTION(mon_cluster_log_to_graylog, OPT_STR)
@@ -76,21 +78,6 @@ OPTION(mon_cluster_log_to_graylog_port, OPT_STR)
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR)
 
 SAFE_OPTION(plugin_dir, OPT_STR)
-
-OPTION(xio_trace_mempool, OPT_BOOL) // mempool allocation counters
-OPTION(xio_trace_msgcnt, OPT_BOOL) // incoming/outgoing msg counters
-OPTION(xio_trace_xcon, OPT_BOOL) // Xio message encode/decode trace
-OPTION(xio_queue_depth, OPT_INT) // depth of Accelio msg queue
-OPTION(xio_mp_min, OPT_INT) // default min mempool size
-OPTION(xio_mp_max_64, OPT_INT) // max 64-byte chunks (buffer is 40)
-OPTION(xio_mp_max_256, OPT_INT) // max 256-byte chunks
-OPTION(xio_mp_max_1k, OPT_INT) // max 1K chunks
-OPTION(xio_mp_max_page, OPT_INT) // max 1K chunks
-OPTION(xio_mp_max_hint, OPT_INT) // max size-hint chunks
-OPTION(xio_portal_threads, OPT_INT) // xio portal threads per messenger
-OPTION(xio_max_conns_per_portal, OPT_INT) // max xio_connections per portal/ctx
-OPTION(xio_transport_type, OPT_STR) // xio transport type: {rdma or tcp}
-OPTION(xio_max_send_inline, OPT_INT) // xio maximum threshold to send inline
 
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
@@ -114,6 +101,7 @@ OPTION(perf, OPT_BOOL)       // enable internal perf counters
 SAFE_OPTION(ms_type, OPT_STR)   // messenger backend. It will be modified in runtime, so use SAFE_OPTION
 OPTION(ms_public_type, OPT_STR)   // messenger backend
 OPTION(ms_cluster_type, OPT_STR)   // messenger backend
+OPTION(ms_learn_addr_from_peer, OPT_BOOL)
 OPTION(ms_tcp_nodelay, OPT_BOOL)
 OPTION(ms_tcp_rcvbuf, OPT_INT)
 OPTION(ms_tcp_prefetch_max_size, OPT_U32) // max prefetch size, we limit this to avoid extra memcpy
@@ -125,6 +113,7 @@ OPTION(ms_die_on_bad_msg, OPT_BOOL)
 OPTION(ms_die_on_unhandled_msg, OPT_BOOL)
 OPTION(ms_die_on_old_message, OPT_BOOL)     // assert if we get a dup incoming message and shouldn't have (may be triggered by pre-541cd3c64be0dfa04e8a2df39422e0eb9541a428 code)
 OPTION(ms_die_on_skipped_message, OPT_BOOL)  // assert if we skip a seq (kernel client does this intentionally)
+OPTION(ms_die_on_bug, OPT_BOOL)
 OPTION(ms_dispatch_throttle_bytes, OPT_U64)
 OPTION(ms_bind_ipv6, OPT_BOOL)
 OPTION(ms_bind_port_min, OPT_INT)
@@ -133,8 +122,8 @@ OPTION(ms_bind_retry_count, OPT_INT) // If binding fails, how many times do we r
 OPTION(ms_bind_retry_delay, OPT_INT) // Delay between attempts to bind
 OPTION(ms_bind_before_connect, OPT_BOOL)
 OPTION(ms_tcp_listen_backlog, OPT_INT)
-OPTION(ms_rwthread_stack_bytes, OPT_U64)
-OPTION(ms_tcp_read_timeout, OPT_U64)
+OPTION(ms_connection_ready_timeout, OPT_U64)
+OPTION(ms_connection_idle_timeout, OPT_U64)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64)
 OPTION(ms_pq_min_cost, OPT_U64)
 OPTION(ms_inject_socket_failures, OPT_U64)
@@ -213,7 +202,6 @@ OPTION(mon_osd_auto_mark_auto_out_in, OPT_BOOL) // mark booting auto-marked-out 
 OPTION(mon_osd_auto_mark_new_in, OPT_BOOL)      // mark booting new osds 'in'
 OPTION(mon_osd_destroyed_out_interval, OPT_INT) // seconds
 OPTION(mon_osd_down_out_interval, OPT_INT) // seconds
-OPTION(mon_osd_down_out_subtree_limit, OPT_STR)   // smallest crush unit/type that we will not automatically mark out
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE)   // min osds required to be in to mark things out
 OPTION(mon_osd_warn_op_age, OPT_DOUBLE)     // max op age before we generate a warning (make it a power of 2)
@@ -657,6 +645,7 @@ OPTION(osd_read_ec_check_for_errors, OPT_BOOL) // return error if any ec shard h
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
 OPTION(osd_recover_clone_overlap_limit, OPT_INT)
+OPTION(osd_debug_feed_pullee, OPT_INT)
 
 OPTION(osd_backfill_scan_min, OPT_INT)
 OPTION(osd_backfill_scan_max, OPT_INT)
@@ -774,6 +763,7 @@ OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL)
 OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
 OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
+OPTION(osd_debug_no_acting_change, OPT_BOOL)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track
@@ -1067,8 +1057,10 @@ OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
 OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 OPTION(bluestore_no_per_pool_stats_tolerance, OPT_STR)
 OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
+OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
 OPTION(bluestore_log_op_age, OPT_DOUBLE)
 OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
+OPTION(bluestore_debug_enforce_settings, OPT_STR)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1367,7 +1359,6 @@ OPTION(rgw_op_thread_timeout, OPT_INT)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT)
 OPTION(rgw_thread_pool_size, OPT_INT)
 OPTION(rgw_num_control_oids, OPT_INT)
-OPTION(rgw_num_rados_handles, OPT_U32)
 OPTION(rgw_verify_ssl, OPT_BOOL) // should http_client try to verify ssl when sent https request
 
 /* The following are tunables for caches of RGW NFS (and other file

@@ -15,10 +15,18 @@
 
 #pragma once
 
-#include "include/rados/librados_fwd.hpp"
+#include <cstdint>
+#include <memory>
+#include <type_traits>
+
 #include <boost/intrusive/list.hpp>
-#include "rgw_common.h"
+#include "include/rados/librados_fwd.hpp"
+
 #include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
+
+#include "rgw_common.h"
+
+#include "include/function2.hpp"
 
 namespace rgw {
 
@@ -27,6 +35,13 @@ struct AioResult {
   uint64_t id = 0; // id allows caller to associate a result with its request
   bufferlist data; // result buffer for reads
   int result = 0;
+  std::aligned_storage_t<3 * sizeof(void*)> user_data;
+
+  AioResult() = default;
+  AioResult(const AioResult&) = delete;
+  AioResult& operator =(const AioResult&) = delete;
+  AioResult(AioResult&&) = delete;
+  AioResult& operator =(AioResult&&) = delete;
 };
 struct AioResultEntry : AioResult, boost::intrusive::list_base_hook<> {
   virtual ~AioResultEntry() {}
@@ -57,15 +72,14 @@ inline int check_for_errors(const AioResultList& results) {
 // each call returns a list of results from prior completions
 class Aio {
  public:
+  using OpFunc = fu2::unique_function<void(Aio*, AioResult&) &&>;
+
   virtual ~Aio() {}
 
-  virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
-                               librados::ObjectReadOperation *op,
-                               uint64_t cost, uint64_t id) = 0;
-
-  virtual AioResultList submit(RGWSI_RADOS::Obj& obj,
-                               librados::ObjectWriteOperation *op,
-                               uint64_t cost, uint64_t id) = 0;
+  virtual AioResultList get(const RGWSI_RADOS::Obj& obj,
+			    OpFunc&& f,
+			    uint64_t cost, uint64_t id) = 0;
+  virtual void put(AioResult& r) = 0;
 
   // poll for any ready completions without waiting
   virtual AioResultList poll() = 0;
@@ -75,6 +89,9 @@ class Aio {
 
   // wait for all outstanding completions and return their results
   virtual AioResultList drain() = 0;
+
+  static OpFunc librados_op(librados::ObjectReadOperation&& op);
+  static OpFunc librados_op(librados::ObjectWriteOperation&& op);
 };
 
 } // namespace rgw

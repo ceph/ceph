@@ -2597,6 +2597,22 @@ void DaemonServer::adjust_pgs()
 	      }
 	      dout(20) << " room " << room << " estmax " << estmax
 		       << " delta " << delta << " next " << next << dendl;
+	      if (p.get_pgp_num_target() == p.get_pg_num_target()) {
+		// since pgp_num is tracking pg_num, ceph is handling
+		// pgp_num.  so, be responsible: don't let pgp_num get
+		// too far out ahead of merges (if we are merging).
+		// this avoids moving lots of unmerged pgs onto a
+		// small number of OSDs where we might blow out the
+		// per-osd pg max.
+		unsigned max_outpace_merges =
+		  std::max<unsigned>(8, p.get_pg_num() * max_misplaced);
+		if (next + max_outpace_merges < p.get_pg_num()) {
+		  next = p.get_pg_num() - max_outpace_merges;
+		  dout(10) << "  using next " << next
+			   << " to avoid outpacing merges (max_outpace_merges "
+			   << max_outpace_merges << ")" << dendl;
+		}
+	      }
 	    }
 	    dout(10) << "pool " << i.first
 		     << " pgp_num_target " << p.get_pgp_num_target()
@@ -2732,21 +2748,18 @@ const char** DaemonServer::get_tracked_conf_keys() const
 void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 				      const std::set <std::string> &changed)
 {
-  // We may be called within lock (via MCommand `config set`) or outwith the
-  // lock (via admin socket `config set`), so handle either case.
-  const bool initially_locked = lock.is_locked_by_me();
-  if (!initially_locked) {
-    lock.Lock();
-  }
 
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
-    for (auto &c : daemon_connections) {
-      _send_configure(c);
-    }
+    finisher.queue(new FunctionContext([this](int r) {
+      std::lock_guard l(lock);
+      for (auto &c : daemon_connections) {
+        _send_configure(c);
+      }
+    }));
   }
 }
 

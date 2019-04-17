@@ -23,9 +23,13 @@
 using peer_type_t = int;
 using auth_proto_t = int;
 
+class AuthConnectionMeta;
+using AuthConnectionMetaRef = seastar::lw_shared_ptr<AuthConnectionMeta>;
+
 namespace ceph::net {
 
 using msgr_tag_t = uint8_t;
+using stop_t = seastar::stop_iteration;
 
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
@@ -39,14 +43,19 @@ class Messenger;
 
 template <typename T, typename... Args>
 seastar::future<T*> create_sharded(Args... args) {
-  auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
-  return sharded_obj->start(args...).then([sharded_obj]() {
-      auto ret = &sharded_obj->local();
+  // seems we should only construct/stop shards on #0
+  return seastar::smp::submit_to(0, [=] {
+    auto sharded_obj = seastar::make_lw_shared<seastar::sharded<T>>();
+    return sharded_obj->start(args...).then([sharded_obj]() {
       seastar::engine().at_exit([sharded_obj]() {
           return sharded_obj->stop().finally([sharded_obj] {});
         });
-      return ret;
+      return sharded_obj.get();
     });
+  }).then([] (seastar::sharded<T> *ptr_shard) {
+    // return the pointer valid for the caller CPU
+    return &ptr_shard->local();
+  });
 }
 
 } // namespace ceph::net

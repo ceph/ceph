@@ -633,15 +633,18 @@ frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
   return dirfragtree[h];
 }
 
-bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
+std::pair<bool, std::vector<CDir*>> CInode::get_dirfrags_under(frag_t fg)
 {
-  bool all = true;
+  std::pair<bool, std::vector<CDir*>> result;
+  auto& all = result.first;
+  auto& dirs = result.second;
+
   {
     frag_vec_t leaves;
     dirfragtree.get_leaves_under(fg, leaves);
     for (const auto &leaf : leaves) {
       if (auto it = dirfrags.find(leaf); it != dirfrags.end()) {
-        ls.push_back(it->second);
+        dirs.push_back(it->second);
       } else {
         all = false;
       }
@@ -649,14 +652,14 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   }
 
   if (all)
-    return all;
+    return result;
 
   fragtree_t tmpdft;
   tmpdft.force_to_leaf(g_ceph_context, fg);
   for (auto &p : dirfrags) {
     tmpdft.force_to_leaf(g_ceph_context, p.first);
     if (fg.contains(p.first) && !dirfragtree.is_leaf(p.first))
-      ls.push_back(p.second);
+      dirs.push_back(p.second);
   }
 
   all = true;
@@ -671,7 +674,7 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
     }
   }
 
-  return all;
+  return result;
 }
 
 void CInode::verify_dirfrags()
@@ -715,10 +718,9 @@ CDir *CInode::get_approx_dirfrag(frag_t fg)
   if (dir) return dir;
 
   // find a child?
-  list<CDir*> ls;
-  get_dirfrags_under(fg, ls);
-  if (!ls.empty()) 
-    return ls.front();
+  auto&& p = get_dirfrags_under(fg);
+  if (!p.second.empty())
+    return p.second.front();
 
   // try parents?
   while (fg.bits() > 0) {
@@ -1560,13 +1562,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
       // also specify which frags are mine
       set<frag_t> myfrags;
-      list<CDir*> dfls;
-      get_dirfrags(dfls);
-      for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) 
-	if ((*p)->is_auth()) {
-	  frag_t fg = (*p)->get_frag();
+      auto&& dfls = get_dirfrags();
+      for (const auto& dir : dfls) {
+	if (dir->is_auth()) {
+	  frag_t fg = dir->get_frag();
 	  myfrags.insert(fg);
 	}
+      }
       encode(myfrags, bl);
     }
     break;
@@ -3160,7 +3162,8 @@ int CInode::get_xlocker_mask(client_t client) const
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(Session *session, mempool_inode *file_i) const
+int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
+					mempool_inode *file_i) const
 {
   client_t client = session->get_client();
   int allowed;
@@ -3174,13 +3177,23 @@ int CInode::get_caps_allowed_for_client(Session *session, mempool_inode *file_i)
   }
 
   if (!is_dir()) {
-    if ((file_i->inline_data.version != CEPH_INLINE_NONE &&
-	 !session->get_connection()->has_feature(
-	   CEPH_FEATURE_MDS_INLINE_DATA)) ||
-	(!file_i->layout.pool_ns.empty() &&
-	 !session->get_connection()->has_feature(
-	   CEPH_FEATURE_FS_FILE_LAYOUT_V2)))
-      allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+    if (file_i->inline_data.version == CEPH_INLINE_NONE &&
+	file_i->layout.pool_ns.empty()) {
+      // noop
+    } else if (cap) {
+      if ((file_i->inline_data.version != CEPH_INLINE_NONE &&
+	   cap->is_noinline()) ||
+	  (!file_i->layout.pool_ns.empty() &&
+	   cap->is_nopoolns()))
+	allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+    } else {
+      auto& conn = session->get_connection();
+      if ((file_i->inline_data.version != CEPH_INLINE_NONE &&
+	   !conn->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) ||
+	  (!file_i->layout.pool_ns.empty() &&
+	   !conn->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)))
+	allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
+    }
   }
   return allowed;
 }
@@ -3256,24 +3269,6 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
     return true;
   return false;
 }
-
-void CInode::replicate_relax_locks()
-{
-  //dout(10) << " relaxing locks on " << *this << dendl;
-  ceph_assert(is_auth());
-  ceph_assert(!is_replicated());
-  
-  authlock.replicate_relax();
-  linklock.replicate_relax();
-  dirfragtreelock.replicate_relax();
-  filelock.replicate_relax();
-  xattrlock.replicate_relax();
-  snaplock.replicate_relax();
-  nestlock.replicate_relax();
-  flocklock.replicate_relax();
-  policylock.replicate_relax();
-}
-
 
 
 // =============================================
@@ -3475,7 +3470,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      */
     ecap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())
-      ecap.caps = ecap.caps & get_caps_allowed_for_client(session, file_i);
+      ecap.caps = ecap.caps & get_caps_allowed_for_client(session, nullptr, file_i);
     ecap.seq = 0;
     ecap.mseq = 0;
     ecap.realm = 0;
@@ -3490,7 +3485,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     int issue = 0;
     if (!no_caps && cap) {
       int likes = get_caps_liked();
-      int allowed = get_caps_allowed_for_client(session, file_i);
+      int allowed = get_caps_allowed_for_client(session, cap, file_i);
       issue = (cap->wanted() | likes) & allowed;
       cap->issue_norevoke(issue);
       issue = cap->pending();
@@ -3666,22 +3661,23 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(file_i->rstat.rctime, bl);
     dirfragtree.encode(bl);
     encode(symlink, bl);
-    if (session->get_connection()->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
+    auto& conn = session->get_connection();
+    if (conn->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
       encode(file_i->dir_layout, bl);
     }
     encode_xattrs();
-    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+    if (conn->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
       encode(inline_version, bl);
       encode(inline_data, bl);
     }
-    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
+    if (conn->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
       mempool_inode *policy_i = ppolicy ? pi : oi;
       encode(policy_i->quota, bl);
     }
-    if (session->get_connection()->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
+    if (conn->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
       encode(layout.pool_ns, bl);
     }
-    if (session->get_connection()->has_feature(CEPH_FEATURE_FS_BTIME)) {
+    if (conn->has_feature(CEPH_FEATURE_FS_BTIME)) {
       encode(any_i->btime, bl);
       encode(any_i->change_attr, bl);
     }
@@ -4049,7 +4045,7 @@ void InodeStoreBase::dump(Formatter *f) const
 }
 
 
-void InodeStore::generate_test_instances(list<InodeStore*> &ls)
+void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
 {
   InodeStore *populated = new InodeStore;
   populated->inode.ino = 0xdeadbeef;
@@ -4057,7 +4053,7 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
-void InodeStoreBare::generate_test_instances(list<InodeStoreBare*> &ls)
+void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
 {
   InodeStoreBare *populated = new InodeStoreBare;
   populated->inode.ino = 0xdeadbeef;
@@ -4623,8 +4619,7 @@ void CInode::dump(Formatter *f, int flags) const
 
   if (flags & DUMP_DIRFRAGS) {
     f->open_array_section("dirfrags");
-    list<CDir*> dfs;
-    get_dirfrags(dfs);
+    auto&& dfs = get_dirfrags();
     for(const auto &dir: dfs) {
       f->open_object_section("dir");
       dir->dump(f, CDir::DUMP_DEFAULT | CDir::DUMP_ITEMS);
@@ -4920,6 +4915,24 @@ bool CInode::is_exportable(mds_rank_t dest) const
     return false;
   } else {
     return true;
+  }
+}
+
+void CInode::get_nested_dirfrags(std::vector<CDir*>& v) const
+{
+  for (const auto &p : dirfrags) {
+    const auto& dir = p.second;
+    if (!dir->is_subtree_root())
+      v.push_back(dir);
+  }
+}
+
+void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
+{
+  for (const auto &p : dirfrags) {
+    const auto& dir = p.second;
+    if (dir->is_subtree_root())
+      v.push_back(dir);
   }
 }
 

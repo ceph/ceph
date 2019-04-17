@@ -564,9 +564,6 @@ MESSAGE(MCommandReply)
 #include "messages/MConfig.h"
 MESSAGE(MConfig)
 
-#include "messages/MDataPing.h"
-MESSAGE(MDataPing)
-
 #include "messages/MDentryLink.h"
 MESSAGE(MDentryLink)
 
@@ -764,9 +761,6 @@ MESSAGE(MMonSubscribe)
 
 #include "messages/MMonSubscribeAck.h"
 MESSAGE(MMonSubscribeAck)
-
-#include "messages/MNop.h"
-MESSAGE(MNop)
 
 #include "messages/MOSDAlive.h"
 MESSAGE(MOSDAlive)

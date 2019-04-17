@@ -7,6 +7,7 @@ import * as _ from 'lodash';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -23,6 +24,8 @@ export class RgwBucketFormComponent implements OnInit {
   error = false;
   loading = false;
   owners = null;
+  action: string;
+  resource: string;
 
   constructor(
     private route: ActivatedRoute,
@@ -31,8 +34,12 @@ export class RgwBucketFormComponent implements OnInit {
     private rgwBucketService: RgwBucketService,
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
+    this.editing = this.router.url.startsWith(`/rgw/bucket/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.resource = this.i18n('bucket');
     this.createForm();
   }
 
@@ -58,8 +65,7 @@ export class RgwBucketFormComponent implements OnInit {
         }
         const bid = decodeURIComponent(params.bid);
         this.loading = true;
-        // Load the bucket data in 'edit' mode.
-        this.editing = true;
+
         this.rgwBucketService.get(bid).subscribe((resp: object) => {
           this.loading = false;
           // Get the default values.

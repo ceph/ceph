@@ -38,7 +38,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Create Bucket**               | Supported       | Different set of canned ACLs           |
 +---------------------------------+-----------------+----------------------------------------+
-| **Bucket Lifecycle**            | Supported       | Removing expired files is supported    |
+| **Bucket Lifecycle**            | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Policy (Buckets, Objects)**   | Supported       | ACLs & bucket policies are supported   |
 +---------------------------------+-----------------+----------------------------------------+
@@ -48,7 +48,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Location**             | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
-| **Bucket Notification**         | Not Supported   |                                        |
+| **Bucket Notification**         | Supported       | See `S3 Notification Compatibility`_   |
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Object Versions**      | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
@@ -74,9 +74,10 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Object Tagging**              | Supported       | See :ref:`tag_policy` for Policy verbs |
 +---------------------------------+-----------------+----------------------------------------+
-| **Storage Class**               | Not Supported   | Use **Bucket Location** as alternative |
-+--------------------------------------------------------------------------------------------+
-
+| **Bucket Tagging**              | Not Supported   |                                        |
++---------------------------------+-----------------+----------------------------------------+
+| **Storage Class**               | Supported       | See :ref:`storage_classes`             |
++---------------------------------+-----------------+----------------------------------------+
 
 Unsupported Header Fields
 -------------------------
@@ -98,3 +99,4 @@ The following common request header fields are not supported:
 +----------------------------+------------+
 
 .. _Amazon S3 API: http://docs.aws.amazon.com/AmazonS3/latest/API/APIRest.html
+.. _S3 Notification Compatibility: ../s3-notification-compatibility

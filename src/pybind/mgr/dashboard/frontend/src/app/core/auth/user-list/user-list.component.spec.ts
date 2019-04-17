@@ -11,6 +11,7 @@ import {
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
+import { ActionLabels } from '../../../shared/constants/app.constants';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { UserTabsComponent } from '../user-tabs/user-tabs.component';
@@ -58,8 +59,8 @@ describe('UserListComponent', () => {
       );
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Add'
+        single: ActionLabels.EDIT,
+        empty: ActionLabels.CREATE
       };
     });
 
@@ -117,7 +118,7 @@ describe('UserListComponent', () => {
       });
 
       it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
+        scenario.empty = ActionLabels.EDIT;
         permissionHelper.testScenarios(scenario);
       });
 
@@ -136,7 +137,7 @@ describe('UserListComponent', () => {
       });
 
       it(`shows always 'Add' as main action`, () => {
-        scenario.single = 'Add';
+        scenario.single = ActionLabels.CREATE;
         permissionHelper.testScenarios(scenario);
       });
 

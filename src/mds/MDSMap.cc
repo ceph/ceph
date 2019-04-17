@@ -112,7 +112,7 @@ void MDSMap::mds_info_t::print_summary(ostream &out) const
   }
 }
 
-void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
+void MDSMap::mds_info_t::generate_test_instances(std::list<mds_info_t*>& ls)
 {
   mds_info_t *sample = new mds_info_t();
   ls.push_back(sample);
@@ -187,7 +187,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
-void MDSMap::generate_test_instances(list<MDSMap*>& ls)
+void MDSMap::generate_test_instances(std::list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();
   m->max_mds = 1;

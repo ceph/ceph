@@ -50,7 +50,7 @@ the CLT itself.
 
 Current CLT members are:
 
- * Ahbishek Lekshmanan <abhishek@suse.com>
+ * Abhishek Lekshmanan <abhishek@suse.com>
  * Alfredo Deza <adeza@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>

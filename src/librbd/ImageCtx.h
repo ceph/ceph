@@ -175,8 +175,6 @@ namespace librbd {
     /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;
     bool cache;
-    bool cache_writethrough_until_flush;
-    uint64_t cache_max_dirty;
     uint64_t sparse_read_threshold_bytes;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
@@ -316,8 +314,6 @@ namespace librbd {
 
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
-
-    bool is_writeback_cache_enabled() const;
 
     static void get_thread_pool_instance(CephContext *cct,
                                          ThreadPool **thread_pool,

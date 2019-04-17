@@ -131,7 +131,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         r, outb, outs = self.mon_command({
             'prefix': 'osd pool create',
             'pool': mdp_name,
-            'pg_num': 8
+            'pg_num': 16,
+            'pg_num_min': 16,
+        })
+        if r != 0:
+            return r, outb, outs
+
+        # count fs metadata omap at 4x usual rate
+        r, outb, outs = self.mon_command({
+            'prefix': 'osd pool set',
+            'pool': mdp_name,
+            'var': "pg_autoscale_bias",
+            'val': "4.0",
         })
         if r != 0:
             return r, outb, outs
@@ -168,7 +179,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             completion = self.add_stateless_service("mds", spec)
             self._orchestrator_wait([completion])
-        except (ImportError, orchestrator.NoOrchestrator):
+            orchestrator.raise_if_exception(completion)
+        except (ImportError, orchestrator.OrchestratorError):
             return 0, "", "Volume created successfully (no MDS daemons created)"
         except Exception as e:
             # Don't let detailed orchestrator exceptions (python backtraces)
@@ -249,8 +261,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             completion = self.remove_stateless_service("mds", vol_name)
             self._orchestrator_wait([completion])
-        except (ImportError, orchestrator.NoOrchestrator):
-            self.log.warning("No orchestrator, not tearing down MDS daemons")
+            orchestrator.raise_if_exception(completion)
+        except (ImportError, orchestrator.OrchestratorError):
+            self.log.warning("OrchestratorError, not tearing down MDS daemons")
         except Exception as e:
             # Don't let detailed orchestrator exceptions (python backtraces)
             # bubble out to the user

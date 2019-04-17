@@ -421,6 +421,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
   return compat;
 }
 
@@ -1118,7 +1119,8 @@ void Monitor::bootstrap()
   if (monmap->min_mon_release &&
       monmap->min_mon_release + 2 < (int)ceph_release()) {
     derr << "current monmap has min_mon_release "
-	 << ceph_release() << " (" << ceph_release_name(monmap->min_mon_release)
+	 << (int)monmap->min_mon_release
+	 << " (" << ceph_release_name(monmap->min_mon_release)
 	 << ") which is >2 releases older than me " << ceph_release()
 	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
 	 << dendl;
@@ -2046,7 +2048,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       return;
     }
 
-    unsigned need = monmap->size() / 2 + 1;
+    unsigned need = monmap->min_quorum_size();
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
@@ -2274,7 +2276,6 @@ void Monitor::collect_metadata(Metadata *m)
   // infer storage device
   string devname = store->get_devname();
   set<string> devnames;
-  derr << " devname " << devname << dendl;
   get_raw_devices(devname, &devnames);
   (*m)["devices"] = stringify(devnames);
   string devids;
@@ -2392,6 +2393,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_NAUTILUS));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_OCTOPUS)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_OCTOPUS));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_OCTOPUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2417,6 +2425,9 @@ void Monitor::calc_quorum_requirements()
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS |
       CEPH_FEATUREMASK_CEPHX_V2;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_OCTOPUS;
   }
 
   // monmap
@@ -3367,7 +3378,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
-      prefix != "mon count-metadata") {
+      prefix != "mon count-metadata" &&
+      prefix != "mon ok-to-stop" &&
+      prefix != "mon ok-to-add-offline" &&
+      prefix != "mon ok-to-rm") {
     monmon()->dispatch(op);
     return;
   }
@@ -3697,6 +3711,59 @@ void Monitor::handle_command(MonOpRequestRef op)
     rdata.append(ds);
     rs = "";
     r = 0;
+  } else if (prefix == "mon ok-to-stop") {
+    vector<string> ids;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+      r = -EINVAL;
+      goto out;
+    }
+    set<string> wouldbe;
+    for (auto rank : quorum) {
+      wouldbe.insert(monmap->get_name(rank));
+    }
+    for (auto& n : ids) {
+      if (monmap->contains(n)) {
+	wouldbe.erase(n);
+      }
+    }
+    if (wouldbe.size() < monmap->min_quorum_size()) {
+      r = -EBUSY;
+      rs = "not enough monitors would be available (" + stringify(wouldbe) +
+	") after stopping mons " + stringify(ids);
+      goto out;
+    }
+    r = 0;
+    rs = "quorum should be preserved (" + stringify(wouldbe) +
+      ") after stopping " + stringify(ids);
+  } else if (prefix == "mon ok-to-add-offline") {
+    if (quorum.size() < monmap->min_quorum_size(monmap->size() + 1)) {
+      rs = "adding a monitor may break quorum (until that monitor starts)";
+      r = -EBUSY;
+      goto out;
+    }
+    rs = "adding another mon that is not yet online will not break quorum";
+    r = 0;
+  } else if (prefix == "mon ok-to-rm") {
+    string id;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      r = -EINVAL;
+      rs = "must specify a monitor id";
+      goto out;
+    }
+    if (!monmap->contains(id)) {
+      r = 0;
+      rs = "mon." + id + " does not exist";
+      goto out;
+    }
+    int rank = monmap->get_rank(id);
+    if (quorum.count(rank) &&
+	quorum.size() - 1 < monmap->min_quorum_size(monmap->size() - 1)) {
+      r = -EBUSY;
+      rs = "removing mon." + id + " would break quorum";
+      goto out;
+    }
+    r = 0;
+    rs = "safe to remove mon." + id;
   } else if (prefix == "mon_status") {
     get_mon_status(f.get(), ds);
     if (f)
@@ -6184,8 +6251,8 @@ int Monitor::handle_auth_request(
     }
 
     // handler?
-    AuthServiceHandler *auth_handler = get_auth_service_handler(
-      auth_method, g_ceph_context, &key_server);
+    unique_ptr<AuthServiceHandler> auth_handler{get_auth_service_handler(
+      auth_method, g_ceph_context, &key_server)};
     if (!auth_handler) {
       dout(1) << __func__ << " auth_method " << auth_method << " not supported"
 	      << dendl;
@@ -6195,10 +6262,20 @@ int Monitor::handle_auth_request(
     uint8_t mode;
     EntityName entity_name;
 
-    decode(mode, p);
-    assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
-    decode(entity_name, p);
-    decode(con->peer_global_id, p);
+    try {
+      decode(mode, p);
+      if (mode < AUTH_MODE_MON ||
+	  mode > AUTH_MODE_MON_MAX) {
+	dout(1) << __func__ << " invalid mode " << (int)mode << dendl;
+	return -EACCES;
+      }
+      assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+      decode(entity_name, p);
+      decode(con->peer_global_id, p);
+    } catch (buffer::error& e) {
+      dout(1) << __func__ << " failed to decode, " << e.what() << dendl;
+      return -EACCES;
+    }
 
     // supported method?
     if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
@@ -6209,7 +6286,6 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
-	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     } else {
@@ -6217,7 +6293,6 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
-	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     }
@@ -6230,7 +6305,6 @@ int Monitor::handle_auth_request(
       con->peer_global_id = authmon()->_assign_global_id();
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
-	delete auth_handler;
 	return -EBUSY;
       }
       dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
@@ -6239,7 +6313,7 @@ int Monitor::handle_auth_request(
 
     // set up partial session
     s = new MonSession(con);
-    s->auth_handler = auth_handler;
+    s->auth_handler = auth_handler.release();
     con->set_priv(RefCountedPtr{s, false});
 
     r = s->auth_handler->start_session(

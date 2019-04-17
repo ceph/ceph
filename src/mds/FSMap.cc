@@ -69,7 +69,7 @@ void FSMap::dump(Formatter *f) const
   f->close_section();
 }
 
-void FSMap::generate_test_instances(list<FSMap*>& ls)
+void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 {
   FSMap *m = new FSMap();
 
@@ -283,17 +283,10 @@ Filesystem::ref FSMap::create_filesystem(std::string_view name,
   fs->mds_map.created = ceph_clock_now();
   fs->mds_map.modified = ceph_clock_now();
   fs->mds_map.enabled = true;
-  if (features & CEPH_FEATURE_SERVER_JEWEL) {
-    fs->fscid = next_filesystem_id++;
-    // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
-    // have initialized next_filesystem_id such that it's never used here.
-    ceph_assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
-  } else {
-    // Use anon fscid because this will get thrown away when encoding
-    // as legacy MDSMap for legacy mons.
-    ceph_assert(filesystems.empty());
-    fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
-  }
+  fs->fscid = next_filesystem_id++;
+  // ANONYMOUS is only for upgrades from legacy mdsmaps, we should
+  // have initialized next_filesystem_id such that it's never used here.
+  ceph_assert(fs->fscid != FS_CLUSTER_ID_ANONYMOUS);
   filesystems[fs->fscid] = fs;
 
   // Created first filesystem?  Set it as the one
@@ -418,54 +411,23 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
 
 void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
-  if (features & CEPH_FEATURE_SERVER_JEWEL) {
-    ENCODE_START(7, 6, bl);
-    encode(epoch, bl);
-    encode(next_filesystem_id, bl);
-    encode(legacy_client_fscid, bl);
-    encode(compat, bl);
-    encode(enable_multiple, bl);
-    {
-      std::vector<Filesystem::ref> v;
-      v.reserve(filesystems.size());
-      for (auto& p : filesystems) v.emplace_back(p.second);
-      encode(v, bl, features);
-    }
-    encode(mds_roles, bl);
-    encode(standby_daemons, bl, features);
-    encode(standby_epochs, bl);
-    encode(ever_enabled_multiple, bl);
-    ENCODE_FINISH(bl);
-  } else {
-    if (filesystems.empty()) {
-      MDSMap disabled_map;
-      disabled_map.epoch = epoch;
-      disabled_map.encode(bl, features);
-    } else {
-      // MDSMonitor should never have created multiple filesystems
-      // until the quorum features indicated Jewel
-      ceph_assert(filesystems.size() == 1);
-      auto fs = filesystems.begin()->second;
-
-      // Take the MDSMap for the enabled filesystem, and populated its
-      // mds_info with the standbys to get a pre-jewel-style mon MDSMap.
-      MDSMap full_mdsmap = fs->mds_map;
-      full_mdsmap.epoch = epoch;
-      for (const auto &p : standby_daemons) {
-        full_mdsmap.mds_info[p.first] = p.second;
-      }
-
-      // Old MDSMaps don't set rank on standby replay daemons
-      for (auto &i : full_mdsmap.mds_info) {
-        auto &info = i.second;
-        if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
-          info.rank = MDS_RANK_NONE;
-        }
-      }
-
-      full_mdsmap.encode(bl, features);
-    }
+  ENCODE_START(7, 6, bl);
+  encode(epoch, bl);
+  encode(next_filesystem_id, bl);
+  encode(legacy_client_fscid, bl);
+  encode(compat, bl);
+  encode(enable_multiple, bl);
+  {
+    std::vector<Filesystem::ref> v;
+    v.reserve(filesystems.size());
+    for (auto& p : filesystems) v.emplace_back(p.second);
+    encode(v, bl, features);
   }
+  encode(mds_roles, bl);
+  encode(standby_daemons, bl, features);
+  encode(standby_epochs, bl);
+  encode(ever_enabled_multiple, bl);
+  ENCODE_FINISH(bl);
 }
 
 void FSMap::decode(bufferlist::const_iterator& p)
@@ -946,7 +908,7 @@ void FSMap::insert(const MDSMap::mds_info_t &new_info)
   standby_epochs[new_info.global_id] = epoch;
 }
 
-std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
+std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
 {
   ceph_assert(mds_roles.at(who) != FS_CLUSTER_ID_NONE);
   auto fs = filesystems.at(mds_roles.at(who));
@@ -956,7 +918,7 @@ std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
   fs->mds_map.stopped.insert(info.rank);
 
   // Also drop any standby replays that were following this rank
-  std::list<mds_gid_t> standbys;
+  std::vector<mds_gid_t> standbys;
   for (const auto &i : fs->mds_map.mds_info) {
     const auto &other_gid = i.first;
     const auto &other_info = i.second;

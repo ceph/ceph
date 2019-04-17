@@ -6,6 +6,7 @@
 #include <limits.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 #include "common/utf8.h"
@@ -13,6 +14,7 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_zone.h"
+#include "rgw_auth_s3.h"
 #include "rgw_formats.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -657,13 +659,13 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
   if (op != NULL) {
     int new_err_no;
     new_err_no = op->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "op->ERRORHANDLER: err_no=" << err_no
+    ldout(s->cct, 1) << "op->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
     new_err_no = handler->error_handler(err_no, &error_content);
-    ldout(s->cct, 20) << "handler->ERRORHANDLER: err_no=" << err_no
+    ldout(s->cct, 1) << "handler->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
@@ -1534,8 +1536,8 @@ int RGWCompleteMultipart_ObjStore::get_params()
     return op_ret;
   }
 
-#define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
-  std::tie(op_ret, data) = rgw_rest_read_all_input(s, COMPLETE_MULTIPART_MAX_LEN);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size);
   if (op_ret < 0)
     return op_ret;
 
@@ -1665,15 +1667,16 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 					int default_type,
 					bool configurable)
 {
-  s->format = default_type;
+  s->format = -1; // set to invalid value to allocation happens anyway 
+  auto type = default_type;
   if (configurable) {
     string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
-      s->format = RGW_FORMAT_XML;
+      type = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
-      s->format = RGW_FORMAT_JSON;
+      type = RGW_FORMAT_JSON;
     } else if (format_str.compare("html") == 0) {
-      s->format = RGW_FORMAT_HTML;
+      type = RGW_FORMAT_HTML;
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
@@ -1684,15 +1687,30 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
         }
         format_buf[i] = 0;
         if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
-          s->format = RGW_FORMAT_XML;
+          type = RGW_FORMAT_XML;
         } else if (strcmp(format_buf, "application/json") == 0) {
-          s->format = RGW_FORMAT_JSON;
+          type = RGW_FORMAT_JSON;
         } else if (strcmp(format_buf, "text/html") == 0) {
-          s->format = RGW_FORMAT_HTML;
+          type = RGW_FORMAT_HTML;
         }
       }
     }
   }
+  return RGWHandler_REST::reallocate_formatter(s, type);
+}
+
+int RGWHandler_REST::reallocate_formatter(struct req_state *s, int type)
+{
+  if (s->format == type) {
+    // do nothing, just reset
+    ceph_assert(s->formatter);
+    s->formatter->reset();
+    return 0;
+  }
+
+  delete s->formatter;
+  s->formatter = nullptr;
+  s->format = type;
 
   const string& mm = s->info.args.get("multipart-manifest");
   const bool multipart_delete = (mm.compare("delete") == 0);
@@ -1728,7 +1746,6 @@ int RGWHandler_REST::allocate_formatter(struct req_state *s,
 
   return 0;
 }
-
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
 int RGWHandler_REST::validate_bucket_name(const string& bucket)

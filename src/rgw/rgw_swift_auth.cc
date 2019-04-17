@@ -128,7 +128,7 @@ std::string TempURLEngine::convert_from_iso8601(std::string expires) const
    * for the HMAC calculations. We need to make the conversion. */
   struct tm date_t;
   if (!parse_iso8601(expires.c_str(), &date_t, nullptr, true)) {
-    return std::move(expires);
+    return expires;
   } else {
     return std::to_string(internal_timegm(&date_t));
   }
@@ -398,7 +398,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process();
+  int ret = validator.process(null_yield);
   if (ret < 0) {
     throw ret;
   }

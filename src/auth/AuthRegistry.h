@@ -14,7 +14,7 @@
 
 class AuthRegistry : public md_config_obs_t {
   CephContext *cct;
-  ceph::mutex lock = ceph::make_mutex("AuthRegistry::lock");
+  mutable ceph::mutex lock = ceph::make_mutex("AuthRegistry::lock");
 
   std::map<int,AuthAuthorizeHandler*> authorize_handlers;
 
@@ -33,8 +33,8 @@ class AuthRegistry : public md_config_obs_t {
   std::vector<uint32_t> service_modes;
   std::vector<uint32_t> client_modes;
 
-  void _parse_method_list(const string& str, std::vector<uint32_t> *v);
-  void _parse_mode_list(const string& str, std::vector<uint32_t> *v);
+  void _parse_method_list(const std::string& str, std::vector<uint32_t> *v);
+  void _parse_mode_list(const std::string& str, std::vector<uint32_t> *v);
   void _refresh_config();
 
 public:
@@ -48,13 +48,13 @@ public:
 
   void get_supported_methods(int peer_type,
 			     std::vector<uint32_t> *methods,
-			     std::vector<uint32_t> *modes=nullptr);
-  bool is_supported_method(int peer_type, int method);
-  bool any_supported_methods(int peer_type);
+			     std::vector<uint32_t> *modes=nullptr) const;
+  bool is_supported_method(int peer_type, int method) const;
+  bool any_supported_methods(int peer_type) const;
 
   void get_supported_modes(int peer_type,
 			   uint32_t auth_method,
-			   std::vector<uint32_t> *modes);
+			   std::vector<uint32_t> *modes) const;
 
   uint32_t pick_mode(int peer_type,
 		     uint32_t auth_method,

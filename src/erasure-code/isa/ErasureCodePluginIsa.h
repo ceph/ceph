@@ -21,14 +21,14 @@
 #include "erasure-code/ErasureCodePlugin.h"
 #include "ErasureCodeIsaTableCache.h"
 
-class ErasureCodePluginIsa : public ErasureCodePlugin {
+class ErasureCodePluginIsa : public ceph::ErasureCodePlugin {
 public:
   ErasureCodeIsaTableCache tcache;
 
   int factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
-		      ErasureCodeInterfaceRef *erasure_code,
-		      std::ostream *ss) override;
+	      ceph::ErasureCodeProfile &profile,
+	      ceph::ErasureCodeInterfaceRef *erasure_code,
+	      std::ostream *ss) override;
 };
 
 #endif

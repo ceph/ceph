@@ -236,7 +236,26 @@ def task(ctx, config):
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
-
+    assert out['tenant'] == ''
+    assert out['max_buckets'] == 4
+    assert out['caps'] == []
+    assert out['op_mask'] == 'read, write, delete'
+    assert out['default_placement'] == ''
+    assert out['default_storage_class'] == ''
+    assert out['placement_tags'] == []
+    assert not out['bucket_quota']['enabled']
+    assert not out['bucket_quota']['check_on_raw']
+    assert out['bucket_quota']['max_size'] == -1
+    assert out['bucket_quota']['max_size_kb'] == 0
+    assert out['bucket_quota']['max_objects'] == -1
+    assert not out['user_quota']['enabled']
+    assert not out['user_quota']['check_on_raw']
+    assert out['user_quota']['max_size'] == -1
+    assert out['user_quota']['max_size_kb'] == 0
+    assert out['user_quota']['max_objects'] == -1
+    assert out['temp_url_keys'] == []
+    assert out['type'] == 'rgw'
+    assert out['mfa_ids'] == []
     # TESTCASE 'info-existing','user','info','existing user query with wrong uid but correct access key','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
 
@@ -247,6 +266,26 @@ def task(ctx, config):
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
+    assert out['tenant'] == ''
+    assert out['max_buckets'] == 4
+    assert out['caps'] == []
+    assert out['op_mask'] == "read, write, delete"
+    assert out['default_placement'] == ''
+    assert out['default_storage_class'] == ''
+    assert out['placement_tags'] == []
+    assert not out['bucket_quota']['enabled']
+    assert not out['bucket_quota']['check_on_raw']
+    assert out ['bucket_quota']['max_size'] == -1
+    assert out ['bucket_quota']['max_size_kb'] == 0
+    assert out ['bucket_quota']['max_objects'] == -1
+    assert not out['user_quota']['enabled']
+    assert not out['user_quota']['check_on_raw']
+    assert out['user_quota']['max_size'] == -1
+    assert out['user_quota']['max_size_kb'] == 0
+    assert out['user_quota']['max_objects'] == -1
+    assert out['temp_url_keys'] == []
+    assert out['type'] == 'rgw'
+    assert out['mfa_ids'] == []
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})

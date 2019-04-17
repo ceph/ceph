@@ -1177,6 +1177,19 @@ function test_mon_mon()
   expect_false ceph mon feature set abcd --yes-i-really-mean-it
 }
 
+function test_mon_priority_and_weight()
+{
+    for i in 0 1 65535; do
+      ceph mon set-weight a $i
+      w=$(ceph mon dump --format=json-pretty 2>/dev/null | jq '.mons[0].weight')
+      [[ "$w" == "$i" ]]
+    done
+
+    for i in -1 65536; do
+      expect_false ceph mon set-weight a $i
+    done
+}
+
 function gen_secrets_file()
 {
   # lets assume we can have the following types
@@ -1475,9 +1488,11 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release nautilus
-  # can't lower (or use new command for anything but jewel)
-  expect_false ceph osd require-osd-release jewel
+  ceph osd require-osd-release octopus
+  # can't lower
+  expect_false ceph osd require-osd-release nautilus
+  expect_false ceph osd require-osd-release mimic
+  expect_false ceph osd require-osd-release luminous
   # these are no-ops but should succeed.
 
   ceph osd set noup

@@ -20,13 +20,6 @@
 
 namespace rgw {
 
-void AioThrottle::aio_cb(void *cb, void *arg)
-{
-  Pending& p = *static_cast<Pending*>(arg);
-  p.result = p.completion->get_return_value();
-  p.parent->put(p);
-}
-
 bool AioThrottle::waiter_ready() const
 {
   switch (waiter) {
@@ -37,76 +30,43 @@ bool AioThrottle::waiter_ready() const
   }
 }
 
-AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                                  librados::ObjectWriteOperation *op,
-                                  uint64_t cost, uint64_t id)
+AioResultList AioThrottle::get(const RGWSI_RADOS::Obj& obj,
+			       OpFunc&& f,
+			       uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
   p->obj = obj;
   p->id = id;
   p->cost = cost;
 
-  if (cost > window) {
-    p->result = -EDEADLK; // would never succeed
-    completed.push_back(*p);
-  } else {
-    get(*p);
-    p->result = obj.aio_operate(p->completion, op);
-    if (p->result < 0) {
-      put(*p);
-    }
-  }
-  p.release();
-  return std::move(completed);
-}
-
-AioResultList AioThrottle::submit(RGWSI_RADOS::Obj& obj,
-                                  librados::ObjectReadOperation *op,
-                                  uint64_t cost, uint64_t id)
-{
-  auto p = std::make_unique<Pending>();
-  p->obj = obj;
-  p->id = id;
-  p->cost = cost;
-
-  if (cost > window) {
-    p->result = -EDEADLK; // would never succeed
-    completed.push_back(*p);
-  } else {
-    get(*p);
-    p->result = obj.aio_operate(p->completion, op, &p->data);
-    if (p->result < 0) {
-      put(*p);
-    }
-  }
-  p.release();
-  return std::move(completed);
-}
-
-void AioThrottle::get(Pending& p)
-{
   std::unique_lock lock{mutex};
+  if (cost > window) {
+    p->result = -EDEADLK; // would never succeed
+    completed.push_back(*p);
+  } else {
+    // wait for the write size to become available
+    pending_size += p->cost;
+    if (!is_available()) {
+      ceph_assert(waiter == Wait::None);
+      waiter = Wait::Available;
+      cond.wait(lock, [this] { return is_available(); });
+      waiter = Wait::None;
+    }
 
-  // wait for the write size to become available
-  pending_size += p.cost;
-  if (!is_available()) {
-    ceph_assert(waiter == Wait::None);
-    waiter = Wait::Available;
-    cond.wait(lock, [this] { return is_available(); });
-    waiter = Wait::None;
+    // register the pending write and attach a completion
+    p->parent = this;
+    pending.push_back(*p);
+    lock.unlock();
+    std::move(f)(this, *static_cast<AioResult*>(p.get()));
+    lock.lock();
   }
-
-  // register the pending write and attach a completion
-  p.parent = this;
-  p.completion = librados::Rados::aio_create_completion(&p, nullptr, aio_cb);
-  pending.push_back(p);
+  p.release();
+  return std::move(completed);
 }
 
-void AioThrottle::put(Pending& p)
+void AioThrottle::put(AioResult& r)
 {
-  p.completion->release();
-  p.completion = nullptr;
-
+  auto& p = static_cast<Pending&>(r);
   std::scoped_lock lock{mutex};
 
   // move from pending to completed

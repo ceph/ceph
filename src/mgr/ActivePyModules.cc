@@ -327,7 +327,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "df") {
     cluster_state.with_osdmap_and_pgmap(
-      [this, &f, &tstate](
+      [&f, &tstate](
 	const OSDMap& osd_map,
 	const PGMap &pg_map) {
 	PyEval_RestoreThread(tstate);
@@ -593,10 +593,7 @@ void ActivePyModules::set_store(const std::string &module_name,
   
   Command set_cmd;
   {
-    PyThreadState *tstate = PyEval_SaveThread();
     std::lock_guard l(lock);
-    PyEval_RestoreThread(tstate);
-
     if (val) {
       store_cache[global_key] = *val;
     } else {
@@ -912,6 +909,7 @@ int ActivePyModules::handle_command(
   auto mod_iter = modules.find(module_name);
   if (mod_iter == modules.end()) {
     *ss << "Module '" << module_name << "' is not available";
+    lock.Unlock();
     return -ENOENT;
   }
 

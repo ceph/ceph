@@ -6,8 +6,8 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title"
-            i18n>{mode, select, editing {Edit} other {Add}} User</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
       <div class="panel-body">
 
@@ -47,6 +47,7 @@
                      placeholder="Password..."
                      id="password"
                      name="password"
+                     autocomplete="new-password"
                      formControlName="password">
               <span class="input-group-btn">
                 <button type="button"
@@ -141,14 +142,12 @@
       </div>
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button [form]="formDir"
-                            type="button"
-                            (submitAction)="submit()"
-                            i18n>{mode, select, editing {Update} other {Create}} User</cd-submit-button>
-          <button i18n
-                  type="button"
-                  class="btn btn-sm btn-default"
-                  routerLink="/user-management/users">Back</button>
+          <cd-submit-button
+            [form]="formDir"
+            (submitAction)="submit()"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

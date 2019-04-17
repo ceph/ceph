@@ -1,0 +1,17 @@
+meta:
+- desc: install ceph/nautilus latest
+tasks:
+- install:
+    branch: nautilus
+- print: "**** done install nautilus"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release nautilus
+      - ceph osd set-require-min-compat-client nautilus
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

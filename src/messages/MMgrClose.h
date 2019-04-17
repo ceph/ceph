@@ -19,6 +19,7 @@ public:
 
   void decode_payload() override
   {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(daemon_name, p);
     decode(service_name, p);
@@ -31,7 +32,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mgrclose"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {
       out << service_name;

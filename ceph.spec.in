@@ -21,7 +21,6 @@
 # please read http://rpm.org/user_doc/conditional_builds.html for explanation of
 # bcond syntax!
 #################################################################################
-%bcond_without ocf
 %bcond_with make_check
 %ifarch s390 s390x
 %bcond_with tcmalloc
@@ -34,6 +33,7 @@
 %bcond_without cephfs_java
 %bcond_without lttng
 %bcond_without libradosstriper
+%bcond_without ocf
 %bcond_without amqp_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
@@ -48,8 +48,10 @@
 %endif
 %if 0%{?is_opensuse}
 %bcond_without libradosstriper
+%bcond_without ocf
 %else
 %bcond_with libradosstriper
+%bcond_with ocf
 %endif
 %ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
@@ -75,7 +77,9 @@
 %if 0%{without python2}
 %global _defined_if_python2_absent 1
 %endif
-
+%if 0%{?fedora} || 0%{?suse_version}
+%global weak_deps 1
+%endif
 %if %{with selinux}
 # get selinux policy version
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
@@ -84,6 +88,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+%{!?python3_version: %global python3_version 3}
 # define _python_buildid macro which will expand to the empty string when
 # building with python2
 %global _python_buildid %{?_defined_if_python2_absent:%{python3_pkgversion}}
@@ -146,7 +151,7 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1-5.13
+BuildRequires:	devtoolset-8-gcc-c++ >= 8.2.1
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -258,15 +263,9 @@ BuildRequires:  redhat-lsb-core
 %if 0%{with python2}
 BuildRequires:	python2-Cython
 %endif
-%if 0%{?rhel} == 7
-BuildRequires:	python34-devel
-BuildRequires:	python34-setuptools
-BuildRequires:	python34-Cython
-%else
-BuildRequires:	python3-devel
-BuildRequires:	python3-setuptools
-BuildRequires:	python3-Cython
-%endif
+BuildRequires:	python%{python3_pkgversion}-devel
+BuildRequires:	python%{python3_pkgversion}-setuptools
+BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7
@@ -363,7 +362,7 @@ Requires:      which
 Requires:      gperftools-libs >= 2.6.1
 %endif
 %endif
-%if 0%{?suse_version}
+%if 0%{?weak_deps}
 Recommends:    chrony
 %endif
 %description base
@@ -440,12 +439,14 @@ Requires:       python%{_python_buildid}-werkzeug
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-Werkzeug
-Recommends:     python%{_python_buildid}-influxdb
+%endif
+%if 0%{?weak_deps}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
+Recommends:	python%{_python_buildid}-influxdb
 %endif
 %if 0%{?rhel} == 7
 Requires:       pyOpenSSL
@@ -503,7 +504,7 @@ Requires:       python3-scipy
 Requires:       python2-scipy
 %endif
 %endif
-%if 0%{?rhel} <= 7
+%if 0%{?rhel} == 7
 Requires:       numpy
 Requires:       scipy
 %endif
@@ -577,6 +578,15 @@ Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-mirror
 Daemon for mirroring RBD images between Ceph clusters, streaming
 changes asynchronously.
+
+%package immutable-object-cache
+Summary:	Ceph daemon for immutable object cache
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%description immutable-object-cache
+Daemon for immutable object cache.
 
 %package -n rbd-nbd
 Summary:	Ceph RBD client base on NBD
@@ -719,6 +729,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Provides: 	python3-rgw = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rgw
 This package contains Python 3 libraries for interacting with Cephs RADOS
 gateway.
@@ -743,6 +754,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	python%{python3_pkgversion}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-rados = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -829,6 +841,7 @@ Group:		Development/Libraries/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-rbd = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rbd
 This package contains Python 3 libraries for interacting with Cephs RADOS
 block device.
@@ -886,6 +899,7 @@ Group:		Development/Libraries/Python
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-cephfs = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
@@ -908,6 +922,7 @@ Summary:	Python 3 utility libraries for Ceph CLI
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
+Provides:   python3-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-ceph-argparse
 This package contains types and routines for Python 3 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
@@ -1051,7 +1066,7 @@ integrated with the Ceph Manager Dashboard web UI.
 %build
 
 %if 0%{?rhel} == 7
-. /opt/rh/devtoolset-7/enable
+. /opt/rh/devtoolset-8/enable
 %endif
 
 %if 0%{with cephfs_java}
@@ -1112,7 +1127,7 @@ ${CMAKE} .. \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_MANPAGE=ON \
-    -DWITH_PYTHON3=ON \
+    -DWITH_PYTHON3=%{python3_version} \
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
@@ -1731,6 +1746,54 @@ if [ $1 -ge 1 ] ; then
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
     /usr/bin/systemctl try-restart ceph-rbd-mirror@\*.service > /dev/null 2>&1 || :
+  fi
+fi
+
+%files immutable-object-cache
+%{_bindir}/ceph-immutable-object-cache
+%{_mandir}/man8/ceph-immutable-object-cache.8*
+%{_unitdir}/ceph-immutable-object-cache@.service
+%{_unitdir}/ceph-immutable-object-cache.target
+
+%post immutable-object-cache
+%if 0%{?suse_version}
+if [ $1 -eq 1 ] ; then
+  /usr/bin/systemctl preset ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target >/dev/null 2>&1 || :
+fi
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_post ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
+%endif
+if [ $1 -eq 1 ] ; then
+/usr/bin/systemctl start ceph-immutable-object-cache.target >/dev/null 2>&1 || :
+fi
+
+%preun immutable-object-cache
+%if 0%{?suse_version}
+%service_del_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_preun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
+%endif
+
+%postun immutable-object-cache
+test -n "$FIRST_ARG" || FIRST_ARG=$1
+%if 0%{?suse_version}
+DISABLE_RESTART_ON_UPDATE="yes"
+%service_del_postun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
+%endif
+%if 0%{?fedora} || 0%{?rhel}
+%systemd_postun ceph-immutable-object-cache@\*.service ceph-immutable-object-cache.target
+%endif
+if [ $FIRST_ARG -ge 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    /usr/bin/systemctl try-restart ceph-immutable-object-cache@\*.service > /dev/null 2>&1 || :
   fi
 fi
 

@@ -401,7 +401,7 @@ ceph_get_module_option(BaseMgrModule *self, PyObject *args)
   char *module = nullptr;
   char *key = nullptr;
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "ssz:ceph_get_module_option", &module, &key,
+  if (!PyArg_ParseTuple(args, "ss|s:ceph_get_module_option", &module, &key,
 			&prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
@@ -443,7 +443,9 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_config(module, key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -481,7 +483,9 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_store(self->this_module->get_name(), key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -848,7 +852,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
             }
             d.regex_str = PyString_AsString(param_value);
             try {
-              d.regex = {d.regex_str.c_str()};
+              d.regex = d.regex_str.c_str();
             } catch (const std::regex_error& e) {
               derr << __func__ << " query " << query_param_name << " item " << j
                    << " contains invalid regex " << d.regex_str << dendl;

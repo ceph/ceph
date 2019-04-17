@@ -64,10 +64,6 @@
 
 #define CEPH_BUFFER_API
 
-#if defined(HAVE_XIO)
-struct xio_reg_mem;
-class XioDispatchHook;
-#endif
 #ifdef HAVE_SEASTAR
 namespace seastar {
 template <typename T> class temporary_buffer;
@@ -155,9 +151,6 @@ namespace buffer CEPH_BUFFER_API {
   class raw_claim_buffer;
 
 
-  class xio_mempool;
-  class xio_msg_buffer;
-
   /*
    * named constructors
    */
@@ -184,9 +177,6 @@ namespace buffer CEPH_BUFFER_API {
   /// of foreign_ptr. the caller must otherwise guarantee that the buffer ptr is
   /// destructed on this cpu
   raw* create(seastar::temporary_buffer<char>&& buf);
-#endif
-#if defined(HAVE_XIO)
-  raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
 inline namespace v14_2_0 {
@@ -1216,6 +1206,7 @@ inline namespace v14_2_0 {
 
     void write_stream(std::ostream &out) const;
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
+    ssize_t pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
@@ -1320,10 +1311,6 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
 }
 
 } // namespace buffer
-
-#if defined(HAVE_XIO)
-xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
-#endif
 
 } // namespace ceph
 

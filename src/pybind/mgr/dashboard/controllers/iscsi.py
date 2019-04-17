@@ -16,6 +16,8 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.iscsi_client import IscsiClient
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.rbd import format_bitmask
+from ..services.tcmu_service import TcmuService
 from ..exceptions import DashboardException
 from ..tools import TaskManager
 
@@ -29,10 +31,17 @@ class IscsiUi(BaseController):
     @ReadPermission
     def status(self):
         status = {'available': False}
-        if not IscsiGatewaysConfig.get_gateways_config()['gateways']:
+        gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
+        if not gateways:
             status['message'] = 'There are no gateways defined'
             return status
         try:
+            for gateway in gateways.keys():
+                try:
+                    IscsiClient.instance(gateway_name=gateway).ping()
+                except RequestException:
+                    status['message'] = 'Gateway {} is inaccessible'.format(gateway)
+                    return status
             config = IscsiClient.instance().get_config()
             if config['version'] != IscsiUi.REQUIRED_CEPH_ISCSI_CONFIG_VERSION:
                 status['message'] = 'Unsupported `ceph-iscsi` config version. Expected {} but ' \
@@ -62,6 +71,73 @@ class IscsiUi(BaseController):
             ip_addresses = IscsiClient.instance(gateway_name=name).get_ip_addresses()
             portals.append({'name': name, 'ip_addresses': ip_addresses['data']})
         return sorted(portals, key=lambda p: '{}.{}'.format(p['name'], p['ip_addresses']))
+
+    @Endpoint()
+    @ReadPermission
+    def overview(self):
+        result_gateways = []
+        result_images = []
+        gateways_names = IscsiGatewaysConfig.get_gateways_config()['gateways'].keys()
+        config = None
+        for gateway_name in gateways_names:
+            try:
+                config = IscsiClient.instance(gateway_name=gateway_name).get_config()
+                break
+            except RequestException:
+                pass
+
+        # Gateways info
+        for gateway_name in gateways_names:
+            gateway = {
+                'name': gateway_name,
+                'state': '',
+                'num_targets': 'n/a',
+                'num_sessions': 'n/a'
+            }
+            try:
+                IscsiClient.instance(gateway_name=gateway_name).ping()
+                gateway['state'] = 'up'
+                if config:
+                    gateway['num_sessions'] = 0
+                    if gateway_name in config['gateways']:
+                        gatewayinfo = IscsiClient.instance(
+                            gateway_name=gateway_name).get_gatewayinfo()
+                        gateway['num_sessions'] = gatewayinfo['num_sessions']
+            except RequestException:
+                gateway['state'] = 'down'
+            if config:
+                gateway['num_targets'] = len([target for _, target in config['targets'].items()
+                                              if gateway_name in target['portals']])
+            result_gateways.append(gateway)
+
+        # Images info
+        if config:
+            tcmu_info = TcmuService.get_iscsi_info()
+            for _, disk_config in config['disks'].items():
+                image = {
+                    'pool': disk_config['pool'],
+                    'image': disk_config['image'],
+                    'backstore': disk_config['backstore'],
+                    'optimized_since': None,
+                    'stats': None,
+                    'stats_history': None
+                }
+                tcmu_image_info = TcmuService.get_image_info(image['pool'],
+                                                             image['image'],
+                                                             tcmu_info)
+                if tcmu_image_info:
+                    if 'optimized_since' in tcmu_image_info:
+                        image['optimized_since'] = tcmu_image_info['optimized_since']
+                    if 'stats' in tcmu_image_info:
+                        image['stats'] = tcmu_image_info['stats']
+                    if 'stats_history' in tcmu_image_info:
+                        image['stats_history'] = tcmu_image_info['stats_history']
+                result_images.append(image)
+
+        return {
+            'gateways': sorted(result_gateways, key=lambda g: g['name']),
+            'images': sorted(result_images, key=lambda i: '{}/{}'.format(i['pool'], i['image']))
+        }
 
 
 @ApiController('/iscsi', Scope.ISCSI)
@@ -104,6 +180,7 @@ class IscsiTarget(RESTController):
         targets = []
         for target_iqn in config['targets'].keys():
             target = IscsiTarget._config_to_target(target_iqn, config)
+            IscsiTarget._set_info(target)
             targets.append(target)
         return targets
 
@@ -111,7 +188,9 @@ class IscsiTarget(RESTController):
         config = IscsiClient.instance().get_config()
         if target_iqn not in config['targets']:
             raise cherrypy.HTTPError(404)
-        return IscsiTarget._config_to_target(target_iqn, config)
+        target = IscsiTarget._config_to_target(target_iqn, config)
+        IscsiTarget._set_info(target)
+        return target
 
     @iscsi_target_task('delete', {'target_iqn': '{target_iqn}'})
     def delete(self, target_iqn):
@@ -251,7 +330,7 @@ class IscsiTarget(RESTController):
                 return True
         # Check if any disk inside this group has changed
         for disk in new_group['disks']:
-            image_id = '{}.{}'.format(disk['pool'], disk['image'])
+            image_id = '{}/{}'.format(disk['pool'], disk['image'])
             if IscsiTarget._target_lun_deletion_required(target, new_target_iqn,
                                                          new_target_controls, new_portals,
                                                          new_disks, image_id):
@@ -290,7 +369,7 @@ class IscsiTarget(RESTController):
     @staticmethod
     def _get_disk(disks, image_id):
         for disk in disks:
-            if '{}.{}'.format(disk['pool'], disk['image']) == image_id:
+            if '{}/{}'.format(disk['pool'], disk['image']) == image_id:
                 return disk
         return None
 
@@ -350,14 +429,39 @@ class IscsiTarget(RESTController):
         for disk in disks:
             pool = disk['pool']
             image = disk['image']
-            IscsiTarget._validate_image_exists(pool, image)
+            backstore = disk['backstore']
+            required_rbd_features = settings['required_rbd_features'][backstore]
+            supported_rbd_features = settings['supported_rbd_features'][backstore]
+            IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
+                                        supported_rbd_features)
 
     @staticmethod
-    def _validate_image_exists(pool, image):
+    def _validate_image(pool, image, backstore, required_rbd_features, supported_rbd_features):
         try:
             ioctx = mgr.rados.open_ioctx(pool)
             try:
-                rbd.Image(ioctx, image)
+                with rbd.Image(ioctx, image) as img:
+                    if img.features() & required_rbd_features != required_rbd_features:
+                        raise DashboardException(msg='Image {} cannot be exported using {} '
+                                                     'backstore because required features are '
+                                                     'missing (required features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      required_rbd_features)),
+                                                 code='image_missing_required_features',
+                                                 component='iscsi')
+                    if img.features() & supported_rbd_features != img.features():
+                        raise DashboardException(msg='Image {} cannot be exported using {} '
+                                                     'backstore because it contains unsupported '
+                                                     'features (supported features are '
+                                                     '{})'.format(image,
+                                                                  backstore,
+                                                                  format_bitmask(
+                                                                      supported_rbd_features)),
+                                                 code='image_contains_unsupported_features',
+                                                 component='iscsi')
+
             except rbd.ImageNotFound:
                 raise DashboardException(msg='Image {} does not exist'.format(image),
                                          code='image_does_not_exist',
@@ -537,6 +641,15 @@ class IscsiTarget(RESTController):
             'acl_enabled': acl_enabled
         }
         return target
+
+    @staticmethod
+    def _set_info(target):
+        if not target['portals']:
+            return
+        target_iqn = target['target_iqn']
+        gateway_name = target['portals'][0]['host']
+        target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(target_iqn)
+        target['info'] = target_info
 
     @staticmethod
     def _sorted_portals(portals):

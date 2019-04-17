@@ -99,9 +99,7 @@ void AuthRegistry::_parse_mode_list(const string& s,
     if (i == "crc") {
       v->push_back(CEPH_CON_MODE_CRC);
     } else if (i == "secure") {
-      if (cct->check_experimental_feature_enabled("ms-mode-secure")) {
-	v->push_back(CEPH_CON_MODE_SECURE);
-      }
+      v->push_back(CEPH_CON_MODE_SECURE);
     } else {
       lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
     }
@@ -180,7 +178,7 @@ void AuthRegistry::_refresh_config()
 void AuthRegistry::get_supported_methods(
   int peer_type,
   std::vector<uint32_t> *methods,
-  std::vector<uint32_t> *modes)
+  std::vector<uint32_t> *modes) const
 {
   if (methods) {
     methods->clear();
@@ -255,14 +253,14 @@ void AuthRegistry::get_supported_methods(
   }
 }
 
-bool AuthRegistry::is_supported_method(int peer_type, int method)
+bool AuthRegistry::is_supported_method(int peer_type, int method) const
 {
   std::vector<uint32_t> s;
   get_supported_methods(peer_type, &s);
   return std::find(s.begin(), s.end(), method) != s.end();
 }
 
-bool AuthRegistry::any_supported_methods(int peer_type)
+bool AuthRegistry::any_supported_methods(int peer_type) const
 {
   std::vector<uint32_t> s;
   get_supported_methods(peer_type, &s);
@@ -272,7 +270,7 @@ bool AuthRegistry::any_supported_methods(int peer_type)
 void AuthRegistry::get_supported_modes(
   int peer_type,
   uint32_t auth_method,
-  std::vector<uint32_t> *modes)
+  std::vector<uint32_t> *modes) const
 {
   std::vector<uint32_t> s;
   get_supported_methods(peer_type, nullptr, &s);

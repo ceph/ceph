@@ -115,6 +115,7 @@
     lc list                    list all bucket lifecycle progress
     lc get                     get a lifecycle bucket configuration
     lc process                 manually process lifecycle
+    lc reshard fix             fix LC for a resharded bucket
     metadata get               get metadata info
     metadata put               put metadata info
     metadata rm                remove metadata info
@@ -279,6 +280,7 @@
      --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)
      --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)
+     --detail                  detailed mode, log and stat head objects as well
   
   Orphans list-jobs options:
      --extra-info              provide extra info in job list

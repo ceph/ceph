@@ -179,7 +179,7 @@ int RGWSI_Notify::init_watch()
       notify_oid = notify_oid_prefix;
     }
 
-    notify_objs[i] = rados_svc->handle(0).obj({control_pool, notify_oid});
+    notify_objs[i] = rados_svc->handle().obj({control_pool, notify_oid});
     auto& notify_obj = notify_objs[i];
 
     int r = notify_obj.open();
@@ -295,7 +295,7 @@ int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;
   }
-  r = rados_svc->handle(0).watch_flush();
+  r = rados_svc->handle().watch_flush();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
@@ -353,23 +353,25 @@ void RGWSI_Notify::_set_enabled(bool status)
   }
 }
 
-int RGWSI_Notify::distribute(const string& key, bufferlist& bl)
+int RGWSI_Notify::distribute(const string& key, bufferlist& bl,
+                             optional_yield y)
 {
   RGWSI_RADOS::Obj notify_obj = pick_control_obj(key);
 
   ldout(cct, 10) << "distributing notification oid=" << notify_obj.get_ref().obj
       << " bl.length()=" << bl.length() << dendl;
-  return robust_notify(notify_obj, bl);
+  return robust_notify(notify_obj, bl, y);
 }
 
-int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl)
+int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+                                optional_yield y)
 {
   // The reply of every machine that acks goes in here.
   boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
   bufferlist rbl;
 
   // First, try to send, without being fancy about it.
-  auto r = notify_obj.notify(bl, 0, &rbl);
+  auto r = notify_obj.notify(bl, 0, &rbl, y);
 
   // If that doesn't work, get serious.
   if (r < 0) {
@@ -409,7 +411,7 @@ int RGWSI_Notify::robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl)
       rbl.clear();
       // Reset the timeouts, we're only concerned with new ones.
       timeouts.clear();
-      r = notify_obj.notify(bl, 0, &rbl);
+      r = notify_obj.notify(bl, 0, &rbl, y);
       if (r < 0) {
 	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
 		      << cpp_strerror(-r) << dendl;

@@ -7,14 +7,10 @@
 
 You can start a development mode Ceph cluster, after compiling the source, with::
 
-	cd src
-	install -d -m0755 out dev/osd0
-	./vstart.sh -n -x -l
+	cd build
+	OSD=3 MON=3 MGR=3 ../src/vstart.sh -n -x
 	# check that it's there
-	./ceph health
-
-.. todo:: vstart is woefully undocumented and full of sharp sticks to poke yourself with.
-
+	bin/ceph health
 
 .. _mailing-list:
 

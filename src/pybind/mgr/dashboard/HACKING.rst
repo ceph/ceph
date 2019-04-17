@@ -62,8 +62,17 @@ Build the Project
 ~~~~~~~~~~~~~~~~~
 
 Run ``npm run build`` to build the project. The build artifacts will be
-stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``https://localhost:8443``.
+stored in the ``dist/`` directory. Use the ``--prod`` flag for a
+production build (``npm run build -- --prod``). Navigate to ``https://localhost:8443``.
+
+Build the Code Documentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run ``npm run doc-build`` to generate code docs in the ``documentation/``
+directory. To make them accesible locally for a web browser, run
+``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
+With ``npm run compodoc -- <opts>`` you may
+`fully configure it https://compodoc.app/guides/usage.html`_.
 
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -139,6 +148,12 @@ installed and run the tests if either is found.
 Start all frontend e2e tests by running::
 
   $ ./run-frontend-e2e-tests.sh
+
+Report:
+  After running the tests you can find the corresponding report as well as screenshots
+  of failed test cases by opening the following file in your browser:
+
+    src/pybind/mgr/dashboard/frontend/.protractor-report/index.html
 
 Device:
   You can force the script to use a specific device with the ``-d`` flag::
@@ -230,6 +245,25 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+Terminology and wording
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of using the Ceph component names, the approach
+suggested is to use the logical/generic names (Block over RBD, Filesystem over
+CephFS, Object over RGW). Nevertheless, as Ceph-Dashboard cannot completely hide
+the Ceph internals, some Ceph-specific names might remain visible.
+
+Regarding the wording for action labels and other textual elements (form titles,
+buttons, etc.), the chosen approach is to follow `these guidelines
+<https://www.patternfly.org/styles/terminology-and-wording/#terminology-and-wording-for-action-labels>`_.
+As a rule of thumb, 'Create' and 'Delete' are the proper wording for most forms,
+instead of 'Add' and 'Remove', unless some already created item is either added
+or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
+(new) permission').
+
+In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
+been created, which provides translated labels for use in UI elements.
+    
 Frontend branding
 ~~~~~~~~~~~~~~~~~
 

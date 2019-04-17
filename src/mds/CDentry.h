@@ -245,9 +245,6 @@ public:
   
   // -- replication
   void encode_replica(mds_rank_t mds, bufferlist& bl, bool need_recover) {
-    if (!is_replicated())
-      lock.replicate_relax();
-
     __u32 nonce = add_replica(mds);
     encode(nonce, bl);
     encode(first, bl);

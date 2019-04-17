@@ -59,11 +59,6 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL;
-      if (flag_bool && !jewel) {
-        ss << "Multiple-filesystems are forbidden until all mons are updated";
-        return -EINVAL;
-      }
       if (!sure) {
 	ss << EXPERIMENTAL_WARNING;
       }
@@ -604,17 +599,15 @@ public:
       };
       fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else if (var == "min_compat_client") {
-      int vno = ceph_release_from_name(val.c_str());
+      auto vno = ceph_release_from_name(val.c_str());
       if (vno <= 0) {
 	ss << "version " << val << " is not recognized";
 	return -EINVAL;
       }
-      fsmap.modify_filesystem(
-	  fs->fscid,
-	  [vno](std::shared_ptr<Filesystem> fs)
-	{
-	  fs->mds_map.set_min_compat_client((uint8_t)vno);
-	});
+      auto f = [vno](auto&& fs) {
+        fs->mds_map.set_min_compat_client(vno);
+      };
+      fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;

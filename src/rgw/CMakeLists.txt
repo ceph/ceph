@@ -34,9 +34,11 @@ set(librgw_common_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
+  rgw_aio.cc
   rgw_aio_throttle.cc
   rgw_auth.cc
   rgw_auth_s3.cc
+  rgw_arn.cc
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_cache.cc
@@ -45,9 +47,6 @@ set(librgw_common_srcs
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
-  rgw_dmclock_scheduler_ctx.cc
-  rgw_dmclock_sync_scheduler.cc
-  rgw_dmclock_async_scheduler.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
@@ -64,6 +63,7 @@ set(librgw_common_srcs
   rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc
+  rgw_sync_counters.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
   rgw_sync_module_es.cc
@@ -115,7 +115,8 @@ set(librgw_common_srcs
   rgw_zone.cc
   rgw_sts.cc
   rgw_rest_sts.cc
-  rgw_perf_counters.cc)
+  rgw_perf_counters.cc
+  rgw_rest_iam.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -125,7 +126,6 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
-
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -176,6 +176,7 @@ add_library(rgw_a STATIC
 
 add_dependencies(rgw_a civetweb_h)
 
+target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
@@ -183,7 +184,6 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 
 target_link_libraries(rgw_a
-  PUBLIC dmclock::dmclock
   PRIVATE
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
@@ -212,7 +212,9 @@ set(radosgw_srcs
   rgw_loadgen_process.cc
   rgw_civetweb.cc
   rgw_civetweb_frontend.cc
-  rgw_civetweb_log.cc)
+  rgw_civetweb_log.cc
+  rgw_dmclock_scheduler_ctx.cc
+  rgw_dmclock_sync_scheduler.cc)
 
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
@@ -221,7 +223,8 @@ endif()
 if(WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
-    rgw_asio_frontend.cc)
+    rgw_asio_frontend.cc
+    rgw_dmclock_async_scheduler.cc)
 endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
@@ -289,7 +292,6 @@ set(librgw_srcs
   rgw_file.cc)
 add_library(rgw SHARED ${librgw_srcs})
 target_link_libraries(rgw
-  PUBLIC dmclock::dmclock
   PRIVATE
   ${rgw_libs}
   librados
@@ -304,7 +306,14 @@ target_link_libraries(rgw
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES})
+  ${EXPAT_LIBRARIES}
+  PUBLIC
+  dmclock::dmclock)
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
+endif()
+
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})

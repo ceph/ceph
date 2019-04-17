@@ -54,9 +54,9 @@ class Notify {
   bool complete;
   bool discarded;
   bool timed_out;  ///< true if the notify timed out
-  set<WatchRef> watchers;
+  std::set<WatchRef> watchers;
 
-  bufferlist payload;
+  ceph::buffer::list payload;
   uint32_t timeout;
   uint64_t cookie;
   uint64_t notify_id;
@@ -67,7 +67,7 @@ class Notify {
   Mutex lock;
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
-  multimap<pair<uint64_t,uint64_t>,bufferlist> notify_replies;
+  std::multimap<std::pair<uint64_t,uint64_t>, ceph::buffer::list> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
@@ -83,7 +83,7 @@ class Notify {
   Notify(
     ConnectionRef client,
     uint64_t client_gid,
-    bufferlist &payload,
+    ceph::buffer::list& payload,
     uint32_t timeout,
     uint64_t cookie,
     uint64_t notify_id,
@@ -98,7 +98,7 @@ class Notify {
 public:
 
   std::ostream& gen_dbg_prefix(std::ostream& out) {
-    return out << "Notify(" << make_pair(cookie, notify_id) << " "
+    return out << "Notify(" << std::make_pair(cookie, notify_id) << " "
         << " watchers=" << watchers.size()
         << ") ";
   }
@@ -108,7 +108,7 @@ public:
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
     uint64_t client_gid,
-    bufferlist &payload,
+    ceph::buffer::list &payload,
     uint32_t timeout,
     uint64_t cookie,
     uint64_t notify_id,
@@ -126,7 +126,7 @@ public:
   /// Called once per NotifyAck
   void complete_watcher(
     WatchRef watcher, ///< [in] watcher to complete
-    bufferlist& reply_bl ///< [in] reply buffer from the notified watcher
+    ceph::buffer::list& reply_bl ///< [in] reply buffer from the notified watcher
     );
   /// Called when a watcher unregisters or times out
   void complete_watcher_remove(
@@ -261,7 +261,7 @@ public:
   /// Call when notify_ack received on notify_id
   void notify_ack(
     uint64_t notify_id, ///< [in] id of acked notify
-    bufferlist& reply_bl ///< [in] notify reply buffer
+    ceph::buffer::list& reply_bl ///< [in] notify reply buffer
     );
 };
 

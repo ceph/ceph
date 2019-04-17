@@ -155,13 +155,13 @@ static uint32_t segment_onwire_size(const uint32_t logical_size)
   return p2roundup<uint32_t>(logical_size, CRYPTO_BLOCK_SIZE);
 }
 
-static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
+static inline ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
 {
   const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
   if (padding_size) {
     bl.append_zero(padding_size);
   }
-  return bl;
+  return std::move(bl);
 }
 
 template <class T, uint16_t... SegmentAlignmentVs>

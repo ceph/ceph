@@ -12,7 +12,8 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title">{editing, select, 1 {Edit} other {Add}} user</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
       <div class="panel-body">
 
@@ -253,7 +254,7 @@
                       class="btn btn-sm btn-default btn-label pull-right tc_addSubuserButton"
                       (click)="showSubuserModal()">
                 <i class="fa fa-fw fa-plus"></i>
-                <ng-container i18n>Add subuser</ng-container>
+                <ng-container i18n>{{ actionLabels.CREATE | titlecase }} {{ subuserLabel | upperFirst }}</ng-container>
               </button>
             </span>
           </div>
@@ -307,7 +308,7 @@
                       class="btn btn-sm btn-default btn-label pull-right tc_addS3KeyButton"
                       (click)="showS3KeyModal()">
                 <i class="fa fa-fw fa-plus"></i>
-                <ng-container i18n>Add S3 key</ng-container>
+                <ng-container i18n>{{ actionLabels.CREATE | titlecase }} {{ s3keyLabel | upperFirst }}</ng-container>
               </button>
             </span>
             <hr>
@@ -392,7 +393,7 @@
                       class="btn btn-sm btn-default btn-label pull-right tc_addCapButton"
                       (click)="showCapabilityModal()">
                 <i class="fa fa-fw fa-plus"></i>
-                <ng-container i18n>Add capability</ng-container>
+                <ng-container i18n>{{ actionLabels.ADD | titlecase }} {{ capabilityLabel | upperFirst }}</ng-container>
               </button>
             </span>
           </div>
@@ -587,15 +588,12 @@
 
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button type="button"
-                            (submitAction)="onSubmit()"
-                            [form]="userForm">
-            <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
-          </cd-submit-button>
-          <button class="btn btn-sm btn-default"
-                  type="button"
-                  routerLink="/rgw/user"
-                  i18n>Back</button>
+          <cd-submit-button
+            (submitAction)="onSubmit()"
+            [form]="userForm"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

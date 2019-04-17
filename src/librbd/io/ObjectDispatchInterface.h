@@ -68,8 +68,8 @@ struct ObjectDispatchInterface {
 
   virtual bool flush(
       FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) = 0;
+      uint64_t* journal_tid, DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) = 0;
 
   virtual bool invalidate_cache(Context* on_finish) = 0;
   virtual bool reset_existence_cache(Context* on_finish) = 0;

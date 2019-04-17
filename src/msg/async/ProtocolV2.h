@@ -242,8 +242,8 @@ private:
   Ct<ProtocolV2> *handle_client_ident(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
   Ct<ProtocolV2> *handle_reconnect(ceph::bufferlist &payload);
-  Ct<ProtocolV2> *handle_existing_connection(AsyncConnectionRef existing);
-  Ct<ProtocolV2> *reuse_connection(AsyncConnectionRef existing,
+  Ct<ProtocolV2> *handle_existing_connection(const AsyncConnectionRef& existing);
+  Ct<ProtocolV2> *reuse_connection(const AsyncConnectionRef& existing,
                                    ProtocolV2 *exproto);
   Ct<ProtocolV2> *send_server_ident();
   Ct<ProtocolV2> *send_reconnect_ok();

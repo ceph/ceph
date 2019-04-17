@@ -140,7 +140,8 @@ add_ceph_unittest(unittest_rgw_string)
 # unitttest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_dmclock_scheduler)
-target_link_libraries(unittest_rgw_dmclock_scheduler ${rgw_libs} dmclock)
+
+target_link_libraries(unittest_rgw_dmclock_scheduler radosgw_a dmclock)
 if(WITH_BOOST_CONTEXT)
   target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
@@ -157,4 +158,10 @@ add_executable(unittest_rgw_xml test_rgw_xml.cc)
 add_ceph_unittest(unittest_rgw_xml)
 
 target_link_libraries(unittest_rgw_xml rgw_a ${EXPAT_LIBRARIES})
+
+# unittest_rgw_arn
+add_executable(unittest_rgw_arn test_rgw_arn.cc)
+add_ceph_unittest(unittest_rgw_arn)
+
+target_link_libraries(unittest_rgw_arn rgw_a)
 

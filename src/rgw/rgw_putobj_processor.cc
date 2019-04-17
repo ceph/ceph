@@ -92,7 +92,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->submit(stripe_obj, &op, cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op)), cost, id);
   return process_completed(c, &written);
 }
 
@@ -105,7 +105,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->submit(stripe_obj, &op, cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op)), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -485,7 +485,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   r = sysobj.omap()
       .set_must_exist(true)
-      .set(p, bl);
+      .set(p, bl, null_yield);
   if (r < 0) {
     return r;
   }

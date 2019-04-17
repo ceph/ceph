@@ -92,14 +92,14 @@ struct denc_traits<OSDPerfMetricKeyDescriptor> {
     }
   }
   static void encode(const OSDPerfMetricKeyDescriptor& v,
-                     bufferlist::contiguous_appender& p) {
+		     ceph::buffer::list::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
   static void decode(OSDPerfMetricKeyDescriptor& v,
-                     bufferptr::const_iterator& p) {
+                     ceph::buffer::ptr::const_iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
@@ -185,8 +185,8 @@ struct PerformanceCounterDescriptor {
     DENC_FINISH(p);
   }
 
-  void pack_counter(const PerformanceCounter &c, bufferlist *bl) const;
-  void unpack_counter(bufferlist::const_iterator& bl,
+  void pack_counter(const PerformanceCounter &c, ceph::buffer::list *bl) const;
+  void unpack_counter(ceph::buffer::list::const_iterator& bl,
                       PerformanceCounter *c) const;
 };
 WRITE_CLASS_DENC(PerformanceCounterDescriptor)
@@ -212,14 +212,14 @@ struct denc_traits<PerformanceCounterDescriptors> {
     }
   }
   static void encode(const PerformanceCounterDescriptors& v,
-                     bufferlist::contiguous_appender& p) {
+                     ceph::buffer::list::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
     }
   }
   static void decode(PerformanceCounterDescriptors& v,
-                     bufferptr::const_iterator& p) {
+                     ceph::buffer::ptr::const_iterator& p) {
     unsigned num;
     denc_varint(num, p);
     v.clear();
@@ -329,7 +329,7 @@ struct OSDPerfMetricQuery {
     }
   }
 
-  void pack_counters(const PerformanceCounters &counters, bufferlist *bl) const;
+  void pack_counters(const PerformanceCounters &counters, ceph::buffer::list *bl) const;
 
   OSDPerfMetricKeyDescriptor key_descriptor;
   PerformanceCounterDescriptors performance_counter_descriptors;
@@ -340,7 +340,7 @@ std::ostream& operator<<(std::ostream& os, const OSDPerfMetricQuery &query);
 
 struct OSDPerfMetricReport {
   PerformanceCounterDescriptors performance_counter_descriptors;
-  std::map<OSDPerfMetricKey, bufferlist> group_packed_performance_counters;
+  std::map<OSDPerfMetricKey, ceph::buffer::list> group_packed_performance_counters;
 
   DENC(OSDPerfMetricReport, v, p) {
     DENC_START(1, 1, p);

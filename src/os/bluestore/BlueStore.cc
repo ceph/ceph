@@ -2795,7 +2795,8 @@ void BlueStore::ExtentMap::fault_range(
       p->extents = decode_some(v);
       p->loaded = true;
       dout(20) << __func__ << " open shard 0x" << std::hex
-	       << p->shard_info->offset << std::dec
+	       << p->shard_info->offset
+	       << " for range 0x" << offset << "~" << length << std::dec
 	       << " (" << v.length() << " bytes)" << dendl;
       ceph_assert(p->dirty == false);
       ceph_assert(v.length() == p->shard_info->bytes);
@@ -3491,21 +3492,33 @@ void *BlueStore::MempoolThread::entry()
 {
   std::unique_lock l(lock);
 
-  std::list<std::shared_ptr<PriorityCache::PriCache>> caches;
-  binned_kv_cache = store->db->get_priority_cache();
-  if (binned_kv_cache != nullptr) {
-    caches.push_back(binned_kv_cache);
-  }
-  caches.push_back(meta_cache);
-  caches.push_back(data_cache);
+  uint64_t base = store->osd_memory_base;
+  double fragmentation = store->osd_memory_expected_fragmentation;
+  uint64_t target = store->osd_memory_target;
+  uint64_t min = store->osd_memory_cache_min;
+  uint64_t max = min;
 
-  autotune_cache_size = store->osd_memory_cache_min;
+  // When setting the maximum amount of memory to use for cache, first 
+  // assume some base amount of memory for the OSD and then fudge in
+  // some overhead for fragmentation that scales with cache usage.
+  uint64_t ltarget = (1.0 - fragmentation) * target;
+  if (ltarget > base + min) {
+    max = ltarget - base;
+  }
+
+  binned_kv_cache = store->db->get_priority_cache();
+  if (store->cache_autotune && binned_kv_cache != nullptr) {
+    pcm = std::make_shared<PriorityCache::Manager>(
+        store->cct, min, max, target);
+    pcm->insert("kv", binned_kv_cache);
+    pcm->insert("meta", meta_cache);
+    pcm->insert("data", data_cache);
+  }
 
   utime_t next_balance = ceph_clock_now();
   utime_t next_resize = ceph_clock_now();
 
   bool interval_stats_trim = false;
-  bool interval_stats_resize = false; 
   while (!stop) {
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
@@ -3515,19 +3528,18 @@ void *BlueStore::MempoolThread::entry()
       _adjust_cache_settings();
 
       // Log events at 5 instead of 20 when balance happens.
-      interval_stats_resize = true; 
       interval_stats_trim = true;
-      if (store->cache_autotune) {
-        _balance_cache(caches);
+
+      if (pcm != nullptr) {
+        pcm->balance();
       }
 
       next_balance = ceph_clock_now();
       next_balance += autotune_interval;
     }
     if (resize_interval > 0 && next_resize < ceph_clock_now()) {
-      if (ceph_using_tcmalloc() && store->cache_autotune) {
-        _tune_cache_size(interval_stats_resize);
-        interval_stats_resize = false;
+      if (ceph_using_tcmalloc() && pcm != nullptr) {
+        pcm->tune_memory();
       }
       next_resize = ceph_clock_now();
       next_resize += resize_interval;
@@ -3572,9 +3584,8 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   int64_t data_alloc =
      static_cast<int64_t>(store->cache_data_ratio * cache_size);
 
-  if (binned_kv_cache != nullptr && store->cache_autotune) {
-    cache_size = autotune_cache_size;
-
+  if (pcm != nullptr && binned_kv_cache != nullptr) {
+    cache_size = pcm->get_tuned_mem();
     kv_alloc = binned_kv_cache->get_committed_size();
     meta_alloc = meta_cache->get_committed_size();
     data_alloc = data_cache->get_committed_size();
@@ -3607,169 +3618,6 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
 
   for (auto i : store->cache_shards) {
     i->trim(max_shard_onodes, max_shard_buffer);
-  }
-}
-
-void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
-{
-  auto cct = store->cct;
-  uint64_t target = store->osd_memory_target;
-  uint64_t base = store->osd_memory_base;
-  double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_min = store->osd_memory_cache_min;
-  uint64_t cache_max = cache_min;
-  uint64_t limited_target = (1.0 - fragmentation) * target;
-  if (limited_target > base + cache_min) {
-    cache_max = limited_target - base;
-  }
-
-  size_t heap_size = 0;
-  size_t unmapped = 0;
-  uint64_t mapped = 0;
-
-  ceph_heap_release_free_memory();
-  ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
-  ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
-  mapped = heap_size - unmapped;
-
-  uint64_t new_size = autotune_cache_size;
-  new_size = (new_size < cache_max) ? new_size : cache_max;
-  new_size = (new_size > cache_min) ? new_size : cache_min;
-
-  // Approach the min/max slowly, but bounce away quickly.
-  if ((uint64_t) mapped < target) {
-    double ratio = 1 - ((double) mapped / target);
-    new_size += ratio * (cache_max - new_size); 
-  } else {
-    double ratio = 1 - ((double) target / mapped);
-    new_size -= ratio * (new_size - cache_min);
-  }
-
-  if (interval_stats) {
-    ldout(cct, 5) << __func__
-                  << " target: " << target
-                  << " heap: " << heap_size
-                  << " unmapped: " << unmapped
-                  << " mapped: " << mapped 
-                  << " old cache_size: " << autotune_cache_size
-                  << " new cache size: " << new_size << dendl;
-  } else {
-    ldout(cct, 20) << __func__
-                   << " target: " << target
-                   << " heap: " << heap_size
-                   << " unmapped: " << unmapped
-                   << " mapped: " << mapped        
-                   << " old cache_size: " << autotune_cache_size
-                   << " new cache size: " << new_size << dendl;
-  }
-  autotune_cache_size = new_size;
-}
-
-void BlueStore::MempoolThread::_balance_cache(
-    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches)
-{
-  int64_t mem_avail = autotune_cache_size;
-  /* Each cache is going to get at least 1 chunk's worth of memory from get_chunk
-   * so shrink the available memory here to compensate.  Don't shrink the amount of
-   * memory below 0 however.
-   */
-  mem_avail -= PriorityCache::get_chunk(1, autotune_cache_size) * caches.size();
-  if (mem_avail < 0) {
-    mem_avail = 0;
-  }
-
-  // Assign memory for each priority level
-  for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
-    ldout(store->cct, 10) << __func__ << " assigning cache bytes for PRI: " << i << dendl;
-    PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
-    _balance_cache_pri(&mem_avail, caches, pri);
-  }
-  // Assign any leftover memory based on the default ratios.
-  if (mem_avail > 0) {
-    for (auto it = caches.begin(); it != caches.end(); it++) {
-      int64_t fair_share =
-          static_cast<int64_t>((*it)->get_cache_ratio() * mem_avail);
-      if (fair_share > 0) {
-        (*it)->add_cache_bytes(PriorityCache::Priority::LAST, fair_share);
-      }
-    }
-  }
-  // assert if we assigned more memory than is available.
-  ceph_assert(mem_avail >= 0);
-
-  // Finally commit the new cache sizes
-  for (auto it = caches.begin(); it != caches.end(); it++) {
-    (*it)->commit_cache_size(autotune_cache_size);
-  }
-}
-
-void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
-    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches,
-    PriorityCache::Priority pri)
-{
-  std::list<std::shared_ptr<PriorityCache::PriCache>> tmp_caches = caches;
-  double cur_ratios = 0;
-  double new_ratios = 0;
-
-  // Zero this priority's bytes, sum the initial ratios.
-  for (auto it = tmp_caches.begin(); it != tmp_caches.end(); it++) {
-    (*it)->set_cache_bytes(pri, 0);
-    cur_ratios += (*it)->get_cache_ratio();
-  }
-
-  // For this priority, loop until caches are satisified or we run out of memory.
-  // Since we can't allocate fractional bytes, stop if we have fewer bytes left
-  // than the number of participating caches.
-  while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
-    uint64_t total_assigned = 0;
-
-    for (auto it = tmp_caches.begin(); it != tmp_caches.end(); ) {
-      int64_t cache_wants = (*it)->request_cache_bytes(pri, autotune_cache_size);
-
-      // Usually the ratio should be set to the fraction of the current caches'
-      // assigned ratio compared to the total ratio of all caches that still
-      // want memory.  There is a special case where the only caches left are
-      // all assigned 0% ratios but still want memory.  In that case, give 
-      // them an equal shot at the remaining memory for this priority.
-      double ratio = 1.0 / tmp_caches.size();
-      if (cur_ratios > 0) {
-        ratio = (*it)->get_cache_ratio() / cur_ratios;
-      }
-      int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
-
-      if (cache_wants > fair_share) {
-        // If we want too much, take what we can get but stick around for more
-        (*it)->add_cache_bytes(pri, fair_share);
-        total_assigned += fair_share;
-
-        new_ratios += (*it)->get_cache_ratio();
-        ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name() 
-                              << " wanted: " << cache_wants << " fair_share: " << fair_share
-                              << " mem_avail: " << *mem_avail
-                              << " staying in list.  Size: " << tmp_caches.size()
-                              << dendl;
-        ++it;
-      } else {
-        // Otherwise assign only what we want
-        if (cache_wants > 0) { 
-          (*it)->add_cache_bytes(pri, cache_wants);
-          total_assigned += cache_wants;
-
-          ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name()
-                                << " wanted: " << cache_wants << " fair_share: " << fair_share
-                                << " mem_avail: " << *mem_avail
-                                << " removing from list.  New size: " << tmp_caches.size() - 1
-                                << dendl;
-
-        }
-        // Either the cache didn't want anything or got what it wanted, so remove it from the tmp list. 
-        it = tmp_caches.erase(it);
-      }
-    }
-    // Reset the ratios 
-    *mem_avail -= total_assigned;
-    cur_ratios = new_ratios;
-    new_ratios = 0;
   }
 }
 
@@ -4035,6 +3883,8 @@ const char **BlueStore::get_tracked_conf_keys() const
     "osd_memory_cache_min",
     "bluestore_cache_autotune",
     "bluestore_cache_autotune_interval",
+    "bluestore_no_per_pool_stats_tolerance",
+    "bluestore_warn_on_legacy_statfs",
     NULL
   };
   return KEYS;
@@ -4043,6 +3893,11 @@ const char **BlueStore::get_tracked_conf_keys() const
 void BlueStore::handle_conf_change(const ConfigProxy& conf,
 				   const std::set<std::string> &changed)
 {
+  if (changed.count("bluestore_no_per_pool_stats_tolerance") ||
+      changed.count("bluestore_warn_on_legacy_statfs")) {
+    _check_legacy_statfs_alert();
+  }
+
   if (changed.count("bluestore_csum_type")) {
     _set_csum();
   }
@@ -4121,7 +3976,7 @@ void BlueStore::_set_compression()
     comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
     } else {
       comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_ssd;
@@ -4132,7 +3987,7 @@ void BlueStore::_set_compression()
     comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
     } else {
       comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_ssd;
@@ -4174,7 +4029,7 @@ void BlueStore::_set_throttle_params()
     throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io_hdd;
     } else {
       throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io_ssd;
@@ -4190,7 +4045,7 @@ void BlueStore::_set_blob_size()
     max_blob_size = cct->_conf->bluestore_max_blob_size;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       max_blob_size = cct->_conf->bluestore_max_blob_size_hdd;
     } else {
       max_blob_size = cct->_conf->bluestore_max_blob_size_ssd;
@@ -4235,7 +4090,7 @@ int BlueStore::_set_cache_sizes()
     cache_size = cct->_conf->bluestore_cache_size;
   } else {
     // choose global cache size based on backend type
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       cache_size = cct->_conf->bluestore_cache_size_hdd;
     } else {
       cache_size = cct->_conf->bluestore_cache_size_ssd;
@@ -4642,7 +4497,7 @@ void BlueStore::_set_alloc_sizes(void)
     prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size_hdd;
     } else {
       prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size_ssd;
@@ -4653,7 +4508,7 @@ void BlueStore::_set_alloc_sizes(void)
     deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops;
   } else {
     ceph_assert(bdev);
-    if (bdev->is_rotational()) {
+    if (_use_rotational_settings()) {
       deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_hdd;
     } else {
       deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_ssd;
@@ -4814,6 +4669,19 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t)
     delete fm;
     fm = NULL;
     return r;
+  }
+  // if space size tracked by free list manager is that higher than actual
+  // dev size one can hit out-of-space allocation which will result
+  // in data loss and/or assertions
+  // Probably user altered the device size somehow.
+  // The only fix for now is to redeploy OSD.
+  if (fm->get_size() >= bdev->get_size() + min_alloc_size) {
+    ostringstream ss;
+    ss << "slow device size mismatch detected, "
+	<< " fm size(" << fm->get_size()
+	<< ") > slow device size(" << bdev->get_size()
+	<< "), Please stop using this OSD as it might cause data loss.";
+    _set_disk_size_mismatch_alert(ss.str());
   }
   return 0;
 }
@@ -5014,6 +4882,17 @@ bool BlueStore::is_journal_rotational()
   }
   dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
   return bluefs->wal_is_rotational();
+}
+
+bool BlueStore::_use_rotational_settings()
+{
+  if (cct->_conf->bluestore_debug_enforce_settings == "hdd") {
+    return true;
+  }
+  if (cct->_conf->bluestore_debug_enforce_settings == "ssd") {
+    return false;
+  }
+  return bdev->is_rotational();
 }
 
 bool BlueStore::test_mount_in_use()
@@ -5554,10 +5433,15 @@ void BlueStore::_dump_alloc_on_failure()
 }
 
 
-int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_out)
+int BlueStore::allocate_bluefs_freespace(
+  uint64_t min_size,
+  uint64_t size,
+  PExtentVector* extents_out)
 {
+  ceph_assert(min_size <= size);
   if (size) {
     // round up to alloc size
+    min_size = p2roundup(min_size, cct->_conf->bluefs_alloc_size);
     size = p2roundup(size, cct->_conf->bluefs_alloc_size);
 
     PExtentVector extents_local;
@@ -5565,32 +5449,39 @@ int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_o
 
 
     uint64_t gift;
+    uint64_t allocated = 0;
+    int64_t alloc_len;
     do {
       // hard cap to fit into 32 bits
       gift = std::min<uint64_t>(size, 1ull << 31);
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
-      int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					  0, 0, extents);
+      alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+				  0, 0, extents);
+      if (alloc_len) {
+	allocated += alloc_len;
+	size -= alloc_len;
+      }
 
-      if (alloc_len < (int64_t)gift) {
+      if (alloc_len < (int64_t)gift && (min_size > allocated)) {
 	derr << __func__
-	     << " failed to allocate on 0x" << std::hex << gift
-	     << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
-	     << " allocated 0x" << alloc_len
-	     << " available 0x " << alloc->get_free()
-	     << std::dec << dendl;
+	      << " failed to allocate on 0x" << std::hex << gift
+	      << " min_size 0x" << min_size
+	      << " > allocated total 0x" << allocated
+	      << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	      << " allocated 0x" << alloc_len
+	      << " available 0x " << alloc->get_free()
+	      << std::dec << dendl;
 
-        alloc->dump();
-        alloc->release(*extents);
-        extents->clear();
+	alloc->dump();
+	alloc->release(*extents);
+	extents->clear();
 	return -ENOSPC;
       }
-      size -= gift;
-    } while (size);
+    } while (size && alloc_len > 0);
     for (auto& e : *extents) {
-      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      dout(5) << __func__ << " gifting " << e << " to bluefs" << dendl;
       bluefs_extents.insert(e.offset, e.length);
       ++out_of_sync_fm;
       // apply to bluefs if not requested from outside
@@ -5785,6 +5676,7 @@ void BlueStore::_open_statfs()
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
+    _check_legacy_statfs_alert();
   } else if (cct->_conf->bluestore_no_per_pool_stats_tolerance == "enforce") {
     per_pool_stat_collection = false;
     dout(10) << __func__ << " store_statfs is requested but missing, using empty" << dendl;
@@ -6240,7 +6132,10 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     dout(1) << __func__
             << " Allocating more space at slow device for BlueFS: +"
 	    << used_space - target_free << " bytes" << dendl;
-    r = allocate_bluefs_freespace(used_space - target_free, nullptr);
+    r = allocate_bluefs_freespace(
+      used_space - target_free,
+      used_space - target_free,
+      nullptr);
 
     umount();
     if (r != 0) {
@@ -6413,11 +6308,16 @@ int BlueStore::expand_devices(ostream& out)
     if (devid == bluefs_shared_bdev ) {
       continue;
     }
+    uint64_t size = bluefs->get_block_device_size(devid);
+    if (size == 0) {
+      // no bdev
+      continue;
+    }
+
     interval_set<uint64_t> before;
     bluefs->get_block_extents(devid, &before);
     ceph_assert(!before.empty());
     uint64_t end = before.range_end();
-    uint64_t size = bluefs->get_block_device_size(devid);
     if (end < size) {
       out << devid
 	  <<" : expanding " << " from 0x" << std::hex
@@ -6555,8 +6455,9 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     // we can bypass db open exclusively in case of kv_only mode
     ceph_assert(kv_only);
     r = _open_db(false, true);
-    if (r < 0)
-      goto out_bdev;
+  }
+  if (r < 0) {
+    goto out_bdev;
   }
 
   if (kv_only)
@@ -8148,6 +8049,7 @@ int BlueStore::statfs(struct store_statfs_t *buf,
 int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
 {
   dout(20) << __func__ << " pool " << pool_id<< dendl;
+
   if (!per_pool_stat_collection) {
     dout(20) << __func__ << " not supported in legacy mode " << dendl;
     return -ENOTSUP;
@@ -8160,6 +8062,19 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
   }
   dout(10) << __func__ << *buf << dendl;
   return 0;
+}
+
+void BlueStore::_check_legacy_statfs_alert()
+{
+  string s;
+  if (!per_pool_stat_collection &&
+    cct->_conf->bluestore_no_per_pool_stats_tolerance != "enforce" &&
+    cct->_conf->bluestore_warn_on_legacy_statfs) {
+    s = "legacy statfs reporting detected, "
+        "suggest to run store repair to get consistent statistic reports";
+  }
+  std::lock_guard l(qlock);
+  legacy_statfs_alert = s;
 }
 
 // ---------------
@@ -11482,6 +11397,20 @@ void BlueStore::_do_write_small(
   bufferlist bl;
   blp.copy(length, bl);
 
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
+  auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
+  uint32_t alloc_len = min_alloc_size;
+  auto offset0 = p2align<uint64_t>(offset, alloc_len);
+
+  bool any_change;
+
+  // search suitable extent in both forward and reverse direction in
+  // [offset - target_max_blob_size, offset + target_max_blob_size] range
+  // then check if blob can be reused via can_reuse_blob func or apply
+  // direct/deferred write (the latter for extents including or higher
+  // than 'offset' only).
+  o->extent_map.fault_range(db, min_off, offset + max_bsize - min_off);
+
   // Look for an existing mutable blob we can use.
   auto begin = o->extent_map.extent_map.begin();
   auto end = o->extent_map.extent_map.end();
@@ -11499,18 +11428,6 @@ void BlueStore::_do_write_small(
     prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
-  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
-  auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
-  uint32_t alloc_len = min_alloc_size;
-  auto offset0 = p2align<uint64_t>(offset, alloc_len);
-
-  bool any_change;
-
-  // search suitable extent in both forward and reverse direction in
-  // [offset - target_max_blob_size, offset + target_max_blob_size] range
-  // then check if blob can be reused via can_reuse_blob func or apply
-  // direct/deferred write (the latter for extents including or higher
-  // than 'offset' only).
   do {
     any_change = false;
 
@@ -13761,6 +13678,16 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
+  if (!disk_size_mismatch_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_DISK_SIZE_MISMATCH",
+      disk_size_mismatch_alert);
+  }
+  if (!legacy_statfs_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_LEGACY_STATFS",
+      legacy_statfs_alert);
+  }
   if (!spillover_alert.empty() &&
       cct->_conf->bluestore_warn_on_bluefs_spillover) {
     alerts.emplace(

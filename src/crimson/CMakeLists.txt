@@ -112,21 +112,26 @@ target_link_libraries(crimson-common
 
 set(crimson_auth_srcs
   auth/KeyRing.cc)
+set(crimson_mgr_srcs
+  mgr/client.cc)
 set(crimson_mon_srcs
   mon/MonClient.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
-  net/Dispatcher.cc
   net/Errors.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
-  net/Socket.cc)
+  net/Socket.cc
+  net/Protocol.cc
+  net/ProtocolV1.cc
+  net/ProtocolV2.cc)
 set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}
+  ${crimson_mgr_srcs}
   ${crimson_mon_srcs}
   ${crimson_net_srcs}
   ${crimson_thread_srcs}

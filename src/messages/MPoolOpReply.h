@@ -24,7 +24,7 @@ public:
   uuid_d fsid;
   __u32 replyCode = 0;
   epoch_t epoch = 0;
-  bufferlist response_data;
+  ceph::buffer::list response_data;
 
   MPoolOpReply() : MessageInstance(CEPH_MSG_POOLOP_REPLY, 0)
   {}
@@ -35,8 +35,8 @@ public:
     epoch(e) {
     set_tid(t);
   }
-  MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
-		bufferlist *blp) :
+  MPoolOpReply(uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
+	       ceph::buffer::list *blp) :
     MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
@@ -48,7 +48,7 @@ public:
 
   std::string_view get_type_name() const override { return "poolopreply"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "pool_op_reply(tid " << get_tid()
 	<< " " << cpp_strerror(-replyCode)
 	<< " v" << version << ")";
@@ -67,6 +67,7 @@ public:
       encode(false, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);

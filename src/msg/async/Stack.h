@@ -33,6 +33,7 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+  virtual int socket_fd() const = 0;
 };
 
 class ConnectedSocket;
@@ -128,6 +129,9 @@ class ConnectedSocket {
   /// Get file descriptor
   int fd() const {
     return _csi->fd();
+  }
+  int socket_fd() const {
+    return _csi->socket_fd();
   }
 
   explicit operator bool() const {
