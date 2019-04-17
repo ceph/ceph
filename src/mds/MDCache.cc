@@ -3072,6 +3072,8 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
 
 void MDCache::set_recovery_set(set<mds_rank_t>& s) 
 {
+  if (s.empty())
+    return;
   dout(7) << "set_recovery_set " << s << dendl;
   recovery_set = s;
 }
