@@ -9,6 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
+#include "librbd/cache/SharedReadOnlyObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -518,11 +519,18 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
   // cache is disabled or parent image context
+  CephContext *cct = m_image_ctx->cct;
+
   if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+     // enable Shared Read-only cache for parent image
+    if (m_image_ctx->child != nullptr && m_image_ctx->shared_cache_enabled ) {
+      ldout(cct, 10) << this << " " << "setting up parent cache"<< dendl;
+      auto sro_cache = cache::SharedReadOnlyObjectDispatch<I>::create(m_image_ctx);
+      sro_cache->init();
+    }
     return send_register_watch(result);
   }
 
-  CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   size_t max_dirty = m_image_ctx->config.template get_val<Option::size_t>(
