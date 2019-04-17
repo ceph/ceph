@@ -11,39 +11,17 @@
         <cd-table-actions [permission]="permissions.osd"
                           [selection]="selection"
                           class="btn-group"
+                          id="osd-actions"
                           [tableActions]="tableActions">
         </cd-table-actions>
-
-        <div class="btn-group"
-             dropdown
-             *ngIf="advancedTableActions.length > 0">
-          <button type="button"
-                  class="btn btn-sm btn-default btn-label tc_configureCluster"
-                  (click)="advancedTableActions[0].click()">
-            <i class="fa fa-fw {{ advancedTableActions[0].icon }}"></i><span>{{ advancedTableActions[0].name }}</span>
-          </button>
-          <button type="button"
-                  dropdownToggle
-                  class="btn btn-sm btn-default dropdown-toggle dropdown-toggle-split"
-                  *ngIf="advancedTableActions.length > 1">
-            <span class="caret caret-black"></span>
-          </button>
-          <ul *dropdownMenu
-              class="dropdown-menu"
-              role="menu">
-            <ng-container *ngFor="let action of advancedTableActions | slice:1">
-              <li role="menuitem">
-                <a class="dropdown-item"
-                   (click)="action.click()">
-                  <i class="fa fa-fw {{ action.icon }}"
-                     aria-hidden="true">
-                  </i>
-                  <ng-container>{{ action.name }}</ng-container>
-                </a>
-              </li>
-            </ng-container>
-          </ul>
-        </div>
+        <cd-table-actions [permission]="{read: true}"
+                          [selection]="selection"
+                          dropDownOnly="Cluster-wide configuration"
+                          btnColor="default"
+                          class="btn-group"
+                          id="cluster-wide-actions"
+                          [tableActions]="clusterWideActions">
+        </cd-table-actions>
       </div>
 
       <cd-osd-details cdTableDetail
