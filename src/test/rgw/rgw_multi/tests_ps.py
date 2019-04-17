@@ -536,7 +536,6 @@ def test_ps_subscription():
 
 def test_ps_event_type_subscription():
     """ test subscriptions for different events """
-    return;
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
 
