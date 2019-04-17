@@ -4282,7 +4282,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
-                                  obj_ctx, dest_obj, olh_epoch, tag, dpp);
+                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4860,7 +4860,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
-                                  dest_obj, olh_epoch, tag, dpp);
+                                  dest_obj, olh_epoch, tag, dpp, null_yield);
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
