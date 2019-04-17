@@ -86,8 +86,8 @@ public:
 
   bool flush(
       io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      io::DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) {
+      uint64_t* journal_id, io::DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) {
     return false;
   }
 
