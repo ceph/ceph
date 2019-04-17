@@ -47,7 +47,7 @@ export class OsdListComponent implements OnInit {
   tableActions: CdTableAction[];
   bsModalRef: BsModalRef;
   columns: CdTableColumn[];
-  advancedTableActions: any[];
+  clusterWideActions: CdTableAction[];
 
   osds = [];
   selection = new CdTableSelection();
@@ -148,29 +148,32 @@ export class OsdListComponent implements OnInit {
         icon: 'fa-remove'
       }
     ];
-    this.advancedTableActions = [
+  }
+
+  ngOnInit() {
+    this.clusterWideActions = [
       {
-        name: this.i18n('Cluster-wide Flags'),
+        name: this.i18n('Flags'),
         icon: 'fa-flag',
         click: () => this.configureFlagsAction(),
-        permission: this.permissions.osd.read
+        permission: 'read',
+        visible: () => this.permissions.osd.read
       },
       {
-        name: this.i18n('Cluster-wide Recovery Priority'),
+        name: this.i18n('Recovery Priority'),
         icon: 'fa-cog',
         click: () => this.configureQosParamsAction(),
-        permission: this.permissions.configOpt.read
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
       },
       {
         name: this.i18n('PG scrub'),
         icon: 'fa-stethoscope',
         click: () => this.configurePgScrubAction(),
-        permission: this.permissions.configOpt.read
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
       }
     ];
-  }
-
-  ngOnInit() {
     this.columns = [
       { prop: 'host.name', name: this.i18n('Host') },
       { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
@@ -199,8 +202,6 @@ export class OsdListComponent implements OnInit {
         cellTransformation: CellTemplate.perSecond
       }
     ];
-
-    this.removeActionsWithNoPermissions();
   }
 
   get hasOsdSelected() {
@@ -335,17 +336,5 @@ export class OsdListComponent implements OnInit {
 
   configurePgScrubAction() {
     this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { class: 'modal-lg' });
-  }
-
-  /**
-   * Removes all actions from 'advancedTableActions' that need a permission the user doesn't have.
-   */
-  private removeActionsWithNoPermissions() {
-    if (!this.permissions) {
-      this.advancedTableActions = [];
-      return;
-    }
-
-    this.advancedTableActions = this.advancedTableActions.filter((action) => action.permission);
   }
 }

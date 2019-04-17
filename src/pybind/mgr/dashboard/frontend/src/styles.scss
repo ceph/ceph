@@ -141,9 +141,6 @@ fieldset[disabled] .btn-primary.active {
   color: $color-primary;
   background-color: $color-button-badge;
 }
-.btn-primary .caret {
-  color: $color-button-caret;
-}
 .btn-default {
   border-radius: $button-radius;
 }
@@ -243,10 +240,6 @@ button.btn.btn-label > i.fa {
 .col-xs-9 {
   padding-left: 30px;
   padding-right: 30px;
-}
-/* Caret */
-.caret {
-  color: $color-caret-text;
 }
 /* Progressbar */
 .progress-bar {
