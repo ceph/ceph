@@ -769,6 +769,7 @@ public:
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(shared_cache_enabled, bool);
 
 #undef ASSIGN_OPTION
 

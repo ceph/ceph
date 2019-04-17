@@ -1,0 +1,26 @@
+0. setup a parent image and a clone image
+
+```
+rbd create testimage --size 100M
+rbd snap create testimage@snap1
+rbd snap protect testimage@snap1
+rbd clone testimage@snap1 child_image
+```
+
+1. start the ceph-immutable-obj-cache daemon
+
+```
+ceph-immutable-obj-cache
+```
+The obj cache will be promoted to /tmp/ceph_immutable_obj_cache/, the total cache size is set to 1G.
+By default this feature is disabled, so you may change these params by setting new values in ceph.conf, like:
+```
+rbd shared cache enabled = true
+immutable object cache path = /mnt/cache # SSD based cache dir
+immutable object cache max size = 16G
+```
+For now the daemon simply cleans all cache on start. So if you have lots of old cache, it may take while to start
+
+2. start randread or read jobs against child image
+Note this is a shared ro cache. So all writes will go to RADOS directly and only read can benefit from the cache
+
