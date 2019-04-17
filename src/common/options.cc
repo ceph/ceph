@@ -2430,7 +2430,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
+    .set_default("plugin=jerasure technique=reed_sol_van k=2 m=2")
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("default erasure code profile for new erasure-coded pools")
     .add_service("mon"),
