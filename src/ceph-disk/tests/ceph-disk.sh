@@ -436,7 +436,7 @@ function run() {
     CEPH_DISK_ARGS+=" --statedir=$dir"
     CEPH_DISK_ARGS+=" --sysconfdir=$dir"
 
-    export CEPH_MON="127.0.0.1:7451" # git grep '\<7451\>' : there must be only one
+    export CEPH_MON="127.0.0.1:$(get_unused_port)"
     export CEPH_ARGS
     CEPH_ARGS+=" --fsid=$(uuidgen)"
     CEPH_ARGS+=" --auth-supported=none"
