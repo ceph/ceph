@@ -220,6 +220,7 @@ public:
   set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
+  map<int,utime_t>    down_pending_out_subtree; // custom subtree down -> out
 
   map<int,double> osd_weight;
 

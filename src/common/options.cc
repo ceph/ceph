@@ -1360,6 +1360,15 @@ std::vector<Option> get_global_options() {
     .set_description("do not automatically mark OSDs 'out' if an entire subtree of this size is down")
     .add_see_also("mon_osd_down_out_interval"),
 
+    Option("mon_custom_subtree_down_out_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("the subtree type down out interval independently timing"),
+
+    Option("mon_custom_subtree_down_out_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("mark all OSDs of subree 'out' that has been 'down' for this long (seconds)")
+    .add_see_also("mon_custom_subtree_down_out_type"),
+
     Option("mon_osd_min_up_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.3)
     .add_service("mon")

@@ -584,6 +584,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (found != down_pending_out.end()) {
         dout(10) << " removing osd." << o << " from down_pending_out map" << dendl;
         down_pending_out.erase(found);
+        int type = osdmap.crush->get_type_id(g_conf().get_val<string>("mon_custom_subtree_down_out_type"));
+        int parent_id = osdmap.crush->get_parent_of_type(o, type);
+        down_pending_out_subtree.erase(parent_id);
       }
     }
   }
@@ -2976,6 +2979,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     pending_inc.new_hb_front_up[from] = m->hb_front_addrs;
 
     down_pending_out.erase(from);  // if any
+    int type = osdmap.crush->get_type_id(g_conf().get_val<string>("mon_custom_subtree_down_out_type"));
+    int parent_id = osdmap.crush->get_parent_of_type(from, type);
+    down_pending_out_subtree.erase(parent_id);
 
     if (m->sb.weight)
       osd_weight[from] = m->sb.weight;
@@ -4373,12 +4379,12 @@ void OSDMonitor::tick()
   }
 
   // mark down osds out?
-
   /* can_mark_out() checks if we can mark osds as being out. The -1 has no
    * influence at all. The decision is made based on the ratio of "in" osds,
    * and the function returns false if this ratio is lower that the minimum
    * ratio set by g_conf()->mon_osd_min_in_ratio. So it's not really up to us.
    */
+  std::set<int> custom_subtree_marked_out;
   if (can_mark_out(-1)) {
     string down_out_subtree_limit = g_conf().get_val<string>(
       "mon_osd_down_out_subtree_limit");
@@ -4386,6 +4392,7 @@ void OSDMonitor::tick()
 
     map<int,utime_t>::iterator i = down_pending_out.begin();
     while (i != down_pending_out.end()) {
+      bool force_down = false;
       int o = i->first;
       utime_t down = now;
       down -= i->second;
@@ -4425,6 +4432,31 @@ void OSDMonitor::tick()
 	  }
 	}
 
+	if (g_conf().get_val<string>("mon_custom_subtree_down_out_type").length()) {
+	  int type = osdmap.crush->get_type_id(g_conf().get_val<string>("mon_custom_subtree_down_out_type"));
+	  if (type > 0) {
+	    if (osdmap.containing_subtree_is_down(g_ceph_context, o, type, &down_cache)) {
+	      int parent_id = osdmap.crush->get_parent_of_type(o, type);
+	      map<int,utime_t>::iterator i = down_pending_out_subtree.find(parent_id);
+	      if (i != down_pending_out_subtree.end()) {
+		utime_t down_time = now - i->second;
+		utime_t cut(g_conf().get_val<uint64_t>("mon_custom_subtree_down_out_interval"), 0);
+		if (down_time <= cut) {
+		  down_pending_out[o] = now;
+		  continue;
+		} else {
+		  // the subtree should down
+		  custom_subtree_marked_out.insert(parent_id);
+		  force_down = true;
+		} 
+	      } else {
+		down_pending_out_subtree[parent_id] = now;
+		continue;
+	      }
+	    }
+	  }
+	}
+
         bool down_out = !osdmap.is_destroyed(o) &&
           g_conf()->mon_osd_down_out_interval > 0 && down.sec() >= grace;
         bool destroyed_out = osdmap.is_destroyed(o) &&
@@ -4433,7 +4465,7 @@ void OSDMonitor::tick()
         // was marked as destroyed, but let's not bother with that
         // complexity for now.
           down.sec() >= g_conf()->mon_osd_destroyed_out_interval;
-        if (down_out || destroyed_out) {
+        if (force_down || down_out || destroyed_out) {
 	  dout(10) << "tick marking osd." << o << " OUT after " << down
 		   << " sec (target " << grace << " = " << orig_grace << " + " << my_grace << ")" << dendl;
 	  pending_inc.new_weight[o] = CEPH_OSD_OUT;
@@ -4457,6 +4489,9 @@ void OSDMonitor::tick()
       }
 
       down_pending_out.erase(o);
+    }
+    for (auto i : custom_subtree_marked_out) {
+      down_pending_out_subtree.erase(i);
     }
   } else {
     dout(10) << "tick NOOUT flag set, not checking down osds" << dendl;
