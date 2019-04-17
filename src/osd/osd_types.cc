@@ -2995,7 +2995,7 @@ void pool_stat_t::dump(Formatter *f) const
   f->dump_int("ondisk_log_size", ondisk_log_size);
   f->dump_int("up", up);
   f->dump_int("acting", acting);
-  f->dump_int("num_store_stats", acting);
+  f->dump_int("num_store_stats", num_store_stats);
 }
 
 void pool_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
