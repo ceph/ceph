@@ -68,8 +68,9 @@ OSD::OSD(int id, uint32_t nonce,
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
-                 std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
+                    std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get().set_auth_server(monc.get());
+    msgr.get().set_auth_client(monc.get());
   }
 }
 
@@ -137,10 +138,7 @@ namespace {
     if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
-    // TODO: v2: ::pick_addresses() returns v2 addresses, but crimson-msgr does
-    // not support v2 yet. remove following set_type() once v2 support is ready.
     for (auto addr : addrs.v) {
-      addr.set_type(addr.TYPE_LEGACY);
       logger().info("picked address {}", addr);
     }
     return addrs;

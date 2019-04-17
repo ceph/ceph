@@ -13,6 +13,7 @@
 #include "auth/KeyRing.h"
 #include "common/ceph_context.h"
 
+#include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
 #include "crimson/common/auth_service.h"
 #include "crimson/common/auth_handler.h"
@@ -29,7 +30,6 @@ namespace ceph::net {
 }
 
 struct AuthAuthorizeHandler;
-class AuthMethodList;
 class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
@@ -44,11 +44,11 @@ class Connection;
 
 class Client : public ceph::net::Dispatcher,
 	       public ceph::common::AuthService,
+	       public ceph::auth::AuthClient,
 	       public ceph::auth::AuthServer
 {
   EntityName entity_name;
   KeyRing keyring;
-  std::unique_ptr<AuthMethodList> auth_methods;
   const uint32_t want_keys;
 
   MonMap monmap;
@@ -114,6 +114,31 @@ private:
   CephContext cct; // for auth_registry
   AuthRegistry auth_registry;
   ceph::common::AuthHandler& auth_handler;
+
+  // AuthClient methods
+  ceph::auth::AuthClient::auth_request_t
+  get_auth_request(ceph::net::ConnectionRef conn,
+		   AuthConnectionMetaRef auth_meta) final;
+
+   // Handle server's request to continue the handshake
+  ceph::bufferlist handle_auth_reply_more(ceph::net::ConnectionRef conn,
+					  AuthConnectionMetaRef auth_meta,
+					  const bufferlist& bl) final;
+
+   // Handle server's indication that authentication succeeded
+  int handle_auth_done(ceph::net::ConnectionRef conn,
+		       AuthConnectionMetaRef auth_meta,
+		       uint64_t global_id,
+		       uint32_t con_mode,
+		       const bufferlist& bl) final;
+
+   // Handle server's indication that the previous auth attempt failed
+  int handle_auth_bad_method(ceph::net::ConnectionRef conn,
+			     AuthConnectionMetaRef auth_meta,
+			     uint32_t old_auth_method,
+			     int result,
+			     const std::vector<uint32_t>& allowed_methods,
+			     const std::vector<uint32_t>& allowed_modes) final;
 
 private:
   void tick();
