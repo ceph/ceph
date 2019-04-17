@@ -79,7 +79,7 @@ function get_ganesha_daemons {
 function array_to_json {
   local array=("$@")
   result="["
-  result+=$(echo "${array[@]}" | sed 's/\(\w\+\)/"\1"/g' | sed 's/ /, /g')
+  result+=$(echo "${array[@]}" | sed 's/\([^ \t]\+\)/"\1"/g' | sed 's/[ \t]\+/, /g')
   result+="]"
   echo $result
 }
