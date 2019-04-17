@@ -34,6 +34,7 @@ export class PrometheusNotification {
   commonAnnotations: object;
   groupKey: string;
   notified: string;
+  id: string;
   alerts: PrometheusNotificationAlert[];
   version: string;
   receiver: string;

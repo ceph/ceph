@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=protected-access
 from . import ControllerTestCase
 from .. import mgr
 from ..controllers import BaseController, Controller
-from ..controllers.prometheus import Prometheus, PrometheusReceiver
+from ..controllers.prometheus import Prometheus, PrometheusReceiver, PrometheusNotifications
 
 
 @Controller('alertmanager/mocked/api/v1/alerts', secure=False)
@@ -18,8 +19,10 @@ class PrometheusControllerTest(ControllerTestCase):
             'ALERTMANAGER_API_HOST': 'http://localhost:{}/alertmanager/mocked/'.format(54583)
         }
         mgr.get_module_option.side_effect = settings.get
-        Prometheus._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
-        cls.setup_controllers([AlertManagerMockInstance, Prometheus, PrometheusReceiver])
+        Prometheus._cp_config['tools.authenticate.on'] = False
+        PrometheusNotifications._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([AlertManagerMockInstance, Prometheus,
+                               PrometheusNotifications, PrometheusReceiver])
 
     def test_list(self):
         self._get('/api/prometheus')
@@ -33,26 +36,47 @@ class PrometheusControllerTest(ControllerTestCase):
         self.assertEqual(notification['name'], 'foo')
         self.assertTrue(len(notification['notified']) > 20)
 
-    def test_get_last_notification_with_empty_notifications(self):
+    def test_get_empty_list_with_no_notifications(self):
+        PrometheusReceiver.notifications = []
+        self._get('/api/prometheus/notifications')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+        self._get('/api/prometheus/notifications?from=last')
+        self.assertStatus(200)
+        self.assertJsonBody([])
+
+    def test_get_all_notification(self):
         PrometheusReceiver.notifications = []
         self._post('/api/prometheus_receiver', {'name': 'foo'})
         self._post('/api/prometheus_receiver', {'name': 'bar'})
-        self._post('/api/prometheus/get_notifications_since', {})
+        self._get('/api/prometheus/notifications')
+        self.assertStatus(200)
+        self.assertJsonBody(PrometheusReceiver.notifications)
+
+    def test_get_last_notification_with_use_of_last_keyword(self):
+        PrometheusReceiver.notifications = []
+        self._post('/api/prometheus_receiver', {'name': 'foo'})
+        self._post('/api/prometheus_receiver', {'name': 'bar'})
+        self._get('/api/prometheus/notifications?from=last')
         self.assertStatus(200)
         last = PrometheusReceiver.notifications[1]
-        self.assertEqual(self.jsonBody(), [last])
+        self.assertJsonBody([last])
+
+    def test_get_no_notification_with_unknown_id(self):
+        PrometheusReceiver.notifications = []
+        self._post('/api/prometheus_receiver', {'name': 'foo'})
+        self._post('/api/prometheus_receiver', {'name': 'bar'})
+        self._get('/api/prometheus/notifications?from=42')
+        self.assertStatus(200)
+        self.assertJsonBody([])
 
     def test_get_no_notification_since_with_last_notification(self):
         PrometheusReceiver.notifications = []
         self._post('/api/prometheus_receiver', {'name': 'foo'})
         notification = PrometheusReceiver.notifications[0]
-        self._post('/api/prometheus/get_notifications_since', notification)
-        self.assertBody('[]')
-
-    def test_get_empty_list_with_no_notifications(self):
-        PrometheusReceiver.notifications = []
-        self._post('/api/prometheus/get_notifications_since', {})
-        self.assertEqual(self.jsonBody(), [])
+        self._get('/api/prometheus/notifications?from=' + notification['id'])
+        self.assertStatus(200)
+        self.assertJsonBody([])
 
     def test_get_notifications_since_last_notification(self):
         PrometheusReceiver.notifications = []
@@ -60,7 +84,7 @@ class PrometheusControllerTest(ControllerTestCase):
         next_to_last = PrometheusReceiver.notifications[0]
         self._post('/api/prometheus_receiver', {'name': 'foo'})
         self._post('/api/prometheus_receiver', {'name': 'bar'})
-        self._post('/api/prometheus/get_notifications_since', next_to_last)
+        self._get('/api/prometheus/notifications?from=' + next_to_last['id'])
         foreLast = PrometheusReceiver.notifications[1]
         last = PrometheusReceiver.notifications[2]
         self.assertEqual(self.jsonBody(), [foreLast, last])
