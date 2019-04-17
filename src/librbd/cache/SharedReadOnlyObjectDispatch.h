@@ -10,6 +10,7 @@
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "tools/immutable_object_cache/Types.h"
 
+using namespace ceph::immutable_obj_cache;
 
 namespace librbd {
 
@@ -17,7 +18,7 @@ class ImageCtx;
 
 namespace cache {
 
-template <typename ImageCtxT = ImageCtx>
+template <typename ImageCtxT = ImageCtx, typename CacheClientT = CacheClient>
 class SharedReadOnlyObjectDispatch : public io::ObjectDispatchInterface {
 public:
   static SharedReadOnlyObjectDispatch* create(ImageCtxT* image_ctx) {
@@ -103,6 +104,13 @@ public:
       uint64_t journal_tid, uint64_t new_journal_tid) {
   }
 
+  bool get_state() {
+    return m_initialzed;
+  }
+
+  CacheClientT *m_cache_client = nullptr;
+  ImageCtxT* m_image_ctx;
+
 private:
 
   int handle_read_cache(
@@ -113,15 +121,13 @@ private:
   int handle_register_client(bool reg);
   void client_handle_request(std::string msg);
 
-  ImageCtxT* m_image_ctx;
-
-  ceph::immutable_obj_cache::CacheClient *m_cache_client = nullptr;
   SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
+  bool m_initialzed;
 };
 
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx>;
+extern template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
 
 #endif // CEPH_LIBRBD_CACHE_OBJECT_CACHER_OBJECT_DISPATCH_H
