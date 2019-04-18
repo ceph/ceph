@@ -114,7 +114,7 @@ public:
 private:
 
   int handle_read_cache(
-      const std::string file_path, uint64_t read_off,
+      ObjectCacheRequest* ack, uint64_t read_off,
       uint64_t read_len, ceph::bufferlist* read_data,
       io::DispatchResult* dispatch_result,
       Context* on_dispatched);
