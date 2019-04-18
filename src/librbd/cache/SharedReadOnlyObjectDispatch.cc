@@ -102,16 +102,8 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
                                      std::function<void(ObjectCacheRequest*)>>
    ([this, snap_id, read_data, dispatch_result, on_dispatched,
       oid, object_off, object_len](ObjectCacheRequest* ack) {
-    if (ack->type == RBDSC_READ_REPLY) {
-      std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
-      ceph_assert(file_path != "");
-      handle_read_cache(file_path, object_off, object_len, read_data,
-                        dispatch_result, on_dispatched);
-    } else {
-      // go back to read rados
-      *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-      on_dispatched->complete(0);
-    }
+     handle_read_cache(ack, object_off, object_len, read_data,
+                       dispatch_result, on_dispatched);
   });
 
   if (m_cache_client && m_cache_client->is_session_work() && m_object_store) {
@@ -125,9 +117,20 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
 
 template <typename I, typename C>
 int SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
-    const std::string file_path, uint64_t read_off,
+    ObjectCacheRequest* ack, uint64_t read_off,
     uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
+  std::string file_path;
+  if (ack->type == RBDSC_READ_REPLY) {
+    file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
+    ceph_assert(file_path != "");
+  } else {
+    // go back to read rados
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+    on_dispatched->complete(0);
+    return false;
+  }
+
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
