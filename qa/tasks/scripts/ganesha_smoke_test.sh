@@ -77,6 +77,16 @@ function get_ganesha_daemons {
 }
 
 function array_to_json {
+  # convert a bash array to json
+  #
+  # example usage:
+  #     ARRAY=(one two three)
+  #     echo $(array_to_json ${ARRAY[@]})
+  # output:
+  #     ["one", "two", "three"]
+  #
+  # CAVEAT: the array elements must not contain spaces, tabs, or (probably)
+  # quotation marks
   local array=("$@")
   result="["
   result+=$(echo "${array[@]}" | sed 's/\([^ \t]\+\)/"\1"/g' | sed 's/[ \t]\+/, /g')
