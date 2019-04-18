@@ -15,12 +15,11 @@ class CephContext;
 class RGWSI_Zone;
 
 template <class T>
-static int parse_decode_json(CephContext *cct, T& t, bufferlist& bl)
+static int parse_decode_json(T& t, bufferlist& bl)
 {
   JSONParser p;
-  int ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
-    return ret;
+  if (!p.parse(bl.c_str(), bl.length())) {
+    return -EINVAL;
   }
 
   try {
@@ -216,7 +215,7 @@ int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, 
     return ret;
   }
 
-  ret = parse_decode_json(cct, t, bl);
+  ret = parse_decode_json(t, bl);
   if (ret < 0) {
     return ret;
   }
@@ -330,7 +329,7 @@ int RGWRESTReadResource::decode_resource(T *dest)
   if (ret < 0) {
     return ret;
   }
-  ret = parse_decode_json(cct, *dest, bl);
+  ret = parse_decode_json(*dest, bl);
   if (ret < 0) {
     return ret;
   }
@@ -449,7 +448,7 @@ int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
   int ret = req.get_status();
   if (ret < 0) {
     if (err_result) {
-      parse_decode_json(cct, *err_result, bl);
+      parse_decode_json(*err_result, bl);
     }
     return ret;
   }
@@ -458,7 +457,7 @@ int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
     return 0;
   }
 
-  ret = parse_decode_json(cct, *dest, bl);
+  ret = parse_decode_json(*dest, bl);
   if (ret < 0) {
     return ret;
   }
@@ -471,7 +470,7 @@ int RGWRESTSendResource::wait(T *dest, E *err_result)
   int ret = req.wait();
   if (ret < 0) {
     if (err_result) {
-      parse_decode_json(cct, *err_result, bl);
+      parse_decode_json(*err_result, bl);
     }
     return ret;
   }
