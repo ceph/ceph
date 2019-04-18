@@ -35,7 +35,7 @@ class ObjectCacheRequest {
 
   bufferlist payload;
 
-  GenContext<ObjectCacheRequest*>* process_msg;
+  CacheGenContextURef process_msg;
 
   ObjectCacheRequest();
   ObjectCacheRequest(uint16_t type, uint64_t seq);

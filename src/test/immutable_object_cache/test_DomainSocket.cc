@@ -106,8 +106,8 @@ public:
     m_send_request_index.store(0);
     m_recv_ack_index.store(0);
     for (uint64_t index = 0; index < times; index++) {
-      auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
-       ObjectCacheRequest*>([this, thinking, times](ObjectCacheRequest* ack){
+      auto ctx = make_gen_lambda_context<ObjectCacheRequest*, std::function<void(ObjectCacheRequest*)>>
+       ([this, thinking, times](ObjectCacheRequest* ack){
          if (thinking != 0) {
            usleep(thinking); // handling message
          }
@@ -122,7 +122,7 @@ public:
         usleep(1);
       }
 
-      m_cache_client->lookup_object("pool_nspace", 1, 2, "object_name", ctx);
+      m_cache_client->lookup_object("pool_nspace", 1, 2, "object_name", std::move(ctx));
       m_send_request_index++;
     }
     m_wait_event.wait();
@@ -130,12 +130,14 @@ public:
 
   bool startup_lookupobject_testing(std::string pool_nspace, std::string object_id) {
     bool hit;
-    auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
-        ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
+    //auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
+    //    ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
+    auto ctx = make_gen_lambda_context<ObjectCacheRequest*, std::function<void(ObjectCacheRequest*)>>
+       ([this, &hit](ObjectCacheRequest* ack){
        hit = ack->type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
-    m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, ctx);
+    m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, std::move(ctx));
     m_wait_event.wait();
     return hit;
   }

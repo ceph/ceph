@@ -98,10 +98,10 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
     return true;
   }
 
-  auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
-      ObjectCacheRequest*>([this, snap_id, read_data, dispatch_result, on_dispatched,
+  CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
+                                     std::function<void(ObjectCacheRequest*)>>
+   ([this, snap_id, read_data, dispatch_result, on_dispatched,
       oid, object_off, object_len](ObjectCacheRequest* ack) {
-
     if (ack->type == RBDSC_READ_REPLY) {
       std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
       ceph_assert(file_path != "");
@@ -118,7 +118,7 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
 
     m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                   m_image_ctx->data_ctx.get_id(),
-                                  (uint64_t)snap_id, oid, ctx);
+                                  (uint64_t)snap_id, oid, std::move(ctx));
   }
   return true;
 }

@@ -86,11 +86,11 @@ namespace immutable_obj_cache {
 
   void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id,
                                   uint64_t snap_id, std::string oid,
-                                  GenContext<ObjectCacheRequest*>* on_finish) {
+                                  CacheGenContextURef&& on_finish) {
     ObjectCacheRequest* req = new ObjectCacheReadData(RBDSC_READ,
                                     ++m_sequence_id, 0, 0,
                                     pool_id, snap_id, oid, pool_nspace);
-    req->process_msg = on_finish;
+    req->process_msg = std::move(on_finish);
     req->encode();
 
     {
@@ -250,8 +250,8 @@ namespace immutable_obj_cache {
          // dedicated thrad to execute this context.
        }
        current_request->process_msg->complete(reply);
-       delete current_request;
-       delete reply;
+       //delete current_request;
+       //delete reply;
     });
 
     if (m_worker_thread_num != 0) {
