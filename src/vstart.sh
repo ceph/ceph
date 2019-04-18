@@ -145,6 +145,7 @@ fi
 
 filestore_path=
 kstore_path=
+bluestore_dev=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -197,6 +198,7 @@ usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
+usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 
 usage_exit() {
 	printf "$usage"
@@ -378,6 +380,16 @@ case $1 in
         pci_id="$2"
         spdk_enabled=1
         shift
+	;;
+    --bluestore-devs )
+	IFS=',' read -r -a bluestore_dev <<< "$2"
+	for dev in "${bluestore_dev[@]}"; do
+	    if [ ! -b $dev -o ! -w $dev ]; then
+		    echo "All --bluestore-devs must refer to writable block devices"
+		    exit 1
+	    fi
+	done
+	shift
         ;;
     * )
 	    usage_exit
@@ -741,7 +753,7 @@ EOF
 start_osd() {
     for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
-	    if [ "$new" -eq 1 ]; then
+	if [ "$new" -eq 1 ]; then
 		    wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
@@ -757,6 +769,13 @@ EOF
 		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
 	    else
 		mkdir -p $CEPH_DEV_DIR/osd$osd
+		if [ -n "${bluestore_dev[$osd]}" ]; then
+		    dd if=/dev/zero of=${bluestore_dev[$osd]} bs=1M count=1
+		    ln -s ${bluestore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
+		    wconf <<EOF
+	bluestore fsck on mount = false
+EOF
+		fi
 	    fi
 
             local uuid=`uuidgen`
