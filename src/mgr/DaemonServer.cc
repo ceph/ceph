@@ -1383,9 +1383,10 @@ bool DaemonServer::_handle_command(
 	  }
 	  auto q = pg_map.num_pg_by_osd.find(osd);
 	  if (q != pg_map.num_pg_by_osd.end()) {
-	    if (q->second.acting > 0 || q->second.up > 0) {
+	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
 	      active_osds.insert(osd);
-	      affected_pgs += q->second.acting + q->second.up;
+	      // XXX: For overlapping PGs, this counts them again
+	      affected_pgs += q->second.acting + q->second.up_not_acting;
 	      continue;
 	    }
 	  }
@@ -1437,7 +1438,6 @@ bool DaemonServer::_handle_command(
       if (!r) {
         ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
            << " durability.";
-        safe_to_destroy.swap(osds);
       }
       if (f) {
         f->open_object_section("osd_status");
