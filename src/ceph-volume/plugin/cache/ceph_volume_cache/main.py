@@ -63,8 +63,9 @@ def pretty_lv(lv):
     print('lv_path: ' + lv.lv_path)
     print('\ntags:')
     pretty(lv.tags)
-    print('\nreport')
-    pretty(lv.report())
+    # disabled as some tags might not be set
+    # print('\nreport')
+    # pretty(lv.report())
     print('-------------')
 
 
@@ -395,45 +396,41 @@ $> ceph-volume cache dump
             return
 
         origin_lv = None
-        # This should be under if argv[0] == 'add'
-        if args.osdid:
-            lvs = api.Volumes()
-            osdid = args.osdid
-            lvs.filter(lv_tags={'ceph.osd_id': osdid})
-
-            for lv in lvs:
-                # TODO make sure there is a db or wal partition
-                # TODO update the cache's name accordingly to this
-                # TODO make sure there's a separate wal or db
-                if args.data:
-                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
-                elif args.db:
-                    # TODO make sure 'ceph.db_device' and others are in tag. ie use tags.get()
-                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.db_device', None))
-                elif args.wal:
-                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.wal_device', None))
-                else:
-                    origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
-                if origin_lv:
-                    break
-            if not origin_lv:
-                print('Couldn\'t find origin LV for OSD ' + args.osdid)
-                return
-            vg_name = origin_lv.vg_name
-        elif args.origin:
-            # origin is already the LV's name, so no need to look for
-            # --data, --db or --wal flags.
-            vg_name = args.volumegroup
-            origin_lv = api.get_lv(lv_name=args.origin, vg_name=vg_name)
-            if not origin_lv:
-                print('Couldn\'t find origin LV ' + args.origin)
-            osdid = origin_lv.tags.get('ceph.osd_id', None)
 
         # TODO think about the interface to possibly use caching "backends"
         # other than lvm. Maybe bcache, iCAS, etc. Maybe the easiest solution is
         # to rename this plugin to 'lvmcache'.
-        # TODO make sure the OSD exists (ie is on this node)
         if self.argv[0] == 'add':
+            if args.osdid:
+                lvs = api.Volumes()
+                osdid = args.osdid
+                lvs.filter(lv_tags={'ceph.osd_id': osdid})
+
+                for lv in lvs:
+                    # TODO update the cache's name accordingly to this
+                    if args.data:
+                        origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
+                    elif args.db:
+                        origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.db_device', None))
+                    elif args.wal:
+                        origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.wal_device', None))
+                    else:
+                        origin_lv = api.get_lv(lv_path=lv.tags.get('ceph.block_device', None))
+                    if origin_lv:
+                        break
+                if not origin_lv:
+                    print('Can\'t find origin LV for OSD ' + args.osdid)
+                    return
+                vg_name = origin_lv.vg_name
+            elif args.origin:
+                # origin is already the LV's name, so no need to look for
+                # --data, --db or --wal flags.
+                vg_name = args.volumegroup
+                origin_lv = api.get_lv(lv_name=args.origin, vg_name=vg_name)
+                if not origin_lv:
+                    print('Can\'t find origin LV ' + args.origin)
+                osdid = origin_lv.tags.get('ceph.osd_id', None)
+
             add_lvmcache(
                 vg_name,
                 origin_lv,
