@@ -23,7 +23,7 @@ class XMLObj;
       </S3Key>
     </Filter>
     <Id>notification1</Id>
-    <Topic>arn:aws:sns:<region>:<account>:[<endpoint-type>:<endpoint-name>]:<topic></Topic>
+    <Topic>arn:aws:sns:<region>:<account>:<topic></Topic>
     <Event>s3:ObjectCreated:*</Event>
     <Event>s3:ObjectRemoved:*</Event>
   </TopicConfiguration>
@@ -410,17 +410,6 @@ struct rgw_pubsub_user_topics {
 WRITE_CLASS_ENCODER(rgw_pubsub_user_topics)
 
 static std::string pubsub_user_oid_prefix = "pubsub.user.";
-
-// generate a topic ARN string
-// no endpoint (pull mode only): arn:s3:sns:<region>:<account>:<topic>
-// with endpoint               : arn:s3:sns:<region>:<account>:<endpoint-type>:<endpoint>:<topic>
-std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
-    const std::string& topic_name, 
-    const std::string& zonegroup_name,
-    const std::string& user_name);
-
-// extract the name of the topic from the string representation of the topic ARN
-std::string topic_name_from_arn(const std::string& topic_arn);
 
 class RGWUserPubSub
 {

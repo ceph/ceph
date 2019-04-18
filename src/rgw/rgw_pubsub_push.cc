@@ -312,7 +312,7 @@ static const std::string WEBHOOK_SCHEMA("webhook");
 static const std::string UNKNOWN_SCHEMA("unknown");
 static const std::string NO_SCHEMA("");
 
-const std::string& RGWPubSubEndpoint::get_schema(const std::string& endpoint) {
+const std::string& get_schema(const std::string& endpoint) {
   if (endpoint.empty()) {
     return NO_SCHEMA; 
   }
