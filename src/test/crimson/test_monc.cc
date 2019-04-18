@@ -15,7 +15,8 @@ class DummyAuthHandler : public ceph::common::AuthHandler {
 public:
   void handle_authentication(const EntityName& name,
                              uint64_t global_id,
-                             const AuthCapsInfo& caps) override {}
+                             const AuthCapsInfo& caps) final
+  {}
 };
 
 DummyAuthHandler dummy_handler;
