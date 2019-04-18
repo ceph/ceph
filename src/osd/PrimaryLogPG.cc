@@ -12822,6 +12822,24 @@ int PrimaryLogPG::prep_object_replica_pushes(
   ceph_assert(is_primary());
   dout(10) << __func__ << ": on " << soid << dendl;
 
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
+    // do we have the head and/or snapdir?
+    hobject_t head = soid.get_head();
+    if (recovery_state.get_pg_log().get_missing().is_missing(head)) {
+      if (recovering.count(head)) {
+	dout(10) << " missing but already recovering head " << head << dendl;
+	return 0;
+      } else {
+	int r = recover_missing(
+	    head, recovery_state.get_pg_log().get_missing().get_items().find(head)->second.need,
+	    get_recovery_op_priority(), h);
+	if (r != PULL_NONE)
+	  return 1;
+	return 0;
+      }
+    }
+  }
+
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContextRef obc = get_object_context(soid, false);
   if (!obc) {

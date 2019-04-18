@@ -1697,6 +1697,11 @@ bool ReplicatedBackend::handle_pull_response(
       a.second.rebuild();
     }
     pi.obc = get_parent()->get_obc(pi.recovery_info.soid, attrset);
+    if (attrset.find(SS_ATTR) != attrset.end()) {
+      bufferlist ssbv = attrset.at(SS_ATTR);
+      SnapSet ss(ssbv);
+      assert(ss.seq  == pi.obc->ssc->snapset.seq);
+    }
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(
       pi.recovery_info,
