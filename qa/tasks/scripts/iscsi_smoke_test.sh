@@ -57,7 +57,7 @@ systemctl start iscsid.service
 sleep 5
 systemctl --no-pager --full status iscsid.service
 
-iscsiadm -m discovery -t st -p $(hostname)
+iscsiadm -m discovery -t st -p ${my_ip}
 iscsiadm -m node -L all
 iscsiadm -m session -P3
 sleep 5
@@ -92,7 +92,7 @@ test -s /mnt/hubba
 umount /mnt
 
 iscsiadm -m node --logout
-iscsiadm -m discovery -t st -o delete -p $(hostname)
+iscsiadm -m discovery -t st -o delete -p ${my_ip}
 
 echo "OK" >/dev/null
 
