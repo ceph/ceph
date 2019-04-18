@@ -422,27 +422,19 @@ public:
     return req.get_http_status();
   }
 
-  template <class E = std::nullptr_t>
+  template <class E = int>
   int wait(bufferlist *pbl, optional_yield y, E *err_result = nullptr) {
     int ret = req.wait(y);
     *pbl = bl;
 
-    if (ret >=0) {
-      ret = req.get_status();
+    if (ret < 0 && err_result ) {
+      ret = parse_decode_json(*err_result, bl);
     }
 
-    if (ret < 0) {
-      if constexpr (!std::is_same_v<E, std::nullptr_t>) {
-        if (err_result) {
-          ret = parse_decode_json(*err_result, bl);
-        }
-      }
-    }
-
-    return ret;
+    return req.get_status();
   }
 
-  template <class T, class E = std::nullptr_t>
+  template <class T, class E = int>
   int wait(T *dest, optional_yield y, E *err_result = nullptr);
 };
 
@@ -450,17 +442,15 @@ template <class T, class E>
 int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
   int ret = req.wait(y);
-  if (ret >=0) {
+  if (ret >= 0) {
     ret = req.get_status();
   }
 
-  if constexpr (!std::is_same_v<E, std::nullptr_t>) {
-    if (ret <0 && err_result) {
-      ret = parse_decode_json(*err_result, bl);
-    }
+  if (ret < 0 && err_result) {
+    ret = parse_decode_json(*err_result, bl);
   }
 
-  if (ret < 0){
+  if (ret < 0) {
     return ret;
   }
 
