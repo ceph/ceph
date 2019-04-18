@@ -154,7 +154,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     auto c = new FunctionContext([command_c, self](int command_r){
       self->py_modules->get_objecter().wait_for_latest_osdmap(
           new FunctionContext([command_c, command_r](int wait_r){
-            command_c->finish(command_r);
+            command_c->complete(command_r);
           })
       );
     });
