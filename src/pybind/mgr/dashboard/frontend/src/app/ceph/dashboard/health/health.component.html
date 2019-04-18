@@ -204,7 +204,8 @@
                     contentClass="content-chart"
                     *ngIf="healthData.df">
         <cd-health-pie [data]="healthData"
-                       [isBytesData]="true"
+                       [showLabelAsTooltip]="true"
+                       chartType="pie"
                        [displayLegend]="true"
                        (prepareFn)="prepareRawUsage($event[0], $event[1])">
         </cd-health-pie>
