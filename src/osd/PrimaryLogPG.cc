@@ -4316,12 +4316,12 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       // pg is consuming on the disk in order to compute amount of new data
       // reserved to hold backfill if it won't fit.
       if (m->op == MOSDPGBackfill::OP_BACKFILL_PROGRESS) {
-        dout(0) << __func__ << " primary " << m->stats.stats.sum.num_bytes << " local " << info.stats.stats.sum.num_bytes << dendl;
+        dout(25) << __func__ << " primary " << m->stats.stats.sum.num_bytes << " local " << info.stats.stats.sum.num_bytes << dendl;
         int64_t bytes = info.stats.stats.sum.num_bytes;
         info.stats = m->stats;
         info.stats.stats.sum.num_bytes = bytes;
       } else {
-        dout(0) << __func__ << " final " << m->stats.stats.sum.num_bytes << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
+        dout(20) << __func__ << " final " << m->stats.stats.sum.num_bytes << " replaces local " << info.stats.stats.sum.num_bytes << dendl;
         info.stats = m->stats;
       }
 
