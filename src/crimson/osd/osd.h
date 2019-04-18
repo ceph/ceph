@@ -95,6 +95,7 @@ class OSD : public ceph::net::Dispatcher,
   MessageRef get_stats() override;
 
   // AuthHandler methods
+  bool require_authorizer() const final;
   void handle_authentication(const EntityName& name,
 			     uint64_t global_id,
 			     const AuthCapsInfo& caps) final;

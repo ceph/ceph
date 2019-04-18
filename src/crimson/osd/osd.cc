@@ -405,6 +405,11 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
   return seastar::now();
 }
 
+bool OSD::require_authorizer() const
+{
+  return osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS;
+}
+
 void OSD::handle_authentication(const EntityName& name,
                                  uint64_t global_id,
                                  const AuthCapsInfo& caps)

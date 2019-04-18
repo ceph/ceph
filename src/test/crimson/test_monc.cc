@@ -13,9 +13,13 @@ namespace {
 
 class DummyAuthHandler : public ceph::common::AuthHandler {
 public:
+  bool require_authorizer() const final {
+    return false;
+  }
   void handle_authentication(const EntityName& name,
                              uint64_t global_id,
-                             const AuthCapsInfo& caps) override {}
+                             const AuthCapsInfo& caps) final
+  {}
 };
 
 DummyAuthHandler dummy_handler;

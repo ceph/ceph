@@ -9,6 +9,8 @@ class AuthCapsInfo;
 namespace ceph::common {
 class AuthHandler {
 public:
+  virtual bool require_authorizer() const  = 0;
+
   // the peer just got authorized
   virtual void handle_authentication(const EntityName& name,
 				     uint64_t global_id,
