@@ -7,41 +7,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& pool, librados::IoCtx& ioctx, bool create)
-{
-  int r = rados->ioctx_create(pool.name.c_str(), ioctx);
-  if (r == -ENOENT && create) {
-    r = rados->pool_create(pool.name.c_str());
-    if (r == -ERANGE) {
-      ldout(cct, 0)
-        << __func__
-        << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
-        << " (this can be due to a pool or placement group misconfiguration, e.g."
-        << " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
-        << dendl;
-    }
-    if (r < 0 && r != -EEXIST) {
-      return r;
-    }
-
-    r = rados->ioctx_create(pool.name.c_str(), ioctx);
-    if (r < 0) {
-      return r;
-    }
-
-    r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
-    if (r < 0 && r != -EOPNOTSUPP) {
-      return r;
-    }
-  } else if (r < 0) {
-    return r;
-  }
-  if (!pool.ns.empty()) {
-    ioctx.set_namespace(pool.ns);
-  }
-  return 0;
-}
-
 int RGWSI_RADOS::do_start()
 {
   int ret = rados.init_with_context(cct);
@@ -68,7 +33,7 @@ uint64_t RGWSI_RADOS::instance_id()
 int RGWSI_RADOS::open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx)
 {
   constexpr bool create = true; // create the pool if it doesn't exist
-  return init_ioctx(cct, get_rados_handle(), pool, io_ctx, create);
+  return rgw_init_ioctx(get_rados_handle(), pool, io_ctx, create);
 }
 
 int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
