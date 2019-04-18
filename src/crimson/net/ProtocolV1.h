@@ -75,6 +75,8 @@ class ProtocolV1 final : public Protocol {
   size_t msgs_index = 0;
   MessageReader* m = nullptr;
 
+  std::unique_ptr<Message*[]> pending_messages = std::make_unique<Message*[]>(msgs_max);
+
   struct Keepalive {
     struct {
       const char tag = CEPH_MSGR_TAG_KEEPALIVE2;
@@ -114,6 +116,7 @@ class ProtocolV1 final : public Protocol {
   seastar::future<> maybe_throttle();
   seastar::future<> read_message();
   seastar::future<> handle_tags();
+  void do_dispatch_messages(size_t pending_size);
   void do_decode_messages();
   void execute_open();
 

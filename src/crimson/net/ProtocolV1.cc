@@ -800,6 +800,31 @@ seastar::future<> ProtocolV1::handle_tags()
     });
 }
 
+void ProtocolV1::do_dispatch_messages(size_t pending_size)
+{
+  ceph_assert(pending_size <= msgs_max);
+  if (unlikely(!pending_size)) {
+    return;
+  }
+  std::for_each(
+    &pending_messages[0], &pending_messages[pending_size],
+    [this] (Message* msg) {
+      constexpr bool add_ref = false; // Message starts with 1 ref
+      // TODO: change MessageRef with foreign_ptr
+      auto msg_ref = MessageRef{msg, add_ref};
+      // start dispatch, ignoring exceptions from the application layer
+      seastar::with_gate(pending_dispatch, [this, msg=std::move(msg_ref)] {
+        logger().debug("{} <= {}@{} === {}",
+            messenger, msg->get_source(), conn.peer_addr, *msg);
+        return dispatcher.ms_dispatch(&conn, std::move(msg))
+        .handle_exception([this] (std::exception_ptr eptr) {
+          logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+          ceph_assert(false);
+        });
+      });
+  });
+}
+
 void ProtocolV1::do_decode_messages()
 {
   logger().debug("{} do_decode_messages() started", conn);
@@ -807,6 +832,7 @@ void ProtocolV1::do_decode_messages()
     return seastar::keep_doing([this] {
       return in_messages.not_empty().then([this] {
         auto batch_size = in_messages.size();
+        unsigned pending_size = 0;
         while (batch_size) {
           MessageReader* raw_msg = in_messages.pop();
           auto msg = ::decode_message(nullptr, 0, raw_msg->header, raw_msg->footer,
@@ -824,24 +850,15 @@ void ProtocolV1::do_decode_messages()
 
           if (likely(conn.update_rx_seq(msg->get_seq()))) {
             // dispatch this message
-            constexpr bool add_ref = false; // Message starts with 1 ref
-            // TODO: change MessageRef with foreign_ptr
-            auto msg_ref = MessageRef{msg, add_ref};
-            // start dispatch, ignoring exceptions from the application layer
-            seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-              logger().debug("{} <= {}@{} === {}", messenger,
-                    msg->get_source(), conn.peer_addr, *msg);
-              return dispatcher.ms_dispatch(&conn, std::move(msg))
-                .handle_exception([this] (std::exception_ptr eptr) {
-                  logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-                  ceph_assert(false);
-                });
-            });
+            pending_messages[pending_size] = msg;
+            ++pending_size;
           } else {
             msg->put();
           }
           --batch_size;
         }
+
+        return do_dispatch_messages(pending_size);
       }); // in_messages.not_empty()
     }).handle_exception_type([this] (const std::system_error& e) {
       if (e.code() == error::read_eof) {
