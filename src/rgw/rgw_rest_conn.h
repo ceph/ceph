@@ -410,9 +410,6 @@ public:
     return req.get_io_user_info();
   }
 
-  template <class T, class E>
-  int decode_resource(T *dest, E *err_result);
-
   int send(bufferlist& bl);
 
   int aio_send(bufferlist& bl);
@@ -425,36 +422,46 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl) {
-    int ret = req.wait();
+  template <class E = std::nullptr_t>
+  int wait(bufferlist *pbl, E *err_result = nullptr) {
+    int ret = req.wait(y);
     *pbl = bl;
-    if (ret < 0) {
-      return ret;
+
+    if (ret >=0) {
+      ret = req.get_status();
     }
 
-    if (req.get_status() < 0) {
-      return req.get_status();
+    if (ret < 0) {
+      if constexpr (!std::is_same_v<E, std::nullptr_t>) {
+        if (err_result) {
+          ret = parse_decode_json(*err_result, bl);
+        }
+      }
     }
-    return 0;
+
+    return ret;
   }
 
   template <class T, class E = int>
   int wait(T *dest, E *err_result = nullptr);
 };
 
-template <class T, class E>
-int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
+template <class T, class E=std::nullptr_t>
+int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
-  int ret = req.get_status();
-  if (ret < 0) {
-    if (err_result) {
-      parse_decode_json(*err_result, bl);
-    }
-    return ret;
+  int ret = req.wait(y);
+  if (ret >=0) {
+    ret = req.get_status();
   }
 
-  if (!dest) {
-    return 0;
+  if constexpr (!std::is_same_v<E, std::nullptr_t>) {
+    if (ret <0 && err_result) {
+      ret = parse_decode_json(*err_result, bl);
+    }
+  }
+
+  if (ret < 0){
+    return ret;
   }
 
   ret = parse_decode_json(*dest, bl);
@@ -462,24 +469,7 @@ int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
     return ret;
   }
   return 0;
-}
 
-template <class T, class E>
-int RGWRESTSendResource::wait(T *dest, E *err_result)
-{
-  int ret = req.wait();
-  if (ret < 0) {
-    if (err_result) {
-      parse_decode_json(*err_result, bl);
-    }
-    return ret;
-  }
-
-  ret = decode_resource(dest, err_result);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
 }
 
 class RGWRESTPostResource : public RGWRESTSendResource {
