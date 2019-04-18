@@ -48,6 +48,18 @@ fieldset[disabled] .btn-primary.active {
   border-color: $color-primary;
 }
 
+/* Icons */
+.ceph-icon {
+  background: {
+    image: url('assets/suse_logo_login.png');
+    clip: padding-box;
+    size: contain;
+    repeat: no-repeat;
+  }
+  padding: 15px;
+  margin-right: 1em;
+}
+
 /* Login */
 .login-suse {
   font-family: 'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif;
