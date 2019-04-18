@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_gc.h"
+#include "rgw_tools.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
