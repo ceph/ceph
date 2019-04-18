@@ -919,7 +919,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0) {
-      ldout(s->cct, 20) << "neither length nor chunked encoding" << dendl;
+      ldpp_dout(this, 20) << "neither length nor chunked encoding" << dendl;
       return -ERR_LENGTH_REQUIRED;
     }
 
@@ -929,7 +929,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   supplied_etag = s->info.env->get("HTTP_ETAG");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
-    ldout(s->cct, 5) << "content type wasn't provided, trying to guess" << dendl;
+    ldpp_dout(this, 5) << "content type wasn't provided, trying to guess" << dendl;
     const char *suffix = strrchr(s->object.name.c_str(), '.');
     if (suffix) {
       suffix++;
@@ -947,7 +947,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
-    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    ldpp_dout(this, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
   }
 
@@ -963,7 +963,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   string multipart_manifest = s->info.args.get("multipart-manifest", &exists);
   if (exists) {
     if (multipart_manifest != "put") {
-      ldout(s->cct, 5) << "invalid multipart-manifest http param: " << multipart_manifest << dendl;
+      ldpp_dout(this, 5) << "invalid multipart-manifest http param: " << multipart_manifest << dendl;
       return -EINVAL;
     }
 
@@ -975,12 +975,12 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     int r = 0;
     std::tie(r, slo_info->raw_data) = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len);
     if (r < 0) {
-      ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
+      ldpp_dout(this, 5) << "failed to read input for slo r=" << r << dendl;
       return r;
     }
 
     if ((int64_t)slo_info->entries.size() > s->cct->_conf->rgw_max_slo_entries) {
-      ldout(s->cct, 5) << "too many entries in slo request: " << slo_info->entries.size() << dendl;
+      ldpp_dout(this, 5) << "too many entries in slo request: " << slo_info->entries.size() << dendl;
       return -EINVAL;
     }
 
@@ -1003,7 +1003,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
       total_size += entry.size_bytes;
 
-      ldout(s->cct, 20) << "slo_part: " << entry.path
+      ldpp_dout(this, 20) << "slo_part: " << entry.path
                         << " size=" << entry.size_bytes
                         << " etag=" << entry.etag
                         << dendl;
@@ -1158,7 +1158,7 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
   /* Handle Swift object expiration. */
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
-    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    ldpp_dout(this, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
   }
 
@@ -1318,7 +1318,7 @@ static void get_contype_from_attrs(map<string, bufferlist>& attrs,
   }
 }
 
-static void dump_object_metadata(struct req_state * const s,
+static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state * const s,
 				 const map<string, bufferlist>& attrs)
 {
   map<string, string> response_attrs;
@@ -1367,7 +1367,7 @@ static void dump_object_metadata(struct req_state * const s,
         dump_header(s, "X-Delete-At", delete_at.sec());
       }
     } catch (buffer::error& err) {
-      ldout(s->cct, 0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
+      ldpp_dout(dpp, 0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT
                           " attr, ignoring"
                        << dendl;
     }
@@ -1404,7 +1404,7 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
-    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    ldpp_dout(this, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
   }
 
@@ -1459,7 +1459,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     dump_last_modified(s, mtime);
     dump_copy_info();
     get_contype_from_attrs(attrs, content_type);
-    dump_object_metadata(s, attrs);
+    dump_object_metadata(this, s, attrs);
     end_header(s, this, !content_type.empty() ? content_type.c_str()
 	       : "binary/octet-stream");
   } else {
@@ -1555,7 +1555,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     }
 
     get_contype_from_attrs(attrs, content_type);
-    dump_object_metadata(s, attrs);
+    dump_object_metadata(this, s, attrs);
   }
 
   end_header(s, this, !content_type.empty() ? content_type.c_str()
@@ -1610,7 +1610,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
   while (cioin.getline(buf, sizeof(buf))) {
     string path_str(buf);
 
-    ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
+    ldpp_dout(this, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
 
     RGWBulkDelete::acct_path_t path;
 
@@ -1665,13 +1665,15 @@ std::unique_ptr<RGWBulkUploadOp::StreamGetter>
 RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
 {
   class SwiftStreamGetter : public StreamGetter {
+    const DoutPrefixProvider* dpp;
     const size_t conlen;
     size_t curpos;
     req_state* const s;
 
   public:
-    SwiftStreamGetter(req_state* const s, const size_t conlen)
-      : conlen(conlen),
+    SwiftStreamGetter(const DoutPrefixProvider* dpp, req_state* const s, const size_t conlen)
+      : dpp(dpp),
+        conlen(conlen),
         curpos(0),
         s(s) {
     }
@@ -1684,7 +1686,7 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
         static_cast<size_t>(s->cct->_conf->rgw_max_chunk_size);
       const size_t max_to_read = std::min({ want, conlen - curpos, max_chunk_size });
 
-      ldout(s->cct, 20) << "bulk_upload: get_at_most max_to_read="
+      ldpp_dout(dpp, 20) << "bulk_upload: get_at_most max_to_read="
                         << max_to_read
                         << ", dst.c_str()=" << reinterpret_cast<intptr_t>(dst.c_str()) << dendl;
 
@@ -1702,11 +1704,11 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
     }
 
     ssize_t get_exactly(size_t want, ceph::bufferlist& dst) override {
-      ldout(s->cct, 20) << "bulk_upload: get_exactly want=" << want << dendl;
+      ldpp_dout(dpp, 20) << "bulk_upload: get_exactly want=" << want << dendl;
 
       /* FIXME: do this in a loop. */
       const auto ret = get_at_most(want, dst);
-      ldout(s->cct, 20) << "bulk_upload: get_exactly ret=" << ret << dendl;
+      ldpp_dout(dpp, 20) << "bulk_upload: get_exactly ret=" << ret << dendl;
       if (ret < 0) {
         return ret;
       } else if (static_cast<size_t>(ret) != want) {
@@ -1721,11 +1723,11 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
     op_ret = -EINVAL;
     return nullptr;
   } else {
-    ldout(s->cct, 20) << "bulk upload: create_stream for length="
+    ldpp_dout(this, 20) << "bulk upload: create_stream for length="
                       << s->length << dendl;
 
     const size_t conlen = atoll(s->length);
-    return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(s, conlen));
+    return std::unique_ptr<SwiftStreamGetter>(new SwiftStreamGetter(this, s, conlen));
   }
 }
 
@@ -1841,7 +1843,7 @@ void RGWInfo_ObjStore_SWIFT::execute()
 
   if (!swiftinfo_sig.empty() &&
       !swiftinfo_expires.empty() &&
-      !is_expired(swiftinfo_expires, s->cct)) {
+      !is_expired(swiftinfo_expires, this)) {
     is_admin_info_enabled = true;
   }
 
@@ -1954,19 +1956,19 @@ void RGWInfo_ObjStore_SWIFT::list_slo_data(Formatter& formatter,
   formatter.close_section();
 }
 
-bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, CephContext* cct)
+bool RGWInfo_ObjStore_SWIFT::is_expired(const std::string& expires, const DoutPrefixProvider *dpp)
 {
   string err;
   const utime_t now = ceph_clock_now();
   const uint64_t expiration = (uint64_t)strict_strtoll(expires.c_str(),
                                                        10, &err);
   if (!err.empty()) {
-    ldout(cct, 5) << "failed to parse siginfo_expires: " << err << dendl;
+    ldpp_dout(dpp, 5) << "failed to parse siginfo_expires: " << err << dendl;
     return true;
   }
 
   if (expiration <= (uint64_t)now.sec()) {
-    ldout(cct, 5) << "siginfo expired: " << expiration << " <= " << now.sec() << dendl;
+    ldpp_dout(dpp, 5) << "siginfo expired: " << expiration << " <= " << now.sec() << dendl;
     return true;
   }
 
@@ -1993,7 +1995,7 @@ std::size_t RGWFormPost::get_max_file_size() /*const*/
     static_cast<uint64_t>(strict_strtoll(max_str.c_str(), 10, &err));
 
   if (! err.empty()) {
-    ldout(s->cct, 5) << "failed to parse FormPost's max_file_size: " << err
+    ldpp_dout(this, 5) << "failed to parse FormPost's max_file_size: " << err
                      << dendl;
     return 0;
   }
@@ -2010,13 +2012,13 @@ bool RGWFormPost::is_non_expired()
     static_cast<uint64_t>(strict_strtoll(expires.c_str(), 10, &err));
 
   if (! err.empty()) {
-    dout(5) << "failed to parse FormPost's expires: " << err << dendl;
+    ldpp_dout(this, 5) << "failed to parse FormPost's expires: " << err << dendl;
     return false;
   }
 
   const utime_t now = ceph_clock_now();
   if (expires_timestamp <= static_cast<uint64_t>(now.sec())) {
-    dout(5) << "FormPost form expired: "
+    ldpp_dout(this, 5) << "FormPost form expired: "
             << expires_timestamp << " <= " << now.sec() << dendl;
     return false;
   }
@@ -2032,7 +2034,7 @@ bool RGWFormPost::is_integral()
     get_owner_info(s, *s->user);
     s->auth.identity = rgw::auth::transform_old_authinfo(s);
   } catch (...) {
-    ldout(s->cct, 5) << "cannot get user_info of account's owner" << dendl;
+    ldpp_dout(this, 5) << "cannot get user_info of account's owner" << dendl;
     return false;
   }
 
@@ -2054,13 +2056,13 @@ bool RGWFormPost::is_integral()
 
     const auto local_sig = sig_helper.get_signature();
 
-    ldout(s->cct, 20) << "FormPost signature [" << temp_url_key_num << "]"
+    ldpp_dout(this, 20) << "FormPost signature [" << temp_url_key_num << "]"
                       << " (calculated): " << local_sig << dendl;
 
     if (sig_helper.is_equal_to(form_signature)) {
       return true;
     } else {
-      ldout(s->cct, 5) << "FormPost's signature mismatch: "
+      ldpp_dout(this, 5) << "FormPost's signature mismatch: "
                        << local_sig << " != " << form_signature << dendl;
     }
   }
@@ -2112,7 +2114,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     throw ret;
   }
 
-  ldout(s->cct, 20) << "temp url user (bucket owner): " << bucket_info.owner
+  ldpp_dout(this, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
@@ -2140,16 +2142,16 @@ int RGWFormPost::get_params()
     }
 
     if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      ldout(s->cct, 20) << "read part header -- part.name="
+      ldpp_dout(this, 20) << "read part header -- part.name="
                         << part.name << dendl;
 
       for (const auto& pair : part.fields) {
-        ldout(s->cct, 20) << "field.name=" << pair.first << dendl;
-        ldout(s->cct, 20) << "field.val=" << pair.second.val << dendl;
-        ldout(s->cct, 20) << "field.params:" << dendl;
+        ldpp_dout(this, 20) << "field.name=" << pair.first << dendl;
+        ldpp_dout(this, 20) << "field.val=" << pair.second.val << dendl;
+        ldpp_dout(this, 20) << "field.params:" << dendl;
 
         for (const auto& param_pair : pair.second.params) {
-          ldout(s->cct, 20) << " " << param_pair.first
+          ldpp_dout(this, 20) << " " << param_pair.first
                             << " -> " << param_pair.second << dendl;
         }
       }
@@ -2596,7 +2598,7 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index)
 
 int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 {
-  ldout(s->cct, 10) << "Starting retarget" << dendl;
+  ldpp_dout(s, 10) << "Starting retarget" << dendl;
   RGWOp* op_override = nullptr;
 
   /* In Swift static web content is served if the request is anonymous or
@@ -2630,7 +2632,7 @@ int RGWSwiftWebsiteHandler::retarget_bucket(RGWOp* op, RGWOp** new_op)
 
 int RGWSwiftWebsiteHandler::retarget_object(RGWOp* op, RGWOp** new_op)
 {
-  ldout(s->cct, 10) << "Starting object retarget" << dendl;
+  ldpp_dout(s, 10) << "Starting object retarget" << dendl;
   RGWOp* op_override = nullptr;
 
   /* In Swift static web content is served if the request is anonymous or
@@ -3064,7 +3066,7 @@ RGWRESTMgr_SWIFT::get_handler(struct req_state* const s,
 {
   int ret = RGWHandler_REST_SWIFT::init_from_header(s, frontend_prefix);
   if (ret < 0) {
-    ldout(s->cct, 10) << "init_from_header returned err=" << ret <<  dendl;
+    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
     return nullptr;
   }
 

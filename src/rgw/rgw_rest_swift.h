@@ -249,7 +249,7 @@ public:
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static void list_slo_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
-  static bool is_expired(const std::string& expires, CephContext* cct);
+  static bool is_expired(const std::string& expires, const DoutPrefixProvider* dpp);
 };
 
 
