@@ -30,7 +30,25 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 #   orchestrator.
 # TODO raise exceptions instead of print+return
 # TODO add error handling at every step
+# TODO what if you run cache add twice on the same OSD?
+# TODO what happens after hard reset?
+# TODO what happens on disk failures?
 
+
+"""
+CHECKS
+
+Q: What if the OSD ID passed with --osdid doesn't exists (ie isn't on this node)?
+A: It will be filtered out when using .filter() and no origin_lv will be found.
+
+Q: What if --db or --wal is passed and the OSD is standalone?
+A: origin_lv won't be found as no LV will have the ceph.db_device or
+    ceph.wal_device tag.
+
+Q: For 'rm', what if the OSD doesn't have a cache?
+A: origin_lv won't be found as no LV will have the ceph.cache_lv tag.
+
+"""
 
 def pretty(s):
     print(json.dumps(s, indent=4, sort_keys=True))
@@ -224,8 +242,8 @@ def add_lvmcache(vgname, origin_lv, md_partition, cache_data_partition, osdid):
 
 def rm_lvmcache(vgname, osd_lv_name):
     osd_lv = api.get_lv(lv_name=osd_lv_name, vg_name=vgname)
-    if not osd_lv or not osd_lv.tags['ceph.cache_lv']:
-        print('Can\'t find cache data lv')
+    if not osd_lv or not osd_lv.tags.get('ceph.cache_lv', None):
+        print('Can\'t find cache data LV.')
         return
     vg = api.get_vg(vg_name=vgname)
     cache_lv_name = osd_lv.tags['ceph.cache_lv']
@@ -248,15 +266,25 @@ class Cache(object):
 
     help_menu = 'Deploy Cache'
     _help = """
-Deploy lvmcache. Usage:
+Manage lvmcache.
 
-$> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data partition> --origin <osd lvm name> --volumegroup <volume group>
+Add cache:
+
+$> ceph-volume cache add
+    --cachemetadata <metadata partition>
+    --cachedata <data partition>
+    --osdid <osd id>
+    [--data|--db|--wal]
+
+--data, --db and --wal indicate which partition to cache. Data is the default.
 
 or:
 
-$> ceph-volume cache add --cachemetadata <metadata partition> --cachedata <data partition> --osdid <osd id> [--data|--db|--wal]
-
---data, --db and --wal indicate which partition to cache
+$> ceph-volume cache add
+    --cachemetadata <metadata partition>
+    --cachedata <data partition>
+    --origin <osd lvm name>
+    --volumegroup <volume group>
 
 Remove cache:
 
@@ -268,7 +296,11 @@ $> ceph-volume cache info
 
 Get cache usage numbers:
 
-$> ceph-volume cache stats
+$> ceph-volume cache stats [--osdid <osd id>]
+
+Dump LVs information:
+
+$> ceph-volume cache dump
 
     """
     name = 'cache'
@@ -340,7 +372,7 @@ $> ceph-volume cache stats
         )
         args = parser.parse_args(main_args)
 
-        if self.argv[0] == 'debug':
+        if self.argv[0] == 'dump':
             lvs = api.Volumes()
             for lv in lvs:
                 pretty_lv(lv)
@@ -404,6 +436,7 @@ $> ceph-volume cache stats
                 osdid)
         elif self.argv[0] == 'rm':
             # TODO verify that the OSD has a cache
+            # TODO handle when passing --origin
             if args.osdid and not args.origin:
                 lvs = api.Volumes()
                 lvs.filter(lv_tags={'ceph.osd_id': args.osdid})
@@ -412,7 +445,7 @@ $> ceph-volume cache stats
                         origin_lv = lv
                         break
             if not origin_lv:
-                print('Couldn\'t find cached LV for OSD ' + args.osdid)
+                print('Can\'t find cache LV for OSD ' + args.osdid)
                 return
             vg_name = origin_lv.vg_name
             rm_lvmcache(vg_name, origin_lv.name)
