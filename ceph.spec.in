@@ -21,7 +21,6 @@
 %else
 %bcond_without tcmalloc
 %endif
-%bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %bcond_without ceph_test_package
