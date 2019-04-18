@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs/Subscription';
 
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
+import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import {
   FeatureTogglesMap$,
@@ -32,7 +33,8 @@ export class HealthComponent implements OnInit, OnDestroy {
     private authStorageService: AuthStorageService,
     private pgCategoryService: PgCategoryService,
     private featureToggles: FeatureTogglesService,
-    private refreshIntervalService: RefreshIntervalService
+    private refreshIntervalService: RefreshIntervalService,
+    private dimlessBinary: DimlessBinaryPipe
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -59,9 +61,14 @@ export class HealthComponent implements OnInit, OnDestroy {
     const ratioLabels = [];
     const ratioData = [];
 
-    ratioLabels.push(this.i18n('Writes'));
+    const total =
+      this.healthData.client_perf.write_op_per_sec + this.healthData.client_perf.read_op_per_sec;
+    const calcPercentage = (status) =>
+      Math.round(((this.healthData.client_perf[status] || 0) / total) * 100);
+
+    ratioLabels.push(`${this.i18n('Writes')} (${calcPercentage('write_op_per_sec')}%)`);
     ratioData.push(this.healthData.client_perf.write_op_per_sec);
-    ratioLabels.push(this.i18n('Reads'));
+    ratioLabels.push(`${this.i18n('Reads')} (${calcPercentage('read_op_per_sec')}%)`);
     ratioData.push(this.healthData.client_perf.read_op_per_sec);
 
     chart.dataset[0].data = ratioData;
@@ -84,19 +91,23 @@ export class HealthComponent implements OnInit, OnDestroy {
       chart.options.cutoutPercentage = 65;
     }
     chart.labels = [
-      `${this.i18n('Used')} (${percentUsed}%)`,
-      `${this.i18n('Avail.')} (${percentAvailable}%)`
+      `${this.dimlessBinary.transform(data.df.stats.total_used_raw_bytes)} ${this.i18n(
+        'Used'
+      )} (${percentUsed}%)`,
+      `${this.dimlessBinary.transform(
+        data.df.stats.total_bytes - data.df.stats.total_used_raw_bytes
+      )} ${this.i18n('Avail.')} (${percentAvailable}%)`
     ];
+
+    chart.options.title = {
+      display: true,
+      text: `${this.dimlessBinary.transform(data.df.stats.total_bytes)} total`,
+      position: 'bottom'
+    };
   }
 
   preparePgStatus(chart, data) {
     const categoryPgAmount = {};
-    chart.labels = [
-      this.i18n('Clean'),
-      this.i18n('Working'),
-      this.i18n('Warning'),
-      this.i18n('Unknown')
-    ];
     chart.colors = [
       {
         backgroundColor: [
@@ -120,6 +131,16 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.dataset[0].data = this.pgCategoryService
       .getAllTypes()
       .map((categoryType) => categoryPgAmount[categoryType]);
+
+    const calcPercentage = (status) =>
+      Math.round(((categoryPgAmount[status] || 0) / data.pg_info.pgs_per_osd) * 100) || 0;
+
+    chart.labels = [
+      `${this.i18n('Clean')} (${calcPercentage('clean')}%)`,
+      `${this.i18n('Working')} (${calcPercentage('working')}%)`,
+      `${this.i18n('Warning')} (${calcPercentage('warning')}%)`,
+      `${this.i18n('Unknown')} (${calcPercentage('unknown')}%)`
+    ];
   }
 
   isClientReadWriteChartShowable() {
