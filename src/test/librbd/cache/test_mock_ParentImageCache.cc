@@ -78,12 +78,12 @@ class TestMockParentImageCache : public TestMockFixture {
 
   void expect_cache_lookup_object(MockParentImageCache& mparent_image_cache,
                                   Context* on_finish) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), lookup_object(
-                     _, _, _, _, _));
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client),
+                               internal_lookup(_, _, _, _));
 
-     expect.WillOnce(WithArg<4>(Invoke([on_finish](GenContext<ObjectCacheRequest*>* ctx) {
-        on_finish->complete(0);
-      })));
+     expect.WillOnce(WithArg<3>(Invoke([on_finish](std::string oid) {
+       on_finish->complete(0);
+     })));
   }
 
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
