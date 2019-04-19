@@ -5968,6 +5968,11 @@ std::vector<Option> get_rgw_options() {
     .set_min_max(1, 1024)
     .set_description("pg_num_min value for RGW metadata (omap-heavy) pools"),
 
+    Option("rgw_rados_pool_recovery_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_min_max(-10, 10)
+    .set_description("recovery_priority value for RGW metadata (omap-heavy) pools"),
+
     Option("rgw_zone", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Zone name")

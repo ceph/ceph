@@ -81,9 +81,20 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 	pool.name + "\", \"var\": \"pg_num_min\": \"" +
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
-     if (r < 0) {
-       dout(10) << __func__ << " warning: failed to set pg_num_min on "
-		<< pool.name << dendl;
+      if (r < 0) {
+	dout(10) << __func__ << " warning: failed to set pg_num_min on "
+		 << pool.name << dendl;
+      }
+      // set recovery_priority
+      int p = g_conf().get_val<uint64_t>("rgw_rados_pool_recovery_priority");
+      r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"recovery_priority\": \"" +
+	stringify(p) + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	dout(10) << __func__ << " warning: failed to set recovery_priority on "
+		 << pool.name << dendl;
       }
     }
   } else if (r < 0) {
