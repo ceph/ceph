@@ -147,6 +147,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         if r != 0:
             return r, outb, outs
 
+        # set higher recovery priority on metadata pool
+        r, outb, outs = self.mon_command({
+            'prefix': 'osd pool set',
+            'pool': mdp_name,
+            'var': "recovery_priority",
+            'val': "5",
+        })
+        if r != 0:
+            return r, outb, outs
+
         r, outb, outs = self.mon_command({
             'prefix': 'osd pool create',
             'pool': dp_name,
