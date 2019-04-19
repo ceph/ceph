@@ -209,7 +209,7 @@ default to 1.00000 and are relative only to each other; they not absolute.
 It is crucial to distinguish them from CRUSH weights, which reflect the
 absolute capacity of a bucket in TiB.  By default this command adjusts
 override weight on OSDs which have + or - 20% of the average utilization,
-but if you include a ``threshold` that percentage will be used instead. ::
+but if you include a ``threshold`` that percentage will be used instead. ::
 
 	ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
 
