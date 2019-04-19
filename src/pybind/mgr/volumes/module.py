@@ -68,6 +68,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Get the mountpath of a CephFS subvolume in a volume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs subvolume snapshot create '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString ',
+            'desc': "Create a snapshot of a CephFS subvolume in a volume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot rm '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Delete a snapshot of a CephFS subvolume in a volume",
+            'perm': 'rw'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -371,3 +388,54 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 return -errno.ENOENT, "", \
                        "Subvolume '{0}' not found".format(sub_name)
         return 0, path, ""
+
+    def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        sub_name = cmd['sub_name']
+        snap_name = cmd['snap_name']
+
+        if not self._volume_exists(vol_name):
+            return -errno.ENOENT, "", \
+                   "Volume '{0}' not found, cannot create snapshot '{1}'".format(vol_name, snap_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            svp = SubvolumePath(sub_name, sub_name)
+            if not svc.get_subvolume_path(svp):
+                return -errno.ENOENT, "", \
+                       "Subvolume '{0}' not found, cannot create snapshot '{1}'".format(sub_name, snap_name)
+            svc.create_subvolume_snapshot(svp, snap_name)
+
+        return 0, "", ""
+
+    def _cmd_fs_subvolume_snapshot_rm(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        sub_name = cmd['sub_name']
+        snap_name = cmd['snap_name']
+
+        force = cmd.get('force', False)
+
+        if not self._volume_exists(vol_name):
+            if force:
+                return 0, "", ""
+            else:
+                return -errno.ENOENT, "", \
+                       "Volume '{0}' not found, cannot remove subvolume snapshot '{1}'".format(vol_name, snap_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            svp = SubvolumePath(sub_name, sub_name)
+            if not svc.get_subvolume_path(svp):
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume '{0}' not found, cannot remove subvolume snapshot '{1}'".format(sub_name, snap_name)
+            try:
+                svc.delete_subvolume_snapshot(svp, snap_name)
+            except cephfs.ObjectNotFound:
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume snapshot '{0}' not found, cannot remove it".format(snap_name)
+
+        return 0, "", ""
