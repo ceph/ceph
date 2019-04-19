@@ -70,8 +70,8 @@ class Module(MgrModule):
         {
             'name': 'interval',
             'type': 'int',
-            'default': 72,
-            'min': 24
+            'default': 24,
+            'min': 8
         }
     ]
 
