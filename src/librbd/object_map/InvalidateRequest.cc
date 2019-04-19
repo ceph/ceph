@@ -24,7 +24,7 @@ template <typename I>
 void InvalidateRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(image_ctx.owner_lock.is_locked());
-  ceph_assert(image_ctx.snap_lock.is_wlocked());
+  ceph_assert(image_ctx.image_lock.is_wlocked());
 
   uint64_t snap_flags;
   int r = image_ctx.get_flags(m_snap_id, &snap_flags);

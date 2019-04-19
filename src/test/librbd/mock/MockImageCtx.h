@@ -62,7 +62,7 @@ struct MockImageCtx {
       lock_tag(image_ctx.lock_tag),
       owner_lock(image_ctx.owner_lock),
       md_lock(image_ctx.md_lock),
-      snap_lock(image_ctx.snap_lock),
+      image_lock(image_ctx.image_lock),
       timestamp_lock(image_ctx.timestamp_lock),
       parent_lock(image_ctx.parent_lock),
       object_map_lock(image_ctx.object_map_lock),
@@ -193,7 +193,7 @@ struct MockImageCtx {
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
   MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,
-                                         const RWLock &in_snap_lock));
+                                         const RWLock &in_image_lock));
 
   MOCK_CONST_METHOD1(test_op_features, bool(uint64_t op_features));
 
@@ -249,7 +249,7 @@ struct MockImageCtx {
 
   RWLock &owner_lock;
   RWLock &md_lock;
-  RWLock &snap_lock;
+  RWLock &image_lock;
   RWLock &timestamp_lock;
   RWLock &parent_lock;
   RWLock &object_map_lock;

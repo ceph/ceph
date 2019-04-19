@@ -416,7 +416,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
 template <typename I>
 void ImageWatcher<I>::notify_request_lock() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
 
   // ExclusiveLock state machine can be dynamically disabled or
   // race with task cancel
@@ -435,7 +435,7 @@ void ImageWatcher<I>::notify_request_lock() {
 template <typename I>
 void ImageWatcher<I>::handle_request_lock(int r) {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
 
   // ExclusiveLock state machine cannot transition -- but can be
   // dynamically disabled

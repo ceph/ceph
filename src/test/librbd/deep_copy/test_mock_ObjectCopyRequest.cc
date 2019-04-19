@@ -291,7 +291,7 @@ public:
                               Return(true)));
       } else {
         expect.WillOnce(DoAll(WithArg<7>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
-                                  ceph_assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
+                                  ceph_assert(mock_image_ctx.image_ctx->image_lock.is_locked());
                                   ceph_assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(
                                     snap_id, 0, 1, state, boost::none, {}, false, ctx);

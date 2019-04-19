@@ -199,7 +199,7 @@ TEST_F(TestObjectMap, DISABLED_StressTest) {
       });
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     ASSERT_TRUE(ictx->object_map != nullptr);
 

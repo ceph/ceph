@@ -109,7 +109,7 @@ void CloseRequest<I>::send_shut_down_exclusive_lock() {
     m_exclusive_lock = m_image_ctx->exclusive_lock;
 
     // if reading a snapshot -- possible object map is open
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     if (m_exclusive_lock == nullptr) {
       delete m_image_ctx->object_map;
       m_image_ctx->object_map = nullptr;
@@ -140,7 +140,7 @@ void CloseRequest<I>::handle_shut_down_exclusive_lock(int r) {
     ceph_assert(m_image_ctx->exclusive_lock == nullptr);
 
     // object map and journal closed during exclusive lock shutdown
-    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx->image_lock);
     ceph_assert(m_image_ctx->journal == nullptr);
     ceph_assert(m_image_ctx->object_map == nullptr);
   }

@@ -90,7 +90,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -119,7 +119,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -127,7 +127,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapMissing) {
   {
     // shouldn't invalidate the HEAD revision when we fail to load
     // the already deleted snapshot
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     uint64_t flags;
     ASSERT_EQ(0, ictx->get_flags(CEPH_NOSNAP, &flags));
     ASSERT_EQ(0U, flags & RBD_FLAG_OBJECT_MAP_INVALID);
@@ -155,7 +155,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapError) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -182,7 +182,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotMissing) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -210,7 +210,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotError) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -239,7 +239,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapMissing) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -268,7 +268,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapError) {
     *ictx, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -296,7 +296,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
   {
     librbd::ObjectMap om(*ictx, ictx->snap_id);
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     om.set_object_map(object_map);
     om.aio_save(&cond_ctx1);
   }
@@ -315,7 +315,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
     *ictx, &object_map, snap_id, &cond_ctx2);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx2.wait());

@@ -32,7 +32,7 @@ DetachChildRequest<I>::~DetachChildRequest() {
 template <typename I>
 void DetachChildRequest<I>::send() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
     // use oldest snapshot or HEAD for parent spec

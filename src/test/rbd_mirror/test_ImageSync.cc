@@ -289,7 +289,7 @@ TEST_F(TestImageSync, SnapshotStress) {
   for (auto &snap_name : snap_names) {
     uint64_t remote_snap_id;
     {
-      RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
+      RWLock::RLocker remote_image_locker(m_remote_image_ctx->image_lock);
       remote_snap_id = m_remote_image_ctx->get_snap_id(
         cls::rbd::UserSnapshotNamespace{}, snap_name);
     }
@@ -300,14 +300,14 @@ TEST_F(TestImageSync, SnapshotStress) {
       m_remote_image_ctx->state->snap_set(remote_snap_id, &ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
+      RWLock::RLocker remote_image_locker(m_remote_image_ctx->image_lock);
       remote_size = m_remote_image_ctx->get_image_size(
         m_remote_image_ctx->snap_id);
     }
 
     uint64_t local_snap_id;
     {
-      RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+      RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
       local_snap_id = m_local_image_ctx->get_snap_id(
         cls::rbd::UserSnapshotNamespace{}, snap_name);
     }
@@ -318,13 +318,13 @@ TEST_F(TestImageSync, SnapshotStress) {
       m_local_image_ctx->state->snap_set(local_snap_id, &ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+      RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
       local_size = m_local_image_ctx->get_image_size(
         m_local_image_ctx->snap_id);
       bool flags_set;
       ASSERT_EQ(0, m_local_image_ctx->test_flags(m_local_image_ctx->snap_id,
                                                  RBD_FLAG_OBJECT_MAP_INVALID,
-                                                 m_local_image_ctx->snap_lock,
+                                                 m_local_image_ctx->image_lock,
                                                  &flags_set));
       ASSERT_FALSE(flags_set);
     }

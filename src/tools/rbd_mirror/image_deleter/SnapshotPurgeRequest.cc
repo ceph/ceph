@@ -35,7 +35,7 @@ void SnapshotPurgeRequest<I>::open_image() {
   m_image_ctx = I::create("", m_image_id, nullptr, m_io_ctx, false);
 
   {
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     m_image_ctx->set_journal_policy(new JournalPolicy());
   }
 
@@ -94,7 +94,7 @@ void SnapshotPurgeRequest<I>::handle_acquire_lock(int r) {
   }
 
   {
-    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx->image_lock);
     m_snaps = m_image_ctx->snaps;
   }
   snap_unprotect();
@@ -108,10 +108,10 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
   }
 
   librados::snap_t snap_id = m_snaps.back();
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   int r = m_image_ctx->get_snap_namespace(snap_id, &m_snap_namespace);
   if (r < 0) {
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     derr << "failed to get snap namespace: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
@@ -121,7 +121,7 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
 
   r = m_image_ctx->get_snap_name(snap_id, &m_snap_name);
   if (r < 0) {
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     derr << "failed to get snap name: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
@@ -132,7 +132,7 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
   bool is_protected;
   r = m_image_ctx->is_snap_protected(snap_id, &is_protected);
   if (r < 0) {
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     derr << "failed to get snap protection status: " << cpp_strerror(r)
          << dendl;
@@ -140,7 +140,7 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
     close_image();
     return;
   }
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   if (!is_protected) {
     snap_remove();
@@ -186,7 +186,7 @@ void SnapshotPurgeRequest<I>::handle_snap_unprotect(int r) {
 
   {
     // avoid the need to refresh to delete the newly unprotected snapshot
-    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx->image_lock);
     librados::snap_t snap_id = m_snaps.back();
     auto snap_info_it = m_image_ctx->snap_info.find(snap_id);
     if (snap_info_it != m_image_ctx->snap_info.end()) {
