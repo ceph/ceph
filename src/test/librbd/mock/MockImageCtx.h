@@ -61,7 +61,6 @@ struct MockImageCtx {
       exclusive_locked(image_ctx.exclusive_locked),
       lock_tag(image_ctx.lock_tag),
       owner_lock(image_ctx.owner_lock),
-      md_lock(image_ctx.md_lock),
       image_lock(image_ctx.image_lock),
       timestamp_lock(image_ctx.timestamp_lock),
       parent_lock(image_ctx.parent_lock),
@@ -248,7 +247,6 @@ struct MockImageCtx {
   librados::IoCtx data_ctx;
 
   RWLock &owner_lock;
-  RWLock &md_lock;
   RWLock &image_lock;
   RWLock &timestamp_lock;
   RWLock &parent_lock;
