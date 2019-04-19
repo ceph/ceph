@@ -296,7 +296,6 @@ TEST_F(TestMockParentImageCache, test_read) {
   Context* on_finish = &cond;
 
   auto& expect = EXPECT_CALL(*(mock_parent_image_cache->m_cache_client), is_session_work())
-                   .WillOnce(Return(true))
                    .WillOnce(Return(true));
   expect_cache_lookup_object(*mock_parent_image_cache, on_finish); 
 
