@@ -3578,7 +3578,8 @@ public:
   }
   ostream &print(ostream &out) const override {
     return out << "([" << first << "," << last
-	       << "] intervals=" << intervals << ")";
+	       << "] all_participants=" << all_participants
+	       << " intervals=" << intervals << ")";
   }
   void encode(ceph::buffer::list &bl) const override {
     ENCODE_START(1, 1, bl);
