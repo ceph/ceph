@@ -238,3 +238,35 @@ class SubvolumeClient(object):
         except cephfs.ObjectNotFound:
             return None
         return path
+
+    def _snapshot_path(self, dir_path, snapshot_name):
+        return os.path.join(
+            dir_path, self.rados.conf_get('client_snapdir'), snapshot_name
+        )
+
+    def _snapshot_create(self, dir_path, snapshot_name, mode=0o755):
+        """
+        Create a snapshot, or do nothing if it already exists.
+        """
+        snapshot_path = self._snapshot_path(dir_path, snapshot_name)
+        try:
+            self.fs.stat(snapshot_path)
+        except cephfs.ObjectNotFound:
+            self.fs.mkdir(snapshot_path, mode)
+        else:
+            log.warn("Snapshot '{0}' already exists".format(snapshot_name))
+
+
+    def _snapshot_delete(self, dir_path, snapshot_name):
+        """
+        Remove a snapshot, or do nothing if it doesn't exist.
+        """
+        snapshot_path = self._snapshot_path(dir_path, snapshot_name)
+        self.fs.stat(snapshot_path)
+        self.fs.rmdir(snapshot_path)
+
+    def create_subvolume_snapshot(self, subvolume_path, snapshot_name, mode=0o755):
+        return self._snapshot_create(self._subvolume_path(subvolume_path), snapshot_name, mode)
+
+    def delete_subvolume_snapshot(self, subvolume_path, snapshot_name):
+        return self._snapshot_delete(self._subvolume_path(subvolume_path), snapshot_name)
