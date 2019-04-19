@@ -35,7 +35,7 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, ceph::BitVector<2> *object_map,
 template <typename I>
 void RefreshRequest<I>::send() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     m_object_count = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
@@ -51,7 +51,7 @@ template <typename I>
 void RefreshRequest<I>::apply() {
   uint64_t num_objs;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     num_objs = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
@@ -172,7 +172,7 @@ void RefreshRequest<I>::send_invalidate() {
     m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
   req->send();
 }
 
@@ -206,7 +206,7 @@ void RefreshRequest<I>::send_resize_invalidate() {
     m_image_ctx, m_snap_id, true, ctx);
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
   req->send();
 }
 
@@ -277,7 +277,7 @@ void RefreshRequest<I>::send_invalidate_and_close() {
 
   lderr(cct) << "object map too large: " << m_object_count << dendl;
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
   req->send();
 }
 

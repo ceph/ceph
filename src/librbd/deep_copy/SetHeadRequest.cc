@@ -39,13 +39,13 @@ void SetHeadRequest<I>::send() {
 
 template <typename I>
 void SetHeadRequest<I>::send_set_size() {
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   if (m_image_ctx->size == m_size) {
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
     send_detach_parent();
     return;
   }
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ldout(m_cct, 20) << dendl;
 
@@ -87,7 +87,7 @@ void SetHeadRequest<I>::handle_set_size(int r) {
 
   {
     // adjust in-memory image size now that it's updated on disk
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     if (m_image_ctx->size > m_size) {
       RWLock::WLocker parent_locker(m_image_ctx->parent_lock);
       if (m_image_ctx->parent_md.spec.pool_id != -1 &&

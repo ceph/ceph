@@ -336,7 +336,7 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
 
   uint64_t snap_id;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     snap_id = m_image_ctx.snap_id;
   }
 
@@ -807,7 +807,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
     ParentImageInfo parent_md;
@@ -903,7 +903,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
      !m_image_ctx.exclusive_lock->is_lock_owner());
   bool journal_disabled_by_policy;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     journal_disabled_by_policy = (
       !journal_disabled &&
       m_image_ctx.get_journal_policy()->journal_disabled());
@@ -955,7 +955,7 @@ template <typename I>
 void RefreshRequest<I>::send_v2_block_writes() {
   bool disabled_journaling = false;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     disabled_journaling = ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
                            (m_features & RBD_FEATURE_JOURNALING) == 0 &&
                            m_image_ctx.journal != nullptr);
@@ -1285,7 +1285,7 @@ void RefreshRequest<I>::apply() {
   RWLock::WLocker md_locker(m_image_ctx.md_lock);
 
   {
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
 
     m_image_ctx.size = m_size;
@@ -1391,7 +1391,7 @@ void RefreshRequest<I>::apply() {
     // handle dynamically enabled / disabled features
     if (m_image_ctx.exclusive_lock != nullptr &&
         !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK,
-                                   m_image_ctx.snap_lock)) {
+                                   m_image_ctx.image_lock)) {
       // disabling exclusive lock will automatically handle closing
       // object map and journaling
       ceph_assert(m_exclusive_lock == nullptr);
@@ -1402,7 +1402,7 @@ void RefreshRequest<I>::apply() {
         std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
-                                     m_image_ctx.snap_lock)) {
+                                     m_image_ctx.image_lock)) {
         if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
           m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
                                                       false);
@@ -1412,7 +1412,7 @@ void RefreshRequest<I>::apply() {
         std::swap(m_journal, m_image_ctx.journal);
       }
       if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
-                                     m_image_ctx.snap_lock) ||
+                                     m_image_ctx.image_lock) ||
           m_object_map != nullptr) {
         std::swap(m_object_map, m_image_ctx.object_map);
       }

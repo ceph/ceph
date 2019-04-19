@@ -311,9 +311,9 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
 
   I *local_image_ctx = (*m_local_image_ctx);
   {
-    local_image_ctx->snap_lock.get_read();
+    local_image_ctx->image_lock.get_read();
     if (local_image_ctx->journal == nullptr) {
-      local_image_ctx->snap_lock.put_read();
+      local_image_ctx->image_lock.put_read();
 
       derr << "local image does not support journaling" << dendl;
       m_ret_val = -EINVAL;
@@ -323,7 +323,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
 
     r = (*m_local_image_ctx)->journal->is_resync_requested(m_do_resync);
     if (r < 0) {
-      local_image_ctx->snap_lock.put_read();
+      local_image_ctx->image_lock.put_read();
 
       derr << "failed to check if a resync was requested" << dendl;
       m_ret_val = r;
@@ -335,7 +335,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     m_local_tag_data = local_image_ctx->journal->get_tag_data();
     dout(10) << "local tag=" << m_local_tag_tid << ", "
              << "local tag data=" << m_local_tag_data << dendl;
-    local_image_ctx->snap_lock.put_read();
+    local_image_ctx->image_lock.put_read();
   }
 
   if (m_local_tag_data.mirror_uuid != m_remote_mirror_uuid && !m_primary) {
@@ -481,9 +481,9 @@ void BootstrapRequest<I>::create_local_image() {
   dout(15) << "local_image_id=" << m_local_image_id << dendl;
   update_progress("CREATE_LOCAL_IMAGE");
 
-  m_remote_image_ctx->snap_lock.get_read();
+  m_remote_image_ctx->image_lock.get_read();
   std::string image_name = m_remote_image_ctx->name;
-  m_remote_image_ctx->snap_lock.put_read();
+  m_remote_image_ctx->image_lock.put_read();
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(

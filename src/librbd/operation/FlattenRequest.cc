@@ -46,7 +46,7 @@ public:
     }
 
     {
-      RWLock::RLocker snap_lock(image_ctx.snap_lock);
+      RWLock::RLocker image_lock(image_ctx.image_lock);
       if (image_ctx.object_map != nullptr &&
           !image_ctx.object_map->object_may_not_exist(m_object_no)) {
         // can skip because the object already exists
@@ -144,15 +144,15 @@ void FlattenRequest<I>::detach_child() {
   // if there are no snaps, remove from the children object as well
   // (if snapshots remain, they have their own parent info, and the child
   // will be removed when the last snap goes away)
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if ((image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
       !image_ctx.snaps.empty()) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
     detach_parent();
     return;
   }
-  image_ctx.snap_lock.put_read();
+  image_ctx.image_lock.put_read();
 
   ldout(cct, 5) << dendl;
   auto ctx = create_context_callback<

@@ -207,7 +207,7 @@ void ImageSync<I>::send_copy_image() {
   librbd::deep_copy::ObjectNumber object_number;
   int r = 0;
   {
-    RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_remote_image_ctx->image_lock);
     ceph_assert(!m_client_meta->sync_points.empty());
     auto &sync_point = m_client_meta->sync_points.front();
     snap_id_end = m_remote_image_ctx->get_snap_id(

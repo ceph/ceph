@@ -86,7 +86,7 @@ int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
     return r;
   }
 
-  RWLock::RLocker snap_locker(ictx->snap_lock);
+  RWLock::RLocker image_locker(ictx->image_lock);
   *op_features = ictx->op_features;
   return 0;
 }
@@ -200,14 +200,14 @@ int Image<I>::get_parent(I *ictx,
     return r;
   }
 
-  RWLock::RLocker snap_locker(ictx->snap_lock);
+  RWLock::RLocker image_locker(ictx->image_lock);
   RWLock::RLocker parent_locker(ictx->parent_lock);
 
   bool release_parent_locks = false;
   BOOST_SCOPE_EXIT_ALL(ictx, &release_parent_locks) {
     if (release_parent_locks) {
       ictx->parent->parent_lock.put_read();
-      ictx->parent->snap_lock.put_read();
+      ictx->parent->image_lock.put_read();
     }
   };
 
@@ -216,7 +216,7 @@ int Image<I>::get_parent(I *ictx,
   auto parent = ictx->parent;
   if (!ictx->migration_info.empty() && ictx->parent != nullptr) {
     release_parent_locks = true;
-    ictx->parent->snap_lock.get_read();
+    ictx->parent->image_lock.get_read();
     ictx->parent->parent_lock.get_read();
 
     parent = ictx->parent->parent;
@@ -230,7 +230,7 @@ int Image<I>::get_parent(I *ictx,
   parent_image->pool_name = parent->md_ctx.get_pool_name();
   parent_image->pool_namespace = parent->md_ctx.get_namespace();
 
-  RWLock::RLocker parent_snap_locker(parent->snap_lock);
+  RWLock::RLocker parent_image_locker(parent->image_lock);
   parent_snap->id = parent->snap_id;
   parent_snap->namespace_type = RBD_SNAP_NAMESPACE_TYPE_USER;
   if (parent->snap_id != CEPH_NOSNAP) {
@@ -312,7 +312,7 @@ template <typename I>
 int Image<I>::list_descendants(
     I *ictx, const std::optional<size_t> &max_level,
     std::vector<librbd::linked_image_spec_t> *images) {
-  RWLock::RLocker l(ictx->snap_lock);
+  RWLock::RLocker l(ictx->image_lock);
   std::vector<librados::snap_t> snap_ids;
   if (ictx->snap_id != CEPH_NOSNAP) {
     snap_ids.push_back(ictx->snap_id);
@@ -347,7 +347,7 @@ int Image<I>::list_descendants(
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
   // no children for non-layered or old format image
-  if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->snap_lock)) {
+  if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->image_lock)) {
     return 0;
   }
 
@@ -519,7 +519,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   uint64_t features;
   uint64_t src_size;
   {
-    RWLock::RLocker snap_locker(src->snap_lock);
+    RWLock::RLocker image_locker(src->image_lock);
 
     if (!src->migration_info.empty()) {
       lderr(cct) << "cannot deep copy migrating image" << dendl;
@@ -566,7 +566,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   if (flatten > 0) {
     parent_spec.pool_id = -1;
   } else {
-    RWLock::RLocker snap_locker(src->snap_lock);
+    RWLock::RLocker image_locker(src->image_lock);
     RWLock::RLocker parent_locker(src->parent_lock);
 
     // use oldest snapshot or HEAD for parent spec
@@ -648,7 +648,7 @@ int Image<I>::deep_copy(I *src, I *dest, bool flatten,
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
   {
-    RWLock::RLocker snap_locker(src->snap_lock);
+    RWLock::RLocker image_locker(src->image_lock);
     snap_id_end = src->snap_id;
   }
 
@@ -684,7 +684,7 @@ int Image<I>::snap_set(I *ictx,
   uint64_t snap_id = CEPH_NOSNAP;
   std::string name(snap_name == nullptr ? "" : snap_name);
   if (!name.empty()) {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
                                 snap_name);
     if (snap_id == CEPH_NOSNAP) {

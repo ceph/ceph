@@ -224,11 +224,11 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::send_read_from_parent() {
-  m_src_image_ctx->snap_lock.get_read();
+  m_src_image_ctx->image_lock.get_read();
   m_src_image_ctx->parent_lock.get_read();
   io::Extents image_extents;
   compute_read_from_parent_ops(&image_extents);
-  m_src_image_ctx->snap_lock.put_read();
+  m_src_image_ctx->image_lock.put_read();
 
   if (image_extents.empty()) {
     m_src_image_ctx->parent_lock.put_read();
@@ -438,12 +438,12 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   }
 
   m_dst_image_ctx->owner_lock.get_read();
-  m_dst_image_ctx->snap_lock.get_read();
+  m_dst_image_ctx->image_lock.get_read();
   if (m_dst_image_ctx->object_map == nullptr) {
     // possible that exclusive lock was lost in background
     lderr(m_cct) << "object map is not initialized" << dendl;
 
-    m_dst_image_ctx->snap_lock.put_read();
+    m_dst_image_ctx->image_lock.put_read();
     m_dst_image_ctx->owner_lock.put_read();
     finish(-EINVAL);
     return;
@@ -463,7 +463,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
   auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
   if (finish_op_ctx == nullptr) {
     lderr(m_cct) << "lost exclusive lock" << dendl;
-    m_dst_image_ctx->snap_lock.put_read();
+    m_dst_image_ctx->image_lock.put_read();
     m_dst_image_ctx->owner_lock.put_read();
     finish(r);
     return;
@@ -482,7 +482,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
 
   // NOTE: state machine might complete before we reach here
   dst_image_ctx->object_map_lock.put_write();
-  dst_image_ctx->snap_lock.put_read();
+  dst_image_ctx->image_lock.put_read();
   dst_image_ctx->owner_lock.put_read();
   if (!sent) {
     ceph_assert(dst_snap_id == CEPH_NOSNAP);
@@ -717,7 +717,7 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 template <typename I>
 void ObjectCopyRequest<I>::compute_read_from_parent_ops(
     io::Extents *parent_image_extents) {
-  assert(m_src_image_ctx->snap_lock.is_locked());
+  assert(m_src_image_ctx->image_lock.is_locked());
   assert(m_src_image_ctx->parent_lock.is_locked());
 
   m_read_ops = {};
@@ -873,7 +873,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     }
 
     if (hide_parent) {
-      RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+      RWLock::RLocker image_locker(m_dst_image_ctx->image_lock);
       RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
       uint64_t parent_overlap = 0;
       int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
@@ -972,7 +972,7 @@ void ObjectCopyRequest<I>::finish(int r) {
 
 template <typename I>
 void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
-  RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+  RWLock::RLocker image_locker(m_dst_image_ctx->image_lock);
 
   auto snap_ids = m_dst_image_ctx->snaps;
   snap_ids.push_back(CEPH_NOSNAP);

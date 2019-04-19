@@ -33,7 +33,7 @@ void UpdateRequest<I>::send() {
 
 template <typename I>
 void UpdateRequest<I>::update_object_map() {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
   ceph_assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
@@ -80,7 +80,7 @@ void UpdateRequest<I>::handle_update_object_map(int r) {
   }
 
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
     update_in_memory_object_map();
 
@@ -97,7 +97,7 @@ void UpdateRequest<I>::handle_update_object_map(int r) {
 
 template <typename I>
 void UpdateRequest<I>::update_in_memory_object_map() {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
   ceph_assert(m_image_ctx.object_map_lock.is_locked());
 
   // rebuilding the object map might update on-disk only

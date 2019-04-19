@@ -83,7 +83,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -115,7 +115,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -145,7 +145,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -173,7 +173,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -204,7 +204,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_EXISTS_CLEAN,
     boost::optional<uint8_t>(), {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -242,7 +242,7 @@ TEST_F(TestMockObjectMapUpdateRequest, BatchUpdate) {
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, false, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
@@ -267,7 +267,7 @@ TEST_F(TestMockObjectMapUpdateRequest, IgnoreMissingObjectMap) {
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
     OBJECT_EXISTS, {}, true, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }

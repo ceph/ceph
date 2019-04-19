@@ -105,7 +105,7 @@ int RenameRequest<I>::filter_return_code(int r) const {
   CephContext *cct = image_ctx.cct;
 
   if (m_state == STATE_READ_SOURCE_HEADER && r == -ENOENT) {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.name == m_dest_name) {
       // signal that replay raced with itself
       return -EEXIST;

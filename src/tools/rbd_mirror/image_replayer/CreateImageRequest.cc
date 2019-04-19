@@ -73,7 +73,7 @@ void CreateImageRequest<I>::create_image() {
   Context *ctx = create_context_callback<
     klass, &klass::handle_create_image>(this);
 
-  RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+  RWLock::RLocker image_locker(m_remote_image_ctx->image_lock);
 
   auto& config{
     reinterpret_cast<CephContext*>(m_local_io_ctx.cct())->_conf};
@@ -323,7 +323,7 @@ void CreateImageRequest<I>::clone_image() {
   std::string snap_name;
   cls::rbd::SnapshotNamespace snap_namespace;
   {
-    RWLock::RLocker remote_snap_locker(m_remote_parent_image_ctx->snap_lock);
+    RWLock::RLocker remote_image_locker(m_remote_parent_image_ctx->image_lock);
     auto it = m_remote_parent_image_ctx->snap_info.find(
       m_remote_parent_spec.snap_id);
     if (it != m_remote_parent_image_ctx->snap_info.end()) {
@@ -407,7 +407,7 @@ void CreateImageRequest<I>::finish(int r) {
 template <typename I>
 int CreateImageRequest<I>::validate_parent() {
   RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
-  RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
+  RWLock::RLocker image_locker(m_remote_image_ctx->image_lock);
 
   m_remote_parent_spec = m_remote_image_ctx->parent_md.spec;
 

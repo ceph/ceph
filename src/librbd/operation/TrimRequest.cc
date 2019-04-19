@@ -74,7 +74,7 @@ public:
                 image_ctx.exclusive_lock->is_lock_owner());
 
     {
-      RWLock::RLocker snap_locker(image_ctx.snap_lock);
+      RWLock::RLocker image_locker(image_ctx.image_lock);
       if (image_ctx.object_map != nullptr &&
           !image_ctx.object_map->object_may_exist(m_object_no)) {
         return 1;
@@ -188,7 +188,7 @@ void TrimRequest<I>::send_pre_trim() {
   }
 
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_pre_trim: "
                               << " delete_start_min=" << m_delete_start_min
@@ -218,7 +218,7 @@ void TrimRequest<I>::send_copyup_objects() {
   bool has_snapshots;
   uint64_t parent_overlap;
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
     snapc = image_ctx.snapc;
@@ -284,7 +284,7 @@ void TrimRequest<I>::send_post_trim() {
   ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.object_map != nullptr) {
       ldout(image_ctx.cct, 5) << this << " send_post_trim:"
                               << " delete_start_min=" << m_delete_start_min
@@ -326,7 +326,7 @@ void TrimRequest<I>::send_clean_boundary() {
 
   ::SnapContext snapc;
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     snapc = image_ctx.snapc;
   }
 

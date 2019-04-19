@@ -167,7 +167,7 @@ void ImageRequest<I>::send() {
 
 template <typename I>
 int ImageRequest<I>::clip_request() {
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
   for (auto &image_extent : m_image_extents) {
     auto clip_len = image_extent.second;
     int r = clip_io(get_image_ctx(&m_image_ctx), image_extent.first, &clip_len);
@@ -277,7 +277,7 @@ void ImageReadRequest<I>::send_request() {
   {
     // prevent image size from changing between computing clip and recording
     // pending async operation
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     snap_id = image_ctx.snap_id;
 
     // map image extents to object extents
@@ -355,7 +355,7 @@ void AbstractImageWriteRequest<I>::send_request() {
   {
     // prevent image size from changing between computing clip and recording
     // pending async operation
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.snap_id != CEPH_NOSNAP || image_ctx.read_only) {
       aio_comp->fail(-EROFS);
       return;
@@ -600,7 +600,7 @@ void ImageFlushRequest<I>::send_request() {
 
   bool journaling = false;
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     journaling = (m_flush_source == FLUSH_SOURCE_USER &&
                   image_ctx.journal != nullptr &&
                   image_ctx.journal->is_journal_appending());

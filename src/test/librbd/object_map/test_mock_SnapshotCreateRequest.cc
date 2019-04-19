@@ -23,7 +23,7 @@ using ::testing::StrEq;
 class TestMockObjectMapSnapshotCreateRequest : public TestMockFixture {
 public:
   void inject_snap_info(librbd::ImageCtx *ictx, uint64_t snap_id) {
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     RWLock::RLocker parent_locker(ictx->parent_lock);
     ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "snap name", snap_id,
 		   ictx->size, ictx->parent_md,
@@ -100,7 +100,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, Success) {
   AsyncRequest<> *request = new SnapshotCreateRequest(
     *ictx, &object_map, snap_id, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -126,7 +126,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, ReadMapError) {
   AsyncRequest<> *request = new SnapshotCreateRequest(
     *ictx, &object_map, snap_id, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -153,7 +153,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, WriteMapError) {
   AsyncRequest<> *request = new SnapshotCreateRequest(
     *ictx, &object_map, snap_id, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -181,7 +181,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, AddSnapshotError) {
   AsyncRequest<> *request = new SnapshotCreateRequest(
     *ictx, &object_map, snap_id, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -209,7 +209,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, FlagCleanObjects) {
   AsyncRequest<> *request = new SnapshotCreateRequest(
     *ictx, &object_map, snap_id, &cond_ctx);
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());

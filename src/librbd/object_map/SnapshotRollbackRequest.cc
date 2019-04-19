@@ -115,7 +115,7 @@ void SnapshotRollbackRequest::send_write_map() {
 
 void SnapshotRollbackRequest::send_invalidate_map() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
