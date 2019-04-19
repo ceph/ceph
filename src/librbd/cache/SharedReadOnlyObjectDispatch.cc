@@ -25,7 +25,7 @@ namespace cache {
 template <typename I, typename C>
 SharedReadOnlyObjectDispatch<I, C>::SharedReadOnlyObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialzed(false) {
+    m_initialzed(false), m_object_store(nullptr) {
 }
 
 template <typename I, typename C>
@@ -90,12 +90,11 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
 
-  // if any session failed, reads will go to rados
-  if(!m_cache_client->is_session_work()) {
+  // if any failse, reads will go to rados
+  if(!m_cache_client->is_session_work() || m_cache_client == nullptr ||
+     m_object_store == nullptr || !m_initialzed) {
     ldout(cct, 5) << "SRO cache client session failed " << dendl;
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
-    return true;
+    return false;
   }
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
@@ -106,48 +105,42 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
                        dispatch_result, on_dispatched);
   });
 
-  if (m_cache_client && m_cache_client->is_session_work() && m_object_store) {
-
-    m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
-                                  m_image_ctx->data_ctx.get_id(),
-                                  (uint64_t)snap_id, oid, std::move(ctx));
-  }
+  m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
+                                m_image_ctx->data_ctx.get_id(),
+                                (uint64_t)snap_id, oid, std::move(ctx));
   return true;
 }
 
 template <typename I, typename C>
-int SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
+void SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
     ObjectCacheRequest* ack, uint64_t read_off,
     uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
-  std::string file_path;
-  if (ack->type == RBDSC_READ_REPLY) {
-    file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
-    ceph_assert(file_path != "");
-  } else {
-    // go back to read rados
-    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-    on_dispatched->complete(0);
-    return false;
-  }
-
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  // try to read from parent image cache
-  int r = m_object_store->read_object(file_path, read_data, read_off, read_len, on_dispatched);
-  if (r == read_len) {
-    *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-    //TODO(): complete in syncfile
-    on_dispatched->complete(r);
-    ldout(cct, 20) << "read cache: " << *dispatch_result <<dendl;
-    return true;
+  if(ack->type != RBDSC_READ_REPLY) {
+    // go back to read rados
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+    on_dispatched->complete(0);
+    return;
   }
 
-  // cache read error, fall back to read rados
-  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
-  on_dispatched->complete(0);
-  return false;
+  ceph_assert(ack->type == RBDSC_READ_REPLY);
+  std::string file_path = ((ObjectCacheReadReplyData*)ack)->cache_path;
+  ceph_assert(file_path != "");
+
+  // try to read from parent image cache
+  int r = m_object_store->read_object(file_path, read_data, read_off, read_len, on_dispatched);
+  if(r < 0) {
+    // cache read error, fall back to read rados
+    *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+    on_dispatched->complete(0);
+  }
+
+  *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+  //TODO(): complete in syncfile
+  on_dispatched->complete(r);
 }
 
 template <typename I, typename C>
