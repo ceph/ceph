@@ -42,15 +42,7 @@ int SharedPersistentObjectCacher<I>::read_object(std::string file_path,
                   << dendl;
     return ret;
   }
-
-  if (read_data->length() != length) {
-    ceph_assert(ret < length);
-    read_data->append("0", length - read_data->length());
-  }
-
-  ceph_assert(read_data->length() == length);
-
-  return length;
+  return read_data->length();
 }
 
 
