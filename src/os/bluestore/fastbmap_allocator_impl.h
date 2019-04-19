@@ -352,6 +352,7 @@ protected:
       pos += d0;
     }
     bits = 1;
+    ceph_assert((pos / d0) < l0.size());
     uint64_t& val_e = l0[pos / d0];
     while (pos < l0_pos_end) {
       val_e |= bits;
