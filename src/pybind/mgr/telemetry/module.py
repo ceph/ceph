@@ -62,7 +62,7 @@ class Module(MgrModule):
         },
         {
             'name': 'interval',
-            'default': 72
+            'default': 24
         }
     ]
 
