@@ -13476,19 +13476,16 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
   while (count <= num_entries &&
 	 ((shard_id >= 0 && current_shard == uint32_t(shard_id)) ||
 	  current_shard < num_shards)) {
-    // key   - oid (for different shards if there is any)
-    // value - list result for the corresponding oid (shard), it is filled by
-    //         the AIO callback
-    map<int, struct rgw_cls_list_ret> list_results;
-    r = CLSRGWIssueBucketList(index_ctx, my_start, prefix, num_entries,
-			      list_versions, oids, list_results,
-			      cct->_conf->rgw_bucket_index_max_aio)();
+    const std::string& oid = oids[current_shard];
+    rgw_cls_list_ret result;
+
+    librados::ObjectReadOperation op;
+    cls_rgw_bucket_list_op(op, my_start, prefix, num_entries,
+                           list_versions, &result);
+    r = index_ctx.operate(oid, &op, nullptr);
     if (r < 0)
       return r;
 
-    const std::string& oid = oids[current_shard];
-    assert(list_results.find(current_shard) != list_results.end());
-    auto& result = list_results[current_shard];
     for (auto& entry : result.dir.m) {
       rgw_bucket_dir_entry& dirent = entry.second;
 
