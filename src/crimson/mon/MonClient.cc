@@ -433,7 +433,7 @@ bool Client::is_hunting() const {
 }
 
 seastar::future<>
-Client::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
+Client::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
 {
   // we only care about these message types
   switch (m->get_type()) {
@@ -689,7 +689,7 @@ int Client::handle_auth_bad_method(ceph::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
+seastar::future<> Client::handle_monmap(ceph::net::Connection* conn,
                                         Ref<MMonMap> m)
 {
   monmap.decode(m->monmapbl);
@@ -707,7 +707,7 @@ seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
   }
 }
 
-seastar::future<> Client::handle_auth_reply(ceph::net::ConnectionRef conn,
+seastar::future<> Client::handle_auth_reply(ceph::net::Connection* conn,
                                                Ref<MAuthReply> m)
 {
   logger().info("mon {} => {} returns {}: {}",

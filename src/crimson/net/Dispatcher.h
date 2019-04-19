@@ -27,7 +27,7 @@ class Dispatcher {
  public:
   virtual ~Dispatcher() {}
 
-  virtual seastar::future<> ms_dispatch(ConnectionRef conn, MessageRef m) {
+  virtual seastar::future<> ms_dispatch(Connection* conn, MessageRef m) {
     return seastar::make_ready_future<>();
   }
 
