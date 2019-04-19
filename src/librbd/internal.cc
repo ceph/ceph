@@ -42,7 +42,6 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcher.h"
-#include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
@@ -1578,7 +1577,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
 
-    RWLock::RLocker locker(ictx->md_lock);
+    RWLock::RLocker locker(ictx->image_lock);
     if (exclusive)
       *exclusive = ictx->exclusive_locked;
     if (tag)
@@ -1616,7 +1615,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
      * duplicate that code.
      */
     {
-      RWLock::RLocker locker(ictx->md_lock);
+      RWLock::RLocker locker(ictx->image_lock);
       r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
 			         exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
 			         cookie, tag, "", utime_t(), 0);
@@ -1639,7 +1638,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     {
-      RWLock::RLocker locker(ictx->md_lock);
+      RWLock::RLocker locker(ictx->image_lock);
       r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
 				   RBD_LOCK_NAME, cookie);
       if (r < 0) {
@@ -1695,7 +1694,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         return -ENOENT;
       }
 
-      RWLock::RLocker locker(ictx->md_lock);
       librados::Rados rados(ictx->md_ctx);
       r = rados.blacklist_add(
         client_address,
@@ -1875,78 +1873,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
-  }
-
-  struct C_RBD_Readahead : public Context {
-    ImageCtx *ictx;
-    object_t oid;
-    uint64_t offset;
-    uint64_t length;
-
-    bufferlist read_data;
-    io::ExtentMap extent_map;
-
-    C_RBD_Readahead(ImageCtx *ictx, object_t oid, uint64_t offset, uint64_t length)
-      : ictx(ictx), oid(oid), offset(offset), length(length) {
-      ictx->readahead.inc_pending();
-    }
-
-    void finish(int r) override {
-      ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": "
-                           << offset << "~" << length << dendl;
-      ictx->readahead.dec_pending();
-    }
-  };
-
-  void readahead(ImageCtx *ictx,
-                 const vector<pair<uint64_t,uint64_t> >& image_extents)
-  {
-    uint64_t total_bytes = 0;
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
-	 p != image_extents.end();
-	 ++p) {
-      total_bytes += p->second;
-    }
-
-    ictx->md_lock.get_write();
-    bool abort = ictx->readahead_disable_after_bytes != 0 &&
-      ictx->total_bytes_read > ictx->readahead_disable_after_bytes;
-    if (abort) {
-      ictx->md_lock.put_write();
-      return;
-    }
-    ictx->total_bytes_read += total_bytes;
-    ictx->image_lock.get_read();
-    uint64_t image_size = ictx->get_image_size(ictx->snap_id);
-    auto snap_id = ictx->snap_id;
-    ictx->image_lock.put_read();
-    ictx->md_lock.put_write();
-
-    pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
-    uint64_t readahead_offset = readahead_extent.first;
-    uint64_t readahead_length = readahead_extent.second;
-
-    if (readahead_length > 0) {
-      ldout(ictx->cct, 20) << "(readahead logical) " << readahead_offset << "~" << readahead_length << dendl;
-      map<object_t,vector<ObjectExtent> > readahead_object_extents;
-      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       readahead_offset, readahead_length, 0, readahead_object_extents);
-      for (map<object_t,vector<ObjectExtent> >::iterator p = readahead_object_extents.begin(); p != readahead_object_extents.end(); ++p) {
-	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-	  ldout(ictx->cct, 20) << "(readahead) oid " << q->oid << " " << q->offset << "~" << q->length << dendl;
-
-	  auto req_comp = new C_RBD_Readahead(ictx, q->oid, q->offset,
-                                              q->length);
-          auto req = io::ObjectDispatchSpec::create_read(
-            ictx, io::OBJECT_DISPATCH_LAYER_NONE, q->oid.name, q->objectno,
-            q->offset, q->length, snap_id, 0, {}, &req_comp->read_data,
-            &req_comp->extent_map, req_comp);
-          req->send();
-	}
-      }
-      ictx->perfcounter->inc(l_librbd_readahead);
-      ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
-    }
   }
 
   int list_watchers(ImageCtx *ictx,

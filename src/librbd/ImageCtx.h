@@ -5,6 +5,7 @@
 
 #include "include/int_types.h"
 
+#include <atomic>
 #include <list>
 #include <map>
 #include <set>
@@ -97,20 +98,20 @@ namespace librbd {
     /**
      * Lock ordering:
      *
-     * owner_lock, md_lock, image_lock, parent_lock,
+     * owner_lock, image_lock, parent_lock,
      * object_map_lock, async_op_lock, timestamp_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
-    RWLock md_lock; // protects access to the mutable image metadata that
-                   // isn't guarded by other locks below, and blocks writes
-                   // when held exclusively, so snapshots can be consistent.
-                   // Fields guarded include:
-                   // total_bytes_read
-                   // exclusive_locked
-                   // lock_tag
-                   // lockers
     RWLock image_lock; // protects snapshot-related member variables,
                        // features (and associated helper classes), and flags
+                       // protects access to the mutable image metadata that
+                       // isn't guarded by other locks below, and blocks writes
+                       // when held exclusively, so snapshots can be consistent.
+                       // Fields guarded include:
+                       // total_bytes_read
+                       // exclusive_locked
+                       // lock_tag
+                       // lockers
     RWLock parent_lock; // protects parent_md and parent
     RWLock object_map_lock; // protects object map updates and object_map itself
 
@@ -147,7 +148,7 @@ namespace librbd {
     cache::ImageCache *image_cache = nullptr;
 
     Readahead readahead;
-    uint64_t total_bytes_read;
+    std::atomic<uint64_t> total_bytes_read = {0};
 
     std::map<uint64_t, io::CopyupRequest<ImageCtx>*> copyup_list;
 

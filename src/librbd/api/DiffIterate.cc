@@ -282,7 +282,6 @@ int DiffIterate<I>::execute() {
   uint64_t from_size = 0;
   uint64_t end_size;
   {
-    RWLock::RLocker md_locker(m_image_ctx.md_lock);
     RWLock::RLocker image_locker(m_image_ctx.image_lock);
     head_ctx.dup(m_image_ctx.data_ctx);
     if (m_from_snap_name) {

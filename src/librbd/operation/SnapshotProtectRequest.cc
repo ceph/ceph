@@ -76,7 +76,6 @@ void SnapshotProtectRequest<I>::send_protect_snap() {
 template <typename I>
 int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker md_locker(image_ctx.md_lock);
   RWLock::RLocker image_locker(image_ctx.image_lock);
 
   CephContext *cct = image_ctx.cct;
