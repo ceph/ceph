@@ -180,7 +180,9 @@ class Module(MgrModule):
             errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
             if errno:
                 continue
-            crashlist.append(json.loads(crashinfo))
+            c = json.loads(crashinfo)
+            del c['utsname_hostname']
+            crashlist.append(c)
         return crashlist
 
     def compile_report(self):
