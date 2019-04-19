@@ -188,7 +188,7 @@ TYPE(LevelDBStoreStats)
 TYPE(ScrubResult)
 
 #include "mon/CreatingPGs.h"
-TYPE(creating_pgs_t)
+TYPE_FEATUREFUL(creating_pgs_t)
 
 #include "mgr/ServiceMap.h"
 TYPE_FEATUREFUL(ServiceMap)

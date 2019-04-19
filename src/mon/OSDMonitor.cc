@@ -843,8 +843,10 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
       const pg_t pgid{ps, static_cast<uint64_t>(poolid)};
       // NOTE: use the *current* epoch as the PG creation epoch so that the
       // OSD does not have to generate a long set of PastIntervals.
-      pending_creatings.pgs.emplace(pgid, make_pair(inc.epoch,
-						    p->second.modified));
+      pending_creatings.pgs.emplace(
+	pgid,
+	creating_pgs_t::pg_create_info(inc.epoch,
+				       p->second.modified));
       dout(10) << __func__ << " adding " << pgid << dendl;
     }
     p->second.start = end;
@@ -859,6 +861,89 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
   }
   dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
 	   << " pools" << dendl;
+
+  if (mon->monmap->min_mon_release >= CEPH_RELEASE_OCTOPUS) {
+    // walk creating pgs' history and past_intervals forward
+    for (auto& i : pending_creatings.pgs) {
+      // this mirrors PG::start_peering_interval()
+      pg_t pgid = i.first;
+
+      // this is a bit imprecise, but sufficient?
+      struct min_size_predicate_t : public IsPGRecoverablePredicate {
+	const pg_pool_t *pi;
+	bool operator()(const set<pg_shard_t> &have) const {
+	  return have.size() >= pi->min_size;
+	}
+	explicit min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      } min_size_predicate(nextmap.get_pg_pool(pgid.pool()));
+
+      vector<int> up, acting;
+      int up_primary, acting_primary;
+      nextmap.pg_to_up_acting_osds(
+	pgid, &up, &up_primary, &acting, &acting_primary);
+      if (i.second.history.epoch_created == 0) {
+	// new pg entry, set it up
+	i.second.up = up;
+	i.second.acting = acting;
+	i.second.up_primary = up_primary;
+	i.second.acting_primary = acting_primary;
+	i.second.history = pg_history_t(i.second.create_epoch,
+					i.second.create_stamp);
+	dout(10) << __func__ << "  pg " << pgid << " just added, "
+		 << " up " << i.second.up
+		 << " p " << i.second.up_primary
+		 << " acting " << i.second.acting
+		 << " p " << i.second.acting_primary
+		 << " history " << i.second.history
+		 << " past_intervals " << i.second.past_intervals
+		 << dendl;
+     } else {
+	std::stringstream debug;
+	if (PastIntervals::check_new_interval(
+	      i.second.acting_primary, acting_primary,
+	      i.second.acting, acting,
+	      i.second.up_primary, up_primary,
+	      i.second.up, up,
+	      i.second.history.same_interval_since,
+	      i.second.history.last_epoch_clean,
+	      &nextmap,
+	      &osdmap,
+	      pgid,
+	      &min_size_predicate,
+	      &i.second.past_intervals,
+	      &debug)) {
+	  epoch_t e = inc.epoch;
+	  i.second.history.same_interval_since = e;
+	  if (i.second.up != up) {
+	    i.second.history.same_up_since = e;
+	  }
+	  if (i.second.acting_primary != acting_primary) {
+	    i.second.history.same_primary_since = e;
+	  }
+	  if (pgid.is_split(
+		osdmap.get_pg_num(pgid.pool()),
+		nextmap.get_pg_num(pgid.pool()),
+		nullptr)) {
+	    i.second.history.last_epoch_split = e;
+	  }
+	  dout(10) << __func__ << "  pg " << pgid << " new interval,"
+		   << " up " << i.second.up << " -> " << up
+		   << " p " << i.second.up_primary << " -> " << up_primary
+		   << " acting " << i.second.acting << " -> " << acting
+		   << " p " << i.second.acting_primary << " -> "
+		   << acting_primary
+		   << " history " << i.second.history
+		   << " past_intervals " << i.second.past_intervals
+		   << dendl;
+	  dout(20) << "  debug: " << debug.str() << dendl;
+	  i.second.up = up;
+	  i.second.acting = acting;
+	  i.second.up_primary = up_primary;
+	  i.second.acting_primary = acting_primary;
+	}
+      }
+    }
+  }
   dout(10) << __func__
 	   << " " << (pending_creatings.pgs.size() - total)
 	   << "/" << pending_creatings.pgs.size()
@@ -1102,7 +1187,13 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     // process the pool flag removal below in the same osdmap epoch.
     auto pending_creatings = update_pending_pgs(pending_inc, tmp);
     bufferlist creatings_bl;
-    encode(pending_creatings, creatings_bl);
+    uint64_t features = CEPH_FEATURES_ALL;
+    if (mon->monmap->min_mon_release < CEPH_RELEASE_OCTOPUS) {
+      dout(20) << __func__ << " encoding pending pgs without octopus features"
+	       << dendl;
+      features &= ~CEPH_FEATURE_SERVER_OCTOPUS;
+    }
+    encode(pending_creatings, creatings_bl, features);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
     // remove any old (or incompat) POOL_CREATING flags
@@ -4240,7 +4331,7 @@ void OSDMonitor::update_creating_pgs()
 	       << dendl;
       continue;
     }
-    auto mapped = pg.second.first;
+    auto mapped = pg.second.create_epoch;
     dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
     spg_t spgid(pgid);
     mapping.get_primary_and_shard(pgid, &acting_primary, &spgid);
@@ -4313,16 +4404,23 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
 	  oldm = new MOSDPGCreate(creating_pgs_epoch);
 	}
 	oldm->mkpg.emplace(pg.pgid,
-			   pg_create_t{create->second.first, pg.pgid, 0});
-	oldm->ctimes.emplace(pg.pgid, create->second.second);
+			   pg_create_t{create->second.create_epoch, pg.pgid, 0});
+	oldm->ctimes.emplace(pg.pgid, create->second.create_stamp);
       } else {
 	if (!m) {
 	  m = new MOSDPGCreate2(creating_pgs_epoch);
 	}
-	m->pgs.emplace(pg, create->second);
+	m->pgs.emplace(pg, make_pair(create->second.create_epoch,
+				     create->second.create_stamp));
+	if (create->second.history.epoch_created) {
+	  dout(20) << __func__ << "   " << pg << " " << create->second.history
+		   << " " << create->second.past_intervals << dendl;
+	  m->pg_extra.emplace(pg, make_pair(create->second.history,
+					    create->second.past_intervals));
+	}
       }
       dout(20) << __func__ << " will create " << pg
-	       << " at " << create->second.first << dendl;
+	       << " at " << create->second.create_epoch << dendl;
     }
   }
   if (m) {
@@ -12597,9 +12695,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool creating_now;
     {
       std::lock_guard<std::mutex> l(creating_pgs_lock);
-      auto emplaced = creating_pgs.pgs.emplace(pgid,
-					       make_pair(osdmap.get_epoch(),
-							 ceph_clock_now()));
+      auto emplaced = creating_pgs.pgs.emplace(
+	pgid,
+	creating_pgs_t::pg_create_info(osdmap.get_epoch(),
+				       ceph_clock_now()));
       creating_now = emplaced.second;
     }
     if (creating_now) {
