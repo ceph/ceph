@@ -337,23 +337,23 @@ protected:
 
     auto pos = l0_pos_start;
     slot_t bits = (slot_t)1 << (l0_pos_start % d0);
-    slot_t& val_s = l0[pos / d0];
-    int64_t pos_e = std::min(l0_pos_end, (int64_t)P2ROUNDUP(l0_pos_start + 1, d0));
+    slot_t* val_s = &l0[pos / d0];
+    int64_t pos_e = std::min(l0_pos_end,
+                             P2ROUNDUP(l0_pos_start + 1, d0));
     while (pos < pos_e) {
-      val_s |= bits;
+      *val_s |=  bits;
       bits <<= 1;
       pos++;
     }
-    pos_e = std::min(l0_pos_end, (int64_t)P2ALIGN(l0_pos_end, d0));
-    auto idx = pos / d0;
+    pos_e = std::min(l0_pos_end, P2ALIGN(l0_pos_end, d0));
     while (pos < pos_e) {
-      l0[idx++] = all_slot_set;
+      *(++val_s) = all_slot_set;
       pos += d0;
     }
     bits = 1;
-    uint64_t& val_e = l0[pos / d0];
+    ++val_s;
     while (pos < l0_pos_end) {
-      val_e |= bits;
+      *val_s |= bits;
       bits <<= 1;
       pos++;
     }
