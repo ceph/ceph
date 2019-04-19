@@ -3137,8 +3137,8 @@ public:
     int new_up_primary,                         ///< [in] up primary of osdmap
     const std::vector<int> &old_up,                  ///< [in] up as of lastmap
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
-    std::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    std::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    const OSDMap *osdmap,  ///< [in] current map
+    const OSDMap *lastmap, ///< [in] last map
     pg_t pgid                                   ///< [in] pgid for pg
     );
 
@@ -3157,13 +3157,43 @@ public:
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
+    const OSDMap *osdmap,      ///< [in] current map
+    const OSDMap *lastmap,     ///< [in] last map
+    pg_t pgid,                                  ///< [in] pgid for pg
+    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    PastIntervals *past_intervals,              ///< [out] intervals
+    std::ostream *out = 0                            ///< [out] debug ostream
+    );
+  static bool check_new_interval(
+    int old_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of osdmap
+    const std::vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const std::vector<int> &new_acting,              ///< [in] acting as of osdmap
+    int old_up_primary,                         ///< [in] up primary of lastmap
+    int new_up_primary,                         ///< [in] up primary of osdmap
+    const std::vector<int> &old_up,                  ///< [in] up as of lastmap
+    const std::vector<int> &new_up,                  ///< [in] up as of osdmap
+    epoch_t same_interval_since,                ///< [in] as of osdmap
+    epoch_t last_epoch_clean,                   ///< [in] current
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
-    );
+    ) {
+    return check_new_interval(
+      old_acting_primary, new_acting_primary,
+      old_acting, new_acting,
+      old_up_primary, new_up_primary,
+      old_up, new_up,
+      same_interval_since, last_epoch_clean,
+      osdmap.get(), lastmap.get(),
+      pgid,
+      could_have_gone_active,
+      past_intervals,
+      out);
+  }
 
   friend std::ostream& operator<<(std::ostream& out, const PastIntervals &i);
 
