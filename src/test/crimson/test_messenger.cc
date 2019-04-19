@@ -45,7 +45,7 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> stop() {
         return seastar::make_ready_future<>();
       }
-      seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+      seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
         if (verbose) {
           logger().info("server got {}", *m);
@@ -93,7 +93,7 @@ static seastar::future<> test_echo(unsigned rounds,
       std::bernoulli_distribution keepalive_dist;
       ceph::net::Messenger *msgr = nullptr;
       std::map<ceph::net::Connection*, seastar::promise<>> pending_conns;
-      std::map<ceph::net::ConnectionRef, PingSessionRef> sessions;
+      std::map<ceph::net::Connection*, PingSessionRef> sessions;
       MessageRef msg_ping{new MPing(), false};
       ceph::auth::DummyAuthClientServer dummy_auth;
 
@@ -101,7 +101,7 @@ static seastar::future<> test_echo(unsigned rounds,
         : rounds(rounds),
           keepalive_dist(std::bernoulli_distribution{keepalive_ratio}) {}
 
-      PingSessionRef find_session(ceph::net::ConnectionRef c) {
+      PingSessionRef find_session(ceph::net::Connection* c) {
         auto found = sessions.find(c);
         if (found == sessions.end()) {
           ceph_assert(false);
@@ -118,13 +118,13 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
         logger().info("{}: connected to {}", *conn, conn->get_peer_addr());
         auto session = seastar::make_shared<PingSession>();
-        auto [i, added] = sessions.emplace(conn, session);
+        auto [i, added] = sessions.emplace(conn.get(), session);
         std::ignore = i;
         ceph_assert(added);
         session->connected_time = mono_clock::now();
         return seastar::now();
       }
-      seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+      seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
         auto session = find_session(c);
         ++(session->count);
@@ -133,10 +133,10 @@ static seastar::future<> test_echo(unsigned rounds,
         }
 
         if (session->count == rounds) {
-          logger().info("{}: finished receiving {} pongs", *c.get(), session->count);
+          logger().info("{}: finished receiving {} pongs", *c, session->count);
           session->finish_time = mono_clock::now();
-          return container().invoke_on_all([conn = c.get()](auto &client) {
-              auto found = client.pending_conns.find(conn);
+          return container().invoke_on_all([c](auto &client) {
+              auto found = client.pending_conns.find(c);
               ceph_assert(found != client.pending_conns.end());
               found->second.set_value();
             });
@@ -181,7 +181,7 @@ static seastar::future<> test_echo(unsigned rounds,
                 }
               }).finally([this, conn, start_time] {
                 return container().invoke_on(conn->get()->shard_id(), [conn, start_time](auto &client) {
-                    auto session = client.find_session((*conn)->shared_from_this());
+                    auto session = client.find_session(&**conn);
                     std::chrono::duration<double> dur_handshake = session->connected_time - start_time;
                     std::chrono::duration<double> dur_pingpong = session->finish_time - session->connected_time;
                     logger().info("{}: handshake {}, pingpong {}",
@@ -305,7 +305,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       seastar::promise<> on_done; // satisfied when first dispatch unblocks
       ceph::auth::DummyAuthClientServer dummy_auth;
 
-      seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+      seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
         switch (++count) {
         case 1:
