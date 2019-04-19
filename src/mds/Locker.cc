@@ -1444,7 +1444,7 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
 
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
-  lock->get_wrlock(true);
+  lock->get_wrlock();
   mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
 }
 
@@ -4448,12 +4448,9 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
 
-  // forcefully take a wrlock
-  lock->get_wrlock(true);
-  mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+  wrlock_force(lock, mut);
 
   in->pre_cow_old_inode();  // avoid cow mayhem
-
   auto &pi = in->project_inode();
   pi.inode.version = in->pre_dirty();
 

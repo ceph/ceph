@@ -1470,7 +1470,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	for (const auto &q : p.second) {
 	  oldin->auth_pin(lock);
 	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
-	  lock->get_wrlock(true);
+	  lock->get_wrlock();
           (void)q; /* unused */
 	}
       }
@@ -1496,7 +1496,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	    oldin->client_snap_caps[lockid].insert(client);
 	    oldin->auth_pin(lock);
 	    lock->set_state(LOCK_SNAP_SYNC);  // gathering
-	    lock->get_wrlock(true);
+	    lock->get_wrlock();
 	    dout(10) << " client." << client << " cap " << ccap_string(issued & cinode_lock_info[i].wr_caps)
 		     << " wrlock lock " << *lock << " on " << *oldin << dendl;
 	  }
@@ -4838,7 +4838,7 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
 	lock->set_state(LOCK_MIX);
 	if (lock == &in->filelock)
 	  in->loner_cap = -1;
-	lock->get_wrlock(true);
+	lock->get_wrlock();
 	mdr->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
       }
     }
@@ -5455,7 +5455,7 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
       in->client_snap_caps[lockid].insert(client);
       in->auth_pin(lock);
       lock->set_state(LOCK_SNAP_SYNC);
-      lock->get_wrlock(true);
+      lock->get_wrlock();
     }
     mds->locker->mark_need_snapflush_inode(in);
   }

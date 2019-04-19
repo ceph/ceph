@@ -483,8 +483,7 @@ public:
   }
 
   // wrlock
-  void get_wrlock(bool force=false) {
-    //assert(can_wrlock() || force);
+  void get_wrlock() {
     if (more()->num_wrlock == 0)
       parent->get(MDSCacheObject::PIN_LOCK);
     ++more()->num_wrlock;
