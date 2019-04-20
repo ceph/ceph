@@ -44,7 +44,7 @@ function TEST_safe_to_destroy() {
     flush_pg_stats
     wait_for_clean
 
-    expect_failure $dir 'pgs currently' osd safe-to-destroy 0
+    expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 0
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 1
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 2
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 3
