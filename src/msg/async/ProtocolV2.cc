@@ -418,6 +418,7 @@ void ProtocolV2::send_message(Message *m) {
   } else {
     ldout(cct, 5) << __func__ << " enqueueing message m=" << m
                   << " type=" << m->get_type() << " " << *m << dendl;
+    m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
     out_queue[m->get_priority()].emplace_back(
       out_queue_entry_t{is_prepared, m});
@@ -562,6 +563,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   static const int max_pending = 128;
   int i = 0;
   Message *pending[max_pending];
+  auto now = ceph::mono_clock::now();
   connection->write_lock.lock();
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
     Message *m = sent.front();
@@ -572,6 +574,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
                    << dendl;
   }
   connection->write_lock.unlock();
+  connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
   for (int k = 0; k < i; k++) {
     pending[k]->put();
   }
@@ -607,6 +610,12 @@ void ProtocolV2::write_event() {
       // send_message or requeue messages may not encode message
       if (!out_entry.is_prepared) {
         prepare_send_message(connection->get_features(), out_entry.m);
+      }
+
+      if (out_entry.m->queue_start != ceph::mono_time()) {
+        connection->logger->tinc(l_msgr_send_messages_queue_lat,
+				 ceph::mono_clock::now() -
+				 out_entry.m->queue_start);
       }
 
       r = write_message(out_entry.m, more);
