@@ -298,7 +298,8 @@ Message *decode_message(CephContext *cct, int crcflags,
 
     if (front_crc != footer.front_crc) {
       if (cct) {
-	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc
+		      << " from " << conn->get_peer_addr() << dendl;
 	ldout(cct, 20) << " ";
 	front.hexdump(*_dout);
 	*_dout << dendl;
@@ -307,7 +308,8 @@ Message *decode_message(CephContext *cct, int crcflags,
     }
     if (middle_crc != footer.middle_crc) {
       if (cct) {
-	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc
+		      << " from " << conn->get_peer_addr() << dendl;
 	ldout(cct, 20) << " ";
 	middle.hexdump(*_dout);
 	*_dout << dendl;
@@ -320,7 +322,8 @@ Message *decode_message(CephContext *cct, int crcflags,
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
 	if (cct) {
-	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc
+			<< " from " << conn->get_peer_addr() << dendl;
 	  ldout(cct, 20) << " ";
 	  data.hexdump(*_dout);
 	  *_dout << dendl;
