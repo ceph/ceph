@@ -20,9 +20,7 @@
 #include "include/ceph_features.h"
 
 
-class MClientReconnect : public MessageInstance<MClientReconnect> {
-public:
-  friend factory;
+class MClientReconnect : public Message {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
@@ -32,9 +30,9 @@ public:
   vector<snaprealm_reconnect_t> realms;
   bool more = false;
 
-  MClientReconnect() :
-    MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
 private:
+  MClientReconnect() :
+    Message{CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION} {}
   ~MClientReconnect() override {}
 
   size_t cap_size = 0;
@@ -168,6 +166,9 @@ public:
       }
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

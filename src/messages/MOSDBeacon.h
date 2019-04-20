@@ -5,18 +5,16 @@
 
 #include "PaxosServiceMessage.h"
 
-class MOSDBeacon : public MessageInstance<MOSDBeacon, PaxosServiceMessage> {
+class MOSDBeacon : public PaxosServiceMessage {
 public:
-  friend factory;
-
   std::vector<pg_t> pgs;
   epoch_t min_last_epoch_clean = 0;
 
   MOSDBeacon()
-    : MessageInstance(MSG_OSD_BEACON, 0)
+    : PaxosServiceMessage{MSG_OSD_BEACON, 0}
   {}
   MOSDBeacon(epoch_t e, epoch_t min_lec)
-    : MessageInstance(MSG_OSD_BEACON, e),
+    : PaxosServiceMessage{MSG_OSD_BEACON, e},
       min_last_epoch_clean(min_lec)
   {}
   void encode_payload(uint64_t features) override {
@@ -38,4 +36,7 @@ public:
         << " lec " << min_last_epoch_clean
         << " v" << version << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

@@ -252,25 +252,24 @@ bool DaemonServer::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool DaemonServer::ms_dispatch(Message *m)
+bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
 {
   // Note that we do *not* take ::lock here, in order to avoid
   // serializing all message handling.  It's up to each handler
   // to take whatever locks it needs.
   switch (m->get_type()) {
     case MSG_PGSTATS:
-      cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
+      cluster_state.ingest_pgstats(ref_cast<MPGStats>(m));
       maybe_ready(m->get_source().num());
-      m->put();
       return true;
     case MSG_MGR_REPORT:
-      return handle_report(static_cast<MMgrReport*>(m));
+      return handle_report(ref_cast<MMgrReport>(m));
     case MSG_MGR_OPEN:
-      return handle_open(static_cast<MMgrOpen*>(m));
+      return handle_open(ref_cast<MMgrOpen>(m));
     case MSG_MGR_CLOSE:
-      return handle_close(static_cast<MMgrClose*>(m));
+      return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
-      return handle_command(static_cast<MCommand*>(m));
+      return handle_command(ref_cast<MCommand>(m));
     default:
       dout(1) << "Unhandled message type " << m->get_type() << dendl;
       return false;
@@ -406,7 +405,7 @@ static bool key_from_string(
   return true;
 }
 
-bool DaemonServer::handle_open(MMgrOpen *m)
+bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 {
   std::lock_guard l(lock);
 
@@ -477,11 +476,10 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon_connections.insert(m->get_connection());
   }
 
-  m->put();
   return true;
 }
 
-bool DaemonServer::handle_close(MMgrClose *m)
+bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
 {
   std::lock_guard l(lock);
 
@@ -503,11 +501,11 @@ bool DaemonServer::handle_close(MMgrClose *m)
   }
 
   // send same message back as a reply
-  m->get_connection()->send_message(m);
+  m->get_connection()->send_message2(m);
   return true;
 }
 
-bool DaemonServer::handle_report(MMgrReport *m)
+bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 {
   DaemonKey key;
   if (!m->service_name.empty()) {
@@ -526,7 +524,6 @@ bool DaemonServer::handle_report(MMgrReport *m)
     dout(4) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
     m->get_connection()->mark_down();
-    m->put();
     return true;
   }
 
@@ -596,7 +593,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   {
     std::lock_guard l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
-    daemon_counters.update(m);
+    daemon_counters.update(*m.get());
 
     auto p = m->config_bl.cbegin();
     if (p != m->config_bl.end()) {
@@ -635,7 +632,6 @@ bool DaemonServer::handle_report(MMgrReport *m)
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
   }
 
-  m->put();
   return true;
 }
 
@@ -715,16 +711,12 @@ bool DaemonServer::_allowed_command(
  */
 class CommandContext {
 public:
-  MCommand *m;
+  ceph::ref_t<MCommand> m;
   bufferlist odata;
   cmdmap_t cmdmap;
 
-  explicit CommandContext(MCommand *m_)
-    : m(m_) {
-  }
-
-  ~CommandContext() {
-    m->put();
+  explicit CommandContext(ceph::ref_t<MCommand> m)
+    : m{std::move(m)} {
   }
 
   void reply(int r, const std::stringstream &ss) {
@@ -772,10 +764,10 @@ public:
   }
 };
 
-bool DaemonServer::handle_command(MCommand *m)
+bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
-  std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
+  auto cmdctx = std::make_shared<CommandContext>(m);
   try {
     return _handle_command(m, cmdctx);
   } catch (const bad_cmd_get& e) {
@@ -785,7 +777,7 @@ bool DaemonServer::handle_command(MCommand *m)
 }
 
 bool DaemonServer::_handle_command(
-  MCommand *m,
+  const ref_t<MCommand>& m,
   std::shared_ptr<CommandContext>& cmdctx)
 {
   auto priv = m->get_connection()->get_priv();
@@ -2767,7 +2759,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
 {
   ceph_assert(lock.is_locked_by_me());
 
-  auto configure = new MMgrConfigure();
+  auto configure = make_message<MMgrConfigure>();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
   configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
 
@@ -2776,7 +2768,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
         osd_perf_metric_collector.get_queries();
   }
 
-  c->send_message(configure);
+  c->send_message2(configure);
 }
 
 OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(

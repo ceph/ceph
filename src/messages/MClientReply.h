@@ -260,10 +260,8 @@ struct InodeStat {
 };
 
 
-class MClientReply : public MessageInstance<MClientReply> {
+class MClientReply : public Message {
 public:
-  friend factory;
-
   // reply data
   struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
@@ -286,9 +284,9 @@ public:
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : MessageInstance(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply() : Message{CEPH_MSG_CLIENT_REPLY} {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    MessageInstance(CEPH_MSG_CLIENT_REPLY) {
+    Message{CEPH_MSG_CLIENT_REPLY} {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();
@@ -353,6 +351,9 @@ public:
   const bufferlist& get_trace_bl() const {
     return trace_bl;
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -357,19 +357,19 @@ bool MDRequestImpl::is_queued_for_replay() const
   return client_request ? client_request->is_queued_for_replay() : false;
 }
 
-MClientRequest::const_ref MDRequestImpl::release_client_request()
+cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();
-  MClientRequest::const_ref req;
+  cref_t<MClientRequest> req;
   req.swap(client_request);
   msg_lock.unlock();
   return req;
 }
 
-void MDRequestImpl::reset_slave_request(const MMDSSlaveRequest::const_ref& req)
+void MDRequestImpl::reset_slave_request(const cref_t<MMDSSlaveRequest>& req)
 {
   msg_lock.lock();
-  MMDSSlaveRequest::const_ref old;
+  cref_t<MMDSSlaveRequest> old;
   old.swap(slave_request);
   slave_request = req;
   msg_lock.unlock();

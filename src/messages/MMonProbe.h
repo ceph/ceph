@@ -20,10 +20,8 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public MessageInstance<MMonProbe> {
+class MMonProbe : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 5;
 
@@ -60,9 +58,9 @@ public:
   uint8_t mon_release = 0;
 
   MMonProbe()
-    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION} {}
   MMonProbe(const uuid_d& f, int o, const string& n, bool hej, uint8_t mr)
-    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION},
       fsid(f),
       op(o),
       name(n),
@@ -137,6 +135,9 @@ public:
     else
       mon_release = 0;
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

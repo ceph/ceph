@@ -18,16 +18,14 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindInoReply : public MessageInstance<MMDSFindInoReply> {
+class MMDSFindInoReply : public Message {
 public:
-  friend factory;
-
   ceph_tid_t tid = 0;
   filepath path;
 
 protected:
-  MMDSFindInoReply() : MessageInstance(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : MessageInstance(MSG_MDS_FINDINOREPLY), tid(t) {}
+  MMDSFindInoReply() : Message{MSG_MDS_FINDINOREPLY} {}
+  MMDSFindInoReply(ceph_tid_t t) : Message{MSG_MDS_FINDINOREPLY}, tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:
@@ -46,6 +44,9 @@ public:
     decode(tid, p);
     decode(path, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 
 
-class MWatchNotify : public MessageInstance<MWatchNotify> {
-public:
-  friend factory;
+class MWatchNotify : public Message {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -36,9 +34,9 @@ private:
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
-    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
+    : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION} { }
   MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b)
-    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION},
       cookie(c),
       ver(v),
       notify_id(i),
@@ -92,6 +90,9 @@ public:
 	<< " ret " << return_code
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

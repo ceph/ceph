@@ -87,22 +87,22 @@ void Beacon::init(const MDSMap &mdsmap)
   });
 }
 
-bool Beacon::ms_can_fast_dispatch2(const Message::const_ref& m) const
+bool Beacon::ms_can_fast_dispatch2(const cref_t<Message>& m) const
 {
   return m->get_type() == MSG_MDS_BEACON;
 }
 
-void Beacon::ms_fast_dispatch2(const Message::ref& m)
+void Beacon::ms_fast_dispatch2(const ref_t<Message>& m)
 {
   bool handled = ms_dispatch2(m);
   ceph_assert(handled);
 }
 
-bool Beacon::ms_dispatch2(const Message::ref& m)
+bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      handle_mds_beacon(MMDSBeacon::msgref_cast(m));
+      handle_mds_beacon(ref_cast<MMDSBeacon>(m));
     }
     return true;
   }
@@ -116,7 +116,7 @@ bool Beacon::ms_dispatch2(const Message::ref& m)
  *
  * This function puts the passed message before returning
  */
-void Beacon::handle_mds_beacon(const MMDSBeacon::const_ref &m)
+void Beacon::handle_mds_beacon(const cref_t<MMDSBeacon> &m)
 {
   std::unique_lock lock(mutex);
 
@@ -197,7 +197,7 @@ bool Beacon::_send()
 
   ceph_assert(want_state != MDSMap::STATE_NULL);
   
-  auto beacon = MMDSBeacon::create(
+  auto beacon = make_message<MMDSBeacon>(
       monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,

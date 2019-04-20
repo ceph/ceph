@@ -18,9 +18,7 @@
 #include "messages/PaxosServiceMessage.h"
 
 
-class MPoolOp : public MessageInstance<MPoolOp, PaxosServiceMessage> {
-public:
-  friend factory;
+class MPoolOp : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 2;
@@ -34,9 +32,9 @@ public:
   __s16 crush_rule = 0;
 
   MPoolOp()
-    : MessageInstance(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
+    : PaxosServiceMessage{CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION} {}
   MPoolOp(const uuid_d& f, ceph_tid_t t, int p, std::string& n, int o, version_t v)
-    : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), pool(p), name(n), op(o),
       snapid(0), crush_rule(0) {
     set_tid(t);
@@ -92,6 +90,9 @@ public:
     } else
       crush_rule = -1;
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

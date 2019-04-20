@@ -29,9 +29,7 @@
  *
  */
 
-class MOSDOpReply : public MessageInstance<MOSDOpReply> {
-public:
-  friend factory;
+class MOSDOpReply : public Message {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 2;
@@ -128,13 +126,13 @@ public:
 
 public:
   MOSDOpReply()
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
     bdata_encode(false) {
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
 	      bool ignore_out_data)
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
       bdata_encode(false) {
 
@@ -334,6 +332,9 @@ public:
     out << ")";
   }
 
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

@@ -5,22 +5,20 @@
 
 #include "msg/Message.h"
 
-class MConfig : public MessageInstance<MConfig> {
+class MConfig : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
   // use transparent comparator so we can lookup in it by std::string_view keys
   std::map<std::string,std::string,std::less<>> config;
 
-  MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MConfig() : Message{MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION} { }
   MConfig(const std::map<std::string,std::string,std::less<>>& c)
-    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION},
       config{c} {}
   MConfig(std::map<std::string,std::string,std::less<>>&& c)
-    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION},
       config{std::move(c)} {}
 
   std::string_view get_type_name() const override {

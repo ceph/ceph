@@ -59,12 +59,12 @@ using std::chrono::duration_cast;
 #define MIN_OFFLOAD 10   // point at which i stop trying, close enough
 
 
-int MDBalancer::proc_message(const Message::const_ref &m)
+int MDBalancer::proc_message(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
 
   case MSG_MDS_HEARTBEAT:
-    handle_heartbeat(MHeartbeat::msgref_cast(m));
+    handle_heartbeat(ref_cast<MHeartbeat>(m));
     break;
 
   default:
@@ -400,13 +400,13 @@ void MDBalancer::send_heartbeat()
   for (const auto& r : up) {
     if (r == mds->get_nodeid())
       continue;
-    auto hb = MHeartbeat::create(load, beat_epoch);
+    auto hb = make_message<MHeartbeat>(load, beat_epoch);
     hb->get_import_map() = import_map;
     mds->send_message_mds(hb, r);
   }
 }
 
-void MDBalancer::handle_heartbeat(const MHeartbeat::const_ref &m)
+void MDBalancer::handle_heartbeat(const cref_t<MHeartbeat> &m)
 {
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;

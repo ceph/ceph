@@ -109,15 +109,15 @@ public:
 
   void set_mgr_optional(bool optional_) {mgr_optional = optional_;}
 
-  bool ms_dispatch(Message *m) override;
+  bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
 
-  bool handle_mgr_map(MMgrMap *m);
-  bool handle_mgr_configure(MMgrConfigure *m);
-  bool handle_mgr_close(MMgrClose *m);
-  bool handle_command_reply(MCommandReply *m);
+  bool handle_mgr_map(ceph::ref_t<MMgrMap> m);
+  bool handle_mgr_configure(ceph::ref_t<MMgrConfigure> m);
+  bool handle_mgr_close(ceph::ref_t<MMgrClose> m);
+  bool handle_command_reply(ceph::ref_t<MCommandReply> m);
 
   void set_perf_metric_query_cb(
     std::function<void(const std::map<OSDPerfMetricQuery,

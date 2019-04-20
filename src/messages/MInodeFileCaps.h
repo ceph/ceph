@@ -18,9 +18,7 @@
 
 #include "msg/Message.h"
 
-class MInodeFileCaps : public MessageInstance<MInodeFileCaps> {
-public:
-  friend factory;
+class MInodeFileCaps : public Message {
 private:
   inodeno_t ino;
   __u32     caps = 0;
@@ -31,9 +29,9 @@ private:
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : MessageInstance(MSG_MDS_INODEFILECAPS) {}
+  MInodeFileCaps() : Message{MSG_MDS_INODEFILECAPS} {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    MessageInstance(MSG_MDS_INODEFILECAPS) {
+    Message{MSG_MDS_INODEFILECAPS} {
     this->ino = ino;
     this->caps = caps;
   }
@@ -56,6 +54,9 @@ public:
     decode(ino, p);
     decode(caps, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -17,10 +17,8 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public MessageInstance<MClientSnap> {
+class MClientSnap : public Message {
 public:
-  friend factory;
-
   ceph_mds_snap_head head;
   bufferlist bl;
   
@@ -30,7 +28,7 @@ public:
 
 protected:
   MClientSnap(int o=0) : 
-    MessageInstance(CEPH_MSG_CLIENT_SNAP) {
+    Message{CEPH_MSG_CLIENT_SNAP} {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }
@@ -64,7 +62,9 @@ public:
     decode_nohead(head.trace_len, bl, p);
     ceph_assert(p.end());
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

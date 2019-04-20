@@ -19,10 +19,8 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MMDSSlaveRequest : public MessageInstance<MMDSSlaveRequest> {
+class MMDSSlaveRequest : public Message {
 public:
-  friend factory;
-
   static constexpr int OP_XLOCK =       1;
   static constexpr int OP_XLOCKACK =   -1;
   static constexpr int OP_UNXLOCK =     2;
@@ -158,9 +156,9 @@ public:
   bufferlist& get_lock_data() { return inode_export; }
 
 protected:
-  MMDSSlaveRequest() : MessageInstance(MSG_MDS_SLAVE_REQUEST) { }
+  MMDSSlaveRequest() : Message{MSG_MDS_SLAVE_REQUEST} { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
-    MessageInstance(MSG_MDS_SLAVE_REQUEST),
+    Message{MSG_MDS_SLAVE_REQUEST},
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
   ~MMDSSlaveRequest() override {}
@@ -214,7 +212,9 @@ public:
 	<< " " << get_opname(op) 
 	<< ")";
   }  
-	
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);	
 };
 
 #endif

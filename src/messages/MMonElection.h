@@ -20,10 +20,7 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
 
-class MMonElection : public MessageInstance<MMonElection> {
-public:
-  friend factory;
-
+class MMonElection : public Message {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 5;
@@ -54,14 +51,14 @@ public:
   bufferlist sharing_bl;
   map<string,string> metadata;
   
-  MMonElection() : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+  MMonElection() : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
     op(0), epoch(0),
     quorum_features(0),
     mon_features(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
-    : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION},
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
       mon_features(0)
@@ -126,7 +123,9 @@ public:
     else
       mon_release = infer_ceph_release_from_mon_features(mon_features);
   }
-  
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);  
 };
 
 #endif

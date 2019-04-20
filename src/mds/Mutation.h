@@ -244,7 +244,7 @@ struct MDRequestImpl : public MutationImpl {
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
-  MClientRequest::const_ref client_request; // client request (if any)
+  cref_t<MClientRequest> client_request; // client request (if any)
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
@@ -271,7 +271,7 @@ struct MDRequestImpl : public MutationImpl {
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
   // -- i am a slave request
-  MMDSSlaveRequest::const_ref slave_request; // slave request (if one is pending; implies slave == true)
+  cref_t<MMDSSlaveRequest> slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
@@ -345,8 +345,8 @@ struct MDRequestImpl : public MutationImpl {
   struct Params {
     metareqid_t reqid;
     __u32 attempt;
-    MClientRequest::const_ref client_req;
-    Message::const_ref triggering_slave_req;
+    cref_t<MClientRequest> client_req;
+    cref_t<Message> triggering_slave_req;
     mds_rank_t slave_to;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
@@ -402,8 +402,8 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
-  MClientRequest::const_ref release_client_request();
-  void reset_slave_request(const MMDSSlaveRequest::const_ref& req=nullptr);
+  cref_t<MClientRequest> release_client_request();
+  void reset_slave_request(const cref_t<MMDSSlaveRequest>& req=nullptr);
 
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;

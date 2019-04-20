@@ -19,24 +19,19 @@
 #include "msg/Message.h"
 #include "mon/MgrMap.h"
 
-class MMgrMap : public MessageInstance<MMgrMap> {
-public:
-  friend factory;
-
+class MMgrMap : public Message {
 protected:
   MgrMap map;
 
 public:
   const MgrMap & get_map() {return map;}
 
-  MMgrMap() : 
-    MessageInstance(MSG_MGR_MAP) {}
-  MMgrMap(const MgrMap &map_) :
-    MessageInstance(MSG_MGR_MAP), map(map_)
-  {
-  }
-
 private:
+  MMgrMap() : 
+    Message{MSG_MGR_MAP} {}
+  MMgrMap(const MgrMap &map_) :
+    Message{MSG_MGR_MAP}, map(map_)
+  {}
   ~MMgrMap() override {}
 
 public:
@@ -53,6 +48,11 @@ public:
     using ceph::encode;
     encode(map, payload, features);
   }
+private:
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif
