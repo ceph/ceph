@@ -18,15 +18,13 @@
 
 #include "msg/Message.h"
 
-class MGenericMessage : public MessageInstance<MGenericMessage> {
-public:
-  friend factory;
+class MGenericMessage : public Message {
 private:
   char tname[20];
   //long pcid;
 
  public:
-  MGenericMessage(int t=0) : MessageInstance(t) { 
+  MGenericMessage(int t=0) : Message{t} {
     snprintf(tname, sizeof(tname), "generic%d", get_type());
   }
 

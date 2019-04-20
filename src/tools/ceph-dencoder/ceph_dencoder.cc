@@ -214,18 +214,18 @@ public:
 
 template<class T>
 class MessageDencoderImpl : public Dencoder {
-  typename T::ref m_object;
-  list<typename T::ref> m_list;
+  ref_t<T> m_object;
+  list<ref_t<T>> m_list;
 
 public:
-  MessageDencoderImpl() : m_object(T::create()) {}
+  MessageDencoderImpl() : m_object{make_message<T>()} {}
   ~MessageDencoderImpl() override {}
 
   string decode(bufferlist bl, uint64_t seek) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
-      Message::ref n(decode_message(g_ceph_context, 0, p), false);
+      ref_t<Message> n(decode_message(g_ceph_context, 0, p), false);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {
@@ -233,7 +233,7 @@ public:
 	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
 	throw std::runtime_error(ss.str());
       }
-      m_object = boost::static_pointer_cast<typename T::ref::element_type, std::remove_reference<decltype(n)>::type::element_type>(n);
+      m_object = ref_cast<T>(n);
     }
     catch (buffer::error& e) {
       return e.what();

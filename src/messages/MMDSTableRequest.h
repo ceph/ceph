@@ -19,19 +19,17 @@
 #include "msg/Message.h"
 #include "mds/mds_table_types.h"
 
-class MMDSTableRequest : public MessageInstance<MMDSTableRequest> {
+class MMDSTableRequest : public Message {
 public:
-  friend factory;
-
   __u16 table = 0;
   __s16 op = 0;
   uint64_t reqid = 0;
   bufferlist bl;
 
 protected:
-  MMDSTableRequest() : MessageInstance(MSG_MDS_TABLE_REQUEST) {}
+  MMDSTableRequest() : Message{MSG_MDS_TABLE_REQUEST} {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    MessageInstance(MSG_MDS_TABLE_REQUEST),
+    Message{MSG_MDS_TABLE_REQUEST},
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }
@@ -63,6 +61,9 @@ public:
     encode(reqid, payload);
     encode(bl, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

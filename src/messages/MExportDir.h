@@ -19,18 +19,17 @@
 #include "msg/Message.h"
 
 
-class MExportDir : public MessageInstance<MExportDir> {
+class MExportDir : public Message {
 public:
-  friend factory;
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
 protected:
-  MExportDir() : MessageInstance(MSG_MDS_EXPORTDIR) {}
+  MExportDir() : Message{MSG_MDS_EXPORTDIR} {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIR}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDir() override {}
@@ -59,7 +58,9 @@ public:
     decode(export_data, p);
     decode(client_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

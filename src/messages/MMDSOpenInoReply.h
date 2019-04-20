@@ -17,19 +17,17 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenInoReply : public MessageInstance<MMDSOpenInoReply> {
+class MMDSOpenInoReply : public Message {
 public:
-  friend factory;
-
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : MessageInstance(MSG_MDS_OPENINOREPLY), error(0) {}
+  MMDSOpenInoReply() : Message{MSG_MDS_OPENINOREPLY}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    MessageInstance(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
+    Message{MSG_MDS_OPENINOREPLY}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 
@@ -55,6 +53,9 @@ public:
     decode(hint, p);
     decode(error, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -4,10 +4,9 @@
 #define CEPH_PAXOSSERVICEMESSAGE_H
 
 #include "msg/Message.h"
-#include "msg/MessageRef.h"
 #include "mon/Session.h"
 
-class PaxosServiceMessage : public MessageSubType<PaxosServiceMessage> {
+class PaxosServiceMessage : public Message {
 public:
   version_t version;
   __s16 deprecated_session_mon;
@@ -18,11 +17,11 @@ public:
   epoch_t rx_election_epoch;
 
   PaxosServiceMessage()
-    : MessageSubType(MSG_PAXOS),
+    : Message{MSG_PAXOS},
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0) { }
   PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
-    : MessageSubType(type, enc_version, compat_enc_version),
+    : Message{type, enc_version, compat_enc_version},
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
  protected:

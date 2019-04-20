@@ -32,9 +32,7 @@
 #include "osd/osd_types.h"
 
 
-class MOSDPing : public MessageInstance<MOSDPing> {
-public:
-  friend factory;
+class MOSDPing : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
@@ -64,14 +62,14 @@ private:
   epoch_t map_epoch = 0;
   __u8 op = 0;
   utime_t stamp;
-  uint32_t min_message_size;
+  uint32_t min_message_size = 0;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
-    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
-    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
+    : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
   ~MOSDPing() override {}
@@ -125,6 +123,9 @@ public:
 	<< " stamp " << stamp
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

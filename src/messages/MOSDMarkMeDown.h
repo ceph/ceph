@@ -17,9 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MOSDMarkMeDown : public MessageInstance<MOSDMarkMeDown, PaxosServiceMessage> {
-public:
-  friend factory;
+class MOSDMarkMeDown : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
@@ -32,12 +30,12 @@ private:
   bool request_ack = false;          // ack requested
 
   MOSDMarkMeDown()
-    : MessageInstance(MSG_OSD_MARK_ME_DOWN, 0,
-			  HEAD_VERSION, COMPAT_VERSION) { }
+    : PaxosServiceMessage{MSG_OSD_MARK_ME_DOWN, 0,
+			  HEAD_VERSION, COMPAT_VERSION} { }
   MOSDMarkMeDown(const uuid_d &fs, int osd, const entity_addrvec_t& av,
 		 epoch_t e, bool request_ack)
-    : MessageInstance(MSG_OSD_MARK_ME_DOWN, e,
-			  HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_OSD_MARK_ME_DOWN, e,
+			  HEAD_VERSION, COMPAT_VERSION},
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}
  private:
@@ -98,6 +96,9 @@ public:
 	<< ", fsid=" << fsid
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

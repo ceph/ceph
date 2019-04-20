@@ -491,16 +491,14 @@ void Mgr::handle_osd_map()
   daemon_state.cull("osd", names_exist);
 }
 
-void Mgr::handle_log(MLog *m)
+void Mgr::handle_log(ref_t<MLog> m)
 {
   for (const auto &e : m->entries) {
     py_module_registry->notify_all(e);
   }
-
-  m->put();
 }
 
-void Mgr::handle_service_map(MServiceMap *m)
+void Mgr::handle_service_map(ref_t<MServiceMap> m)
 {
   dout(10) << "e" << m->service_map.epoch << dendl;
   cluster_state.set_service_map(m->service_map);
@@ -520,23 +518,22 @@ void Mgr::handle_mon_map()
   daemon_state.cull("mon", names_exist);
 }
 
-bool Mgr::ms_dispatch(Message *m)
+bool Mgr::ms_dispatch2(const ref_t<Message>& m)
 {
   dout(4) << *m << dendl;
   std::lock_guard l(lock);
 
   switch (m->get_type()) {
     case MSG_MGR_DIGEST:
-      handle_mgr_digest(static_cast<MMgrDigest*>(m));
+      handle_mgr_digest(ref_cast<MMgrDigest>(m));
       break;
     case CEPH_MSG_MON_MAP:
       py_module_registry->notify_all("mon_map", "");
       handle_mon_map();
-      m->put();
       break;
     case CEPH_MSG_FS_MAP:
       py_module_registry->notify_all("fs_map", "");
-      handle_fs_map((MFSMap*)m);
+      handle_fs_map(ref_cast<MFSMap>(m));
       return false; // I shall let this pass through for Client
       break;
     case CEPH_MSG_OSD_MAP:
@@ -547,15 +544,13 @@ bool Mgr::ms_dispatch(Message *m)
       // Continuous subscribe, so that we can generate notifications
       // for our MgrPyModules
       objecter->maybe_request_map();
-      m->put();
       break;
     case MSG_SERVICE_MAP:
-      handle_service_map(static_cast<MServiceMap*>(m));
+      handle_service_map(ref_cast<MServiceMap>(m));
       py_module_registry->notify_all("service_map", "");
-      m->put();
       break;
     case MSG_LOG:
-      handle_log(static_cast<MLog *>(m));
+      handle_log(ref_cast<MLog>(m));
       break;
 
     default:
@@ -565,7 +560,7 @@ bool Mgr::ms_dispatch(Message *m)
 }
 
 
-void Mgr::handle_fs_map(MFSMap* m)
+void Mgr::handle_fs_map(ref_t<MFSMap> m)
 {
   ceph_assert(lock.is_locked_by_me());
 
@@ -657,11 +652,11 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   return false;
 }
 
-void Mgr::handle_mgr_digest(MMgrDigest* m)
+void Mgr::handle_mgr_digest(ref_t<MMgrDigest> m)
 {
   dout(10) << m->mon_status_json.length() << dendl;
   dout(10) << m->health_json.length() << dendl;
-  cluster_state.load_digest(m);
+  cluster_state.load_digest(m.get());
   py_module_registry->notify_all("mon_status", "");
   py_module_registry->notify_all("health", "");
 
@@ -669,8 +664,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
   // the pgmap might have changed since last time we were here.
   py_module_registry->notify_all("pg_summary", "");
   dout(10) << "done." << dendl;
-
-  m->put();
+  m.reset();
 
   if (!digest_received) {
     digest_received = true;

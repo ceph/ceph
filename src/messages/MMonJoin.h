@@ -20,10 +20,8 @@
 #include <vector>
 using std::vector;
 
-class MMonJoin : public MessageInstance<MMonJoin, PaxosServiceMessage> {
+class MMonJoin : public PaxosServiceMessage {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
 
@@ -31,9 +29,9 @@ public:
   string name;
   entity_addrvec_t addrs;
 
-  MMonJoin() : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MMonJoin() : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION} {}
   MMonJoin(uuid_d &f, string n, const entity_addrvec_t& av)
-    : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), name(n), addrs(av)
   { }
   

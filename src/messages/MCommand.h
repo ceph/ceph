@@ -19,17 +19,15 @@
 
 #include "msg/Message.h"
 
-class MCommand : public MessageInstance<MCommand> {
+class MCommand : public Message {
 public:
-  friend factory;
-
   uuid_d fsid;
   std::vector<std::string> cmd;
 
   MCommand()
-    : MessageInstance(MSG_COMMAND) {}
+    : Message{MSG_COMMAND} {}
   MCommand(const uuid_d &f)
-    : MessageInstance(MSG_COMMAND),
+    : Message{MSG_COMMAND},
       fsid(f) { }
 
 private:

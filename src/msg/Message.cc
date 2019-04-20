@@ -334,517 +334,517 @@ Message *decode_message(CephContext *cct, int crcflags,
   }
 
   // make message
-  Message::ref m;
+  ref_t<Message> m;
   int type = header.type;
   switch (type) {
 
     // -- with payload --
 
   case MSG_PGSTATS:
-    m = MPGStats::create();
+    m = make_message<MPGStats>();
     break;
   case MSG_PGSTATSACK:
-    m = MPGStatsAck::create();
+    m = make_message<MPGStatsAck>();
     break;
 
   case CEPH_MSG_STATFS:
-    m = MStatfs::create();
+    m = make_message<MStatfs>();
     break;
   case CEPH_MSG_STATFS_REPLY:
-    m = MStatfsReply::create();
+    m = make_message<MStatfsReply>();
     break;
   case MSG_GETPOOLSTATS:
-    m = MGetPoolStats::create();
+    m = make_message<MGetPoolStats>();
     break;
   case MSG_GETPOOLSTATSREPLY:
-    m = MGetPoolStatsReply::create();
+    m = make_message<MGetPoolStatsReply>();
     break;
   case CEPH_MSG_POOLOP:
-    m = MPoolOp::create();
+    m = make_message<MPoolOp>();
     break;
   case CEPH_MSG_POOLOP_REPLY:
-    m = MPoolOpReply::create();
+    m = make_message<MPoolOpReply>();
     break;
   case MSG_MON_COMMAND:
-    m = MMonCommand::create();
+    m = make_message<MMonCommand>();
     break;
   case MSG_MON_COMMAND_ACK:
-    m = MMonCommandAck::create();
+    m = make_message<MMonCommandAck>();
     break;
   case MSG_MON_PAXOS:
-    m = MMonPaxos::create();
+    m = make_message<MMonPaxos>();
     break;
   case MSG_CONFIG:
-    m = MConfig::create();
+    m = make_message<MConfig>();
     break;
   case MSG_GET_CONFIG:
-    m = MGetConfig::create();
+    m = make_message<MGetConfig>();
     break;
 
   case MSG_MON_PROBE:
-    m = MMonProbe::create();
+    m = make_message<MMonProbe>();
     break;
   case MSG_MON_JOIN:
-    m = MMonJoin::create();
+    m = make_message<MMonJoin>();
     break;
   case MSG_MON_ELECTION:
-    m = MMonElection::create();
+    m = make_message<MMonElection>();
     break;
   case MSG_MON_SYNC:
-    m = MMonSync::create();
+    m = make_message<MMonSync>();
     break;
   case MSG_MON_SCRUB:
-    m = MMonScrub::create();
+    m = make_message<MMonScrub>();
     break;
 
   case MSG_LOG:
-    m = MLog::create();
+    m = make_message<MLog>();
     break;
   case MSG_LOGACK:
-    m = MLogAck::create();
+    m = make_message<MLogAck>();
     break;
 
   case CEPH_MSG_PING:
-    m = MPing::create();
+    m = make_message<MPing>();
     break;
   case MSG_COMMAND:
-    m = MCommand::create();
+    m = make_message<MCommand>();
     break;
   case MSG_COMMAND_REPLY:
-    m = MCommandReply::create();
+    m = make_message<MCommandReply>();
     break;
   case MSG_OSD_BACKFILL_RESERVE:
-    m = MBackfillReserve::create();
+    m = make_message<MBackfillReserve>();
     break;
   case MSG_OSD_RECOVERY_RESERVE:
-    m = MRecoveryReserve::create();
+    m = make_message<MRecoveryReserve>();
     break;
   case MSG_OSD_FORCE_RECOVERY:
-    m = MOSDForceRecovery::create();
+    m = make_message<MOSDForceRecovery>();
     break;
 
   case MSG_ROUTE:
-    m = MRoute::create();
+    m = make_message<MRoute>();
     break;
   case MSG_FORWARD:
-    m = MForward::create();
+    m = make_message<MForward>();
     break;
     
   case CEPH_MSG_MON_MAP:
-    m = MMonMap::create();
+    m = make_message<MMonMap>();
     break;
   case CEPH_MSG_MON_GET_MAP:
-    m = MMonGetMap::create();
+    m = make_message<MMonGetMap>();
     break;
   case CEPH_MSG_MON_GET_OSDMAP:
-    m = MMonGetOSDMap::create();
+    m = make_message<MMonGetOSDMap>();
     break;
   case CEPH_MSG_MON_GET_VERSION:
-    m = MMonGetVersion::create();
+    m = make_message<MMonGetVersion>();
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
-    m = MMonGetVersionReply::create();
+    m = make_message<MMonGetVersionReply>();
     break;
   case CEPH_MSG_MON_METADATA:
-    m = MMonMetadata::create();
+    m = make_message<MMonMetadata>();
     break;
 
   case MSG_OSD_BOOT:
-    m = MOSDBoot::create();
+    m = make_message<MOSDBoot>();
     break;
   case MSG_OSD_ALIVE:
-    m = MOSDAlive::create();
+    m = make_message<MOSDAlive>();
     break;
   case MSG_OSD_BEACON:
-    m = MOSDBeacon::create();
+    m = make_message<MOSDBeacon>();
     break;
   case MSG_OSD_PGTEMP:
-    m = MOSDPGTemp::create();
+    m = make_message<MOSDPGTemp>();
     break;
   case MSG_OSD_FAILURE:
-    m = MOSDFailure::create();
+    m = make_message<MOSDFailure>();
     break;
   case MSG_OSD_MARK_ME_DOWN:
-    m = MOSDMarkMeDown::create();
+    m = make_message<MOSDMarkMeDown>();
     break;
   case MSG_OSD_FULL:
-    m = MOSDFull::create();
+    m = make_message<MOSDFull>();
     break;
   case MSG_OSD_PING:
-    m = MOSDPing::create();
+    m = make_message<MOSDPing>();
     break;
   case CEPH_MSG_OSD_OP:
-    m = MOSDOp::create();
+    m = make_message<MOSDOp>();
     break;
   case CEPH_MSG_OSD_OPREPLY:
-    m = MOSDOpReply::create();
+    m = make_message<MOSDOpReply>();
     break;
   case MSG_OSD_REPOP:
-    m = MOSDRepOp::create();
+    m = make_message<MOSDRepOp>();
     break;
   case MSG_OSD_REPOPREPLY:
-    m = MOSDRepOpReply::create();
+    m = make_message<MOSDRepOpReply>();
     break;
   case MSG_OSD_PG_CREATED:
-    m = MOSDPGCreated::create();
+    m = make_message<MOSDPGCreated>();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
-    m = MOSDPGUpdateLogMissing::create();
+    m = make_message<MOSDPGUpdateLogMissing>();
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
-    m = MOSDPGUpdateLogMissingReply::create();
+    m = make_message<MOSDPGUpdateLogMissingReply>();
     break;
   case CEPH_MSG_OSD_BACKOFF:
-    m = MOSDBackoff::create();
+    m = make_message<MOSDBackoff>();
     break;
 
   case CEPH_MSG_OSD_MAP:
-    m = MOSDMap::create();
+    m = make_message<MOSDMap>();
     break;
 
   case CEPH_MSG_WATCH_NOTIFY:
-    m = MWatchNotify::create();
+    m = make_message<MWatchNotify>();
     break;
 
   case MSG_OSD_PG_NOTIFY:
-    m = MOSDPGNotify::create();
+    m = make_message<MOSDPGNotify>();
     break;
   case MSG_OSD_PG_QUERY:
-    m = MOSDPGQuery::create();
+    m = make_message<MOSDPGQuery>();
     break;
   case MSG_OSD_PG_LOG:
-    m = MOSDPGLog::create();
+    m = make_message<MOSDPGLog>();
     break;
   case MSG_OSD_PG_REMOVE:
-    m = MOSDPGRemove::create();
+    m = make_message<MOSDPGRemove>();
     break;
   case MSG_OSD_PG_INFO:
-    m = MOSDPGInfo::create();
+    m = make_message<MOSDPGInfo>();
     break;
   case MSG_OSD_PG_CREATE:
-    m = MOSDPGCreate::create();
+    m = make_message<MOSDPGCreate>();
     break;
   case MSG_OSD_PG_CREATE2:
-    m = MOSDPGCreate2::create();
+    m = make_message<MOSDPGCreate2>();
     break;
   case MSG_OSD_PG_TRIM:
-    m = MOSDPGTrim::create();
+    m = make_message<MOSDPGTrim>();
     break;
 
   case MSG_OSD_SCRUB:
-    m = MOSDScrub::create();
+    m = make_message<MOSDScrub>();
     break;
   case MSG_OSD_SCRUB2:
-    m = MOSDScrub2::create();
+    m = make_message<MOSDScrub2>();
     break;
   case MSG_OSD_SCRUB_RESERVE:
-    m = MOSDScrubReserve::create();
+    m = make_message<MOSDScrubReserve>();
     break;
   case MSG_REMOVE_SNAPS:
-    m = MRemoveSnaps::create();
+    m = make_message<MRemoveSnaps>();
     break;
   case MSG_OSD_REP_SCRUB:
-    m = MOSDRepScrub::create();
+    m = make_message<MOSDRepScrub>();
     break;
   case MSG_OSD_REP_SCRUBMAP:
-    m = MOSDRepScrubMap::create();
+    m = make_message<MOSDRepScrubMap>();
     break;
   case MSG_OSD_PG_SCAN:
-    m = MOSDPGScan::create();
+    m = make_message<MOSDPGScan>();
     break;
   case MSG_OSD_PG_BACKFILL:
-    m = MOSDPGBackfill::create();
+    m = make_message<MOSDPGBackfill>();
     break;
   case MSG_OSD_PG_BACKFILL_REMOVE:
-    m = MOSDPGBackfillRemove::create();
+    m = make_message<MOSDPGBackfillRemove>();
     break;
   case MSG_OSD_PG_PUSH:
-    m = MOSDPGPush::create();
+    m = make_message<MOSDPGPush>();
     break;
   case MSG_OSD_PG_PULL:
-    m = MOSDPGPull::create();
+    m = make_message<MOSDPGPull>();
     break;
   case MSG_OSD_PG_PUSH_REPLY:
-    m = MOSDPGPushReply::create();
+    m = make_message<MOSDPGPushReply>();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE:
-    m = MOSDPGRecoveryDelete::create();
+    m = make_message<MOSDPGRecoveryDelete>();
     break;
   case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
-    m = MOSDPGRecoveryDeleteReply::create();
+    m = make_message<MOSDPGRecoveryDeleteReply>();
     break;
   case MSG_OSD_PG_READY_TO_MERGE:
-    m = MOSDPGReadyToMerge::create();
+    m = make_message<MOSDPGReadyToMerge>();
     break;
   case MSG_OSD_EC_WRITE:
-    m = MOSDECSubOpWrite::create();
+    m = make_message<MOSDECSubOpWrite>();
     break;
   case MSG_OSD_EC_WRITE_REPLY:
-    m = MOSDECSubOpWriteReply::create();
+    m = make_message<MOSDECSubOpWriteReply>();
     break;
   case MSG_OSD_EC_READ:
-    m = MOSDECSubOpRead::create();
+    m = make_message<MOSDECSubOpRead>();
     break;
   case MSG_OSD_EC_READ_REPLY:
-    m = MOSDECSubOpReadReply::create();
+    m = make_message<MOSDECSubOpReadReply>();
     break;
    // auth
   case CEPH_MSG_AUTH:
-    m = MAuth::create();
+    m = make_message<MAuth>();
     break;
   case CEPH_MSG_AUTH_REPLY:
-    m = MAuthReply::create();
+    m = make_message<MAuthReply>();
     break;
 
   case MSG_MON_GLOBAL_ID:
-    m = MMonGlobalID::create();
+    m = make_message<MMonGlobalID>();
     break; 
 
     // clients
   case CEPH_MSG_MON_SUBSCRIBE:
-    m = MMonSubscribe::create();
+    m = make_message<MMonSubscribe>();
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    m = MMonSubscribeAck::create();
+    m = make_message<MMonSubscribeAck>();
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    m = MClientSession::create();
+    m = make_message<MClientSession>();
     break;
   case CEPH_MSG_CLIENT_RECONNECT:
-    m = MClientReconnect::create();
+    m = make_message<MClientReconnect>();
     break;
   case CEPH_MSG_CLIENT_REQUEST:
-    m = MClientRequest::create();
+    m = make_message<MClientRequest>();
     break;
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    m = MClientRequestForward::create();
+    m = make_message<MClientRequestForward>();
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    m = MClientReply::create();
+    m = make_message<MClientReply>();
     break;
   case CEPH_MSG_CLIENT_RECLAIM:
-    m = MClientReclaim::create();
+    m = make_message<MClientReclaim>();
     break;
   case CEPH_MSG_CLIENT_RECLAIM_REPLY:
-    m = MClientReclaimReply::create();
+    m = make_message<MClientReclaimReply>();
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    m = MClientCaps::create();
+    m = make_message<MClientCaps>();
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
-    m = MClientCapRelease::create();
+    m = make_message<MClientCapRelease>();
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    m = MClientLease::create();
+    m = make_message<MClientLease>();
     break;
   case CEPH_MSG_CLIENT_SNAP:
-    m = MClientSnap::create();
+    m = make_message<MClientSnap>();
     break;
   case CEPH_MSG_CLIENT_QUOTA:
-    m = MClientQuota::create();
+    m = make_message<MClientQuota>();
     break;
 
     // mds
   case MSG_MDS_SLAVE_REQUEST:
-    m = MMDSSlaveRequest::create();
+    m = make_message<MMDSSlaveRequest>();
     break;
 
   case CEPH_MSG_MDS_MAP:
-    m = MMDSMap::create();
+    m = make_message<MMDSMap>();
     break;
   case CEPH_MSG_FS_MAP:
-    m = MFSMap::create();
+    m = make_message<MFSMap>();
     break;
   case CEPH_MSG_FS_MAP_USER:
-    m = MFSMapUser::create();
+    m = make_message<MFSMapUser>();
     break;
   case MSG_MDS_BEACON:
-    m = MMDSBeacon::create();
+    m = make_message<MMDSBeacon>();
     break;
   case MSG_MDS_OFFLOAD_TARGETS:
-    m = MMDSLoadTargets::create();
+    m = make_message<MMDSLoadTargets>();
     break;
   case MSG_MDS_RESOLVE:
-    m = MMDSResolve::create();
+    m = make_message<MMDSResolve>();
     break;
   case MSG_MDS_RESOLVEACK:
-    m = MMDSResolveAck::create();
+    m = make_message<MMDSResolveAck>();
     break;
   case MSG_MDS_CACHEREJOIN:
-    m = MMDSCacheRejoin::create();
+    m = make_message<MMDSCacheRejoin>();
 	break;
   
   case MSG_MDS_DIRUPDATE:
-    m = MDirUpdate::create();
+    m = make_message<MDirUpdate>();
     break;
 
   case MSG_MDS_DISCOVER:
-    m = MDiscover::create();
+    m = make_message<MDiscover>();
     break;
   case MSG_MDS_DISCOVERREPLY:
-    m = MDiscoverReply::create();
+    m = make_message<MDiscoverReply>();
     break;
 
   case MSG_MDS_FINDINO:
-    m = MMDSFindIno::create();
+    m = make_message<MMDSFindIno>();
     break;
   case MSG_MDS_FINDINOREPLY:
-    m = MMDSFindInoReply::create();
+    m = make_message<MMDSFindInoReply>();
     break;
 
   case MSG_MDS_OPENINO:
-    m = MMDSOpenIno::create();
+    m = make_message<MMDSOpenIno>();
     break;
   case MSG_MDS_OPENINOREPLY:
-    m = MMDSOpenInoReply::create();
+    m = make_message<MMDSOpenInoReply>();
     break;
 
   case MSG_MDS_SNAPUPDATE:
-    m = MMDSSnapUpdate::create();
+    m = make_message<MMDSSnapUpdate>();
     break;
 
   case MSG_MDS_FRAGMENTNOTIFY:
-    m = MMDSFragmentNotify::create();
+    m = make_message<MMDSFragmentNotify>();
     break;
 
   case MSG_MDS_FRAGMENTNOTIFYACK:
-    m = MMDSFragmentNotifyAck::create();
+    m = make_message<MMDSFragmentNotifyAck>();
     break;
 
   case MSG_MDS_EXPORTDIRDISCOVER:
-    m = MExportDirDiscover::create();
+    m = make_message<MExportDirDiscover>();
     break;
   case MSG_MDS_EXPORTDIRDISCOVERACK:
-    m = MExportDirDiscoverAck::create();
+    m = make_message<MExportDirDiscoverAck>();
     break;
   case MSG_MDS_EXPORTDIRCANCEL:
-    m = MExportDirCancel::create();
+    m = make_message<MExportDirCancel>();
     break;
 
   case MSG_MDS_EXPORTDIR:
-    m = MExportDir::create();
+    m = make_message<MExportDir>();
     break;
   case MSG_MDS_EXPORTDIRACK:
-    m = MExportDirAck::create();
+    m = make_message<MExportDirAck>();
     break;
   case MSG_MDS_EXPORTDIRFINISH:
-    m = MExportDirFinish::create();
+    m = make_message<MExportDirFinish>();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFY:
-    m = MExportDirNotify::create();
+    m = make_message<MExportDirNotify>();
     break;
 
   case MSG_MDS_EXPORTDIRNOTIFYACK:
-    m = MExportDirNotifyAck::create();
+    m = make_message<MExportDirNotifyAck>();
     break;
 
   case MSG_MDS_EXPORTDIRPREP:
-    m = MExportDirPrep::create();
+    m = make_message<MExportDirPrep>();
     break;
 
   case MSG_MDS_EXPORTDIRPREPACK:
-    m = MExportDirPrepAck::create();
+    m = make_message<MExportDirPrepAck>();
     break;
 
   case MSG_MDS_EXPORTCAPS:
-    m = MExportCaps::create();
+    m = make_message<MExportCaps>();
     break;
   case MSG_MDS_EXPORTCAPSACK:
-    m = MExportCapsAck::create();
+    m = make_message<MExportCapsAck>();
     break;
   case MSG_MDS_GATHERCAPS:
-    m = MGatherCaps::create();
+    m = make_message<MGatherCaps>();
     break;
 
 
   case MSG_MDS_DENTRYUNLINK:
-    m = MDentryUnlink::create();
+    m = make_message<MDentryUnlink>();
     break;
   case MSG_MDS_DENTRYLINK:
-    m = MDentryLink::create();
+    m = make_message<MDentryLink>();
     break;
 
   case MSG_MDS_HEARTBEAT:
-    m = MHeartbeat::create();
+    m = make_message<MHeartbeat>();
     break;
 
   case MSG_MDS_CACHEEXPIRE:
-    m = MCacheExpire::create();
+    m = make_message<MCacheExpire>();
     break;
 
   case MSG_MDS_TABLE_REQUEST:
-    m = MMDSTableRequest::create();
+    m = make_message<MMDSTableRequest>();
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:
-    m = MInodeUpdate::create();
+    m = make_message<MInodeUpdate>();
     break;
 	*/
 
   case MSG_MDS_INODEFILECAPS:
-    m = MInodeFileCaps::create();
+    m = make_message<MInodeFileCaps>();
     break;
 
   case MSG_MDS_LOCK:
-    m = MLock::create();
+    m = make_message<MLock>();
     break;
 
   case MSG_MGR_BEACON:
-    m = MMgrBeacon::create();
+    m = make_message<MMgrBeacon>();
     break;
 
   case MSG_MON_MGR_REPORT:
-    m = MMonMgrReport::create();
+    m = make_message<MMonMgrReport>();
     break;
 
   case MSG_SERVICE_MAP:
-    m = MServiceMap::create();
+    m = make_message<MServiceMap>();
     break;
 
   case MSG_MGR_MAP:
-    m = MMgrMap::create();
+    m = make_message<MMgrMap>();
     break;
 
   case MSG_MGR_DIGEST:
-    m = MMgrDigest::create();
+    m = make_message<MMgrDigest>();
     break;
 
   case MSG_MGR_OPEN:
-    m = MMgrOpen::create();
+    m = make_message<MMgrOpen>();
     break;
 
   case MSG_MGR_CLOSE:
-    m = MMgrClose::create();
+    m = make_message<MMgrClose>();
     break;
 
   case MSG_MGR_REPORT:
-    m = MMgrReport::create();
+    m = make_message<MMgrReport>();
     break;
 
   case MSG_MGR_CONFIGURE:
-    m = MMgrConfigure::create();
+    m = make_message<MMgrConfigure>();
     break;
 
   case MSG_TIMECHECK:
-    m = MTimeCheck::create();
+    m = make_message<MTimeCheck>();
     break;
   case MSG_TIMECHECK2:
-    m = MTimeCheck2::create();
+    m = make_message<MTimeCheck2>();
     break;
 
   case MSG_MON_HEALTH:
-    m = MMonHealth::create();
+    m = make_message<MMonHealth>();
     break;
 
   case MSG_MON_HEALTH_CHECKS:
-    m = MMonHealthChecks::create();
+    m = make_message<MMonHealthChecks>();
     break;
 
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
-    m = MGenericMessage::create(type);
+    m = make_message<MGenericMessage>(type);
     break;
 
   default:

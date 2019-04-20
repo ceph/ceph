@@ -18,9 +18,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public MessageInstance<MClientSession> {
-public:
-  friend factory;
+class MClientSession : public Message {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -38,15 +36,15 @@ public:
   int get_max_leases() const { return head.max_leases; }
 
 protected:
-  MClientSession() : MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
+  MClientSession() : Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} { }
   MClientSession(int o, version_t s=0) : 
-    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    MessageInstance(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    Message{CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION} {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
@@ -87,6 +85,9 @@ public:
       encode(supported_features, payload);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

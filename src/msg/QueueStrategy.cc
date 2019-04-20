@@ -46,11 +46,11 @@ void QueueStrategy::ds_dispatch(Message *m) {
 void QueueStrategy::entry(QSThread *thrd)
 {
   for (;;) {
-    Message::ref m;
+    ref_t<Message> m;
     lock.Lock();
     for (;;) {
       if (! mqueue.empty()) {
-	m = Message::ref(&mqueue.front(), false);
+	m = ref_t<Message>(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }

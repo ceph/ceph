@@ -24,14 +24,12 @@
  * MMonGetVersion. The latest version of the requested thing is sent
  * back.
  */
-class MMonGetVersionReply : public MessageInstance<MMonGetVersionReply> {
-public:
-  friend factory;
+class MMonGetVersionReply : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
 
 public:
-  MMonGetVersionReply() : MessageInstance(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
+  MMonGetVersionReply() : Message{CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION} { }
 
   std::string_view get_type_name() const override {
     return "mon_get_version_reply";

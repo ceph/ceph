@@ -18,9 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public MessageInstance<MClientRequestForward> {
-public:
-  friend factory;
+class MClientRequestForward : public Message {
 private:
   int32_t dest_mds;
   int32_t num_fwd;
@@ -28,10 +26,10 @@ private:
 
 protected:
   MClientRequestForward()
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    : Message{CEPH_MSG_CLIENT_REQUEST_FORWARD},
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
   MClientRequestForward(ceph_tid_t t, int dm, int nf, bool cmr) :
-    MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    Message{CEPH_MSG_CLIENT_REQUEST_FORWARD},
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
     ceph_assert(client_must_resend);
     header.tid = t;
@@ -65,6 +63,9 @@ public:
     decode(num_fwd, p);
     decode(client_must_resend, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

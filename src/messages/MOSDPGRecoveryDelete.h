@@ -10,10 +10,8 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-class MOSDPGRecoveryDelete : public MessageInstance<MOSDPGRecoveryDelete, MOSDFastDispatchOp> {
+class MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -23,7 +21,7 @@ public:
   list<pair<hobject_t, eversion_t> > objects;    ///< objects to remove
 
 private:
-  uint64_t cost;
+  uint64_t cost = 0;
 
 public:
   int get_cost() const override {
@@ -45,18 +43,19 @@ public:
   }
 
   MOSDPGRecoveryDelete()
-    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
-			 COMPAT_VERSION), cost(0) {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+			 COMPAT_VERSION}
+  {}
 
   MOSDPGRecoveryDelete(pg_shard_t from, spg_t pgid, epoch_t map_epoch,
 		       epoch_t min_epoch)
-    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
-			 COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+			 COMPAT_VERSION},
       from(from),
       pgid(pgid),
       map_epoch(map_epoch),
-      min_epoch(min_epoch),
-      cost(0) {}
+      min_epoch(min_epoch)
+  {}
 
 private:
   ~MOSDPGRecoveryDelete() {}
@@ -86,8 +85,9 @@ public:
     decode(cost, p);
     decode(objects, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
-
 
 #endif

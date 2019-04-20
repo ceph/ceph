@@ -23,9 +23,7 @@
  * PGNotify - notify primary of my PGs and versions.
  */
 
-class MOSDPGNotify : public MessageInstance<MOSDPGNotify> {
-public:
-  friend factory;
+class MOSDPGNotify : public Message {
 private:
   static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 6;
@@ -48,7 +46,7 @@ private:
     : MOSDPGNotify(0, {})
   {}
   MOSDPGNotify(epoch_t e, pg_list_t&& l)
-    : MessageInstance(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION},
       epoch(e),
       pg_list(std::move(l)) {
     set_priority(CEPH_MSG_PRIO_HIGH);
@@ -82,6 +80,9 @@ public:
     out << " epoch " << epoch
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

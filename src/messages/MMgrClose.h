@@ -5,9 +5,7 @@
 
 #include "msg/Message.h"
 
-class MMgrClose : public MessageInstance<MMgrClose> {
-public:
-  friend factory;
+class MMgrClose : public Message {
 private:
 
   static constexpr int HEAD_VERSION = 1;
@@ -44,6 +42,10 @@ public:
   }
 
   MMgrClose()
-    : MessageInstance(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION}
   {}
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

@@ -24,10 +24,8 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 
-class MForward : public MessageInstance<MForward> {
+class MForward : public Message {
 public:
-  friend factory;
-
   uint64_t tid;
   uint8_t client_type;
   entity_addrvec_t client_addrs;
@@ -42,11 +40,11 @@ public:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
 
-  MForward() : MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+  MForward() : Message{MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION},
                tid(0), con_features(0), msg(NULL) {}
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
            const MonCap& caps) :
-    MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION},
     tid(t), client_caps(caps), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();
@@ -151,6 +149,9 @@ public:
       << " tid " << tid
       << " con_features " << con_features << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
   
 #endif

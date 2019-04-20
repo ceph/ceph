@@ -19,18 +19,16 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public MessageInstance<MExportCapsAck> {
+class MExportCapsAck : public Message {
 public:  
-  friend factory;
-
   inodeno_t ino;
   bufferlist cap_bl;
 
 protected:
   MExportCapsAck() :
-    MessageInstance(MSG_MDS_EXPORTCAPSACK) {}
+    Message{MSG_MDS_EXPORTCAPSACK} {}
   MExportCapsAck(inodeno_t i) :
-    MessageInstance(MSG_MDS_EXPORTCAPSACK), ino(i) {}
+    Message{MSG_MDS_EXPORTCAPSACK}, ino(i) {}
   ~MExportCapsAck() override {}
 
 public:
@@ -49,6 +47,9 @@ public:
     decode(ino, p);
     decode(cap_bl, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

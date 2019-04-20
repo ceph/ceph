@@ -22,15 +22,10 @@
  * The mgr digest is a way for the mgr to subscribe to things
  * other than the cluster maps, which are needed by 
  */
-class MMgrDigest : public MessageInstance<MMgrDigest> {
+class MMgrDigest : public Message {
 public:
-  friend factory;
-
   bufferlist mon_status_json;
   bufferlist health_json;
-
-  MMgrDigest() : 
-    MessageInstance(MSG_MGR_DIGEST) {}
 
   std::string_view get_type_name() const override { return "mgrdigest"; }
   void print(ostream& out) const override {
@@ -49,8 +44,14 @@ public:
   }
 
 private:
+  MMgrDigest() :
+    Message{MSG_MGR_DIGEST} {}
   ~MMgrDigest() override {}
 
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

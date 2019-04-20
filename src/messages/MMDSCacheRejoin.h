@@ -27,11 +27,8 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public MessageInstance<MMDSCacheRejoin> {
-public:
-  friend factory;
+class MMDSCacheRejoin : public Message {
 private:
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -216,10 +213,10 @@ private:
   
 protected:
   MMDSCacheRejoin() :
-    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
-    op(0) {}
+    MMDSCacheRejoin{0}
+  {}
   MMDSCacheRejoin(int o) : 
-    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION},
     op(o) {}
   ~MMDSCacheRejoin() override {}
 
@@ -355,7 +352,9 @@ public:
     if (header.version >= 2)
       decode(client_metadata_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)

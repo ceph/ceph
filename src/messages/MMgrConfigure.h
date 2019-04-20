@@ -22,11 +22,8 @@
  * This message is sent from ceph-mgr to MgrClient, instructing it
  * it about what data to send back to ceph-mgr at what frequency.
  */
-class MMgrConfigure : public MessageInstance<MMgrConfigure> {
-public:
-  friend factory;
+class MMgrConfigure : public Message {
 private:
-
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -64,9 +61,14 @@ public:
 			   << ", threshold=" << stats_threshold << ")";
   }
 
+private:
   MMgrConfigure()
-    : MessageInstance(MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_CONFIGURE, HEAD_VERSION, COMPAT_VERSION}
   {}
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -19,10 +19,8 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
 
-class MOSDBackoff : public MessageInstance<MOSDBackoff, MOSDFastDispatchOp> {
+class MOSDBackoff : public MOSDFastDispatchOp {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -40,10 +38,10 @@ public:
   }
 
   MOSDBackoff()
-    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
 	      hobject_t begin_, hobject_t end_)
-    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid_),
       map_epoch(ep),
       op(op_),
@@ -80,6 +78,9 @@ public:
 	<< " [" << begin << "," << end << ")"
 	<< " e" << map_epoch << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

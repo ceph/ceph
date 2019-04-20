@@ -25,11 +25,9 @@
  * can be used to determine whether a pool actually does not exist, or
  * if it may have been created but the map was not received yet.
  */
-class MMonGetVersion : public MessageInstance<MMonGetVersion> {
+class MMonGetVersion : public Message {
 public:
-  friend factory;
-
-  MMonGetVersion() : MessageInstance(CEPH_MSG_MON_GET_VERSION) {}
+  MMonGetVersion() : Message{CEPH_MSG_MON_GET_VERSION} {}
 
   std::string_view get_type_name() const override {
     return "mon_get_version";

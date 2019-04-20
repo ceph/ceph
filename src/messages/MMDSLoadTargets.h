@@ -23,17 +23,15 @@
 #include <map>
 using std::map;
 
-class MMDSLoadTargets : public MessageInstance<MMDSLoadTargets, PaxosServiceMessage> {
+class MMDSLoadTargets : public PaxosServiceMessage {
 public:
-  friend factory;
-
   mds_gid_t global_id;
   set<mds_rank_t> targets;
 
 protected:
-  MMDSLoadTargets() : MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0) {}
+  MMDSLoadTargets() : PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0) {}
   MMDSLoadTargets(mds_gid_t g, set<mds_rank_t>& mds_targets) :
-    MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0),
+    PaxosServiceMessage(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
   ~MMDSLoadTargets() override {}
 
@@ -57,6 +55,9 @@ public:
     encode(global_id, payload);
     encode(targets, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

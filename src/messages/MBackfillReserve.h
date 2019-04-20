@@ -17,10 +17,9 @@
 
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
-class MBackfillReserve : public MessageInstance<MBackfillReserve, MOSDPeeringOp> {
-public:
-  friend factory;
+class MBackfillReserve : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
@@ -94,7 +93,7 @@ public:
   }
 
   MBackfillReserve()
-    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDPeeringOp{MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       query_epoch(0), type(-1), priority(-1), primary_num_bytes(0),
       shard_num_bytes(0) {}
   MBackfillReserve(int type,
@@ -102,7 +101,7 @@ public:
 		   epoch_t query_epoch, unsigned prio = -1,
 		   int64_t primary_num_bytes = 0,
                    int64_t shard_num_bytes = 0)
-    : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDPeeringOp{MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio), primary_num_bytes(primary_num_bytes),
       shard_num_bytes(shard_num_bytes) {}
