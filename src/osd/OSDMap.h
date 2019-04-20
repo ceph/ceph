@@ -819,6 +819,11 @@ public:
     return !is_up(osd);
   }
 
+  bool is_stop(int osd) const {
+    return exists(osd) && is_down(osd) &&
+           (osd_state[osd] & CEPH_OSD_STOP);
+  }
+
   bool is_out(int osd) const {
     return !exists(osd) || get_weight(osd) == CEPH_OSD_OUT;
   }

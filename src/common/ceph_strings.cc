@@ -65,6 +65,8 @@ const char *ceph_osd_state_name(int s)
                 return "noin";
         case CEPH_OSD_NOOUT:
                 return "noout";
+        case CEPH_OSD_STOP:
+                return "stop";
 	default:
 		return "???";
 	}

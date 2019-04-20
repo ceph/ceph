@@ -124,6 +124,7 @@ struct ceph_eversion {
 #define CEPH_OSD_NODOWN       (1<<9)  /* osd can not be marked down */
 #define CEPH_OSD_NOIN         (1<<10) /* osd can not be marked in */
 #define CEPH_OSD_NOOUT        (1<<11) /* osd can not be marked out */
+#define CEPH_OSD_STOP         (1<<12) /* osd has been stopped by admin */
 
 extern const char *ceph_osd_state_name(int s);
 

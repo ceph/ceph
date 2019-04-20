@@ -10428,9 +10428,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_require_osd_release = rel;
     goto update;
   } else if (prefix == "osd down" ||
-	     prefix == "osd out" ||
-	     prefix == "osd in" ||
-	     prefix == "osd rm") {
+             prefix == "osd out" ||
+             prefix == "osd in" ||
+             prefix == "osd rm" ||
+             prefix == "osd stop") {
 
     bool any = false;
     bool stop = false;
@@ -10536,6 +10537,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             }
 	    any = true;
 	  }
+        } else if (prefix == "osd stop") {
+          if (osdmap.is_stop(osd)) {
+            if (verbose)
+              ss << "osd." << osd << " is already stopped. ";
+          } else if (osdmap.is_down(osd)) {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_STOP);
+            ss << "stop down osd." << osd << ". ";
+            any = true;
+          } else {
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP | CEPH_OSD_STOP);
+            ss << "stop osd." << osd << ". ";
+            any = true;
+          }
         }
       }
     }
