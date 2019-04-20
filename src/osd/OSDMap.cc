@@ -2048,6 +2048,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   for (const auto &client : inc.new_up_client) {
     osd_state[client.first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
+    osd_state[client.first] &= ~CEPH_OSD_STOP; // if any
     osd_addrs->client_addrs[client.first].reset(
       new entity_addrvec_t(client.second));
     osd_addrs->hb_back_addrs[client.first].reset(

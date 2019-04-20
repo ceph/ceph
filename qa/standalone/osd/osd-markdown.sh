@@ -124,8 +124,23 @@ function TEST_markdown_boot_exceed_time() {
     ceph osd tree | grep up | grep osd.0 || return 1
 }
 
-main osd-markdown "$@"
+function TEST_osd_stop() {
 
-# Local Variables:
-# compile-command: "cd ../.. ; make -j4 && test/osd/osd-bench.sh"
-# End:
+    local dir=$1
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    osd_0_pid=$(cat $dir/osd.0.pid)
+    ps -p $osd_0_pid || return 1
+
+    ceph osd tree | grep osd.0 | grep up || return 1
+    ceph osd stop osd.0
+    sleep 15 # give osd plenty of time to notice and exit
+    ceph osd tree | grep down | grep osd.0 || return 1
+    ! ps -p $osd_0_pid || return 1
+}
+
+main osd-markdown "$@"
