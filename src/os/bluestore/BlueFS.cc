@@ -630,6 +630,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     log_file, cct->_conf->bluefs_max_prefetch,
     false,  // !random
     true);  // ignore eof
+
+  bool seen_recs = false;
   while (true) {
     ceph_assert((log_reader->buf.pos & ~super.block_mask()) == 0);
     uint64_t pos = log_reader->buf.pos;
@@ -658,15 +660,31 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       }
     }
     if (uuid != super.uuid) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
-               << dendl;
+      if (seen_recs) {
+	dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
+		 << dendl;
+      } else {
+	derr << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
+		 << ", block dump: \n";
+	bufferlist t;
+	t.substr_of(bl, 0, super.block_size);
+	t.hexdump(*_dout);
+	*_dout << dendl;
+      }
       break;
     }
     if (seq != log_seq + 1) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: seq " << seq << " != expected " << log_seq + 1
-               << dendl;
+      if (seen_recs) {
+	dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: seq " << seq << " != expected " << log_seq + 1
+		 << dendl;;
+      } else {
+	derr << __func__ << " 0x" << std::hex << pos << std::dec
+	     << ": stop: seq " << seq << " != expected " << log_seq + 1
+	     << dendl;;
+      }
       break;
     }
     if (more) {
@@ -675,24 +693,25 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       bufferlist t;
       int r = _read(log_reader, &log_reader->buf, read_pos, more, &t, NULL);
       if (r < (int)more) {
-	dout(10) << __func__ << " 0x" << std::hex << pos
-                 << ": stop: len is 0x" << bl.length() + more << std::dec
-                 << ", which is past eof" << dendl;
+	derr  << __func__ << " 0x" << std::hex << pos
+              << ": stop: len is 0x" << bl.length() + more << std::dec
+              << ", which is past eof" << dendl;
 	break;
       }
       ceph_assert(r == (int)more);
       bl.claim_append(t);
       read_pos += r;
     }
+    seen_recs = true;
     bluefs_transaction_t t;
     try {
       auto p = bl.cbegin();
       decode(t, p);
     }
     catch (buffer::error& e) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: failed to decode: " << e.what()
-               << dendl;
+      derr << __func__ << " 0x" << std::hex << pos << std::dec
+           << ": stop: failed to decode: " << e.what()
+           << dendl;
       delete log_reader;
       return -EIO;
     }
