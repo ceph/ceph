@@ -190,31 +190,50 @@ resending pending requests. ::
 	ceph osd pause
 	ceph osd unpause
 
-Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the
+Set the override weight (reweight) of ``{osd-num}`` to ``{weight}``. Two OSDs with the
 same weight will receive roughly the same number of I/O requests and
 store approximately the same amount of data. ``ceph osd reweight``
 sets an override weight on the OSD. This value is in the range 0 to 1,
 and forces CRUSH to re-place (1-weight) of the data that would
-otherwise live on this drive. It does not change the weights assigned
+otherwise live on this drive. It does not change weights assigned
 to the buckets above the OSD in the crush map, and is a corrective
 measure in case the normal CRUSH distribution is not working out quite
 right. For instance, if one of your OSDs is at 90% and the others are
-at 50%, you could reduce this weight to try and compensate for it. ::
+at 50%, you could reduce this weight to compensate. ::
 
 	ceph osd reweight {osd-num} {weight}
 
-Reweights all the OSDs by reducing the weight of OSDs which are
-heavily overused. By default it will adjust the weights downward on
-OSDs which have 120% of the average utilization, but if you include
-threshold it will use that percentage instead. ::
+Balance OSD fullness by reducing the override weight of OSDs which are
+overly utilized.  Note that these override aka ``reweight`` values
+default to 1.00000 and are relative only to each other; they not absolute.
+It is crucial to distinguish them from CRUSH weights, which reflect the
+absolute capacity of a bucket in TiB.  By default this command adjusts
+override weight on OSDs which have + or - 20% of the average utilization,
+but if you include a ``threshold`` that percentage will be used instead. ::
 
-	ceph osd reweight-by-utilization [threshold]
+	ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
 
-Describes what reweight-by-utilization would do. ::
+To limit the step by which any OSD's reweight will be changed, specify
+``max_change`` which defaults to 0.05.  To limit the number of OSDs that will
+be adjusted, specify ``max_osds`` as well; the default is 4.  Increasing these
+parameters can speed leveling of OSD utilization, at the potential cost of
+greater impact on client operations due to more data moving at once.
 
-	ceph osd test-reweight-by-utilization
+To determine which and how many PGs and OSDs will be affected by a given invocation
+you can test before executing. ::
 
-Adds/removes the address to/from the blacklist. When adding an address,
+	ceph osd test-reweight-by-utilization [threshold [max_change max_osds]] [--no-increasing]
+
+Adding ``--no-increasing`` to either command prevents increasing any
+override weights that are currently < 1.00000.  This can be useful when
+you are balancing in a hurry to remedy ``full`` or ``nearful`` OSDs or
+when some OSDs are being evacuated or slowly brought into service.
+
+Deployments utilizing Nautilus (or later revisions of Luminous and Mimic)
+that have no pre-Luminous cients may instead wish to instead enable the
+`balancer`` module for ``ceph-mgr``.
+
+Add/remove an IP address to/from the blacklist. When adding an address,
 you can specify how long it should be blacklisted in seconds; otherwise,
 it will default to 1 hour. A blacklisted address is prevented from
 connecting to any OSD. Blacklisting is most often used to prevent a
