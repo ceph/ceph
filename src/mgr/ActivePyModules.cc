@@ -46,9 +46,11 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
+    cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
     server(server), py_module_registry(pmr), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
+  cmd_finisher.start();
 }
 
 ActivePyModules::~ActivePyModules() = default;
@@ -433,6 +435,9 @@ void ActivePyModules::shutdown()
     dout(10) << "joined module " << i.first << dendl;
     lock.Lock();
   }
+
+  cmd_finisher.wait_for_empty();
+  cmd_finisher.stop();
 
   modules.clear();
 }
