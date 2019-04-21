@@ -188,6 +188,18 @@ class FSStatus(object):
         #all matching
         return False
 
+    def hadfailover_rank(self, fscid, status, rank):
+        """
+        Compares two statuses for mds failovers for a
+        particular rank
+        """
+        rank_info = self.get_rank(fscid, rank)
+        orig_rank_info = status.get_rank(fscid, rank)
+        if ((rank_info['gid'] != orig_rank_info['gid']) or (rank_info['incarnation'] != orig_rank_info['incarnation'])):
+            return True
+        return False
+        
+
 class CephCluster(object):
     @property
     def admin_remote(self):
