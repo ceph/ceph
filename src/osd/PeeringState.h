@@ -13,6 +13,8 @@
 #include <string>
 #include <atomic>
 
+#include "include/ceph_assert.h"
+
 #include "PGLog.h"
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
