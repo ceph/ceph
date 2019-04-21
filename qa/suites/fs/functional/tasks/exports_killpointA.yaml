@@ -9,6 +9,4 @@ tasks:
 - cephfs_test_runner:
     fail_on_skip: false
     modules:
-      - tasks.cephfs.test_exports.TestExports
-      - tasks.cephfs.test_exports.TestExportPin
-      - tasks.cephfs.test_exports.TestEphemeralPins
+      - tasks.cephfs.test_exports.TestKillPointsA
