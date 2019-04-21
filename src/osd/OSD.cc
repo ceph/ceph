@@ -8515,7 +8515,6 @@ void OSD::consume_map()
         it != pg_map.end();
         ++it) {
       PG *pg = it->second;
-      pg->lock();
       if (pg->is_primary())
         num_pg_primary++;
       else if (pg->is_replica())
@@ -8529,8 +8528,6 @@ void OSD::consume_map()
       } else {
         service.init_splits_between(it->first, service.get_osdmap(), osdmap);
       }
-
-      pg->unlock();
     }
 
     lock_guard<mutex> pending_creates_locker{pending_creates_lock};
@@ -8578,9 +8575,7 @@ void OSD::consume_map()
         it != pg_map.end();
         ++it) {
       PG *pg = it->second;
-      pg->lock();
       pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
-      pg->unlock();
     }
 
     logger->set(l_osd_pg, pg_map.size());
@@ -9944,9 +9939,11 @@ void OSD::process_peering_events(
       // handle an event
       peering_wq.queue(pg);
     } else {
+      pg->peering_lock();
       assert(!pg->peering_queue.empty());
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
+      pg->peering_unlock();
       pg->handle_peering_event(evt, &rctx);
     }
     need_up_thru = pg->need_up_thru || need_up_thru;

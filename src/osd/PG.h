@@ -310,6 +310,7 @@ protected:
    * unlock() when done with the current pointer (_most common_).
    */  
   mutable Mutex _lock;
+  mutable Mutex _peering_lock;
   std::atomic_uint ref{0};
 
 #ifdef PG_DEBUG_REFS
@@ -335,6 +336,10 @@ public:
 
   bool is_locked() const {
     return _lock.is_locked();
+  }
+  void peering_lock() const;
+  void peering_unlock() const {
+    _peering_lock.Unlock();
   }
 
 #ifdef PG_DEBUG_REFS

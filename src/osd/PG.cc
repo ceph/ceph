@@ -291,6 +291,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.shard),
   osdmap_ref(curmap), last_persisted_osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
+  _peering_lock("PG::_peering_lock"),
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
@@ -368,6 +369,12 @@ void PG::lock(bool no_lockdep) const
   assert(!dirty_big_info);
 
   dout(30) << "lock" << dendl;
+}
+
+void PG::peering_lock() const
+{
+  _peering_lock.Lock();
+  dout(30) << "_peering_lock" << dendl;
 }
 
 std::string PG::gen_prefix() const
@@ -5768,10 +5775,12 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 void PG::set_last_peering_reset()
 {
   dout(20) << "set_last_peering_reset " << get_osdmap()->get_epoch() << dendl;
+  peering_lock();
   if (last_peering_reset != get_osdmap()->get_epoch()) {
     last_peering_reset = get_osdmap()->get_epoch();
     reset_interval_flush();
   }
+  peering_unlock();
 }
 
 struct FlushState {
@@ -6307,8 +6316,10 @@ void PG::take_waiters()
   for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
        i != peering_waiters.end();
        ++i) osd->queue_for_peering(this);
+  peering_lock();
   peering_queue.splice(peering_queue.begin(), peering_waiters,
 		       peering_waiters.begin(), peering_waiters.end());
+  peering_unlock();
 }
 
 void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
@@ -6326,9 +6337,13 @@ void PG::handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx)
 
 void PG::queue_peering_event(CephPeeringEvtRef evt)
 {
-  if (old_peering_evt(evt))
+  peering_lock();
+  if (old_peering_evt(evt)) {
+    peering_unlock();
     return;
+  }
   peering_queue.push_back(evt);
+  peering_unlock();
   osd->queue_for_peering(this);
 }
 
