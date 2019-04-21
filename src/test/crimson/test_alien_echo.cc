@@ -42,7 +42,7 @@ struct Server {
   struct ServerDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+    seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
@@ -79,7 +79,7 @@ struct Client {
   struct ClientDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+    seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "client got pong " << *m << std::endl;
       ++count;
