@@ -733,10 +733,7 @@ seastar::future<> ProtocolV1::read_message()
       seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
           logger().debug("{} <= {}@{} === {}", messenger,
                 msg->get_source(), conn.peer_addr, *msg);
-          return dispatcher.ms_dispatch(
-              seastar::static_pointer_cast<SocketConnection>(
-                conn.shared_from_this()),
-              std::move(msg))
+          return dispatcher.ms_dispatch(&conn, std::move(msg))
             .handle_exception([this] (std::exception_ptr eptr) {
               logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
               ceph_assert(false);

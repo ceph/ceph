@@ -143,14 +143,14 @@ private:
 private:
   void tick();
 
-  seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn,
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
 				MessageRef m) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
-  seastar::future<> handle_monmap(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_monmap(ceph::net::Connection* conn,
 				  Ref<MMonMap> m);
-  seastar::future<> handle_auth_reply(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_auth_reply(ceph::net::Connection* conn,
 				      Ref<MAuthReply> m);
   seastar::future<> handle_subscribe_ack(Ref<MMonSubscribeAck> m);
   seastar::future<> handle_get_version_reply(Ref<MMonGetVersionReply> m);

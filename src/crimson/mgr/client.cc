@@ -49,7 +49,7 @@ seastar::future<> Client::stop()
   });
 }
 
-seastar::future<> Client::ms_dispatch(ceph::net::ConnectionRef conn,
+seastar::future<> Client::ms_dispatch(ceph::net::Connection* conn,
                                       MessageRef m)
 {
   switch(m->get_type()) {
@@ -90,7 +90,7 @@ seastar::future<> Client::reconnect()
   });
 }
 
-seastar::future<> Client::handle_mgr_map(ceph::net::ConnectionRef,
+seastar::future<> Client::handle_mgr_map(ceph::net::Connection*,
                                          Ref<MMgrMap> m)
 {
   mgrmap = m->get_map();
@@ -104,7 +104,7 @@ seastar::future<> Client::handle_mgr_map(ceph::net::ConnectionRef,
   }
 }
 
-seastar::future<> Client::handle_mgr_conf(ceph::net::ConnectionRef conn,
+seastar::future<> Client::handle_mgr_conf(ceph::net::Connection* conn,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);
