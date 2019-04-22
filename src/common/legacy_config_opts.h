@@ -755,6 +755,7 @@ OPTION(osd_verify_sparse_read_holes, OPT_BOOL)  // read fiemap-reported holes an
 OPTION(osd_backoff_on_unfound, OPT_BOOL)   // object unfound
 OPTION(osd_backoff_on_degraded, OPT_BOOL) // [mainly for debug?] object unreadable/writeable
 OPTION(osd_backoff_on_peering, OPT_BOOL)  // [debug] pg peering
+OPTION(osd_debug_im_sure_no_pg_ever_split, OPT_BOOL)
 OPTION(osd_debug_crash_on_ignored_backoff, OPT_BOOL) // crash osd if client ignores a backoff; useful for debugging
 OPTION(osd_debug_inject_dispatch_delay_probability, OPT_DOUBLE)
 OPTION(osd_debug_inject_dispatch_delay_duration, OPT_DOUBLE)

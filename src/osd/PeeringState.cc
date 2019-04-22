@@ -2090,6 +2090,8 @@ void PeeringState::activate(
 
   // init complete pointer
   if (missing.num_missing() == 0) {
+    if (cct->_conf->osd_debug_im_sure_no_pg_ever_split)
+      ceph_assert(info.last_complete == info.last_update);
     psdout(10) << "activate - no missing, moving last_complete " << info.last_complete
 	     << " -> " << info.last_update << dendl;
     info.last_complete = info.last_update;

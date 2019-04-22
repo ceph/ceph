@@ -3686,6 +3686,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Turn up debug levels during shutdown"),
 
+    Option("osd_debug_im_sure_no_pg_ever_split", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("debug on the circumstance pg never split"),
+
     Option("osd_debug_crash_on_ignored_backoff", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
