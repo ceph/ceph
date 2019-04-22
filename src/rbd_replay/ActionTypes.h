@@ -325,7 +325,7 @@ public:
   static void generate_test_instances(std::list<ActionEntry *> &o);
 
 private:
-  void decode(__u8 version, bufferlist::const_iterator &it);
+  void decode_versioned(__u8 version, bufferlist::const_iterator &it);
 };
 
 WRITE_CLASS_ENCODER(ActionEntry);
