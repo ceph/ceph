@@ -151,5 +151,5 @@ Limitations
 .. _Install and Configure libvirt: ../libvirt
 .. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
 .. _Storage Tags: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/4.11/storage.html#storage-tags
-.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/master/service_offerings.html#creating-a-new-disk-offering
+.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/en/4.12.0.0/adminguide/service_offerings.html#creating-a-new-disk-offering
 .. _User Management: ../../rados/operations/user-management
