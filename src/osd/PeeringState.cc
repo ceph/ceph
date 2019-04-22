@@ -2261,6 +2261,7 @@ void PeeringState::activate(
         // Save num_bytes for reservation request, can't be negative
         peer_bytes[peer] = std::max<int64_t>(0, pi.stats.stats.sum.num_bytes);
         pi.stats.stats.clear();
+        pi.stats.stats.sum.num_bytes = peer_bytes[peer];
 
 	// initialize peer with our purged_snaps.
 	pi.purged_snaps = info.purged_snaps;
@@ -4781,9 +4782,6 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 	evt.primary_num_bytes, evt.local_num_bytes)) {
     post_event(RejectRemoteReservation());
   } else {
-    // Use un-ec-adjusted bytes for stats.
-    ps->info.stats.stats.sum.num_bytes = evt.local_num_bytes;
-
     PGPeeringEventRef preempt;
     if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
