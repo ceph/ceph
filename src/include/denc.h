@@ -88,6 +88,8 @@ public:
 	     ceph::bufferlist::contiguous_appender& appender)
     : name{name},
       appender{appender},
+      bl_offset{appender.bl.length()},
+      space_offset{space_size()},
       start{appender.get_pos()}
   {}
   ~DencDumper() {
@@ -106,6 +108,9 @@ private:
       t &= t - 1;
     return bits <= 2;
   }
+  size_t space_size() {
+    return appender.get_logical_offset() - appender.get_out_of_band_offset();
+  }
   void dump() {
     char fn[PATH_MAX];
     ::snprintf(fn, sizeof(fn),
@@ -115,12 +120,23 @@ private:
     if (fd < 0) {
       return;
     }
-    size_t len = appender.get_pos() - start;
-    [[maybe_unused]] int r = ::write(fd, start, len);
+    auto close_fd = make_scope_guard([fd] { ::close(fd); });
+    if (auto bl_delta = appender.bl.length() - bl_offset; bl_delta > 0) {
+      ceph::bufferlist dump_bl;
+      appender.bl.copy(bl_offset + space_offset, bl_delta - space_offset, dump_bl);
+      const size_t space_len = space_size();
+      dump_bl.append(appender.get_pos() - space_len, space_len);
+      dump_bl.write_fd(fd);
+    } else {
+      size_t len = appender.get_pos() - start;
+      [[maybe_unused]] int r = ::write(fd, start, len);
+    }
     ::close(fd);
   }
   const char* name;
   ceph::bufferlist::contiguous_appender& appender;
+  const size_t bl_offset;
+  const size_t space_offset;
   const char* start;
   static int i;
 };
