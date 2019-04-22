@@ -188,7 +188,7 @@ Erasure code profile examples using low level configuration
 Minimal testing
 ---------------
 
-It is strictly equivalent to using the default erasure code profile. The *DD*
+It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
 implies *K=2*, the *c* implies *M=1* and the *jerasure* plugin is used
 by default.::
 
