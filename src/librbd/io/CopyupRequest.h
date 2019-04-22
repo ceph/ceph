@@ -87,6 +87,7 @@ private:
   bool m_deep_copy = false;
   bool m_flatten = false;
   bool m_copyup_required = true;
+  bool m_copyup_is_zero = true;
 
   ceph::bufferlist m_copyup_data;
 

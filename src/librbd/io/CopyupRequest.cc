@@ -180,6 +180,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   ldout(cct, 20) << "oid=" << m_oid << ", r=" << r << dendl;
 
   m_lock.Lock();
+  m_copyup_is_zero = m_copyup_data.is_zero();
   m_copyup_required = is_copyup_required();
   disable_append_requests();
 
@@ -369,8 +370,8 @@ void CopyupRequest<I>::copyup() {
   ldout(cct, 20) << "oid=" << m_oid << dendl;
 
   bool copy_on_read = m_pending_requests.empty();
-  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_data.is_zero();
-  if (m_copyup_data.is_zero()) {
+  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_is_zero;
+  if (m_copyup_is_zero) {
     m_copyup_data.clear();
   }
 
@@ -522,7 +523,7 @@ bool CopyupRequest<I>::is_copyup_required() {
     return true;
   }
 
-  if (!m_copyup_data.is_zero()) {
+  if (!m_copyup_is_zero) {
     return true;
   }
 
