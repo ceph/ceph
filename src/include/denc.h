@@ -77,37 +77,60 @@ inline constexpr bool denc_supported = denc_traits<T>::supported;
 # include <sys/types.h>
 # include <sys/stat.h>
 # include <fcntl.h>
+
 # define ENCODE_STR(x) #x
 # define ENCODE_STRINGIFY(x) ENCODE_STR(x)
-# define DENC_DUMP_PRE(Type)			\
-  char *__denc_dump_pre = p.get_pos();
-  // this hackery with bits below is just to get a semi-reasonable
-  // distribution across time.  it is somewhat exponential but not
-  // quite.
-# define DENC_DUMP_POST(Type)			\
-  do {									\
-    static int i = 0;							\
-    i++;								\
-    int bits = 0;							\
-    for (unsigned t = i; t; bits++)					\
-      t &= t - 1;							\
-    if (bits > 2)							\
-      break;								\
-    char fn[PATH_MAX];							\
-    ::snprintf(fn, sizeof(fn),						\
-	     ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", #Type,		\
-	     getpid(), i++);						\
-    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);		\
-    if (fd >= 0) {							\
-      size_t len = p.get_pos() - __denc_dump_pre;			\
-      int r = ::write(fd, __denc_dump_pre, len);			\
-      (void)r;								\
-      ::close(fd);							\
-    }									\
-  } while (0)
+
+template<typename T>
+class DencDumper {
+public:
+  DencDumper(const char* name,
+	     ceph::bufferlist::contiguous_appender& appender)
+    : name{name},
+      appender{appender},
+      start{appender.get_pos()}
+  {}
+  ~DencDumper() {
+    if (do_sample()) {
+      dump();
+    }
+  }
+private:
+  static bool do_sample() {
+    // this hackery with bits below is just to get a semi-reasonable
+    // distribution across time.  it is somewhat exponential but not
+    // quite.
+    i++;
+    int bits = 0;
+    for (unsigned t = i; t; bits++)
+      t &= t - 1;
+    return bits <= 2;
+  }
+  void dump() {
+    char fn[PATH_MAX];
+    ::snprintf(fn, sizeof(fn),
+	       ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", name,
+	       getpid(), i++);
+    int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC, 0644);
+    if (fd < 0) {
+      return;
+    }
+    size_t len = appender.get_pos() - start;
+    [[maybe_unused]] int r = ::write(fd, start, len);
+    ::close(fd);
+  }
+  const char* name;
+  ceph::bufferlist::contiguous_appender& appender;
+  const char* start;
+  static int i;
+};
+
+template<typename T> int DencDumper<T>::i = 0;
+
+# define DENC_DUMP_PRE(Type)						\
+  DencDumper<Type> _denc_dumper{#Type, p};
 #else
 # define DENC_DUMP_PRE(Type)
-# define DENC_DUMP_POST(Type)
 #endif
 
 
@@ -1700,7 +1723,6 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   void encode(::ceph::buffer::list::contiguous_appender& p) const {	\
     DENC_DUMP_PRE(Type);						\
     _denc_friend(*this, p);						\
-    DENC_DUMP_POST(Type);						\
   }									\
   void decode(::ceph::buffer::ptr::const_iterator& p) {			\
     _denc_friend(*this, p);						\
@@ -1718,7 +1740,6 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   void encode(::ceph::buffer::list::contiguous_appender& p, uint64_t f) const { \
     DENC_DUMP_PRE(Type);						\
     _denc_friend(*this, p, f);						\
-    DENC_DUMP_POST(Type);						\
   }									\
   void decode(::ceph::buffer::ptr::const_iterator& p, uint64_t f=0) {	\
     _denc_friend(*this, p, f);						\
