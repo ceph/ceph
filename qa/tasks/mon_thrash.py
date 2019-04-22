@@ -41,11 +41,11 @@ class MonitorThrasher:
                         the monitor (default: 10)
     thrash_delay        Number of seconds to wait in-between
                         test iterations (default: 0)
-    thrash_store        Thrash monitor store before killing the monitor being thrashed (default: False)
-    thrash_store_probability  Probability of thrashing a monitor's store
+    store_thrash        Thrash monitor store before killing the monitor being thrashed (default: False)
+    store_thrash_probability  Probability of thrashing a monitor's store
                               (default: 50)
     thrash_many         Thrash multiple monitors instead of just one. If
-                        'maintain-quorum' is set to False, then we will
+                        'maintain_quorum' is set to False, then we will
                         thrash up to as many monitors as there are
                         available. (default: False)
     maintain_quorum     Always maintain quorum, taking care on how many
@@ -62,7 +62,7 @@ class MonitorThrasher:
     scrub               Scrub after each iteration (default: True)
     check_mds_failover  Check if mds failover happened (default: False)
 
-    Note: if 'store-thrash' is set to True, then 'maintain-quorum' must also
+    Note: if 'store_thrash' is set to True, then 'maintain_quorum' must also
           be set to True.
 
     For example::
@@ -72,8 +72,8 @@ class MonitorThrasher:
     - mon_thrash:
         revive_delay: 20
         thrash_delay: 1
-        thrash_store: true
-        thrash_store_probability: 40
+        store_thrash: true
+        store_thrash_probability: 40
         seed: 31337
         maintain_quorum: true
         thrash_many: true
