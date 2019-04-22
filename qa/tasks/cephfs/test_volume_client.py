@@ -983,6 +983,24 @@ vc.disconnect()
             obj_data = obj_data
         )))
 
+    def test_put_object_versioned(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test_data'
+        obj_name = 'test_vc_obj'
+        pool_name = self.fs.get_data_pool_names()[0]
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+
+        self._volume_client_python(vc_mount, dedent("""
+                data, version_before = vc.get_object_and_version("{pool_name}", "{obj_name}")
+                data += 'modification1'
+                vc.put_object_versioned("{pool_name}", "{obj_name}", data, version)
+                data, version_after = vc.get_object_and_version("{pool_name}", "{obj_name}")
+                assert version_after == version_before + 1
+        """).format(pool_name=pool_name, obj_name=obj_name))
+
     # test that put_object_versioned() matches the object version with
     # supplied version number before writing to the object.
     def test_version_check_for_put_object_versioned(self):
