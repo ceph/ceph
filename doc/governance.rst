@@ -52,6 +52,7 @@ Current CLT members are:
 
  * Abhishek Lekshmanan <abhishek@suse.com>
  * Alfredo Deza <adeza@redhat.com>
+ * Casey Bodley <cbodley@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>
  * Jason Dillaman <dillaman@redhat.com>
