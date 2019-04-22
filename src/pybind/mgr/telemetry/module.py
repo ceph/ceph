@@ -186,7 +186,8 @@ class Module(MgrModule):
     def compile_report(self):
         report = {
             'leaderboard': False,
-            'report_version': 1
+            'report_version': 1,
+            'report_timestamp': datetime.utcnow().isoformat()
         }
 
         if self.leaderboard:
