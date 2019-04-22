@@ -8,7 +8,7 @@ tasks:
     conf:
       client:
         rbd cache: true
-        rbd cache policy: writeback
+        rbd cache policy: writearound
 - workunit:
     clients:
       all: [rbd/qemu-iotests.sh]
