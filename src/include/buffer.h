@@ -77,6 +77,8 @@ template<uint8_t S>
 struct sha_digest_t;
 using sha1_digest_t = sha_digest_t<20>;
 
+template<typename T> class DencDumper;
+
 namespace ceph {
 
 template <class T>
@@ -808,6 +810,7 @@ inline namespace v14_2_0 {
       }
 
       friend class list;
+      template<typename Type> friend class ::DencDumper;
 
     public:
       ~contiguous_appender() {
