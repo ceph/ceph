@@ -159,7 +159,6 @@ void CopyupRequest<I>::read_from_parent() {
     return;
   }
 
-  m_deep_copy = false;
   auto comp = AioCompletion::create_and_start<
     CopyupRequest<I>,
     &CopyupRequest<I>::handle_read_from_parent>(
@@ -179,6 +178,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << ", r=" << r << dendl;
 
+  m_image_ctx->snap_lock.get_read();
   m_lock.Lock();
   m_copyup_is_zero = m_copyup_data.is_zero();
   m_copyup_required = is_copyup_required();
@@ -186,6 +186,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 
   if (r < 0 && r != -ENOENT) {
     m_lock.Unlock();
+    m_image_ctx->snap_lock.put_read();
 
     lderr(cct) << "error reading from parent: " << cpp_strerror(r) << dendl;
     finish(r);
@@ -194,12 +195,22 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 
   if (!m_copyup_required) {
     m_lock.Unlock();
+    m_image_ctx->snap_lock.put_read();
 
     ldout(cct, 20) << "no-op, skipping" << dendl;
     finish(0);
     return;
   }
+
+  // copyup() will affect snapshots only if parent data is not all
+  // zeros.
+  if (!m_copyup_is_zero) {
+    m_snap_ids.insert(m_snap_ids.end(), m_image_ctx->snaps.rbegin(),
+                      m_image_ctx->snaps.rend());
+  }
+
   m_lock.Unlock();
+  m_image_ctx->snap_lock.put_read();
 
   update_object_maps();
 }
@@ -217,7 +228,6 @@ void CopyupRequest<I>::deep_copy() {
 
   ldout(cct, 20) << "oid=" << m_oid << ", flatten=" << m_flatten << dendl;
 
-  m_deep_copy = true;
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
   auto req = deep_copy::ObjectCopyRequest<I>::create(
@@ -269,6 +279,14 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
     return;
   }
 
+  // For deep-copy, copyup() will never affect snapshots.  However,
+  // this state machine is responsible for updating object maps for
+  // snapshots that have been created on destination image after
+  // migration started.
+  if (r != -ENOENT) {
+    compute_deep_copy_snap_ids();
+  }
+
   m_lock.Unlock();
   m_image_ctx->snap_lock.put_read();
 
@@ -289,15 +307,6 @@ void CopyupRequest<I>::update_object_maps() {
 
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << dendl;
-
-  if (!m_image_ctx->snaps.empty()) {
-    if (m_deep_copy) {
-      compute_deep_copy_snap_ids();
-    } else {
-      m_snap_ids.insert(m_snap_ids.end(), m_image_ctx->snaps.rbegin(),
-                        m_image_ctx->snaps.rend());
-    }
-  }
 
   bool copy_on_read = m_pending_requests.empty();
   uint8_t head_object_map_state = OBJECT_EXISTS;
