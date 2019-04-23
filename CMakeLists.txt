@@ -406,13 +406,9 @@ set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
 CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-find_package(NSS REQUIRED)
-find_package(NSPR REQUIRED)
 find_package(OpenSSL REQUIRED)
-# TODO: use NSS only for validation of the OpenSSL-based implementations
-set(USE_NSS 1)
 set(USE_OPENSSL 1)
-set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
+set(CRYPTO_LIBS OpenSSL::Crypto)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)

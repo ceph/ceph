@@ -179,8 +179,6 @@ if(${ENABLE_COVERAGE})
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
-include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
-
 set(GCOV_PREFIX_STRIP 4)
 
 # the src/.git_version file may be written out by make-dist; otherwise

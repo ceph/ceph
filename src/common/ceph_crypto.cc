@@ -16,14 +16,6 @@
 #include "common/config.h"
 #include "ceph_crypto.h"
 
-#ifdef USE_NSS
-
-// for SECMOD_RestartModules()
-#include <secmod.h>
-#include <nspr.h>
-
-#endif /*USE_NSS*/
-
 #ifdef USE_OPENSSL
 #include <openssl/evp.h>
 
@@ -173,77 +165,13 @@ static void shutdown() {
 }
 
 } // namespace ceph::crypto::openssl
-#endif /*USE_OPENSSL*/
-
-#ifdef USE_NSS
-
-namespace ceph::crypto::nss {
-
-static pthread_mutex_t crypto_init_mutex = PTHREAD_MUTEX_INITIALIZER;
-static uint32_t crypto_refs = 0;
-static NSSInitContext *crypto_context = NULL;
-static pid_t crypto_init_pid = 0;
-
-
-static void init(CephContext *cct)
-{
-  pid_t pid = getpid();
-  pthread_mutex_lock(&crypto_init_mutex);
-  if (crypto_init_pid != pid) {
-    if (crypto_init_pid > 0) {
-      SECMOD_RestartModules(PR_FALSE);
-    }
-    crypto_init_pid = pid;
-  }
-
-  if (++crypto_refs == 1) {
-    NSSInitParameters init_params;
-    memset(&init_params, 0, sizeof(init_params));
-    init_params.length = sizeof(init_params);
-
-    uint32_t flags = (NSS_INIT_READONLY | NSS_INIT_PK11RELOAD);
-    if (cct->_conf->nss_db_path.empty()) {
-      flags |= (NSS_INIT_NOCERTDB | NSS_INIT_NOMODDB);
-    }
-    crypto_context = NSS_InitContext(cct->_conf->nss_db_path.c_str(), "", "",
-                                     SECMOD_DB, &init_params, flags);
-  }
-  pthread_mutex_unlock(&crypto_init_mutex);
-  ceph_assert_always(crypto_context != NULL);
-}
-
-static void shutdown(bool shared)
-{
-  pthread_mutex_lock(&crypto_init_mutex);
-  ceph_assert_always(crypto_refs > 0);
-  if (--crypto_refs == 0) {
-    NSS_ShutdownContext(crypto_context);
-    if (!shared) {
-      PR_Cleanup();
-    }
-    crypto_context = NULL;
-    crypto_init_pid = 0;
-  }
-  pthread_mutex_unlock(&crypto_init_mutex);
-}
-
-ceph::crypto::nss::HMAC::~HMAC()
-{
-  PK11_DestroyContext(ctx, PR_TRUE);
-  PK11_FreeSymKey(symkey);
-  PK11_FreeSlot(slot);
-}
-
-} // namespace ceph::crypto::nss
 #else
 # error "No supported crypto implementation found."
-#endif /*USE_NSS*/
+#endif /*USE_OPENSSL*/
 
 
 void ceph::crypto::init(CephContext* const cct) {
-#ifdef USE_NSS
-  ceph::crypto::nss::init(cct);
-#endif
+  static_cast<void>(cct);
 
 #ifdef USE_OPENSSL
   ceph::crypto::ssl::init();
@@ -251,9 +179,7 @@ void ceph::crypto::init(CephContext* const cct) {
 }
 
 void ceph::crypto::shutdown(const bool shared) {
-#ifdef USE_NSS
-  ceph::crypto::nss::shutdown(shared);
-#endif
+  static_cast<void>(shared);
 
 #ifdef USE_OPENSSL
   ceph::crypto::ssl::shutdown();
@@ -286,4 +212,6 @@ void ceph::crypto::ssl::OpenSSLDigest::Final(unsigned char *digest) {
   unsigned int s;
   EVP_DigestFinal_ex(mpContext, digest, &s);
 }
+#else
+# error "No supported crypto implementation found."
 #endif /*USE_OPENSSL*/
