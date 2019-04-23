@@ -37,27 +37,6 @@ TokenEngine::is_applicable(const std::string& token) const noexcept
   return ! token.empty() && ! cct->_conf->rgw_keystone_url.empty();
 }
 
-TokenEngine::token_envelope_t
-TokenEngine::decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const
-{
-  ceph::buffer::list token_body_bl;
-  int ret = rgw_decode_b64_cms(cct, token, token_body_bl);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "cannot decode pki token" << dendl;
-    throw ret;
-  } else {
-    ldpp_dout(dpp, 20) << "successfully decoded pki token" << dendl;
-  }
-
-  TokenEngine::token_envelope_t token_body;
-  ret = token_body.parse(cct, token, token_body_bl, config.get_api_version());
-  if (ret < 0) {
-    throw ret;
-  }
-
-  return token_body;
-}
-
 boost::optional<TokenEngine::token_envelope_t>
 TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const
 {
