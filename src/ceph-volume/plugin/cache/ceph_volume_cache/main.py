@@ -17,8 +17,6 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 
 
 # TODO handle OSD removal
-# TODO add a 'cache status' function that shows which OSDs are cached, cache mode, etc
-# TODO look into getting cache statistics
 # TODO add change caching mode
 # TODO  stderr: WARNING: Maximum supported pool metadata size is 16.00 GiB.
 # TODO  stderr: WARNING: recovery of pools without pool metadata spare LV is not automated.
@@ -30,9 +28,8 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 #   orchestrator.
 # TODO raise exceptions instead of print+return
 # TODO add error handling at every step
-# TODO what if you run cache add twice on the same OSD?
-# TODO what happens after hard reset?
 # TODO what happens on disk failures?
+# TODO make sure nothing breaks on filestore/non-LVM bluestore
 
 
 """
@@ -48,6 +45,12 @@ A: origin_lv won't be found as no LV will have the ceph.db_device or
 Q: For 'rm', what if the OSD doesn't have a cache?
 A: origin_lv won't be found as no LV will have the ceph.cache_lv tag.
 
+Q: What if you run cache add twice on the same OSD?
+A: This plugin makes sure the origin LV isn't cached by looking at the tag ceph.cache_lv.
+
+Q: What happens after hard reset?
+A: 'ceph-volume cache info' shows that LVs are still cached as expeted.
+
 """
 
 def pretty(s):
@@ -55,7 +58,6 @@ def pretty(s):
 
 
 def pretty_lv(lv):
-    print('-------------')
     print('lv_name: ' + lv.lv_name)
     print('type: ' + lv.tags.get('ceph.type', ''))
     print('osdid: ' + lv.tags.get('ceph.osd_id', ''))
@@ -211,7 +213,7 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_lv_size = md_partition_size - disk.Size(gb=1)
     data_lv_size = data_partition_size - disk.Size(gb=1)
 
-    # TODO: update the "ceph.block_device" tag to point to the origin LV
+    # TODO: update the "ceph.block_device" tag to point to the origin LV - later comment: why? is this still needed?
     # TODO: update these new LVs' tags (ceph.osd_id, ceph.cluster_fsid, etc.)
     cache_md_lv = api.create_lv(
         'cache_md_osd.' + osdid,
@@ -232,8 +234,8 @@ def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
 
 def _create_lvmcache(vg_name, origin_lv, cache_metadata_lv, cache_data_lv):
     # TODO: test that cache data is greater than metadata
-    api.create_lvmcache_pool(vg_name, cache_data_lv, cache_metadata_lv)
-    api.create_lvmcache(vg_name, cache_data_lv, origin_lv)
+    create_lvmcache_pool(vg_name, cache_data_lv, cache_metadata_lv)
+    create_lvmcache(vg_name, cache_data_lv, origin_lv)
 
     # After this point, cache_metadata_lv and cache_data_lv are hidden, and
     # their names have changed from:
@@ -251,7 +253,7 @@ def _create_lvmcache(vg_name, origin_lv, cache_metadata_lv, cache_data_lv):
 
     # TODO do we need this tag?
     origin_lv.set_tag('ceph.cache_lv', cache_data_lv.lv_name)
-    api.set_lvmcache_caching_mode('writeback', vg_name, origin_lv)
+    set_lvmcache_caching_mode('writeback', vg_name, origin_lv)
 
     return cache_lv
 
@@ -409,17 +411,14 @@ $> ceph-volume cache dump
         )
         args = parser.parse_args(main_args)
 
+        if len(self.argv) == 0:
+            return parser.print_help()
+
         if self.argv[0] == 'dump':
             lvs = api.Volumes()
             for lv in lvs:
                 pretty_lv(lv)
             return
-
-        if len(self.argv) <= 1:
-            return parser.print_help()
-
-        # TODO make sure OSD is on bluestore
-        # TODO make sure OSDs are LVs (deployed with ceph-volume/LVM)
 
         if args.osdid and args.origin:
             print('Can\'t have --osdid and --origin')
@@ -452,6 +451,9 @@ $> ceph-volume cache dump
                     print('Can\'t find origin LV for OSD ' + args.osdid)
                     return
                 vg_name = origin_lv.vg_name
+                if 'ceph.cache_lv' in origin_lv.tags:
+                    print('Error: Origin LV is already cached')
+                    return
             elif args.origin:
                 # origin is already the LV's name, so no need to look for
                 # --data, --db or --wal flags.
@@ -468,8 +470,7 @@ $> ceph-volume cache dump
                 args.cachedata,
                 osdid)
         elif self.argv[0] == 'rm':
-            # TODO verify that the OSD has a cache
-            # TODO handle when passing --origin
+            # TODO handle when passing --origin instead of --osdid
             if args.osdid and not args.origin:
                 lvs = api.Volumes()
                 lvs.filter(lv_tags={'ceph.osd_id': args.osdid})
