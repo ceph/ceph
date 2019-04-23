@@ -57,7 +57,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --system-site-packages $vdir
+    virtualenv -p python3 --system-site-packages $vdir
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
