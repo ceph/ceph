@@ -1472,6 +1472,8 @@ int MonClient::handle_auth_request(
     return 0;
   }
   ldout(cct,10) << __func__ << " bad authorizer on " << con << dendl;
+  // discard old challenge
+  auth_meta->authorizer_challenge.reset();
   return -EACCES;
 }
 
