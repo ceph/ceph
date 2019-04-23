@@ -948,7 +948,7 @@ std::string rgwlc_s3_expiration_header(
       continue;
 
     if(! prefix.empty()) {
-      if (boost::starts_with(obj_key.name, prefix))
+      if (! boost::starts_with(obj_key.name, prefix))
 	continue;
     }
 
