@@ -154,19 +154,19 @@ bool update_object_map(I& image_ctx, uint64_t object_no, uint8_t current_state,
   CephContext *cct = image_ctx.cct;
   uint64_t snap_id = image_ctx.snap_id;
 
-  uint8_t state = (*image_ctx.object_map)[object_no];
-  if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
+  current_state = (*image_ctx.object_map)[object_no];
+  if (current_state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
       snap_id == CEPH_NOSNAP) {
     // might be writing object to OSD concurrently
-    new_state = state;
+    new_state = current_state;
   }
 
-  if (new_state != state) {
+  if (new_state != current_state) {
     ldout(cct, 15) << image_ctx.get_object_name(object_no)
-      << " rebuild updating object map "
-      << static_cast<uint32_t>(state) << "->"
-      << static_cast<uint32_t>(new_state) << dendl;
-    (*image_ctx.object_map)[object_no] = new_state;
+                   << " rebuild updating object map "
+                   << static_cast<uint32_t>(current_state) << "->"
+                   << static_cast<uint32_t>(new_state) << dendl;
+    image_ctx.object_map->set_state(object_no, new_state, current_state);
   }
   return false;
 }

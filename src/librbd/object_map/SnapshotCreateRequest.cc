@@ -132,8 +132,7 @@ bool SnapshotCreateRequest::send_add_snapshot() {
 }
 
 void SnapshotCreateRequest::update_object_map() {
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
-  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
 
   auto it = m_object_map.begin();
   auto end_it = m_object_map.end();

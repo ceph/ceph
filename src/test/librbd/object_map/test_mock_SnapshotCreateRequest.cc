@@ -86,6 +86,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, Success) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
 
   uint64_t snap_id = 1;
@@ -98,7 +99,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, Success) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new SnapshotCreateRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
@@ -115,6 +116,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, ReadMapError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
 
   uint64_t snap_id = 1;
@@ -124,7 +126,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, ReadMapError) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new SnapshotCreateRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
@@ -141,6 +143,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, WriteMapError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
 
   uint64_t snap_id = 1;
@@ -151,7 +154,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, WriteMapError) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new SnapshotCreateRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
@@ -168,6 +171,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, AddSnapshotError) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
 
   uint64_t snap_id = 1;
@@ -179,7 +183,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, AddSnapshotError) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new SnapshotCreateRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker image_locker(ictx->image_lock);
     request->send();
@@ -196,6 +200,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, FlagCleanObjects) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1024);
   for (uint64_t i = 0; i < object_map.size(); ++i) {
@@ -207,7 +212,7 @@ TEST_F(TestMockObjectMapSnapshotCreateRequest, FlagCleanObjects) {
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *request = new SnapshotCreateRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, &cond_ctx);
   {
     RWLock::RLocker image_locker(ictx->image_lock);
     request->send();

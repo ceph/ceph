@@ -200,7 +200,7 @@ void SnapshotRemoveRequest::compute_next_snap_id() {
 
 void SnapshotRemoveRequest::update_object_map() {
   assert(m_image_ctx.image_lock.is_locked());
-  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
   if (m_next_snap_id == m_image_ctx.snap_id && m_next_snap_id == CEPH_NOSNAP) {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 5) << dendl;
