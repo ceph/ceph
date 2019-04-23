@@ -41,6 +41,7 @@
 #include "include/ceph_assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
+#include "include/scope_guard.h"
 
 #include "buffer.h"
 #include "byteorder.h"
@@ -131,7 +132,6 @@ private:
       size_t len = appender.get_pos() - start;
       [[maybe_unused]] int r = ::write(fd, start, len);
     }
-    ::close(fd);
   }
   const char* name;
   ceph::bufferlist::contiguous_appender& appender;
