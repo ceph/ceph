@@ -1848,13 +1848,15 @@ public:
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const rgw_user& user,               /* in */
                             RGWBucketInfo& bucket_info,         /* in */
-                            rgw_obj& obj);                      /* in */
+                            rgw_obj& obj,                       /* in */
+                            const DoutPrefixProvider *dpp);     /* in/out */                
   int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                                RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
-                               bool& restored);                 /* out */
+                               bool& restored,                 /* out */
+                               const DoutPrefixProvider *dpp);     /* in/out */                
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
@@ -1868,7 +1870,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -1915,6 +1917,7 @@ public:
                        string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
+                       const DoutPrefixProvider *dpp,
                        rgw_zone_set *zones_trace= nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**
@@ -1957,7 +1960,8 @@ public:
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
-               void *progress_data);
+               void *progress_data,
+               const DoutPrefixProvider *dpp);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
@@ -1969,14 +1973,16 @@ public:
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
-               string *petag);
+               string *petag,
+               const DoutPrefixProvider *dpp);
   
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
                      rgw_obj& obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
-                     uint64_t olh_epoch);
+                     uint64_t olh_epoch,
+                     const DoutPrefixProvider *dpp);
 
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
