@@ -208,7 +208,7 @@ public:
    */
   virtual int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) = 0;
 
-  virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& cfs = {}) {
+  virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& options = {}) {
     return -ENOTSUP;
   }
 

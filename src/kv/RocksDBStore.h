@@ -354,12 +354,6 @@ public:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
   uint64_t get_estimated_size(map<string,uint64_t> &extra) override;
-  virtual int64_t request_cache_bytes(
-      PriorityCache::Priority pri, uint64_t cache_bytes) const override;
-  virtual int64_t commit_cache_size() override;
-  virtual std::string get_cache_name() const override {
-    return "RocksDB Block Cache";
-  }
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
