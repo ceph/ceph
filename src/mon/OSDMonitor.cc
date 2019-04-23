@@ -9635,6 +9635,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	break;
       }
       if (err == 0) {
+        if (!unlink_only)
+          pending_inc.new_crush_node_flags[id] = 0;
 	ss << "removed item id " << id << " name '" << name << "' from crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
