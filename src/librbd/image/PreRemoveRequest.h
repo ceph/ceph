@@ -69,6 +69,7 @@ private:
   std::list<obj_watch_t> m_watchers;
 
   std::map<uint64_t, SnapInfo> m_snap_infos;
+  int m_ret_val = 0;
 
   void acquire_exclusive_lock();
   void handle_exclusive_lock(int r);

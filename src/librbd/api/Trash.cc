@@ -19,6 +19,7 @@
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/trash/MoveRequest.h"
+#include "librbd/trash/RemoveRequest.h"
 #include <json_spirit/json_spirit.h>
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/image/ListWatchersRequest.h"
@@ -322,7 +323,8 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
   trash_entries.erase(
       std::remove_if(trash_entries.begin(), trash_entries.end(),
                      [](librbd::trash_image_info_t info) {
-                       return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+                       return info.source != RBD_TRASH_IMAGE_SOURCE_USER &&
+                         info.source != RBD_TRASH_IMAGE_SOURCE_USER_PARENT;
                      }),
       trash_entries.end());
 
@@ -517,41 +519,17 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     return -EBUSY;
   }
 
-  r = cls_client::trash_state_set(&io_ctx, image_id,
-                                  cls::rbd::TRASH_IMAGE_STATE_REMOVING,
-                                  cls::rbd::TRASH_IMAGE_STATE_NORMAL);
-  if (r < 0 && r != -EOPNOTSUPP) {
-    lderr(cct) << "error setting trash image state: "
-               << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   ThreadPool *thread_pool;
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
   C_SaferCond cond;
-  auto req = librbd::image::RemoveRequest<I>::create(
-    io_ctx, "", image_id, force, true, prog_ctx, op_work_queue, &cond);
+  auto req = librbd::trash::RemoveRequest<I>::create(
+      io_ctx, image_id, op_work_queue, force, prog_ctx, &cond);
   req->send();
 
   r = cond.wait();
   if (r < 0) {
-    lderr(cct) << "error removing image " << image_id
-               << ", which is pending deletion" << dendl;
-    int ret = cls_client::trash_state_set(&io_ctx, image_id,
-                                          cls::rbd::TRASH_IMAGE_STATE_NORMAL,
-                                          cls::rbd::TRASH_IMAGE_STATE_REMOVING);
-    if (ret < 0 && ret != -EOPNOTSUPP) {
-      lderr(cct) << "error setting trash image state: "
-                 << cpp_strerror(ret) << dendl;
-    }
-    return r;
-  }
-  r = cls_client::trash_remove(&io_ctx, image_id);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "error removing image " << image_id
-               << " from rbd_trash object" << dendl;
     return r;
   }
 

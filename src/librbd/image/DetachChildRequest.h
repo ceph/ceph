@@ -8,6 +8,7 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "librbd/Types.h"
+#include "librbd/internal.h"
 
 class Context;
 
@@ -50,13 +51,16 @@ private:
    *    |                               v
    *    |                           OPEN_PARENT
    *    |                               |
-   *    |                               v
-   *    |                           REMOVE_SNAPSHOT
-   *    |                               |
-   *    |                               v
-   *    |                           CLOSE_PARENT
-   *    |                               |
-   *    |/------------------------------/
+   *    |                               v           (has more children)
+   *    |                           REMOVE_SNAPSHOT ---------------\
+   *    |                               |                          |
+   *    |                               v                  (noent) |
+   *    |     (auto-delete when     GET_PARENT_TRASH_ENTRY . . . .\|
+   *    |      last child detached)     |                          |
+   *    |                               v                          v
+   *    |                           REMOVE_PARENT_FROM_TRASH   CLOSE_PARENT
+   *    |                               |                          |
+   *    |/------------------------------/--------------------------/
    *    |
    *    v
    * <finish>
@@ -77,6 +81,7 @@ private:
   ImageCtxT* m_parent_image_ctx = nullptr;
 
   ceph::bufferlist m_out_bl;
+  NoOpProgressContext m_no_op;
 
   void clone_v2_child_detach();
   void handle_clone_v2_child_detach(int r);
@@ -89,6 +94,12 @@ private:
 
   void clone_v2_remove_snapshot();
   void handle_clone_v2_remove_snapshot(int r);
+
+  void clone_v2_get_parent_trash_entry();
+  void handle_clone_v2_get_parent_trash_entry(int r);
+
+  void clone_v2_remove_parent_from_trash();
+  void handle_clone_v2_remove_parent_from_trash(int r);
 
   void clone_v2_close_parent();
   void handle_clone_v2_close_parent(int r);
