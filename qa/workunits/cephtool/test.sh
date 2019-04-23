@@ -1554,6 +1554,34 @@ function test_mon_osd()
   ! ceph -s | grep 'NODOWN'
   ! ceph -s | grep 'NOOUT'
 
+  # test crush node flags
+  ceph osd add-noup osd.0
+  ceph osd add-nodown osd.0
+  ceph osd add-noin osd.0
+  ceph osd add-noout osd.0
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep "osd.0"
+  ceph osd rm-noup osd.0
+  ceph osd rm-nodown osd.0
+  ceph osd rm-noin osd.0
+  ceph osd rm-noout osd.0
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep "osd.0"
+
+  ceph osd crush add-bucket foo host root=default
+  ceph osd add-noup foo
+  ceph osd add-nodown foo
+  ceph osd add-noin foo
+  ceph osd add-noout foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | grep foo
+  ceph osd rm-noup foo
+  ceph osd rm-nodown foo
+  ceph osd rm-noin foo
+  ceph osd rm-noout foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep foo
+  ceph osd add-noup foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | grep foo
+  ceph osd crush rm foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep foo
+
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'
