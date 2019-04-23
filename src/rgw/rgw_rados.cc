@@ -3334,7 +3334,8 @@ int RGWRados::on_last_entry_in_listing(RGWBucketInfo& bucket_info,
 int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     const rgw_user& user,
                                     RGWBucketInfo& bucket_info,
-                                    rgw_obj& obj)
+                                    rgw_obj& obj, 
+                                    const DoutPrefixProvider *dpp)
 {
   if (! swift_versioning_enabled(bucket_info)) {
     return 0;
@@ -3411,7 +3412,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *ptag */
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
-               NULL); /* void *progress_data */
+               NULL, /* void *progress_data */
+               dpp); 
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -3426,7 +3428,8 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                                        const rgw_user& user,
                                        RGWBucketInfo& bucket_info,
                                        rgw_obj& obj,
-                                       bool& restored)             /* out */
+                                       bool& restored,                  /* out */
+                                       const DoutPrefixProvider *dpp)
 {
   if (! swift_versioning_enabled(bucket_info)) {
     return 0;
@@ -3503,7 +3506,8 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                        nullptr,       /* string *ptag */
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
-                       nullptr);      /* void *progress_data */
+                       nullptr,       /* void *progress_data */
+                       dpp);      
     if (ret == -ECANCELED || ret == -ENOENT) {
       /* Has already been overwritten, meaning another rgw process already
        * copied it out */
@@ -3999,7 +4003,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp)
 {
   map<string, bufferlist> attrset;
 
@@ -4023,7 +4027,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj)
 
   return copy_obj_data(rctx, dest_bucket_info, dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime, attrset,
-                       0, real_time(), NULL);
+                       0, real_time(), NULL, dpp);
 }
 
 struct obj_time_weight {
@@ -4260,6 +4264,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               const DoutPrefixProvider *dpp,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -4277,7 +4282,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
-                                  obj_ctx, dest_obj, olh_epoch, tag);
+                                  obj_ctx, dest_obj, olh_epoch, tag, dpp);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4568,7 +4573,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
-               void *progress_data)
+               void *progress_data,
+               const DoutPrefixProvider *dpp)
 {
   int ret;
   uint64_t obj_size;
@@ -4587,11 +4593,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   remote_src = !zonegroup.equals(src_bucket_info.zonegroup);
 
   if (remote_src && remote_dest) {
-    ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
     return -EINVAL;
   }
 
-  ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
+  ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
@@ -4599,7 +4605,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data);
+               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp);
   }
 
   map<string, bufferlist> src_attrs;
@@ -4624,7 +4630,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     // may result in data corruption silently when copying
     // multipart objects acorss pools. So reject COPY operations
     //on encrypted objects before it is fully functional.
-    ldout(cct, 0) << "ERROR: copy op for encrypted object " << src_obj
+    ldpp_dout(dpp, 0) << "ERROR: copy op for encrypted object " << src_obj
                   << " has not been implemented." << dendl;
     return -ERR_NOT_IMPLEMENTED;
   }
@@ -4658,7 +4664,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   ret = get_max_chunk_size(dest_bucket_info.placement_rule, dest_obj, &max_chunk_size);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj.bucket << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj.bucket << dendl;
     return ret;
   }
 
@@ -4669,7 +4675,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (astate->has_manifest) {
     src_rule = &astate->manifest.get_tail_placement().placement_rule;
-    ldout(cct, 20) << __func__ << "(): manifest src_rule=" << src_rule->to_str() << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "(): manifest src_rule=" << src_rule->to_str() << dendl;
   }
 
   if (!src_rule || src_rule->empty()) {
@@ -4677,16 +4683,16 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (!get_obj_data_pool(*src_rule, src_obj, &src_pool)) {
-    ldout(cct, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to locate data pool for " << src_obj << dendl;
     return -EIO;
   }
 
   if (!get_obj_data_pool(dest_placement, dest_obj, &dest_pool)) {
-    ldout(cct, 0) << "ERROR: failed to locate data pool for " << dest_obj << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to locate data pool for " << dest_obj << dendl;
     return -EIO;
   }
 
-  ldout(cct, 20) << __func__ << "(): src_rule=" << src_rule->to_str() << " src_pool=" << src_pool
+  ldpp_dout(dpp, 20) << __func__ << "(): src_rule=" << src_rule->to_str() << " src_pool=" << src_pool
                              << " dest_rule=" << dest_placement.to_str() << " dest_pool=" << dest_pool << dendl;
 
   bool copy_data = !astate->has_manifest ||
@@ -4720,7 +4726,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -4739,7 +4745,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   bool copy_itself = (dest_obj == src_obj);
   RGWObjManifest *pmanifest; 
-  ldout(cct, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
+  ldpp_dout(dpp, 20) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
   RGWRados::Object dest_op_target(this, dest_bucket_info, obj_ctx, dest_obj);
   RGWRados::Object::Write write_op(&dest_op_target);
@@ -4826,7 +4832,7 @@ done_ret:
 
       int r = ref.ioctx.operate(riter->oid, &op);
       if (r < 0) {
-        ldout(cct, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: cleanup after error failed to drop reference on obj=" << *riter << dendl;
       }
     }
   }
@@ -4844,7 +4850,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       real_time delete_at,
-               string *petag)
+               string *petag,
+               const DoutPrefixProvider *dpp)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -4853,7 +4860,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
-                                  dest_obj, olh_epoch, tag);
+                                  dest_obj, olh_epoch, tag, dpp);
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
@@ -4864,7 +4871,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     bufferlist bl;
     ret = read_op.read(ofs, end, bl);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: fail to read object data, ret = " << ret << dendl;
       return ret;
     }
 
@@ -4899,7 +4906,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     RGWCompressionInfo cs_info;
     ret = rgw_compression_info_from_attrset(attrs, compressed, cs_info);
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to read compression info" << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to read compression info" << dendl;
       return ret;
     }
     // pass original size if compressed
@@ -4915,7 +4922,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              rgw_obj& obj,
                              const rgw_placement_rule& placement_rule,
                              const real_time& mtime,
-                             uint64_t olh_epoch)
+                             uint64_t olh_epoch,
+                             const DoutPrefixProvider *dpp)
 {
   map<string, bufferlist> attrs;
   real_time read_mtime;
@@ -4949,7 +4957,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       attrs,
                       olh_epoch,
                       real_time(),
-                      nullptr /* petag */);
+                      nullptr /* petag */,
+                      dpp);
   if (ret < 0) {
     return ret;
   }

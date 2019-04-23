@@ -3628,7 +3628,8 @@ void RGWPutObj::execute()
     op_ret = store->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
-                                          obj);
+                                          obj,
+                                          this);
     if (op_ret < 0) {
       return;
     }
@@ -3662,7 +3663,7 @@ void RGWPutObj::execute()
     processor.emplace<MultipartObjectProcessor>(
         &aio, store, s->bucket_info, pdest_placement,
         s->owner.get_id(), obj_ctx, obj,
-        multipart_upload_id, multipart_part_num, multipart_part_str);
+        multipart_upload_id, multipart_part_num, multipart_part_str, this);
   } else if(append) {
     if (s->bucket_info.versioned()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
@@ -3671,7 +3672,7 @@ void RGWPutObj::execute()
     pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
             &aio, store, s->bucket_info, pdest_placement, s->bucket_owner.get_id(),obj_ctx, obj,
-            s->req_id, position, &cur_accounted_size);
+            s->req_id, position, &cur_accounted_size, this);
   } else {
     if (s->bucket_info.versioning_enabled()) {
       if (!version_id.empty()) {
@@ -3684,7 +3685,7 @@ void RGWPutObj::execute()
     pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
         &aio, store, s->bucket_info, pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id);
+        s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id, this);
   }
 
   op_ret = processor->prepare();
@@ -4005,7 +4006,7 @@ void RGWPostObj::execute()
                                     &s->dest_placement,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
-                                    obj, 0, s->req_id);
+                                    obj, 0, s->req_id, this);
     op_ret = processor.prepare();
     if (op_ret < 0) {
       return;
@@ -4552,7 +4553,7 @@ void RGWDeleteObj::execute()
 
     bool ver_restored = false;
     op_ret = store->swift_versioning_restore(*s->sysobj_ctx, *obj_ctx, s->bucket_owner.get_id(),
-                                             s->bucket_info, obj, ver_restored);
+                                             s->bucket_info, obj, ver_restored, this);
     if (op_ret < 0) {
       return;
     }
@@ -4867,7 +4868,8 @@ void RGWCopyObj::execute()
   op_ret = store->swift_versioning_copy(obj_ctx,
                                         dest_bucket_info.owner,
                                         dest_bucket_info,
-                                        dst_obj);
+                                        dst_obj,
+                                        this);
   if (op_ret < 0) {
     return;
   }
@@ -4896,8 +4898,8 @@ void RGWCopyObj::execute()
 			   (version_id.empty() ? NULL : &version_id),
 			   &s->req_id, /* use req_id as tag */
 			   &etag,
-			   copy_obj_progress_cb, (void *)this
-    );
+			   copy_obj_progress_cb, (void *)this, 
+                           this);
 }
 
 int RGWGetACLs::verify_permission()
@@ -6748,7 +6750,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   using namespace rgw::putobj;
 
   AtomicObjectProcessor processor(&aio, store, binfo, &s->dest_placement, bowner.get_id(),
-                                  obj_ctx, obj, 0, s->req_id);
+                                  obj_ctx, obj, 0, s->req_id, this);
 
   op_ret = processor.prepare();
   if (op_ret < 0) {

@@ -613,6 +613,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
+                       dpp,
                        &zones_trace,
                        &bytes_transferred);
 
