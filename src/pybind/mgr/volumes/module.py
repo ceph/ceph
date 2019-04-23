@@ -61,6 +61,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Delete a CephFS subvolume in a volume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs subvolume getpath '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString ',
+            'desc': "Get the mountpath of a CephFS subvolume in a volume",
+            'perm': 'rw'
+        },
 
         # volume ls [recursive]
         # subvolume ls <volume>
@@ -360,3 +367,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             })
 
         return 0, json.dumps(result, indent=2), ""
+
+    def _cmd_fs_subvolume_getpath(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        sub_name = cmd['sub_name']
+
+        if not self._volume_exists(vol_name):
+            return -errno.ENOENT, "", "Volume '{0}' not found".format(vol_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            svp = SubvolumePath(sub_name, sub_name)
+            path = svc.get_subvolume_path(svp)
+            if not path:
+                return -errno.ENOENT, "", \
+                       "Subvolume '{0}' not found".format(sub_name)
+        return 0, path, ""
