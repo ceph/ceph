@@ -201,12 +201,10 @@ int Image<I>::get_parent(I *ictx,
   }
 
   RWLock::RLocker image_locker(ictx->image_lock);
-  RWLock::RLocker parent_locker(ictx->parent_lock);
 
-  bool release_parent_locks = false;
-  BOOST_SCOPE_EXIT_ALL(ictx, &release_parent_locks) {
-    if (release_parent_locks) {
-      ictx->parent->parent_lock.put_read();
+  bool release_image_lock = false;
+  BOOST_SCOPE_EXIT_ALL(ictx, &release_image_lock) {
+    if (release_image_lock) {
       ictx->parent->image_lock.put_read();
     }
   };
@@ -215,9 +213,8 @@ int Image<I>::get_parent(I *ictx,
   // of the migration source image
   auto parent = ictx->parent;
   if (!ictx->migration_info.empty() && ictx->parent != nullptr) {
-    release_parent_locks = true;
+    release_image_lock = true;
     ictx->parent->image_lock.get_read();
-    ictx->parent->parent_lock.get_read();
 
     parent = ictx->parent->parent;
   }
@@ -567,7 +564,6 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     parent_spec.pool_id = -1;
   } else {
     RWLock::RLocker image_locker(src->image_lock);
-    RWLock::RLocker parent_locker(src->parent_lock);
 
     // use oldest snapshot or HEAD for parent spec
     if (!src->snap_info.empty()) {

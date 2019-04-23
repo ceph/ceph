@@ -89,7 +89,6 @@ void SetHeadRequest<I>::handle_set_size(int r) {
     // adjust in-memory image size now that it's updated on disk
     RWLock::WLocker image_locker(m_image_ctx->image_lock);
     if (m_image_ctx->size > m_size) {
-      RWLock::WLocker parent_locker(m_image_ctx->parent_lock);
       if (m_image_ctx->parent_md.spec.pool_id != -1 &&
           m_image_ctx->parent_md.overlap > m_size) {
         m_image_ctx->parent_md.overlap = m_size;
@@ -103,15 +102,15 @@ void SetHeadRequest<I>::handle_set_size(int r) {
 
 template <typename I>
 void SetHeadRequest<I>::send_detach_parent() {
-  m_image_ctx->parent_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   if (m_image_ctx->parent_md.spec.pool_id == -1 ||
       (m_image_ctx->parent_md.spec == m_parent_spec &&
        m_image_ctx->parent_md.overlap == m_parent_overlap)) {
-    m_image_ctx->parent_lock.put_read();
+    m_image_ctx->image_lock.put_read();
     send_attach_parent();
     return;
   }
-  m_image_ctx->parent_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ldout(m_cct, 20) << dendl;
 
@@ -143,7 +142,7 @@ void SetHeadRequest<I>::handle_detach_parent(int r) {
 
   {
     // adjust in-memory parent now that it's updated on disk
-    RWLock::WLocker parent_locker(m_image_ctx->parent_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     m_image_ctx->parent_md.spec = {};
     m_image_ctx->parent_md.overlap = 0;
   }
@@ -153,14 +152,14 @@ void SetHeadRequest<I>::handle_detach_parent(int r) {
 
 template <typename I>
 void SetHeadRequest<I>::send_attach_parent() {
-  m_image_ctx->parent_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   if (m_image_ctx->parent_md.spec == m_parent_spec &&
       m_image_ctx->parent_md.overlap == m_parent_overlap) {
-    m_image_ctx->parent_lock.put_read();
+    m_image_ctx->image_lock.put_read();
     finish(0);
     return;
   }
-  m_image_ctx->parent_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ldout(m_cct, 20) << dendl;
 
@@ -193,7 +192,7 @@ void SetHeadRequest<I>::handle_attach_parent(int r) {
 
   {
     // adjust in-memory parent now that it's updated on disk
-    RWLock::WLocker parent_locker(m_image_ctx->parent_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     m_image_ctx->parent_md.spec = m_parent_spec;
     m_image_ctx->parent_md.overlap = m_parent_overlap;
   }

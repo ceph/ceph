@@ -138,7 +138,6 @@ public:
         return 1;
       }
 
-      RWLock::RLocker parent_locker(image_ctx.parent_lock);
       uint64_t overlap_objects = 0;
       uint64_t overlap;
       int r = image_ctx.get_parent_overlap(CEPH_NOSNAP, &overlap);

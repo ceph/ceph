@@ -107,7 +107,6 @@ public:
       journal(NULL),
       owner_lock(util::unique_lock_name("librbd::ImageCtx::owner_lock", this)),
       image_lock(util::unique_lock_name("librbd::ImageCtx::image_lock", this)),
-      parent_lock(util::unique_lock_name("librbd::ImageCtx::parent_lock", this)),
       timestamp_lock(util::unique_lock_name("librbd::ImageCtx::timestamp_lock", this)),
       async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
       copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
@@ -619,7 +618,6 @@ public:
   const ParentImageInfo* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
     ceph_assert(image_lock.is_locked());
-    ceph_assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP)
       return &parent_md;
     const SnapInfo *info = get_snap_info(in_snap_id);

@@ -134,7 +134,6 @@ template <typename I>
 bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
                                               bool read_request) {
   ceph_assert(m_ictx->image_lock.is_locked());
-  ceph_assert(m_ictx->parent_lock.is_locked());
 
   m_has_parent = false;
   parent_extents->clear();
@@ -267,7 +266,6 @@ void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
 
   RWLock::RLocker image_locker(image_ctx->image_lock);
-  RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
   // calculate reverse mapping onto the image
   Extents parent_extents;
@@ -284,7 +282,6 @@ void ObjectReadRequest<I>::read_parent() {
   }
 
   if (object_overlap == 0) {
-    parent_locker.unlock();
     image_locker.unlock();
 
     this->finish(-ENOENT);
@@ -329,12 +326,10 @@ void ObjectReadRequest<I>::copyup() {
 
   image_ctx->owner_lock.get_read();
   image_ctx->image_lock.get_read();
-  image_ctx->parent_lock.get_read();
   Extents parent_extents;
   if (!this->compute_parent_extents(&parent_extents, true) ||
       (image_ctx->exclusive_lock != nullptr &&
        !image_ctx->exclusive_lock->is_lock_owner())) {
-    image_ctx->parent_lock.put_read();
     image_ctx->image_lock.put_read();
     image_ctx->owner_lock.put_read();
     this->finish(0);
@@ -353,12 +348,10 @@ void ObjectReadRequest<I>::copyup() {
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
     image_ctx->copyup_list_lock.Unlock();
-    image_ctx->parent_lock.put_read();
     image_ctx->image_lock.put_read();
     new_req->send();
   } else {
     image_ctx->copyup_list_lock.Unlock();
-    image_ctx->parent_lock.put_read();
     image_ctx->image_lock.put_read();
   }
 
@@ -397,7 +390,6 @@ template <typename I>
 void AbstractObjectWriteRequest<I>::compute_parent_info() {
   I *image_ctx = this->m_ictx;
   RWLock::RLocker image_locker(image_ctx->image_lock);
-  RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
   this->compute_parent_extents(&m_parent_extents, false);
 

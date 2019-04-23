@@ -1194,7 +1194,6 @@ int Migration<I>::create_dst_image() {
   cls::rbd::ParentImageSpec parent_spec;
   {
     RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
-    RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
     size = m_src_image_ctx->size;
 
     // use oldest snapshot or HEAD for parent spec
@@ -1654,7 +1653,6 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
   uint64_t parent_overlap;
   {
     RWLock::RLocker image_locker(child_image_ctx->image_lock);
-    RWLock::RLocker parent_locker(child_image_ctx->parent_lock);
 
     // use oldest snapshot or HEAD for parent spec
     if (!child_image_ctx->snap_info.empty()) {

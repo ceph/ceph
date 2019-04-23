@@ -221,7 +221,6 @@ uint64_t MigrateRequest<I>::get_num_overlap_objects() {
   ldout(cct, 10) << dendl;
 
   RWLock::RLocker image_locker(image_ctx.image_lock);
-  RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
   auto overlap = image_ctx.migration_info.overlap;
 

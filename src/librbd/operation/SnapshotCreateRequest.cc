@@ -160,7 +160,6 @@ void SnapshotCreateRequest<I>::send_create_snap() {
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   RWLock::RLocker image_locker(image_ctx.image_lock);
-  RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||

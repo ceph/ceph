@@ -330,8 +330,7 @@ int DiffIterate<I>::execute() {
   DiffContext diff_context(m_image_ctx, m_callback, m_callback_arg,
                            m_whole_object, from_snap_id, end_snap_id);
   if (m_include_parent && from_snap_id == 0) {
-    RWLock::RLocker l(m_image_ctx.image_lock);
-    RWLock::RLocker l2(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     uint64_t overlap = 0;
     m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
     r = 0;
