@@ -475,13 +475,11 @@ void ObjectCopyRequest<I>::send_update_object_map() {
     });
 
   auto dst_image_ctx = m_dst_image_ctx;
-  dst_image_ctx->object_map_lock.get_write();
   bool sent = dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
                                  {}, {}, false, ctx);
 
   // NOTE: state machine might complete before we reach here
-  dst_image_ctx->object_map_lock.put_write();
   dst_image_ctx->image_lock.put_read();
   dst_image_ctx->owner_lock.put_read();
   if (!sent) {

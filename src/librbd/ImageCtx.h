@@ -99,7 +99,7 @@ namespace librbd {
      * Lock ordering:
      *
      * owner_lock, image_lock, parent_lock,
-     * object_map_lock, async_op_lock, timestamp_lock
+     * async_op_lock, timestamp_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock image_lock; // protects snapshot-related member variables,
@@ -112,8 +112,8 @@ namespace librbd {
                        // exclusive_locked
                        // lock_tag
                        // lockers
+                       // object_map
     RWLock parent_lock; // protects parent_md and parent
-    RWLock object_map_lock; // protects object map updates and object_map itself
 
     RWLock timestamp_lock; // protects (create/access/modify)_timestamp
     Mutex async_ops_lock; // protects async_ops and async_requests

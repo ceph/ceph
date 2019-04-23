@@ -108,7 +108,6 @@ public:
       owner_lock(util::unique_lock_name("librbd::ImageCtx::owner_lock", this)),
       image_lock(util::unique_lock_name("librbd::ImageCtx::image_lock", this)),
       parent_lock(util::unique_lock_name("librbd::ImageCtx::parent_lock", this)),
-      object_map_lock(util::unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
       timestamp_lock(util::unique_lock_name("librbd::ImageCtx::timestamp_lock", this)),
       async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
       copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),

@@ -746,7 +746,7 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      RWLock::RLocker image_locker(ictx2->image_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -833,7 +833,7 @@ TEST_F(TestInternal, SnapshotCopyupZerosMigration)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      RWLock::RLocker image_locker(ictx2->image_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
