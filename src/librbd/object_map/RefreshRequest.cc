@@ -25,11 +25,12 @@ using util::create_rados_callback;
 namespace object_map {
 
 template <typename I>
-RefreshRequest<I>::RefreshRequest(I &image_ctx, ceph::BitVector<2> *object_map,
+RefreshRequest<I>::RefreshRequest(I &image_ctx, RWLock* object_map_lock,
+                                  ceph::BitVector<2> *object_map,
                                   uint64_t snap_id, Context *on_finish)
-  : m_image_ctx(image_ctx), m_object_map(object_map), m_snap_id(snap_id),
-    m_on_finish(on_finish), m_object_count(0),
-    m_truncate_on_disk_object_map(false) {
+  : m_image_ctx(image_ctx), m_object_map_lock(object_map_lock),
+     m_object_map(object_map), m_snap_id(snap_id), m_on_finish(on_finish),
+    m_object_count(0), m_truncate_on_disk_object_map(false) {
 }
 
 template <typename I>
@@ -57,6 +58,7 @@ void RefreshRequest<I>::apply() {
   }
   ceph_assert(m_on_disk_object_map.size() >= num_objs);
 
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
   *m_object_map = m_on_disk_object_map;
 }
 
@@ -293,6 +295,7 @@ Context *RefreshRequest<I>::handle_invalidate_and_close(int *ret_val) {
     *ret_val = -EFBIG;
   }
 
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
   m_object_map->clear();
   return m_on_finish;
 }

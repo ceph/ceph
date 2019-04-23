@@ -659,8 +659,6 @@ TEST_F(TestInternal, SnapshotCopyup)
       C_SaferCond ctx;
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
-
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
