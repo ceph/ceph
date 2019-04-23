@@ -240,7 +240,6 @@ void SnapshotRollbackRequest<I>::send_rollback_object_map() {
   {
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     RWLock::RLocker image_locker(image_ctx.image_lock);
-    RWLock::WLocker object_map_lock(image_ctx.object_map_lock);
     if (image_ctx.object_map != nullptr) {
       CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;

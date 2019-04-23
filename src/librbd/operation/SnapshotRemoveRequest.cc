@@ -39,7 +39,6 @@ void SnapshotRemoveRequest<I>::send_op() {
   ceph_assert(image_ctx.owner_lock.is_locked());
   {
     RWLock::RLocker image_locker(image_ctx.image_lock);
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
     if (image_ctx.snap_info.find(m_snap_id) == image_ctx.snap_info.end()) {
       lderr(cct) << "snapshot doesn't exist" << dendl;
       this->async_complete(-ENOENT);
@@ -227,7 +226,6 @@ void SnapshotRemoveRequest<I>::remove_object_map() {
   {
     RWLock::RLocker owner_lock(image_ctx.owner_lock);
     RWLock::WLocker image_locker(image_ctx.image_lock);
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
     if (image_ctx.object_map != nullptr) {
       ldout(cct, 5) << dendl;
 

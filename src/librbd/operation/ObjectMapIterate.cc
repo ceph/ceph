@@ -159,9 +159,7 @@ private:
     RWLock::RLocker image_locker(image_ctx.image_lock);
     ceph_assert(image_ctx.object_map != nullptr);
 
-    RWLock::WLocker l(image_ctx.object_map_lock);
     uint8_t state = (*image_ctx.object_map)[m_object_no];
-
     ldout(cct, 10) << "C_VerifyObjectCallback::object_map_action"
 		   << " object " << image_ctx.get_object_name(m_object_no)
 		   << " state " << (int)state

@@ -467,18 +467,15 @@ void AbstractObjectWriteRequest<I>::pre_write_object_map_update() {
   ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
                             << "~" << this->m_object_len << dendl;
 
-  image_ctx->object_map_lock.get_write();
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_pre_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, new_state, {}, this->m_trace, false,
           this)) {
-    image_ctx->object_map_lock.put_write();
     image_ctx->image_lock.put_read();
     return;
   }
 
-  image_ctx->object_map_lock.put_write();
   image_ctx->image_lock.put_read();
   write_object();
 }
@@ -632,18 +629,15 @@ void AbstractObjectWriteRequest<I>::post_write_object_map_update() {
 
   // should have been flushed prior to releasing lock
   ceph_assert(image_ctx->exclusive_lock->is_lock_owner());
-  image_ctx->object_map_lock.get_write();
   if (image_ctx->object_map->template aio_update<
         AbstractObjectWriteRequest<I>,
         &AbstractObjectWriteRequest<I>::handle_post_write_object_map_update>(
           CEPH_NOSNAP, this->m_object_no, OBJECT_NONEXISTENT, OBJECT_PENDING,
           this->m_trace, false, this)) {
-    image_ctx->object_map_lock.put_write();
     image_ctx->image_lock.put_read();
     return;
   }
 
-  image_ctx->object_map_lock.put_write();
   image_ctx->image_lock.put_read();
   this->finish(0);
 }

@@ -70,7 +70,8 @@ public:
 
   int update_head() {
     auto& image_ctx = this->m_image_ctx;
-    RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
+    ceph_assert(image_ctx.image_lock.is_locked());
+
     bool sent = image_ctx.object_map->template aio_update<Context>(
       CEPH_NOSNAP, m_object_no, m_head_object_map_state, {}, m_trace, false,
       this);
@@ -79,6 +80,8 @@ public:
 
   int update_snapshot(uint64_t snap_id) {
     auto& image_ctx = this->m_image_ctx;
+    ceph_assert(image_ctx.image_lock.is_locked());
+
     uint8_t state = OBJECT_EXISTS;
     if (image_ctx.test_features(RBD_FEATURE_FAST_DIFF, image_ctx.image_lock) &&
         (m_snap_id_idx > 0 || m_first_snap_is_clean)) {
@@ -87,7 +90,6 @@ public:
       state = OBJECT_EXISTS_CLEAN;
     }
 
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
     bool sent = image_ctx.object_map->template aio_update<Context>(
       snap_id, m_object_no, state, {}, m_trace, true, this);
     ceph_assert(sent);
@@ -326,12 +328,10 @@ void CopyupRequest<I>::update_object_maps() {
     head_object_map_state = (*r_it)->get_pre_write_object_map_state();
   }
 
-  RWLock::WLocker object_map_locker(m_image_ctx->object_map_lock);
   if ((*m_image_ctx->object_map)[m_object_no] != head_object_map_state) {
     // (maybe) need to update the HEAD object map state
     m_snap_ids.push_back(CEPH_NOSNAP);
   }
-  object_map_locker.unlock();
   image_locker.unlock();
 
   ceph_assert(m_image_ctx->exclusive_lock->is_lock_owner());

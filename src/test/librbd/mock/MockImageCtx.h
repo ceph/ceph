@@ -64,7 +64,6 @@ struct MockImageCtx {
       image_lock(image_ctx.image_lock),
       timestamp_lock(image_ctx.timestamp_lock),
       parent_lock(image_ctx.parent_lock),
-      object_map_lock(image_ctx.object_map_lock),
       async_ops_lock(image_ctx.async_ops_lock),
       copyup_list_lock(image_ctx.copyup_list_lock),
       order(image_ctx.order),
@@ -250,7 +249,6 @@ struct MockImageCtx {
   RWLock &image_lock;
   RWLock &timestamp_lock;
   RWLock &parent_lock;
-  RWLock &object_map_lock;
   Mutex &async_ops_lock;
   Mutex &copyup_list_lock;
 

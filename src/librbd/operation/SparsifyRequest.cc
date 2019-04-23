@@ -231,13 +231,11 @@ public:
       C_SparsifyObject<I>,
       &C_SparsifyObject<I>::handle_pre_update_object_map>(this);
 
-    image_ctx.object_map_lock.get_write();
     bool sent = image_ctx.object_map->template aio_update<
       Context, &Context::complete>(CEPH_NOSNAP, m_object_no, OBJECT_PENDING,
                                    OBJECT_EXISTS, {}, false, ctx);
 
     // NOTE: state machine might complete before we reach here
-    image_ctx.object_map_lock.put_write();
     image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
     if (!sent) {
@@ -304,8 +302,6 @@ public:
 
       assert(image_ctx.exclusive_lock->is_lock_owner());
       assert(image_ctx.object_map != nullptr);
-
-      RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
 
       sent = image_ctx.object_map->template aio_update<
         Context, &Context::complete>(CEPH_NOSNAP, m_object_no,

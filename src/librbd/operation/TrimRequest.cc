@@ -197,7 +197,6 @@ void TrimRequest<I>::send_pre_trim() {
 
       ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
-      RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_PENDING,
             OBJECT_EXISTS, {}, false, this)) {
@@ -293,7 +292,6 @@ void TrimRequest<I>::send_post_trim() {
 
       ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
-      RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
       if (image_ctx.object_map->template aio_update<AsyncRequest<I> >(
             CEPH_NOSNAP, m_delete_start_min, m_num_objects, OBJECT_NONEXISTENT,
             OBJECT_PENDING, {}, false, this)) {
