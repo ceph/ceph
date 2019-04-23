@@ -230,8 +230,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny();
   }
 
-  /* Token ID is a concept that makes dealing with PKI tokens more effective.
-   * Instead of storing several kilobytes, a short hash can be burried. */
+  /* Token ID is a legacy of supporting the service-side validation
+   * of PKI/PKIz token type which are already-removed-in-OpenStack.
+   * The idea was to bury in cache only a short hash instead of few
+   * kilobytes. RadosGW doesn't do the local validation anymore. */
   const auto& token_id = rgw_get_token_id(token);
   ldpp_dout(dpp, 20) << "token_id=" << token_id << dendl;
 
@@ -245,18 +247,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::grant(std::move(apl));
   }
 
-  /* Retrieve token. */
-  if (rgw_is_pki_token(token)) {
-    try {
-      t = decode_pki_token(dpp, token);
-    } catch (...) {
-      /* Last resort. */
-      t = get_from_keystone(dpp, token);
-    }
-  } else {
-    /* Can't decode, just go to the Keystone server for validation. */
-    t = get_from_keystone(dpp, token);
-  }
+  /* Not in cache. Go to the Keystone for validation. This happens even
+   * for the legacy PKI/PKIz token types. That's it, after the PKI/PKIz
+   * RadosGW-side validation has been removed, we always ask Keystone. */
+  t = get_from_keystone(dpp, token);
 
   if (! t) {
     return result_t::deny(-EACCES);
