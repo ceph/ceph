@@ -230,3 +230,11 @@ class SubvolumeClient(object):
                 raise
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
+
+    def get_subvolume_path(self, subvolume_path):
+        path = self._subvolume_path(subvolume_path)
+        try:
+            self.fs.stat(path)
+        except cephfs.ObjectNotFound:
+            return None
+        return path
