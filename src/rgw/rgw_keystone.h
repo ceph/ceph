@@ -16,12 +16,6 @@
 
 #include <atomic>
 
-int rgw_open_cms_envelope(CephContext *cct,
-                          const std::string& src,
-                          std::string& dst);            /* out */
-int rgw_decode_b64_cms(CephContext *cct,
-                       const string& signed_b64,
-                       bufferlist& bl);
 bool rgw_is_pki_token(const string& token);
 void rgw_get_token_id(const string& token, string& token_id);
 static inline std::string rgw_get_token_id(const string& token)
