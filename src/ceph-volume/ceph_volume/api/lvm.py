@@ -696,36 +696,6 @@ def get_vg(vg_name=None, vg_tags=None):
     return vgs.get(vg_name=vg_name, vg_tags=vg_tags)
 
 
-def create_lvmcache_pool(vg_name, data_lv, metadata_lv):
-    process.run([
-        'lvconvert',
-        '--yes',
-        '--poolmetadataspare', 'n',
-        '--type', 'cache-pool',
-        '--poolmetadata', metadata_lv.lv_path, data_lv.lv_path,
-    ])
-
-
-def create_lvmcache(vg_name, cache_lv, origin_lv):
-    process.run([
-        'lvconvert',
-        '--yes',
-        '--type', 'cache',
-        '--cachepool', cache_lv.lv_path, origin_lv.lv_path
-    ])
-
-
-def set_lvmcache_caching_mode(caching_mode, vg_name, origin_lv):
-    if caching_mode not in ['writeback', 'writethrough']:
-        print('Unknown caching mode: ' + caching_mode)
-        return
-
-    process.run([
-        'lvchange',
-        '--cachemode', caching_mode, origin_lv.lv_path
-    ])
-
-
 class VolumeGroups(list):
     """
     A list of all known volume groups for the current system, with the ability

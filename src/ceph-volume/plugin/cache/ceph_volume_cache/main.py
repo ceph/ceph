@@ -164,6 +164,36 @@ def print_cache_stats(osdid=None):
             return
 
 
+def create_lvmcache_pool(vg_name, data_lv, metadata_lv):
+    process.run([
+        'lvconvert',
+        '--yes',
+        '--poolmetadataspare', 'n',
+        '--type', 'cache-pool',
+        '--poolmetadata', metadata_lv.lv_path, data_lv.lv_path,
+    ])
+
+
+def create_lvmcache(vg_name, cache_lv, origin_lv):
+    process.run([
+        'lvconvert',
+        '--yes',
+        '--type', 'cache',
+        '--cachepool', cache_lv.lv_path, origin_lv.lv_path
+    ])
+
+
+def set_lvmcache_caching_mode(caching_mode, vg_name, origin_lv):
+    if caching_mode not in ['writeback', 'writethrough']:
+        print('Unknown caching mode: ' + caching_mode)
+        return
+
+    process.run([
+        'lvchange',
+        '--cachemode', caching_mode, origin_lv.lv_path
+    ])
+
+
 # partition sizes in GB
 def _create_cache_lvs(vg_name, md_partition, data_partition, osdid):
     md_partition_size = disk.size_from_human_readable(disk.lsblk(md_partition)['SIZE'])
