@@ -1,3 +1,5 @@
+.. _log-based-pg:
+
 ============
 Log Based PG
 ============

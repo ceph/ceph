@@ -5,10 +5,7 @@ Asynchronous Recovery
 PGs in Ceph maintain a log of writes to allow speedy recovery of data.
 Instead of scanning all of the objects to see what is missing on each
 osd, we can examine the pg log to see which objects we need to
-recover. See `Log Based PG`_ for more detail on this process.
-
-.. _`Log Based PG`:
-  log_based_pg.rst
+recover. See :ref:`Log Based PG <log-based-pg>` for more details on this process.
 
 Until now, this recovery process was synchronous - it blocked writes
 to an object until it was recovered. In contrast, backfill could allow
