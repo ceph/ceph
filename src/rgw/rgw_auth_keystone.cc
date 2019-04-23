@@ -20,7 +20,6 @@
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
 
-#include "common/ceph_crypto_cms.h"
 #include "common/ceph_crypto.h"
 #include "common/Cond.h"
 

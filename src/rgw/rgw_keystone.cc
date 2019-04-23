@@ -15,7 +15,6 @@
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
-#include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/Cond.h"
 #include "rgw_perf_counters.h"
