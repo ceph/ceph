@@ -124,9 +124,6 @@
 /* Define if have curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
 
-/* Define if using NSS. */
-#cmakedefine USE_NSS
-
 /* Define if using OpenSSL. */
 #cmakedefine USE_OPENSSL
 
