@@ -120,6 +120,7 @@ class SELinux(Task):
             'comm="rhsmd"',
             'scontext=system_u:system_r:syslogd_t:s0',
             'tcontext=system_u:system_r:nrpe_t:s0',
+            'comm="updatedb"',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
