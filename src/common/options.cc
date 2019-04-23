@@ -8137,6 +8137,10 @@ std::vector<Option> get_mds_client_options() {
     Option("fake_statfs_for_testing", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Set a value for kb and compute kb_used from total of num_bytes"),
+
+    Option("debug_allow_any_pool_priority", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Allow any pool priority to be set to test conversion to new range"),
   });
 }
 
