@@ -7,7 +7,9 @@
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
+#include "librbd/image/TypeTraits.h"
 #include "librbd/image/DetachChildRequest.h"
+#include "librbd/trash/RemoveRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 
@@ -32,6 +34,46 @@ struct MockTestImageCtx : public MockImageCtx {
 MockTestImageCtx* MockTestImageCtx::s_instance = nullptr;
 
 } // anonymous namespace
+
+namespace image {
+
+template <>
+struct TypeTraits<MockTestImageCtx> {
+  typedef librbd::MockContextWQ ContextWQ;
+};
+
+} // namespace image
+
+namespace trash {
+
+template <>
+class RemoveRequest<MockTestImageCtx> {
+private:
+  typedef ::librbd::image::TypeTraits<MockTestImageCtx> TypeTraits;
+  typedef typename TypeTraits::ContextWQ ContextWQ;
+public:
+  static RemoveRequest *s_instance;
+  static RemoveRequest *create(librados::IoCtx &ioctx,
+                               MockTestImageCtx *image_ctx,
+                               ContextWQ *op_work_queue, bool force,
+                               ProgressContext &prog_ctx, Context *on_finish) {
+    ceph_assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  Context *on_finish = nullptr;
+
+  RemoveRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+RemoveRequest<MockTestImageCtx> *RemoveRequest<MockTestImageCtx>::s_instance;
+
+} // namespace trash
 } // namespace librbd
 
 // template definitions
@@ -52,6 +94,7 @@ using ::testing::WithArg;
 class TestMockImageDetachChildRequest : public TestMockFixture {
 public:
   typedef DetachChildRequest<MockTestImageCtx> MockDetachChildRequest;
+  typedef trash::RemoveRequest<MockTestImageCtx> MockTrashRemoveRequest;
 
   void SetUp() override {
     TestMockFixture::SetUp();
@@ -138,6 +181,28 @@ public:
                            })));
   }
 
+  void expect_trash_get(MockImageCtx &mock_image_ctx,
+                        librados::MockTestMemIoCtxImpl &mock_io_ctx_impl,
+                        const cls::rbd::TrashImageSpec& trash_spec,
+                        int r) {
+    using ceph::encode;
+    EXPECT_CALL(mock_io_ctx_impl,
+                exec(RBD_TRASH, _, StrEq("rbd"),
+                     StrEq("trash_get"), _, _, _))
+      .WillOnce(WithArg<5>(Invoke([trash_spec, r](bufferlist* bl) {
+                             encode(trash_spec, *bl);
+                             return r;
+                           })));
+  }
+
+  void expect_trash_remove(MockTrashRemoveRequest& mock_trash_remove_request,
+                           int r) {
+    EXPECT_CALL(mock_trash_remove_request, send())
+      .WillOnce(Invoke([&mock_trash_remove_request, r]() {
+          mock_trash_remove_request.on_finish->complete(r);
+        }));
+  }
+
   librbd::ImageCtx *image_ctx;
 };
 
@@ -198,7 +263,40 @@ TEST_F(TestMockImageDetachChildRequest, TrashedSnapshotSuccess) {
                        "snap1", 123, {}, 0}, 0);
   expect_open(mock_image_ctx, 0);
   expect_snap_remove(mock_image_ctx, "snap1", 0);
+  const cls::rbd::TrashImageSpec trash_spec;
+  expect_trash_get(mock_image_ctx, *mock_io_ctx_impl, trash_spec, -ENOENT);
   expect_close(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  auto req = MockDetachChildRequest::create(mock_image_ctx, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageDetachChildRequest, ParentAutoRemove) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  mock_image_ctx.parent_md.spec = {m_ioctx.get_id(), "", "parent id", 234};
+
+  InSequence seq;
+  expect_test_op_features(mock_image_ctx, true);
+
+  librados::MockTestMemIoCtxImpl *mock_io_ctx_impl;
+  expect_create_ioctx(mock_image_ctx, &mock_io_ctx_impl);
+  expect_child_detach(mock_image_ctx, *mock_io_ctx_impl, 0);
+  expect_snapshot_get(mock_image_ctx, *mock_io_ctx_impl,
+                      "rbd_header.parent id",
+                      {234, {cls::rbd::TrashSnapshotNamespace{}},
+                       "snap1", 123, {}, 0}, 0);
+  expect_open(mock_image_ctx, 0);
+  expect_snap_remove(mock_image_ctx, "snap1", 0);
+  const cls::rbd::TrashImageSpec trash_spec =
+      {cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT, "parent", {}, {}};
+
+  expect_trash_get(mock_image_ctx, *mock_io_ctx_impl, trash_spec, 0);
+  MockTrashRemoveRequest mock_trash_remove_request;
+  expect_trash_remove(mock_trash_remove_request, 0);
 
   C_SaferCond ctx;
   auto req = MockDetachChildRequest::create(mock_image_ctx, &ctx);
