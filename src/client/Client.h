@@ -1165,18 +1165,11 @@ private:
   bool _vxattrcb_dir_pin_exists(Inode *in);
   size_t _vxattrcb_dir_pin(Inode *in, char *val, size_t size);
 
-  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
+  bool _vxattrcb_snap_btime_exists(Inode *in);
+  size_t _vxattrcb_snap_btime(Inode *in, char *val, size_t size);
 
   static const VXattr *_get_vxattrs(Inode *in);
   static const VXattr *_match_vxattr(Inode *in, const char *name);
-
-  size_t _vxattrs_name_size(const VXattr *vxattrs) {
-	  if (vxattrs == _dir_vxattrs)
-		  return _dir_vxattrs_name_size;
-	  else if (vxattrs == _file_vxattrs)
-		  return _file_vxattrs_name_size;
-	  return 0;
-  }
 
   int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 		   struct flock *fl, uint64_t owner, bool removing=false);
@@ -1200,8 +1193,6 @@ private:
 
 
   uint32_t deleg_timeout = 0;
-  size_t _file_vxattrs_name_size;
-  size_t _dir_vxattrs_name_size;
 
   client_switch_interrupt_callback_t switch_interrupt_cb = nullptr;
   client_remount_callback_t remount_cb = nullptr;
