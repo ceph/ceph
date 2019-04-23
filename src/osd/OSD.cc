@@ -4693,6 +4693,7 @@ void OSD::heartbeat_check()
 
 void OSD::heartbeat()
 {
+  ceph_assert(heartbeat_lock.is_locked_by_me());
   dout(30) << "heartbeat" << dendl;
 
   // get CPU load avg
@@ -5312,7 +5313,10 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
 	   << oldest << ".." << newest << dendl;
 
   // ensure our local fullness awareness is accurate
-  heartbeat();
+  {
+    Mutex::Locker l(heartbeat_lock);
+    heartbeat();
+  }
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->get_epoch() == 0) {
