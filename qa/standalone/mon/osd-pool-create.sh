@@ -233,6 +233,95 @@ function TEST_pool_create_rep_expected_num_objects() {
     fi
 }
 
+function check_pool_priority() {
+    local dir=$1
+    shift
+    local pools=$1
+    shift
+    local spread="$1"
+    shift
+    local results="$1"
+
+    setup $dir || return 1
+
+    EXTRA_OPTS="--debug_allow_any_pool_priority=true"
+    export EXTRA_OPTS
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+
+    # Add pool 0 too
+    for i in $(seq 0 $pools)
+    do
+      num=$(expr $i + 1)
+      ceph osd pool create test${num} 1 1
+    done
+
+    wait_for_clean || return 1
+    for i in $(seq 0 $pools)
+    do
+	num=$(expr $i + 1)
+	ceph osd pool set test${num} recovery_priority $(expr $i \* $spread)
+    done
+
+    #grep "recovery_priority.*pool set" out/mon.a.log
+
+    bin/ceph osd dump
+
+    # Restart everything so mon converts the priorities
+    kill_daemons
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    activate_osd $dir 0 || return 1
+    activate_osd $dir 1 || return 1
+    activate_osd $dir 2 || return 1
+    sleep 5
+
+    grep convert $dir/mon.a.log
+    ceph osd dump
+
+    pos=1
+    for i in $(ceph osd dump | grep ^pool | sed 's/.*recovery_priority //' | awk '{ print $1 }')
+    do
+      result=$(echo $results | awk "{ print \$${pos} }")
+      # A value of 0 is an unset value so sed/awk gets "pool"
+      if test $result = "0"
+      then
+        result="pool"
+      fi
+      test "$result" = "$i" || return 1
+      pos=$(expr $pos + 1)
+    done
+}
+
+function TEST_pool_pos_only_prio() {
+   local dir=$1
+   check_pool_priority $dir 20 5 "0 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10" || return 1
+}
+
+function TEST_pool_neg_only_prio() {
+   local dir=$1
+   check_pool_priority $dir 20 -5 "0 0 -1 -1 -2 -2 -3 -3 -4 -4 -5 -5 -6 -6 -7 -7 -8 -8 -9 -9 -10" || return 1
+}
+
+function TEST_pool_both_prio() {
+   local dir=$1
+   check_pool_priority $dir 20 "5 - 50" "-10 -9 -8 -7 -6 -5 -4 -3 -2 -1 0 1 2 3 4 5 6 7 8 9 10" || return 1
+}
+
+function TEST_pool_both_prio_no_neg() {
+   local dir=$1
+   check_pool_priority $dir 20 "2 - 4" "-4 -2 0 0 1 1 2 2 3 3 4 5 5 6 6 7 7 8 8 9 10" || return 1
+}
+
+function TEST_pool_both_prio_no_pos() {
+   local dir=$1
+   check_pool_priority $dir 20 "2 - 36" "-10 -9 -8 -8 -7 -7 -6 -6 -5 -5 -4 -3 -3 -2 -2 -1 -1 0 0 2 4" || return 1
+}
+
+
 main osd-pool-create "$@"
 
 # Local Variables:

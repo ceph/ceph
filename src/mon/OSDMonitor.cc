@@ -7625,10 +7625,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "error parsing int value '" << val << "': " << interr;
         return -EINVAL;
       }
-      if (n > OSD_POOL_PRIORITY_MAX || n < OSD_POOL_PRIORITY_MIN) {
-        ss << "pool recovery_priority must be between " << OSD_POOL_PRIORITY_MIN
-	   << " and " << OSD_POOL_PRIORITY_MAX;
-        return -EINVAL;
+      if (!g_conf()->debug_allow_any_pool_priority) {
+        if (n > OSD_POOL_PRIORITY_MAX || n < OSD_POOL_PRIORITY_MIN) {
+          ss << "pool recovery_priority must be between " << OSD_POOL_PRIORITY_MIN
+	     << " and " << OSD_POOL_PRIORITY_MAX;
+          return -EINVAL;
+        }
       }
     } else if (var == "pg_autoscale_bias") {
       if (f < 0.0 || f > 1000.0) {
