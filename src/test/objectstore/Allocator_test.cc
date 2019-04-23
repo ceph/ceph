@@ -225,6 +225,16 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
   EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
 }
 
+TEST_P(AllocTest, test_alloc_39334)
+{
+  int64_t block = 0x4000;
+  int64_t size = 0x5d00000000;
+
+  init_alloc(size, block);
+  alloc->init_add_free(0x4000, 0x5cffffc000);
+  EXPECT_EQ(size - block, alloc->get_free());
+}
+
 TEST_P(AllocTest, test_alloc_fragmentation)
 {
   uint64_t capacity = 4 * 1024 * 1024;
