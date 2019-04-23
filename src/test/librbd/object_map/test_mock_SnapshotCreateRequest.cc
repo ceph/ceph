@@ -24,7 +24,6 @@ class TestMockObjectMapSnapshotCreateRequest : public TestMockFixture {
 public:
   void inject_snap_info(librbd::ImageCtx *ictx, uint64_t snap_id) {
     RWLock::WLocker image_locker(ictx->image_lock);
-    RWLock::RLocker parent_locker(ictx->parent_lock);
     ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "snap name", snap_id,
 		   ictx->size, ictx->parent_md,
                    RBD_PROTECTION_STATUS_UNPROTECTED, 0, utime_t());

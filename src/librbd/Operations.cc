@@ -348,7 +348,7 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
   }
 
   {
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     if (m_image_ctx.parent_md.spec.pool_id == -1) {
       lderr(cct) << "image has no parent" << dendl;
       return -EINVAL;
@@ -386,19 +386,16 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
   }
 
   m_image_ctx.image_lock.get_read();
-  m_image_ctx.parent_lock.get_read();
 
   // can't flatten a non-clone
   if (m_image_ctx.parent_md.spec.pool_id == -1) {
     lderr(cct) << "image has no parent" << dendl;
-    m_image_ctx.parent_lock.put_read();
     m_image_ctx.image_lock.put_read();
     on_finish->complete(-EINVAL);
     return;
   }
   if (m_image_ctx.snap_id != CEPH_NOSNAP) {
     lderr(cct) << "snapshots cannot be flattened" << dendl;
-    m_image_ctx.parent_lock.put_read();
     m_image_ctx.image_lock.put_read();
     on_finish->complete(-EROFS);
     return;
@@ -414,7 +411,6 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
   uint64_t overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
                                                       overlap);
 
-  m_image_ctx.parent_lock.put_read();
   m_image_ctx.image_lock.put_read();
 
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
@@ -1575,7 +1571,7 @@ int Operations<I>::migrate(ProgressContext &prog_ctx) {
   }
 
   {
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     if (m_image_ctx.migration_info.empty()) {
       lderr(cct) << "image has no migrating parent" << dendl;
       return -EINVAL;
@@ -1613,24 +1609,20 @@ void Operations<I>::execute_migrate(ProgressContext &prog_ctx,
   }
 
   m_image_ctx.image_lock.get_read();
-  m_image_ctx.parent_lock.get_read();
 
   if (m_image_ctx.migration_info.empty()) {
     lderr(cct) << "image has no migrating parent" << dendl;
-    m_image_ctx.parent_lock.put_read();
     m_image_ctx.image_lock.put_read();
     on_finish->complete(-EINVAL);
     return;
   }
   if (m_image_ctx.snap_id != CEPH_NOSNAP) {
     lderr(cct) << "snapshots cannot be migrated" << dendl;
-    m_image_ctx.parent_lock.put_read();
     m_image_ctx.image_lock.put_read();
     on_finish->complete(-EROFS);
     return;
   }
 
-  m_image_ctx.parent_lock.put_read();
   m_image_ctx.image_lock.put_read();
 
   operation::MigrateRequest<I> *req = new operation::MigrateRequest<I>(

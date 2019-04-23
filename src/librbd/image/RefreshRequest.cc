@@ -808,7 +808,6 @@ template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
   {
     RWLock::RLocker image_locker(m_image_ctx.image_lock);
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
     ParentImageInfo parent_md;
     MigrationInfo migration_info;
@@ -1283,7 +1282,6 @@ void RefreshRequest<I>::apply() {
 
   RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker image_locker(m_image_ctx.image_lock);
-  RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
 
   m_image_ctx.size = m_size;
   m_image_ctx.lockers = m_lockers;

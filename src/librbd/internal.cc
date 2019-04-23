@@ -973,8 +973,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
-    RWLock::RLocker l(ictx->image_lock);
-    RWLock::RLocker l2(ictx->parent_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     return ictx->get_parent_overlap(ictx->snap_id, overlap);
   }
 

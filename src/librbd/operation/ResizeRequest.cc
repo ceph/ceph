@@ -433,7 +433,8 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
 template <typename I>
 void ResizeRequest<I>::compute_parent_overlap() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker l2(image_ctx.parent_lock);
+  ceph_assert(image_ctx.image_lock.is_locked());
+
   if (image_ctx.parent == NULL) {
     m_new_parent_overlap = 0;
   } else {
@@ -448,7 +449,6 @@ void ResizeRequest<I>::update_size_and_overlap() {
     RWLock::WLocker image_locker(image_ctx.image_lock);
     image_ctx.size = m_new_size;
 
-    RWLock::WLocker parent_locker(image_ctx.parent_lock);
     if (image_ctx.parent != NULL && m_new_size < m_original_size) {
       image_ctx.parent_md.overlap = m_new_parent_overlap;
     }

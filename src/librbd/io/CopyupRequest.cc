@@ -149,7 +149,6 @@ template <typename I>
 void CopyupRequest<I>::read_from_parent() {
   auto cct = m_image_ctx->cct;
   RWLock::RLocker image_locker(m_image_ctx->image_lock);
-  RWLock::RLocker parent_locker(m_image_ctx->parent_lock);
 
   if (m_image_ctx->parent == nullptr) {
     ldout(cct, 5) << "parent detached" << dendl;
@@ -224,7 +223,6 @@ template <typename I>
 void CopyupRequest<I>::deep_copy() {
   auto cct = m_image_ctx->cct;
   ceph_assert(m_image_ctx->image_lock.is_locked());
-  ceph_assert(m_image_ctx->parent_lock.is_locked());
   ceph_assert(m_image_ctx->parent != nullptr);
 
   m_lock.Lock();
@@ -589,7 +587,6 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
     }
   }
 
-  RWLock::RLocker parent_locker(m_image_ctx->parent_lock);
   std::copy_if(m_image_ctx->snaps.rbegin(), m_image_ctx->snaps.rend(),
                std::back_inserter(m_snap_ids),
                [this, cct=m_image_ctx->cct, &deep_copied](uint64_t snap_id) {

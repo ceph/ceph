@@ -218,7 +218,6 @@ void TrimRequest<I>::send_copyup_objects() {
   uint64_t parent_overlap;
   {
     RWLock::RLocker image_locker(image_ctx.image_lock);
-    RWLock::RLocker parent_locker(image_ctx.parent_lock);
 
     snapc = image_ctx.snapc;
     has_snapshots = !image_ctx.snaps.empty();

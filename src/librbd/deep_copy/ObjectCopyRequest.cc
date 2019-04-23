@@ -225,13 +225,11 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
 template <typename I>
 void ObjectCopyRequest<I>::send_read_from_parent() {
   m_src_image_ctx->image_lock.get_read();
-  m_src_image_ctx->parent_lock.get_read();
   io::Extents image_extents;
   compute_read_from_parent_ops(&image_extents);
   m_src_image_ctx->image_lock.put_read();
 
   if (image_extents.empty()) {
-    m_src_image_ctx->parent_lock.put_read();
     handle_read_from_parent(0);
     return;
   }
@@ -252,7 +250,6 @@ void ObjectCopyRequest<I>::send_read_from_parent() {
                                 std::move(image_extents),
                                 io::ReadResult{&m_read_from_parent_data}, 0,
                                 ZTracer::Trace());
-  src_image_ctx->parent_lock.put_read();
 }
 
 template <typename I>
@@ -576,9 +573,9 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   m_read_snaps = {};
   m_zero_interval = {};
 
-  m_src_image_ctx->parent_lock.get_read();
+  m_src_image_ctx->image_lock.get_read();
   bool hide_parent = (m_src_image_ctx->parent != nullptr);
-  m_src_image_ctx->parent_lock.put_read();
+  m_src_image_ctx->image_lock.put_read();
 
   librados::snap_t src_copy_point_snap_id = m_snap_map.rbegin()->first;
   bool prev_exists = hide_parent;
@@ -716,7 +713,6 @@ template <typename I>
 void ObjectCopyRequest<I>::compute_read_from_parent_ops(
     io::Extents *parent_image_extents) {
   assert(m_src_image_ctx->image_lock.is_locked());
-  assert(m_src_image_ctx->parent_lock.is_locked());
 
   m_read_ops = {};
   m_zero_interval = {};
@@ -849,9 +845,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
 
-  m_src_image_ctx->parent_lock.get_read();
+  m_src_image_ctx->image_lock.get_read();
   bool hide_parent = (m_src_image_ctx->parent != nullptr);
-  m_src_image_ctx->parent_lock.put_read();
+  m_src_image_ctx->image_lock.put_read();
 
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
@@ -872,9 +868,9 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
     if (hide_parent) {
       RWLock::RLocker image_locker(m_dst_image_ctx->image_lock);
-      RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
       uint64_t parent_overlap = 0;
-      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
+      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq,
+                                                  &parent_overlap);
       if (r < 0) {
         ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
                         << dst_snap_seq << ": " << cpp_strerror(r) << dendl;

@@ -179,7 +179,6 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
   bool refresh_parent;
   {
     RWLock::RLocker image_locker(m_image_ctx.image_lock);
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
     const auto parent_info = m_image_ctx.get_parent_info(m_snap_id);
     if (parent_info == nullptr) {
@@ -326,7 +325,6 @@ int SetSnapRequest<I>::apply() {
 
   RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
   RWLock::WLocker image_locker(m_image_ctx.image_lock);
-  RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
   if (m_snap_id != CEPH_NOSNAP) {
     ceph_assert(m_image_ctx.exclusive_lock == nullptr);
     int r = m_image_ctx.snap_set(m_snap_id);
