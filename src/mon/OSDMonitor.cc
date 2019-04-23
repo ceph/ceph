@@ -10560,11 +10560,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         osdmap.get_all_osds(osds);
         stop = true;
       } else {
-	if (osdmap.crush->name_exists(idvec[j])) {
+        if (long osd = parse_osd_id(idvec[j].c_str(), &ss); osd >= 0) {
+          osds.insert(osd);
+	} else if (osdmap.crush->name_exists(idvec[j])) {
+          std::stringstream().swap(ss);
 	  crush_nodes.insert(osdmap.crush->get_item_id(idvec[j]));
-	} else if (long osd = parse_osd_id(idvec[j].c_str(), &ss);
-		   osd >= 0) {
-	  osds.insert(osd);
 	} else {
 	  // ss has reason for failure
 	  ss << ", unable to parse osd id or crush node:\"" << idvec[j]
@@ -10754,11 +10754,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
         stop = true;
       } else {
-	if (osdmap.crush->name_exists(idvec[j])) {
-	  crush_nodes.insert(osdmap.crush->get_item_id(idvec[j]));
-	} else if (long osd = parse_osd_id(idvec[j].c_str(), &ss);
-		   osd >= 0) {
+	if (long osd = parse_osd_id(idvec[j].c_str(), &ss); osd >= 0) {
 	  osds.push_back(osd);
+        } else if (osdmap.crush->name_exists(idvec[j])) {
+          std::stringstream().swap(ss);
+          crush_nodes.insert(osdmap.crush->get_item_id(idvec[j]));
 	} else {
 	  // ss has reason for failure
 	  ss << ", unable to parse osd id or crush node:\"" << idvec[j]
