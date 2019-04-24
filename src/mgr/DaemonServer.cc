@@ -927,6 +927,22 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  if (prefix == "injectargs") {
+    vector<string> argsvec;
+    cmd_getval(cct, cmdctx->cmdmap, "injected_args", argsvec);
+
+    if (argsvec.empty()) {
+      dout(0)  << "ignoring empty injectargs" << dendl;
+      return false;
+    }
+    string args = argsvec.front();
+    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
+      args += " " + *a;
+    r = cct->_conf.injectargs(args, &ss);
+    cmdctx->reply(0, ss);
+    return true;
+  }
+
   // -----------
   // PG commands
 

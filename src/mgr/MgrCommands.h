@@ -208,3 +208,7 @@ COMMAND("device set-life-expectancy name=devid,type=CephString "\
 COMMAND("device rm-life-expectancy name=devid,type=CephString",
 	"Clear predicted device life expectancy",
 	"mgr", "rw")
+COMMAND("injectargs " \
+        "name=injected_args,type=CephString,n=N",
+        "inject configuration arguments into running MGR",
+        "mgr", "rw")
