@@ -20,7 +20,7 @@
   </form>
   <div *ngFor="let option of filteredOptions"
        class="select-menu-item"
-       [class.disabled]="data.length === selectionLimit && !option.selected"
+       [ngClass]="{'help-block disabled': (data.length === selectionLimit || !option.enabled) && !option.selected}"
        (click)="triggerSelection(option)">
     <div class="select-menu-item-icon">
       <i class="fa fa-check"
