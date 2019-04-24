@@ -3,7 +3,7 @@
 
 
 seastar::future<>
-ChainedDispatchers::ms_dispatch(ceph::net::Connection* conn,
+ChainedDispatchers::ms_dispatch(ceph::net::ConnectionRef conn,
                                 MessageRef m) {
   return seastar::do_for_each(dispatchers, [conn, m](Dispatcher* dispatcher) {
     return dispatcher->ms_dispatch(conn, m);

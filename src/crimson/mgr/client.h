@@ -37,12 +37,12 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 private:
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
+  seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn,
 				Ref<Message> m) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  seastar::future<> handle_mgr_map(ceph::net::Connection* conn,
+  seastar::future<> handle_mgr_map(ceph::net::ConnectionRef conn,
 				   Ref<MMgrMap> m);
-  seastar::future<> handle_mgr_conf(ceph::net::Connection* conn,
+  seastar::future<> handle_mgr_conf(ceph::net::ConnectionRef conn,
 				    Ref<MMgrConfigure> m);
   seastar::future<> reconnect();
   void report();
