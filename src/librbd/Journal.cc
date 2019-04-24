@@ -76,7 +76,7 @@ struct C_IsTagOwner : public Context {
       op_work_queue(op_work_queue), on_finish(on_finish),
       cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
       journaler(new Journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID,
-                              {})) {
+                              {}, nullptr)) {
   }
 
   void finish(int r) override {
@@ -113,7 +113,7 @@ struct C_GetTagOwner : public Context {
   C_GetTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
                 std::string *mirror_uuid, Context *on_finish)
     : mirror_uuid(mirror_uuid), on_finish(on_finish),
-      journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID, {}) {
+      journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID, {}, nullptr) {
   }
 
   virtual void finish(int r) {
@@ -459,7 +459,8 @@ int Journal<I>::request_resync(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {},
+                      nullptr);
 
   Mutex lock("lock");
   journal::ImageClientMeta client_meta;
@@ -1074,7 +1075,7 @@ void Journal<I>::create_journaler() {
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
-			      IMAGE_CLIENT_ID, settings);
+			      IMAGE_CLIENT_ID, settings, nullptr);
   m_journaler->add_listener(&m_metadata_listener);
 
   Context *ctx = create_async_context_callback(

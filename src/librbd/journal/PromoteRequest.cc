@@ -40,7 +40,7 @@ void PromoteRequest<I>::send_open() {
   ldout(cct, 20) << dendl;
 
   m_journaler = new Journaler(m_image_ctx->md_ctx, m_image_ctx->id,
-                              Journal<>::IMAGE_CLIENT_ID, {});
+                              Journal<>::IMAGE_CLIENT_ID, {}, nullptr);
   Context *ctx = create_async_context_callback(
     *m_image_ctx, create_context_callback<
       PromoteRequest<I>, &PromoteRequest<I>::handle_open>(this));

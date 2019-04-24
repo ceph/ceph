@@ -378,7 +378,7 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}, nullptr) {
   }
 
   int init() {

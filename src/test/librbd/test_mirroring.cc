@@ -329,7 +329,7 @@ public:
       "remote-image-id", {{{}, "sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
-    journal::Journaler journaler(io_ctx, image_id, "peer-client", {});
+    journal::Journaler journaler(io_ctx, image_id, "peer-client", {}, nullptr);
     C_SaferCond init_ctx;
     journaler.init(&init_ctx);
     ASSERT_EQ(-ENOENT, init_ctx.wait());

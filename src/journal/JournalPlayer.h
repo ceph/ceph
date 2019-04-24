@@ -11,6 +11,7 @@
 #include "common/Mutex.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectPlayer.h"
+#include "journal/Types.h"
 #include "cls/journal/cls_journal_types.h"
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
@@ -20,6 +21,7 @@ class SafeTimer;
 
 namespace journal {
 
+class CacheManagerHandler;
 class Entry;
 class ReplayHandler;
 
@@ -31,7 +33,7 @@ public:
 
   JournalPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
                 const JournalMetadataPtr& journal_metadata,
-                ReplayHandler *replay_handler);
+                ReplayHandler *replay_handler, CacheManagerHandler *cache_manager_handler);
   ~JournalPlayer();
 
   void prefetch();
@@ -48,6 +50,7 @@ private:
 
   enum State {
     STATE_INIT,
+    STATE_WAITCACHE,
     STATE_PREFETCH,
     STATE_PLAYBACK,
     STATE_ERROR
@@ -89,12 +92,27 @@ private:
     }
   };
 
+  struct CacheRebalanceHandler : public journal::CacheRebalanceHandler {
+    JournalPlayer *player;
+
+    CacheRebalanceHandler(JournalPlayer *player) : player(player) {
+    }
+
+    void handle_cache_rebalanced(uint64_t new_cache_bytes) override {
+      player->handle_cache_rebalanced(new_cache_bytes);
+    }
+  };
+
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
   std::string m_object_oid_prefix;
-  JournalMetadataPtr m_journal_metadata;
-
+  JournalMetadataPtr m_journal_metadata;  
   ReplayHandler *m_replay_handler;
+  CacheManagerHandler *m_cache_manager_handler;
+
+  std::string m_cache_name;
+  CacheRebalanceHandler m_cache_rebalance_handler;
+  uint64_t m_max_fetch_bytes;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -150,6 +168,8 @@ private:
 
   void notify_entries_available();
   void notify_complete(int r);
+
+  void handle_cache_rebalanced(uint64_t new_cache_bytes);
 };
 
 } // namespace journal
