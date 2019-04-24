@@ -1677,14 +1677,6 @@ protected:
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
   void fulfill_query(const MQuery& q, PeeringCtx *rctx);
 
-  bool should_restart_peering(
-    int newupprimary,
-    int newactingprimary,
-    const vector<int>& newup,
-    const vector<int>& newacting,
-    OSDMapRef lastmap,
-    OSDMapRef osdmap);
-
   // OpRequest queueing
   bool can_discard_op(OpRequestRef& op);
   bool can_discard_scan(OpRequestRef op);
