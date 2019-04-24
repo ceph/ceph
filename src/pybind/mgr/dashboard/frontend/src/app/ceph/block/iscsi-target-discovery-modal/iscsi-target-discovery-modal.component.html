@@ -130,6 +130,7 @@
         <div class="button-group text-right">
           <cd-submit-button (submitAction)="submitAction()"
                             [form]="discoveryForm"
+                            *ngIf="hasPermission"
                             i18n>Submit</cd-submit-button>
           <cd-back-button [back]="bsModalRef.hide"
                           name="Cancel"

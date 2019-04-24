@@ -144,7 +144,7 @@ class IscsiUi(BaseController):
 class Iscsi(BaseController):
 
     @Endpoint('GET', 'discoveryauth')
-    @UpdatePermission
+    @ReadPermission
     def get_discoveryauth(self):
         return self._get_discoveryauth()
 
