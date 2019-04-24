@@ -263,7 +263,7 @@ public:
 
   ObjectStore::CollectionHandle ch;
 
-  struct RecoveryCtx;
+  struct PeeringCtx;
 
   // -- methods --
   std::ostream& gen_prefix(std::ostream& out) const override;
@@ -412,7 +412,7 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
-  void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
+  void merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
 		  unsigned split_bits,
 		  const pg_merge_meta_t& last_pg_merge_meta);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
@@ -428,16 +428,16 @@ public:
   bool set_force_backfill(bool b);
 
   void queue_peering_event(PGPeeringEventRef evt);
-  void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
+  void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
   void queue_flushed(epoch_t started_at);
   void handle_advance_map(
     OSDMapRef osdmap, OSDMapRef lastmap,
     vector<int>& newup, int up_primary,
     vector<int>& newacting, int acting_primary,
-    RecoveryCtx *rctx);
-  void handle_activate_map(RecoveryCtx *rctx);
-  void handle_initialize(RecoveryCtx *rctx);
+    PeeringCtx *rctx);
+  void handle_activate_map(PeeringCtx *rctx);
+  void handle_initialize(PeeringCtx *rctx);
   void handle_query_state(Formatter *f);
 
   /**
@@ -449,8 +449,8 @@ public:
     ThreadPool::TPHandle &handle,
     uint64_t *ops_begun) = 0;
 
-  // more work after the above, but with a RecoveryCtx
-  void find_unfound(epoch_t queued, RecoveryCtx *rctx);
+  // more work after the above, but with a PeeringCtx
+  void find_unfound(epoch_t queued, PeeringCtx *rctx);
 
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
@@ -995,14 +995,14 @@ protected:
 
 public:
   bool dne() { return info.dne(); }
-  struct RecoveryCtx {
+  struct PeeringCtx {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > *query_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
     ObjectStore::Transaction *transaction;
     ThreadPool::TPHandle* handle;
-    RecoveryCtx(map<int, map<spg_t, pg_query_t> > *query_map,
+    PeeringCtx(map<int, map<spg_t, pg_query_t> > *query_map,
 		map<int,
 		    vector<pair<pg_notify_t, PastIntervals> > > *info_map,
 		map<int,
@@ -1013,7 +1013,7 @@ public:
 	transaction(transaction),
         handle(NULL) {}
 
-    RecoveryCtx(BufferedRecoveryMessages &buf, RecoveryCtx &rctx)
+    PeeringCtx(BufferedRecoveryMessages &buf, PeeringCtx &rctx)
       : query_map(&(buf.query_map)),
 	info_map(&(buf.info_map)),
 	notify_list(&(buf.notify_list)),
@@ -1536,7 +1536,7 @@ protected:
   bool search_for_missing(
     const pg_info_t &oinfo, const pg_missing_t &omissing,
     pg_shard_t fromosd,
-    RecoveryCtx*);
+    PeeringCtx*);
 
   void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
   
@@ -1589,7 +1589,7 @@ protected:
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int,
       vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
-    RecoveryCtx *ctx);
+    PeeringCtx *ctx);
 
   struct C_PG_ActivateCommitted : public Context {
     PGRef pg;
@@ -2075,7 +2075,7 @@ protected:
   TrivialEvent(DeleteInterrupted)
 
   /* Encapsulates PG recovery process */
-  class RecoveryState {
+  class PeeringState {
     void start_handle(RecoveryCtx *new_ctx);
     void end_handle();
   public:
@@ -2086,8 +2086,8 @@ protected:
 
     /* States */
     struct Initial;
-    class RecoveryMachine : public boost::statechart::state_machine< RecoveryMachine, Initial > {
-      RecoveryState *state;
+    class PeeringMachine : public boost::statechart::state_machine< PeeringMachine, Initial > {
+      PeeringState *state;
     public:
       PG *pg;
 
@@ -2102,7 +2102,7 @@ protected:
       void log_enter(const char *state_name);
       void log_exit(const char *state_name, utime_t duration);
 
-      RecoveryMachine(RecoveryState *state, PG *pg) : state(state), pg(pg), event_count(0) {}
+      PeeringMachine(PeeringState *state, PG *pg) : state(state), pg(pg), event_count(0) {}
 
       /* Accessor functions for state methods */
       ObjectStore::Transaction* get_cur_transaction() {
@@ -2138,7 +2138,7 @@ protected:
 	state->rctx->send_notify(to, info, pi);
       }
     };
-    friend class RecoveryMachine;
+    friend class PeeringMachine;
 
     /* States */
     // Initial
@@ -2176,13 +2176,13 @@ protected:
     //       Deleting
     // Crashed
 
-    struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
+    struct Crashed : boost::statechart::state< Crashed, PeeringMachine >, NamedState {
       explicit Crashed(my_context ctx);
     };
 
     struct Reset;
 
-    struct Initial : boost::statechart::state< Initial, RecoveryMachine >, NamedState {
+    struct Initial : boost::statechart::state< Initial, PeeringMachine >, NamedState {
       explicit Initial(my_context ctx);
       void exit();
 
@@ -2200,7 +2200,7 @@ protected:
       }
     };
 
-    struct Reset : boost::statechart::state< Reset, RecoveryMachine >, NamedState {
+    struct Reset : boost::statechart::state< Reset, PeeringMachine >, NamedState {
       explicit Reset(my_context ctx);
       void exit();
 
@@ -2223,7 +2223,7 @@ protected:
 
     struct Start;
 
-    struct Started : boost::statechart::state< Started, RecoveryMachine, Start >, NamedState {
+    struct Started : boost::statechart::state< Started, PeeringMachine, Start >, NamedState {
       explicit Started(my_context ctx);
       void exit();
 
@@ -2828,7 +2828,7 @@ protected:
       void exit();
     };
 
-    RecoveryMachine machine;
+    PeeringMachine machine;
     PG *pg;
 
     /// context passed in by state machine caller
@@ -2845,7 +2845,7 @@ protected:
     boost::optional<RecoveryCtx> rctx;
 
   public:
-    explicit RecoveryState(PG *pg)
+    explicit PeeringState(PG *pg)
       : machine(this, pg), pg(pg), orig_ctx(0) {
       machine.initiate();
     }
@@ -3000,7 +3000,7 @@ public:
     bool try_fast_info,
     PerfCounters *logger = nullptr);
 
-  void write_if_dirty(RecoveryCtx *rctx) {
+  void write_if_dirty(PeeringCtx *rctx) {
     write_if_dirty(*rctx->transaction);
   }
 protected:
@@ -3085,7 +3085,7 @@ protected:
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
-  void fulfill_query(const MQuery& q, RecoveryCtx *rctx);
+  void fulfill_query(const MQuery& q, PeeringCtx *rctx);
   void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
 
   bool should_restart_peering(
