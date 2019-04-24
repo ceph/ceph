@@ -2557,6 +2557,14 @@ bool OSDMonitor::can_mark_down(int i)
     return false;
   }
 
+  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
+      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NODOWN)) {
+    dout(5) << __func__ << " osd." << i
+            << " is marked as nodown via device class, "
+            << "will not mark it down" << dendl;
+    return false;
+  }
+
   int num_osds = osdmap.get_num_osds();
   if (num_osds == 0) {
     dout(5) << __func__ << " no osds" << dendl;
@@ -2594,6 +2602,14 @@ bool OSDMonitor::can_mark_up(int i)
     return false;
   }
 
+  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
+      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOUP)) {
+    dout(5) << __func__ << " osd." << i
+            << " is marked as noup via device class, "
+            << "will not mark it up" << dendl;
+    return false;
+  }
+
   return true;
 }
 
@@ -2617,6 +2633,14 @@ bool OSDMonitor::can_mark_out(int i)
   if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOOUT) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as noout via a crush node flag, "
+            << "will not mark it out" << dendl;
+    return false;
+  }
+
+  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
+      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOOUT)) {
+    dout(5) << __func__ << " osd." << i
+            << " is marked as noout via device class, "
             << "will not mark it out" << dendl;
     return false;
   }
@@ -2660,6 +2684,14 @@ bool OSDMonitor::can_mark_in(int i)
   if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOIN) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as noin via a crush node flag, "
+            << "will not mark it in" << dendl;
+    return false;
+  }
+
+  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
+      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOIN)) {
+    dout(5) << __func__ << " osd." << i
+            << " is marked as noin via device class, "
             << "will not mark it in" << dendl;
     return false;
   }
@@ -10727,6 +10759,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     set<int> osds;
     set<int> crush_nodes;
+    set<int> device_classes;
     for (auto& w : who) {
       if (w == "any" || w == "all" || w == "*") {
         osdmap.get_all_osds(osds);
@@ -10737,11 +10770,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         osds.insert(osd);
       } else if (osdmap.crush->name_exists(w)) {
         crush_nodes.insert(osdmap.crush->get_item_id(w));
+      } else if (osdmap.crush->class_exists(w)) {
+        device_classes.insert(osdmap.crush->get_class_id(w));
       } else {
-        ss << "unable to parse osd id or crush node:\"" << w << "\". ";
+        ss << "unable to parse osd id or crush node or device class: "
+           << "\"" << w << "\". ";
       }
     }
-    if (osds.empty() && crush_nodes.empty()) {
+    if (osds.empty() && crush_nodes.empty() && device_classes.empty()) {
       // ss has reason for failure
       err = -EINVAL;
       goto reply;
@@ -10800,6 +10836,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       auto old_flags = osdmap.get_crush_node_flags(id);
       auto& pending_flags = pending_inc.new_crush_node_flags[id];
       pending_flags |= old_flags; // adopt existing flags first!
+      if (do_set) {
+        pending_flags |= flags;
+      } else {
+        pending_flags &= ~flags;
+      }
+      any = true;
+    }
+    for (auto& id : device_classes) {
+      auto old_flags = osdmap.get_device_class_flags(id);
+      auto& pending_flags = pending_inc.new_device_class_flags[id];
+      pending_flags |= old_flags;
       if (do_set) {
         pending_flags |= flags;
       } else {
