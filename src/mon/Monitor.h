@@ -892,8 +892,7 @@ public:
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap mon_caps;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
-  KeyStore *ms_get_auth1_authorizer_keystore();
+  bool get_authorizer(int dest_type, AuthAuthorizer **authorizer);
 public: // for AuthMonitor msgr1:
   int ms_handle_authentication(Connection *con) override;
 private:

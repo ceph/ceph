@@ -158,11 +158,6 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
   return msgr->get_myaddrs();
 }
 
-KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
-{
-  return monc->rotating_secrets.get();
-}
-
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
   MgrSession *s = new MgrSession(cct);
@@ -208,21 +203,6 @@ int DaemonServer::ms_handle_authentication(Connection *con)
   }
 
   return 1;
-}
-
-bool DaemonServer::ms_get_authorizer(
-  int dest_type,
-  AuthAuthorizer **authorizer)
-{
-  dout(10) << "type=" << ceph_entity_type_name(dest_type) << dendl;
-
-  if (dest_type == CEPH_ENTITY_TYPE_MON) {
-    return true;
-  }
-
-  *authorizer = monc->build_authorizer(dest_type);
-  dout(20) << "got authorizer " << *authorizer << dendl;
-  return *authorizer != NULL;
 }
 
 bool DaemonServer::ms_handle_reset(Connection *con)

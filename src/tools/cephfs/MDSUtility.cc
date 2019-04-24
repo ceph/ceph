@@ -156,11 +156,3 @@ void MDSUtility::handle_fs_map(MFSMap* m)
 }
 
 
-bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}

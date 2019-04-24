@@ -6021,7 +6021,7 @@ int Monitor::get_auth_request(
     return -EACCES;
   }
   AuthAuthorizer *auth;
-  if (!ms_get_authorizer(con->get_peer_type(), &auth)) {
+  if (!get_authorizer(con->get_peer_type(), &auth)) {
     return -EACCES;
   }
   auth_meta->authorizer.reset(auth);
@@ -6082,9 +6082,9 @@ int Monitor::handle_auth_bad_method(
   return -EACCES;
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
+bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
 {
-  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
+  dout(10) << "get_authorizer for " << ceph_entity_type_name(service_id)
 	   << dendl;
 
   if (is_shutdown())
@@ -6153,7 +6153,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
 
   CephXTicketBlob blob;
   if (!cephx_build_service_ticket_blob(cct, info, blob)) {
-    dout(0) << "ms_get_authorizer failed to build service ticket" << dendl;
+    dout(0) << "get_authorizer failed to build service ticket" << dendl;
     return false;
   }
   bufferlist ticket_data;
@@ -6168,11 +6168,6 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
   *authorizer = handler.build_authorizer(0);
   
   return true;
-}
-
-KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
-{
-  return &keyring;
 }
 
 int Monitor::handle_auth_request(
@@ -6192,6 +6187,14 @@ int Monitor::handle_auth_request(
 	   << " method " << auth_method
 	   << " payload " << payload.length()
 	   << dendl;
+  if (!payload.length()) {
+    if (!con->is_msgr2()) {
+      // for v1 connections, we tolerate no authorizer, because authentication
+      // happens via MAuth messages.
+      return 1;
+    }
+    return -EACCES;
+  }
   if (!more) {
     auth_meta->auth_mode = payload[0];
   }
