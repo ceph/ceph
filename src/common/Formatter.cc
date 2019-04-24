@@ -17,6 +17,7 @@
 #include "HTMLFormatter.h"
 #include "common/escape.h"
 #include "include/buffer.h"
+#include "include/utime.h"
 
 #include <set>
 #include <limits>
@@ -89,6 +90,26 @@ void Formatter::flush(bufferlist &bl)
   std::stringstream os;
   flush(os);
   bl.append(os.str());
+}
+
+void Formatter::dump_timestamp(const char *name, const utime_t& t)
+{
+  open_object_section(name);
+  dump_unsigned("unix_seconds", t.sec());
+  dump_unsigned("unix_nanoseconds", t.nsec());
+  t.gmtime(dump_stream("iso8601"));
+  close_section();
+}
+
+void Formatter::dump_timestamp(const char *name, unsigned long long seconds,
+			       unsigned long nsec)
+{
+  utime_t t(seconds, nsec);
+  open_object_section(name);
+  dump_unsigned("unix_seconds", t.sec());
+  dump_unsigned("unix_nanoseconds", t.nsec());
+  t.gmtime(dump_stream("iso8601"));
+  close_section();
 }
 
 void Formatter::dump_format(const char *name, const char *fmt, ...)

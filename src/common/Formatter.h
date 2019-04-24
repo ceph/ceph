@@ -6,12 +6,15 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 
+#include <chrono>
 #include <deque>
 #include <list>
 #include <vector>
 #include <stdarg.h>
 #include <sstream>
 #include <map>
+
+class utime_t;
 
 namespace ceph {
 
@@ -94,6 +97,21 @@ namespace ceph {
       foo.dump(this);
       close_section();
     }
+    void dump_timestamp(const char *name, const utime_t& t);
+    void dump_timestamp(const char *name, unsigned long long seconds,
+			unsigned long nsec);
+
+    template<typename Clock, typename Duration>
+    void dump_timestamp(const char *name,
+			const std::chrono::time_point<Clock, Duration>& t) {
+      auto a = t.time_since_epoch();
+      dump_timestamp(
+	name,
+	std::chrono::duration_cast<std::chrono::seconds>(a).count(),
+	std::chrono::duration_cast<std::chrono::nanoseconds>(
+	  (a % std::chrono::seconds(1))).count());
+    }
+
     virtual std::ostream& dump_stream(const char *name) = 0;
     virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;
     virtual void dump_format(const char *name, const char *fmt, ...);

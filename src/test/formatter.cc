@@ -15,6 +15,9 @@
 #include "gtest/gtest.h"
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
+#include "common/Clock.h"
+#include "common/ceph_time.h"
+#include "include/utime.h"
 
 #include <sstream>
 #include <string>
@@ -67,6 +70,25 @@ TEST(JsonFormatter, Empty) {
   JSONFormatter fmt(false);
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "");
+}
+
+TEST(JsonFormatter, utime) {
+  utime_t t(1556122013, 839991182);
+  ostringstream oss;
+  JSONFormatter fmt(false);
+  fmt.dump_timestamp("time", t);
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "{\"unix_seconds\":1556122013,\"unix_nanoseconds\":839991182,\"iso8601\":\"2019-04-24 16:06:53.839991Z\"}");
+}
+
+TEST(JsonFormatter, time) {
+  ceph::real_clock::time_point t =
+    ceph::real_clock::from_time_t(1556122013);
+  ostringstream oss;
+  JSONFormatter fmt(false);
+  fmt.dump_timestamp("time", t);
+  fmt.flush(oss);
+  ASSERT_EQ(oss.str(), "{\"unix_seconds\":1556122013,\"unix_nanoseconds\":0,\"iso8601\":\"2019-04-24 16:06:53.000000Z\"}");
 }
 
 TEST(XmlFormatter, Simple1) {
