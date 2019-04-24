@@ -406,6 +406,22 @@ public:
   void reg_next_scrub() override;
   void unreg_next_scrub() override;
 
+  void clear_ready_to_merge() override;
+
+  void queue_want_pg_temp(const vector<int> &wanted) override;
+  void clear_want_pg_temp() override;
+
+  void on_new_interval() override;
+  virtual void plpg_on_new_interval() = 0;
+
+  void on_role_change() override;
+  virtual void plpg_on_role_change() = 0;
+
+  void clear_publish_stats() override;
+  void clear_primary_state() override;
+
+  epoch_t oldest_stored_osdmap() override;
+
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
   }
@@ -568,12 +584,6 @@ protected:
   virtual PGBackend *get_pgbackend() = 0;
   virtual const PGBackend* get_pgbackend() const = 0;
 
-protected:
-  /*** PG ****/
-  /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() const {
-    return get_pgbackend()->get_is_recoverable_predicate();
-  }
 protected:
   void requeue_map_waiters();
 
@@ -922,9 +932,6 @@ protected:
   void _update_blocked_by();
   friend class TestOpsSocketHook;
   void publish_stats_to_osd();
-  void clear_publish_stats();
-
-  void clear_primary_state();
 
   bool needs_recovery() const;
   bool needs_backfill() const;
@@ -1469,56 +1476,6 @@ protected:
     return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
   }
 
-  void init_primary_up_acting(
-    const vector<int> &newup,
-    const vector<int> &newacting,
-    int new_up_primary,
-    int new_acting_primary) {
-    actingset.clear();
-    acting = newacting;
-    for (uint8_t i = 0; i < acting.size(); ++i) {
-      if (acting[i] != CRUSH_ITEM_NONE)
-	actingset.insert(
-	  pg_shard_t(
-	    acting[i],
-	    pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-    }
-    upset.clear();
-    up = newup;
-    for (uint8_t i = 0; i < up.size(); ++i) {
-      if (up[i] != CRUSH_ITEM_NONE)
-	upset.insert(
-	  pg_shard_t(
-	    up[i],
-	    pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-    }
-    if (!pool.info.is_erasure()) {
-      up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
-      primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
-      return;
-    }
-    up_primary = pg_shard_t();
-    primary = pg_shard_t();
-    for (uint8_t i = 0; i < up.size(); ++i) {
-      if (up[i] == new_up_primary) {
-	up_primary = pg_shard_t(up[i], shard_id_t(i));
-	break;
-      }
-    }
-    for (uint8_t i = 0; i < acting.size(); ++i) {
-      if (acting[i] == new_acting_primary) {
-	primary = pg_shard_t(acting[i], shard_id_t(i));
-	break;
-      }
-    }
-    ceph_assert(up_primary.osd == new_up_primary);
-    ceph_assert(primary.osd == new_acting_primary);
-  }
-
-  void set_role(int r) {
-    role = r;
-  }
-
   bool state_test(uint64_t m) const { return recovery_state.state_test(m); }
   void state_set(uint64_t m) { recovery_state.state_set(m); }
   void state_clear(uint64_t m) { recovery_state.state_clear(m); }
@@ -1659,13 +1616,6 @@ protected:
     boost::optional<eversion_t> roll_forward_to);
 
   bool try_flush_or_schedule_async() override;
-  void start_peering_interval(
-    const OSDMapRef lastmap,
-    const vector<int>& newup, int up_primary,
-    const vector<int>& newacting, int acting_primary,
-    ObjectStore::Transaction *t);
-  void on_new_interval();
-  virtual void _on_new_interval() = 0;
   void start_flush_on_transaction(
     ObjectStore::Transaction *t) override;
 

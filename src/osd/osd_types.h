@@ -3160,7 +3160,7 @@ public:
     const OSDMap *osdmap,      ///< [in] current map
     const OSDMap *lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     );
@@ -3178,7 +3178,7 @@ public:
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     ) {
