@@ -90,33 +90,16 @@ fi
 test "$milestone" || usage
 echo "Milestone: $milestone"
 
-# ------------------------------------
-# How to find out the milestone number
-# ------------------------------------
-# can't seem to extract the milestone number with the API
-# milestone numbers can be obtained with:
+# milestone numbers can be obtained manually with:
 #   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
 
-if [[ "x$milestone" = "xhammer" ]] ; then
-    milestone_number=5
-    target_branch=hammer
-elif [[ "x$milestone" = "xjewel" ]] ; then
-    milestone_number=8
-    target_branch=jewel
-elif [[ "x$milestone" = "xkraken" ]] ; then
-    milestone_number=9
-    target_branch=kraken
-elif [[ "x$milestone" = "xluminous" ]] ; then
-    milestone_number=10
-    target_branch=luminous
-elif [[ "x$milestone" = "xmimic" ]] ; then
-    milestone_number=11
-    target_branch=mimic
-elif [[ "x$milestone" = "xnautilus" ]] ; then
-    milestone_number=12
-    target_branch=nautilus
+milestone_number=$(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
+
+if test -n "$milestone_number" ; then
+    target_branch="$milestone"
 else
-    echo "Please enter hammer, jewel, kraken, luminous, mimic, or nautilus"
+    echo -n "Unknown Milestone. Please use one of the following ones: "
+    echo $(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq '.[].title')
     exit 1
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
