@@ -2,7 +2,6 @@
 import json
 import logging
 import time
-from unittest import SkipTest
 
 from mgr_test_case import MgrTestCase
 
@@ -63,7 +62,7 @@ class TestProgress(MgrTestCase):
     def setUp(self):
         # Ensure we have at least four OSDs
         if self._osd_count() < 4:
-            raise SkipTest("Not enough OSDS!")
+            self.skipTest("Not enough OSDS!")
 
         # Remove any filesystems so that we can remove their pools
         if self.mds_cluster:
