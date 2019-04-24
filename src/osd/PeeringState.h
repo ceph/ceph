@@ -103,8 +103,6 @@ public:
     virtual void set_probe_targets(const set<pg_shard_t> &probe_set) = 0;
     virtual void clear_probe_targets() = 0;
 
-    virtual void clear_ready_to_merge() = 0;
-
     virtual void queue_want_pg_temp(const vector<int> &wanted) = 0;
     virtual void clear_want_pg_temp() = 0;
 
@@ -132,8 +130,11 @@ public:
     virtual void do_delete_work(ObjectStore::Transaction *t) = 0;
 
     // PG Merge
+    virtual void clear_ready_to_merge() = 0;
     virtual void set_not_ready_to_merge_target(pg_t pgid, pg_t src) = 0;
     virtual void set_not_ready_to_merge_source(pg_t pgid) = 0;
+    virtual void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) = 0;
+    virtual void set_ready_to_merge_source(eversion_t lu) = 0;
 
     // active map notifications
     virtual void on_active_actmap() = 0;
@@ -1436,6 +1437,18 @@ public:
     machine.process_event(evt->get_event());
     end_handle();
   }
+
+  void start_split_stats(
+    const set<spg_t>& childpgs, vector<object_stat_sum_t> *out);
+  void finish_split_stats(
+    const object_stat_sum_t& stats, ObjectStore::Transaction *t);
+  void split_into(
+    pg_t child_pgid, PeeringState *child, unsigned split_bits);
+  void merge_from(
+    map<spg_t,PeeringState *>& sources,
+    PeeringCtx *rctx,
+    unsigned split_bits,
+    const pg_merge_meta_t& last_pg_merge_meta);
 
   void dump_history(Formatter *f) const {
     state_history.dump(f);

@@ -412,8 +412,6 @@ public:
   void reg_next_scrub();
   void unreg_next_scrub();
 
-  void clear_ready_to_merge() override;
-
   void queue_want_pg_temp(const vector<int> &wanted) override;
   void clear_want_pg_temp() override;
 
@@ -495,8 +493,12 @@ public:
 
   void do_delete_work(ObjectStore::Transaction *t) override;
 
+  void clear_ready_to_merge() override;
   void set_not_ready_to_merge_target(pg_t pgid, pg_t src) override;
   void set_not_ready_to_merge_source(pg_t pgid) override;
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) override;
+  void set_ready_to_merge_source(eversion_t lu) override;
+
   void send_pg_created(pg_t pgid) override;
 
   void queue_peering_event(PGPeeringEventRef evt);
