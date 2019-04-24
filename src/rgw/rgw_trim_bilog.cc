@@ -21,7 +21,7 @@
 #include "include/scope_guard.h"
 #include "common/bounded_key_counter.h"
 #include "common/errno.h"
-#include "rgw_sync_log_trim.h"
+#include "rgw_trim_bilog.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
 #include "rgw_data_sync.h"
