@@ -429,8 +429,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   RGWBucketInfo& bucket_info = bucket->bucket_info;
 
-  using namespace rgw::putobj;
-  rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
   rgw_obj obj(bucket_info.bucket, key);
@@ -439,16 +438,14 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   string req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
 
-  AtomicObjectProcessor processor(&aio, store, bucket_info,
-                                  nullptr,
-                                  owner.get_id(),
-                                  obj_ctx, obj, olh_epoch, req_id, dpp);
+  using namespace rgw::putobj;
+  AtomicObjectProcessor processor(&aio, store, bucket_info, nullptr,
+                                  owner.get_id(), obj_ctx, obj, olh_epoch,
+                                  req_id, dpp, null_yield);
 
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
-
-  using namespace rgw::putobj;
 
   DataProcessor *filter = &processor;
 

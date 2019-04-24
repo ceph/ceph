@@ -4278,11 +4278,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
 
-  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
-                                  obj_ctx, dest_obj, olh_epoch, tag, dpp);
+                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4519,7 +4519,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
     return ret;
   }
 
-  ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
+  ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb(), null_yield);
   if (ret < 0) {
     delete out_stream_req;
     return ret;
@@ -4856,11 +4856,11 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
-                                  dest_obj, olh_epoch, tag, dpp);
+                                  dest_obj, olh_epoch, tag, dpp, null_yield);
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
@@ -6713,9 +6713,11 @@ struct get_obj_data {
   rgw::Aio* aio;
   uint64_t offset; // next offset to write to client
   rgw::AioResultList completed; // completed read results, sorted by offset
+  optional_yield yield;
 
-  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio, uint64_t offset)
-    : store(store), client_cb(cb), aio(aio), offset(offset) {}
+  get_obj_data(RGWRados* store, RGWGetDataCB* cb, rgw::Aio* aio,
+               uint64_t offset, optional_yield yield)
+    : store(store), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
 
   int flush(rgw::AioResultList&& results) {
     int r = rgw::check_for_errors(results);
@@ -6813,12 +6815,13 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op)), cost, id);
+  auto completed = d->aio->get(obj, rgw::Aio::librados_op(std::move(op), d->yield), cost, id);
 
   return d->flush(std::move(completed));
 }
 
-int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
+int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
+                                    optional_yield y)
 {
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
@@ -6826,8 +6829,8 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
-  rgw::AioThrottle aio(window_size);
-  get_obj_data data(store, cb, &aio, ofs);
+  auto aio = rgw::make_throttle(window_size, y);
+  get_obj_data data(store, cb, &*aio, ofs, y);
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data);
