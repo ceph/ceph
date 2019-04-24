@@ -3578,7 +3578,8 @@ public:
   }
   ostream &print(ostream &out) const override {
     return out << "([" << first << "," << last
-	       << "] intervals=" << intervals << ")";
+	       << "] all_participants=" << all_participants
+	       << " intervals=" << intervals << ")";
   }
   void encode(ceph::buffer::list &bl) const override {
     ENCODE_START(1, 1, bl);
@@ -3774,8 +3775,8 @@ bool PastIntervals::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
-  OSDMapRef osdmap,
-  OSDMapRef lastmap,
+  const OSDMap *osdmap,
+  const OSDMap *lastmap,
   pg_t pgid)
 {
   const pg_pool_t *plast = lastmap->get_pg_pool(pgid.pool());
@@ -3821,8 +3822,8 @@ bool PastIntervals::check_new_interval(
   const vector<int> &new_up,
   epoch_t same_interval_since,
   epoch_t last_epoch_clean,
-  OSDMapRef osdmap,
-  OSDMapRef lastmap,
+  const OSDMap *osdmap,
+  const OSDMap *lastmap,
   pg_t pgid,
   IsPGRecoverablePredicate *could_have_gone_active,
   PastIntervals *past_intervals,

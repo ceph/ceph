@@ -4705,14 +4705,7 @@ void OSD::build_initial_pg_history(
   PastIntervals *pi)
 {
   dout(10) << __func__ << " " << pgid << " created " << created << dendl;
-  h->epoch_created = created;
-  h->epoch_pool_created = created;
-  h->same_interval_since = created;
-  h->same_up_since = created;
-  h->same_primary_since = created;
-  h->last_scrub_stamp = created_stamp;
-  h->last_deep_scrub_stamp = created_stamp;
-  h->last_clean_scrub_stamp = created_stamp;
+  *h = pg_history_t(created, created_stamp);
 
   OSDMapRef lastmap = service.get_map(created);
   int up_primary, acting_primary;
@@ -4746,8 +4739,8 @@ void OSD::build_initial_pg_history(
       up, new_up,
       h->same_interval_since,
       h->last_epoch_clean,
-      osdmap,
-      lastmap,
+      osdmap.get(),
+      lastmap.get(),
       pgid.pgid,
       &min_size_predicate,
       pi,
@@ -9007,6 +9000,9 @@ void OSD::split_pgs(
  */
 void OSD::handle_pg_create(OpRequestRef op)
 {
+  // NOTE: this can be removed in P release (mimic is the last version to
+  // send MOSDPGCreate messages).
+
   const MOSDPGCreate *m = static_cast<const MOSDPGCreate*>(op->get_req());
   ceph_assert(m->get_type() == MSG_OSD_PG_CREATE);
 
@@ -9270,33 +9266,55 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
     spg_t pgid = p.first;
     epoch_t created = p.second.first;
     utime_t created_stamp = p.second.second;
-    dout(20) << __func__ << " " << pgid << " e" << created
-	     << "@" << created_stamp << dendl;
-    pg_history_t h;
-    h.epoch_created = created;
-    h.epoch_pool_created = created;
-    h.same_up_since = created;
-    h.same_interval_since = created;
-    h.same_primary_since = created;
-    h.last_scrub_stamp = created_stamp;
-    h.last_deep_scrub_stamp = created_stamp;
-    h.last_clean_scrub_stamp = created_stamp;
-
-    enqueue_peering_evt(
-      pgid,
-      PGPeeringEventRef(
-	std::make_shared<PGPeeringEvent>(
-	  m->epoch,
-	  m->epoch,
-	  NullEvt(),
-	  true,
-	  new PGCreateInfo(
-	    pgid,
-	    created,
-	    h,
-	    PastIntervals(),
-	    true)
-	  )));
+    auto q = m->pg_extra.find(pgid);
+    if (q == m->pg_extra.end()) {
+      dout(20) << __func__ << " " << pgid << " e" << created
+	       << "@" << created_stamp
+	       << " (no history or past_intervals)" << dendl;
+      // pre-octopus ... no pg history.  this can be removed in Q release.
+      enqueue_peering_evt(
+	pgid,
+	PGPeeringEventRef(
+	  std::make_shared<PGPeeringEvent>(
+	    m->epoch,
+	    m->epoch,
+	    NullEvt(),
+	    true,
+	    new PGCreateInfo(
+	      pgid,
+	      created,
+	      pg_history_t(created, created_stamp),
+	      PastIntervals(),
+	      true)
+	    )));
+    } else {
+      dout(20) << __func__ << " " << pgid << " e" << created
+	       << "@" << created_stamp
+	       << " history " << q->second.first
+	       << " pi " << q->second.second << dendl;
+      if (!q->second.second.empty() &&
+	  m->epoch < q->second.second.get_bounds().second) {
+	clog->error() << "got pg_create on " << pgid << " epoch " << m->epoch
+		      << " and unmatched past_intervals " << q->second.second
+		      << " (history " << q->second.first << ")";
+      } else {
+	enqueue_peering_evt(
+	  pgid,
+	  PGPeeringEventRef(
+	    std::make_shared<PGPeeringEvent>(
+	      m->epoch,
+	      m->epoch,
+	      NullEvt(),
+	      true,
+	      new PGCreateInfo(
+		pgid,
+		m->epoch,
+		q->second.first,
+		q->second.second,
+		true)
+	      )));
+      }
+    }
   }
 
   {

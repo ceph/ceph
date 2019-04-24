@@ -572,7 +572,7 @@ static int update_creating_pgs(MonitorDBStore& st)
   creating.last_scan_epoch = last_osdmap_epoch;
 
   bufferlist newbl;
-  ::encode(creating, newbl);
+  encode(creating, newbl, CEPH_FEATURES_ALL);
 
   auto t = make_shared<MonitorDBStore::Transaction>();
   t->put("osd_pg_creating", "creating", newbl);

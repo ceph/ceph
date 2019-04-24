@@ -12,11 +12,12 @@
 
 class MOSDPGCreate2 : public Message {
 public:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
   epoch_t epoch = 0;
   map<spg_t,pair<epoch_t,utime_t>> pgs;
+  map<spg_t,pair<pg_history_t,PastIntervals>> pg_extra;
 
   MOSDPGCreate2()
     : Message{MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION} {}
@@ -38,12 +39,16 @@ public:
     using ceph::encode;
     encode(epoch, payload);
     encode(pgs, payload);
+    encode(pg_extra, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);
     decode(pgs, p);
+    if (header.version >= 2) {
+      decode(pg_extra, p);
+    }
   }
 private:
   template<class T, typename... Args>
