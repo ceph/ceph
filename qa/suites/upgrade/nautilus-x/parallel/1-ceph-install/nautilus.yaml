@@ -1,6 +1,6 @@
 meta:
 - desc: |
-   install ceph/luminous latest
+   install ceph/nautilus latest
    run workload and upgrade-sequence in parallel
    upgrade the client node
 tasks:
