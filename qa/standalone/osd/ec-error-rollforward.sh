@@ -10,7 +10,7 @@ function run() {
     export CEPH_MON="127.0.0.1:7132" # git grep '\<7132\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON --osd-objectstore filestore"
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
     export margin=10
     export objects=200
     export poolname=test

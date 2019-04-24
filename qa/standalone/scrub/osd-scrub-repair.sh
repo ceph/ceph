@@ -56,7 +56,6 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd-skip-data-digest=false "
-    CEPH_ARGS+="--osd-objectstore=filestore "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -191,24 +190,6 @@ function corrupt_and_repair_erasure_coded() {
 
 }
 
-function create_ec_pool() {
-    local pool_name=$1
-    shift
-    local allow_overwrites=$1
-    shift
-
-    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd "$@" || return 1
-
-    create_pool "$poolname" 1 1 erasure myprofile || return 1
-
-    if [ "$allow_overwrites" = "true" ]; then
-        ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
-    fi
-
-    wait_for_clean || return 1
-    return 0
-}
-
 function auto_repair_erasure_coded() {
     local dir=$1
     local allow_overwrites=$2
@@ -225,9 +206,9 @@ function auto_repair_erasure_coded() {
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id $ceph_osd_args || return 1
-	else
             run_osd $dir $id $ceph_osd_args || return 1
+	else
+            run_osd_filestore $dir $id $ceph_osd_args || return 1
 	fi
     done
     create_rbd_pool || return 1
@@ -280,7 +261,7 @@ function TEST_auto_repair_bluestore_basic() {
 	    --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     create_pool $poolname 1 1 || return 1
@@ -329,7 +310,7 @@ function TEST_auto_repair_bluestore_scrub() {
 	    --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     create_pool $poolname 1 1 || return 1
@@ -384,7 +365,7 @@ function TEST_auto_repair_bluestore_failed() {
 	    --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     create_pool $poolname 1 1 || return 1
@@ -453,7 +434,7 @@ function TEST_auto_repair_bluestore_failed_norecov() {
 	    --osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     create_pool $poolname 1 1 || return 1
@@ -510,7 +491,7 @@ function TEST_repair_stats() {
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 $(expr $OSDS - 1)) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     create_pool $poolname 1 1 || return 1
@@ -539,8 +520,8 @@ function TEST_repair_stats() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd_bluestore $dir $primary $ceph_osd_args || return 1
-    run_osd_bluestore $dir $other $ceph_osd_args || return 1
+    run_osd $dir $primary $ceph_osd_args || return 1
+    run_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
@@ -584,7 +565,7 @@ function TEST_repair_stats_ec() {
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 $(expr $OSDS - 1)) ; do
-        run_osd_bluestore $dir $id $ceph_osd_args || return 1
+        run_osd $dir $id $ceph_osd_args || return 1
     done
 
     # Create an EC pool
@@ -612,8 +593,8 @@ function TEST_repair_stats_ec() {
       OSD=$(expr $i % 2)
       _objectstore_tool_nodown $dir $OSD obj$i remove || return 1
     done
-    run_osd_bluestore $dir $primary $ceph_osd_args || return 1
-    run_osd_bluestore $dir $other $ceph_osd_args || return 1
+    run_osd $dir $primary $ceph_osd_args || return 1
+    run_osd $dir $other $ceph_osd_args || return 1
     wait_for_clean || return 1
 
     repair $pgid
@@ -655,9 +636,9 @@ function corrupt_and_repair_jerasure() {
     run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id || return 1
-	else
             run_osd $dir $id || return 1
+	else
+            run_osd_filestore $dir $id || return 1
 	fi
     done
     create_rbd_pool || return 1
@@ -689,9 +670,9 @@ function corrupt_and_repair_lrc() {
     run_mgr $dir x || return 1
     for id in $(seq 0 9) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id || return 1
-	else
             run_osd $dir $id || return 1
+	else
+            run_osd_filestore $dir $id || return 1
 	fi
     done
     create_rbd_pool || return 1
@@ -724,9 +705,9 @@ function unfound_erasure_coded() {
     run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id || return 1
-	else
             run_osd $dir $id || return 1
+	else
+            run_osd_filestore $dir $id || return 1
 	fi
     done
 
@@ -794,9 +775,9 @@ function list_missing_erasure_coded() {
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id || return 1
-	else
             run_osd $dir $id || return 1
+	else
+            run_osd_filestore $dir $id || return 1
 	fi
     done
     create_rbd_pool || return 1
@@ -3405,9 +3386,9 @@ function corrupt_scrub_erasure() {
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
 	if [ "$allow_overwrites" = "true" ]; then
-            run_osd_bluestore $dir $id || return 1
-	else
             run_osd $dir $id || return 1
+	else
+            run_osd_filestore $dir $id || return 1
 	fi
     done
     create_rbd_pool || return 1
