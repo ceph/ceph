@@ -91,6 +91,11 @@ function test_dedup_ratio_fixed()
   do
     rm -rf ./dedup_object_$num
   done
+  $RADOS_TOOL -p $POOL rm $OBJ 
+  for num in `seq 0 20`
+  do
+    $RADOS_TOOL -p $POOL rm dedup_object_$num
+  done
 }
 
 function test_dedup_chunk_scrub()
@@ -143,6 +148,8 @@ function test_dedup_chunk_scrub()
   $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
   
   rm -rf ./foo ./bar ./foo-chunk ./bar-chunk ./test_obj
+  $RADOS_TOOL -p $POOL rm foo
+  $RADOS_TOOL -p $POOL rm bar
 }
 
 function test_dedup_ratio_rabin()
@@ -160,26 +167,24 @@ function test_dedup_ratio_rabin()
   done
   $RADOS_TOOL -p $POOL put $OBJ ./test_rabin_object
   RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1015  --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
-  echo $RESULT
   if [ 4096 -ne $RESULT ];
   then
-    die "Estimate failed expecting 7168 result $RESULT"
+    die "Estimate failed expecting 4096 result $RESULT"
   fi
 
   echo "a" >> test_rabin_object_2
   dd if=./test_rabin_object bs=8K count=1 >> test_rabin_object_2
   $RADOS_TOOL -p $POOL put $OBJ"_2" ./test_rabin_object_2
   RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1012 --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
-  echo $RESULT
   if [ 11259 -ne $RESULT ];
   then
-    die "Estimate failed expecting 16386 result $RESULT"
+    die "Estimate failed expecting 11259 result $RESULT"
   fi
 
   RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1024 --chunk-mask-bit 3  --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
   if [ 7170 -ne $RESULT ];
   then
-    die "Estimate failed expecting 5122 result $RESULT"
+    die "Estimate failed expecting 7170 result $RESULT"
   fi
 
   rm -rf ./dedup_object_1k ./test_rabin_object ./test_rabin_object_2 ./dedup_16
