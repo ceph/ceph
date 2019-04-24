@@ -2303,11 +2303,11 @@ void rename_rollback::drec::decode(bufferlist::const_iterator &bl)
 
 void rename_rollback::drec::dump(Formatter *f) const
 {
-  f->dump_stream("directory fragment") << dirfrag;
-  f->dump_stream("directory old mtime") << dirfrag_old_mtime;
-  f->dump_stream("directory old rctime") << dirfrag_old_rctime;
+  f->dump_stream("directory_fragment") << dirfrag;
+  f->dump_stream("directory_old_mtime") << dirfrag_old_mtime;
+  f->dump_stream("directory_old_rctime") << dirfrag_old_rctime;
   f->dump_int("ino", ino);
-  f->dump_int("remote ino", remote_ino);
+  f->dump_int("remote_ino", remote_ino);
   f->dump_string("dname", dname);
   uint32_t type = DTTOIF(remote_d_type) & S_IFMT; // convert to type entries
   string type_string;
@@ -2321,8 +2321,8 @@ void rename_rollback::drec::dump(Formatter *f) const
   default:
     type_string = "UNKNOWN-" + stringify((int)type); break;
   }
-  f->dump_string("remote dtype", type_string);
-  f->dump_stream("old ctime") << old_ctime;
+  f->dump_string("remote_dtype", type_string);
+  f->dump_stream("old_ctime") << old_ctime;
 }
 
 void rename_rollback::drec::generate_test_instances(std::list<drec*>& ls)
@@ -2361,14 +2361,14 @@ void rename_rollback::decode(bufferlist::const_iterator &bl)
 
 void rename_rollback::dump(Formatter *f) const
 {
-  f->dump_stream("request id") << reqid;
-  f->open_object_section("original src drec");
+  f->dump_stream("request_id") << reqid;
+  f->open_object_section("original_src_drec");
   orig_src.dump(f);
   f->close_section(); // original src drec
-  f->open_object_section("original dest drec");
+  f->open_object_section("original_dest_drec");
   orig_dest.dump(f);
   f->close_section(); // original dest drec
-  f->open_object_section("stray drec");
+  f->open_object_section("stray_drec");
   stray.dump(f);
   f->close_section(); // stray drec
   f->dump_stream("ctime") << ctime;
