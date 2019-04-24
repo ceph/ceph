@@ -417,7 +417,7 @@ class TestBuilderProject(object):
     def test_choose_reference(self, ref, tag, branch, sha1, expected):
         config = dict(
             os_type='ubuntu',
-            os_version='16.04',
+            os_version='18.04',
         )
         if ref:
             config['ref'] = ref
@@ -478,7 +478,7 @@ class TestBuilderProject(object):
         ('rhel', None, None, 'centos7'),
         ('centos', None, None, 'centos7'),
         ('fedora', None, None, 'fedora25'),
-        ('ubuntu', None, None, 'xenial'),
+        ('ubuntu', None, None, 'bionic'),
         ('debian', None, None, 'jessie'),
     ]
 
@@ -755,6 +755,6 @@ class TestShamanProject(TestBuilderProject):
         ('rhel', None, None, 'centos/7'),
         ('centos', None, None, 'centos/7'),
         ('fedora', None, None, 'fedora/25'),
-        ('ubuntu', None, None, 'ubuntu/16.04'),
+        ('ubuntu', None, None, 'ubuntu/18.04'),
         ('debian', None, None, 'debian/8.0'),
     ]
