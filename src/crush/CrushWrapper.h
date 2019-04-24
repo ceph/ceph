@@ -968,7 +968,7 @@ public:
 
   int validate_weightf(float weight) {
     uint64_t iweight = weight * 0x10000;
-    if (iweight > std::numeric_limits<int>::max()) {
+    if (iweight > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
       return -EOVERFLOW;
     }
     return 0;
