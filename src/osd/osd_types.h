@@ -2571,16 +2571,16 @@ WRITE_CLASS_ENCODER(pg_hit_set_history_t)
  * history they need to worry about.
  */
 struct pg_history_t {
-  epoch_t epoch_created;       // epoch in which *pg* was created (pool or pg)
-  epoch_t epoch_pool_created;  // epoch in which *pool* was created
+  epoch_t epoch_created = 0;       // epoch in which *pg* was created (pool or pg)
+  epoch_t epoch_pool_created = 0;  // epoch in which *pool* was created
 			       // (note: may be pg creation epoch for
 			       // pre-luminous clusters)
-  epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
-  epoch_t last_interval_started; // first epoch of last_epoch_started interval
-  epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
-  epoch_t last_interval_clean; // first epoch of last_epoch_clean interval
-  epoch_t last_epoch_split;    // as parent or child
-  epoch_t last_epoch_marked_full;  // pool or cluster
+  epoch_t last_epoch_started = 0;;  // lower bound on last epoch started (anywhere, not necessarily locally)
+  epoch_t last_interval_started = 0;; // first epoch of last_epoch_started interval
+  epoch_t last_epoch_clean = 0;;    // lower bound on last epoch the PG was completely clean.
+  epoch_t last_interval_clean = 0;; // first epoch of last_epoch_clean interval
+  epoch_t last_epoch_split = 0;;    // as parent or child
+  epoch_t last_epoch_marked_full = 0;;  // pool or cluster
   
   /**
    * In the event of a map discontinuity, same_*_since may reflect the first
@@ -2589,9 +2589,9 @@ struct pg_history_t {
    * must have been a clean interval between e and now and that we cannot be
    * in the active set during the interval containing e.
    */
-  epoch_t same_up_since;       // same acting set since
-  epoch_t same_interval_since;   // same acting AND up set since
-  epoch_t same_primary_since;  // same primary at least back through this epoch.
+  epoch_t same_up_since = 0;;       // same acting set since
+  epoch_t same_interval_since = 0;;   // same acting AND up set since
+  epoch_t same_primary_since = 0;;  // same primary at least back through this epoch.
 
   eversion_t last_scrub;
   eversion_t last_deep_scrub;
@@ -2619,16 +2619,16 @@ struct pg_history_t {
       l.last_clean_scrub_stamp == r.last_clean_scrub_stamp;
   }
 
-  pg_history_t()
-    : epoch_created(0),
-      epoch_pool_created(0),
-      last_epoch_started(0),
-      last_interval_started(0),
-      last_epoch_clean(0),
-      last_interval_clean(0),
-      last_epoch_split(0),
-      last_epoch_marked_full(0),
-      same_up_since(0), same_interval_since(0), same_primary_since(0) {}
+  pg_history_t() {}
+  pg_history_t(epoch_t created, utime_t stamp)
+    : epoch_created(created),
+      epoch_pool_created(created),
+      same_up_since(created),
+      same_interval_since(created),
+      same_primary_since(created),
+      last_scrub_stamp(stamp),
+      last_deep_scrub_stamp(stamp),
+      last_clean_scrub_stamp(stamp) {}
   
   bool merge(const pg_history_t &other) {
     // Here, we only update the fields which cannot be calculated from the OSDmap.
@@ -3137,8 +3137,8 @@ public:
     int new_up_primary,                         ///< [in] up primary of osdmap
     const std::vector<int> &old_up,                  ///< [in] up as of lastmap
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
-    std::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    std::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    const OSDMap *osdmap,  ///< [in] current map
+    const OSDMap *lastmap, ///< [in] last map
     pg_t pgid                                   ///< [in] pgid for pg
     );
 
@@ -3157,13 +3157,43 @@ public:
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
+    const OSDMap *osdmap,      ///< [in] current map
+    const OSDMap *lastmap,     ///< [in] last map
+    pg_t pgid,                                  ///< [in] pgid for pg
+    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    PastIntervals *past_intervals,              ///< [out] intervals
+    std::ostream *out = 0                            ///< [out] debug ostream
+    );
+  static bool check_new_interval(
+    int old_acting_primary,                     ///< [in] primary as of lastmap
+    int new_acting_primary,                     ///< [in] primary as of osdmap
+    const std::vector<int> &old_acting,              ///< [in] acting as of lastmap
+    const std::vector<int> &new_acting,              ///< [in] acting as of osdmap
+    int old_up_primary,                         ///< [in] up primary of lastmap
+    int new_up_primary,                         ///< [in] up primary of osdmap
+    const std::vector<int> &old_up,                  ///< [in] up as of lastmap
+    const std::vector<int> &new_up,                  ///< [in] up as of osdmap
+    epoch_t same_interval_since,                ///< [in] as of osdmap
+    epoch_t last_epoch_clean,                   ///< [in] current
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
-    );
+    ) {
+    return check_new_interval(
+      old_acting_primary, new_acting_primary,
+      old_acting, new_acting,
+      old_up_primary, new_up_primary,
+      old_up, new_up,
+      same_interval_since, last_epoch_clean,
+      osdmap.get(), lastmap.get(),
+      pgid,
+      could_have_gone_active,
+      past_intervals,
+      out);
+  }
 
   friend std::ostream& operator<<(std::ostream& out, const PastIntervals &i);
 
