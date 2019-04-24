@@ -25,7 +25,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
-#include "rgw_sync_log_trim.h"
+#include "rgw_trim_bilog.h"
 #include "rgw_service.h"
 
 #include "services/svc_rados.h"
