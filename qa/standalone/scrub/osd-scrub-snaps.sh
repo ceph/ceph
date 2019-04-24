@@ -30,7 +30,7 @@ function run() {
     export CEPH_MON="127.0.0.1:7121" # git grep '\<7121\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON --osd-objectstore=filestore"
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -100,12 +100,12 @@ function create_scenario() {
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":1)"
     OBJ5SAVE="$JSON"
     # Starts with a snapmap
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*MAP_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype nosnapmap "$JSON" remove || return 1
     # Check that snapmap is stil there
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*MAP_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
@@ -120,13 +120,13 @@ function create_scenario() {
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
 
     # Starts with a snapmap
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*MAP_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj16 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype snapmap "$JSON" remove || return 1
     # Check that snapmap is now removed
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    ! grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    ! grep "^M.*MAP_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
