@@ -21,6 +21,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include "include/rados/librados_fwd.hpp"
+#include "common/async/yield_context.h"
 
 #include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
 
@@ -90,8 +91,10 @@ class Aio {
   // wait for all outstanding completions and return their results
   virtual AioResultList drain() = 0;
 
-  static OpFunc librados_op(librados::ObjectReadOperation&& op);
-  static OpFunc librados_op(librados::ObjectWriteOperation&& op);
+  static OpFunc librados_op(librados::ObjectReadOperation&& op,
+                            optional_yield y);
+  static OpFunc librados_op(librados::ObjectWriteOperation&& op,
+                            optional_yield y);
 };
 
 } // namespace rgw
