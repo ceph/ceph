@@ -143,7 +143,8 @@ struct MockJournalerProxy {
 
   template <typename IoCtxT>
   MockJournalerProxy(IoCtxT &header_ioctx, const std::string &,
-                     const std::string &, const Settings&) {
+                     const std::string &, const Settings&,
+                     journal::CacheManagerHandler *) {
     MockJournaler::get_instance().construct();
   }
 
@@ -151,7 +152,8 @@ struct MockJournalerProxy {
   MockJournalerProxy(WorkQueue *work_queue, Timer *timer, Mutex *timer_lock,
                      librados::IoCtx &header_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id, const Settings&) {
+                     const std::string &client_id, const Settings&,
+                     journal::CacheManagerHandler *) {
     MockJournaler::get_instance().construct();
   }
 

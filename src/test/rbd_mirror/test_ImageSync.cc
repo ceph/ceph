@@ -77,7 +77,7 @@ public:
 
     m_remote_journaler = new ::journal::Journaler(
       m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {});
+      m_remote_io_ctx, m_remote_image_ctx->id, "mirror-uuid", {}, nullptr);
 
     m_client_meta = {"image-id"};
 

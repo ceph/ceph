@@ -78,7 +78,7 @@ public:
   journal::JournalPlayer *create_player(const std::string &oid,
                                         const journal::JournalMetadataPtr &metadata) {
     journal::JournalPlayer *player(new journal::JournalPlayer(
-      m_ioctx, oid + ".", metadata, &m_replay_hander));
+      m_ioctx, oid + ".", metadata, &m_replay_hander, nullptr));
     m_players.push_back(player);
     return player;
   }
