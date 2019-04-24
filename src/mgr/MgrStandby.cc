@@ -452,15 +452,6 @@ bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 }
 
 
-bool MgrStandby::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc.build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
 bool MgrStandby::ms_handle_refused(Connection *con)
 {
   // do nothing for now

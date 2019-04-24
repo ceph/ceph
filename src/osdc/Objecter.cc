@@ -4458,17 +4458,6 @@ bool Objecter::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool Objecter::ms_get_authorizer(int dest_type,
-				 AuthAuthorizer **authorizer)
-{
-  if (!initialized)
-    return false;
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-  *authorizer = monc->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
 void Objecter::op_target_t::dump(Formatter *f) const
 {
   f->dump_stream("pg") << pgid;
