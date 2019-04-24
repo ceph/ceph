@@ -714,12 +714,20 @@ class TeuthologyOpenStack(OpenStack):
         running the teuthology cluster.
         """
         original_argv = self.argv[:]
-        argv = []
+        argv = ['--ceph', self.args.ceph,
+                '--ceph-repo', self.args.ceph_repo,
+                '--suite-repo', self.args.suite_repo,
+                '--suite-branch', self.args.suite_branch,
+                ]
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
                                     '--teuthology-branch',
                                     '--teuthology-git-url',
                                     '--test-repo',
+                                    '--suite-repo',
+                                    '--suite-branch',
+                                    '--ceph-repo',
+                                    '--ceph',
                                     '--archive-upload',
                                     '--archive-upload-url',
                                     '--key-name',
