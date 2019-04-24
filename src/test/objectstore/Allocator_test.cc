@@ -227,8 +227,8 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
 
 TEST_P(AllocTest, test_alloc_39334)
 {
-  int64_t block = 0x4000;
-  int64_t size = 0x5d00000000;
+  uint64_t block = 0x4000;
+  uint64_t size = 0x5d00000000;
 
   init_alloc(size, block);
   alloc->init_add_free(0x4000, 0x5cffffc000);
