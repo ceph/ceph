@@ -1675,6 +1675,44 @@ function test_mon_osd()
   ceph osd crush rm foo
   ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep 'foo'
 
+  # test device class flags
+  osd_0_device_class=$(ceph osd crush get-device-class osd.0)
+  ceph osd set-group noup $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noup'
+  ceph osd set-group noup,nodown $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noup'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'nodown'
+  ceph osd set-group noup,nodown,noin $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noup'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'nodown'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noin'
+  ceph osd set-group noup,nodown,noin,noout $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noup'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'nodown'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noin'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noout'
+
+  ceph osd unset-group noup $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | expect_false grep 'noup'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'nodown'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noin'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noout'
+  ceph osd unset-group noup,nodown $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | expect_false grep 'noup\|nodown'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noin'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noout'
+  ceph osd unset-group noup,nodown,noin $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | expect_false grep 'noup\|nodown\|noin'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noout'
+  ceph osd unset-group noup,nodown,noin,noout $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | expect_false grep 'noup\|nodown\|noin\|noout'
+
+  ceph osd set-group noin,noout $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noin'
+  ceph osd dump -f json-pretty | jq ".device_class_flags.$osd_0_device_class" | grep 'noout'
+  ceph osd unset-group noin,noout $osd_0_device_class
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep $osd_0_device_class
+
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
   ceph osd dump | grep ^osd.0 | grep 'weight 0.5'

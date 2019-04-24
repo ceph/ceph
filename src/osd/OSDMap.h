@@ -400,6 +400,7 @@ public:
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
     mempool::osdmap::map<int32_t,uint32_t> new_crush_node_flags;
+    mempool::osdmap::map<int32_t,uint32_t> new_device_class_flags;
 
     string cluster_snapshot;
 
@@ -517,6 +518,7 @@ private:
   vector<uint32_t> osd_state;
 
   mempool::osdmap::map<int32_t,uint32_t> crush_node_flags; // crush node -> CEPH_OSD_* flags
+  mempool::osdmap::map<int32_t,uint32_t> device_class_flags; // device class -> CEPH_OSD_* flags
 
   utime_t last_up_change, last_in_change;
 
@@ -833,6 +835,7 @@ public:
 
   unsigned get_osd_crush_node_flags(int osd) const;
   unsigned get_crush_node_flags(int id) const;
+  unsigned get_device_class_flags(int id) const;
 
   bool is_noup(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
