@@ -259,67 +259,73 @@ namespace rgw {
     rgw_env.set("REQUEST_URI", s->info.request_uri);
     rgw_env.set("QUERY_STRING", "");
 
-    /* XXX authorize does less here then in the REST path, e.g.,
-     * the user's info is cached, but still incomplete */
-    ldpp_dout(s, 2) << "authorizing" << dendl;
-    ret = req->authorize(op);
-    if (ret < 0) {
-      dout(10) << "failed to authorize request" << dendl;
-      abort_req(s, op, ret);
-      goto done;
-    }
-
-    /* FIXME: remove this after switching all handlers to the new authentication
-     * infrastructure. */
-    if (! s->auth.identity) {
-      s->auth.identity = rgw::auth::transform_old_authinfo(s);
-    }
-
-    ldpp_dout(s, 2) << "reading op permissions" << dendl;
-    ret = req->read_permissions(op);
-    if (ret < 0) {
-      abort_req(s, op, ret);
-      goto done;
-    }
-
-    ldpp_dout(s, 2) << "init op" << dendl;
-    ret = op->init_processing();
-    if (ret < 0) {
-      abort_req(s, op, ret);
-      goto done;
-    }
-
-    ldpp_dout(s, 2) << "verifying op mask" << dendl;
-    ret = op->verify_op_mask();
-    if (ret < 0) {
-      abort_req(s, op, ret);
-      goto done;
-    }
-
-    ldpp_dout(s, 2) << "verifying op permissions" << dendl;
-    ret = op->verify_permission();
-    if (ret < 0) {
-      if (s->system_request) {
-	dout(2) << "overriding permissions due to system operation" << dendl;
-      } else if (s->auth.identity->is_admin_of(s->user->user_id)) {
-	dout(2) << "overriding permissions due to admin operation" << dendl;
-      } else {
+    try {
+      /* XXX authorize does less here then in the REST path, e.g.,
+       * the user's info is cached, but still incomplete */
+      ldpp_dout(s, 2) << "authorizing" << dendl;
+      ret = req->authorize(op);
+      if (ret < 0) {
+	dout(10) << "failed to authorize request" << dendl;
 	abort_req(s, op, ret);
 	goto done;
       }
-    }
 
-    ldpp_dout(s, 2) << "verifying op params" << dendl;
-    ret = op->verify_params();
-    if (ret < 0) {
-      abort_req(s, op, ret);
-      goto done;
-    }
+      /* FIXME: remove this after switching all handlers to the new
+       * authentication infrastructure. */
+      if (! s->auth.identity) {
+	s->auth.identity = rgw::auth::transform_old_authinfo(s);
+      }
 
-    ldpp_dout(s, 2) << "executing" << dendl;
-    op->pre_exec();
-    op->execute();
-    op->complete();
+      ldpp_dout(s, 2) << "reading op permissions" << dendl;
+      ret = req->read_permissions(op);
+      if (ret < 0) {
+	abort_req(s, op, ret);
+	goto done;
+      }
+
+      ldpp_dout(s, 2) << "init op" << dendl;
+      ret = op->init_processing();
+      if (ret < 0) {
+	abort_req(s, op, ret);
+	goto done;
+      }
+
+      ldpp_dout(s, 2) << "verifying op mask" << dendl;
+      ret = op->verify_op_mask();
+      if (ret < 0) {
+	abort_req(s, op, ret);
+	goto done;
+      }
+
+      ldpp_dout(s, 2) << "verifying op permissions" << dendl;
+      ret = op->verify_permission();
+      if (ret < 0) {
+	if (s->system_request) {
+	  dout(2) << "overriding permissions due to system operation" << dendl;
+	} else if (s->auth.identity->is_admin_of(s->user->user_id)) {
+	  dout(2) << "overriding permissions due to admin operation" << dendl;
+	} else {
+	  abort_req(s, op, ret);
+	  goto done;
+	}
+      }
+
+      ldpp_dout(s, 2) << "verifying op params" << dendl;
+      ret = op->verify_params();
+      if (ret < 0) {
+	abort_req(s, op, ret);
+	goto done;
+      }
+
+      ldpp_dout(s, 2) << "executing" << dendl;
+      op->pre_exec();
+      op->execute();
+      op->complete();
+
+    } catch (const ceph::crypto::DigestException& e) {
+      dout(0) << "authentication failed" << e.what() << dendl;
+      abort_req(s, op, -ERR_INVALID_SECRET_KEY);
+    }
 
   done:
     try {
