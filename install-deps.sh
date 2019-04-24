@@ -278,10 +278,10 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 7 xenial
-                install_boost_on_ubuntu xenial
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
-                install_boost_on_ubuntu bionic
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
