@@ -262,7 +262,13 @@ namespace PriorityCache
     // Each cache is going to get a little extra from get_chunk, so shrink the
     // available memory here to compensate.
     mem_avail -= get_chunk(1, tuned_mem) * caches.size();
-    ceph_assert(mem_avail >= 0);
+
+    if (mem_avail < 0) {
+      // There's so little memory available that just assigning a chunk per
+      // cache pushes us over the limit. Set mem_avail to 0 and continue to
+      // ensure each priority's byte counts are zeroed in balance_priority.
+      mem_avail = 0;
+    }
 
     // Assign memory for each priority level
     for (int i = 0; i < Priority::LAST+1; i++) {
