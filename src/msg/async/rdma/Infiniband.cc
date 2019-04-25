@@ -964,6 +964,7 @@ Infiniband::~Infiniband()
     ibv_destroy_srq(srq);
   delete memory_manager;
   delete pd;
+  delete device_list;
 }
 
 /**
