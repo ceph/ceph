@@ -860,6 +860,12 @@ add_executable(unittest_ipaddr
 add_ceph_unittest(unittest_ipaddr)
 target_link_libraries(unittest_ipaddr mon global)
 
+# unittest_utime
+add_executable(unittest_utime
+  test_utime.cc)
+add_ceph_unittest(unittest_utime)
+target_link_libraries(unittest_utime mon global)
+
 # unittest_texttable
 add_executable(unittest_texttable
   test_texttable.cc
