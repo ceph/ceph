@@ -27,6 +27,7 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
 
 #include <boost/asio/yield.hpp>

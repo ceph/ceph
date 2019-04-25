@@ -170,7 +170,7 @@ public:
         return *this;
       }
 
-      GetOp& set_optional_yield(optional_yield& _y) {
+      GetOp& set_yield(optional_yield& _y) {
         y = _y;
         return *this;
       }
@@ -224,7 +224,6 @@ public:
   Instance instance(RGWSysObjectCtx& _ctx,
                     const rgw_bucket& _bucket);
 
-
   int store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
 				   RGWBucketEntryPoint& be, bool exclusive,
 				   RGWObjVersionTracker *objv_tracker, real_time mtime,
@@ -235,3 +234,4 @@ public:
   int remove_bucket_instance_info(const rgw_bucket& bucket,
 				  RGWObjVersionTracker *objv_tracker);
 };
+

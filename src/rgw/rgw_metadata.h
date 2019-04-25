@@ -33,12 +33,19 @@ class RGWMetadataObject {
 protected:
   obj_version objv;
   ceph::real_time mtime;
+  std::map<string, bufferlist> *pattrs{nullptr};
   
 public:
   RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time get_mtime() { return mtime; }
+  void set_pattrs(std::map<string, bufferlist> *_pattrs) {
+    pattrs = _pattrs;
+  }
+  std::map<string, bufferlist> *get_pattrs() {
+    return pattrs;
+  }
 
   virtual void dump(Formatter *f) const {}
 };
@@ -53,22 +60,24 @@ class RGWMetadataHandler {
 public:
   class Put {
   protected:
+    RGWSI_MetaBackend *meta_be;
     RGWMetadataHandler *handler;
     RGWSI_MetaBackend::Context *ctx;
     string& entry;
     RGWMetadataObject *obj;
     RGWObjVersionTracker& objv_tracker;
     RGWMDLogSyncType apply_type;
+    optional_yield y;
 
     int get(RGWMetadataObject **obj) {
-      return handler->do_get(ctx, entry, obj);
+      return handler->do_get(ctx, entry, obj, y);
     }
   public:
     Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
         string& _entry, RGWMetadataObject *_obj,
-        RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type) : ctx(_ctx), entry(_entry),
-                                                                       obj(_obj), objv_tracker(_objv_tracker),
-                                                                       apply_type(_type) {}
+        RGWObjVersionTracker& _objv_tracker, optional_yield _y,
+        RGWMDLogSyncType _type);
+
     virtual ~Put() {}
 
     virtual int put_pre() {
@@ -90,11 +99,14 @@ protected:
   RGWSI_MetaBackend_Handle be_handle{0};
   RGWSI_MetaBackend::ModuleRef be_module;
 
-  virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj,
+                     optional_yield y) = 0;
   virtual int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
-                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type,
+                     optional_yield y) = 0;
   virtual int do_put_operate(Put *put_op);
-  virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker,
+                        optional_yield y) = 0;
 
   virtual int init_module() = 0;
 
@@ -102,16 +114,19 @@ public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
-  virtual RGWSI_MetaBackend::Type required_be_type() = 0;
   virtual RGWSI_MetaBackend::ModuleRef& get_be_module() {
     return be_module;
   }
 
+  RGWSI_MetaBackend  *get_meta_be() {
+    return meta_be;
+  }
+
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  int get(string& entry, RGWMetadataObject **obj);
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type);
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker);
+  int get(string& entry, RGWMetadataObject **obj, optional_yield y);
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type);
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y);
 
   virtual int list_keys_init(const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
@@ -121,8 +136,6 @@ public:
 
   int init(RGWMetadataManager *manager);
 
-
-protected:
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
    * the sync mode to see if the new one should replace the on-disk one.
@@ -152,6 +165,10 @@ protected:
     }
     return true;
   }
+
+  int call_with_ctx(std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
+  int call_with_ctx(const string& entry, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
+
 };
 
 class RGWMetadataTopHandler;
@@ -167,17 +184,19 @@ class RGWMetadataManager {
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
   int register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle);
 
+protected:
+  int call_with_ctx(const string& entry, RGWMetadataObject *obj, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
 public:
   RGWMetadataManager(RGWSI_Meta *_meta_svc);
   ~RGWMetadataManager();
 
   RGWMetadataHandler *get_handler(const string& type);
 
-  int get(string& metadata_key, Formatter *f);
-  int put(string& metadata_key, bufferlist& bl,
+  int get(string& metadata_key, Formatter *f, optional_yield y);
+  int put(string& metadata_key, bufferlist& bl, optional_yield y,
           RGWMDLogSyncType sync_mode,
           obj_version *existing_version = NULL);
-  int remove(string& metadata_key);
+  int remove(string& metadata_key, optional_yield y);
 
   int list_keys_init(const string& section, void **phandle);
   int list_keys_init(const string& section, const string& marker, void **phandle);
@@ -206,6 +225,7 @@ public:
   int put() override;
 
   virtual int put_checked(RGWMetadataObject *_old_obj);
+  virtual void encode_obj(bufferlist *bl) {}
 };
 
 
