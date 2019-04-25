@@ -119,7 +119,7 @@ PeeringState::PeeringState(
   OSDMapRef curmap,
   DoutPrefixProvider *dpp,
   PeeringListener *pl)
-  : state_history(pl),
+  : state_history(*pl),
     cct(cct),
     spgid(spgid),
     dpp(dpp),

@@ -62,7 +62,7 @@ struct PGStateInstance {
 
 class PGStateHistory {
 public:
-  PGStateHistory(EpochSource *es) : buffer(10), es(es) {}
+  PGStateHistory(const EpochSource &es) : buffer(10), es(es) {}
 
   void enter(const utime_t entime, const char* state);
 
@@ -83,5 +83,5 @@ public:
 private:
   std::unique_ptr<PGStateInstance> pi;
   boost::circular_buffer<std::unique_ptr<PGStateInstance>> buffer;
-  EpochSource *es;
+  const EpochSource &es;
 };
