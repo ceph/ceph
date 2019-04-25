@@ -3563,7 +3563,7 @@ class DataLogTrimCR : public RGWCoroutine {
       num_shards(num_shards),
       zone_id(store->get_zone().id),
       peer_status(store->zone_conn_map.size()),
-      min_shard_markers(num_shards),
+      min_shard_markers(num_shards, "99999999"),
       last_trim(last_trim)
   {}
 
