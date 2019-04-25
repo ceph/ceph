@@ -44,12 +44,11 @@ class Protocol {
 
   virtual void trigger_close() = 0;
 
-  // encode/write a message
-  virtual seastar::future<> write_message(MessageRef msg) = 0;
-
-  virtual seastar::future<> do_keepalive() = 0;
-
-  virtual seastar::future<> do_keepalive_ack() = 0;
+  virtual ceph::bufferlist do_sweep_messages(
+      const std::deque<MessageRef>& msgs,
+      size_t num_msgs,
+      bool require_keepalive,
+      bool require_keepalive_ack) = 0;
 
  public:
   const proto_t proto_type;

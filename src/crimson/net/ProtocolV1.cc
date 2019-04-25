@@ -129,12 +129,12 @@ uint32_t get_proto_version(entity_type_t peer_type, bool connect)
   }
 }
 
-void discard_up_to(std::queue<MessageRef>* queue,
+void discard_up_to(std::deque<MessageRef>* queue,
                    ceph::net::seq_num_t seq)
 {
   while (!queue->empty() &&
          queue->front()->get_seq() < seq) {
-    queue->pop();
+    queue->pop_front();
   }
 }
 
@@ -651,62 +651,75 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
 
 // open state
 
-seastar::future<> ProtocolV1::write_message(MessageRef msg)
+ceph::bufferlist ProtocolV1::do_sweep_messages(
+    const std::deque<MessageRef>& msgs,
+    size_t num_msgs,
+    bool require_keepalive,
+    bool require_keepalive_ack)
 {
-  msg->set_seq(++conn.out_seq);
-  auto& header = msg->get_header();
-  header.src = messenger.get_myname();
-  msg->encode(conn.features, messenger.get_crc_flags());
-  if (session_security) {
-    session_security->sign_message(msg.get());
-  }
-  bufferlist bl;
-  bl.append(CEPH_MSGR_TAG_MSG);
-  bl.append((const char*)&header, sizeof(header));
-  bl.append(msg->get_payload());
-  bl.append(msg->get_middle());
-  bl.append(msg->get_data());
-  auto& footer = msg->get_footer();
-  if (HAVE_FEATURE(conn.features, MSG_AUTH)) {
-    bl.append((const char*)&footer, sizeof(footer));
-  } else {
-    ceph_msg_footer_old old_footer;
-    if (messenger.get_crc_flags() & MSG_CRC_HEADER) {
-      old_footer.front_crc = footer.front_crc;
-      old_footer.middle_crc = footer.middle_crc;
-    } else {
-      old_footer.front_crc = old_footer.middle_crc = 0;
-    }
-    if (messenger.get_crc_flags() & MSG_CRC_DATA) {
-      old_footer.data_crc = footer.data_crc;
-    } else {
-      old_footer.data_crc = 0;
-    }
-    old_footer.flags = footer.flags;
-    bl.append((const char*)&old_footer, sizeof(old_footer));
-  }
-  // write as a seastar::net::packet
-  return socket->write(std::move(bl));
-  // TODO: lossless policy
-  //  .then([this, msg = std::move(msg)] {
-  //    if (!policy.lossy) {
-  //      sent.push(std::move(msg));
-  //    }
-  //  });
-}
+  static const size_t RESERVE_MSG_SIZE = sizeof(CEPH_MSGR_TAG_MSG) +
+                                         sizeof(ceph_msg_header) +
+                                         sizeof(ceph_msg_footer);
+  static const size_t RESERVE_MSG_SIZE_OLD = sizeof(CEPH_MSGR_TAG_MSG) +
+                                             sizeof(ceph_msg_header) +
+                                             sizeof(ceph_msg_footer_old);
 
-seastar::future<> ProtocolV1::do_keepalive()
-{
-  k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
-    ceph::coarse_real_clock::now());
-  logger().debug("{} write keepalive2 {}", conn, k.req.stamp.tv_sec);
-  return socket->write(make_static_packet(k.req));
-}
+  ceph::bufferlist bl;
+  if (likely(num_msgs)) {
+    if (HAVE_FEATURE(conn.features, MSG_AUTH)) {
+      bl.reserve(num_msgs * RESERVE_MSG_SIZE);
+    } else {
+      bl.reserve(num_msgs * RESERVE_MSG_SIZE_OLD);
+    }
+  }
 
-seastar::future<> ProtocolV1::do_keepalive_ack()
-{
-  logger().debug("{} write keepalive2 ack {}", conn, k.ack.stamp.tv_sec);
-  return socket->write(make_static_packet(k.ack));
+  if (unlikely(require_keepalive)) {
+    k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
+      ceph::coarse_real_clock::now());
+    logger().debug("{} write keepalive2 {}", conn, k.req.stamp.tv_sec);
+    bl.append(create_static(k.req));
+  }
+
+  if (unlikely(require_keepalive_ack)) {
+    logger().debug("{} write keepalive2 ack {}", conn, k.ack.stamp.tv_sec);
+    bl.append(create_static(k.ack));
+  }
+
+  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
+    msg->set_seq(++conn.out_seq);
+    auto& header = msg->get_header();
+    header.src = messenger.get_myname();
+    msg->encode(conn.features, messenger.get_crc_flags());
+    if (session_security) {
+      session_security->sign_message(msg.get());
+    }
+    bl.append(CEPH_MSGR_TAG_MSG);
+    bl.append((const char*)&header, sizeof(header));
+    bl.append(msg->get_payload());
+    bl.append(msg->get_middle());
+    bl.append(msg->get_data());
+    auto& footer = msg->get_footer();
+    if (HAVE_FEATURE(conn.features, MSG_AUTH)) {
+      bl.append((const char*)&footer, sizeof(footer));
+    } else {
+      ceph_msg_footer_old old_footer;
+      if (messenger.get_crc_flags() & MSG_CRC_HEADER) {
+        old_footer.front_crc = footer.front_crc;
+        old_footer.middle_crc = footer.middle_crc;
+      } else {
+        old_footer.front_crc = old_footer.middle_crc = 0;
+      }
+      if (messenger.get_crc_flags() & MSG_CRC_DATA) {
+        old_footer.data_crc = footer.data_crc;
+      } else {
+        old_footer.data_crc = 0;
+      }
+      old_footer.flags = footer.flags;
+      bl.append((const char*)&old_footer, sizeof(old_footer));
+    }
+  });
+
+  return bl;
 }
 
 seastar::future<> ProtocolV1::handle_keepalive2_ack()
