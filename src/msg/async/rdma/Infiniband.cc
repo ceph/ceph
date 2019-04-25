@@ -110,7 +110,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 
 
 Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
-  : device(d), device_attr(new ibv_device_attr), active_port(nullptr)
+  : device(d), active_port(nullptr)
 {
   if (device == NULL) {
     lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
@@ -126,7 +126,7 @@ Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
     lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
-  int r = ibv_query_device(ctxt, device_attr);
+  int r = ibv_query_device(ctxt, &device_attr);
   if (r) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
     ceph_abort();
@@ -134,7 +134,7 @@ Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
 }
 
 void Device::binding_port(CephContext *cct, int port_num) {
-  port_cnt = device_attr->phys_port_cnt;
+  port_cnt = device_attr.phys_port_cnt;
   for (uint8_t i = 0; i < port_cnt; ++i) {
     Port *port = new Port(cct, ctxt, i+1);
     if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
@@ -915,9 +915,9 @@ void Infiniband::init()
 
   support_srq = cct->_conf->ms_async_rdma_support_srq;
   if (support_srq)
-    rx_queue_len = device->device_attr->max_srq_wr;
+    rx_queue_len = device->device_attr.max_srq_wr;
   else
-    rx_queue_len = device->device_attr->max_qp_wr;
+    rx_queue_len = device->device_attr.max_qp_wr;
   if (rx_queue_len > cct->_conf->ms_async_rdma_receive_queue_len) {
     rx_queue_len = cct->_conf->ms_async_rdma_receive_queue_len;
     ldout(cct, 1) << __func__ << " receive queue length is " << rx_queue_len << " receive buffers" << dendl;
@@ -936,7 +936,7 @@ void Infiniband::init()
     ceph_abort();
   }
 
-  tx_queue_len = device->device_attr->max_qp_wr;
+  tx_queue_len = device->device_attr.max_qp_wr;
   if (tx_queue_len > cct->_conf->ms_async_rdma_send_buffers) {
     tx_queue_len = cct->_conf->ms_async_rdma_send_buffers;
     ldout(cct, 1) << __func__ << " assigning: " << tx_queue_len << " send buffers"  << dendl;
@@ -944,7 +944,7 @@ void Infiniband::init()
     ldout(cct, 0) << __func__ << " using the max allowed send buffers: " << tx_queue_len << dendl;
   }
 
-  ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
+  ldout(cct, 1) << __func__ << " device allow " << device->device_attr.max_cqe
                 << " completion entries" << dendl;
 
   memory_manager = new MemoryManager(cct, device, pd);
