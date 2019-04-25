@@ -588,7 +588,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyOnRead) {
   flush_async_operations(ictx);
 }
 
-TEST_F(TestMockIoCopyupRequest, DeepCopyWithSnaps) {
+TEST_F(TestMockIoCopyupRequest, DeepCopyWithPostSnaps) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
@@ -624,6 +624,77 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithSnaps) {
   MockAbstractObjectWriteRequest mock_write_request;
   MockObjectCopyRequest mock_object_copy_request;
   mock_image_ctx.migration_info = {1, "", "", "image id",
+                                   {{CEPH_NOSNAP, {2, 1}}},
+                                   ictx->size, true};
+  expect_is_empty_write_op(mock_write_request, false);
+  expect_object_copy(mock_image_ctx, mock_object_copy_request, true, 0);
+
+  expect_is_empty_write_op(mock_write_request, false);
+  expect_get_parent_overlap(mock_image_ctx, 1, 0, 0);
+  expect_get_parent_overlap(mock_image_ctx, 2, 1, 0);
+  expect_prune_parent_extents(mock_image_ctx, 1, 1);
+  expect_get_parent_overlap(mock_image_ctx, 3, 1, 0);
+  expect_prune_parent_extents(mock_image_ctx, 1, 1);
+  expect_get_pre_write_object_map_state(mock_image_ctx, mock_write_request,
+                                        OBJECT_EXISTS);
+  expect_object_map_at(mock_image_ctx, 0, OBJECT_NONEXISTENT);
+  expect_object_map_update(mock_image_ctx, 2, 0, OBJECT_EXISTS, true, 0);
+  expect_object_map_update(mock_image_ctx, 3, 0, OBJECT_EXISTS_CLEAN, true, 0);
+  expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
+                           0);
+
+  expect_add_copyup_ops(mock_write_request);
+  expect_copyup(mock_image_ctx, CEPH_NOSNAP, "oid", "", 0);
+  expect_write(mock_image_ctx, CEPH_NOSNAP, "oid", 0);
+
+  auto req = new MockCopyupRequest(&mock_image_ctx, "oid", 0,
+                                   {{0, 4096}}, {});
+  mock_image_ctx.copyup_list[0] = req;
+  req->append_request(&mock_write_request);
+  req->send();
+
+  ASSERT_EQ(0, mock_write_request.ctx.wait());
+}
+
+TEST_F(TestMockIoCopyupRequest, DeepCopyWithPreAndPostSnaps) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ictx->snap_lock.get_write();
+  ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "4", 4, ictx->size,
+                 ictx->parent_md, RBD_PROTECTION_STATUS_UNPROTECTED,
+                 0, {});
+  ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "3", 3, ictx->size,
+                 ictx->parent_md, RBD_PROTECTION_STATUS_UNPROTECTED,
+                 0, {});
+  ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "2", 2, ictx->size,
+                 ictx->parent_md, RBD_PROTECTION_STATUS_UNPROTECTED,
+                 0, {});
+  ictx->add_snap(cls::rbd::UserSnapshotNamespace(), "1", 1, ictx->size,
+                 ictx->parent_md, RBD_PROTECTION_STATUS_UNPROTECTED,
+                 0, {});
+  ictx->snapc = {4, {4, 3, 2, 1}};
+  ictx->snap_lock.put_write();
+
+  MockTestImageCtx mock_parent_image_ctx(*ictx->parent);
+  MockTestImageCtx mock_image_ctx(*ictx, &mock_parent_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+
+  expect_test_features(mock_image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+  expect_is_lock_owner(mock_image_ctx);
+
+  InSequence seq;
+
+  MockAbstractObjectWriteRequest mock_write_request;
+  MockObjectCopyRequest mock_object_copy_request;
+  mock_image_ctx.migration_info = {1, "", "", "image id",
                                    {{CEPH_NOSNAP, {2, 1}}, {10, {1}}},
                                    ictx->size, true};
   expect_is_empty_write_op(mock_write_request, false);
@@ -633,10 +704,13 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyWithSnaps) {
   expect_get_parent_overlap(mock_image_ctx, 2, 0, 0);
   expect_get_parent_overlap(mock_image_ctx, 3, 1, 0);
   expect_prune_parent_extents(mock_image_ctx, 1, 1);
+  expect_get_parent_overlap(mock_image_ctx, 4, 1, 0);
+  expect_prune_parent_extents(mock_image_ctx, 1, 1);
   expect_get_pre_write_object_map_state(mock_image_ctx, mock_write_request,
                                         OBJECT_EXISTS);
   expect_object_map_at(mock_image_ctx, 0, OBJECT_NONEXISTENT);
-  expect_object_map_update(mock_image_ctx, 3, 0, OBJECT_EXISTS, true, 0);
+  expect_object_map_update(mock_image_ctx, 3, 0, OBJECT_EXISTS_CLEAN, true, 0);
+  expect_object_map_update(mock_image_ctx, 4, 0, OBJECT_EXISTS_CLEAN, true, 0);
   expect_object_map_update(mock_image_ctx, CEPH_NOSNAP, 0, OBJECT_EXISTS, true,
                            0);
 

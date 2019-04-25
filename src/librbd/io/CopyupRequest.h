@@ -93,6 +93,7 @@ private:
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
+  bool m_first_snap_is_clean = false;
 
   Mutex m_lock;
   WriteRequests m_pending_requests;
