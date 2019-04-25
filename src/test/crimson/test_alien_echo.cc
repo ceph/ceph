@@ -58,10 +58,6 @@ struct Server {
       return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(
           0, bufferlist{});
     }
-    std::unique_ptr<AuthAuthorizer> authorizer = std::make_unique<DummyAuthAuthorizer>();
-    AuthAuthorizer* ms_get_authorizer(peer_type_t) const override {
-      return authorizer.get();
-    }
   } dispatcher;
   Server(ceph::net::Messenger& msgr)
     : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
