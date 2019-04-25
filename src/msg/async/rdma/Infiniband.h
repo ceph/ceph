@@ -88,7 +88,7 @@ class Device {
   int get_gid_idx() { return active_port->get_gid_idx(); }
   void binding_port(CephContext *c, int port_num);
   struct ibv_context *ctxt;
-  ibv_device_attr *device_attr;
+  ibv_device_attr device_attr;
   Port* active_port;
 };
 
