@@ -344,27 +344,6 @@ public:
     return out;
   }
 
-  int sprintf(char *out, int outlen) const {
-    struct tm bdt;
-    time_t tt = sec();
-    localtime_r(&tt, &bdt);
-
-    return ::snprintf(out, outlen,
-		    "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
-		    bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-		    bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec());
-  }
-
-  static int snprintf(char *out, int outlen, time_t tt) {
-    struct tm bdt;
-    localtime_r(&tt, &bdt);
-
-    return ::snprintf(out, outlen,
-        "%04d-%02d-%02d %02d:%02d:%02d",
-        bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-        bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
-  }
-
   static int invoke_date(const std::string& date_str, utime_t *result) {
      char buf[256];
 
