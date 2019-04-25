@@ -509,28 +509,28 @@ TEST_F(OSDMapTest, PrimaryAffinity) {
   }
 }
 
-TEST_F(OSDMapTest, get_crush_node_flags) {
+TEST_F(OSDMapTest, get_osd_crush_node_flags) {
   set_up_map();
 
   for (unsigned i=0; i<get_num_osds(); ++i) {
-    ASSERT_EQ(0u, osdmap.get_crush_node_flags(i));
+    ASSERT_EQ(0u, osdmap.get_osd_crush_node_flags(i));
   }
 
   OSDMap::Incremental inc(osdmap.get_epoch() + 1);
   inc.new_crush_node_flags[-1] = 123u;
   osdmap.apply_incremental(inc);
   for (unsigned i=0; i<get_num_osds(); ++i) {
-    ASSERT_EQ(123u, osdmap.get_crush_node_flags(i));
+    ASSERT_EQ(123u, osdmap.get_osd_crush_node_flags(i));
   }
-  ASSERT_EQ(0u, osdmap.get_crush_node_flags(1000));
+  ASSERT_EQ(0u, osdmap.get_osd_crush_node_flags(1000));
 
   OSDMap::Incremental inc3(osdmap.get_epoch() + 1);
   inc3.new_crush_node_flags[-1] = 456u;
   osdmap.apply_incremental(inc3);
   for (unsigned i=0; i<get_num_osds(); ++i) {
-    ASSERT_EQ(456u, osdmap.get_crush_node_flags(i));
+    ASSERT_EQ(456u, osdmap.get_osd_crush_node_flags(i));
   }
-  ASSERT_EQ(0u, osdmap.get_crush_node_flags(1000));
+  ASSERT_EQ(0u, osdmap.get_osd_crush_node_flags(1000));
 
   OSDMap::Incremental inc2(osdmap.get_epoch() + 1);
   inc2.new_crush_node_flags[-1] = 0;

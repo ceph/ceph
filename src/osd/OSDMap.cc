@@ -5870,7 +5870,7 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   }
 }
 
-unsigned OSDMap::get_crush_node_flags(int osd) const
+unsigned OSDMap::get_osd_crush_node_flags(int osd) const
 {
   unsigned flags = 0;
   if (!crush_node_flags.empty()) {
@@ -5884,5 +5884,14 @@ unsigned OSDMap::get_crush_node_flags(int osd) const
       }
     }
   }
+  return flags;
+}
+
+unsigned OSDMap::get_crush_node_flags(int id) const
+{
+  unsigned flags = 0;
+  auto it = crush_node_flags.find(id);
+  if (it != crush_node_flags.end())
+    flags = it->second;
   return flags;
 }

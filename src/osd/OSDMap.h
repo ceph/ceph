@@ -478,8 +478,11 @@ public:
       return new_state.count(osd) && (new_state[osd] & state) != 0;
     }
 
-    void pending_osd_state_set(int osd, unsigned state) {
+    bool pending_osd_state_set(int osd, unsigned state) {
+      if (pending_osd_has_state(osd, state))
+        return false;
       new_state[osd] |= state;
+      return true;
     }
 
     // cancel the specified pending osd state if there is any
@@ -834,7 +837,8 @@ public:
     return !is_out(osd);
   }
 
-  unsigned get_crush_node_flags(int osd) const;
+  unsigned get_osd_crush_node_flags(int osd) const;
+  unsigned get_crush_node_flags(int id) const;
 
   bool is_noup(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);

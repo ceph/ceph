@@ -2550,7 +2550,7 @@ bool OSDMonitor::can_mark_down(int i)
     return false;
   }
 
-  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NODOWN) {
+  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NODOWN) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as nodown via a crush node flag, "
             << "will not mark it down" << dendl;
@@ -2587,7 +2587,7 @@ bool OSDMonitor::can_mark_up(int i)
     return false;
   }
 
-  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOUP) {
+  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOUP) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as noup via a crush node flag, "
             << "will not mark it up" << dendl;
@@ -2614,7 +2614,7 @@ bool OSDMonitor::can_mark_out(int i)
     return false;
   }
 
-  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOOUT) {
+  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOOUT) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as noout via a crush node flag, "
             << "will not mark it out" << dendl;
@@ -2657,7 +2657,7 @@ bool OSDMonitor::can_mark_in(int i)
     return false;
   }
 
-  if (osdmap.get_crush_node_flags(i) & CEPH_OSD_NOIN) {
+  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOIN) {
     dout(5) << __func__ << " osd." << i
 	    << " is marked as noin via a crush node flag, "
             << "will not mark it in" << dendl;
@@ -10687,6 +10687,130 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       getline(ss, rs);
       wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
 						get_last_committed() + 1));
+      return true;
+    }
+  } else if (prefix == "osd set-group" ||
+             prefix == "osd unset-group") {
+    bool do_set = prefix == "osd set-group";
+    string flag_str;
+    vector<string> who;
+    cmd_getval(cct, cmdmap, "flags", flag_str);
+    cmd_getval(cct, cmdmap, "who", who);
+    vector<string> raw_flags;
+    boost::split(raw_flags, flag_str, boost::is_any_of(","));
+    unsigned flags = 0;
+    for (auto& f : raw_flags) {
+      if (f == "noup")
+        flags |= CEPH_OSD_NOUP;
+      else if (f == "nodown")
+        flags |= CEPH_OSD_NODOWN;
+      else if (f == "noin")
+        flags |= CEPH_OSD_NOIN;
+      else if (f == "noout")
+        flags |= CEPH_OSD_NOOUT;
+      else {
+        ss << "unrecognized flag '" << f << "', must be one of "
+           << "{noup,nodown,noin,noout}";
+        err = -EINVAL;
+        goto reply;
+      }
+    }
+    if (flags == 0) {
+      ss << "must specify flag(s) {noup,nodwon,noin,noout} to set/unset";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (who.empty()) {
+      ss << "must specify at least one or more targets to set/unset";
+      err = -EINVAL;
+      goto reply;
+    }
+    set<int> osds;
+    set<int> crush_nodes;
+    for (auto& w : who) {
+      if (w == "any" || w == "all" || w == "*") {
+        osdmap.get_all_osds(osds);
+        break;
+      }
+      std::stringstream ts;
+      if (auto osd = parse_osd_id(w.c_str(), &ts); osd >= 0) {
+        osds.insert(osd);
+      } else if (osdmap.crush->name_exists(w)) {
+        crush_nodes.insert(osdmap.crush->get_item_id(w));
+      } else {
+        ss << "unable to parse osd id or crush node:\"" << w << "\". ";
+      }
+    }
+    if (osds.empty() && crush_nodes.empty()) {
+      // ss has reason for failure
+      err = -EINVAL;
+      goto reply;
+    }
+    bool any = false;
+    for (auto osd : osds) {
+      if (!osdmap.exists(osd)) {
+        ss << "osd." << osd << " does not exist. ";
+        continue;
+      }
+      if (do_set) {
+        if (flags & CEPH_OSD_NOUP) {
+          any |= osdmap.is_noup(osd) ?
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP) :
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
+        }
+        if (flags & CEPH_OSD_NODOWN) {
+          any |= osdmap.is_nodown(osd) ?
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN) :
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
+        }
+        if (flags & CEPH_OSD_NOIN) {
+          any |= osdmap.is_noin(osd) ?
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN) :
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
+        }
+        if (flags & CEPH_OSD_NOOUT) {
+          any |= osdmap.is_noout(osd) ?
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT) :
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
+        }
+      } else {
+        if (flags & CEPH_OSD_NOUP) {
+          any |= osdmap.is_noup(osd) ?
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP) :
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP);
+        }
+        if (flags & CEPH_OSD_NODOWN) {
+          any |= osdmap.is_nodown(osd) ?
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN) :
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN);
+        }
+        if (flags & CEPH_OSD_NOIN) {
+          any |= osdmap.is_noin(osd) ?
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN) :
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN);
+        }
+        if (flags & CEPH_OSD_NOOUT) {
+          any |= osdmap.is_noout(osd) ?
+            pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT) :
+            pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT);
+        }
+      }
+    }
+    for (auto& id : crush_nodes) {
+      auto old_flags = osdmap.get_crush_node_flags(id);
+      auto& pending_flags = pending_inc.new_crush_node_flags[id];
+      pending_flags |= old_flags; // adopt existing flags first!
+      if (do_set) {
+        pending_flags |= flags;
+      } else {
+        pending_flags &= ~flags;
+      }
+      any = true;
+    }
+    if (any) {
+      getline(ss, rs);
+      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
+                                 get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd add-noup" ||
