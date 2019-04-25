@@ -27,6 +27,37 @@ remove_images() {
     done
 }
 
+test_diff() {
+    local pool_name=xrbddiff1
+    local image_name=xtestdiff1
+    local snapshot_name=snap1
+    local image_size=1M
+    ceph osd pool create $pool_name 8
+    rbd create --thick-provision --size $image_size $pool_name/$image_name
+    test -n "$(rbd diff $pool_name/$image_name)"
+    rbd rm $pool_name/$image_name
+    rbd create --size $image_size $pool_name/$image_name
+    test -z "$(rbd diff $pool_name/$image_name)"
+    rbd snap create $pool_name/$image_name --snap=allzeroes
+    test -z "$(rbd diff $pool_name/$image_name)"
+    test -z "$(rbd diff --from-snap=allzeroes $pool_name/$image_name)"
+    local device="$(sudo rbd map $pool_name/$image_name)" # /dev/rbdx
+    dd if=/dev/urandom of=$device bs=$image_size count=1
+    test -n "$(rbd diff $pool_name/$image_name)"
+    test -n "$(rbd diff --from-snap=allzeroes $pool_name/$image_name)"
+    rbd snap create $pool_name/$image_name --snap=$snapshot_name
+    rbd snap ls $pool_name/$image_name
+    test -z "$(rbd diff --from-snap=$snapshot_name $pool_name/$image_name)"
+#    dd if=/dev/urandom of=$device bs=$image_size count=1
+#    test -n "$(rbd diff --from-snap=$snapshot_name $pool_name/$image_name)"
+    rbd snap rollback $pool_name/$image_name@$snapshot_name
+    test -z "$(rbd diff --from-snap=$snapshot_name $pool_name/$image_name)"
+    rbd snap rollback $pool_name/$image_name@allzeroes
+    test -z "$(rbd diff --from-snap=allzeroes $pool_name/$image_name)"
+    rbd unmap $device
+    ceph osd pool rm $pool_name $pool_name --yes-i-really-really-mean-it
+}
+
 test_others() {
     echo "testing import, export, resize, and snapshots..."
     TMP_FILES="/tmp/img1 /tmp/img1.new /tmp/img2 /tmp/img2.new /tmp/img3 /tmp/img3.new /tmp/img-diff1.new /tmp/img-diff2.new /tmp/img-diff3.new /tmp/img1.snap1 /tmp/img1.snap1 /tmp/img-diff1.snap1"
@@ -920,6 +951,7 @@ test_ls
 test_remove
 test_migration
 test_config
+test_diff
 RBD_CREATE_ARGS=""
 test_others
 test_locking
