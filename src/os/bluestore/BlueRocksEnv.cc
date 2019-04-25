@@ -121,6 +121,12 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
 		    (unsigned long long)h->file->fnode.ino);
   };
 
+  // Readahead the file starting from offset by n bytes for caching.
+  rocksdb::Status Prefetch(uint64_t offset, size_t n) override {
+    fs->read(h, &h->buf, offset, n, nullptr, nullptr);
+    return rocksdb::Status::OK();
+  }
+
   //enum AccessPattern { NORMAL, RANDOM, SEQUENTIAL, WILLNEED, DONTNEED };
 
   void Hint(AccessPattern pattern) override {
