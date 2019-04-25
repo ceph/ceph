@@ -481,20 +481,6 @@ seastar::future<> Client::ms_handle_reset(ceph::net::ConnectionRef conn)
   }
 }
 
-AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
-{
-  if (active_con) {
-    return active_con->get_authorizer(peer);
-  } else {
-    return nullptr;
-  }
-}
-
-AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
-{
-  return ms_get_authorizer(peer);
-}
-
 std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
 Client::get_supported_auth_methods(int peer_type)
 {

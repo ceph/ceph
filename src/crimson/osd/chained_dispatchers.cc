@@ -37,17 +37,3 @@ ChainedDispatchers::ms_handle_remote_reset(ceph::net::ConnectionRef conn) {
     return dispatcher->ms_handle_remote_reset(conn);
   });
 }
-
-AuthAuthorizer*
-ChainedDispatchers::ms_get_authorizer(peer_type_t peer_type) const
-{
-  // since dispatcher returns a nullptr if it does not have the authorizer,
-  // let's use the chain-of-responsibility pattern here.
-  for (auto dispatcher : dispatchers) {
-    if (auto auth = dispatcher->ms_get_authorizer(peer_type); auth) {
-      return auth;
-    }
-  }
-  // just give up
-  return nullptr;
-}	 
