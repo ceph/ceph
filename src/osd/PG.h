@@ -198,7 +198,7 @@ public:
     return recovery_state.get_osdmap();
   }
 
-  epoch_t get_osdmap_epoch() const override {
+  epoch_t get_osdmap_epoch() const override final {
     return recovery_state.get_osdmap()->get_epoch();
   }
 

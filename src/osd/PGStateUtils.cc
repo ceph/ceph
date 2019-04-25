@@ -22,13 +22,13 @@ NamedState::~NamedState() {
 void PGStateHistory::enter(const utime_t entime, const char* state)
 {
   if (pi == nullptr) {
-    pi = std::unique_ptr<PGStateInstance>(new PGStateInstance);
+    pi = std::make_unique<PGStateInstance>();
   }
   pi->enter_state(entime, state);
 }
 
 void PGStateHistory::exit(const char* state) {
-  pi->setepoch(es->get_osdmap_epoch());
+  pi->setepoch(es.get_osdmap_epoch());
   pi->exit_state(ceph_clock_now());
   if (pi->empty()) {
     reset();
