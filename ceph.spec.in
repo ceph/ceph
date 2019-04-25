@@ -468,6 +468,7 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-ipaddress
 Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
