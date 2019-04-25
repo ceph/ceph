@@ -39,6 +39,17 @@ enum {
   l_bluefs_max_bytes_wal,
   l_bluefs_max_bytes_db,
   l_bluefs_max_bytes_slow,
+  l_bluefs_read_random_count,
+  l_bluefs_read_random_bytes,
+  l_bluefs_read_random_disk_count,
+  l_bluefs_read_random_disk_bytes,
+  l_bluefs_read_random_buffer_count,
+  l_bluefs_read_random_buffer_bytes,
+  l_bluefs_read_count,
+  l_bluefs_read_bytes,
+  l_bluefs_read_prefetch_count,
+  l_bluefs_read_prefetch_bytes,
+
   l_bluefs_last,
 };
 
