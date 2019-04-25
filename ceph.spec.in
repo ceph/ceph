@@ -2115,7 +2115,7 @@ fi
 %{_bindir}/ceph_test_*
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
-%{_bindir}/cephdeduptool
+%{_bindir}/ceph-dedup-tool
 %{_mandir}/man8/ceph-debugpack.8*
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
