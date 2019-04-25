@@ -12,6 +12,9 @@
 #include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDPGInfo.h"
@@ -983,7 +986,8 @@ PG::do_osd_op(const object_info_t& oi, OSDOp* osd_op)
       return seastar::now();
     });
   default:
-    return seastar::now();
+    throw std::runtime_error(
+      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
 }
 
