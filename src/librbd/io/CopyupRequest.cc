@@ -38,10 +38,12 @@ public:
   C_UpdateObjectMap(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                     uint64_t object_no, uint8_t head_object_map_state,
                     const std::vector<uint64_t> *snap_ids,
-                    const ZTracer::Trace &trace, size_t snap_id_idx)
+                    bool first_snap_is_clean, const ZTracer::Trace &trace,
+                    size_t snap_id_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_no(object_no),
       m_head_object_map_state(head_object_map_state), m_snap_ids(*snap_ids),
-      m_trace(trace), m_snap_id_idx(snap_id_idx)
+      m_first_snap_is_clean(first_snap_is_clean), m_trace(trace),
+      m_snap_id_idx(snap_id_idx)
   {
   }
 
@@ -79,7 +81,7 @@ public:
     auto& image_ctx = this->m_image_ctx;
     uint8_t state = OBJECT_EXISTS;
     if (image_ctx.test_features(RBD_FEATURE_FAST_DIFF, image_ctx.snap_lock) &&
-        m_snap_id_idx > 0) {
+        (m_snap_id_idx > 0 || m_first_snap_is_clean)) {
       // first snapshot should be exists+dirty since it contains
       // the copyup data -- later snapshots inherit the data.
       state = OBJECT_EXISTS_CLEAN;
@@ -96,6 +98,7 @@ private:
   uint64_t m_object_no;
   uint8_t m_head_object_map_state;
   const std::vector<uint64_t> &m_snap_ids;
+  bool m_first_snap_is_clean;
   const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
 };
@@ -335,7 +338,7 @@ void CopyupRequest<I>::update_object_maps() {
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_UpdateObjectMap<I>>(),
     boost::lambda::_1, m_image_ctx, m_object_no, head_object_map_state,
-    &m_snap_ids, m_trace, boost::lambda::_2));
+    &m_snap_ids, m_first_snap_is_clean, m_trace, boost::lambda::_2));
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_update_object_maps>(this);
   auto throttle = new AsyncObjectThrottle<I>(
@@ -591,6 +594,7 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
                std::back_inserter(m_snap_ids),
                [this, cct=m_image_ctx->cct, &deep_copied](uint64_t snap_id) {
       if (deep_copied.count(snap_id)) {
+        m_first_snap_is_clean = true;
         return false;
       }
 
