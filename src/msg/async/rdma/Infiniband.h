@@ -117,6 +117,7 @@ class DeviceList {
     }
     delete []devices;
     ibv_free_device_list(device_list);
+    rdma_free_devices(device_context_list);
   }
 
   Device* get_device(const char* device_name) {
