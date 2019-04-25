@@ -872,6 +872,18 @@ COMMAND("osd rm-noout " \
         "(if they are currently marked as noout), " \
         "can use <all|any> to automatically filter out all noout osds", \
         "osd", "rw")
+COMMAND("osd set-group " \
+        "name=flags,type=CephString "
+        "name=who,type=CephString,n=N", \
+        "set <flags> for batch osds or crush nodes, " \
+        "<flags> must be a comma-separated subset of {noup,nodown,noin,noout}", \
+        "osd", "rw")
+COMMAND("osd unset-group " \
+        "name=flags,type=CephString "
+        "name=who,type=CephString,n=N", \
+        "unset <flags> for batch osds or crush nodes, " \
+        "<flags> must be a comma-separated subset of {noup,nodown,noin,noout}", \
+        "osd", "rw")
 COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
