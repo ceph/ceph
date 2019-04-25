@@ -36,16 +36,7 @@ class RGWChainedCacheImpl;
 class RGWSI_User : public RGWServiceInstance
 {
   friend class User;
-
-  struct Svc {
-    RGWSI_User *user{nullptr};
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_SysObj *sysobj{nullptr};
-    RGWSI_SysObj_Cache *cache{nullptr};
-    RGWSI_Meta *meta{nullptr};
-    RGWSI_MetaBackend *meta_be{nullptr};
-    RGWSI_SyncModules *sync_modules{nullptr};
-  } svc;
+  friend class PutOperation;
 
   RGWMetadataHandler *user_meta_handler;
 
@@ -58,24 +49,31 @@ class RGWSI_User : public RGWServiceInstance
   using RGWChainedCacheImpl_user_info_cache_entry = RGWChainedCacheImpl<user_info_cache_entry>;
   unique_ptr<RGWChainedCacheImpl_user_info_cache_entry> uinfo_cache;
 
-  int read_user_info_meta(RGWSI_MetaBackend::Context *ctx,
-                          string& entry,
-                          RGWUserInfo& info,
-                          RGWObjVersionTracker * const objv_tracker,
-                          real_time * const pmtime,
-                          rgw_cache_entry_info * const cache_info,
-                          map<string, bufferlist> * const pattrs);
-  int store_user_info_meta(RGWSI_MetaBackend::Context *ctx,
-                           string& entry,
-                           RGWUserInfo& info,
-                           RGWUserInfo *old_info,
-                           RGWObjVersionTracker *objv_tracker,
-                           real_time& mtime,
-                           bool exclusive,
-                           map<string, bufferlist> *pattrs);
+  int get_user_info_from_index(RGWSI_MetaBackend::Context *ctx,
+                               const string& key,
+                               const rgw_pool& pool,
+                               RGWUserInfo *info,
+                               RGWObjVersionTracker * const objv_tracker,
+                               real_time * const pmtime);
+
+  int remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker);
+
+  int remove_key_index(RGWSI_MetaBackend::Context *ctx, const RGWAccessKey& access_key);
+  int remove_email_index(RGWSI_MetaBackend::Context *ctx, const string& email);
+  int remove_swift_name_index(RGWSI_MetaBackend::Context *ctx, const string& swift_name);
 
   int do_start() override;
 public:
+  struct Svc {
+    RGWSI_User *user{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SyncModules *sync_modules{nullptr};
+  } svc;
+
   RGWSI_User(CephContext *cct);
   ~RGWSI_User();
 
@@ -84,6 +82,16 @@ public:
             RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
+  static string get_meta_key(const rgw_user& user) {
+    return user.to_str();
+  }
+
+  static string get_buckets_oid(const rgw_user& user_id) {
+#define RGW_BUCKETS_OID_SUFFIX ".buckets"
+    return user_id.to_str() + RGW_BUCKETS_OID_SUFFIX;
+  }
+
+#if 0
   class User {
     friend class Op;
 
@@ -110,16 +118,11 @@ public:
       return user_info;
     }
 
-    static string get_meta_key(const rgw_user& user) {
-      return user.to_str();
-    }
-
     struct GetOp {
       User& source;
 
       ceph::real_time *pmtime{nullptr};
       map<string, bufferlist> *pattrs{nullptr};
-      boost::optional<obj_version> refresh_version;
       RGWUserInfo *pinfo{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
@@ -131,11 +134,6 @@ public:
 
       GetOp& set_attrs(map<string, bufferlist> *_attrs) {
         pattrs = _attrs;
-        return *this;
-      }
-
-      GetOp& set_refresh_version(const obj_version& rf) {
-        refresh_version = rf;
         return *this;
       }
 
@@ -199,18 +197,48 @@ public:
 
   User user(RGWSysObjectCtx& _ctx,
             const rgw_user& _user);
+#endif
 
-  int read_user_info(const rgw_user& user,
+  /* base svc_user interfaces */
+
+  int read_user_info(RGWSI_MetaBackend::Context *ctx,
                      RGWUserInfo *info,
-                     real_time *pmtime,
-                     map<string, bufferlist> *pattrs,
-                     RGWObjVersionTracker *objv_tracker,
-                     rgw_cache_entry_info *cache_info);
-  int store_user_info(RGWUserInfo& user_info, bool exclusive,
-                      map<string, bufferlist>& attrs,
+                     RGWObjVersionTracker * const objv_tracker,
+                     real_time * const pmtime,
+                     rgw_cache_entry_info * const cache_info,
+                     map<string, bufferlist> * const pattrs,
+                     optional_yield y);
+
+  int store_user_info(RGWSI_MetaBackend::Context *ctx,
+                      RGWUserInfo& info,
+                      RGWUserInfo *old_info,
                       RGWObjVersionTracker *objv_tracker,
-                      real_time mtime);
-  int remove_user_info(const rgw_user& user,
-                       RGWObjVersionTracker *objv_tracker);
+                      real_time& mtime,
+                      bool exclusive,
+                      map<string, bufferlist> *attrs,
+                      optional_yield y);
+
+  int remove_user_info(RGWSI_MetaBackend::Context *ctx,
+                       const RGWUserInfo& info,
+                       RGWObjVersionTracker *objv_tracker,
+                       optional_yield y);
+
+  int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
+                             const string& email, RGWUserInfo *info,
+                             RGWObjVersionTracker *objv_tracker,
+                             real_time *pmtime,
+                             optional_yield y);
+  int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
+                             const string& swift_name,
+                             RGWUserInfo *info,        /* out */
+                             RGWObjVersionTracker * const objv_tracker,
+                             real_time * const pmtime,
+                             optional_yield y);
+  int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
+                                  const std::string& access_key,
+                                  RGWUserInfo *info,
+                                  RGWObjVersionTracker* objv_tracker,
+                                  real_time *pmtime,
+                                  optional_yield y);
 };
 

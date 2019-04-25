@@ -31,6 +31,7 @@
 #include "services/svc_bucket.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
+#include "services/svc_user.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -48,8 +49,7 @@
 // define as static when RGWBucket implementation completes
 void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id)
 {
-  buckets_obj_id = user_id.to_str();
-  buckets_obj_id += RGW_BUCKETS_OBJ_SUFFIX;
+  buckets_obj_id = RGWSI_User::get_buckets_oid(user_id);
 }
 
 /*
@@ -1849,7 +1849,7 @@ static int process_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_st
   do {
     list<std::string> keys;
 
-    ret = store->svc.meta->get_mgr()meta_mgr->list_keys_next(handle, default_max_keys, keys, &truncated);
+    ret = store->svc.meta->get_mgr()->list_keys_next(handle, default_max_keys, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2553,10 +2553,6 @@ public:
     return 0;
   }
 
-  RGWSI_MetaBackend::Type required_be_type() override {
-    return MDBE_SOBJ;
-  }
-
   int read_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
                                   string& entry,
                                   RGWBucketEntryPoint *be,
@@ -2568,7 +2564,7 @@ public:
     RGWSI_MBSObj_GetParams params = {
       .pmtime = pmtime,
       .pattrs = pattrs,
-      .pbl = &bl;
+      .pbl = &bl,
     };
     int ret = meta_be->get_entry(ctx, params,
                                  objv_tracker);
@@ -2762,6 +2758,10 @@ public:
   }
   ~RGWMetadataHandlerPut_Bucket() {}
 
+  void encode_obj(bufferlist *bl) override {
+    ceph::encode(obj->get_be(), *bl);
+  }
+
   int put_checked(RGWMetadataObject *_old_obj) override;
   int put_post() override;
 };
@@ -2779,16 +2779,9 @@ int RGWMetadataHandlerPut_Bucket::put_checked(RGWMetadataObject *_old_obj)
 {
   RGWBucketEntryMetadataObject *old_obj = static_cast<RGWBucketEntryMetadataObject *>(_old_obj);
 
-  auto& be = obj->get_be();
+  obj->set_pattrs(old_obj->get_attrs());
 
-  map<string, bufferlist> *pattrs = (old_obj ? &old_obj->get_attrs() : nullptr);
-
-  ret = handler->store_bucket_entrypoint_info(entry, be, false, objv_tracker,
-                                              obj->get_mtime(), &old_obj->get_attrs());
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return RGWMetadataHandlerPut_SObj::put_checked(old_obj);
 }
 
 int RGWMetadataHandlerPut_Bucket::put_post()
@@ -3059,19 +3052,13 @@ pubic:
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   int read_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
-                                 string& entry,
                                  RGWBucketCompleteInfo *bi,
                                  ceph::real_time *pmtime,
-                                 map<string, bufferlist> *pattrs,
                                  optional_yield y) {
     RGWObjVersionTracker objv_tracker,
     bufferlist bl;
-    RGWSI_MBSObj_GetParams params = {
-      .pmtime = pmtime,
-      .pattrs = pattrs,
-      .pbl = &bl;
-      .y = y;
-    };
+    RGWSI_MBSObj_GetParams params(&bl, &bi.attrs, pmtime, y);
+
     int ret = meta_be->get_entry(ctx, params,
                                  &objv_tracker);
     if (ret < 0) {
@@ -3090,33 +3077,13 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
     return 0;
   }
 
-  int store_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
-                                  string& entry,
-                                  const RGWBucketInfo& bi,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  const ceph::real_time& mtime,
-                                  map<string, bufferlist> *pattrs) {
-    RGWSI_MBSObj_PutParams params = {
-      .mtime = mtime,
-      .pattrs = pattrs,
-    };
-    ceph::encode(be, params.bl);
-    int ret = meta_be->put_entry(ctx, params,
-                                 objv_tracker);
-    if (ret < 0) {
-      return ret;
-    }
-
-    return 0;
-  }
-
   int remove_bucket_instance_entry(RGWSI_MetaBackend::Context *ctx,
                                    string& entry,
                                    RGWObjVersionTracker *objv_tracker,
                                    const ceph::real_time& mtime) {
-    RGWSI_MBSObj_RemoveParams params = {
-      .mtime = mtime,
-    };
+    RGWSI_MBSObj_RemoveParams params;
+    params.mtime = mtime,
+
     int ret = meta_be->do_remove(ctx, params,
                                  objv_tracker);
     if (ret < 0) {
@@ -3132,11 +3099,9 @@ public:
 
   int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
     RGWBucketCompleteInfo bci;
-
     real_time mtime;
-    map<string, bufferlist> attrs;
 
-    int ret = read_bucket_instance_entry(ctx, entry, &bci, &mtime, &attrs, null_yield);
+    int ret = read_bucket_instance_entry(ctx, &bci, &mtime, null_yield);
     if (ret < 0)
       return ret;
 
@@ -3159,7 +3124,7 @@ public:
   int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWBucketCompleteInfo bci;
 
-    int ret = read_bucket_instance_entry(ctx, entry, bci, nullptr, nullptr, null_yield);
+    int ret = read_bucket_instance_entry(ctx, entry, bci, nullptr, null_yield);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -3240,10 +3205,16 @@ public:
                                        RGWMDLogSyncType type) : RGWMetadataHanderPut_SObj(ctx, entry, obj, objv_tracker, type),
                                                                 handler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
+
+    auto& bci = obj->get_bci();
+    obj->set_pattrs(&bci.attrs);
+  }
+
+  void encode_obj(bufferlist *bl) override {
+    ceph::encode(obj->get_bucket_info(), *bl);
   }
 
   int put_pre() override;
-  int put_checked(RGWMetadataObject *_old_obj) override;
   int put_post() override;
 };
 
@@ -3259,6 +3230,8 @@ int RGWBucketInstanceMetadatHandler::do_put(RGWSI_MetaBackend::Context *ctx, str
 
 int RGWMetadataHandlerPut_BucketInstance::put_pre()
 {
+  RGWBucketCompleteInfo& bci = obj->get_bci();
+
   RGWBucketInstanceMetadataObject *old_obj = static_cast<RGWBucketInstanceMetadataObject *>(_old_obj);
 
   RGWBucketCompleteInfo *old_bci = (old_obj ? &old_obj->get_bci() : nullptr);
@@ -3320,14 +3293,6 @@ int RGWMetadataHandlerPut_BucketInstance::put_pre()
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
-
-  return 0;
-}
-
-int RGWMetadataHandlerPut_BucketInstance::put_checked(RGWMetadataObject *_old_obj) {
-  ret = store_bucket_instance_entry(bci.info, false, mtime, &bci.attrs);
-  if (ret < 0)
-    return ret;
 
   return 0;
 }

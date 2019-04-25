@@ -93,15 +93,23 @@ public:
     Module *module{nullptr};
     std::string section;
     std::string key;
+
+    virtual void set_key(const string& _key) {
+      key = _key;
+    }
   };
 
   struct PutParams {
-    virtual ~PutParams() = 0;
-
     ceph::real_time mtime;
+
+    PutParams() {}
+    PutParams(const ceph::real_time& _mtime) : mtime(_mtime) {}
+    virtual ~PutParams() = 0;
   };
 
   struct GetParams {
+    GetParams() {}
+    GetParams(ceph::real_time *_pmtime) : pmtime(_pmtime) {}
     virtual ~GetParams();
 
     ceph::real_time *pmtime{nullptr};
@@ -123,34 +131,40 @@ public:
 
   virtual Type get_type() = 0;
 
-  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, Context *ctx) = 0;
+  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, Context *ctx) = 0;
 
   virtual GetParams *alloc_default_get_params(ceph::real_time *pmtime) = 0;
 
   /* these should be implemented by backends */
   virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
                         RGWSI_MetaBackend::GetParams& params,
-                        RGWObjVersionTracker *objv_tracker) = 0;
+                        RGWObjVersionTracker *objv_tracker,
+                        optional_yield y) = 0;
   virtual int put_entry(RGWSI_MetaBackend::Context *ctx,
                         RGWSI_MetaBackend::PutParams& params,
-                        RGWObjVersionTracker *objv_tracker) = 0;
+                        RGWObjVersionTracker *objv_tracker,
+                        optional_yield y) = 0;
   virtual int remove_entry(Context *ctx,
                            RGWSI_MetaBackend::RemoveParams& params,
-                           RGWObjVersionTracker *objv_tracker) = 0;
+                           RGWObjVersionTracker *objv_tracker,
+                           optional_yield y) = 0;
 
   /* these should be called by handlers */
   virtual int get(Context *ctx,
                   GetParams &params,
-                  RGWObjVersionTracker *objv_tracker);
+                  RGWObjVersionTracker *objv_tracker,
+                  optional_yield y);
 
   virtual int put(Context *ctx,
                   PutParams& params,
                   RGWObjVersionTracker *objv_tracker,
+                  optional_yield y,
                   RGWMDLogSyncType sync_mode);
 
   virtual int remove(Context *ctx,
                      RemoveParams& params,
                      RGWObjVersionTracker *objv_tracker,
+                     optional_yield y,
                      RGWMDLogSyncType sync_mode);
 };
 

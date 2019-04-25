@@ -7775,7 +7775,7 @@ int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucke
     .set_mtime(pmtime)
     .set_attrs(pattrs)
     .set_pinfo(&info)
-    .set_optional_yield(y)
+    .set_yield(y)
     .exec();
 
   if (r < 0) {
@@ -7831,7 +7831,7 @@ int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
     .set_mtime(pmtime)
     .set_attrs(pattrs)
     .set_pinfo(&info)
-    .set_optional_yield(y)
+    .set_yield(y)
     .exec();
   if (r < 0) {
     return r;
