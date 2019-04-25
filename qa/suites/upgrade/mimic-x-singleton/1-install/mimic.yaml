@@ -17,6 +17,6 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-ssh
     extra_packages: ['librados2']
-- print: "**** done install luminous"
+- print: "**** done install mimic"
 - ceph:
 - print: "**** done ceph"
