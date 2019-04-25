@@ -27,10 +27,6 @@ class Protocol {
   // Reentrant closing
   seastar::future<> close();
 
-  seastar::future<> send(MessageRef msg);
-
-  seastar::future<> keepalive();
-
   virtual void start_connect(const entity_addr_t& peer_addr,
                              const entity_type_t& peer_type) = 0;
 
@@ -61,6 +57,17 @@ class Protocol {
   seastar::gate pending_dispatch;
   AuthConnectionMetaRef auth_meta;
 
+ private:
+  bool closed = false;
+  // become valid only after closed == true
+  seastar::shared_future<> close_ready;
+
+// the write state-machine
+ public:
+  seastar::future<> send(MessageRef msg);
+  seastar::future<> keepalive();
+
+ protected:
   // write_state is changed with state atomically, indicating the write
   // behavior of the according state.
   enum class write_state_t {
@@ -81,10 +88,6 @@ class Protocol {
   write_state_t write_state = write_state_t::none;
   // wait until current state changed
   seastar::shared_promise<> state_changed;
-
-  bool closed = false;
-  // become valid only after closed == true
-  seastar::shared_future<> close_ready;
 
   bool need_keepalive = false;
   std::optional<utime_t> keepalive_ack = std::nullopt;
