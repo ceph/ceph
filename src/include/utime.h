@@ -348,7 +348,8 @@ public:
   static int invoke_date(const std::string& date_str, utime_t *result) {
      char buf[256];
 
-     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::KEEP);
+     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE,
+			 SubProcess::KEEP);
      bin_date.add_cmd_args("-d", date_str.c_str(), "+%s %N", NULL);
 
      int r = bin_date.spawn();
@@ -382,17 +383,45 @@ public:
 
     const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
     if (p) {
-      if (*p == ' ') {
+      if (*p == ' ' || *p == 'T') {
 	p++;
-	p = strptime(p, " %H:%M:%S", &tm);
-	if (!p)
+	// strptime doesn't understand fractional/decimal seconds, and
+	// it also only takes format chars or literals, so we have to
+	// get creative.
+	char fmt[32] = {0};
+	strncpy(fmt, p, sizeof(fmt) - 1);
+	fmt[0] = '%';
+	fmt[1] = 'H';
+	fmt[2] = ':';
+	fmt[3] = '%';
+	fmt[4] = 'M';
+	fmt[6] = '%';
+	fmt[7] = 'S';
+	const char *subsec = 0;
+	char *q = fmt + 8;
+	if (*q == '.') {
+	  ++q;
+	  subsec = p + 9;
+	  q = fmt + 9;
+	  while (*q && isdigit(*q)) {
+	    ++q;
+	  }
+	}
+	// look for tz...
+	if (*q == '-' || *q == '+' || *q == 'Z') {
+	  *q = '%';
+	  *(q+1) = 'z';
+	  *(q+2) = 0;
+	}
+	p = strptime(p, fmt, &tm);
+	if (!p) {
 	  return -EINVAL;
-        if (nsec && *p == '.') {
-          ++p;
+	}
+        if (nsec && subsec) {
           unsigned i;
           char buf[10]; /* 9 digit + null termination */
-          for (i = 0; (i < sizeof(buf) - 1) && isdigit(*p); ++i, ++p) {
-            buf[i] = *p;
+          for (i = 0; (i < sizeof(buf) - 1) && isdigit(*subsec); ++i, ++subsec) {
+            buf[i] = *subsec;
           }
           for (; i < sizeof(buf) - 1; ++i) {
             buf[i] = '0';
@@ -419,9 +448,18 @@ public:
         *nsec = (uint64_t)usec * 1000;
       }
     }
+
+    // apply the tm_gmtoff manually below, since none of mktime,
+    // gmtime, and localtime seem to do it.  zero it out here just in
+    // case some other libc *does* apply it.  :(
+    auto gmtoff = tm.tm_gmtoff;
+    tm.tm_gmtoff = 0;
+
     time_t t = internal_timegm(&tm);
     if (epoch)
       *epoch = (uint64_t)t;
+
+    *epoch -= gmtoff;
 
     if (out_date) {
       char buf[32];
