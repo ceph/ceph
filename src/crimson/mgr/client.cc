@@ -78,7 +78,7 @@ seastar::future<> Client::reconnect()
       logger().warn("No active mgr available yet");
       return seastar::now();
     }
-    auto peer = mgrmap.get_active_addrs().legacy_addr();
+    auto peer = mgrmap.get_active_addrs().front();
     return msgr.connect(peer, CEPH_ENTITY_TYPE_MGR).then(
       [this](auto xconn) {
         conn = xconn->release();
