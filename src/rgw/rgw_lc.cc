@@ -311,104 +311,6 @@ int RGWLC::bucket_lc_prepare(int index)
   return 0;
 }
 
-static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, ceph::real_time *expire_time = nullptr)
-{
-  double timediff, cmp;
-  utime_t base_time;
-  if (cct->_conf->rgw_lc_debug_interval <= 0) {
-    /* Normal case, run properly */
-    cmp = days*24*60*60;
-    base_time = ceph_clock_now().round_to_day();
-  } else {
-    /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
-    cmp = days*cct->_conf->rgw_lc_debug_interval;
-    base_time = ceph_clock_now();
-  }
-  timediff = base_time - ceph::real_clock::to_time_t(mtime);
-
-  if (expire_time) {
-    *expire_time = mtime + make_timespan(cmp);
-  }
-  ldout(cct, 20) << __func__ << "(): mtime=" << mtime << " days=" << days << " base_time=" << base_time << " timediff=" << timediff << " cmp=" << cmp << dendl;
-
-  return (timediff >= cmp);
-}
-
-int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
-{
-  MultipartMetaFilter mp_filter;
-  vector<rgw_bucket_dir_entry> objs;
-  RGWMPObj mp_obj;
-  bool is_truncated;
-  int ret;
-  RGWBucketInfo& bucket_info = target->get_bucket_info();
-  RGWRados::Bucket::List list_op(target);
-  auto delay_ms = cct->_conf.get_val<int64_t>("rgw_lc_thread_delay");
-  list_op.params.list_versions = false;
-  /* lifecycle processing does not depend on total order, so can
-   * take advantage of unorderd listing optimizations--such as
-   * operating on one shard at a time */
-  list_op.params.allow_unordered = true;
-  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
-  list_op.params.filter = &mp_filter;
-  for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
-    if (!prefix_iter->second.status || prefix_iter->second.mp_expiration <= 0) {
-      continue;
-    }
-    list_op.params.prefix = prefix_iter->first;
-    do {
-      objs.clear();
-      list_op.params.marker = list_op.get_next_marker();
-      ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
-      if (ret < 0) {
-          if (ret == (-ENOENT))
-            return 0;
-          ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
-          return ret;
-      }
-
-      for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
-        if (obj_has_expired(cct, obj_iter->meta.mtime, prefix_iter->second.mp_expiration)) {
-          rgw_obj_key key(obj_iter->key);
-          if (!mp_obj.from_meta(key.name)) {
-            continue;
-          }
-          RGWObjectCtx rctx(store);
-          ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
-          if (ret < 0 && ret != -ERR_NO_SUCH_UPLOAD) {
-            ldpp_dout(this, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << obj_iter->key << dendl;
-          } else if (ret == -ERR_NO_SUCH_UPLOAD) {
-            ldpp_dout(this, 5) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << obj_iter->key << dendl;
-          }
-          if (going_down())
-            return 0;
-        }
-      } /* for objs */
-      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
-    } while(is_truncated);
-  }
-  return 0;
-}
-
-static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
-{
-  RGWRados::Object op_target(store, bucket_info, ctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
-}
-
-static bool is_valid_op(const lc_op& op)
-{
-      return (op.status &&
-              (op.expiration > 0 
-               || op.expiration_date != boost::none
-               || op.noncur_expiration > 0
-               || op.dm_expiration
-               || !op.transitions.empty()
-               || !op.noncur_transitions.empty()));
-}
-
 class LCObjsLister {
   RGWRados *store;
   RGWBucketInfo& bucket_info;
@@ -423,11 +325,9 @@ class LCObjsLister {
   int64_t delay_ms;
 
 public:
-  LCObjsLister(RGWRados *_store, RGWBucketInfo& _bucket_info) :
+  LCObjsLister(RGWRados *_store, RGWBucketInfo& _bucket_info, RGWRados::Bucket::List _list_op) :
       store(_store), bucket_info(_bucket_info),
-      target(store, bucket_info), list_op(&target) {
-    list_op.params.list_versions = bucket_info.versioned();
-    list_op.params.allow_unordered = true;
+      target(store, bucket_info), list_op(_list_op) {
     delay_ms = store->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
@@ -496,6 +396,100 @@ public:
   }
 };
 
+static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, ceph::real_time *expire_time = nullptr)
+{
+  double timediff, cmp;
+  utime_t base_time;
+  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+    /* Normal case, run properly */
+    cmp = days*24*60*60;
+    base_time = ceph_clock_now().round_to_day();
+  } else {
+    /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
+    cmp = days*cct->_conf->rgw_lc_debug_interval;
+    base_time = ceph_clock_now();
+  }
+  timediff = base_time - ceph::real_clock::to_time_t(mtime);
+
+  if (expire_time) {
+    *expire_time = mtime + make_timespan(cmp);
+  }
+  ldout(cct, 20) << __func__ << "(): mtime=" << mtime << " days=" << days << " base_time=" << base_time << " timediff=" << timediff << " cmp=" << cmp << dendl;
+
+  return (timediff >= cmp);
+}
+
+int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+{
+  MultipartMetaFilter mp_filter;
+  RGWMPObj mp_obj;
+  int ret;
+  RGWBucketInfo& bucket_info = target->get_bucket_info();
+  RGWRados::Bucket::List list_op(target);
+  list_op.params.list_versions = false;
+  /* lifecycle processing does not depend on total order, so can
+   * take advantage of unorderd listing optimizations--such as
+   * operating on one shard at a time */
+  list_op.params.allow_unordered = true;
+  list_op.params.ns = RGW_OBJ_NS_MULTIPART;
+  list_op.params.filter = &mp_filter;
+
+  LCObjsLister ol(store, bucket_info, list_op);
+
+  for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+    if (!prefix_iter->second.status || prefix_iter->second.mp_expiration <= 0) {
+      continue;
+    }
+
+    ol.set_prefix(prefix_iter->first);
+    ret = ol.init();
+    if (ret < 0) {
+      if (ret == (-ENOENT))
+        return 0;
+      ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
+      return ret;
+    }
+
+    rgw_bucket_dir_entry o;
+    for (; ol.get_obj(&o); ol.next()) {
+      if (obj_has_expired(cct, o.meta.mtime, prefix_iter->second.mp_expiration)) {
+        rgw_obj_key key(o.key);
+        if (!mp_obj.from_meta(key.name)) {
+          continue;
+        }
+        RGWObjectCtx rctx(store);
+        ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
+        if (ret < 0 && ret != -ERR_NO_SUCH_UPLOAD) {
+          ldpp_dout(this, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << o.key << dendl;
+        } else if (ret == -ERR_NO_SUCH_UPLOAD) {
+          ldpp_dout(this, 5) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << o.key << dendl;
+        }
+        if (going_down())
+          return 0;
+      }
+    }
+  }
+  return 0;
+}
+
+static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
+{
+  RGWRados::Object op_target(store, bucket_info, ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
+}
+
+static bool is_valid_op(const lc_op& op)
+{
+      return (op.status &&
+              (op.expiration > 0
+               || op.expiration_date != boost::none
+               || op.noncur_expiration > 0
+               || op.dm_expiration
+               || !op.transitions.empty()
+               || !op.noncur_transitions.empty()));
+}
 
 struct op_env {
   lc_op& op;
@@ -960,6 +954,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     ldpp_dout(this, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
     return ret;
   }
+  RGWRados::Bucket target(store, bucket_info);
 
   if (bucket_info.bucket.marker != bucket_marker) {
     ldpp_dout(this, 1) << "LC: deleting stale entry found for bucket=" << bucket_tenant
@@ -968,8 +963,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
     return -ENOENT;
   }
 
-  RGWRados::Bucket target(store, bucket_info);
-  LCObjsLister ol(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+  list_op.params.list_versions = bucket_info.versioned();
+  list_op.params.allow_unordered = true;
+
+  LCObjsLister ol(store, bucket_info, list_op);
 
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
