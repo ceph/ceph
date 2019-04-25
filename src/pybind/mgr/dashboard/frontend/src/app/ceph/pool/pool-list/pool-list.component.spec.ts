@@ -63,6 +63,10 @@ describe('PoolListComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should have columns that are sortable', () => {
+    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
+
   describe('pool deletion', () => {
     let taskWrapper: TaskWrapperService;
 
@@ -206,7 +210,11 @@ describe('PoolListComponent', () => {
     it('transforms pools data correctly', () => {
       const pools = [
         {
-          stats: { rd_bytes: { latest: 6, rate: 4, series: [[0, 2], [1, 6]] } },
+          stats: {
+            bytes_used: { latest: 5, rate: 0, series: [] },
+            max_avail: { latest: 15, rate: 0, series: [] },
+            rd_bytes: { latest: 6, rate: 4, series: [[0, 2], [1, 6]] }
+          },
           pg_status: { 'active+clean': 8, down: 2 }
         }
       ];
@@ -215,23 +223,42 @@ describe('PoolListComponent', () => {
           cdIsBinary: true,
           pg_status: '8 active+clean, 2 down',
           stats: {
-            bytes_used: { latest: 0, rate: 0, series: [] },
-            max_avail: { latest: 0, rate: 0, series: [] },
+            bytes_used: { latest: 5, rate: 0, series: [] },
+            max_avail: { latest: 15, rate: 0, series: [] },
             rd: { latest: 0, rate: 0, series: [] },
             rd_bytes: { latest: 6, rate: 4, series: [2, 6] },
             wr: { latest: 0, rate: 0, series: [] },
             wr_bytes: { latest: 0, rate: 0, series: [] }
-          }
+          },
+          usage: 0.25
         }
       ];
+      expect(component.transformPoolsData(pools)).toEqual(expected);
+    });
 
+    it('transforms pools data correctly if stats are missing', () => {
+      const pools = [{}];
+      const expected = [
+        {
+          cdIsBinary: true,
+          pg_status: '',
+          stats: {
+            bytes_used: { latest: 0, rate: 0, series: [] },
+            max_avail: { latest: 0, rate: 0, series: [] },
+            rd: { latest: 0, rate: 0, series: [] },
+            rd_bytes: { latest: 0, rate: 0, series: [] },
+            wr: { latest: 0, rate: 0, series: [] },
+            wr_bytes: { latest: 0, rate: 0, series: [] }
+          },
+          usage: 0
+        }
+      ];
       expect(component.transformPoolsData(pools)).toEqual(expected);
     });
 
     it('transforms empty pools data correctly', () => {
       const pools = undefined;
       const expected = undefined;
-
       expect(component.transformPoolsData(pools)).toEqual(expected);
     });
   });
