@@ -82,6 +82,7 @@ set(common_srcs
   perf_counters_collection.cc
   perf_histogram.cc
   pick_address.cc
+  rabin.cc
   reverse.c
   run_cmd.cc
   scrub_types.cc

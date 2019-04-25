@@ -33,12 +33,12 @@ if [ -n "$CEPH_BIN" ] ; then
    # CMake env
    RADOS_TOOL="$CEPH_BIN/rados"
    CEPH_TOOL="$CEPH_BIN/ceph"
-   DEDUP_TOOL="$CEPH_BIN/cephdeduptool"
+   DEDUP_TOOL="$CEPH_BIN/ceph-dedup-tool"
 else
    # executables should be installed by the QA env 
    RADOS_TOOL=$(which rados)
    CEPH_TOOL=$(which ceph)
-   DEDUP_TOOL=$(which cephdeduptool)
+   DEDUP_TOOL=$(which ceph-dedup-tool)
 fi
 
 POOL=dedup_pool
@@ -90,6 +90,11 @@ function test_dedup_ratio_fixed()
   for num in `seq 0 20`
   do
     rm -rf ./dedup_object_$num
+  done
+  $RADOS_TOOL -p $POOL rm $OBJ 
+  for num in `seq 0 20`
+  do
+    $RADOS_TOOL -p $POOL rm dedup_object_$num
   done
 }
 
@@ -143,10 +148,52 @@ function test_dedup_chunk_scrub()
   $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
   
   rm -rf ./foo ./bar ./foo-chunk ./bar-chunk ./test_obj
+  $RADOS_TOOL -p $POOL rm foo
+  $RADOS_TOOL -p $POOL rm bar
+}
+
+function test_dedup_ratio_rabin()
+{
+  # case 1
+  echo "abcdefghijklmnop" >> dedup_16
+  for num in `seq 0 63`
+  do
+    dd if=./dedup_16  bs=16 count=1 >> dedup_object_1k
+  done
+
+  for num in `seq 0 11`
+  do
+    dd if=dedup_object_1k bs=1K count=1 >> test_rabin_object
+  done
+  $RADOS_TOOL -p $POOL put $OBJ ./test_rabin_object
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1015  --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
+  if [ 4096 -ne $RESULT ];
+  then
+    die "Estimate failed expecting 4096 result $RESULT"
+  fi
+
+  echo "a" >> test_rabin_object_2
+  dd if=./test_rabin_object bs=8K count=1 >> test_rabin_object_2
+  $RADOS_TOOL -p $POOL put $OBJ"_2" ./test_rabin_object_2
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1012 --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
+  if [ 11259 -ne $RESULT ];
+  then
+    die "Estimate failed expecting 11259 result $RESULT"
+  fi
+
+  RESULT=$($DEDUP_TOOL --op estimate --pool $POOL --min-chunk 1024 --chunk-mask-bit 3  --chunk-algorithm rabin --fingerprint-algorithm rabin --debug | grep result -a | awk '{print$4}')
+  if [ 7170 -ne $RESULT ];
+  then
+    die "Estimate failed expecting 7170 result $RESULT"
+  fi
+
+  rm -rf ./dedup_object_1k ./test_rabin_object ./test_rabin_object_2 ./dedup_16
+
 }
 
 test_dedup_ratio_fixed
 test_dedup_chunk_scrub
+test_dedup_ratio_rabin
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 
