@@ -452,6 +452,7 @@ int BlueFS::mount()
   block_all.clear();
   block_all.resize(MAX_BDEV);
   _init_alloc();
+  _init_logger();
 
   r = _replay(false, false);
   if (r < 0) {
@@ -476,7 +477,6 @@ int BlueFS::mount()
            << std::hex << log_writer->pos << std::dec
            << dendl;
 
-  _init_logger();
   return 0;
 
  out:
