@@ -1346,7 +1346,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     const std::deque<MessageRef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
-    bool require_keepalive_ack)
+    std::optional<utime_t> _keepalive_ack)
 {
   ceph::bufferlist bl;
 
@@ -1355,8 +1355,8 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     bl.append(keepalive_frame.get_buffer(session_stream_handlers));
   }
 
-  if (unlikely(require_keepalive_ack)) {
-    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(last_keepalive_ack_to_send);
+  if (unlikely(_keepalive_ack.has_value())) {
+    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
     bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
   }
 
@@ -1540,11 +1540,8 @@ void ProtocolV2::execute_ready()
             return read_frame_payload().then([this] {
               // handle_keepalive2() logic
               auto keepalive_frame = KeepAliveFrame::Decode(rx_segments_data.back());
-              last_keepalive_ack_to_send = keepalive_frame.timestamp();
-              logger().debug("{} got KEEPALIVE2 {}",
-                             conn, last_keepalive_ack_to_send);
+              notify_keepalive_ack(keepalive_frame.timestamp());
               conn.set_last_keepalive(seastar::lowres_system_clock::now());
-              notify_keepalive_ack();
             });
           case Tag::KEEPALIVE2_ACK:
             return read_frame_payload().then([this] {
