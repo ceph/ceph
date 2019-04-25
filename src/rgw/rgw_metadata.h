@@ -33,12 +33,19 @@ class RGWMetadataObject {
 protected:
   obj_version objv;
   ceph::real_time mtime;
+  std::map<string, bufferlist> *pattrs{nullptr};
   
 public:
   RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time get_mtime() { return mtime; }
+  void set_pattrs(std::map<string, bufferlist> *_pattrs) {
+    pattrs = _pattrs;
+  }
+  std::map<string, bufferlist> *get_pattrs() {
+    return pattrs;
+  }
 
   virtual void dump(Formatter *f) const {}
 };
@@ -53,6 +60,7 @@ class RGWMetadataHandler {
 public:
   class Put {
   protected:
+    RGWSI_MetaBackend *meta_be;
     RGWMetadataHandler *handler;
     RGWSI_MetaBackend::Context *ctx;
     string& entry;
@@ -66,9 +74,8 @@ public:
   public:
     Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
         string& _entry, RGWMetadataObject *_obj,
-        RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type) : ctx(_ctx), entry(_entry),
-                                                                       obj(_obj), objv_tracker(_objv_tracker),
-                                                                       apply_type(_type) {}
+        RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type);
+
     virtual ~Put() {}
 
     virtual int put_pre() {
@@ -102,9 +109,12 @@ public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
-  virtual RGWSI_MetaBackend::Type required_be_type() = 0;
   virtual RGWSI_MetaBackend::ModuleRef& get_be_module() {
     return be_module;
+  }
+
+  RGWSI_MetaBackend  *get_meta_be() {
+    return meta_be;
   }
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
@@ -121,8 +131,6 @@ public:
 
   int init(RGWMetadataManager *manager);
 
-
-protected:
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
    * the sync mode to see if the new one should replace the on-disk one.
@@ -152,6 +160,10 @@ protected:
     }
     return true;
   }
+
+  int call_with_ctx(std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
+  int call_with_ctx(const string& entry, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
+
 };
 
 class RGWMetadataTopHandler;
@@ -167,6 +179,8 @@ class RGWMetadataManager {
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
   int register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle);
 
+protected:
+  int call_with_ctx(const string& entry, RGWMetadataObject *obj, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
 public:
   RGWMetadataManager(RGWSI_Meta *_meta_svc);
   ~RGWMetadataManager();
@@ -206,6 +220,7 @@ public:
   int put() override;
 
   virtual int put_checked(RGWMetadataObject *_old_obj);
+  virtual void encode_obj(bufferlist *bl) {}
 };
 
 

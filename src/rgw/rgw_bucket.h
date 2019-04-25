@@ -72,6 +72,7 @@ public:
     ep(_ep), attrs(std::move(_attrs)) {
     objv = v;
     mtime = m;
+    set_pattrs (&attrs);
   }
 
   void dump(Formatter *f) const override {

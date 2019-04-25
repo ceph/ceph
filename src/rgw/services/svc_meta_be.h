@@ -93,15 +93,23 @@ public:
     Module *module{nullptr};
     std::string section;
     std::string key;
+
+    virtual void set_key(const string& _key) {
+      key = _key;
+    }
   };
 
   struct PutParams {
-    virtual ~PutParams() = 0;
-
     ceph::real_time mtime;
+
+    PutParams() {}
+    PutParams(const ceph::real_time& _mtime) : mtime(_mtime) {}
+    virtual ~PutParams() = 0;
   };
 
   struct GetParams {
+    GetParams() {}
+    GetParams(ceph::real_time *_pmtime) : pmtime(_pmtime) {}
     virtual ~GetParams();
 
     ceph::real_time *pmtime{nullptr};
@@ -123,7 +131,7 @@ public:
 
   virtual Type get_type() = 0;
 
-  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, const string& key, RGWMetadataObject *obj, Context *ctx) = 0;
+  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, Context *ctx) = 0;
 
   virtual GetParams *alloc_default_get_params(ceph::real_time *pmtime) = 0;
 

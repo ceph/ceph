@@ -304,10 +304,6 @@ public:
 
   string get_type() override { return string(); }
 
-  RGWSI_MetaBackend::Type required_be_type() override {
-    return RGWSI_MetaBackend::Type::MDBE_SOBJ; /* handled doesn't really using the backend */
-  }
-
   int init_module() override {
     be_module.reset(new HandlerModule());
     return 0;
@@ -389,6 +385,16 @@ int RGWMetadataHandler::init(RGWMetadataManager *manager)
   return manager->register_handler(this, &meta_be, &be_handle);
 }
 
+RGWMetadataHandler::Put::Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
+                             string& _entry, RGWMetadataObject *_obj,
+                             RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type) :
+  ctx(_ctx), entry(_entry),
+  obj(_obj), objv_tracker(_objv_tracker),
+  apply_type(_type)
+{
+  meta_be = handler->get_meta_be();
+}
+
 int RGWMetadataHandlerPut_SObj::put()
 {
   RGWMetadataObject *old_obj{nullptr};
@@ -401,8 +407,8 @@ int RGWMetadataHandlerPut_SObj::put()
 
   std::unique_ptr<RGWMetadataObject> oo(old_obj);
 
-  auto old_ver = (!old_obj ? : old_obj->get_version());
-  auto old_mtime = (!old_obj ? : old_obj->get_mtime());
+  auto old_ver = (!old_obj ? obj_version() : old_obj->get_version());
+  auto old_mtime = (!old_obj ? ceph::real_time() : old_obj->get_mtime());
 
   // are we actually going to perform this put, or is it too old?
   bool exists = (ret != -ENOENT);
@@ -412,20 +418,18 @@ int RGWMetadataHandlerPut_SObj::put()
     return STATUS_NO_APPLY;
   }
 
-  objv_tracker.read_version = old_ver.read_version; /* maintain the obj version we just read */
+  objv_tracker.read_version = old_ver; /* maintain the obj version we just read */
 
   return put_checked(old_obj);
 }
 
 int RGWMetadataHandlerPut_SObj::put_checked(RGWMetadataObject *_old_obj)
 {
-  RGWSI_MBSObj_PutParams params = {
-    .mtime = obj->mtime,
-    .pattrs = obj->pattrs,
-  };
-  ceph::encode(be, params.bl);
+  RGWSI_MBSObj_PutParams params(obj->get_pattrs(), obj->get_mtime());
+
+  encode_obj(&params.bl);
   int ret = meta_be->put_entry(ctx, params,
-                               objv_tracker);
+                               &objv_tracker);
   if (ret < 0) {
     return ret;
   }
@@ -446,33 +450,47 @@ int RGWMetadataHandler::do_put_operate(Put *put_op)
   }
 
   r = put_op->put_post();
-  if (r != 0) }  /* e.g., -error or STATUS_APPLIED */
+  if (r != 0) {  /* e.g., -error or STATUS_APPLIED */
     return r;
   }
 
   return 0;
 }
+
+int RGWMetadataHandler::call_with_ctx(std::function<int(RGWSI_MetaBackend::Context *ctx)> f)
+{
+  RGWSI_Meta_Ctx ctx;
+  meta_be->init_ctx(be_handle, &ctx);
+  return f(ctx.get());
+}
+
+int RGWMetadataHandler::call_with_ctx(const string& entry, std::function<int(RGWSI_MetaBackend::Context *ctx)> f)
+{
+  RGWSI_Meta_Ctx ctx;
+  meta_be->init_ctx(be_handle, &ctx);
+  ctx->set_key(entry);
+  return f(ctx.get());
 }
 
 int RGWMetadataHandler::get(string& entry, RGWMetadataObject **obj)
 {
-  RGWSI_Meta_Ctx ctx;
-  init_ctx(be_handle, entry, nullptr, &ctx);
-  return do_get(ctx.get(), entry, obj);
+  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
+    return do_get(ctx, entry, obj);
+  });
 }
 
 int RGWMetadataHandler::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type)
 {
-  RGWSI_Meta_Ctx ctx;
-  init_ctx(be_handle, entry, obj, &ctx);
-  return do_put(ctx.get(), entry, obj, objv_tracker, type);
+  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
+    return do_put(ctx, entry, obj, objv_tracker, type);
+  });
 }
 
 int RGWMetadataHandler::remove(string& entry, RGWObjVersionTracker& objv_tracker)
 {
-  RGWSI_Meta_Ctx ctx;
-  init_ctx(be_handle, entry, nullptr, &ctx);
-  return do_remove(ctx.get(), entry, objv_tracker);
+  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
+    return do_remove(ctx, entry, objv_tracker);
+  });
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle)

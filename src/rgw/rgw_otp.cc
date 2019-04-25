@@ -78,10 +78,6 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler {
     return 0;
   }
 
-  RGWSI_MetaBackend::Type required_be_type() override {
-    return RGWSI_MetaBackend::Type::MDBE_OTP;
-  }
-
   RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
     otp_devices_list_t devices;
     try {
