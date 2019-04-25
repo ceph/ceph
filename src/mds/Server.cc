@@ -6559,7 +6559,12 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
   int r = mdcache->path_traverse(mdr, cf, refpath, &trace, &in, MDS_TRAVERSE_FORWARD);
-  if (r > 0) return;
+  if (r > 0) {
+    CInode *diri = mdcache->get_inode(refpath.get_ino());
+    if (diri)
+      mds->locker->derive_wrlock_from_excl_cap(mdr, &diri->filelock);
+    return;
+  }
   if (r < 0) {
     if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
@@ -6633,9 +6638,12 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   for (int i=0; i<(int)trace.size()-1; i++)
     lov.add_rdlock(&trace[i]->lock);
   lov.add_xlock(&dn->lock);
-  lov.add_wrlock(&diri->filelock);
-  lov.add_wrlock(&diri->nestlock);
   lov.add_xlock(&in->linklock);
+  lov.add_wrlock(&diri->nestlock);
+
+  mds->locker->derive_wrlock_from_excl_cap(mdr, &diri->filelock);
+  lov.add_wrlock(&diri->filelock);
+
   if (straydn) {
     lov.add_wrlock(&straydn->get_dir()->inode->filelock);
     lov.add_wrlock(&straydn->get_dir()->inode->nestlock);
