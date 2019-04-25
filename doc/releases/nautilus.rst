@@ -306,7 +306,7 @@ Instructions
 #. Upgrade all radosgw daemons by upgrading packages and restarting
    daemons on all hosts::
 
-     # systemctl restart radosgw.target
+     # systemctl restart ceph-radosgw.target
 
 #. Complete the upgrade by disallowing pre-Nautilus OSDs and enabling
    all new Nautilus-only functionality::
