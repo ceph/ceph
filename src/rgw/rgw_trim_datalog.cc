@@ -64,7 +64,7 @@ class DataLogTrimCR : public RGWCoroutine {
       num_shards(num_shards),
       zone_id(store->svc.zone->get_zone().id),
       peer_status(store->svc.zone->get_zone_data_notify_to_map().size()),
-      min_shard_markers(num_shards),
+      min_shard_markers(num_shards, "99999999"),
       last_trim(last_trim)
   {}
 
