@@ -655,7 +655,7 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     const std::deque<MessageRef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
-    bool require_keepalive_ack)
+    std::optional<utime_t> _keepalive_ack)
 {
   static const size_t RESERVE_MSG_SIZE = sizeof(CEPH_MSGR_TAG_MSG) +
                                          sizeof(ceph_msg_header) +
@@ -680,8 +680,9 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     bl.append(create_static(k.req));
   }
 
-  if (unlikely(require_keepalive_ack)) {
-    logger().debug("{} write keepalive2 ack {}", conn, k.ack.stamp.tv_sec);
+  if (unlikely(_keepalive_ack.has_value())) {
+    logger().debug("{} write keepalive2 ack {}", conn, *_keepalive_ack);
+    k.ack.stamp = ceph_timespec(*_keepalive_ack);
     bl.append(create_static(k.ack));
   }
 
@@ -736,9 +737,8 @@ seastar::future<> ProtocolV1::handle_keepalive2()
 {
   return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
-      k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
-      logger().debug("{} got keepalive2 {}", conn, k.ack.stamp.tv_sec);
-      notify_keepalive_ack();
+      utime_t ack{*reinterpret_cast<const ceph_timespec*>(buf.get())};
+      notify_keepalive_ack(ack);
     });
 }
 

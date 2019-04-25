@@ -48,7 +48,7 @@ class Protocol {
       const std::deque<MessageRef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
-      bool require_keepalive_ack) = 0;
+      std::optional<utime_t> keepalive_ack) = 0;
 
  public:
   const proto_t proto_type;
@@ -75,7 +75,7 @@ class Protocol {
     state_changed = seastar::shared_promise<>();
   }
 
-  void notify_keepalive_ack();
+  void notify_keepalive_ack(utime_t keepalive_ack);
 
  private:
   write_state_t write_state = write_state_t::none;
@@ -87,7 +87,7 @@ class Protocol {
   seastar::shared_future<> close_ready;
 
   bool need_keepalive = false;
-  bool need_keepalive_ack = false;
+  std::optional<utime_t> keepalive_ack = std::nullopt;
   bool write_dispatching = false;
   seastar::future<stop_t> do_write_dispatch_sweep();
   void write_event();

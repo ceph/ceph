@@ -29,7 +29,7 @@ class ProtocolV2 final : public Protocol {
       const std::deque<MessageRef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
-      bool require_keepalive_ack) override;
+      std::optional<utime_t> keepalive_ack) override;
 
  private:
   SocketMessenger &messenger;
@@ -71,8 +71,6 @@ class ProtocolV2 final : public Protocol {
   uint64_t global_seq = 0;
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
-
-  utime_t last_keepalive_ack_to_send;
 
  // TODO: Frame related implementations, probably to a separate class.
  private:

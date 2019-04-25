@@ -87,12 +87,11 @@ seastar::future<> Protocol::keepalive()
   return seastar::now();
 }
 
-void Protocol::notify_keepalive_ack()
+void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
 {
-  if (!need_keepalive_ack) {
-    need_keepalive_ack = true;
-    write_event();
-  }
+  logger().debug("{} got keepalive ack {}", conn, _keepalive_ack);
+  keepalive_ack = _keepalive_ack;
+  write_event();
 }
 
 seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
@@ -101,26 +100,28 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
    case write_state_t::open: {
     size_t num_msgs = conn.out_q.size();
     // we must have something to write...
-    ceph_assert(num_msgs || need_keepalive || need_keepalive_ack);
+    ceph_assert(num_msgs || need_keepalive || keepalive_ack.has_value());
     Message* msg_ptr = nullptr;
     if (likely(num_msgs)) {
       msg_ptr = conn.out_q.front().get();
     }
     // sweep all pending writes with the concrete Protocol
     return socket->write(do_sweep_messages(
-        conn.out_q, num_msgs, need_keepalive, need_keepalive_ack))
-    .then([this, msg_ptr, num_msgs] {
+        conn.out_q, num_msgs, need_keepalive, keepalive_ack))
+    .then([this, msg_ptr, num_msgs, prv_keepalive_ack=keepalive_ack] {
       need_keepalive = false;
-      need_keepalive_ack = false;
+      if (keepalive_ack == prv_keepalive_ack) {
+        keepalive_ack = std::nullopt;
+      }
       if (likely(num_msgs && msg_ptr == conn.out_q.front().get())) {
         // we have sent some messages successfully
         // and the out_q was not reset during socket write
         conn.out_q.erase(conn.out_q.begin(), conn.out_q.begin()+num_msgs);
       }
-      if (conn.out_q.empty()) {
+      if (conn.out_q.empty() && !keepalive_ack.has_value()) {
         // good, we have nothing pending to send now.
         return socket->flush().then([this] {
-          if (conn.out_q.empty() && !need_keepalive && !need_keepalive_ack) {
+          if (conn.out_q.empty() && !need_keepalive && !keepalive_ack.has_value()) {
             // still nothing pending to send after flush,
             // the dispatching can ONLY stop now
             ceph_assert(write_dispatching);
