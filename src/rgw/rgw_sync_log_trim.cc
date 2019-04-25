@@ -660,7 +660,7 @@ int AsyncMetadataList::_send_request()
       assert(keys.size() == 1);
       auto& key = keys.front();
       // stop at original marker
-      if (marker >= start_marker) {
+      if (marker > start_marker) {
         return 0;
       }
       if (!callback(std::move(key), std::move(marker))) {
