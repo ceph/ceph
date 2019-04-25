@@ -235,7 +235,10 @@ class PoolTest(DashboardTestCase):
             # they can't recover from the resulting warning state.
             # Feel free to test it locally.
             # {
-            #     'pg_num': '8',
+            #     'pg_num': '2', # Decrease PGs
+            # },
+            # {
+            #     'pg_num': '8', # Increase PGs
             # },
             {
                 'application_metadata': ['rgw'],
