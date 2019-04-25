@@ -164,7 +164,8 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                 __func__, c->cid, oid);
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return seastar::make_exception_future<ceph::bufferptr>(
+      EnoentException(fmt::format("object does not exist: {}", oid)));
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
     return seastar::make_ready_future<ceph::bufferptr>(found->second);

@@ -98,11 +98,19 @@ PGBackend::_load_oi(const hobject_t& oid)
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         OI_ATTR).then([oid, this](auto bp) {
+                         OI_ATTR).then_wrapped([oid, this](auto fut) {
     auto oi = std::make_unique<object_info_t>();
-    bufferlist bl;
-    bl.push_back(std::move(bp));
-    oi->decode(bl);
+    if (fut.failed()) {
+      auto ep = std::move(fut).get_exception();
+      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+        std::rethrow_exception(ep);
+      }
+    } else {
+      // decode existing OI_ATTR's value
+      ceph::bufferlist bl;
+      bl.push_back(std::move(fut).get0());
+      oi->decode(bl);
+    }
     return seastar::make_ready_future<cached_oi_t>(
       oi_cache.insert(oid, std::move(oi)));
   });
@@ -116,10 +124,21 @@ PGBackend::_load_ss(const hobject_t& oid)
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         SS_ATTR).then([oid, this](auto bp) {
-    bufferlist bl;
-    bl.push_back(std::move(bp));
-    auto snapset = std::make_unique<SnapSet>(bl);
+                         SS_ATTR).then_wrapped([oid, this](auto fut) {
+    std::unique_ptr<SnapSet> snapset;
+    if (fut.failed()) {
+      auto ep = std::move(fut).get_exception();
+      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+        std::rethrow_exception(ep);
+      } else {
+        snapset = std::make_unique<SnapSet>();
+      }
+    } else {
+      // decode existing SS_ATTR's value
+      ceph::bufferlist bl;
+      bl.push_back(std::move(fut).get0());
+      snapset = std::make_unique<SnapSet>(bl);
+    }
     return seastar::make_ready_future<cached_ss_t>(
       ss_cache.insert(oid, std::move(snapset)));
   });
