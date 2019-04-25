@@ -525,6 +525,12 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
                                 const ceph::bufferlist& payload,
                                 ceph::bufferlist *reply)
 {
+  // for some channels prior to nautilus (osd heartbeat), we tolerate the lack of
+  // an authorizer.
+  if (payload.length() == 0 && !auth_handler.require_authorizer()) {
+    auth_handler.handle_authentication({}, {}, {});
+    return 1;
+  }
   auth_meta->auth_mode = payload[0];
   if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
