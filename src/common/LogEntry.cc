@@ -267,7 +267,7 @@ void LogEntry::dump(Formatter *f) const
   f->dump_stream("name") << name;
   f->dump_stream("rank") << rank;
   f->dump_object("addrs", addrs);
-  f->dump_stream("stamp") << stamp;
+  stamp.gmtime(f->dump_stream("stamp"));
   f->dump_unsigned("seq", seq);
   f->dump_string("channel", channel);
   f->dump_stream("priority") << prio;
@@ -372,4 +372,3 @@ void LogSummary::generate_test_instances(list<LogSummary*>& o)
   o.push_back(new LogSummary);
   // more!
 }
-
