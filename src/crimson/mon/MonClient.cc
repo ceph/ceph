@@ -540,7 +540,7 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   uint64_t global_id;
   AuthCapsInfo caps_info;
   bool is_valid = ah->verify_authorizer(
-    nullptr,
+    &cct,
     &active_con->get_keys(),
     payload,
     auth_meta->get_connection_secret_length(),
