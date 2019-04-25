@@ -276,10 +276,10 @@ seastar::future<> Heartbeat::handle_reply(ceph::net::Connection* conn,
   }
   const auto now = clock::now();
   auto& unacked = ping->second.unacknowledged;
-  if (conn == peer.con_back) {
+  if (conn == peer.con_back.get()) {
     peer.last_rx_back = now;
     unacked--;
-  } else if (conn == peer.con_front) {
+  } else if (conn == peer.con_front.get()) {
     peer.last_rx_front = now;
     unacked--;
   }

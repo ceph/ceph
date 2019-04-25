@@ -1018,7 +1018,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   });
 }
 
-seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
+seastar::future<> PG::handle_op(ceph::net::Connection* conn,
                                 Ref<MOSDOp> m)
 {
   return wait_for_active().then([conn, m, this] {
