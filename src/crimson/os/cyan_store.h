@@ -6,8 +6,11 @@
 #include <string>
 #include <unordered_map>
 #include <map>
+#include <typeinfo>
 #include <vector>
+
 #include <seastar/core/future.hh>
+
 #include "osd/osd_types.h"
 #include "include/uuid.h"
 
@@ -26,6 +29,33 @@ class CyanStore {
   uuid_d osd_fsid;
 
 public:
+  template <class ConcreteExceptionT>
+  class Exception : public std::logic_error {
+  public:
+    using std::logic_error::logic_error;
+
+    // Throwing an exception isn't the sole way to signalize an error
+    // with it. This approach nicely fits cold, infrequent issues but
+    // when applied to a hot one (like ENOENT on write path), it will
+    // likely hurt performance.
+    // Alternative approach for hot errors is to create exception_ptr
+    // on our own and place it in the future via make_exception_future.
+    // When ::handle_exception is called, handler would inspect stored
+    // exception whether it's hot-or-cold before rethrowing it.
+    // The main advantage is both types flow through very similar path
+    // based on future::handle_exception.
+    static bool is_class_of(const std::exception_ptr& ep) {
+      // Seastar offers hacks for making throwing lock-less but stack
+      // unwinding still can be a problem so painful to justify going
+      // with non-standard, obscure things like this one.
+      return *ep.__cxa_exception_type() == typeid(ConcreteExceptionT);
+    }
+  };
+
+  struct EnoentException : public Exception<EnoentException> {
+    using Exception<EnoentException>::Exception;
+  };
+
   CyanStore(const std::string& path);
   ~CyanStore();
 
