@@ -121,7 +121,6 @@ class DeviceList {
   }
 
   Device* get_device(const char* device_name) {
-    ceph_assert(devices);
     for (int i = 0; i < num; ++i) {
       if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
         return devices[i];
