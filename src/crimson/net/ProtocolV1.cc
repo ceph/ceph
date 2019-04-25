@@ -655,6 +655,9 @@ seastar::future<> ProtocolV1::write_message(MessageRef msg)
   auto& header = msg->get_header();
   header.src = messenger.get_myname();
   msg->encode(conn.features, messenger.get_crc_flags());
+  if (session_security) {
+    session_security->sign_message(msg.get());
+  }
   bufferlist bl;
   bl.append(CEPH_MSGR_TAG_MSG);
   bl.append((const char*)&header, sizeof(header));
@@ -772,6 +775,16 @@ seastar::future<> ProtocolV1::read_message()
       ::decode(m.footer, p);
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
                                   m.front, m.middle, m.data, nullptr);
+      if (!msg) {
+	logger().debug("decode message failed");
+	return;
+      }
+      if (session_security) {
+	if (session_security->check_message_signature(msg)) {
+	  logger().debug("signature check failed");
+	  return;
+	}
+      }
       // TODO: set time stamps
       msg->set_byte_throttler(conn.policy.throttler_bytes);
 
