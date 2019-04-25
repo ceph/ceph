@@ -398,6 +398,7 @@ Client::Client(Client&&) = default;
 Client::~Client() = default;
 
 seastar::future<> Client::start() {
+  entity_name = ceph::common::local_conf()->name;
   auth_registry.refresh_config();
   return load_keyring().then([this] {
     return monmap.build_initial(ceph::common::local_conf(), false);
