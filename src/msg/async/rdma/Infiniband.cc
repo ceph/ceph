@@ -127,7 +127,7 @@ Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
     ceph_abort();
   }
   int r = ibv_query_device(ctxt, device_attr);
-  if (r == -1) {
+  if (r) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
