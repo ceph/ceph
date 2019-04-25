@@ -1554,7 +1554,8 @@ bool PG::recoverable_and_ge_min_size(const vector<int> &want) const
 void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
                                   const pg_info_t &auth_info,
                                   vector<int> *want,
-                                  set<pg_shard_t> *async_recovery) const
+                                  set<pg_shard_t> *async_recovery,
+                                  const OSDMapRef osdmap) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
   for (uint8_t i = 0; i < want->size(); ++i) {
@@ -1581,14 +1582,21 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
     // past the authoritative last_update the same as those equal to it.
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    auto approx_missing_objects =
-      shard_info.stats.stats.sum.num_objects_missing;
-    if (auth_version > candidate_version) {
-      approx_missing_objects += auth_version - candidate_version;
-    }
-    if (static_cast<uint64_t>(approx_missing_objects) >
-	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
+      auto approx_missing_objects =
+        shard_info.stats.stats.sum.num_objects_missing;
+      if (auth_version > candidate_version) {
+        approx_missing_objects += auth_version - candidate_version;
+      }
+      if (static_cast<uint64_t>(approx_missing_objects) >
+	  cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+        candidates_by_cost.emplace(approx_missing_objects, shard_i);
+      }
+    } else {
+      if (auth_version > candidate_version &&
+          (auth_version - candidate_version) > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+        candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
+      }
     }
   }
 
@@ -1613,7 +1621,8 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
 void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_info,
                                           const pg_info_t &auth_info,
                                           vector<int> *want,
-                                          set<pg_shard_t> *async_recovery) const
+                                          set<pg_shard_t> *async_recovery,
+                                          const OSDMapRef osdmap) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
   for (auto osd_num : *want) {
@@ -1632,16 +1641,28 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
     // logs plus historical missing objects as the cost of recovery
     version_t auth_version = auth_info.last_update.version;
     version_t candidate_version = shard_info.last_update.version;
-    auto approx_missing_objects =
-      shard_info.stats.stats.sum.num_objects_missing;
-    if (auth_version > candidate_version) {
-      approx_missing_objects += auth_version - candidate_version;
+    if (HAVE_FEATURE(osdmap->get_up_osd_features(), SERVER_NAUTILUS)) {
+      auto approx_missing_objects =
+        shard_info.stats.stats.sum.num_objects_missing;
+      if (auth_version > candidate_version) {
+        approx_missing_objects += auth_version - candidate_version;
+      } else {
+        approx_missing_objects += candidate_version - auth_version;
+      }
+      if (static_cast<uint64_t>(approx_missing_objects)  >
+	  cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+        candidates_by_cost.emplace(approx_missing_objects, shard_i);
+      }
     } else {
-      approx_missing_objects += candidate_version - auth_version;
-    }
-    if (static_cast<uint64_t>(approx_missing_objects)  >
-	cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
-      candidates_by_cost.insert(make_pair(approx_missing_objects, shard_i));
+      size_t approx_entries;
+      if (auth_version > candidate_version) {
+        approx_entries = auth_version - candidate_version;
+      } else {
+        approx_entries = candidate_version - auth_version;
+      }
+      if (approx_entries > cct->_conf.get_val<uint64_t>("osd_async_recovery_min_cost")) {
+        candidates_by_cost.insert(make_pair(approx_entries, shard_i));
+      }
     }
   }
 
@@ -1759,9 +1780,9 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   set<pg_shard_t> want_async_recovery;
   if (HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_MIMIC)) {
     if (pool.info.is_erasure()) {
-      choose_async_recovery_ec(all_info, auth_log_shard->second, &want, &want_async_recovery);
+      choose_async_recovery_ec(all_info, auth_log_shard->second, &want, &want_async_recovery, get_osdmap());
     } else {
-      choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery);
+      choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery, get_osdmap());
     }
   }
   if (want != acting) {
