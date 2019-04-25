@@ -88,7 +88,7 @@ class Device {
   int get_gid_idx() { return active_port->get_gid_idx(); }
   void binding_port(CephContext *c, int port_num);
   struct ibv_context *ctxt;
-  ibv_device_attr *device_attr;
+  ibv_device_attr device_attr;
   Port* active_port;
 };
 
@@ -117,10 +117,10 @@ class DeviceList {
     }
     delete []devices;
     ibv_free_device_list(device_list);
+    rdma_free_devices(device_context_list);
   }
 
   Device* get_device(const char* device_name) {
-    ceph_assert(devices);
     for (int i = 0; i < num; ++i) {
       if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
         return devices[i];
