@@ -15,7 +15,6 @@
 
 #include "crimson/auth/AuthClient.h"
 #include "crimson/auth/AuthServer.h"
-#include "crimson/common/auth_service.h"
 #include "crimson/common/auth_handler.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Fwd.h"
@@ -43,7 +42,6 @@ namespace ceph::mon {
 class Connection;
 
 class Client : public ceph::net::Dispatcher,
-	       public ceph::common::AuthService,
 	       public ceph::auth::AuthClient,
 	       public ceph::auth::AuthServer
 {
@@ -92,8 +90,6 @@ public:
   void sub_unwant(const std::string& what);
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
-  // AuthService methods
-  AuthAuthorizer* get_authorizer(peer_type_t peer) const override;
 
 private:
   // AuthServer methods
@@ -146,7 +142,6 @@ private:
   seastar::future<> ms_dispatch(ceph::net::Connection* conn,
 				MessageRef m) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
   seastar::future<> handle_monmap(ceph::net::Connection* conn,
 				  Ref<MMonMap> m);
