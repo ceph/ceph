@@ -241,14 +241,14 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       gmtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
 	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
+	  << 'T'
 	  << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
@@ -270,14 +270,14 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       gmtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
 	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
+	  << 'T'
 	  << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
