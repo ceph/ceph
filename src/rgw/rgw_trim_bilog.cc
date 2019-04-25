@@ -479,7 +479,8 @@ int BucketTrimInstanceCR::operate()
 
     // initialize each shard with the maximum marker, which is only used when
     // there are no peers syncing from us
-    min_markers.assign(std::max(1u, bucket_info.num_shards), "99999999");
+    min_markers.assign(std::max(1u, bucket_info.num_shards),
+                       RGWSyncLogTrimCR::max_marker);
 
     // determine the minimum marker for each shard
     retcode = take_min_status(cct, peer_status.begin(), peer_status.end(),
