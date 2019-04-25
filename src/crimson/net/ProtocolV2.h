@@ -25,11 +25,11 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_close() override;
 
-  seastar::future<> write_message(MessageRef msg) override;
-
-  seastar::future<> do_keepalive() override;
-
-  seastar::future<> do_keepalive_ack() override;
+  ceph::bufferlist do_sweep_messages(
+      const std::deque<MessageRef>& msgs,
+      size_t num_msgs,
+      bool require_keepalive,
+      bool require_keepalive_ack) override;
 
  private:
   SocketMessenger &messenger;
