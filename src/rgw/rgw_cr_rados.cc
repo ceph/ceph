@@ -804,7 +804,7 @@ int RGWSyncLogTrimCR::request_complete()
     return r;
   }
   // nothing left to trim, update last_trim_marker
-  if (*last_trim_marker < to_marker) {
+  if (*last_trim_marker < to_marker && to_marker != max_marker) {
     *last_trim_marker = to_marker;
   }
   return 0;
