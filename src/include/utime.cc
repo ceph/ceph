@@ -17,10 +17,8 @@
 
 void utime_t::dump(ceph::Formatter *f) const
 {
-  f->open_object_section("utime");
   f->dump_int("seconds", tv.tv_sec);
   f->dump_int("nanoseconds", tv.tv_nsec);
-  f->close_section();
 }
 
 void utime_t::generate_test_instances(std::list<utime_t*>& o)

@@ -5624,17 +5624,12 @@ struct watch_item_t {
     }
     DECODE_FINISH(bl);
   }
-  void dump_bare(ceph::Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_stream("watcher") << name;
     f->dump_int("cookie", cookie);
     f->dump_int("timeout", timeout_seconds);
     f->open_object_section("addr");
     addr.dump(f);
-    f->close_section();
-  }
-  void dump(ceph::Formatter *f) const {
-    f->open_object_section("watch_item_t");
-    dump_bare(f);
     f->close_section();
   }
   static void generate_test_instances(std::list<watch_item_t*>& o) {
@@ -5682,7 +5677,7 @@ struct obj_list_watch_response_t {
     f->open_array_section("entries");
     for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("watch");
-      p->dump_bare(f);
+      p->dump(f);
       f->close_section();
     }
     f->close_section();
