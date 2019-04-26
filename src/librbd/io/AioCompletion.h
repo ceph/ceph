@@ -4,8 +4,6 @@
 #ifndef CEPH_LIBRBD_IO_AIO_COMPLETION_H
 #define CEPH_LIBRBD_IO_AIO_COMPLETION_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
 #include "common/ceph_time.h"
 #include "include/Context.h"
 #include "include/utime.h"
@@ -15,6 +13,10 @@
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Types.h"
+
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
 
 class CephContext;
 
@@ -42,26 +44,32 @@ struct AioCompletion {
     AIO_STATE_COMPLETE,
   } aio_state_t;
 
-  mutable Mutex lock;
-  Cond cond;
-  aio_state_t state;
-  ssize_t rval;
-  callback_t complete_cb;
-  void *complete_arg;
-  rbd_completion_t rbd_comp;
-  uint32_t pending_count;   ///< number of requests
-  int ref;
-  bool released;
-  ImageCtx *ictx;
+  mutable std::mutex lock;
+  std::condition_variable cond;
+
+  callback_t complete_cb = nullptr;
+  void *complete_arg = nullptr;
+  rbd_completion_t rbd_comp = nullptr;
+
+  /// note: only using atomic for built-in memory barrier
+  std::atomic<aio_state_t> state{AIO_STATE_PENDING};
+
+  std::atomic<ssize_t> rval{0};
+  std::atomic<int> error_rval{0};
+  std::atomic<uint32_t> ref{1};
+  std::atomic<uint32_t> pending_count{0};   ///< number of requests
+  std::atomic<bool> released{false};
+
+  ImageCtx *ictx = nullptr;
   coarse_mono_time start_time;
-  aio_type_t aio_type;
+  aio_type_t aio_type = AIO_TYPE_NONE;
 
   ReadResult read_result;
 
   AsyncOperation async_op;
 
   xlist<AioCompletion*>::item m_xlist_item;
-  bool event_notify;
+  bool event_notify = false;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -96,12 +104,7 @@ struct AioCompletion {
     return comp;
   }
 
-  AioCompletion() : lock("AioCompletion::lock", true, false),
-                    state(AIO_STATE_PENDING), rval(0), complete_cb(NULL),
-                    complete_arg(NULL), rbd_comp(NULL),
-                    pending_count(0), ref(1), released(false), ictx(NULL),
-                    aio_type(AIO_TYPE_NONE), m_xlist_item(this),
-                    event_notify(false) {
+  AioCompletion() : m_xlist_item(this) {
   }
 
   ~AioCompletion() {
@@ -109,14 +112,14 @@ struct AioCompletion {
 
   int wait_for_complete();
 
-  void finalize(ssize_t rval);
+  void finalize();
 
   inline bool is_initialized(aio_type_t type) const {
-    Mutex::Locker locker(lock);
+    std::unique_lock<std::mutex> locker(lock);
     return ((ictx != nullptr) && (aio_type == type));
   }
   inline bool is_started() const {
-    Mutex::Locker locker(lock);
+    std::unique_lock<std::mutex> locker(lock);
     return async_op.started();
   }
 
@@ -133,9 +136,7 @@ struct AioCompletion {
 
   void set_request_count(uint32_t num);
   void add_request() {
-    lock.Lock();
     ceph_assert(pending_count > 0);
-    lock.Unlock();
     get();
   }
   void complete_request(ssize_t r);
@@ -145,26 +146,19 @@ struct AioCompletion {
   ssize_t get_return_value();
 
   void get() {
-    lock.Lock();
     ceph_assert(ref > 0);
-    ref++;
-    lock.Unlock();
+    ++ref;
   }
   void release() {
-    lock.Lock();
-    ceph_assert(!released);
-    released = true;
-    put_unlock();
+    bool previous_released = released.exchange(true);
+    ceph_assert(!previous_released);
+    put();
   }
   void put() {
-    lock.Lock();
-    put_unlock();
-  }
-  void put_unlock() {
-    ceph_assert(ref > 0);
-    int n = --ref;
-    lock.Unlock();
-    if (!n) {
+    uint32_t previous_ref = ref--;
+    ceph_assert(previous_ref > 0);
+
+    if (previous_ref == 1) {
       if (ictx != nullptr && event_notify) {
         ictx->completed_reqs_lock.Lock();
         m_xlist_item.remove_myself();
@@ -175,7 +169,6 @@ struct AioCompletion {
   }
 
   void set_event_notify(bool s) {
-    Mutex::Locker l(lock);
     event_notify = s;
   }
 

@@ -101,9 +101,8 @@ struct C_AioCompletion : public Context {
     if (r < 0) {
       aio_comp->fail(r);
     } else {
-      aio_comp->lock.Lock();
       aio_comp->complete();
-      aio_comp->put_unlock();
+      aio_comp->put();
     }
   }
 };
