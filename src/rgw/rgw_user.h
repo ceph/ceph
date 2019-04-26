@@ -543,17 +543,18 @@ class RGWUser;
 
 class RGWAccessKeyPool
 {
-  RGWUser *user;
+  RGWUser *user{nullptr};
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
   rgw_user user_id;
-  RGWRados *store;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
 
-  map<std::string, RGWAccessKey> *swift_keys;
-  map<std::string, RGWAccessKey> *access_keys;
+  map<std::string, RGWAccessKey> *swift_keys{nullptr};
+  map<std::string, RGWAccessKey> *access_keys{nullptr};
 
   // we don't want to allow keys for the anonymous user or a null user
-  bool keys_allowed;
+  bool keys_allowed{false};
 
 private:
   int create_key(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
@@ -573,7 +574,6 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
   explicit RGWAccessKeyPool(RGWUser* usr);
-  ~RGWAccessKeyPool();
 
   int init(RGWUserAdminOpState& op_state);
 
@@ -587,13 +587,14 @@ public:
 
 class RGWSubUserPool
 {
-  RGWUser *user;
+  RGWUser *user{nullptr};
 
   rgw_user user_id;
-  RGWRados *store;
-  bool subusers_allowed;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
+  bool subusers_allowed{false};
 
-  map<string, RGWSubUser> *subuser_map;
+  map<string, RGWSubUser> *subuser_map{nullptr};
 
 private:
   int check_op(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
@@ -608,7 +609,6 @@ private:
   int modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
   explicit RGWSubUserPool(RGWUser *user);
-  ~RGWSubUserPool();
 
   bool exists(std::string subuser);
   int init(RGWUserAdminOpState& op_state);
@@ -623,9 +623,9 @@ public:
 
 class RGWUserCapPool
 {
-  RGWUserCaps *caps;
-  bool caps_allowed;
-  RGWUser *user;
+  RGWUserCaps *caps{false};
+  bool caps_allowed{false};
+  RGWUser *user{false};
 
 private:
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
@@ -633,7 +633,6 @@ private:
 
 public:
   explicit RGWUserCapPool(RGWUser *user);
-  ~RGWUserCapPool();
 
   int init(RGWUserAdminOpState& op_state);
 
@@ -649,10 +648,11 @@ class RGWUser
 
 private:
   RGWUserInfo old_info;
-  RGWRados *store;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
 
   rgw_user user_id;
-  bool info_stored;
+  bool info_stored{false};
 
   void set_populated() { info_stored = true; }
   void clear_populated() { info_stored = false; }
@@ -671,7 +671,6 @@ private:
 
 public:
   RGWUser();
-  ~RGWUser();
 
   int init(RGWRados *storage, RGWUserAdminOpState& op_state);
 
@@ -680,6 +679,7 @@ public:
   int init_members(RGWUserAdminOpState& op_state);
 
   RGWRados *get_store() { return store; }
+  RGWUserCtl *get_user_ctl() { return user_ctl; }
 
   /* API Contracted Members */
   RGWUserCapPool caps;
