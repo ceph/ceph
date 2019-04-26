@@ -408,8 +408,8 @@ function TEST_backfill_test_sametarget() {
 # With fillpool down write 2611 byte objects 
 # Take down $osd and bring back $fillosd simultaneously
 # Wait for backfilling
-# PG 2.0 will be able to backfill its remaining data
-# PG 3.0 must get backfill_toofull
+# One PG will be able to backfill its remaining data
+# One PG must get backfill_toofull
 function TEST_backfill_multi_partial() {
     local dir=$1
     local EC=$2
@@ -507,15 +507,15 @@ function TEST_backfill_multi_partial() {
     ceph pg dump pgs
 
     ERRORS=0
-    if [ "$(ceph pg dump pgs | grep "^3.0" | grep +backfill_toofull | wc -l)" != "1" ];
+    if [ "$(get_num_in_state backfill_toofull)" != "1" ];
     then
-      echo "PG 3.0 should be in backfill_toofull"
+      echo "One PG should be in backfill_toofull"
       ERRORS="$(expr $ERRORS + 1)"
     fi
 
-    if [ "$(ceph pg dump pgs | grep "^2.0" | grep active+clean | wc -l)" != "1" ];
+    if [ "$(get_num_in_state active+clean)" != "2" ];
     then
-      echo "PG 2.0 should have completed backfill"
+      echo "Two PGs should be active+clean after one PG completed backfill"
       ERRORS="$(expr $ERRORS + 1)"
     fi
 
