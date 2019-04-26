@@ -499,20 +499,19 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
     object_requests = m_dispatch_queue.front().get();
   }
 
-  auto ctx = new FunctionContext(
-    [this, object_no=object_requests->get_object_no()](int r) {
-      Mutex::Locker locker(m_lock);
-      dispatch_delayed_requests(object_no);
-    });
-
   m_timer_task = new FunctionContext(
-    [this, ctx](int r) {
+    [this, object_no=object_requests->get_object_no()](int r) {
       ceph_assert(m_timer_lock->is_locked());
       auto cct = m_image_ctx->cct;
       ldout(cct, 20) << "running timer task " << m_timer_task << dendl;
 
       m_timer_task = nullptr;
-      m_image_ctx->op_work_queue->queue(ctx, 0);
+      m_image_ctx->op_work_queue->queue(
+          new FunctionContext(
+            [this, object_no](int r) {
+              Mutex::Locker locker(m_lock);
+              dispatch_delayed_requests(object_no);
+            }), 0);
     });
 
   ldout(cct, 20) << "scheduling task " << m_timer_task << " at "
