@@ -1,9 +1,8 @@
 import { HTTP_INTERCEPTORS, HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { TestBed } from '@angular/core/testing';
+import { async, TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
 import { AppModule } from '../../app.module';
 import { ApiInterceptorService } from './api-interceptor.service';
 import { NotificationService } from './notification.service';
@@ -43,10 +42,12 @@ describe('ApiInterceptorService', () => {
     expect(notificationService.show).toHaveBeenCalledWith(...expectedCallParams);
   };
 
-  configureTestBed({
-    imports: [AppModule, HttpClientTestingModule],
-    providers: [NotificationService]
-  });
+  beforeEach(async(() => {
+    TestBed.configureTestingModule({
+      imports: [AppModule, HttpClientTestingModule],
+      providers: [NotificationService]
+    });
+  }));
 
   beforeEach(() => {
     httpClient = TestBed.get(HttpClient);
@@ -155,7 +156,7 @@ describe('ApiInterceptorService', () => {
     );
     httpTesting
       .expectOne(url)
-      .error({ task: { name: 'mytask', metadata: { component: 'foobar' } } }, { status: 400 });
+      .error({ task: { name: 'mytask', metadata: { component: 'foobar' } } } as ErrorEvent, { status: 400 });
     httpTesting.verify();
     expect(notificationService.show).toHaveBeenCalledTimes(0);
     expect(notificationService.notifyTask).toHaveBeenCalledWith({
