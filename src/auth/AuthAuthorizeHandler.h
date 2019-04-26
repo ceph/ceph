@@ -31,7 +31,7 @@ struct AuthAuthorizeHandler {
   virtual ~AuthAuthorizeHandler() {}
   virtual bool verify_authorizer(
     CephContext *cct,
-    KeyStore *keys,
+    const KeyStore& keys,
     const ceph::buffer::list& authorizer_data,
     size_t connection_secret_required_len,
     ceph::buffer::list *authorizer_reply,
