@@ -110,7 +110,7 @@ private:
   const AuthRegistry& auth_registry;
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
-  RotatingKeyRing rotating_keyring;
+  std::unique_ptr<RotatingKeyRing> rotating_keyring;
   uint64_t global_id;
   clock_t::time_point last_rotating_renew_sent;
 };
@@ -120,7 +120,10 @@ Connection::Connection(const AuthRegistry& auth_registry,
                        KeyRing* keyring)
   : auth_registry{auth_registry},
     conn{conn},
-    rotating_keyring{nullptr, CEPH_ENTITY_TYPE_OSD, keyring}
+    rotating_keyring{
+      std::make_unique<RotatingKeyRing>(nullptr,
+                                        CEPH_ENTITY_TYPE_OSD,
+                                        keyring)}
 {}
 
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
@@ -148,7 +151,7 @@ seastar::future<> Connection::renew_rotating_keyring()
   auto ttl = std::chrono::seconds{
     static_cast<long>(ceph::common::local_conf()->auth_service_ticket_ttl)};
   auto cutoff = now - ttl / 4;
-  if (!rotating_keyring.need_new_secrets(utime_t(cutoff))) {
+  if (!rotating_keyring->need_new_secrets(utime_t(cutoff))) {
     return seastar::now();
   }
   if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
@@ -174,7 +177,7 @@ AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
 }
 
 KeyStore& Connection::get_keys() {
-  return rotating_keyring;
+  return *rotating_keyring;
 }
 
 std::unique_ptr<AuthClientHandler>
@@ -187,7 +190,7 @@ Connection::create_auth(ceph::auth::method_t protocol,
   std::unique_ptr<AuthClientHandler> auth;
   auth.reset(AuthClientHandler::create(&cct,
                                        protocol,
-                                       &rotating_keyring));
+                                       rotating_keyring.get()));
   if (!auth) {
     logger().error("no handler for protocol {}", protocol);
     throw std::system_error(make_error_code(
