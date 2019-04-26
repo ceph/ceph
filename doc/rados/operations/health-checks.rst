@@ -678,6 +678,12 @@ the pool is too large and should be reduced or set to zero with::
 
 For more information, see :ref:`specifying_pool_target_size`.
 
+TOO_FEW_OSDS
+____________
+
+The number of OSDs in the cluster is below the configurable
+threshold of ``osd_pool_default_size``.
+
 SMALLER_PGP_NUM
 _______________
 
