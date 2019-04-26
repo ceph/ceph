@@ -130,14 +130,13 @@ public:
       }
     }
 
-    map<string, RGWAccessKey>::iterator iter;
-    for (iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
+    for (auto iter = info.swift_keys.begin(); iter != info.swift_keys.end(); ++iter) {
       if (old_info && old_info->swift_keys.count(iter->first) != 0)
         continue;
-      RGWAccessKey& k = iter->second;
+      auto& k = iter->second;
       /* check if swift mapping exists */
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_swift(ctx, k.id, inf, nullptr, nullptr);
+      int r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr);
       if (r >= 0 && inf.user_id != info.user_id) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
           << ") already mapped to another user (" << info.user_id << ")" << dendl;
@@ -149,7 +148,7 @@ public:
     for (auto iter = info.access_keys.begin(); iter != info.access_keys.end(); ++iter) {
       if (old_info && old_info->access_keys.count(iter->first) != 0)
         continue;
-      RGWAccessKey& k = iter->second;
+      auto& k = iter->second;
       RGWUserInfo inf;
       int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y);
       if (r >= 0 && inf.user_id != info.user_id) {
@@ -194,7 +193,7 @@ public:
     }
 
     for (auto iter = info.access_keys.begin(); iter != info.access_keys.end(); ++iter) {
-      RGWAccessKey& k = iter->second;
+      auto& k = iter->second;
       if (old_info && old_info->access_keys.count(iter->first) != 0)
         continue;
 
@@ -204,9 +203,8 @@ public:
         return ret;
     }
 
-    map<string, RGWAccessKey>::iterator siter;
-    for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
-      RGWAccessKey& k = siter->second;
+    for (auto siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
+      auto& k = siter->second;
       if (old_info && old_info->swift_keys.count(siter->first) != 0)
         continue;
 
@@ -226,7 +224,7 @@ public:
     return 0;
   }
 
-  int remove_old_indexes(RGWUserInfo& old_info, RGWUserInfo& new_info, optional_yield y) {
+  int remove_old_indexes(const RGWUserInfo& old_info, const RGWUserInfo& new_info, optional_yield y) {
     int ret;
 
     if (!old_info.user_id.empty() &&
@@ -251,10 +249,9 @@ public:
       }
     }
 
-    map<string, RGWAccessKey>::iterator old_iter;
-    for (old_iter = old_info.swift_keys.begin(); old_iter != old_info.swift_keys.end(); ++old_iter) {
-      RGWAccessKey& swift_key = old_iter->second;
-      map<string, RGWAccessKey>::iterator new_iter = new_info.swift_keys.find(swift_key.id);
+    for (auto old_iter = old_info.swift_keys.begin(); old_iter != old_info.swift_keys.end(); ++old_iter) {
+      const auto& swift_key = old_iter->second;
+      auto new_iter = new_info.swift_keys.find(swift_key.id);
       if (new_iter == new_info.swift_keys.end()) {
         ret = svc.user->remove_swift_name_index(ctx, swift_key.id, y);
         if (ret < 0 && ret != -ENOENT) {
