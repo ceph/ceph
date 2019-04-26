@@ -15,6 +15,7 @@
 #include "librbd/Operations.h"
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Migration.h"
 #include "librbd/api/PoolMetadata.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
@@ -652,6 +653,181 @@ TEST_F(TestInternal, SnapshotCopyup)
       if ((ictx2->features & RBD_FEATURE_FAST_DIFF) != 0 &&
           it != snaps.begin() && snap_name != NULL) {
         state = OBJECT_EXISTS_CLEAN;
+      }
+
+      librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
+      C_SaferCond ctx;
+      object_map.open(&ctx);
+      ASSERT_EQ(0, ctx.wait());
+
+      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      ASSERT_EQ(state, object_map[0]);
+    }
+  }
+}
+
+TEST_F(TestInternal, SnapshotCopyupZeros)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  // create an empty clone
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
+  ASSERT_EQ(0,
+	    ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+					   "snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+
+  std::string clone_name = get_temp_image_name();
+  int order = ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
+			     clone_name.c_str(), features, &order, 0, 0));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+
+  ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+  ASSERT_EQ(256, ictx2->io_work_queue->write(256, bl.length(), bufferlist{bl},
+                                             0));
+
+  librados::IoCtx snap_ctx;
+  snap_ctx.dup(ictx2->data_ctx);
+  snap_ctx.snap_set_read(CEPH_SNAPDIR);
+
+  librados::snap_set_t snap_set;
+  ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
+
+  // verify that snapshot wasn't affected
+  ASSERT_EQ(1U, snap_set.clones.size());
+  ASSERT_EQ(CEPH_NOSNAP, snap_set.clones[0].cloneid);
+
+  bufferptr read_ptr(256);
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  std::list<std::string> snaps = {"snap1", ""};
+  librbd::io::ReadResult read_result{&read_bl};
+  for (std::list<std::string>::iterator it = snaps.begin();
+       it != snaps.end(); ++it) {
+    const char *snap_name = it->empty() ? NULL : it->c_str();
+    ASSERT_EQ(0, librbd::api::Image<>::snap_set(
+                   ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
+
+    ASSERT_EQ(256,
+              ictx2->io_work_queue->read(0, 256,
+                                         librbd::io::ReadResult{read_result},
+                                         0));
+    ASSERT_TRUE(read_bl.is_zero());
+
+    ASSERT_EQ(256,
+              ictx2->io_work_queue->read(256, 256,
+                                         librbd::io::ReadResult{read_result},
+                                         0));
+    if (snap_name == NULL) {
+      ASSERT_TRUE(bl.contents_equal(read_bl));
+    } else {
+      ASSERT_TRUE(read_bl.is_zero());
+    }
+
+    // verify that only HEAD object map was updated
+    if ((ictx2->features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      uint8_t state = OBJECT_EXISTS;
+      if (snap_name != NULL) {
+        state = OBJECT_NONEXISTENT;
+      }
+
+      librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
+      C_SaferCond ctx;
+      object_map.open(&ctx);
+      ASSERT_EQ(0, ctx.wait());
+
+      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      ASSERT_EQ(state, object_map[0]);
+    }
+  }
+}
+
+TEST_F(TestInternal, SnapshotCopyupZerosMigration)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+
+  close_image(ictx);
+
+  // migrate an empty image
+  std::string dst_name = get_temp_image_name();
+  librbd::ImageOptions dst_opts;
+  dst_opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+  ASSERT_EQ(0, librbd::api::Migration<>::prepare(m_ioctx, m_image_name,
+                                                 m_ioctx, dst_name,
+                                                 dst_opts));
+
+  librbd::ImageCtx *ictx2;
+  ASSERT_EQ(0, open_image(dst_name, &ictx2));
+
+  ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
+
+  bufferlist bl;
+  bl.append(std::string(256, '1'));
+  ASSERT_EQ(256, ictx2->io_work_queue->write(256, bl.length(), bufferlist{bl},
+                                             0));
+
+  librados::IoCtx snap_ctx;
+  snap_ctx.dup(ictx2->data_ctx);
+  snap_ctx.snap_set_read(CEPH_SNAPDIR);
+
+  librados::snap_set_t snap_set;
+  ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
+
+  // verify that snapshot wasn't affected
+  ASSERT_EQ(1U, snap_set.clones.size());
+  ASSERT_EQ(CEPH_NOSNAP, snap_set.clones[0].cloneid);
+
+  bufferptr read_ptr(256);
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  std::list<std::string> snaps = {"snap1", ""};
+  librbd::io::ReadResult read_result{&read_bl};
+  for (std::list<std::string>::iterator it = snaps.begin();
+       it != snaps.end(); ++it) {
+    const char *snap_name = it->empty() ? NULL : it->c_str();
+    ASSERT_EQ(0, librbd::api::Image<>::snap_set(
+                   ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
+
+    ASSERT_EQ(256,
+              ictx2->io_work_queue->read(0, 256,
+                                         librbd::io::ReadResult{read_result},
+                                         0));
+    ASSERT_TRUE(read_bl.is_zero());
+
+    ASSERT_EQ(256,
+              ictx2->io_work_queue->read(256, 256,
+                                         librbd::io::ReadResult{read_result},
+                                         0));
+    if (snap_name == NULL) {
+      ASSERT_TRUE(bl.contents_equal(read_bl));
+    } else {
+      ASSERT_TRUE(read_bl.is_zero());
+    }
+
+    // verify that only HEAD object map was updated
+    if ((ictx2->features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      uint8_t state = OBJECT_EXISTS;
+      if (snap_name != NULL) {
+        state = OBJECT_NONEXISTENT;
       }
 
       librbd::ObjectMap<> object_map(*ictx2, ictx2->snap_id);
