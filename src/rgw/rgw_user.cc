@@ -470,24 +470,14 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
 
 RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
 {
-  user = usr;
-  swift_keys = NULL;
-  access_keys = NULL;
-
-  if (!user) {
-    keys_allowed = false;
-    store = NULL;
+  if (!usr) {
     return;
   }
 
-  keys_allowed = true;
+  user = usr;
 
   store = user->get_store();
-}
-
-RGWAccessKeyPool::~RGWAccessKeyPool()
-{
-
+  user_ctl = user->get_user_ctl();
 }
 
 int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
@@ -996,18 +986,15 @@ int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
 
 RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
 {
-  subusers_allowed = (usr != NULL);
-  if (usr)
-    store = usr->get_store();
-  else
-    store = NULL;
+  if (!usr) {
+    return;
+  }
+
   user = usr;
-  subuser_map = NULL;
-}
 
-RGWSubUserPool::~RGWSubUserPool()
-{
-
+  subusers_allowed = true;
+  store = user->get_store();
+  user_ctl = user->get_user_ctl();
 }
 
 int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
@@ -1299,14 +1286,11 @@ int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg, 
 
 RGWUserCapPool::RGWUserCapPool(RGWUser *usr)
 {
+  if (!usr) {
+    return;
+  }
   user = usr;
-  caps = NULL;
-  caps_allowed = (user != NULL);
-}
-
-RGWUserCapPool::~RGWUserCapPool()
-{
-
+  caps_allowed = true;
 }
 
 int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
@@ -1414,7 +1398,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
   return 0;
 }
 
-RGWUser::RGWUser() : store(NULL), info_stored(false), caps(this), keys(this), subusers(this)
+RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
 {
   init_default();
 }
@@ -1433,10 +1417,6 @@ int RGWUser::init(RGWRados *storage, RGWUserAdminOpState& op_state)
   return 0;
 }
 
-RGWUser::~RGWUser()
-{
-}
-
 void RGWUser::init_default()
 {
   // use anonymous user info as a placeholder
@@ -1453,6 +1433,7 @@ int RGWUser::init_storage(RGWRados *storage)
   }
 
   store = storage;
+  user_ctl = *store->ctl.user;
 
   clear_populated();
 
