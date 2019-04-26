@@ -37,15 +37,6 @@ int RGWSI_User::do_start()
 {
   uinfo_cache.reset(new RGWChainedCacheImpl<user_info_cache_entry>);
   uinfo_cache->init(svc.cache);
-
-  auto mm = svc.meta->get_mgr();
-  user_meta_handler = RGWUserMetaHandlerAllocator::alloc(this);
-
-  int r = user_meta_handler->init(mm);
-  if (r < 0) {
-    return r;
-  }
-
   return 0;
 }
 
