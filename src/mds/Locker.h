@@ -93,7 +93,8 @@ public:
   void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
-  bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait=false);
+  bool wrlock_try(SimpleLock *lock, MutationRef& mut);
+  bool wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut);
   void wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
 
   void remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut);

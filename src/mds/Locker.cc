@@ -544,8 +544,10 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  goto out;
 	}
 	// nowait if we have already gotten remote wrlock
-	if (!wrlock_start(p, mdr, need_remote_wrlock))
+	if (!wrlock_start(p, mdr)) {
+	  ceph_assert(!need_remote_wrlock);
 	  goto out;
+	}
 	dout(10) << " got wrlock on " << *p.lock << " " << *p.lock->get_parent() << dendl;
       }
     } else {
@@ -1433,7 +1435,36 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
 }
 
-bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, bool nowait)
+bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
+{
+  dout(10) << "wrlock_try " << *lock << " on " << *lock->get_parent() << dendl;
+
+  while (1) {
+    if (lock->can_wrlock(mut->get_client())) {
+      lock->get_wrlock();
+      mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+      return true;
+    }
+    if (!lock->is_stable())
+      break;
+    CInode *in = static_cast<CInode *>(lock->get_parent());
+    if (!in->is_auth())
+      break;
+    // don't do nested lock state change if we have dirty scatterdata and
+    // may scatter_writebehind or start_scatter, because nowait==true implies
+    // that the caller already has a log entry open!
+    if (lock->is_dirty())
+      return false;
+    ScatterLock *slock = static_cast<ScatterLock*>(lock);
+    if (in->has_subtree_or_exporting_dirfrag() || slock->get_scatter_wanted())
+      scatter_mix(slock);
+    else
+      simple_lock(lock);
+  }
+  return false;
+}
+
+bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut)
 {
   SimpleLock *lock = op.lock;
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
@@ -1444,7 +1475,7 @@ bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, boo
 
   CInode *in = static_cast<CInode *>(lock->get_parent());
   client_t client = op.is_state_pin() ? lock->get_excl_client() : mut->get_client();
-  bool want_scatter = !nowait && lock->get_parent()->is_auth() &&
+  bool want_scatter = lock->get_parent()->is_auth() &&
 		      (in->has_subtree_or_exporting_dirfrag() ||
 		       static_cast<ScatterLock*>(lock)->get_scatter_wanted());
 
@@ -1467,20 +1498,10 @@ bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, boo
       break;
 
     if (in->is_auth()) {
-      // don't do nested lock state change if we have dirty scatterdata and
-      // may scatter_writebehind or start_scatter, because nowait==true implies
-      // that the caller already has a log entry open!
-      if (nowait && lock->is_dirty())
-	return false;
-
       if (want_scatter)
 	scatter_mix(static_cast<ScatterLock*>(lock));
       else
 	simple_lock(lock);
-
-      if (nowait && !lock->can_wrlock(client))
-	return false;
-      
     } else {
       // replica.
       // auth should be auth_pinned (see acquire_locks wrlock weird mustpin case).
@@ -1495,11 +1516,9 @@ bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut, boo
     }
   }
 
-  if (!nowait) {
-    dout(7) << "wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
-    nudge_log(lock);
-  }
+  dout(7) << "wrlock_start waiting on " << *lock << " on " << *lock->get_parent() << dendl;
+  lock->add_waiter(SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+  nudge_log(lock);
     
   return false;
 }
