@@ -31,9 +31,9 @@ AuthSessionHandler *get_auth_session_handler(
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
-
+#ifndef WITH_SEASTAR
   ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
- 
+#endif
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
     // if there is no session key, there is no session handler.
