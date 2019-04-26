@@ -51,6 +51,7 @@ class RGWSI_MDLog;
 class RGWSI_Meta;
 class RGWSI_MetaBackend;
 class RGWSI_MetaBackend_SObj;
+class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -73,6 +74,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_MDLog> mdlog;
   std::unique_ptr<RGWSI_Meta> meta;
   std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
+  std::unique_ptr<RGWSI_MetaBackend_OTP> meta_be_otp;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_RADOS> rados;
   std::unique_ptr<RGWSI_Zone> zone;
@@ -96,12 +98,15 @@ struct RGWServices
 {
   RGWServices_Def _svc;
 
+  CephContext *cct;
+
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Cls *cls{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
-  RGWSI_MetaBackend *meta_be{nullptr};
+  RGWSI_MetaBackend *meta_be_sobj{nullptr};
+  RGWSI_MetaBackend *meta_be_otp{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_RADOS *rados{nullptr};
   RGWSI_Zone *zone{nullptr};
@@ -111,6 +116,7 @@ struct RGWServices
   RGWSI_SysObj *sysobj{nullptr};
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
+  RGWSI_User *user{nullptr};
 
   int do_init(CephContext *cct, bool have_cache, bool raw_storage);
 
@@ -126,5 +132,45 @@ struct RGWServices
   }
 };
 
+class RGWMetadataManager;
+class RGWMetadataHandler;
+class RGWUserCtl;
+
+struct RGWCtlDef {
+  struct _meta {
+    std::unique_ptr<RGWMetadataManager> mgr;
+    std::unique_ptr<RGWMetadataHandler> bucket;
+    std::unique_ptr<RGWMetadataHandler> bucket_instance;
+    std::unique_ptr<RGWMetadataHandler> user;
+    std::unique_ptr<RGWMetadataHandler> otp;
+
+    _meta();
+    ~_meta();
+  } meta;
+
+  std::unique_ptr<RGWUserCtl> user;
+
+  RGWCtlDef();
+  ~RGWCtlDef();
+
+  int init(RGWServices& svc);
+};
+
+struct RGWCtl {
+  RGWCtlDef _ctl;
+
+  struct _meta {
+    RGWMetadataManager *mgr{nullptr};
+
+    RGWMetadataHandler *bucket{nullptr};
+    RGWMetadataHandler *bucket_instance{nullptr};
+    RGWMetadataHandler *user{nullptr};
+    RGWMetadataHandler *otp{nullptr};
+  } meta;
+
+  RGWUserCtl *user{nullptr};
+
+  int init(RGWServices& svc);
+};
 
 #endif

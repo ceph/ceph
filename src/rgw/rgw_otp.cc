@@ -201,9 +201,8 @@ RGWMetadataHandler *rgw_otp_get_handler()
   return otp_meta_handler;
 }
 
-void rgw_otp_init(RGWRados *store)
+RGWMetadataHandler *RGWOTPMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
+                                                      RGWSI_MetaBackend *meta_be_svc)
 {
-  otp_meta_handler = new RGWOTPMetadataHandler(store->svc.zone,
-                                               store->svc.meta_be);
-  otp_meta_handler->init(store->svc.meta->get_mgr());
+  return new RGWOTPMetadataHandler(zone_svc, meta_be_svc);
 }

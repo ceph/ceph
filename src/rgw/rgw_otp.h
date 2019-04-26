@@ -9,7 +9,12 @@ class RGWRados;
 class RGWMetadataHandler;
 
 RGWMetadataHandler *rgw_otp_get_handler(void);
-void rgw_otp_init(RGWRados *store);
+
+class RGWOTPMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc, RGWSI_MetaBackend *meta_be_svc);
+};
+
 
 #endif
 
