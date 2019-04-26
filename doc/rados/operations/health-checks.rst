@@ -385,6 +385,12 @@ so marking "out" OSDs "in" (if there are any) can also help::
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
 
+TOO_FEW_OSDS
+____________
+
+The number of OSDs in the cluster is below the configurable
+threshold of ``osd_pool_default_size``.
+
 SMALLER_PGP_NUM
 _______________
 
