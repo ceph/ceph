@@ -210,7 +210,7 @@ public:
                      optional_yield y);
 
   int store_user_info(RGWSI_MetaBackend::Context *ctx,
-                      RGWUserInfo& info,
+                      const RGWUserInfo& info,
                       RGWUserInfo *old_info,
                       RGWObjVersionTracker *objv_tracker,
                       real_time& mtime,

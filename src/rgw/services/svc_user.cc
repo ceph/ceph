@@ -83,7 +83,7 @@ class PutOperation
   RGWSI_User::Svc& svc;
   RGWSI_MetaBackend_SObj::Context_SObj *ctx;
   RGWUID ui;
-  RGWUserInfo& info;
+  const RGWUserInfo& info;
   RGWUserInfo *old_info;
   RGWObjVersionTracker *objv_tracker;
   real_time& mtime;
@@ -102,7 +102,7 @@ class PutOperation
 public:  
   PutOperation(RGWSI_User::Svc& svc,
                RGWSI_MetaBackend::Context *_ctx,
-               RGWUserInfo& info,
+               const RGWUserInfo& info,
                RGWUserInfo *old_info,
                RGWObjVersionTracker *objv_tracker,
                real_time& mtime,
@@ -138,7 +138,7 @@ public:
       /* check if swift mapping exists */
       RGWUserInfo inf;
       int r = svc.user->get_user_info_by_swift(ctx, k.id, inf, nullptr, nullptr);
-      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+      if (r >= 0 && inf.user_id != info.user_id) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
           << ") already mapped to another user (" << info.user_id << ")" << dendl;
         return -EEXIST;
@@ -152,7 +152,7 @@ public:
       RGWAccessKey& k = iter->second;
       RGWUserInfo inf;
       int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y);
-      if (r >= 0 && inf.user_id.compare(info.user_id) != 0) {
+      if (r >= 0 && inf.user_id != info.user_id) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
         return -EEXIST;
       }
@@ -243,7 +243,7 @@ public:
     }
 
     if (!old_info.user_email.empty() &&
-        old_info.user_email.compare(new_info.user_email) != 0) {
+        old_info.user_email != new_info.user_email) {
       ret = svc.user->remove_email_index(ctx, old_info.user_email, y);
       if (ret < 0 && ret != -ENOENT) {
         set_err_msg("ERROR: could not remove index for email " + old_info.user_email);
@@ -273,7 +273,7 @@ public:
 };
 
 int RGWSI_User::store_user_info(RGWSI_MetaBackend::Context *ctx,
-                                RGWUserInfo& info,
+                                const RGWUserInfo& info,
                                 RGWUserInfo *old_info,
                                 RGWObjVersionTracker *objv_tracker,
                                 real_time& mtime,
