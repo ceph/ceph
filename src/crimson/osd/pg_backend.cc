@@ -44,19 +44,19 @@ PGBackend::PGBackend(shard_id_t shard,
     store{store}
 {}
 
-seastar::future<PGBackend::cached_oi_t>
-PGBackend::get_object(const hobject_t& oid)
+seastar::future<PGBackend::cached_os_t>
+PGBackend::get_object_state(const hobject_t& oid)
 {
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
     logger().trace("find_object: {}@HEAD", oid);
-    return _load_oi(oid);
+    return _load_os(oid);
   } else {
     // we want a snap
     return _load_ss(oid).then([oid,this](cached_ss_t ss) {
       // head?
       if (oid.snap > ss->seq) {
-        return _load_oi(oid.get_head());
+        return _load_os(oid.get_head());
       } else {
         // which clone would it be?
         auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
@@ -83,18 +83,18 @@ PGBackend::get_object(const hobject_t& oid)
           }
           logger().trace("find_object: {}@[{},{}] -- HIT",
                          soid, first, last);
-          return _load_oi(soid);
+          return _load_os(soid);
         });
       }
     });
   }
 }
 
-seastar::future<PGBackend::cached_oi_t>
-PGBackend::_load_oi(const hobject_t& oid)
+seastar::future<PGBackend::cached_os_t>
+PGBackend::_load_os(const hobject_t& oid)
 {
-  if (auto found = oi_cache.find(oid); found) {
-    return seastar::make_ready_future<cached_oi_t>(std::move(found));
+  if (auto found = os_cache.find(oid); found) {
+    return seastar::make_ready_future<cached_os_t>(std::move(found));
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
@@ -105,14 +105,17 @@ PGBackend::_load_oi(const hobject_t& oid)
       if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
         std::rethrow_exception(ep);
       }
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{oid}, false)));
     } else {
       // decode existing OI_ATTR's value
       ceph::bufferlist bl;
       bl.push_back(std::move(fut).get0());
-      oi->decode(bl);
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
     }
-    return seastar::make_ready_future<cached_oi_t>(
-      oi_cache.insert(oid, std::move(oi)));
   });
 }
 

@@ -969,13 +969,13 @@ seastar::future<> PG::wait_for_active()
 }
 
 seastar::future<>
-PG::do_osd_op(const object_info_t& oi, OSDOp& osd_op)
+PG::do_osd_op(const ObjectState& os, OSDOp& osd_op)
 {
   switch (const auto& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
   case CEPH_OSD_OP_READ:
-    return backend->read(oi,
+    return backend->read(os.oi,
                          op.extent.offset,
                          op.extent.length,
                          op.extent.truncate_size,
@@ -1001,8 +1001,8 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
       const auto oid = (m->get_snapid() == CEPH_SNAPDIR ?
                         m->get_hobj().get_head() :
                         m->get_hobj());
-      return backend->get_object(oid).then([&osd_op,this](auto oi) {
-        return do_osd_op(*oi, osd_op);
+      return backend->get_object_state(oid).then([&osd_op,this](auto os) {
+        return do_osd_op(*os, osd_op);
       }).handle_exception_type([&osd_op](const object_not_found&) {
         osd_op.rval = -ENOENT;
         throw;
