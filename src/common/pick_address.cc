@@ -383,7 +383,6 @@ int pick_addresses(
 
   // ipv4 and/or ipv6?
   if (addrs->v.empty()) {
-    entity_addr_t addr;
     addr.set_type(entity_addr_t::TYPE_MSGR2);
     if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
