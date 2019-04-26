@@ -4356,13 +4356,6 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 int BlueStore::_open_path()
 {
   // sanity check(s)
-  auto osd_max_object_size =
-    cct->_conf.get_val<Option::size_t>("osd_max_object_size");
-  if (osd_max_object_size >= (size_t)OBJECT_MAX_SIZE) {
-    derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
-      << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
-    return -EINVAL;
-  }
   ceph_assert(path_fd < 0);
   path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY|O_CLOEXEC));
   if (path_fd < 0) {
