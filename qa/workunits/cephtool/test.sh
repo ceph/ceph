@@ -1534,11 +1534,9 @@ function test_mon_osd()
   expect_false ceph osd add-noup 797er
   expect_false ceph osd add-nodown u9uwer
   expect_false ceph osd add-noin 78~15
-  expect_false ceph osd add-noout 0 all 1
 
   expect_false ceph osd rm-noup 1234567
   expect_false ceph osd rm-nodown fsadf7
-  expect_false ceph osd rm-noin 0 1 any
   expect_false ceph osd rm-noout 790-fd
 
   ids=`ceph osd ls-tree default`
