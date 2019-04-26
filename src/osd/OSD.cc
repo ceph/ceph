@@ -2020,6 +2020,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
+  loadpgs_lock("OSD::loadpgs_lock"),
   mon_report_lock("OSD::mon_report_lock"),
   up_thru_wanted(0),
   requested_full_first(0),
@@ -3932,6 +3933,139 @@ PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
   return pg;
 }
 
+int OSD::load_pgs_(const int& thread_index)
+{
+  vector<coll_t>& ls = coll_collection[thread_index];
+  dout(10) << "load_pgs coll_t num " << ls.size() << " thread index " << thread_index << dendl;
+
+  int r = 0;
+  for (vector<coll_t>::iterator it = ls.begin();
+    it != ls.end();
+    ++it) {
+    spg_t pgid;
+    if (it->is_temp(&pgid) ||
+      (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+        dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
+        recursive_remove_collection(cct, store, pgid, *it);
+        continue;
+    }
+
+    if (!it->is_pg(&pgid)) {
+      dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
+      continue;
+    }
+
+    dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
+    epoch_t map_epoch = 0;
+    r = PG::peek_map_epoch(store, pgid, &map_epoch);
+    if (r < 0) {
+      derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
+        << dendl;
+      continue;
+    }
+
+    PG *pg = NULL;
+    if (map_epoch > 0) {
+      OSDMapRef pgosdmap = service.try_get_map(map_epoch);
+      if (!pgosdmap) {
+        if (!osdmap->have_pg_pool(pgid.pool())) {
+          derr << __func__ << ": could not find map for epoch " << map_epoch
+            << " on pg " << pgid << ", but the pool is not present in the "
+            << "current map, so this is probably a result of bug 10617.  "
+            << "Skipping the pg for now, you can use ceph-objectstore-tool "
+            << "to clean it up later." << dendl;
+          continue;
+        } else {
+          derr << __func__ << ": have pgid " << pgid << " at epoch "
+            << map_epoch << ", but missing map.  Crashing."
+            << dendl;
+          assert(0 == "Missing map in load_pgs");
+        }
+      }
+      pg = _open_lock_pg(pgosdmap, pgid);
+    } else {
+      pg = _open_lock_pg(osdmap, pgid);
+    }
+    // there can be no waiters here, so we don't call wake_pg_waiters
+
+    pg->ch = store->open_collection(pg->coll);
+
+    // read pg state, log
+    pg->read_state(store);
+
+    if (pg->dne()) {
+      dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
+      pg->ch = nullptr;
+      service.pg_remove_epoch(pg->pg_id);
+      pg->unlock();
+      {
+        // Delete pg
+        RWLock::WLocker l(pg_map_lock);
+        auto p = pg_map.find(pg->get_pgid());
+        assert(p != pg_map.end() && p->second == pg);
+        dout(20) << __func__ << " removed pg " << pg << " from pg_map" << dendl;
+        pg_map.erase(p);
+        pg->put("PGMap");
+      }
+      recursive_remove_collection(cct, store, pgid, *it);
+      continue;
+    }
+
+    service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
+
+    pg->reg_next_scrub();
+
+    dout(10) << __func__ << " loaded " << *pg << dendl;
+    pg->unlock();
+  }
+
+output:
+  loadpgs_lock.Lock();
+  --loadpg_thread_count;
+  if(0 == loadpg_thread_count) {
+    dout(10) << "all load_pgs thread finish " << thread_index << dendl;
+    loadpgs_cond.Signal();
+  }
+  loadpgs_lock.Unlock();
+
+  dout(10) << "load_pgs thread " << thread_index << " left " << loadpg_thread_count << " result " << r << dendl;
+  return r;
+}
+
+int OSD::split_loadpg_collection(int thread_num, vector<coll_t>& collections)
+{
+  vector<coll_t>* thread_collection = NULL;
+  int sum_num = collections.size();
+  int perthread_num = (0 == sum_num%thread_num) ? sum_num/thread_num : (sum_num+thread_num)/thread_num;
+  coll_collection.resize(thread_num + 1);
+  for (int i = 0; i < collections.size(); ++i) {
+    if(0 == i % perthread_num) {
+      int thread_index = i / perthread_num;
+      thread_collection = &coll_collection[thread_index];
+      dout(10) << "coll_t collections thread index " << thread_index 
+        << " item " << i 
+        << " sum num " << sum_num 
+        << " thread num " << thread_num 
+        << " perthread_num " <<perthread_num << dendl;
+    }
+
+    thread_collection->push_back(collections[i]);
+  }
+
+  return 0;
+}
+
+void OSD::waiting_for_loadpgs() 
+{
+  dout(10) << "waiting before. " << dendl;
+  loadpgs_lock.Lock();
+  loadpgs_cond.Wait(loadpgs_lock);
+  loadpgs_lock.Unlock();
+  dout(10) << "waiting after. " << dendl;
+
+  return;
+}
+
 void OSD::load_pgs()
 {
   assert(osd_lock.is_locked());
@@ -3948,6 +4082,38 @@ void OSD::load_pgs()
   }
 
   int num = 0;
+  if(!store_is_rotational) {
+    loadpg_thread_count = loadpg_thread_num = 8;
+    if(cct->_conf->osd_loadpg_num_threads_ssd > 0)
+      loadpg_thread_count = loadpg_thread_num = cct->_conf->osd_loadpg_num_threads_ssd;
+    std::vector<LoadPgsThread*> threads;
+    threads.resize(loadpg_thread_count);
+    LoadPgsThread* ploadpg_thread = NULL;
+    split_loadpg_collection(loadpg_thread_num, ls);
+    for (int i = 0; i < loadpg_thread_num; ++i) {
+      ploadpg_thread = new LoadPgsThread(this, i);
+      if (NULL == ploadpg_thread) {
+        derr << "create load pg thread failed " << cpp_strerror(errno) << dendl;
+        assert(0 == "create load pg thread failed");
+      }
+
+      threads[i] = ploadpg_thread;
+      ploadpg_thread->create("load_pgs");
+    }
+
+    waiting_for_loadpgs();
+
+    //thread join
+    for (int i = 0; i < loadpg_thread_num; ++i) {
+      ploadpg_thread = threads[i];
+      ploadpg_thread->join();
+
+      delete ploadpg_thread;
+      ploadpg_thread = NULL;
+    }
+
+    num = get_num_pgs();
+  } else {
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
@@ -4028,6 +4194,8 @@ void OSD::load_pgs()
     pg->unlock();
     ++num;
   }
+  }//end of if(!store_is_rotational)
+
   dout(0) << __func__ << " opened " << num << " pgs" << dendl;
 }
 

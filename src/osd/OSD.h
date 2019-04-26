@@ -1882,6 +1882,24 @@ protected:
   bool maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create);
   void resume_creating_pg();
 
+  Mutex loadpgs_lock;
+  Cond loadpgs_cond;
+  int loadpg_thread_num;
+  int loadpg_thread_count;
+  vector<vector< coll_t> > coll_collection;
+  typedef struct LoadPgsThread_T : public Thread {
+    OSD *osd;
+    int thread_index;
+    explicit LoadPgsThread_T(OSD *o, int index) : osd(o), thread_index(index) {}
+    void *entry() {
+      osd->load_pgs_(thread_index);
+      return NULL;
+    }
+  } LoadPgsThread;
+  vector<LoadPgsThread* > threads;
+  int split_loadpg_collection(int threadnum, vector<coll_t> &collections);
+  int load_pgs_(const int& thread_index);
+  void waiting_for_loadpgs();
   void load_pgs();
 
   /// build initial pg history and intervals on create

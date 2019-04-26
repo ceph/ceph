@@ -625,6 +625,7 @@ OPTION(osd_op_num_threads_per_shard_ssd, OPT_INT)
 OPTION(osd_op_num_shards, OPT_INT)
 OPTION(osd_op_num_shards_hdd, OPT_INT)
 OPTION(osd_op_num_shards_ssd, OPT_INT)
+OPTION(osd_loadpg_num_threads_ssd, OPT_INT)
 
 // PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
 // mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
