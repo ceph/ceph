@@ -917,6 +917,7 @@ seastar::future<> Client::reopen_session(int rank)
                                 });
       ceph_assert_always(found != pending_conns.end());
       active_con.reset(new Connection{std::move(*found)});
+      logger().info("found mon.{}", monmap.get_name(peer));
       return seastar::parallel_for_each(pending_conns, [] (auto& conn) {
         return conn.close();
       });
