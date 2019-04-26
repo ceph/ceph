@@ -128,7 +128,7 @@ private:
 			    const std::vector<int>& new_acting,
 			    int new_acting_primary);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
-  seastar::future<> do_osd_op(const object_info_t& oi, OSDOp* op);
+  seastar::future<> do_osd_op(const object_info_t& oi, OSDOp& op);
 
 private:
   const spg_t pgid;
