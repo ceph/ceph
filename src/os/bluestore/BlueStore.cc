@@ -11685,14 +11685,12 @@ void BlueStore::_do_write_small(
   } while (any_change);
 
   // new blob.
-  
   BlobRef b = c->new_blob();
   uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
   wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, true, true);
-  logger->inc(l_bluestore_write_small_new);
 
   return;
 }
@@ -12064,12 +12062,14 @@ int BlueStore::_do_alloc_write(
 	  });
         ceph_assert(r == 0);
 	op->data = *l;
+	logger->inc(l_bluestore_write_small_deferred);
       } else {
 	b->get_blob().map_bl(
 	  b_off, *l,
 	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t, &txc->ioc, false);
 	  });
+	logger->inc(l_bluestore_write_small_new);
       }
     }
   }
