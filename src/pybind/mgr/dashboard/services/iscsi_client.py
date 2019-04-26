@@ -212,5 +212,5 @@ class IscsiClient(RestClient):
 
     @RestClient.api_get('/api/targetinfo/{target_iqn}')
     def get_targetinfo(self, target_iqn, request=None):
-        logger.debug("iSCSI: Getting targetinfo: %s", target_iqn)
+        # pylint: disable=unused-argument
         return request()
