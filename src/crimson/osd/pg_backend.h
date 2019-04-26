@@ -9,6 +9,7 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "crimson/common/shared_lru.h"
+#include "crimson/os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
@@ -39,6 +40,12 @@ public:
 				   size_t truncate_size,
 				   uint32_t truncate_seq,
 				   uint32_t flags);
+  seastar::future<> write(
+    const ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
+  seastar::future<> submit_transaction(ceph::os::Transaction&& txn);
+
 protected:
   const shard_id_t shard;
   CollectionRef coll;
