@@ -257,7 +257,7 @@ struct RotatingSecrets {
   bool need_new_secrets() const {
     return secrets.size() < KEY_ROTATE_NUM;
   }
-  bool need_new_secrets(utime_t now) const {
+  bool need_new_secrets(const utime_t& now) const {
     return secrets.size() < KEY_ROTATE_NUM || current().expiration <= now;
   }
 
