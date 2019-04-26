@@ -298,22 +298,6 @@ public:
     }
   }
 
-  struct ptr_lt {
-    bool operator()(const SimpleLock* l, const SimpleLock* r) const {
-      // first sort by object type (dn < inode)
-      if (!(l->type->type > CEPH_LOCK_DN) && (r->type->type > CEPH_LOCK_DN)) return true;
-      if ((l->type->type > CEPH_LOCK_DN) == (r->type->type > CEPH_LOCK_DN)) {
-	// then sort by object
-	if (l->parent->is_lt(r->parent)) return true;
-	if (l->parent == r->parent) {
-	  // then sort by (inode) lock type
-	  if (l->type->type < r->type->type) return true;
-	}
-      }
-      return false;
-    }
-  };
-
   void decode_locked_state(const bufferlist& bl) {
     parent->decode_lock_state(type->type, bl);
   }
