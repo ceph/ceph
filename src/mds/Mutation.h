@@ -73,9 +73,6 @@ public:
     SimpleLock* lock;
     mutable unsigned flags;
     mutable mds_rank_t wrlock_target;
-    operator SimpleLock*() const {
-      return lock;
-    }
     LockOp(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) :
       lock(l), flags(f), wrlock_target(t) {}
     bool is_rdlock() const { return !!(flags & RDLOCK); }
@@ -88,6 +85,20 @@ public:
       wrlock_target = MDS_RANK_NONE;
     }
     bool is_state_pin() const { return !!(flags & STATE_PIN); }
+
+    bool operator<(const LockOp& r) const {
+      if ((lock->type->type <= CEPH_LOCK_DN) && (r.lock->type->type > CEPH_LOCK_DN))
+	return true;
+      if ((lock->type->type > CEPH_LOCK_DN) == (r.lock->type->type > CEPH_LOCK_DN)) {
+	auto lp = lock->get_parent();
+	auto rp = r.lock->get_parent();
+	// then sort by object
+	if (lp == rp)
+	  return (lock->type->type < r.lock->type->type);
+	return lp->is_lt(rp);
+      }
+      return false;
+    }
   };
 
   struct LockOpVec : public vector<LockOp> {
@@ -114,7 +125,7 @@ public:
       reserve(32);
     }
   };
-  typedef set<LockOp, SimpleLock::ptr_lt> lock_set;
+  typedef set<LockOp> lock_set;
   typedef lock_set::iterator lock_iterator;
   lock_set locks;  // full ordering
 

@@ -84,10 +84,9 @@ void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
     }
   }
 }
-
 void MutationImpl::LockOpVec::sort_and_merge()
 {
-  std::sort(begin(), end(), SimpleLock::ptr_lt());
+  std::sort(begin(), end());
   // merge ops on the same lock
   for (auto i = end() - 1; i > begin(); ) {
     auto j = i;
@@ -99,7 +98,6 @@ void MutationImpl::LockOpVec::sort_and_merge()
       i = j;
       continue;
     }
-
     // merge
     ++j;
     for (auto k = i; k > j; --k) {

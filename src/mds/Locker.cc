@@ -237,7 +237,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  // if the lock is the latest locked one, it's possible that slave mds got the lock
 	  // while there are recovering mds.
-	  if (!mdr->locks.count(lock) || lock == *mdr->locks.rbegin())
+	  if (!mdr->locks.count(lock) || lock == mdr->locks.rbegin()->lock)
 	    wait = true;
 	}
 	if (wait) {
