@@ -46,6 +46,7 @@ namespace {
 
 namespace ceph::mon {
 
+using ceph::common::local_conf;
 
 class Connection {
 public:
@@ -79,6 +80,8 @@ public:
   AuthAuthorizer* get_authorizer(peer_type_t peer) const;
   KeyStore& get_keys();
   seastar::future<> renew_tickets();
+  seastar::future<> renew_rotating_keyring();
+
   ceph::net::ConnectionRef get_conn();
 
 private:
@@ -88,7 +91,11 @@ private:
                                                  uint64_t global_id,
                                                  const EntityName& name,
                                                  uint32_t want_keys);
-  seastar::future<bool> do_auth();
+  enum class request_t {
+    rotating,
+    general,
+  };
+  seastar::future<bool> do_auth(request_t);
 
 private:
   bool closed = false;
@@ -105,6 +112,7 @@ private:
   std::unique_ptr<AuthClientHandler> auth;
   RotatingKeyRing rotating_keyring;
   uint64_t global_id;
+  clock_t::time_point last_rotating_renew_sent;
 };
 
 Connection::Connection(const AuthRegistry& auth_registry,
@@ -124,7 +132,7 @@ seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
-    return do_auth().then([](bool success) {
+    return do_auth(request_t::general).then([](bool success) {
       if (!success)  {
         throw std::system_error(make_error_code(
           ceph::net::error::negotiation_failure));
@@ -132,6 +140,28 @@ seastar::future<> Connection::renew_tickets()
     });
   }
   return seastar::now();
+}
+
+seastar::future<> Connection::renew_rotating_keyring()
+{
+  auto now = clock_t::now();
+  auto ttl = std::chrono::seconds{
+    static_cast<long>(ceph::common::local_conf()->auth_service_ticket_ttl)};
+  auto cutoff = now - ttl / 4;
+  if (!rotating_keyring.need_new_secrets(utime_t(cutoff))) {
+    return seastar::now();
+  }
+  if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
+    logger().info("renew_rotating_keyring called too often");
+    return seastar::now();
+  }
+  last_rotating_renew_sent = now;
+  return do_auth(request_t::rotating).then([](bool success) {
+    if (!success)  {
+      throw std::system_error(make_error_code(
+        ceph::net::error::negotiation_failure));
+    }
+  });
 }
 
 AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
@@ -186,16 +216,24 @@ Connection::setup_session(epoch_t epoch,
   return conn->send(m);
 }
 
-seastar::future<bool> Connection::do_auth()
+seastar::future<bool> Connection::do_auth(Connection::request_t what)
 {
   auto m = make_message<MAuth>();
   m->protocol = auth->get_protocol();
   auth->prepare_build_request();
-  if (int ret = auth->build_request(m->auth_payload); ret) {
-    logger().error("missing/bad key for '{}'",
-                   ceph::common::local_conf()->name);
-    throw std::system_error(make_error_code(
-      ceph::net::error::negotiation_failure));
+  switch (what) {
+  case request_t::rotating:
+    auth->build_rotating_request(m->auth_payload);
+    break;
+  case request_t::general:
+    if (int ret = auth->build_request(m->auth_payload); ret) {
+      logger().error("missing/bad key for '{}'", local_conf()->name);
+      throw std::system_error(make_error_code(
+        ceph::net::error::negotiation_failure));
+    }
+    break;
+  default:
+    assert(0);
   }
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
@@ -245,7 +283,7 @@ Connection::authenticate_v1(epoch_t epoch,
     case -EAGAIN:
       // cephx
       return seastar::repeat([this] {
-        return do_auth().then([](bool success) {
+        return do_auth(request_t::general).then([](bool success) {
           return seastar::make_ready_future<seastar::stop_iteration>(
             success ?
             seastar::stop_iteration::yes:
@@ -425,7 +463,8 @@ seastar::future<> Client::load_keyring()
 void Client::tick()
 {
   seastar::with_gate(tick_gate, [this] {
-    return active_con->renew_tickets();
+    return seastar::when_all_succeed(active_con->renew_tickets(),
+                                     active_con->renew_rotating_keyring());
   });
 }
 
@@ -697,7 +736,12 @@ seastar::future<> Client::handle_monmap(ceph::net::Connection* conn,
   sub.got("monmap", monmap.get_epoch());
 
   if (monmap.get_addr_name(peer_addr, cur_mon)) {
-    return seastar::now();
+    if (active_con) {
+      return seastar::when_all_succeed(active_con->renew_tickets(),
+                                       active_con->renew_rotating_keyring());
+    } else {
+      return seastar::now();
+    }
   } else {
     logger().warn("mon.{} went away", cur_mon);
     return reopen_session(-1);
