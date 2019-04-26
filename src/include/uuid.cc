@@ -17,11 +17,7 @@
 
 void uuid_d::dump(ceph::Formatter *f) const
 {
-  f->open_object_section("uuid_d");
-  {
-    f->dump_stream("uuid") << to_string();
-  }
-  f->close_section();
+  f->dump_stream("uuid") << to_string();
 }
 
 void uuid_d::generate_test_instances(std::list<uuid_d*>& o)
