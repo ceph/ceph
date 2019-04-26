@@ -99,7 +99,6 @@ PGBackend::_load_os(const hobject_t& oid)
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
                          OI_ATTR).then_wrapped([oid, this](auto fut) {
-    auto oi = std::make_unique<object_info_t>();
     if (fut.failed()) {
       auto ep = std::move(fut).get_exception();
       if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
@@ -187,4 +186,30 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
       }
       return seastar::make_ready_future<bufferlist>(std::move(bl));
     });
+}
+
+seastar::future<> PGBackend::writefull(
+  const ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  const ceph_osd_op& op = osd_op.op;
+  if (op.extent.length != osd_op.indata.length()) {
+    throw ::invalid_argument();
+  }
+
+  if (os.exists && op.extent.length < os.oi.size) {
+    txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.length);
+  }
+  if (op.extent.length) {
+    txn.write(coll->cid, ghobject_t{os.oi.soid}, 0, op.extent.length,
+              osd_op.indata, op.flags);
+  }
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::submit_transaction(ceph::os::Transaction&& txn)
+{
+  logger().trace("submit_transaction: num_ops={}", txn.get_num_ops());
+  return store->do_transaction(coll, std::move(txn));
 }

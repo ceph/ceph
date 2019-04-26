@@ -11,3 +11,5 @@ class object_not_found : public std::exception {
 class object_corrupted : public std::exception {
 };
 
+class invalid_argument : public std::exception {
+};
