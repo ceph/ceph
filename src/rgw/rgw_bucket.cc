@@ -2343,8 +2343,6 @@ public:
 };
 
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
-  RGWSI_MetaBackend::ModuleRef be_module;
-
 public:
   string get_type() override { return "bucket"; }
 

@@ -63,7 +63,7 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWUserCtl& user_ctl,
+extern int rgw_store_user_info(RGWUserCtl *user_ctl,
                                RGWUserInfo& info,
                                RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker,
@@ -75,7 +75,7 @@ extern int rgw_store_user_info(RGWUserCtl& user_ctl,
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = nullptr,
@@ -86,7 +86,7 @@ extern int rgw_get_user_info_by_uid(RGWUserCtl& user_ctl,
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
                                       string& email, RGWUserInfo& info,
                                       RGWObjVersionTracker *objv_tracker = NULL,
                                       real_time *pmtime = nullptr);
@@ -94,7 +94,7 @@ extern int rgw_get_user_info_by_email(RGWUserCtl& user_ctl,
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
                                       const string& swift_name,
                                       RGWUserInfo& info,        /* out */
                                       RGWObjVersionTracker *objv_tracker = nullptr,
@@ -103,7 +103,7 @@ extern int rgw_get_user_info_by_swift(RGWUserCtl& user_ctl,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
                                            RGWObjVersionTracker* objv_tracker = nullptr,
@@ -113,14 +113,14 @@ extern int rgw_get_user_info_by_access_key(RGWUserCtl& user_ctl,
  * and put it into @attrs.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_get_user_attrs_by_uid(RGWUserCtl& user_ctl,
+extern int rgw_get_user_attrs_by_uid(RGWUserCtl *user_ctl,
                                      const rgw_user& user_id,
                                      map<string, bufferlist>& attrs,
                                      RGWObjVersionTracker *objv_tracker = nullptr);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
-extern int rgw_delete_user(RGWUserCtl& user_ctl, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
+extern int rgw_delete_user(RGWUserCtl *user_ctl, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
@@ -623,9 +623,9 @@ public:
 
 class RGWUserCapPool
 {
-  RGWUserCaps *caps{false};
+  RGWUserCaps *caps{nullptr};
   bool caps_allowed{false};
-  RGWUser *user{false};
+  RGWUser *user{nullptr};
 
 private:
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
@@ -783,7 +783,7 @@ class RGWUserMetadataObject : public RGWMetadataObject {
   RGWUserCompleteInfo uci;
 public:
   RGWUserMetadataObject() {}
-  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, real_time m)
+  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, const obj_version& v, real_time m)
       : uci(_uci) {
     objv = v;
     mtime = m;

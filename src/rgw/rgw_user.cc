@@ -141,7 +141,7 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-int rgw_store_user_info(RGWUserCtl& user_ctl,
+int rgw_store_user_info(RGWUserCtl *user_ctl,
                         RGWUserInfo& info,
                         RGWUserInfo *old_info,
                         RGWObjVersionTracker *objv_tracker,
@@ -150,19 +150,19 @@ int rgw_store_user_info(RGWUserCtl& user_ctl,
                         map<string, bufferlist> *pattrs)
 {
   map<string, bufferlist> attrs;
-  return user_ctl.store_info(info, RGWUserCtl::PutParams()
-                                   .set_old_info(&info)
-                                   .set_objv_tracker(objv_tracker)
-                                   .set_mtime(mtime)
-                                   .set_exclusive(exclusive)
-                                   .set_attrs(pattrs));
+  return user_ctl->store_info(info, RGWUserCtl::PutParams()
+                                    .set_old_info(&info)
+                                    .set_objv_tracker(objv_tracker)
+                                    .set_mtime(mtime)
+                                    .set_exclusive(exclusive)
+                                    .set_attrs(pattrs));
 }
 
 /**
  * Given a uid, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_user_info_by_uid(RGWUserCtl& user_ctl,
+int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
                              const rgw_user& uid,
                              RGWUserInfo& info,
                              RGWObjVersionTracker * const objv_tracker,
@@ -170,70 +170,70 @@ int rgw_get_user_info_by_uid(RGWUserCtl& user_ctl,
                              rgw_cache_entry_info * const cache_info,
                              map<string, bufferlist> * const pattrs)
 {
-  return user_ctl.get_info_by_uid(uid, RGWUserCtl::GetParams()
-                                       .set_info(&info)
-                                       .set_objv_tracker(objv_tracker)
-                                       .set_mtime(pmtime)
-                                       .set_cache_info(cache_info)
-                                       .set_attrs(pattrs));
+  return user_ctl->get_info_by_uid(uid, RGWUserCtl::GetParams()
+                                        .set_info(&info)
+                                        .set_objv_tracker(objv_tracker)
+                                        .set_mtime(pmtime)
+                                        .set_cache_info(cache_info)
+                                        .set_attrs(pattrs));
 }
 
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_user_info_by_email(RGWUserCtl& user_ctl, string& email, RGWUserInfo& info,
+int rgw_get_user_info_by_email(RGWUserCtl *user_ctl, string& email, RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
-  return user_ctl.get_info_by_email(email, RGWUserCtl::GetParams()
-                                           .set_info(&info)
-                                           .set_objv_tracker(objv_tracker)
-                                           .set_mtime(pmtime));
+  return user_ctl->get_info_by_email(email, RGWUserCtl::GetParams()
+                                            .set_info(&info)
+                                            .set_objv_tracker(objv_tracker)
+                                            .set_mtime(pmtime));
 }
 
 /**
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
                                       const string& swift_name,
                                       RGWUserInfo& info,        /* out */
                                       RGWObjVersionTracker * const objv_tracker,
                                       real_time * const pmtime)
 {
-  return user_ctl.get_info_by_swift(swift_name, RGWUserCtl::GetParams()
-                                                .set_info(&info)
-                                                .set_objv_tracker(objv_tracker)
-                                                .set_mtime(pmtime));
+  return user_ctl->get_info_by_swift(swift_name, RGWUserCtl::GetParams()
+                                                 .set_info(&info)
+                                                 .set_objv_tracker(objv_tracker)
+                                                 .set_mtime(pmtime));
 }
 
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWUserCtl& user_ctl,
+extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
                                            RGWObjVersionTracker* objv_tracker,
                                            real_time *pmtime)
 {
-  return user_ctl.get_info_by_access_key(access_key, RGWUserCtl::GetParams()
-                                                     .set_info(&info)
-                                                     .set_objv_tracker(objv_tracker)
-                                                     .set_mtime(pmtime));
+  return user_ctl->get_info_by_access_key(access_key, RGWUserCtl::GetParams()
+                                                      .set_info(&info)
+                                                      .set_objv_tracker(objv_tracker)
+                                                      .set_mtime(pmtime));
 }
 
-int rgw_get_user_attrs_by_uid(RGWUserCtl& user_ctl,
+int rgw_get_user_attrs_by_uid(RGWUserCtl *user_ctl,
                               const rgw_user& user_id,
                               map<string, bufferlist>& attrs,
                               RGWObjVersionTracker *objv_tracker)
 {
   RGWUserInfo user_info;
 
-  return user_ctl.get_info_by_uid(user_id, RGWUserCtl::GetParams()
-                                           .set_info(&user_info)
-                                           .set_objv_tracker(objv_tracker)
-                                           .set_attrs(&attrs));
+  return user_ctl->get_info_by_uid(user_id, RGWUserCtl::GetParams()
+                                            .set_info(&user_info)
+                                            .set_objv_tracker(objv_tracker)
+                                            .set_attrs(&attrs));
 }
 
 /**
@@ -242,9 +242,9 @@ int rgw_get_user_attrs_by_uid(RGWUserCtl& user_ctl,
  * from the user and user email pools. This leaves the pools
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
-int rgw_delete_user(RGWUserCtl& user_ctl, RGWUserInfo& info, RGWObjVersionTracker& objv_tracker) {
-  return user_ctl.remove_info(info, RGWUserCtl::RemoveParams()
-                                    .set_objv_tracker(&objv_tracker));
+int rgw_delete_user(RGWUserCtl *user_ctl, RGWUserInfo& info, RGWObjVersionTracker& objv_tracker) {
+  return user_ctl->remove_info(info, RGWUserCtl::RemoveParams()
+                                     .set_objv_tracker(&objv_tracker));
 }
 
 static bool char_is_unreserved_url(char c)
@@ -615,13 +615,13 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   if (!id.empty()) {
     switch (key_type) {
     case KEY_TYPE_SWIFT:
-      if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
+      if (rgw_get_user_info_by_swift(user_ctl, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
       break;
     case KEY_TYPE_S3:
-      if (rgw_get_user_info_by_access_key(store, id, duplicate_check) >= 0) {
+      if (rgw_get_user_info_by_access_key(user_ctl, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
         return -ERR_KEY_EXIST;
       }
@@ -661,7 +661,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
       if (!validate_access_key(id))
         continue;
 
-    } while (!rgw_get_user_info_by_access_key(store, id, duplicate_check));
+    } while (!rgw_get_user_info_by_access_key(user_ctl, id, duplicate_check));
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
@@ -672,7 +672,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     }
 
     // check that the access key doesn't exist
-    if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
+    if (rgw_get_user_info_by_swift(user_ctl, id, duplicate_check) >= 0) {
       set_err_msg(err_msg, "cannot create existing swift key");
       return -ERR_KEY_EXIST;
     }
@@ -861,7 +861,6 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
     return -ERR_INVALID_ACCESS_KEY;
   }
 
-  rgw_remove_key_index(store, kiter->second);
   keys_map->erase(kiter);
 
   if (!defer_user_update)
@@ -928,7 +927,6 @@ int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
   keys_map = swift_keys;
   kiter = keys_map->find(swift_kid);
   if (kiter != keys_map->end()) {
-    rgw_remove_key_index(store, kiter->second);
     keys_map->erase(kiter);
   }
 
@@ -936,12 +934,11 @@ int RGWAccessKeyPool::remove_subuser_keys(RGWUserAdminOpState& op_state,
   std::string subuser_str = op_state.get_subuser();
   keys_map = access_keys;
   RGWUserInfo user_info = op_state.get_user_info();
-  map<std::string, RGWAccessKey>::iterator user_kiter = user_info.access_keys.begin();
+  auto user_kiter = user_info.access_keys.begin();
   for (; user_kiter != user_info.access_keys.end(); ++user_kiter) {
     if (user_kiter->second.subuser == subuser_str) {
       kiter = keys_map->find(user_kiter->first);
       if (kiter != keys_map->end()) {
-        rgw_remove_key_index(store, kiter->second);
         keys_map->erase(kiter);
       }
     }
@@ -1405,7 +1402,7 @@ int RGWUser::init_storage(RGWRados *storage)
   }
 
   store = storage;
-  user_ctl = *store->ctl.user;
+  user_ctl = store->ctl.user;
 
   clear_populated();
 
@@ -1445,19 +1442,19 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
   }
 
   if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
-    found = (rgw_get_user_info_by_uid(store, user_id, user_info, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_uid(user_ctl, user_id, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }
   if (!user_email.empty() && !found) {
-    found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_email(user_ctl, user_email, user_info, &op_state.objv) >= 0);
     op_state.found_by_email = found;
   }
   if (!swift_user.empty() && !found) {
-    found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_swift(user_ctl, swift_user, user_info, &op_state.objv) >= 0);
     op_state.found_by_key = found;
   }
   if (!access_key.empty() && !found) {
-    found = (rgw_get_user_info_by_access_key(store, access_key, user_info, &op_state.objv) >= 0);
+    found = (rgw_get_user_info_by_access_key(user_ctl, access_key, user_info, &op_state.objv) >= 0);
     op_state.found_by_key = found;
   }
   
@@ -1515,7 +1512,7 @@ int RGWUser::update(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
-  ret = rgw_store_user_info(store, user_info, pold_info, &op_state.objv, real_time(), false);
+  ret = rgw_store_user_info(user_ctl, user_info, pold_info, &op_state.objv, real_time(), false);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to store user info");
     return ret;
@@ -1758,7 +1755,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   } while (is_truncated);
 
-  ret = rgw_delete_user(store, user_info, op_state.objv);
+  ret = rgw_delete_user(user_ctl, user_info, op_state.objv);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -1827,8 +1824,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   std::string old_email = old_info.user_email;
   if (!op_email.empty()) {
     // make sure we are not adding a duplicate email
-    if (old_email.compare(op_email) != 0) {
-      ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
+    if (old_email != op_email) {
+      ret = rgw_get_user_info_by_email(user_ctl, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id.compare(user_id) != 0) {
         set_err_msg(err_msg, "cannot add duplicate email");
         return -ERR_EMAIL_EXIST;
@@ -1836,14 +1833,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
     }
     user_info.user_email = op_email;
   } else if (op_email.empty() && op_state.user_email_specified) {
-
     ldout(store->ctx(), 10) << "removing email index: " << user_info.user_email << dendl;
-    ret = rgw_remove_email_index(store, user_info.user_email);
-    if (ret < 0 && ret != -ENOENT) {
-      ldout(store->ctx(), 0) << "ERROR: could not remove " << user_info.user_id << " index (err=" << ret << ")" << dendl;
-      return ret;
-    }
-    user_info.user_email = "";
+    /* will be physically removed later when calling update() */
+    user_info.user_email.clear();
   }
 
   // update the remaining user info
@@ -2420,6 +2412,18 @@ public:
     *obj = mdo;
 
     return 0;
+  }
+
+  RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
+    RGWUserCompleteInfo uci;
+
+    try {
+      decode_json_obj(uci, jo);
+    } catch (JSONDecoder::err& e) {
+      return nullptr;
+    }
+
+    return new RGWUserMetadataObject(uci, objv, mtime);
   }
 
   int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
