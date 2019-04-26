@@ -591,6 +591,7 @@ public:
   }
 
   RGWServices svc;
+  RGWCtl ctl;
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we
@@ -646,6 +647,7 @@ public:
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   int init_svc(bool raw);
+  int init_ctl();
   int init_rados();
   int init_complete();
   int initialize();

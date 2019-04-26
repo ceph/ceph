@@ -46,26 +46,6 @@ int RGWSI_Bucket::do_start()
 {
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
   binfo_cache->init(svc.cache);
-
-  auto mm = svc.meta->get_mgr();
-  auto sync_module = svc.sync_modules->get_sync_module();
-  if (sync_module) {
-    bucket_meta_handler = sync_module->alloc_bucket_meta_handler();
-    bucket_instance_meta_handler = sync_module->alloc_bucket_instance_meta_handler();
-  } else {
-    bucket_meta_handler = RGWBucketMetaHandlerAllocator::alloc();
-    bucket_instance_meta_handler = RGWBucketInstanceMetaHandlerAllocator::alloc();
-  }
-
-  int r = bucket_meta_handler->init(mm);
-  if (r < 0) {
-    return r;
-  }
-
-  r = bucket_instance_meta_handler->init(mm);
-  if (r < 0) {
-    return r;
-  }
   return 0;
 }
 

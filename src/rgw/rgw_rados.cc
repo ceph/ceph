@@ -1208,13 +1208,13 @@ int RGWRados::init_complete()
 
   if (run_sync_thread) {
     // initialize the log period history
-    meta_mgr->init_oldest_log_period();
+    ctl.meta.mgr->init_oldest_log_period();
   }
 
   async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
   async_rados->start();
 
-  ret = meta_mgr->init(current_period.get_id());
+  ret = ctl.meta.mgr->init(current_period.get_id());
   if (ret < 0) {
     lderr(cct) << "ERROR: failed to initialize metadata log: "
         << cpp_strerror(-ret) << dendl;
@@ -1222,7 +1222,7 @@ int RGWRados::init_complete()
   }
 
   if (svc.zone->is_meta_master()) {
-    auto md_log = meta_mgr->get_log(current_period.get_id());
+    auto md_log = ctl.meta.mgr->get_log(current_period.get_id());
     meta_notifier = new RGWMetaNotifier(this, md_log);
     meta_notifier->start();
   }
@@ -1341,6 +1341,11 @@ int RGWRados::init_svc(bool raw)
   return svc.init(cct, use_cache);
 }
 
+int RGWRados::init_ctl()
+{
+  return ctl.init(svc);
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1356,6 +1361,12 @@ int RGWRados::initialize()
   ret = init_svc(false);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+    return ret;
+  }
+
+  ret = init_ctl();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 
