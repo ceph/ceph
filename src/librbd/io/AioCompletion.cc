@@ -147,6 +147,8 @@ void AioCompletion::fail(int r)
 
   lderr(cct) << cpp_strerror(r) << dendl;
   ceph_assert(pending_count == 0);
+
+  get();
   rval = r;
   complete();
   put();
