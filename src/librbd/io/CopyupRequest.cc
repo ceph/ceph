@@ -165,7 +165,7 @@ void CopyupRequest<I>::read_from_parent() {
   auto comp = AioCompletion::create_and_start<
     CopyupRequest<I>,
     &CopyupRequest<I>::handle_read_from_parent>(
-      this, util::get_image_ctx(m_image_ctx), AIO_TYPE_READ);
+      this, util::get_image_ctx(m_image_ctx->parent), AIO_TYPE_READ);
 
   ldout(cct, 20) << "oid=" << m_oid << ", "
                  << "completion=" << comp << ", "
