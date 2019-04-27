@@ -5,6 +5,7 @@
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
 #include "svc_meta.h"
+#include "svc_meta_be_sobj.h"
 #include "svc_sync_modules.h"
 
 #include "rgw/rgw_user.h"
@@ -12,6 +13,17 @@
 #include "rgw/rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_User::Svc& svc;
+public:
+  RGWSI_User_Module(RGWSI_User::Svc& _svc) : svc(_svc) {}
+
+  void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
+    *oid = key;
+    *pool = svc.zone->get_zone_params().user_uid_pool;
+  }
+};
 
 RGWSI_User::RGWSI_User(CephContext *cct): RGWServiceInstance(cct) {
 }
@@ -37,10 +49,23 @@ int RGWSI_User::do_start()
 {
   uinfo_cache.reset(new RGWChainedCacheImpl<user_info_cache_entry>);
   uinfo_cache->init(svc.cache);
+
+  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &be_handler);
+  if (r < 0) {
+    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << r << dendl;
+    return r;
+  }
+
+  RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
+
+  auto module = new RGWSI_User_Module(svc);
+  be_module.reset(module);
+  bh->set_module(module);
   return 0;
 }
 
 int RGWSI_User::read_user_info(RGWSI_MetaBackend::Context *ctx,
+                               const rgw_user& user,
                                RGWUserInfo *info,
                                RGWObjVersionTracker * const objv_tracker,
                                real_time * const pmtime,
@@ -54,7 +79,7 @@ int RGWSI_User::read_user_info(RGWSI_MetaBackend::Context *ctx,
 
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
 
-  int ret = svc.meta_be->get_entry(ctx, params, objv_tracker, y);
+  int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -62,9 +87,8 @@ int RGWSI_User::read_user_info(RGWSI_MetaBackend::Context *ctx,
   auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
-    auto meta_key = get_meta_key(user_id.user_id);
-    if (meta_key != ctx->key) {
-      lderr(svc.meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << meta_key << " != " << ctx->key << dendl;
+    if (user_id.user_id != user) {
+      lderr(svc.meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
       return -EIO;
     }
     if (!iter.end()) {
@@ -167,7 +191,7 @@ public:
 
     RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
 
-    int ret = svc.meta_be->put_entry(ctx, params, &ot);
+    int ret = svc.meta_be->put_entry(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot);
     if (ret < 0)
       return ret;
 
@@ -404,12 +428,12 @@ int RGWSI_User::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserI
 {
   ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
 
-  RGWSI_MBSObj_RemoveParams params;
+  RGWSI_MBSObj_RemoveParams params(y);
 #warning need mtime?
 #if 0
   params.mtime = user_info.mtime;
 #endif
-  int ret = svc.meta_be->remove_entry(ctx, params, objv_tracker, y);
+  int ret = svc.meta_be->remove_entry(ctx, get_meta_key(user_info.user_id), params, objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     string key;
     user_info.user_id.to_str(key);
@@ -455,7 +479,7 @@ int RGWSI_User::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
   try {
     decode(uid, iter);
 
-    int ret = read_user_info(ctx->clone(get_meta_key(uid.user_id)),
+    int ret = read_user_info(ctx, uid.user_id,
                              &e.info, &e.objv_tracker, nullptr, &cache_info, nullptr, y);
     if (ret < 0) {
       return ret;

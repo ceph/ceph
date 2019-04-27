@@ -15,6 +15,7 @@ RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
 RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
 
 int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
+                                  const string& key,
                                   RGWMetadataLogData& log_data,
                                   RGWObjVersionTracker *objv_tracker,
                                   RGWMDLogStatus op_type)
@@ -36,7 +37,7 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
   bufferlist logbl;
   encode(log_data, logbl);
 
-  int ret = mdlog_svc->add_entry(ctx->module, ctx->section, ctx->key, logbl);
+  int ret = mdlog_svc->add_entry(ctx->module, ctx->section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -44,6 +45,7 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
+                                   const string& key,
                                    RGWMetadataLogData& log_data,
                                    RGWObjVersionTracker *objv_tracker, int ret)
 {
@@ -55,7 +57,7 @@ int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
   bufferlist logbl;
   encode(log_data, logbl);
 
-  int r = mdlog_svc->add_entry(ctx->module, ctx->section, ctx->key, logbl);
+  int r = mdlog_svc->add_entry(ctx->module, ctx->section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -66,6 +68,7 @@ int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
+                                      const string& key,
                                       const real_time& mtime,
                                       RGWObjVersionTracker *objv_tracker,
                                       RGWMDLogSyncType sync_mode)
@@ -73,7 +76,7 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
   real_time orig_mtime;
   unique_ptr<GetParams> params(alloc_default_get_params(&orig_mtime));
 
-  int ret = get_entry(ctx, *params, objv_tracker);
+  int ret = get_entry(ctx, key, *params, objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -95,6 +98,7 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
+                              const string& key,
                               const ceph::real_time& mtime,
                               RGWObjVersionTracker *objv_tracker,
                               RGWMDLogStatus op_type,
@@ -105,7 +109,7 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
   int ret;
 
   if (generic_prepare) {
-    ret = prepare_mutate(ctx, mtime, objv_tracker, sync_mode);
+    ret = prepare_mutate(ctx, key, mtime, objv_tracker, sync_mode);
     if (ret < 0 ||
         ret == STATUS_NO_APPLY) {
       return ret;
@@ -113,7 +117,7 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
   }
 
   RGWMetadataLogData log_data;
-  ret = pre_modify(ctx, log_data, objv_tracker, op_type);
+  ret = pre_modify(ctx, key, log_data, objv_tracker, op_type);
   if (ret < 0) {
     return ret;
   }
@@ -122,7 +126,7 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
 
   /* cascading ret into post_modify() */
 
-  ret = post_modify(ctx, log_data, objv_tracker, ret);
+  ret = post_modify(ctx, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
@@ -130,39 +134,52 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::get(Context *ctx,
+                           const string& key,
                            GetParams& params,
                            RGWObjVersionTracker *objv_tracker)
 {
-  return get_entry(ctx, params, objv_tracker);
+  return get_entry(ctx, key, params, objv_tracker);
 }
 
 int RGWSI_MetaBackend::put(Context *ctx,
+                           const string& key,
                            PutParams& params,
                            RGWObjVersionTracker *objv_tracker,
                            RGWMDLogSyncType sync_mode)
 {
   std::function<int()> f = [&]() {
-    return put_entry(ctx, params, objv_tracker);
+    return put_entry(ctx, key, params, objv_tracker);
   };
 
-  return mutate(ctx, params.mtime, objv_tracker,
+  return mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_WRITE, sync_mode,
                 f,
                 false);
 }
 
 int RGWSI_MetaBackend::remove(Context *ctx,
+                              const string& key,
                               RemoveParams& params,
                               RGWObjVersionTracker *objv_tracker,
                               RGWMDLogSyncType sync_mode)
 {
   std::function<int()> f = [&]() {
-    return remove_entry(ctx, params, objv_tracker);
+    return remove_entry(ctx, key, params, objv_tracker);
   };
 
-  return mutate(ctx, params.mtime, objv_tracker,
+  return mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_REMOVE, sync_mode,
                 f,
                 false);
+}
+
+
+int RGWSI_MetaBackend_Handler::call(std::function<int(Op *)> f)
+{
+  return be->call([&](RGWSI_MetaBackend::Context *ctx) {
+    ctx->init(this);
+    Op op(be, ctx);
+    return f(&op);
+  });
 }
 

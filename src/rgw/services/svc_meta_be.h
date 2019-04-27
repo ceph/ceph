@@ -20,14 +20,12 @@
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_mdlog_types.h"
 
-class RGWMetadataHandler;
 class RGWMetadataLogData;
-class RGWMetadataObject;
 
 class RGWSI_MDLog;
 class RGWSI_Meta;
-
-typedef void *RGWSI_MetaBackend_Handle;
+class RGWObjVersionTracker;
+class RGWSI_MetaBackend_Handler;
 
 class RGWSI_MetaBackend : public RGWServiceInstance
 {
@@ -36,24 +34,20 @@ public:
   class Module;
   class Context;
 protected:
-  map<string, RGWMetadataHandler *> handlers;
-
   RGWSI_MDLog *mdlog_svc{nullptr};
-
-  int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
 
   void base_init(RGWSI_MDLog *_mdlog_svc) {
     mdlog_svc = _mdlog_svc;
   }
 
-  virtual int init_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handle *phandle) { return 0; }
-
   int prepare_mutate(RGWSI_MetaBackend::Context *ctx,
-                     const real_time& mtime,
+                     const std::string& key,
+                     const ceph::real_time& mtime,
                      RGWObjVersionTracker *objv_tracker,
                      RGWMDLogSyncType sync_mode);
 
   virtual int mutate(Context *ctx,
+                     const std::string& key,
                      const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
                      RGWMDLogStatus op_type,
                      RGWMDLogSyncType sync_mode,
@@ -61,10 +55,12 @@ protected:
                      bool generic_prepare);
 
   virtual int pre_modify(Context *ctx,
+                         const std::string& key,
                          RGWMetadataLogData& log_data,
                          RGWObjVersionTracker *objv_tracker,
                          RGWMDLogStatus op_type);
   virtual int post_modify(Context *ctx,
+                          const std::string& key,
                           RGWMetadataLogData& log_data,
                           RGWObjVersionTracker *objv_tracker, int ret);
 public:
@@ -74,10 +70,6 @@ public:
      */
   public:
     virtual ~Module() = 0;
-    /* key to use for hashing entries for log shard placement */
-    virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
-      hash_key = section + ":" + key;
-    }
   };
 
   using ModuleRef = std::shared_ptr<Module>;
@@ -89,14 +81,7 @@ public:
                     */
     virtual ~Context() = 0;
 
-    RGWSI_MetaBackend_Handle handle;
-    Module *module{nullptr};
-    std::string section;
-    std::string key;
-
-    virtual void set_key(const string& _key) {
-      key = _key;
-    }
+    virtual void init(RGWSI_MetaBackend_Handler *h) = 0;
   };
 
   struct PutParams {
@@ -131,40 +116,93 @@ public:
 
   virtual Type get_type() = 0;
 
-  virtual void init_ctx(RGWSI_MetaBackend_Handle handle, Context *ctx) = 0;
-
+  virtual RGWSI_MetaBackend_Handler *alloc_be_handler() = 0;
   virtual GetParams *alloc_default_get_params(ceph::real_time *pmtime) = 0;
 
   /* these should be implemented by backends */
   virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
+                        const std::string& key,
                         RGWSI_MetaBackend::GetParams& params,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y) = 0;
   virtual int put_entry(RGWSI_MetaBackend::Context *ctx,
+                        const std::string& key,
                         RGWSI_MetaBackend::PutParams& params,
                         RGWObjVersionTracker *objv_tracker,
                         optional_yield y) = 0;
   virtual int remove_entry(Context *ctx,
+                           const std::string& key,
                            RGWSI_MetaBackend::RemoveParams& params,
                            RGWObjVersionTracker *objv_tracker,
                            optional_yield y) = 0;
 
-  /* these should be called by handlers */
+  virtual int call(std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
+
+  /* higher level */
   virtual int get(Context *ctx,
+                  const std::string& key,
                   GetParams &params,
                   RGWObjVersionTracker *objv_tracker,
                   optional_yield y);
 
   virtual int put(Context *ctx,
+                  const std::string& key,
                   PutParams& params,
                   RGWObjVersionTracker *objv_tracker,
                   optional_yield y,
                   RGWMDLogSyncType sync_mode);
 
   virtual int remove(Context *ctx,
+                     const std::string& key,
                      RemoveParams& params,
                      RGWObjVersionTracker *objv_tracker,
                      optional_yield y,
                      RGWMDLogSyncType sync_mode);
+
+};
+
+class RGWSI_MetaBackend_Handler {
+  RGWSI_MetaBackend *be{nullptr};
+
+public:
+  class Op {
+    friend class RGWSI_MetaBackend_Handler;
+
+    RGWSI_MetaBackend *be;
+    RGWSI_MetaBackend::Context *be_ctx;
+
+    Op(RGWSI_MetaBackend *_be,
+       RGWSI_MetaBackend::Context *_ctx) : be(_be), be_ctx(_ctx) {}
+
+  public:
+    RGWSI_MetaBackend::Context *ctx() {
+      return be_ctx;
+    }
+
+    int get(const std::string& key,
+            RGWSI_MetaBackend::GetParams &params,
+            RGWObjVersionTracker *objv_tracker) {
+      return be->get(be_ctx, key, params, objv_tracker);
+    }
+
+    int put(const std::string& key,
+            RGWSI_MetaBackend::PutParams& params,
+            RGWObjVersionTracker *objv_tracker,
+            RGWMDLogSyncType sync_mode) {
+      return be->put(be_ctx, key, params, objv_tracker, sync_mode);
+    }
+
+    int remove(const std::string& key,
+               RGWSI_MetaBackend::RemoveParams& params,
+               RGWObjVersionTracker *objv_tracker,
+               RGWMDLogSyncType sync_mode) {
+      return be->remove(be_ctx, key, params, objv_tracker, sync_mode);
+    }
+  };
+
+  RGWSI_MetaBackend_Handler(RGWSI_MetaBackend *_be) : be(_be) {}
+  virtual ~RGWSI_MetaBackend_Handler() {}
+
+  virtual int call(std::function<int(Op *)> f);
 };
 
