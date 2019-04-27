@@ -95,6 +95,9 @@ struct C_AioCompletion : public Context {
     aio_comp->init_time(ictx, aio_type);
     aio_comp->get();
   }
+  virtual ~C_AioCompletion() {
+    aio_comp->put();
+  }
 
   void finish(int r) override {
     ldout(cct, 20) << "C_AioComplete::finish: r=" << r << dendl;
@@ -102,7 +105,6 @@ struct C_AioCompletion : public Context {
       aio_comp->fail(r);
     } else {
       aio_comp->complete();
-      aio_comp->put();
     }
   }
 };

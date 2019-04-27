@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "common/zipkin_trace.h"
+#include "librbd/io/AioCompletion.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/ReadResult.h"
 #include <boost/variant/variant.hpp>
@@ -16,8 +17,6 @@ namespace librbd {
 class ImageCtx;
 
 namespace io {
-
-class AioCompletion;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageDispatchSpec {
@@ -122,6 +121,10 @@ public:
                                  0, parent_trace);
   }
 
+  ~ImageDispatchSpec() {
+    m_aio_comp->put();
+  }
+
   void send();
   void fail(int r);
 
@@ -161,6 +164,7 @@ private:
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(std::move(image_extents)), m_request(std::move(request)),
       m_op_flags(op_flags), m_parent_trace(parent_trace) {
+    m_aio_comp->get();
   }
 
   ImageCtxT& m_image_ctx;
