@@ -141,10 +141,6 @@ class TestRecoveryPool(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
 
-        def get_state(mds_id):
-            info = self.mds_cluster.get_mds_info(mds_id)
-            return info['state'] if info is not None else None
-
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "inode"])
@@ -153,7 +149,7 @@ class TestRecoveryPool(CephFSTestCase):
         if False:
             with self.assertRaises(CommandFailedError):
                 # Normal reset should fail when no objects are present, we'll use --force instead
-                self.fs.journal_tool(["journal", "reset"])
+                self.fs.journal_tool(["journal", "reset"], 0)
 
         self.fs.mds_stop()
         self.fs.data_scan(['scan_extents', '--alternate-pool',
@@ -163,22 +159,18 @@ class TestRecoveryPool(CephFSTestCase):
                            recovery_pool, '--filesystem', self.fs.name,
                            '--force-corrupt', '--force-init',
                            self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                              'recover_dentries', 'list',
-                              '--alternate-pool', recovery_pool])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list',
+                              '--alternate-pool', recovery_pool], 0)
 
         self.fs.data_scan(['init', '--force-init', '--filesystem',
                            self.fs.name])
         self.fs.data_scan(['scan_inodes', '--filesystem', self.fs.name,
                            '--force-corrupt', '--force-init',
                            self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                              'recover_dentries', 'list'])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list'], 0)
 
-        self.fs.journal_tool(['--rank=' + recovery_fs + ":0", 'journal',
-                              'reset', '--force'])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'journal',
-                              'reset', '--force'])
+        self.recovery_fs.journal_tool(['journal', 'reset', '--force'], 0)
+        self.fs.journal_tool(['journal', 'reset', '--force'], 0)
         self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired',
                                             recovery_fs + ":0")
 
@@ -190,12 +182,11 @@ class TestRecoveryPool(CephFSTestCase):
         self.recovery_fs.mds_restart()
         self.fs.wait_for_daemons()
         self.recovery_fs.wait_for_daemons()
-        for mds_id in self.recovery_fs.mds_ids:
-            self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + mds_id,
+        status = self.recovery_fs.status()
+        for rank in self.recovery_fs.get_ranks(status=status):
+            self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + rank['name'],
                                                 'injectargs', '--debug-mds=20')
-            self.fs.mon_manager.raw_cluster_cmd('daemon', "mds." + mds_id,
-                                                'scrub_path', '/',
-                                                'recursive', 'repair')
+            self.fs.rank_tell(['scrub', 'start', '/', 'recursive', 'repair'], rank=rank['rank'], status=status)
         log.info(str(self.mds_cluster.status()))
 
         # Mount a client

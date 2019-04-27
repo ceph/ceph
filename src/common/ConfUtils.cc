@@ -163,7 +163,7 @@ parse_bufferlist(ceph::bufferlist *bl, std::deque<std::string> *errors,
 }
 
 int ConfFile::
-read(const std::string &section, const std::string &key, std::string &val) const
+read(const std::string &section, const std::string_view key, std::string &val) const
 {
   string k(normalize_key_name(key));
 
@@ -250,13 +250,12 @@ trim_whitespace(std::string &str, bool strip_internal)
  * the field names of md_config_t and get a key in normal form.
  */
 std::string ConfFile::
-normalize_key_name(const std::string &key)
+normalize_key_name(std::string_view key)
 {
-  if (key.find_first_of(" \t\r\n\f\v\xa0") == string::npos) {
-    return key;
+  std::string k{key};
+  if (k.find_first_of(" \t\r\n\f\v\xa0") == k.npos) {
+    return k;
   }
-
-  string k(key);
   ConfFile::trim_whitespace(k, true);
   std::replace(k.begin(), k.end(), ' ', '_');
   return k;
@@ -285,7 +284,7 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 
   section_iter_t::value_type vt("global", ConfSection());
   pair < section_iter_t, bool > vr(sections.insert(vt));
-  assert(vr.second);
+  ceph_assert(vr.second);
   section_iter_t cur_section = vr.first;
   std::string acc;
 
@@ -589,6 +588,6 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	ceph_abort();
 	break;
     }
-    assert(c != '\0'); // We better not go past the end of the input string.
+    ceph_assert(c != '\0'); // We better not go past the end of the input string.
   }
 }

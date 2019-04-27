@@ -7,10 +7,11 @@ the single-call helper
 import os
 import logging
 import json
-from ceph_volume import process, conf
-from ceph_volume.util import system, constants
+from ceph_volume import process, conf, __release__, terminal
+from ceph_volume.util import system, constants, str_to_int, disk
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 
 def create_key():
@@ -47,6 +48,97 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     system.chown(osd_keyring)
 
 
+def get_journal_size(lv_format=True):
+    """
+    Helper to retrieve the size (defined in megabytes in ceph.conf) to create
+    the journal logical volume, it "translates" the string into a float value,
+    then converts that into gigabytes, and finally (optionally) it formats it
+    back as a string so that it can be used for creating the LV.
+
+    :param lv_format: Return a string to be used for ``lv_create``. A 5 GB size
+    would result in '5G', otherwise it will return a ``Size`` object.
+    """
+    conf_journal_size = conf.ceph.get_safe('osd', 'osd_journal_size', '5120')
+    logger.debug('osd_journal_size set to %s' % conf_journal_size)
+    journal_size = disk.Size(mb=str_to_int(conf_journal_size))
+
+    if journal_size < disk.Size(gb=2):
+        mlogger.error('Refusing to continue with configured size for journal')
+        raise RuntimeError('journal sizes must be larger than 2GB, detected: %s' % journal_size)
+    if lv_format:
+        return '%sG' % journal_size.gb.as_int()
+    return journal_size
+
+
+def get_block_db_size(lv_format=True):
+    """
+    Helper to retrieve the size (defined in megabytes in ceph.conf) to create
+    the block.db logical volume, it "translates" the string into a float value,
+    then converts that into gigabytes, and finally (optionally) it formats it
+    back as a string so that it can be used for creating the LV.
+
+    :param lv_format: Return a string to be used for ``lv_create``. A 5 GB size
+    would result in '5G', otherwise it will return a ``Size`` object.
+
+    .. note: Configuration values are in bytes, unlike journals which
+             are defined in gigabytes
+    """
+    conf_db_size = None
+    try:
+        conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
+    except RuntimeError:
+        logger.exception("failed to load ceph configuration, will use defaults")
+
+    if not conf_db_size:
+        logger.debug(
+            'block.db has no size configuration, will fallback to using as much as possible'
+        )
+        return None
+    logger.debug('bluestore_block_db_size set to %s' % conf_db_size)
+    db_size = disk.Size(b=str_to_int(conf_db_size))
+
+    if db_size < disk.Size(gb=2):
+        mlogger.error('Refusing to continue with configured size for block.db')
+        raise RuntimeError('block.db sizes must be larger than 2GB, detected: %s' % db_size)
+    if lv_format:
+        return '%sG' % db_size.gb.as_int()
+    return db_size
+
+def get_block_wal_size(lv_format=True):
+    """
+    Helper to retrieve the size (defined in megabytes in ceph.conf) to create
+    the block.wal logical volume, it "translates" the string into a float value,
+    then converts that into gigabytes, and finally (optionally) it formats it
+    back as a string so that it can be used for creating the LV.
+
+    :param lv_format: Return a string to be used for ``lv_create``. A 5 GB size
+    would result in '5G', otherwise it will return a ``Size`` object.
+
+    .. note: Configuration values are in bytes, unlike journals which
+             are defined in gigabytes
+    """
+    conf_wal_size = None
+    try:
+        conf_wal_size = conf.ceph.get_safe('osd', 'bluestore_block_wal_size', None)
+    except RuntimeError:
+        logger.exception("failed to load ceph configuration, will use defaults")
+
+    if not conf_wal_size:
+        logger.debug(
+            'block.wal has no size configuration, will fallback to using as much as possible'
+        )
+        return None
+    logger.debug('bluestore_block_wal_size set to %s' % conf_wal_size)
+    wal_size = disk.Size(b=str_to_int(conf_wal_size))
+
+    if wal_size < disk.Size(gb=2):
+        mlogger.error('Refusing to continue with configured size for block.wal')
+        raise RuntimeError('block.wal sizes must be larger than 2GB, detected: %s' % wal_size)
+    if lv_format:
+        return '%sG' % wal_size.gb.as_int()
+    return wal_size
+
+
 def create_id(fsid, json_secrets, osd_id=None):
     """
     :param fsid: The osd fsid to create, always required
@@ -64,8 +156,11 @@ def create_id(fsid, json_secrets, osd_id=None):
         '-i', '-',
         'osd', 'new', fsid
     ]
-    if check_id(osd_id):
-        cmd.append(osd_id)
+    if osd_id is not None:
+        if osd_id_available(osd_id):
+            cmd.append(osd_id)
+        else:
+            raise RuntimeError("The osd ID {} is already in use or does not exist.".format(osd_id))
     stdout, stderr, returncode = process.call(
         cmd,
         stdin=json_secrets,
@@ -76,10 +171,10 @@ def create_id(fsid, json_secrets, osd_id=None):
     return ' '.join(stdout).strip()
 
 
-def check_id(osd_id):
+def osd_id_available(osd_id):
     """
-    Checks to see if an osd ID exists or not. Returns True
-    if it does exist, False if it doesn't.
+    Checks to see if an osd ID exists and if it's available for
+    reuse. Returns True if it is, False if it isn't.
 
     :param osd_id: The osd ID to check
     """
@@ -103,7 +198,10 @@ def check_id(osd_id):
 
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
-    return any([str(osd['id']) == str(osd_id) for osd in osds])
+    osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
+    if osd and osd[0].get('status') == "destroyed":
+        return True
+    return False
 
 
 def mount_tmpfs(path):
@@ -113,6 +211,9 @@ def mount_tmpfs(path):
         'tmpfs', 'tmpfs',
         path
     ])
+
+    # Restore SELinux context
+    system.set_context(path)
 
 
 def create_osd_path(osd_id, tmpfs=False):
@@ -144,7 +245,7 @@ def format_device(device):
     process.run(command)
 
 
-def _normalize_mount_flags(flags):
+def _normalize_mount_flags(flags, extras=None):
     """
     Mount flag options have to be a single string, separated by a comma. If the
     flags are separated by spaces, or with commas and spaces in ceph.conf, the
@@ -159,20 +260,45 @@ def _normalize_mount_flags(flags):
         [" rw ,", "exec"]
 
     :param flags: A list of flags, or a single string of mount flags
+    :param extras: Extra set of mount flags, useful when custom devices like VDO need
+                   ad-hoc mount configurations
     """
+    # Instead of using set(), we append to this new list here, because set()
+    # will create an arbitrary order on the items that is made worst when
+    # testing with tools like tox that includes a randomizer seed. By
+    # controlling the order, it is easier to correctly assert the expectation
+    unique_flags = []
     if isinstance(flags, list):
+        if extras:
+            flags.extend(extras)
+
         # ensure that spaces and commas are removed so that they can join
-        # correctly
-        return ','.join([f.strip().strip(',') for f in flags if f])
+        # correctly, remove duplicates
+        for f in flags:
+            if f and f not in unique_flags:
+                unique_flags.append(f.strip().strip(','))
+        return ','.join(unique_flags)
 
     # split them, clean them, and join them back again
     flags = flags.strip().split(' ')
-    return ','.join(
-        [f.strip().strip(',') for f in flags if f]
-    )
+    if extras:
+        flags.extend(extras)
+
+    # remove possible duplicates
+    for f in flags:
+        if f and f not in unique_flags:
+            unique_flags.append(f.strip().strip(','))
+    flags = ','.join(unique_flags)
+    # Before returning, split them again, since strings can be mashed up
+    # together, preventing removal of duplicate entries
+    return ','.join(set(flags.split(',')))
 
 
-def mount_osd(device, osd_id):
+def mount_osd(device, osd_id, **kw):
+    extras = []
+    is_vdo = kw.get('is_vdo', '0')
+    if is_vdo == '1':
+        extras = ['discard']
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
@@ -181,10 +307,15 @@ def mount_osd(device, osd_id):
         default=constants.mount.get('xfs'),
         split=' ',
     )
-    command.append(_normalize_mount_flags(flags))
+    command.append(
+        _normalize_mount_flags(flags, extras=extras)
+    )
     command.append(device)
     command.append(destination)
     process.run(command)
+
+    # Restore SELinux context
+    system.set_context(destination)
 
 
 def _link_device(device, device_type, osd_id):
@@ -254,7 +385,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
                    --setuser ceph --setgroup ceph
 
     In some cases it is required to use the keyring, when it is passed in as
-    a keywork argument it is used as part of the ceph-osd command
+    a keyword argument it is used as part of the ceph-osd command
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
     monmap = os.path.join(path, 'activate.monmap')
@@ -264,7 +395,6 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     base_command = [
         'ceph-osd',
         '--cluster', conf.cluster,
-        # undocumented flag, sets the `type` file to contain 'bluestore'
         '--osd-objectstore', 'bluestore',
         '--mkfs',
         '-i', osd_id,
@@ -295,10 +425,12 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     command = base_command + supplementary_command
 
-    process.call(command, stdin=keyring, show_command=True)
+    _, _, returncode = process.call(command, stdin=keyring, show_command=True)
+    if returncode != 0:
+        raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
 
 
-def osd_mkfs_filestore(osd_id, fsid):
+def osd_mkfs_filestore(osd_id, fsid, keyring):
     """
     Create the files for the OSD to function. A normal call will look like:
 
@@ -318,17 +450,29 @@ def osd_mkfs_filestore(osd_id, fsid):
     system.chown(journal)
     system.chown(path)
 
-    process.run([
+    command = [
         'ceph-osd',
         '--cluster', conf.cluster,
-        # undocumented flag, sets the `type` file to contain 'filestore'
         '--osd-objectstore', 'filestore',
         '--mkfs',
         '-i', osd_id,
         '--monmap', monmap,
+    ]
+
+    if __release__ != 'luminous':
+        # goes through stdin
+        command.extend(['--keyfile', '-'])
+
+    command.extend([
         '--osd-data', path,
         '--osd-journal', journal,
         '--osd-uuid', fsid,
         '--setuser', 'ceph',
         '--setgroup', 'ceph'
     ])
+
+    _, _, returncode = process.call(
+        command, stdin=keyring, terminal_verbose=True, show_command=True
+    )
+    if returncode != 0:
+        raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))

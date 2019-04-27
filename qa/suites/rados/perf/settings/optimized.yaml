@@ -1,6 +1,15 @@
 overrides:
   ceph:
     conf:
+      mon:
+        debug mon: "0/0"
+        debug ms: "0/0"
+        debug paxos: "0/0"
+      osd:
+        debug filestore: "0/0"
+        debug journal: "0/0"
+        debug ms: "0/0"
+        debug osd: "0/0"
       global:
         auth client required: none
         auth cluster required: none
@@ -50,7 +59,6 @@ overrides:
         debug asok: "0/0"
         debug throttle: "0/0"
         debug refs: "0/0"
-        debug xio: "0/0"
         debug compressor: "0/0"
         debug bluestore: "0/0"
         debug bluefs: "0/0"

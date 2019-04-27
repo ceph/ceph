@@ -7,6 +7,7 @@ crushtool -o crushmap --build --num_osds 10 host straw 2 rack straw 2 row straw 
 ceph osd setcrushmap -i crushmap
 ceph osd tree
 ceph tell osd.* injectargs --osd_max_markdown_count 1024 --osd_max_markdown_period 1
+ceph osd set noout
 
 wait_for_healthy() {
   while ceph health | grep down

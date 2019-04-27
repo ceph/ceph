@@ -14,7 +14,7 @@ to read something, but it's corrupt so we can't, or we scrubbed a PG but
 the data was inconsistent so we can't recover.
 
 Use WRN for incidents that the cluster can handle, but have some abnormal/negative
-aspect, such as a temporary degredation of service, or an unexpected internal
+aspect, such as a temporary degradation of service, or an unexpected internal
 value.  For example, a metadata error that can be auto-fixed, or a slow operation.
 
 Use INFO for ordinary cluster operations that do not indicate a fault in

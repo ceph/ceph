@@ -5,16 +5,16 @@
 
 
 class MGatherCaps : public Message {
- public:
+public:
   inodeno_t ino;
 
+protected:
   MGatherCaps() :
-    Message(MSG_MDS_GATHERCAPS) {}
-private:
+    Message{MSG_MDS_GATHERCAPS} {}
   ~MGatherCaps() override {}
 
 public:
-  const char *get_type_name() const override { return "gather_caps"; }
+  std::string_view get_type_name() const override { return "gather_caps"; }
   void print(ostream& o) const override {
     o << "gather_caps(" << ino << ")";
   }
@@ -25,10 +25,12 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

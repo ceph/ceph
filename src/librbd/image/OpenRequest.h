@@ -19,9 +19,9 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class OpenRequest {
 public:
-  static OpenRequest *create(ImageCtxT *image_ctx, bool skip_open_parent,
+  static OpenRequest *create(ImageCtxT *image_ctx, uint64_t flags,
                              Context *on_finish) {
-    return new OpenRequest(image_ctx, skip_open_parent, on_finish);
+    return new OpenRequest(image_ctx, flags, on_finish);
   }
 
   void send();
@@ -42,7 +42,7 @@ private:
    *                v                               |
    *            V2_GET_ID|NAME                      |
    *                |                               |
-   *                v                               |
+   *                v (skip if have name)           |
    *            V2_GET_NAME_FROM_TRASH              |
    *                |                               |
    *                v                               |
@@ -55,7 +55,13 @@ private:
    *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
+   *            V2_GET_ACCESS_MODIFIY_TIMESTAMP     |
+   *                |                               |
+   *                v                               |
    *            V2_GET_DATA_POOL --------------> REFRESH
+   *                                                |
+   *                                                v
+   *                                             INIT_CACHE
    *                                                |
    *                                                v
    *                                             REGISTER_WATCH (skip if
@@ -72,7 +78,7 @@ private:
    * @endverbatim
    */
 
-  OpenRequest(ImageCtxT *image_ctx, bool skip_open_parent, Context *on_finish);
+  OpenRequest(ImageCtxT *image_ctx, uint64_t flags, Context *on_finish);
 
   ImageCtxT *m_image_ctx;
   bool m_skip_open_parent_image;
@@ -105,17 +111,24 @@ private:
   void send_v2_get_create_timestamp();
   Context *handle_v2_get_create_timestamp(int *result);
 
+  void send_v2_get_access_modify_timestamp();
+  Context *handle_v2_get_access_modify_timestamp(int *result);
+
   void send_v2_get_data_pool();
   Context *handle_v2_get_data_pool(int *result);
 
   void send_refresh();
   Context *handle_refresh(int *result);
 
+  Context *send_init_cache(int *result);
+
   Context *send_register_watch(int *result);
   Context *handle_register_watch(int *result);
 
   Context *send_set_snap(int *result);
   Context *handle_set_snap(int *result);
+
+  Context *finalize(int r);
 
   void send_close_image(int error_result);
   Context *handle_close_image(int *result);

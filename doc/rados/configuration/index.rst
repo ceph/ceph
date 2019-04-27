@@ -2,26 +2,12 @@
  Configuration
 ===============
 
-Ceph can run with a cluster containing thousands of Object Storage Devices
-(OSDs). A minimal system will have at least two OSDs for data replication. To
-configure OSD clusters, you must provide settings in the configuration file.
-Ceph provides default values for many settings, which you can override in the
-configuration file. Additionally, you can make runtime modification to the
-configuration using command-line utilities.
-
-When Ceph starts, it activates three daemons:
-
-- ``ceph-mon`` (mandatory)
-- ``ceph-osd`` (mandatory)
-- ``ceph-mds`` (mandatory for cephfs only)
-
-Each process, daemon or utility loads the host's configuration file. A process
-may have information about more than one daemon instance (*i.e.,* multiple
-contexts). A daemon or utility only has information about a single daemon
-instance (a single context).
-
-.. note:: Ceph can run on a single host for evaluation purposes.
-
+Each Ceph process, daemon or utility draws its configuration from
+several sources on startup, include a local configuration, the
+monitors, the command line, or environment variables.  Configuration
+options may be set globally such that they apply to all daemons, to
+all daemons or services of a particular type, or only to a specific
+daemon, process, or client.
 
 .. raw:: html
 
@@ -45,7 +31,9 @@ To optimize the performance of your cluster, refer to the following:
 .. toctree::
    :maxdepth: 1
 
+   Common Settings <common>
    Network Settings <network-config-ref>
+   Messenger v2 protocol <msgr2>
    Auth Settings <auth-config-ref>
    Monitor Settings <mon-config-ref>
    mon-lookup-dns

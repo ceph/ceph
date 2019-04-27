@@ -1,8 +1,13 @@
 roles:
-- [mon.a, mgr.y, mds.a, osd.0, osd.1, osd.2, osd.3]
-- [mon.b, mon.c, mgr.x, mds.a-s, osd.4, osd.5, osd.6, osd.7]
+- [mon.a, mgr.y, mds.a, mds.c, osd.0, osd.1, osd.2, osd.3]
+- [mon.b, mon.c, mgr.x, mds.b, osd.4, osd.5, osd.6, osd.7]
 - [client.0]
 openstack:
 - volumes: # attached to each instance
     count: 4
-    size: 10 # GB
+    size: 20 # GB
+- machine:
+    disk: 200 # GB
+log-rotate:
+  ceph-mds: 10G
+  ceph-osd: 10G

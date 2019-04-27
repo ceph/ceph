@@ -28,15 +28,15 @@
 
 void ClassHandler::add_embedded_class(const string& cname)
 {
-  assert(mutex.is_locked());
+  ceph_assert(mutex.is_locked());
   ClassData *cls = _get_class(cname, false);
-  assert(cls->status == ClassData::CLASS_UNKNOWN);
+  ceph_assert(cls->status == ClassData::CLASS_UNKNOWN);
   cls->status = ClassData::CLASS_INITIALIZING;
 }
 
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock(mutex);
   ClassData *cls = _get_class(cname, true);
   if (!cls)
     return -EPERM;
@@ -211,7 +211,7 @@ int ClassHandler::_load_class(ClassData *cls)
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
-  assert(mutex.is_locked());
+  ceph_assert(mutex.is_locked());
 
   ClassData *cls = _get_class(cname, false);
   ldout(cct, 10) << "register_class " << cname << " status " << cls->status << dendl;
@@ -283,7 +283,7 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::_get_method(const char *mnam
 
 int ClassHandler::ClassData::get_method_flags(const char *mname)
 {
-  Mutex::Locker l(handler->mutex);
+  std::lock_guard l(handler->mutex);
   ClassMethod *method = _get_method(mname);
   if (!method)
     return -ENOENT;

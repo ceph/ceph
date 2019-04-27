@@ -23,11 +23,11 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/Finisher.h"
 #include "common/RWLock.h"
+#include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
 #include "common/perf_counters.h"
@@ -175,7 +175,7 @@ public:
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
+    int next() override;
     string key() override;
     bufferlist value() override;
     int status() override {
@@ -267,7 +267,7 @@ public:
     q_list_t q;  ///< transactions
 
     ~OpSequencer() {
-      assert(q.empty());
+      ceph_assert(q.empty());
     }
 
     void queue_new(TransContext *txc) {
@@ -290,7 +290,7 @@ public:
       if (txc->state >= TransContext::STATE_KV_DONE) {
 	return true;
       }
-      assert(txc->state < TransContext::STATE_KV_DONE);
+      ceph_assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
     }
@@ -310,6 +310,7 @@ public:
 private:
   KeyValueDB *db;
   uuid_d fsid;
+  string basedir;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
@@ -435,11 +436,18 @@ public:
     logger->dump_formatted(f, false);
     f->close_section();
   }
-
-  int statfs(struct store_statfs_t *buf) override;
+  void get_db_statistics(Formatter *f) override {
+    db->get_statistics(f);
+  }
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   using ObjectStore::exists;
   bool exists(CollectionHandle& c, const ghobject_t& oid) override;
@@ -559,7 +567,7 @@ public:
     ThreadPool::TPHandle *handle = NULL) override;
 
   void compact () override {
-    assert(db);
+    ceph_assert(db);
     db->compact();
   }
   
@@ -628,7 +636,7 @@ private:
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   bufferlist& bl);
+		   const bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,
@@ -660,6 +668,10 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
 
 };
 

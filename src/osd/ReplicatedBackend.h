@@ -15,9 +15,7 @@
 #ifndef REPBACKEND_H
 #define REPBACKEND_H
 
-#include "OSD.h"
 #include "PGBackend.h"
-#include "include/memory.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
@@ -29,7 +27,7 @@ class ReplicatedBackend : public PGBackend {
 public:
   ReplicatedBackend(
     PGBackend::Listener *pg,
-    coll_t coll,
+    const coll_t &coll,
     ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct);
@@ -104,7 +102,7 @@ public:
 	       j != i->second.end();
 	       ++j) {
 	    f->open_object_section("pull_info");
-	    assert(pulling.count(*j));
+	    ceph_assert(pulling.count(*j));
 	    pulling.find(*j)->second.dump(f);
 	    f->close_section();
 	  }
@@ -246,7 +244,7 @@ private:
     list<pull_complete_info> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(pg_shard_t from, const PushOp &op, PushReplyOp *response,
-		   ObjectStore::Transaction *t);
+		   ObjectStore::Transaction *t, bool is_repair);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
@@ -327,7 +325,7 @@ private:
   /**
    * Client IO
    */
-  struct InProgressOp {
+  struct InProgressOp : public RefCountedObject {
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
     Context *on_commit;
@@ -336,13 +334,15 @@ private:
     InProgressOp(
       ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
-      : tid(tid), on_commit(on_commit),
+      : RefCountedObject(nullptr, 0),
+	tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
     bool done() const {
       return waiting_for_commit.empty();
     }
   };
-  map<ceph_tid_t, InProgressOp> in_progress_ops;
+  typedef boost::intrusive_ptr<InProgressOp> InProgressOpRef;
+  map<ceph_tid_t, InProgressOpRef> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -395,7 +395,7 @@ private:
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
-  void op_commit(InProgressOp *op);
+  void op_commit(InProgressOpRef& op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
 
@@ -411,12 +411,12 @@ private:
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
   };
-  typedef ceph::shared_ptr<RepModify> RepModifyRef;
+  typedef std::shared_ptr<RepModify> RepModifyRef;
 
   struct C_OSD_RepModifyCommit;
 
   void repop_commit(RepModifyRef rm);
-  bool auto_repair_supported() const override { return false; }
+  bool auto_repair_supported() const override { return store->has_builtin_csum(); }
 
 
   int be_deep_scrub(

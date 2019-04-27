@@ -17,25 +17,30 @@
 
 #include <atomic>
 
-#include "os/fs/FS.h"
+#include "include/types.h"
 #include "include/interval_set.h"
+#include "common/Thread.h"
+#include "include/utime.h"
 
-#include "aio.h"
+#include "ceph_aio.h"
 #include "BlockDevice.h"
 
 class KernelDevice : public BlockDevice {
-  int fd_direct, fd_buffered;
+  std::vector<int> fd_directs, fd_buffereds;
+  bool enable_wrt = true;
   std::string path;
-  FS *fs;
   bool aio, dio;
+
+  int vdo_fd = -1;      ///< fd for vdo sysfs directory
+  string vdo_name;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
-  Mutex debug_lock;
+  ceph::mutex debug_lock = ceph::make_mutex("KernelDevice::debug_lock");
   interval_set<uint64_t> debug_inflight;
 
   std::atomic<bool> io_since_flush = {false};
-  std::mutex flush_mutex;
+  ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
 
   aio_queue_t aio_queue;
   aio_callback_t discard_callback;
@@ -44,8 +49,8 @@ class KernelDevice : public BlockDevice {
   bool discard_started;
   bool discard_stop;
 
-  std::mutex discard_lock;
-  std::condition_variable discard_cond;
+  ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
+  ceph::condition_variable discard_cond;
   bool discard_running = false;
   interval_set<uint64_t> discard_queued;
   interval_set<uint64_t> discard_finishing;
@@ -83,7 +88,7 @@ class KernelDevice : public BlockDevice {
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
-  int _sync_write(uint64_t off, bufferlist& bl, bool buffered);
+  int _sync_write(uint64_t off, bufferlist& bl, bool buffered, int write_hint);
 
   int _lock();
 
@@ -91,11 +96,14 @@ class KernelDevice : public BlockDevice {
 
   // stalled aio debugging
   aio_list_t debug_queue;
-  std::mutex debug_queue_lock;
+  ceph::mutex debug_queue_lock = ceph::make_mutex("KernelDevice::debug_queue_lock");
   aio_t *debug_oldest = nullptr;
   utime_t debug_stall_since;
   void debug_aio_link(aio_t& aio);
   void debug_aio_unlink(aio_t& aio);
+
+  void _detect_vdo();
+  int choose_fd(bool buffered, int write_hint) const;
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
@@ -113,6 +121,8 @@ public:
   }
   int get_devices(std::set<std::string> *ls) override;
 
+  bool get_thin_utilization(uint64_t *total, uint64_t *avail) const override;
+
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered) override;
@@ -120,10 +130,11 @@ public:
 	       IOContext *ioc) override;
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
 
-  int write(uint64_t off, bufferlist& bl, bool buffered) override;
+  int write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
   int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc,
-		bool buffered) override;
+		bool buffered,
+		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
   int discard(uint64_t offset, uint64_t len) override;
 

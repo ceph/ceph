@@ -12,7 +12,7 @@
 // for now name it for its sole application.
 
 class MOSDFull : public PaxosServiceMessage {
- public:
+public:
   epoch_t map_epoch = 0;
   uint32_t state = 0;
 
@@ -21,9 +21,9 @@ private:
 
 public:
   MOSDFull(epoch_t e, unsigned s)
-    : PaxosServiceMessage(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
+    : PaxosServiceMessage{MSG_OSD_FULL, e}, map_epoch(e), state(s) { }
   MOSDFull()
-    : PaxosServiceMessage(MSG_OSD_FULL, 0) {}
+    : PaxosServiceMessage{MSG_OSD_FULL, 0} {}
 
 public:
   void encode_payload(uint64_t features) {
@@ -33,19 +33,21 @@ public:
     encode(state, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
     decode(state, p);
   }
 
-  const char *get_type_name() const { return "osd_full"; }
+  std::string_view get_type_name() const { return "osd_full"; }
   void print(ostream &out) const {
     set<string> states;
     OSDMap::calc_state_set(state, states);
     out << "osd_full(e" << map_epoch << " " << states << " v" << version << ")";
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

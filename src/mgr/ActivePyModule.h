@@ -43,7 +43,7 @@ private:
   std::string uri;
 
 public:
-  ActivePyModule(PyModuleRef py_module_,
+  ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : PyModuleRunner(py_module_, clog_)
   {}
@@ -52,15 +52,31 @@ public:
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
 
+  bool method_exists(const std::string &method) const;
+
+  PyObject *dispatch_remote(
+      const std::string &method,
+      PyObject *args,
+      PyObject *kwargs,
+      std::string *err);
+
   int handle_command(
     const cmdmap_t &cmdmap,
+    const bufferlist &inbuf,
     std::stringstream *ds,
     std::stringstream *ss);
 
-  void set_health_checks(health_check_map_t&& c) {
+
+  bool set_health_checks(health_check_map_t&& c) {
+    // when health checks change a report is immediately sent to the monitors.
+    // currently modules have static health check details, but this equality
+    // test could be made smarter if too much noise shows up in the future.
+    bool changed = health_checks != c;
     health_checks = std::move(c);
+    return changed;
   }
   void get_health_checks(health_check_map_t *checks);
+  void config_notify();
 
   void set_uri(const std::string &str)
   {

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <errno.h>
 
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using namespace librados;

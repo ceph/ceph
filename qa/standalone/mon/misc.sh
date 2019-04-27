@@ -39,7 +39,6 @@ function TEST_osd_pool_get_set() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
-    create_rbd_pool || return 1
     create_pool $TEST_POOL 8
 
     local flag
@@ -125,8 +124,12 @@ function TEST_mon_add_to_single_mon() {
     # without the fix of #5454, mon.a will assert failure at seeing the MMonJoin
     # from mon.b
     run_mon $dir b --public-addr $MONB || return 1
+    # make sure mon.b get's it's join request in first, then
+    sleep 2
     # wait for the quorum
     timeout 120 ceph -s > /dev/null || return 1
+    ceph mon dump
+    ceph mon dump -f json-pretty
     local num_mons
     num_mons=$(ceph mon dump --format=json 2>/dev/null | jq ".mons | length") || return 1
     [ $num_mons == 2 ] || return 1
@@ -169,7 +172,7 @@ function TEST_mon_features() {
     CEPH_ARGS+="--mon-initial-members=a,b,c "
     CEPH_ARGS+="--mon-host=$MONA,$MONB,$MONC "
     CEPH_ARGS+="--mon-debug-no-initial-persistent-features "
-    CEPH_ARGS+="--mon-debug-no-require-mimic "
+    CEPH_ARGS+="--mon-debug-no-require-nautilus "
 
     run_mon $dir a --public-addr $MONA || return 1
     run_mon $dir b --public-addr $MONB || return 1
@@ -180,13 +183,15 @@ function TEST_mon_features() {
     jq_success "$jqinput" '.monmap.mons | length == 3' || return 1
     # quorum contains two monitors
     jq_success "$jqinput" '.quorum | length == 2' || return 1
-    # quorum's monitor features contain kraken, luminous, and mimic
+    # quorum's monitor features contain kraken, luminous, mimic, and nautilus
     jqfilter='.features.quorum_mon[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.features.quorum_mon[]|select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
     jqfilter='.features.quorum_mon[]|select(. == "mimic")'
     jq_success "$jqinput" "$jqfilter" "mimic" || return 1
+    jqfilter='.features.quorum_mon[]|select(. == "nautilus")'
+    jq_success "$jqinput" "$jqfilter" "nautilus" || return 1
 
     # monmap must have no persistent features set, because we
     # don't currently have a quorum made out of all the monitors
@@ -201,13 +206,15 @@ function TEST_mon_features() {
     # validate 'mon feature ls'
 
     jqinput="$(ceph mon feature ls --format=json 2>/dev/null)"
-    # k l m are supported
+    # k l m n are supported
     jqfilter='.all.supported[] | select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
     jqfilter='.all.supported[] | select(. == "luminous")'
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
     jqfilter='.all.supported[] | select(. == "mimic")'
     jq_success "$jqinput" "$jqfilter" "mimic" || return 1
+    jqfilter='.all.supported[] | select(. == "nautilus")'
+    jq_success "$jqinput" "$jqfilter" "nautilus" || return 1
 
     # start third monitor
     run_mon $dir c --public-addr $MONC || return 1
@@ -230,7 +237,7 @@ function TEST_mon_features() {
 
     # monmap must have not all k l m persistent
     # features set.
-    jqfilter='.monmap.features.persistent | length == 3'
+    jqfilter='.monmap.features.persistent | length == 6'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
@@ -238,6 +245,12 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "mimic")'
     jq_success "$jqinput" "$jqfilter" "mimic" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "osdmap-prune")'
+    jq_success "$jqinput" "$jqfilter" "osdmap-prune" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "nautilus")'
+    jq_success "$jqinput" "$jqfilter" "nautilus" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "octopus")'
+    jq_success "$jqinput" "$jqfilter" "octopus" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
     # that's all folks. thank you for tuning in.

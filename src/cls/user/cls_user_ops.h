@@ -21,7 +21,7 @@ struct cls_user_set_buckets_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(add, bl);
@@ -45,7 +45,7 @@ struct cls_user_remove_bucket_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(bucket, bl);
     DECODE_FINISH(bl);
@@ -73,7 +73,7 @@ struct cls_user_list_buckets_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(marker, bl);
     decode(max_entries, bl);
@@ -103,7 +103,7 @@ struct cls_user_list_buckets_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -125,7 +125,7 @@ struct cls_user_get_header_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
@@ -134,6 +134,27 @@ struct cls_user_get_header_op {
   static void generate_test_instances(list<cls_user_get_header_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_op)
+
+struct cls_user_reset_stats_op {
+  real_time time;
+  cls_user_reset_stats_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(time, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_user_reset_stats_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_reset_stats_op);
 
 struct cls_user_get_header_ret {
   cls_user_header header;
@@ -146,7 +167,7 @@ struct cls_user_get_header_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(header, bl);
     DECODE_FINISH(bl);
@@ -168,7 +189,7 @@ struct cls_user_complete_stats_sync_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(time, bl);
     DECODE_FINISH(bl);

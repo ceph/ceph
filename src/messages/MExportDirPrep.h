@@ -20,6 +20,7 @@
 #include "include/types.h"
 
 class MExportDirPrep : public Message {
+private:
   dirfrag_t dirfrag;
  public:
   bufferlist basedir;
@@ -27,29 +28,28 @@ class MExportDirPrep : public Message {
   list<bufferlist> traces;
 private:
   set<mds_rank_t> bystanders;
-  bool b_did_assim;
+  bool b_did_assim = false;
 
 public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  list<dirfrag_t>& get_bounds() { return bounds; }
-  set<mds_rank_t> &get_bystanders() { return bystanders; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const list<dirfrag_t>& get_bounds() const { return bounds; }
+  const set<mds_rank_t> &get_bystanders() const { return bystanders; }
 
-  bool did_assim() { return b_did_assim; }
+  bool did_assim() const { return b_did_assim; }
   void mark_assim() { b_did_assim = true; }
 
-  MExportDirPrep() {
-    b_did_assim = false;
-  }
+protected:
+  MExportDirPrep() = default;
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRPREP),
-    dirfrag(df), b_did_assim(false) {
+    Message{MSG_MDS_EXPORTDIRPREP},
+    dirfrag(df)
+  {
     set_tid(tid);
   }
-private:
   ~MExportDirPrep() override {}
 
 public:
-  const char *get_type_name() const override { return "ExP"; }
+  std::string_view get_type_name() const override { return "ExP"; }
   void print(ostream& o) const override {
     o << "export_prep(" << dirfrag << ")";
   }
@@ -66,7 +66,7 @@ public:
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(basedir, p);
     decode(bounds, p);
@@ -82,6 +82,9 @@ public:
     encode(traces, payload);
     encode(bystanders, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

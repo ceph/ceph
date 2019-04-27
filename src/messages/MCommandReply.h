@@ -21,25 +21,25 @@
 #include "MCommand.h"
 
 class MCommandReply : public Message {
- public:
+public:
   errorcode32_t r;
-  string rs;
+  std::string rs;
   
   MCommandReply()
-    : Message(MSG_COMMAND_REPLY) {}
+    : Message{MSG_COMMAND_REPLY} {}
   MCommandReply(MCommand *m, int _r)
-    : Message(MSG_COMMAND_REPLY), r(_r) {
+    : Message{MSG_COMMAND_REPLY}, r(_r) {
     header.tid = m->get_tid();
   }
   MCommandReply(int _r, std::string_view s)
-    : Message(MSG_COMMAND_REPLY),
+    : Message{MSG_COMMAND_REPLY},
       r(_r), rs(s) { }
 private:
   ~MCommandReply() override {}
 
 public:
-  const char *get_type_name() const override { return "command_reply"; }
-  void print(ostream& o) const override {
+  std::string_view get_type_name() const override { return "command_reply"; }
+  void print(std::ostream& o) const override {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }
   
@@ -49,7 +49,8 @@ public:
     encode(rs, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     decode(r, p);
     decode(rs, p);
   }

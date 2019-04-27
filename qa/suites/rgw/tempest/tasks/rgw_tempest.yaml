@@ -1,6 +1,6 @@
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 tasks:
 - install:
-    flavor: notcmalloc
 - ceph:
 - tox: [ client.0 ]
 - keystone:
@@ -28,7 +28,6 @@ tasks:
           description: Swift Service
 - rgw:
     client.0:
-      valgrind: [--tool=memcheck]
       frontend_prefix: /swift
       use-keystone-role: client.0
 - tempest:

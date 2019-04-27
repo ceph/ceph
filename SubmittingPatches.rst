@@ -12,11 +12,10 @@ The patch signing procedures and definitions are unmodified.
 SIGNING CONTRIBUTIONS
 =====================
 
-In order to keep the record of code attribution clean within the
-source repository, please follow these guidelines for signing 
-patches submitted to the project.  These definitions are taken
-from those used by the Linux kernel and many other open source
-projects.
+In order to keep the record of code attribution clean within the source
+repository, follow these guidelines for signing patches submitted to the
+project. These definitions are taken from those used by the Linux kernel
+and many other open source projects.
 
 
 1. Sign your work
@@ -29,7 +28,7 @@ patches that are being emailed around.
 
 The sign-off is a simple line at the end of the explanation for the
 patch, which certifies that you wrote it or otherwise have the right to
-pass it on as a open-source patch.  The rules are pretty simple: if you
+pass it on as a open-source patch. The rules are pretty simple: if you
 can certify the below:
 
 Developer's Certificate of Origin 1.1
@@ -66,7 +65,7 @@ then you just add a line saying ::
 
 using your real name (sorry, no pseudonyms or anonymous contributions.)
 
-Some people also put extra tags at the end.  They'll just be ignored for
+Some people also put extra tags at the end. They'll just be ignored for
 now, but you can do this to mark internal company procedures or just
 point out some special detail about the sign-off. 
 
@@ -130,22 +129,22 @@ arrange to have an ``Acked-by:`` line added to the patch's changelog.
 ``Acked-by:`` is often used by the maintainer of the affected code when that
 maintainer neither contributed to nor forwarded the patch.
 
-``Acked-by:`` is not as formal as ``Signed-off-by:``.  It is a record that the acker
-has at least reviewed the patch and has indicated acceptance.  Hence patch
+``Acked-by:`` is not as formal as ``Signed-off-by:``. It is a record that the acker
+has at least reviewed the patch and has indicated acceptance. Hence patch
 mergers will sometimes manually convert an acker's "yep, looks good to me"
 into an ``Acked-by:``.
 
 ``Acked-by:`` does not necessarily indicate acknowledgement of the entire patch.
 For example, if a patch affects multiple subsystems and has an ``Acked-by:`` from
 one subsystem maintainer then this usually indicates acknowledgement of just
-the part which affects that maintainer's code.  Judgement should be used here.
+the part which affects that maintainer's code. Judgement should be used here.
 When in doubt people should refer to the original discussion in the mailing
 list archives.
 
 If a person has had the opportunity to comment on a patch, but has not
 provided such comments, you may optionally add a "Cc:" tag to the patch.
 This is the only tag which might be added without an explicit action by the
-person it names.  This tag documents that potentially interested parties
+person it names. This tag documents that potentially interested parties
 have been included in the discussion
 
 
@@ -153,14 +152,13 @@ have been included in the discussion
 --------------------------------------------------------------
 
 If this patch fixes a problem reported by somebody else, consider adding a
-Reported-by: tag to credit the reporter for their contribution.  Please
-note that this tag should not be added without the reporter's permission,
-especially if the problem was not reported in a public forum.  That said,
-if we diligently credit our bug reporters, they will, hopefully, be
-inspired to help us again in the future.
+``Reported-by:`` tag to credit the reporter for their contribution. This tag should
+not be added without the reporter's permission, especially if the problem was
+not reported in a public forum. That said, if we diligently credit our bug
+reporters, they will, hopefully, be inspired to help us again in the future.
 
 A ``Tested-by:`` tag indicates that the patch has been successfully tested (in
-some environment) by the person named.  This tag informs maintainers that
+some environment) by the person named. This tag informs maintainers that
 some testing has been performed, provides a means to locate testers for
 future patches, and ensures credit for the testers.
 
@@ -177,7 +175,7 @@ By offering my ``Reviewed-by:`` tag, I state that:
        the mainline kernel.
 
    (b) Any problems, concerns, or questions relating to the patch
-       have been communicated back to the submitter.  I am satisfied
+       have been communicated back to the submitter. I am satisfied
        with the submitter's response to my comments.
 
    (c) While there may be things that could be improved with this
@@ -192,10 +190,10 @@ By offering my ``Reviewed-by:`` tag, I state that:
 
 A ``Reviewed-by`` tag is a statement of opinion that the patch is an
 appropriate modification of the kernel without any remaining serious
-technical issues.  Any interested reviewer (who has done the work) can
-offer a ``Reviewed-by`` tag for a patch.  This tag serves to give credit to
+technical issues. Any interested reviewer (who has done the work) can
+offer a ``Reviewed-by`` tag for a patch. This tag serves to give credit to
 reviewers and to inform maintainers of the degree of review which has been
-done on the patch.  ``Reviewed-by:`` tags, when supplied by reviewers known to
+done on the patch. ``Reviewed-by:`` tags, when supplied by reviewers known to
 understand the subject area and to perform thorough reviews, will normally
 increase the likelihood of your patch getting into the kernel.
 
@@ -203,14 +201,14 @@ increase the likelihood of your patch getting into the kernel.
 PREPARING AND SENDING PATCHES
 =============================
 
-The upstream repository is managed by Git.  You will find that it
+The upstream repository is managed by Git. You will find that it
 is easiest to work on the project and submit changes by using the
 git tools, both for managing your own code and for preparing and
 sending patches.
 
 The project will generally accept code either by pulling code directly from
 a published git tree (usually on github), or via patches emailed directly
-to the email list (ceph-devel@vger.kernel.org).  For the kernel client,
+to the email list (ceph-devel@vger.kernel.org). For the kernel client,
 patches are expected to be reviewed in the email list. And for everything
 else, github is preferred due to the convenience of the 'pull request'
 feature.
@@ -256,7 +254,7 @@ email list to ensure your submission is noticed.
 When addressing review comments, can should either add additional patches to
 your branch or (better yet) squash those changes into the relevant commits so
 that the sequence of changes is "clean" and gets things right the first time.
-The 'git rebase -i' command is very helpful in this process.  Once you have
+The ``git rebase -i`` command is very helpful in this process. Once you have
 updated your local branch, you can simply force-push to the existing branch
 in your public repository that is referenced by the pull request with
 
@@ -264,7 +262,7 @@ in your public repository that is referenced by the pull request with
 
    $ git push -f origin mything
 
-and your changes will be visible from the existing pull-request.  You may want
+and your changes will be visible from the existing pull-request. You may want
 to ping the reviewer again or comment on the pull request to ensure the updates
 are noticed.
 
@@ -321,17 +319,17 @@ A: You don't. If someone reviews your pull request, they should indicate they
 --------------------------------------------------
 
 The best way to generate a patch for manual submission is to work from
-a Git checkout of the Ceph source code.  You can then generate patches
-with the 'git format-patch' command.  For example,
+a Git checkout of the Ceph source code. You can then generate patches
+with the 'git format-patch' command. For example,
 
 .. code-block:: bash
 
    $ git format-patch HEAD^^ -o mything
 
 will take the last two commits and generate patches in the mything/
-directory.  The commit you specify on the command line is the
-'upstream' commit that you are diffing against.  Note that it does
-not necesarily have to be an ancestor of your current commit.  You
+directory. The commit you specify on the command line is the
+'upstream' commit that you are diffing against. Note that it does
+not necessarily have to be an ancestor of your current commit. You
 can do something like
 
 .. code-block:: bash
@@ -345,27 +343,27 @@ can do something like
 and the patches will be against origin/unstable.
 
 The ``-o`` dir is optional; if left off, the patch(es) will appear in
-the current directory.  This can quickly get messy.
+the current directory. This can quickly get messy.
 
 You can also add ``--cover-letter`` and get a '0000' patch in the
-mything/ directory.  That can be updated to include any overview
-stuff for a multipart patch series.  If it's a single patch, don't
+mything/ directory. That can be updated to include any overview
+stuff for a multipart patch series. If it's a single patch, don't
 bother.
 
 Make sure your patch does not include any extra files which do not
-belong in a patch submission.  Make sure to review your patch -after-
+belong in a patch submission. Make sure to review your patch -after-
 generated it with ``diff(1)``, to ensure accuracy.
 
 If your changes produce a lot of deltas, you may want to look into
 splitting them into individual patches which modify things in
-logical stages.  This will facilitate easier reviewing by other
+logical stages. This will facilitate easier reviewing by other
 kernel developers, very important if you want your patch accepted.
 There are a number of scripts which can aid in this.
 
 The ``git send-email`` command make it super easy to send patches
-(particularly those prepared with git format patch).  It is careful to
+(particularly those prepared with git format patch). It is careful to
 format the emails correctly so that you don't have to worry about your
-email client mangling whitespace or otherwise screwing things up.  It
+email client mangling whitespace or otherwise screwing things up. It
 works like so:
 
 .. code-block:: bash
@@ -409,20 +407,20 @@ release process.
 Commit message
 ^^^^^^^^^^^^^^
 
-Be as specific as possible.  The WORST descriptions possible include
+Be as specific as possible. The WORST descriptions possible include
 things like "update driver X", "bug fix for driver X", or "this patch
-includes updates for subsystem X.  Please apply."
+includes updates for subsystem X. Please apply."
 
 If your description starts to get long, that's a sign that you probably
-need to split up your patch.  See :ref:`split_changes`.
+need to split up your patch. See :ref:`split_changes`.
 
 When you submit or resubmit a patch or patch series, include the
-complete patch description and justification for it.  Don't just
-say that this is version N of the patch (series).  Don't expect the
+complete patch description and justification for it. Don't just
+say that this is version N of the patch (series). Don't expect the
 patch merger to refer back to earlier patch versions or referenced
 URLs to find the patch description and put that into the patch.
 I.e., the patch (series) and its description should be self-contained.
-This benefits both the patch merger(s) and reviewers.  Some reviewers
+This benefits both the patch merger(s) and reviewers. Some reviewers
 probably didn't even receive earlier versions of the patch.
 
 Tag the commit
@@ -459,15 +457,15 @@ Separate *logical changes* into a single patch file.
 
 For example, if your changes include both bug fixes and performance
 enhancements for a single driver, separate those changes into two
-or more patches.  If your changes include an API update, and a new
+or more patches. If your changes include an API update, and a new
 driver which uses that new API, separate those into two patches.
 
 On the other hand, if you make a single change to numerous files,
-group those changes into a single patch.  Thus a single logical change
+group those changes into a single patch. Thus a single logical change
 is contained within a single patch.
 
 If one patch depends on another patch in order for a change to be
-complete, that is OK.  Simply note "this patch depends on patch X"
+complete, that is OK. Simply note "this patch depends on patch X"
 in your patch description.
 
 If you cannot condense your patch set into a smaller set of patches,
@@ -490,6 +488,9 @@ contact the component lead, who should arrange for the missing section
 to be created with sufficient detail for the patch submitter to
 document their changes.
 
+When writing and/or editing documentation, follow the Google Developer
+Documentation Style Guide: https://developers.google.com/style/
+
 6. Style check your changes
 ---------------------------
 
@@ -497,24 +498,24 @@ Check your patch for basic style violations, details of which can be
 found in CodingStyle.
 
 
-7. No MIME, no links, no compression, no attachments.  Just plain text
+7. No MIME, no links, no compression, no attachments. Just plain text
 ----------------------------------------------------------------------
 
 Developers need to be able to read and comment on the changes you are
-submitting.  It is important for a kernel developer to be able to
+submitting. It is important for a kernel developer to be able to
 "quote" your changes, using standard e-mail tools, so that they may
 comment on specific portions of your code.
 
 For this reason, all patches should be submitting e-mail "inline".
-WARNING:  Be wary of your editor's word-wrap corrupting your patch,
+WARNING: Be wary of your editor's word-wrap corrupting your patch,
 if you choose to cut-n-paste your patch.
 
 Do not attach the patch as a MIME attachment, compressed or not.
 Many popular e-mail applications will not always transmit a MIME
 attachment as plain text, making it impossible to comment on your
-code.  A MIME attachment also takes Linus a bit more time to process,
+code. A MIME attachment also takes Linus a bit more time to process,
 decreasing the likelihood of your MIME-attached change being accepted.
 
-Exception:  If your mailer is mangling patches then someone may ask
+Exception: If your mailer is mangling patches then someone may ask
 you to re-send them using MIME.
 

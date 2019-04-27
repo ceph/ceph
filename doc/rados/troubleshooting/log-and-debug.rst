@@ -444,14 +444,6 @@ OSD
 :Default: 1
 
 
-``osd tmapput sets uses tmap``
-
-:Description: Uses ``tmap``. For debug only.
-:Type: Boolean
-:Required: No
-:Default: ``false``
-
-
 ``osd min pg log entries``
 
 :Description: The minimum number of log entries for placement groups. 
@@ -562,7 +554,7 @@ RADOS Gateway
 :Description: Enable logging of RGW's bandwidth usage.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``rgw usage log flush threshold``

@@ -3,7 +3,9 @@
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
-  add_dependencies(tests ${test_name})
+  if(TARGET ${test_name})
+    add_dependencies(tests ${test_name})
+  endif()
   set_property(TEST
     ${test_name}
     PROPERTY ENVIRONMENT 
@@ -18,13 +20,33 @@ function(add_ceph_test test_name test_path)
   # none of the tests should take more than 1 hour to complete
   set_property(TEST
     ${test_name}
-    PROPERTY TIMEOUT 3600)
+    PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
 endfunction()
+
+option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
+if(WITH_GTEST_PARALLEL)
+  set(gtest_parallel_source_dir ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel)
+  include(ExternalProject)
+  ExternalProject_Add(gtest-parallel_ext
+    SOURCE_DIR "${gtest_parallel_source_dir}"
+    GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
+    GIT_TAG "master"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND "")
+  add_dependencies(tests gtest-parallel_ext)
+  find_package(PythonInterp REQUIRED)
+  set(GTEST_PARALLEL_COMMAND
+    ${PYTHON_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+endif()
 
 #sets uniform compiler flags and link libraries
 function(add_ceph_unittest unittest_name)
-  add_ceph_test(${unittest_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name})
+  set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name}")
+  # If the second argument is "parallel", it means we want a parallel run
+  if(WITH_GTEST_PARALLEL AND "${ARGV1}" STREQUAL "parallel")
+    set(UNITTEST ${GTEST_PARALLEL_COMMAND} ${UNITTEST})
+  endif()
+  add_ceph_test(${unittest_name} "${UNITTEST}")
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
-  set_target_properties(${unittest_name} PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 endfunction()
-

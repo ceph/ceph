@@ -18,7 +18,7 @@
 #include "rgw/rgw_rados.h"
 #include "rgw/rgw_crypt.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -27,7 +27,7 @@ using namespace std;
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* key, size_t len);
 
 
-class ut_get_sink : public RGWGetDataCB {
+class ut_get_sink : public RGWGetObj_Filter {
   std::stringstream sink;
 public:
   ut_get_sink() {}
@@ -44,20 +44,13 @@ public:
   }
 };
 
-class ut_put_sink: public RGWPutObjDataProcessor
+class ut_put_sink: public rgw::putobj::DataProcessor
 {
   std::stringstream sink;
 public:
-  ut_put_sink(){}
-  virtual ~ut_put_sink(){}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override
+  int process(bufferlist&& bl, uint64_t ofs) override
   {
     sink << boost::string_ref(bl.c_str(),bl.length());
-    *again = false;
-    return 0;
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override
-  {
     return 0;
   }
   std::string get_sink()
@@ -68,12 +61,14 @@ public:
 
 
 class BlockCryptNone: public BlockCrypt {
+  size_t block_size = 256;
 public:
   BlockCryptNone(){};
+  BlockCryptNone(size_t sz) : block_size(sz) {}
   virtual ~BlockCryptNone(){};
   size_t get_block_size() override
   {
-    return 256;
+    return block_size;
   }
   bool encrypt(bufferlist& input,
                        off_t in_ofs,
@@ -526,6 +521,172 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup)
   ASSERT_EQ(fixup_range(&decrypt,513,1024), range_t(512,1024+255));
 }
 
+using parts_len_t = std::vector<size_t>;
+
+class TestRGWGetObj_BlockDecrypt : public RGWGetObj_BlockDecrypt {
+  using RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt;
+public:
+  void set_parts_len(parts_len_t&& other) {
+    parts_len = std::move(other);
+  }
+};
+
+std::vector<size_t> create_mp_parts(size_t obj_size, size_t mp_part_len){
+  std::vector<size_t> parts_len;
+  size_t part_size;
+  size_t ofs=0;
+
+  while (ofs < obj_size){
+    part_size = std::min(mp_part_len, (obj_size - ofs));
+    ofs += part_size;
+    parts_len.push_back(part_size);
+  }
+  return parts_len;
+}
+
+const size_t part_size = 5*1024*1024;
+const size_t obj_size = 30*1024*1024;
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_simple)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
+  ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,4095));
+  ASSERT_EQ(fixup_range(&decrypt,1,4096),   range_t(0,8191));
+  ASSERT_EQ(fixup_range(&decrypt,0,4095),   range_t(0,4095));
+  ASSERT_EQ(fixup_range(&decrypt,4095,4096), range_t(0,8191));
+
+  // ranges are end-end inclusive, we request bytes just spanning short of first
+  // part to exceeding the first part, part_size - 1 is aligned to a 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 2), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 1), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size),     range_t(0, part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size + 1), range_t(0, part_size + 4095));
+
+  // request bytes spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, part_size -2, part_size + 2),
+	    range_t(part_size - 4096, part_size + 4095));
+
+  // request last byte
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size -1),
+	    range_t(obj_size - 4096, obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_obj_size)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_obj_size = obj_size + 1;
+  decrypt.set_parts_len(create_mp_parts(na_obj_size, part_size));
+
+  // these should be unaffected here
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 2), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 1), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size),     range_t(0, part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size + 1), range_t(0, part_size + 4095));
+
+
+  // request last 2 bytes; spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -2 , na_obj_size -1),
+	    range_t(na_obj_size - 1 - 4096, na_obj_size - 1));
+
+  // request last byte, spans last 1B part only
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -1, na_obj_size - 1),
+	    range_t(na_obj_size - 1, na_obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_part_size)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_part_size = part_size + 1;
+  decrypt.set_parts_len(create_mp_parts(obj_size, na_part_size));
+
+  // na_part_size -2, ie. part_size -1  is aligned to 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 2), range_t(0, na_part_size -2));
+  // even though na_part_size -1 should not align to a 4095 boundary, the range
+  // should not span the next part
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 1), range_t(0, na_part_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size),     range_t(0, na_part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size + 1), range_t(0, na_part_size + 4095));
+
+  // request spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, na_part_size - 2, na_part_size + 2),
+	    range_t(na_part_size - 1 - 4096, na_part_size + 4095));
+
+  // request last byte, this will be interesting, since this a multipart upload
+  // with 5MB+1 size, the last part is actually 5 bytes short of 5 MB, which
+  // should be considered for the ranges alignment; an easier way to look at
+  // this will be that the last offset aligned to a 5MiB part will be 5MiB -
+  // 4095, this is a part that is 5MiB - 5 B
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size -1),
+	    range_t(obj_size +5 -4096, obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_part_size = part_size + 1;
+  auto na_obj_size = obj_size + 7; // (6*(5MiB + 1) + 1) for the last 1B overflow
+  decrypt.set_parts_len(create_mp_parts(na_obj_size, na_part_size));
+
+  // na_part_size -2, ie. part_size -1  is aligned to 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 2), range_t(0, na_part_size -2));
+  // even though na_part_size -1 should not align to a 4095 boundary, the range
+  // should not span the next part
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 1), range_t(0, na_part_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size),     range_t(0, na_part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size + 1), range_t(0, na_part_size + 4095));
+
+  // request last byte, spans last 1B part only
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -1, na_obj_size - 1),
+	    range_t(na_obj_size - 1, na_obj_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -2, na_obj_size -1),
+	    range_t(na_obj_size - 2, na_obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+
+  decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
+
+  // the ranges below would be mostly unreachable in current code as rgw
+  // would've returned a 411 before reaching, but we're just doing this to make
+  // sure we don't have invalid access
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size + 100),
+            range_t(obj_size - 4096, obj_size - 1));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size, obj_size + 1),
+            range_t(obj_size - 1, obj_size - 1));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size+1, obj_size + 100),
+            range_t(obj_size - 1, obj_size - 1));
+
+}
 
 TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 {
@@ -562,18 +723,11 @@ TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 
       bufferlist bl;
       bl.append(input.c_str()+pos, size);
-      void* handle;
-      bool again = false;
-      rgw_raw_obj ro;
-      encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-      encrypt.throttle_data(handle, ro, size, false);
+      encrypt.process(std::move(bl), pos);
 
       pos = pos + size;
     } while (pos < test_size);
-    bufferlist bl;
-    void* handle;
-    bool again = false;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.process({}, pos);
 
     ASSERT_EQ(put_sink.get_sink().length(), static_cast<size_t>(test_size));
 
@@ -619,13 +773,8 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
 				   AES_256_CBC_create(g_ceph_context, &key[0], 32) );
     bufferlist bl;
     bl.append((char*)test_in, test_size);
-    void* handle;
-    bool again = false;
-    rgw_raw_obj ro;
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
-    encrypt.throttle_data(handle, ro, test_size, false);
-    bl.clear();
-    encrypt.handle_data(bl, 0, &handle, nullptr, &again);
+    encrypt.process(std::move(bl), 0);
+    encrypt.process({}, test_size);
     ASSERT_EQ(put_sink.get_sink().length(), test_size);
 
     bl.append(put_sink.get_sink().data(), put_sink.get_sink().length());
@@ -651,7 +800,9 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

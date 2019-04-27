@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef _CEPH_UUID_H
 #define _CEPH_UUID_H
 
@@ -6,12 +7,13 @@
  */
 
 #include "encoding.h"
+
 #include <ostream>
+#include <random>
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <boost/random/random_device.hpp>
 
 struct uuid_d {
   boost::uuids::uuid uuid;
@@ -26,8 +28,8 @@ struct uuid_d {
   }
 
   void generate_random() {
-    boost::random::random_device rng("/dev/urandom");
-    boost::uuids::basic_random_generator<boost::random::random_device> gen(&rng);
+    std::random_device rng;
+    boost::uuids::basic_random_generator gen(rng);
     uuid = gen();
   }
   
@@ -52,12 +54,12 @@ struct uuid_d {
     return (char*)uuid.data;
   }
 
-  void encode(bufferlist& bl) const {
-    ::encode_raw(uuid, bl);
+  void encode(ceph::buffer::list& bl) const {
+    ceph::encode_raw(uuid, bl);
   }
 
-  void decode(bufferlist::iterator& p) const {
-    ::decode_raw(uuid, p);
+  void decode(ceph::buffer::list::const_iterator& p) const {
+    ceph::decode_raw(uuid, p);
   }
 };
 WRITE_CLASS_ENCODER(uuid_d)

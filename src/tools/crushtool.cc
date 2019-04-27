@@ -36,7 +36,7 @@
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_crush
@@ -61,7 +61,7 @@ static int get_fd_data(int fd, bufferlist &bl)
     total += bytes;
   } while(true);
 
-  assert(bl.length() == total);
+  ceph_assert(bl.length() == total);
   return 0;
 }
 
@@ -166,11 +166,13 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --add-bucket name type [--loc type name ...]\n"
-       << "                         insert a bucket into the hierachy at the given\n"
+       << "                         insert a bucket into the hierarchy at the given\n"
        << "                         location\n";
   cout << "   -i mapfn --move       name --loc type name ...\n"
        << "                         move the given item to specified location\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "   -i mapfn --rebuild-class-roots\n";
+  cout << "                         rebuild the per-class shadow trees (normally a no-op)\n";
   cout << "   -i mapfn --create-simple-rule name root type mode\n"
        << "                         create crush rule <name> to start from <root>,\n"
        << "                         replicate across buckets of type <type>, using\n"
@@ -190,6 +192,8 @@ void usage()
   cout << "                         table, table-kv, html, html-pretty\n";
   cout << "   --dump                dump the crush map\n";
   cout << "   --tree                print map summary as a tree\n";
+  cout << "   --bucket-tree         print bucket map summary as a tree\n";
+  cout << "   --bucket-name         specify bucket bucket name for bucket-tree\n";
   cout << "   --check [max_id]      check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
   cout << "                         show location for given device id\n";
@@ -218,6 +222,13 @@ void usage()
   cout << "                         export select data generated during testing routine\n";
   cout << "                         to CSV files for off-line post-processing\n";
   cout << "                         use --help-output for more information\n";
+  cout << "   --reclassify          transform legacy CRUSH map buckets and rules\n";
+  cout << "                         by adding classes\n";
+  cout << "      --reclassify-bucket <bucket-match> <class> <default-parent>\n";
+  cout << "      --reclassify-root <bucket-name> <class>\n";
+  cout << "   --set-subtree-class <bucket-name> <class>\n";
+  cout << "                         set class for all items beneath bucket-name\n";
+  cout << "   --compare <otherfile> compare two maps using --test parameters\n";
   cout << "\n";
   cout << "Options for the output stage\n";
   cout << "\n";
@@ -355,9 +366,19 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   const char *me = argv[0];
-  std::string infn, srcfn, outfn, add_name, add_type, remove_name, reweight_name;
+
+  std::string infn, srcfn, outfn, add_name, add_type, remove_name,
+    reweight_name, bucket_name;
   std::string move_name;
   bool compile = false;
   bool decompile = false;
@@ -366,12 +387,15 @@ int main(int argc, const char **argv)
   bool test = false;
   bool display = false;
   bool tree = false;
+  bool bucket_tree = false;
   string dump_format = "json-pretty";
   bool dump = false;
   int full_location = -1;
   bool write_to_file = false;
   int verbose = 0;
   bool unsafe_tunables = false;
+
+  bool rebuild_class_roots = false;
 
   bool reweight = false;
   int add_item = -1;
@@ -400,15 +424,21 @@ int main(int argc, const char **argv)
   int straw_calc_version = -1;
   int allowed_bucket_algs = -1;
 
+  bool reclassify = false;
+  map<string,pair<string,string>> reclassify_bucket; // %suffix or prefix% -> class, default_root
+  map<string,string> reclassify_root;        // bucket -> class
+  map<string,string> set_subtree_class;     // bucket -> class
+
+  string compare;
+
   CrushWrapper crush;
 
   CrushTester tester(crush, cout);
 
   // we use -c, don't confuse the generic arg parsing
   // only parse arguments from CEPH_ARGS, if in the environment
-  vector<const char *> env_args;
-  env_to_vec(env_args);
-  auto cct = global_init(NULL, env_args, CEPH_ENTITY_TYPE_CLIENT,
+  vector<const char *> empty_args;
+  auto cct = global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   // crushtool times out occasionally when quits. so do not
@@ -426,9 +456,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
-      return EXIT_SUCCESS;
     } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
       infn = val;
       decompile = true;
@@ -438,8 +465,46 @@ int main(int argc, const char **argv)
       outfn = val;
     } else if (ceph_argparse_flag(args, i, "-v", "--verbose", (char*)NULL)) {
       verbose += 1;
+    } else if (ceph_argparse_witharg(args, i, &val, "--compare", (char*)NULL)) {
+      compare = val;
+    } else if (ceph_argparse_flag(args, i, "--reclassify", (char*)NULL)) {
+      reclassify = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--reclassify-bucket",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      string c = *i;
+      i = args.erase(i);
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      reclassify_bucket[val] = make_pair(c, *i);
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--reclassify-root",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      reclassify_root[val] = *i;
+      i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-subtree-class",
+				     (char*)NULL)) {
+      if (i == args.end()) {
+	cerr << "expecting additional argument" << std::endl;
+	return EXIT_FAILURE;
+      }
+      set_subtree_class[val] = *i;
+      i = args.erase(i);
     } else if (ceph_argparse_flag(args, i, "--tree", (char*)NULL)) {
       tree = true;
+    } else if (ceph_argparse_flag(args, i, "--bucket-tree", (char*)NULL)) {
+      bucket_tree = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket-name", (char*)NULL)) {
+      bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
       dump_format = val;
     } else if (ceph_argparse_flag(args, i, "--dump", (char*)NULL)) {
@@ -500,6 +565,8 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
+    } else if (ceph_argparse_flag(args, i, "--rebuild-class-roots", (char*)NULL)) {
+      rebuild_class_roots = true;
     } else if (ceph_argparse_witharg(args, i, &add_item, err, "--add_item", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -759,7 +826,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (test && !check && !display && !write_to_file) {
+  if (test && !check && !display && !write_to_file && compare.empty()) {
     cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
   }
 
@@ -769,6 +836,10 @@ int main(int argc, const char **argv)
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
       add_item < 0 && !add_bucket && !move_item && !add_rule && !del_rule && full_location < 0 &&
+      !bucket_tree &&
+      !reclassify && !rebuild_class_roots &&
+      compare.empty() &&
+
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     return EXIT_FAILURE;
@@ -826,7 +897,7 @@ int main(int argc, const char **argv)
         return EXIT_FAILURE;
       }
     }
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       crush.decode(p);
     } catch(...) {
@@ -1097,7 +1168,7 @@ int main(int argc, const char **argv)
       return 0;
     }
     int ruleno = crush.get_rule_id(rule_name);
-    assert(ruleno >= 0);
+    ceph_assert(ruleno >= 0);
     int r = crush.remove_rule(ruleno);
     if (r < 0) {
       cerr << "fail to remove rule " << rule_name << std::endl;
@@ -1110,7 +1181,31 @@ int main(int argc, const char **argv)
     crush.reweight(g_ceph_context);
     modified = true;
   }
+  if (rebuild_class_roots) {
+    int r = crush.rebuild_roots_with_classes(g_ceph_context);
+    if (r < 0) {
+      cerr << "failed to rebuidl roots with classes" << std::endl;
+      return EXIT_FAILURE;
+    }
+    modified = true;
+  }
 
+  for (auto& i : set_subtree_class) {
+    crush.set_subtree_class(i.first, i.second);
+    modified = true;
+  }
+  if (reclassify) {
+    int r = crush.reclassify(
+      g_ceph_context,
+      cout,
+      reclassify_root,
+      reclassify_bucket);
+    if (r < 0) {
+      cerr << "failed to reclassify map" << std::endl;
+      return EXIT_FAILURE;
+    }
+    modified = true;
+  }
 
   // display ---
   if (full_location >= 0) {
@@ -1123,7 +1218,20 @@ int main(int argc, const char **argv)
   }
 
   if (tree) {
-    crush.dump_tree(&cout, NULL);
+    crush.dump_tree(&cout, NULL, {}, true);
+  }
+
+  if (bucket_tree) {
+    if (bucket_name.empty()) {
+      cerr << ": error bucket_name is empty" << std::endl;
+    }
+    else {
+      set<int> osd_ids;
+      crush.get_leaves(bucket_name.c_str(), &osd_ids);
+      for (auto &id : osd_ids) {
+        cout << "osd." << id << std::endl;
+      }
+    }
   }
 
   if (dump) {
@@ -1166,6 +1274,28 @@ int main(int argc, const char **argv)
       tester.set_output_statistics(true);
 
     int r = tester.test();
+    if (r < 0)
+      return EXIT_FAILURE;
+  }
+
+  if (compare.size()) {
+    CrushWrapper crush2;
+    bufferlist in;
+    string error;
+    int r = in.read_file(compare.c_str(), &error);
+    if (r < 0) {
+      cerr << me << ": error reading '" << compare << "': "
+	   << error << std::endl;
+      return EXIT_FAILURE;
+    }
+    auto p = in.cbegin();
+    try {
+      crush2.decode(p);
+    } catch(...) {
+      cerr << me << ": unable to decode " << compare << std::endl;
+      return EXIT_FAILURE;
+    }
+    r = tester.compare(crush2);
     if (r < 0)
       return EXIT_FAILURE;
   }

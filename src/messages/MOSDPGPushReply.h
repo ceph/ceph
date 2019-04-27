@@ -18,15 +18,16 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGPushReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   vector<PushReplyOp> replies;
-  uint64_t cost;
+  uint64_t cost = 0;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -39,8 +40,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
+    : MOSDFastDispatchOp{MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION}
     {}
 
   void compute_cost(CephContext *cct) {
@@ -57,7 +57,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
     decode(replies, p);
@@ -89,7 +89,7 @@ public:
     out << ")";
   }
 
-  const char *get_type_name() const override { return "MOSDPGPushReply"; }
+  std::string_view get_type_name() const override { return "MOSDPGPushReply"; }
 };
 
 #endif

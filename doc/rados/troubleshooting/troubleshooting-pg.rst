@@ -213,7 +213,7 @@ assumed to be preferable to returning an IO error to the user.
 
 First, you can identify which objects are unfound with::
 
-	ceph pg 2.4 list_missing [starting offset, in json]
+	ceph pg 2.4 list_unfound [starting offset, in json]
 
 .. code-block:: javascript
 
@@ -381,8 +381,8 @@ objects. If an object named ``foo`` in PG ``0.6`` is truncated, we will have::
                     "size_mismatch"
                 ],
                 "union_shard_errors": [
-                    "data_digest_mismatch_oi",
-                    "size_mismatch_oi"
+                    "data_digest_mismatch_info",
+                    "size_mismatch_info"
                 ],
                 "selected_object_info": "0:602f83fe:::foo:head(16'1 client.4110.0:1 dirty|data_digest|omap_digest s 968 uv 1 dd e978e67f od ffffffff alloc_hint [0 0 0])",
                 "shards": [
@@ -403,8 +403,8 @@ objects. If an object named ``foo`` in PG ``0.6`` is truncated, we will have::
                     {
                         "osd": 2,
                         "errors": [
-                            "data_digest_mismatch_oi",
-                            "size_mismatch_oi"
+                            "data_digest_mismatch_info",
+                            "size_mismatch_info"
                         ],
                         "size": 0,
                         "omap_digest": "0xffffffff",
@@ -435,9 +435,9 @@ In this case, we can learn from the output:
     ``oi`` indicate a comparison with ``selected_object_info``. Look at the
     ``shards`` array to determine which shard has which error(s).
 
-    * ``data_digest_mismatch_oi``: the digest stored in the object-info is not
+    * ``data_digest_mismatch_info``: the digest stored in the object-info is not
       ``0xffffffff``, which is calculated from the shard read from OSD.2
-    * ``size_mismatch_oi``: the size stored in the object-info is different
+    * ``size_mismatch_info``: the size stored in the object-info is different
       from the one read from OSD.2. The latter is 0.
 
 You can repair the inconsistent placement group by executing::
@@ -569,7 +569,7 @@ rule needs, ``--rule`` is the value of the ``ruleset`` field
 displayed by ``ceph osd crush rule dump``.  The test will try mapping
 one million values (i.e. the range defined by ``[--min-x,--max-x]``)
 and must display at least one bad mapping. If it outputs nothing it
-means all mappings are successfull and you can stop right there: the
+means all mappings are successful and you can stop right there: the
 problem is elsewhere.
 
 The CRUSH rule can be edited by decompiling the crush map::

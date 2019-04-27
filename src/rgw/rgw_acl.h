@@ -60,7 +60,7 @@ public:
     encode(flags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(flags, bl);
     DECODE_FINISH(bl);
@@ -86,7 +86,7 @@ public:
     encode(type, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(type, bl);
     DECODE_FINISH(bl);
@@ -157,7 +157,7 @@ public:
     encode(url_spec, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(type, bl);
     string s;
@@ -246,7 +246,7 @@ struct ACLReferer {
     encode(perm, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(url_spec, bl);
     decode(perm, bl);
@@ -303,7 +303,8 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
+  uint32_t get_perm(const DoutPrefixProvider* dpp,
+                    const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
   uint32_t get_referer_perm(uint32_t current_perm,
@@ -319,7 +320,7 @@ public:
     encode(referer_list, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     bool maps_initialized;
     decode(maps_initialized, bl);
@@ -376,7 +377,7 @@ public:
     encode(display_name, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     string s;
     decode(s, bl);
@@ -413,11 +414,13 @@ public:
     acl.set_ctx(ctx);
   }
 
-  uint32_t get_perm(const rgw::auth::Identity& auth_identity,
+  uint32_t get_perm(const DoutPrefixProvider* dpp,
+                    const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,
                     const char * http_referer);
   uint32_t get_group_perm(ACLGroupTypeEnum group, uint32_t perm_mask);
-  bool verify_permission(const rgw::auth::Identity& auth_identity,
+  bool verify_permission(const DoutPrefixProvider* dpp,
+                         const rgw::auth::Identity& auth_identity,
                          uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr);
@@ -428,7 +431,7 @@ public:
     encode(acl, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(owner, bl);
     decode(acl, bl);
@@ -436,7 +439,7 @@ public:
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWAccessControlPolicy*>& o);
-  void decode_owner(bufferlist::iterator& bl) { // sometimes we only need that, should be faster
+  void decode_owner(bufferlist::const_iterator& bl) { // sometimes we only need that, should be faster
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(owner, bl);
     DECODE_FINISH(bl);

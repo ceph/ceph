@@ -36,6 +36,11 @@ public:
     PURGE_DIR
   };
 
+  utime_t stamp;
+  //None PurgeItem serves as NoOp for splicing out journal entries;
+  //so there has to be a "pad_size" to specify the size of journal
+  //space to be spliced.
+  uint32_t pad_size;
   Action action;
   inodeno_t ino;
   uint64_t size;
@@ -45,11 +50,35 @@ public:
   fragtree_t fragtree;
 
   PurgeItem()
-   : action(NONE), ino(0), size(0)
+   : pad_size(0), action(NONE), ino(0), size(0)
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator &p);
+
+  static Action str_to_type(std::string_view str) {
+    return PurgeItem::actions.at(std::string(str));
+  }
+
+  void dump(Formatter *f) const
+  {
+    f->dump_int("action", action);
+    f->dump_int("ino", ino);
+    f->dump_int("size", size);
+    f->open_object_section("layout");
+    layout.dump(f);
+    f->close_section();
+    f->open_object_section("SnapContext");
+    snapc.dump(f);
+    f->close_section();
+    f->open_object_section("fragtree");
+    fragtree.dump(f);
+    f->close_section();
+  }
+
+  std::string_view get_type_str() const;
+private:
+  static const std::map<std::string, PurgeItem::Action> actions;
 };
 WRITE_CLASS_ENCODER(PurgeItem)
 
@@ -77,6 +106,7 @@ protected:
   CephContext *cct;
   const mds_rank_t rank;
   Mutex lock;
+  bool readonly = false;
 
   int64_t metadata_pool;
 
@@ -95,6 +125,8 @@ protected:
   // Map of Journaler offset to PurgeItem
   std::map<uint64_t, PurgeItem> in_flight;
 
+  std::set<uint64_t> pending_expire;
+
   // Throttled allowances
   uint64_t ops_in_flight;
 
@@ -103,7 +135,7 @@ protected:
 
   uint32_t _calculate_ops(const PurgeItem &item) const;
 
-  bool can_consume();
+  bool _can_consume();
 
   // How many bytes were remaining when drain() was first called,
   // used for indicating progress.
@@ -131,7 +163,9 @@ protected:
       uint64_t expire_to);
 
   bool recovered;
-  std::list<Context*> waiting_for_recovery;
+  std::vector<Context*> waiting_for_recovery;
+
+  void _go_readonly(int r);
 
 public:
   void init();
@@ -174,7 +208,7 @@ public:
 
   void update_op_limit(const MDSMap &mds_map);
 
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 

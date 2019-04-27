@@ -163,7 +163,6 @@ private:
   librbd::ManagedLock<ImageCtxT> *m_instance_lock;
   Context *m_on_finish = nullptr;
   int m_ret_val = 0;
-  bool m_removing = false;
   std::string m_leader_instance_id;
   librbd::managed_lock::Locker m_instance_locker;
   std::set<std::pair<std::string, C_NotifyInstanceRequest *>> m_notify_ops;
@@ -211,6 +210,7 @@ private:
   bool unsuspend_notify_request(C_NotifyInstanceRequest *req);
   void unsuspend_notify_requests();
 
+  void notify_sync_complete(const Mutex& lock, const std::string &sync_id);
   void handle_notify_sync_request(C_SyncRequest *sync_ctx, int r);
   void handle_notify_sync_complete(C_SyncRequest *sync_ctx, int r);
 

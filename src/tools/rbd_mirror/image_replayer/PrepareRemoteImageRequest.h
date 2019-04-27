@@ -4,13 +4,15 @@
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_PREPARE_REMOTE_IMAGE_REQUEST_H
 #define RBD_MIRROR_IMAGE_REPLAYER_PREPARE_REMOTE_IMAGE_REQUEST_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/journal/cls_journal_types.h"
+#include "journal/Settings.h"
 #include "librbd/journal/TypeTraits.h"
 #include <string>
 
 namespace journal { class Journaler; }
-namespace librados { struct IoCtx; }
+namespace journal { class Settings; }
 namespace librbd { struct ImageCtx; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
@@ -36,6 +38,7 @@ public:
                                            const std::string &global_image_id,
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
+                                           const journal::Settings &settings,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
                                            Journaler **remote_journaler,
@@ -44,9 +47,10 @@ public:
                                            Context *on_finish) {
     return new PrepareRemoteImageRequest(threads, remote_io_ctx,
                                          global_image_id, local_mirror_uuid,
-                                         local_image_id, remote_mirror_uuid,
-                                         remote_image_id, remote_journaler,
-                                         client_state, client_meta, on_finish);
+                                         local_image_id, settings,
+                                         remote_mirror_uuid, remote_image_id,
+                                         remote_journaler, client_state,
+                                         client_meta, on_finish);
   }
 
   PrepareRemoteImageRequest(Threads<ImageCtxT> *threads,
@@ -54,6 +58,7 @@ public:
                            const std::string &global_image_id,
                            const std::string &local_mirror_uuid,
                            const std::string &local_image_id,
+                           const journal::Settings &journal_settings,
                            std::string *remote_mirror_uuid,
                            std::string *remote_image_id,
                            Journaler **remote_journaler,
@@ -63,6 +68,7 @@ public:
     : m_threads(threads), m_remote_io_ctx(remote_io_ctx),
       m_global_image_id(global_image_id),
       m_local_mirror_uuid(local_mirror_uuid), m_local_image_id(local_image_id),
+      m_journal_settings(journal_settings),
       m_remote_mirror_uuid(remote_mirror_uuid),
       m_remote_image_id(remote_image_id),
       m_remote_journaler(remote_journaler), m_client_state(client_state),
@@ -100,6 +106,7 @@ private:
   std::string m_global_image_id;
   std::string m_local_mirror_uuid;
   std::string m_local_image_id;
+  journal::Settings m_journal_settings;
   std::string *m_remote_mirror_uuid;
   std::string *m_remote_image_id;
   Journaler **m_remote_journaler;
@@ -123,8 +130,6 @@ private:
   void handle_register_client(int r);
 
   void finish(int r);
-
-  bool decode_client_meta();
 };
 
 } // namespace image_replayer

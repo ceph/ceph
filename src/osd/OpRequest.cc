@@ -10,7 +10,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
@@ -23,11 +23,19 @@
 #define tracepoint(...)
 #endif
 
+using std::ostream;
+using std::set;
+using std::string;
+using std::stringstream;
+
+using ceph::Formatter;
+
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),
   rmw_flags(0), request(req),
   hit_flag_points(0), latest_flag_point(0),
-  hitset_inserted(false), qos_resp(dmc::PhaseType::reservation) {
+  hitset_inserted(false)
+{
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
@@ -58,7 +66,7 @@ void OpRequest::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (auto& i : events) {
       f->dump_object("event", i);
     }
@@ -78,29 +86,29 @@ void OpRequest::_unregistered() {
   request->set_connection(nullptr);
 }
 
-bool OpRequest::check_rmw(int flag) {
-  assert(rmw_flags != 0);
+bool OpRequest::check_rmw(int flag) const {
+  ceph_assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
-bool OpRequest::may_read() {
+bool OpRequest::may_read() const {
   return need_read_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
 }
-bool OpRequest::may_write() {
+bool OpRequest::may_write() const {
   return need_write_cap() || check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
 }
-bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
-bool OpRequest::rwordered_forced() {
+bool OpRequest::may_cache() const { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
+bool OpRequest::rwordered_forced() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_RWORDERED);
 }
-bool OpRequest::rwordered() {
+bool OpRequest::rwordered() const {
   return may_write() || may_cache() || rwordered_forced();
 }
 
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-bool OpRequest::need_read_cap() {
+bool OpRequest::need_read_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
 }
-bool OpRequest::need_write_cap() {
+bool OpRequest::need_write_cap() const {
   return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
 }
 bool OpRequest::need_promote() {
@@ -150,7 +158,7 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
-  mark_event_string(s);
+  mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,

@@ -1,13 +1,18 @@
+set(CURSES_NEED_NCURSES TRUE)
+find_package(Curses REQUIRED)
+
 set(rbd_srcs
   rbd.cc
   ArgumentTypes.cc
   IndentStream.cc
+  MirrorDaemonServiceInfo.cc
   OptionPrinter.cc
   Shell.cc
   Utils.cc
   action/Bench.cc
   action/Children.cc
   action/Clone.cc
+  action/Config.cc
   action/Copy.cc
   action/Create.cc
   action/Device.cc
@@ -26,15 +31,19 @@ set(rbd_srcs
   action/List.cc
   action/Lock.cc
   action/MergeDiff.cc
+  action/Migration.cc
   action/MirrorPool.cc
   action/MirrorImage.cc
+  action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
+  action/Perf.cc
   action/Pool.cc
   action/Remove.cc
   action/Rename.cc
   action/Resize.cc
   action/Snap.cc
+  action/Sparsify.cc
   action/Status.cc
   action/Trash.cc
   action/Watch.cc)
@@ -46,7 +55,7 @@ target_link_libraries(rbd librbd librados
   cls_journal_client cls_rbd_client
   rbd_types
   journal
-  ceph-common global
+  ceph-common global ${CURSES_LIBRARIES}
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_KRBD)
   target_link_libraries(rbd 

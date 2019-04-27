@@ -5,6 +5,7 @@
 
 #include "include/Context.h"
 #include "include/types.h"
+#include "common/zipkin_trace.h"
 #include "osd/osd_types.h"
 
 class WritebackHandler {

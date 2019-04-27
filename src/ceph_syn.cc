@@ -63,7 +63,7 @@ int main(int argc, const char **argv, char *envp[])
   for (int i=0; i<num_client; i++) {
     messengers[i] = Messenger::create_client_messenger(g_ceph_context,
 						       "synclient");
-    messengers[i]->bind(g_conf->public_addr);
+    messengers[i]->bind(g_conf()->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
     auto client = new StandaloneClient(messengers[i], mclients[i]);

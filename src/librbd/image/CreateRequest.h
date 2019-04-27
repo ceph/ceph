@@ -6,23 +6,18 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "common/WorkQueue.h"
-#include "librbd/ObjectMap.h"
 #include "include/rados/librados.hpp"
-#include "include/rbd_types.h"
-#include "cls/rbd/cls_rbd_types.h"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
-#include "common/Timer.h"
-#include "librbd/journal/TypeTraits.h"
 
+class ConfigProxy;
 class Context;
+class ContextWQ;
 
 using librados::IoCtx;
 
-namespace journal {
-  class Journaler;
-}
+namespace journal { class Journaler; }
 
 namespace librbd {
 namespace image {
@@ -30,17 +25,18 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CreateRequest {
 public:
-  static CreateRequest *create(IoCtx &ioctx, const std::string &image_name,
+  static CreateRequest *create(const ConfigProxy& config, IoCtx &ioctx,
+                               const std::string &image_name,
                                const std::string &image_id, uint64_t size,
                                const ImageOptions &image_options,
                                const std::string &non_primary_global_image_id,
                                const std::string &primary_mirror_uuid,
                                bool skip_mirror_enable,
                                ContextWQ *op_work_queue, Context *on_finish) {
-    return new CreateRequest(ioctx, image_name, image_id, size, image_options,
-                             non_primary_global_image_id, primary_mirror_uuid,
-                             skip_mirror_enable, op_work_queue,
-                             on_finish);
+    return new CreateRequest(config, ioctx, image_name, image_id, size,
+                             image_options, non_primary_global_image_id,
+                             primary_mirror_uuid, skip_mirror_enable,
+                             op_work_queue, on_finish);
   }
 
   static int validate_order(CephContext *cct, uint8_t order);
@@ -54,24 +50,21 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                               VALIDATE POOL                v (pool validation
+   *                               VALIDATE DATA POOL           v (pool validation
    *                                     |                      .  disabled)
    *                                     v                      .
-   *                             VALIDATE OVERWRITE             .
-   *                                     |                      .
-   *                                     v                      .
-   * (error: bottom up)           CREATE ID OBJECT. . < . . . . .
+   * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
    * |               |                   v
-   * |               |          ADD IMAGE TO DIRECTORY
+   * |               |            CREATE ID OBJECT
    * |               |               /   |
-   * |      REMOVE ID OBJECT<-------/    v
+   * |      REMOVE FROM DIR <-------/    v
    * |               |           NEGOTIATE FEATURES (when using default features)
    * |               |                   |
    * |               |                   v         (stripingv2 disabled)
    * |               |              CREATE IMAGE. . . . > . . . .
    * v               |               /   |                      .
-   * |      REMOVE FROM DIR<--------/    v                      .
+   * |      REMOVE ID OBJ <---------/    v                      .
    * |               |          SET STRIPE UNIT COUNT           .
    * |               |               /   |  \ . . . . . > . . . .
    * |      REMOVE HEADER OBJ<------/    v                     /. (object-map
@@ -93,7 +86,8 @@ private:
    * @endverbatim
    */
 
-  CreateRequest(IoCtx &ioctx, const std::string &image_name,
+  CreateRequest(const ConfigProxy& config, IoCtx &ioctx,
+                const std::string &image_name,
                 const std::string &image_id, uint64_t size,
                 const ImageOptions &image_options,
                 const std::string &non_primary_global_image_id,
@@ -101,7 +95,8 @@ private:
                 bool skip_mirror_enable,
                 ContextWQ *op_work_queue, Context *on_finish);
 
-  IoCtx &m_ioctx;
+  const ConfigProxy& m_config;
+  IoCtx m_io_ctx;
   IoCtx m_data_io_ctx;
   std::string m_image_name;
   std::string m_image_id;
@@ -133,17 +128,14 @@ private:
   rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
-  void validate_pool();
-  void handle_validate_pool(int r);
-
-  void validate_overwrite();
-  void handle_validate_overwrite(int r);
-
-  void create_id_object();
-  void handle_create_id_object(int r);
+  void validate_data_pool();
+  void handle_validate_data_pool(int r);
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
+
+  void create_id_object();
+  void handle_create_id_object(int r);
 
   void negotiate_features();
   void handle_negotiate_features(int r);
@@ -178,11 +170,12 @@ private:
   void remove_header_object();
   void handle_remove_header_object(int r);
 
+  void remove_id_object();
+  void handle_remove_id_object(int r);
+
   void remove_from_dir();
   void handle_remove_from_dir(int r);
 
-  void remove_id_object();
-  void handle_remove_id_object(int r);
 };
 
 } //namespace image

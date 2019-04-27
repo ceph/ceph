@@ -17,7 +17,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/encoding.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using namespace librados;

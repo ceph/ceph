@@ -14,7 +14,7 @@ struct rgw_cls_tag_timeout_op
     encode(tag_timeout, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(tag_timeout, bl);
     DECODE_FINISH(bl);
@@ -48,7 +48,7 @@ struct rgw_cls_obj_prepare_op
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
@@ -85,7 +85,7 @@ struct rgw_cls_obj_complete_op
   cls_rgw_obj_key key;
   string locator;
   rgw_bucket_entry_ver ver;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   string tag;
   bool log_op;
   uint16_t bilog_flags;
@@ -111,7 +111,7 @@ struct rgw_cls_obj_complete_op
     encode(zones_trace, bl);
     ENCODE_FINISH(bl);
  }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 3, 3, bl);
     uint8_t c;
     decode(c, bl);
@@ -167,7 +167,7 @@ struct rgw_cls_link_olh_op {
   string olh_tag;
   bool delete_marker;
   string op_tag;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
@@ -195,7 +195,7 @@ struct rgw_cls_link_olh_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(5, bl);
     decode(key, bl);
     decode(olh_tag, bl);
@@ -252,7 +252,7 @@ struct rgw_cls_unlink_instance_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
     decode(key, bl);
     decode(op_tag, bl);
@@ -288,7 +288,7 @@ struct rgw_cls_read_olh_log_op
     encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(olh, bl);
     decode(ver_marker, bl);
@@ -303,7 +303,7 @@ WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
 
 struct rgw_cls_read_olh_log_ret
 {
-  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
 
   rgw_cls_read_olh_log_ret() : is_truncated(false) {}
@@ -314,7 +314,7 @@ struct rgw_cls_read_olh_log_ret
     encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(log, bl);
     decode(is_truncated, bl);
@@ -340,7 +340,7 @@ struct rgw_cls_trim_olh_log_op
     encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(olh, bl);
     decode(ver, bl);
@@ -365,7 +365,7 @@ struct rgw_cls_bucket_clear_olh_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(key, bl);
     decode(olh_tag, bl);
@@ -394,7 +394,7 @@ struct rgw_cls_list_op
     encode(list_versions, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
     if (struct_v < 4) {
       decode(start_obj.name, bl);
@@ -413,8 +413,7 @@ struct rgw_cls_list_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_list_op)
 
-struct rgw_cls_list_ret
-{
+struct rgw_cls_list_ret {
   rgw_bucket_dir dir;
   bool is_truncated;
 
@@ -426,7 +425,7 @@ struct rgw_cls_list_ret
     encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(dir, bl);
     decode(is_truncated, bl);
@@ -450,7 +449,7 @@ struct rgw_cls_check_index_ret
     encode(calculated_header, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(existing_header, bl);
     decode(calculated_header, bl);
@@ -464,7 +463,7 @@ WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 struct rgw_cls_bucket_update_stats_op
 {
   bool absolute{false};
-  map<uint8_t, rgw_bucket_category_stats> stats;
+  map<RGWObjCategory, rgw_bucket_category_stats> stats;
 
   rgw_cls_bucket_update_stats_op() {}
 
@@ -474,7 +473,7 @@ struct rgw_cls_bucket_update_stats_op
     encode(stats, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(absolute, bl);
     decode(stats, bl);
@@ -494,7 +493,7 @@ struct rgw_cls_obj_remove_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(keep_attr_prefixes, bl);
     DECODE_FINISH(bl);
@@ -511,7 +510,7 @@ struct rgw_cls_obj_store_pg_ver_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(attr, bl);
     DECODE_FINISH(bl);
@@ -532,7 +531,7 @@ struct rgw_cls_obj_check_attrs_prefix {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(check_prefix, bl);
     decode(fail_if_exist, bl);
@@ -556,7 +555,7 @@ struct rgw_cls_obj_check_mtime {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(mtime, bl);
     uint8_t c;
@@ -581,7 +580,7 @@ struct rgw_cls_usage_log_add_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(info, bl);
     if (struct_v >= 2) {
@@ -598,7 +597,7 @@ struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
 
-  rgw_cls_bi_get_op() : type(PlainIdx) {}
+  rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -607,7 +606,7 @@ struct rgw_cls_bi_get_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(key, bl);
     uint8_t c;
@@ -629,7 +628,7 @@ struct rgw_cls_bi_get_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -648,7 +647,7 @@ struct rgw_cls_bi_put_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -671,7 +670,7 @@ struct rgw_cls_bi_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max, bl);
     decode(name, bl);
@@ -694,7 +693,7 @@ struct rgw_cls_bi_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(is_truncated, bl);
@@ -707,27 +706,32 @@ struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string owner;
+  string bucket;
 
   string iter;  // should be empty for the first call, non empty for subsequent calls
   uint32_t max_entries;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(start_epoch, bl);
     encode(end_epoch, bl);
     encode(owner, bl);
     encode(iter, bl);
     encode(max_entries, bl);
+    encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(2, bl);
     decode(start_epoch, bl);
     decode(end_epoch, bl);
     decode(owner, bl);
     decode(iter, bl);
     decode(max_entries, bl);
+    if (struct_v >= 2) {
+      decode(bucket, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -746,7 +750,7 @@ struct rgw_cls_usage_log_read_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(usage, bl);
     decode(truncated, bl);
@@ -760,20 +764,25 @@ struct rgw_cls_usage_log_trim_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string user;
+  string bucket;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(start_epoch, bl);
     encode(end_epoch, bl);
     encode(user, bl);
+    encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(3, bl);
     decode(start_epoch, bl);
     decode(end_epoch, bl);
     decode(user, bl);
+    if (struct_v >= 3) {
+      decode(bucket, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -791,7 +800,7 @@ struct cls_rgw_gc_set_entry_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(expiration_secs, bl);
     decode(info, bl);
@@ -815,7 +824,7 @@ struct cls_rgw_gc_defer_entry_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(expiration_secs, bl);
     decode(tag, bl);
@@ -842,7 +851,7 @@ struct cls_rgw_gc_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(marker, bl);
     decode(max, bl);
@@ -872,7 +881,7 @@ struct cls_rgw_gc_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(entries, bl);
     if (struct_v >= 2)
@@ -887,7 +896,7 @@ struct cls_rgw_gc_list_ret {
 WRITE_CLASS_ENCODER(cls_rgw_gc_list_ret)
 
 struct cls_rgw_gc_remove_op {
-  list<string> tags;
+  vector<string> tags;
 
   cls_rgw_gc_remove_op() {}
 
@@ -897,7 +906,7 @@ struct cls_rgw_gc_remove_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tags, bl);
     DECODE_FINISH(bl);
@@ -921,7 +930,7 @@ struct cls_rgw_bi_log_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(marker, bl);
     decode(max, bl);
@@ -946,7 +955,7 @@ struct cls_rgw_bi_log_trim_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(start_marker, bl);
     decode(end_marker, bl);
@@ -971,7 +980,7 @@ struct cls_rgw_bi_log_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(truncated, bl);
@@ -993,7 +1002,7 @@ struct cls_rgw_lc_get_next_entry_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(marker, bl);
     DECODE_FINISH(bl);
@@ -1001,9 +1010,10 @@ struct cls_rgw_lc_get_next_entry_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
 
-struct cls_rgw_lc_get_next_entry_ret {
-  pair<string, int> entry;
+using rgw_lc_entry_t = std::pair<std::string, int>;
 
+struct cls_rgw_lc_get_next_entry_ret {
+  rgw_lc_entry_t entry;
   cls_rgw_lc_get_next_entry_ret() {}
 
   void encode(bufferlist& bl) const {
@@ -1012,7 +1022,7 @@ struct cls_rgw_lc_get_next_entry_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1021,8 +1031,48 @@ struct cls_rgw_lc_get_next_entry_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
 
+struct cls_rgw_lc_get_entry_op {
+  string marker;
+  cls_rgw_lc_get_entry_op() {}
+  cls_rgw_lc_get_entry_op(const std::string& _marker) : marker(_marker) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_op)
+
+struct cls_rgw_lc_get_entry_ret {
+  rgw_lc_entry_t entry;
+  cls_rgw_lc_get_entry_ret() {}
+  cls_rgw_lc_get_entry_ret(rgw_lc_entry_t&& _entry) : entry(std::move(_entry)) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_ret)
+
+
 struct cls_rgw_lc_rm_entry_op {
-  pair<string, int> entry;
+  rgw_lc_entry_t entry;
   cls_rgw_lc_rm_entry_op() {}
 
   void encode(bufferlist& bl) const {
@@ -1031,7 +1081,7 @@ struct cls_rgw_lc_rm_entry_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1040,7 +1090,7 @@ struct cls_rgw_lc_rm_entry_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_rm_entry_op)
 
 struct cls_rgw_lc_set_entry_op {
-  pair<string, int> entry;
+  rgw_lc_entry_t entry;
   cls_rgw_lc_set_entry_op() {}
 
   void encode(bufferlist& bl) const {
@@ -1049,7 +1099,7 @@ struct cls_rgw_lc_set_entry_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1069,7 +1119,7 @@ struct cls_rgw_lc_put_head_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(head, bl);
     DECODE_FINISH(bl);
@@ -1089,7 +1139,7 @@ struct cls_rgw_lc_get_head_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(head, bl);
     DECODE_FINISH(bl);
@@ -1111,7 +1161,7 @@ struct cls_rgw_lc_list_entries_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(marker, bl);
     decode(max_entries, bl);
@@ -1134,7 +1184,7 @@ struct cls_rgw_lc_list_entries_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(entries, bl);
     if (struct_v >= 2) {
@@ -1157,7 +1207,7 @@ struct cls_rgw_reshard_add_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1180,7 +1230,7 @@ struct cls_rgw_reshard_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max, bl);
     decode(marker, bl);
@@ -1205,7 +1255,7 @@ struct cls_rgw_reshard_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(is_truncated, bl);
@@ -1227,7 +1277,7 @@ struct cls_rgw_reshard_get_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1248,7 +1298,7 @@ struct cls_rgw_reshard_get_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1273,7 +1323,7 @@ struct cls_rgw_reshard_remove_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tenant, bl);
     decode(bucket_name, bl);
@@ -1294,7 +1344,7 @@ struct cls_rgw_set_bucket_resharding_op  {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entry, bl);
     DECODE_FINISH(bl);
@@ -1310,7 +1360,7 @@ struct cls_rgw_clear_bucket_resharding_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
@@ -1328,7 +1378,7 @@ struct cls_rgw_guard_bucket_resharding_op  {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(ret_err, bl);
     DECODE_FINISH(bl);
@@ -1346,7 +1396,7 @@ struct cls_rgw_get_bucket_resharding_op  {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
@@ -1365,7 +1415,7 @@ struct cls_rgw_get_bucket_resharding_ret  {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(new_instance, bl);
     DECODE_FINISH(bl);

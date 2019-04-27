@@ -12,8 +12,6 @@
    man/8/ceph-debugpack
    man/8/ceph-dencoder
    man/8/ceph-deploy
-   man/8/ceph-detect-init
-   man/8/ceph-disk
    man/8/ceph-volume
    man/8/ceph-volume-systemd
    man/8/ceph-fuse
@@ -22,7 +20,6 @@
    man/8/ceph-osd
    man/8/ceph-post-file
    man/8/ceph-rbdnamer
-   man/8/ceph-rest-api
    man/8/ceph-run
    man/8/ceph-syn
    man/8/ceph
@@ -43,3 +40,4 @@
    man/8/rbd-replay
    man/8/rbd
    man/8/rbdmap
+   man/8/ceph-immutable-object-cache

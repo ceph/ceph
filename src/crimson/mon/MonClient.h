@@ -1,0 +1,171 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+
+#pragma once
+
+#include <memory>
+
+#include <seastar/core/future.hh>
+#include <seastar/core/gate.hh>
+#include <seastar/core/lowres_clock.hh>
+#include <seastar/core/timer.hh>
+
+#include "auth/AuthRegistry.h"
+#include "auth/KeyRing.h"
+#include "common/ceph_context.h"
+
+#include "crimson/auth/AuthClient.h"
+#include "crimson/auth/AuthServer.h"
+#include "crimson/common/auth_service.h"
+#include "crimson/common/auth_handler.h"
+#include "crimson/net/Dispatcher.h"
+#include "crimson/net/Fwd.h"
+
+#include "mon/MonMap.h"
+
+#include "mon/MonSub.h"
+
+template<typename Message> using Ref = boost::intrusive_ptr<Message>;
+namespace ceph::net {
+  class Messenger;
+}
+
+struct AuthAuthorizeHandler;
+class MAuthReply;
+struct MMonMap;
+struct MMonSubscribeAck;
+struct MMonGetVersionReply;
+struct MMonCommandAck;
+struct MLogAck;
+struct MConfig;
+
+namespace ceph::mon {
+
+class Connection;
+
+class Client : public ceph::net::Dispatcher,
+	       public ceph::common::AuthService,
+	       public ceph::auth::AuthClient,
+	       public ceph::auth::AuthServer
+{
+  EntityName entity_name;
+  KeyRing keyring;
+  const uint32_t want_keys;
+
+  MonMap monmap;
+  seastar::promise<MessageRef> reply;
+  std::unique_ptr<Connection> active_con;
+  std::vector<Connection> pending_conns;
+  seastar::timer<seastar::lowres_clock> timer;
+  seastar::gate tick_gate;
+
+  ceph::net::Messenger& msgr;
+
+  // commands
+  using get_version_t = seastar::future<version_t, version_t>;
+
+  ceph_tid_t last_version_req_id = 0;
+  std::map<ceph_tid_t, typename get_version_t::promise_type> version_reqs;
+
+  ceph_tid_t last_mon_command_id = 0;
+  using command_result_t =
+    seastar::future<std::int32_t, string, ceph::bufferlist>;
+  std::map<ceph_tid_t, typename command_result_t::promise_type> mon_commands;
+
+  MonSub sub;
+
+public:
+  Client(ceph::net::Messenger&, ceph::common::AuthHandler&);
+  Client(Client&&);
+  ~Client();
+  seastar::future<> start();
+  seastar::future<> stop();
+
+  const uuid_d& get_fsid() const {
+    return monmap.fsid;
+  }
+  get_version_t get_version(const std::string& map);
+  command_result_t run_command(const std::vector<std::string>& cmd,
+			       const bufferlist& bl);
+  seastar::future<> send_message(MessageRef);
+  bool sub_want(const std::string& what, version_t start, unsigned flags);
+  void sub_got(const std::string& what, version_t have);
+  void sub_unwant(const std::string& what);
+  bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
+  seastar::future<> renew_subs();
+  // AuthService methods
+  AuthAuthorizer* get_authorizer(peer_type_t peer) const override;
+
+private:
+  // AuthServer methods
+  std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+  get_supported_auth_methods(int peer_type) final;
+  uint32_t pick_con_mode(int peer_type,
+			 uint32_t auth_method,
+			 const std::vector<uint32_t>& preferred_modes) final;
+  AuthAuthorizeHandler* get_auth_authorize_handler(int peer_type,
+						   int auth_method) final;
+  int handle_auth_request(ceph::net::ConnectionRef conn,
+			  AuthConnectionMetaRef auth_meta,
+			  bool more,
+			  uint32_t auth_method,
+			  const ceph::bufferlist& payload,
+			  ceph::bufferlist *reply) final;
+
+  CephContext cct; // for auth_registry
+  AuthRegistry auth_registry;
+  ceph::common::AuthHandler& auth_handler;
+
+  // AuthClient methods
+  ceph::auth::AuthClient::auth_request_t
+  get_auth_request(ceph::net::ConnectionRef conn,
+		   AuthConnectionMetaRef auth_meta) final;
+
+   // Handle server's request to continue the handshake
+  ceph::bufferlist handle_auth_reply_more(ceph::net::ConnectionRef conn,
+					  AuthConnectionMetaRef auth_meta,
+					  const bufferlist& bl) final;
+
+   // Handle server's indication that authentication succeeded
+  int handle_auth_done(ceph::net::ConnectionRef conn,
+		       AuthConnectionMetaRef auth_meta,
+		       uint64_t global_id,
+		       uint32_t con_mode,
+		       const bufferlist& bl) final;
+
+   // Handle server's indication that the previous auth attempt failed
+  int handle_auth_bad_method(ceph::net::ConnectionRef conn,
+			     AuthConnectionMetaRef auth_meta,
+			     uint32_t old_auth_method,
+			     int result,
+			     const std::vector<uint32_t>& allowed_methods,
+			     const std::vector<uint32_t>& allowed_modes) final;
+
+private:
+  void tick();
+
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
+				MessageRef m) override;
+  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
+  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
+
+  seastar::future<> handle_monmap(ceph::net::Connection* conn,
+				  Ref<MMonMap> m);
+  seastar::future<> handle_auth_reply(ceph::net::Connection* conn,
+				      Ref<MAuthReply> m);
+  seastar::future<> handle_subscribe_ack(Ref<MMonSubscribeAck> m);
+  seastar::future<> handle_get_version_reply(Ref<MMonGetVersionReply> m);
+  seastar::future<> handle_mon_command_ack(Ref<MMonCommandAck> m);
+  seastar::future<> handle_log_ack(Ref<MLogAck> m);
+  seastar::future<> handle_config(Ref<MConfig> m);
+
+private:
+  seastar::future<> load_keyring();
+  seastar::future<> authenticate();
+
+  bool is_hunting() const;
+  seastar::future<> reopen_session(int rank);
+  std::vector<unsigned> get_random_mons(unsigned n) const;
+  seastar::future<> _add_conn(unsigned rank, uint64_t global_id);
+};
+
+} // namespace ceph::mon

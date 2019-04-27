@@ -15,12 +15,12 @@
 #ifndef CEPH_SIMPLECACHE_H
 #define CEPH_SIMPLECACHE_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/unordered_map.h"
 
 template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SimpleLRU {
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("SimpleLRU::lock");
   size_t max_size;
   ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H> contents;
   list<pair<K, V> > lru;
@@ -40,17 +40,17 @@ class SimpleLRU {
   }
 
 public:
-  SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {
+  SimpleLRU(size_t max_size) : max_size(max_size) {
     contents.rehash(max_size);
   }
 
   void pin(K key, V val) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     pinned.emplace(std::move(key), std::move(val));
   }
 
   void clear_pinned(K e) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (typename map<K, V, C>::iterator i = pinned.begin();
 	 i != pinned.end() && i->first <= e;
 	 pinned.erase(i++)) {
@@ -64,7 +64,7 @@ public:
   }
 
   void clear(K key) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
       contents.find(key);
     if (i == contents.end())
@@ -74,13 +74,13 @@ public:
   }
 
   void set_size(size_t new_size) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     max_size = new_size;
     trim_cache();
   }
 
   bool lookup(K key, V *out) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
       contents.find(key);
     if (i != contents.end()) {
@@ -97,7 +97,7 @@ public:
   }
 
   void add(K key, V value) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     _add(std::move(key), std::move(value));
   }
 };

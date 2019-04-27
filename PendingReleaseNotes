@@ -1,62 +1,55 @@
-13.0.1
+14.2.1
 ------
 
-* *CephFS*:
+* The default value for `mon_crush_min_required_version` has been
+  changed from `firefly` to `hammer`, which means the cluster will
+  issue a health warning if your CRUSH tunables are older than hammer.
+  There is generally a small (but non-zero) amount of data that will
+  move around by making the switch to hammer tunables; for more information,
+  see :ref:`crush-map-tunables`.
 
-  * Several "ceph mds" commands have been obsoleted and replaced
-    by equivalent "ceph fs" commands:
-      - mds dump -> fs dump
-      - mds getmap -> fs dump
-      - mds stop -> mds deactivate
-      - mds set_max_mds -> fs set max_mds
-      - mds set -> fs set
-      - mds cluster_down -> fs set cluster_down true
-      - mds cluster_up -> fs set cluster_down false
-      - mds add_data_pool -> fs add_data_pool
-      - mds remove_data_pool -> fs rm_data_pool
-      - mds rm_data_pool -> fs rm_data_pool
+  If possible, we recommend that you set the oldest allowed client to `hammer`
+  or later.  You can tell what the current oldest allowed client is with::
 
-  * New CephFS file system attributes session_timeout and session_autoclose
-    are configurable via `ceph fs set`. The MDS config options
-    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
-    obsolete.
+    ceph osd dump | min_compat_client
 
-* *RBD*
+  If the current value is older than hammer, you can tell whether it
+  is safe to make this change by verifying that there are no clients
+  older than hammer current connected to the cluster with::
 
-  * The RBD C API's rbd_discard method now enforces a maximum length of
-    2GB to match the C++ API's Image::discard method. This restriction
-    prevents overflow of the result code.
+    ceph features
 
-  * The rbd CLI's "lock list" JSON and XML output has changed.
+  The newer `straw2` CRUSH bucket type was introduced in hammer, and
+  ensuring that all clients are hammer or newer allows new features
+  only supported for `straw2` buckets to be used, including the
+  `crush-compat` mode for the :ref:`balancer`.
+  
 
-  * The rbd CLI's "showmapped" JSON and XML output has changed.
+>=15.0.0
+--------
 
-  * RBD now optionally supports simplified image clone semantics where
-    non-protected snapshots can be cloned; and snapshots with linked clones
-    can be removed and the space automatically reclaimed once all remaining
-    linked clones are detached. This feature is enabled by default if
-    the OSD "require-min-compat-client" flag is set to mimic or later; or can be
-    overridden via the "rbd_default_clone_format" configuration option.
+* The RGW "num_rados_handles" has been removed.
+  * If you were using a value of "num_rados_handles" greater than 1
+    multiply your current "objecter_inflight_ops" and 
+    "objecter_inflight_op_bytes" paramaeters by the old
+    "num_rados_handles" to get the same throttle behavior.
 
-* The sample ``crush-location-hook`` script has been removed.  Its output is
-  equivalent to the built-in default behavior, so it has been replaced with an
-  example in the CRUSH documentation.
+* Ceph now packages python bindings for python3.6 instead of
+  python3.4, because EPEL7 recently switched from python3.4 to
+  python3.6 as the native python3. see the `announcement <https://lists.fedoraproject.org/archives/list/epel-announce@lists.fedoraproject.org/message/EGUMKAIMPK2UD5VSHXM53BH2MBDGDWMO/>_`
+  for more details on the background of this change.
 
-* The "rcceph" script (systemd/ceph in the source code tree, shipped as
-  /usr/sbin/rcceph in the ceph-base package for CentOS and SUSE) has been
-  dropped. This script was used to perform admin operations (start, stop,
-  restart, etc.) on all OSD and/or MON daemons running on a given machine.
-  This functionality is provided by the systemd target units (ceph-osd.target,
-  ceph-mon.target, etc.).
+* librbd now uses a write-around cache policy be default,
+  replacing the previous write-back cache policy default.
+  This cache policy allows librbd to immediately complete
+  write IOs while they are still in-flight to the OSDs.
+  Subsequent flush requests will ensure all in-flight
+  write IOs are completed prior to completing. The
+  librbd cache policy can be controlled via a new
+  "rbd_cache_policy" configuration option.
 
-* The python-ceph-compat package is declared deprecated, and will be dropped
-  when all supported distros have completed the move to Python 3. It has
-  already been dropped from those supported distros where Python 3 is standard
-  and Python 2 is optional (currently only SUSE).
-
-* The -f option of the rados tool now means "--format" instead of "--force",
-  for consistency with the ceph tool.
-
->= 12.2.3
----------
-
+* librbd now includes a simple IO scheduler which attempts to
+  batch together multiple IOs against the same backing RBD
+  data block object. The librbd IO scheduler policy can be
+  controlled via a new "rbd_io_scheduler" configuration
+  option.

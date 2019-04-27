@@ -17,17 +17,19 @@
 
 #include <atomic>
 #include <map>
+#include <queue>
 #include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
-#include "include/xlist.h"
+#include "include/ceph_assert.h"
+#include "common/Throttle.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/PrioritizedQueue.h"
 
+#include "Message.h"
+
 class CephContext;
 class Messenger;
-class Message;
 struct Connection;
 
 /**
@@ -40,23 +42,23 @@ class DispatchQueue {
   class QueueItem {
     int type;
     ConnectionRef con;
-    MessageRef m;
+    ref_t<Message> m;
   public:
-    explicit QueueItem(Message *m) : type(-1), con(0), m(m) {}
+    explicit QueueItem(const ref_t<Message>& m) : type(-1), con(0), m(m) {}
     QueueItem(int type, Connection *con) : type(type), con(con), m(0) {}
     bool is_code() const {
       return type != -1;
     }
     int get_code () const {
-      assert(is_code());
+      ceph_assert(is_code());
       return type;
     }
-    Message *get_message() {
-      assert(!is_code());
-      return m.get();
+    const ref_t<Message>& get_message() {
+      ceph_assert(!is_code());
+      return m;
     }
     Connection *get_connection() {
-      assert(is_code());
+      ceph_assert(is_code());
       return con.get();
     }
   };
@@ -68,9 +70,9 @@ class DispatchQueue {
 
   PrioritizedQueue<QueueItem, uint64_t> mqueue;
 
-  set<pair<double, Message*> > marrival;
-  map<Message *, set<pair<double, Message*> >::iterator> marrival_map;
-  void add_arrival(Message *m) {
+  std::set<pair<double, ref_t<Message>>> marrival;
+  map<ref_t<Message>, decltype(marrival)::iterator> marrival_map;
+  void add_arrival(const ref_t<Message>& m) {
     marrival_map.insert(
       make_pair(
 	m,
@@ -78,12 +80,11 @@ class DispatchQueue {
 	)
       );
   }
-  void remove_arrival(Message *m) {
-    map<Message *, set<pair<double, Message*> >::iterator>::iterator i =
-      marrival_map.find(m);
-    assert(i != marrival_map.end());
-    marrival.erase(i->second);
-    marrival_map.erase(i);
+  void remove_arrival(const ref_t<Message>& m) {
+    auto it = marrival_map.find(m);
+    ceph_assert(it != marrival_map.end());
+    marrival.erase(it->second);
+    marrival_map.erase(it);
   }
 
   std::atomic<uint64_t> next_id;
@@ -106,7 +107,7 @@ class DispatchQueue {
   Mutex local_delivery_lock;
   Cond local_delivery_cond;
   bool stop_local_delivery;
-  list<pair<Message *, int> > local_messages;
+  std::queue<pair<ref_t<Message>, int>> local_messages;
   class LocalDeliveryThread : public Thread {
     DispatchQueue *dq;
   public:
@@ -117,8 +118,8 @@ class DispatchQueue {
     }
   } local_delivery_thread;
 
-  uint64_t pre_dispatch(Message *m);
-  void post_dispatch(Message *m, uint64_t msize);
+  uint64_t pre_dispatch(const ref_t<Message>& m);
+  void post_dispatch(const ref_t<Message>& m, uint64_t msize);
 
  public:
 
@@ -126,7 +127,10 @@ class DispatchQueue {
   Throttle dispatch_throttler;
 
   bool stop;
-  void local_delivery(Message *m, int priority);
+  void local_delivery(const ref_t<Message>& m, int priority);
+  void local_delivery(Message* m, int priority) {
+    return local_delivery(ref_t<Message>(m, false), priority); /* consume ref */
+  }
   void run_local_delivery();
 
   double get_max_age(utime_t now) const;
@@ -194,10 +198,16 @@ class DispatchQueue {
     cond.Signal();
   }
 
-  bool can_fast_dispatch(const Message *m) const;
-  void fast_dispatch(Message *m);
-  void fast_preprocess(Message *m);
-  void enqueue(Message *m, int priority, uint64_t id);
+  bool can_fast_dispatch(const cref_t<Message> &m) const;
+  void fast_dispatch(const ref_t<Message>& m);
+  void fast_dispatch(Message* m) {
+    return fast_dispatch(ref_t<Message>(m, false)); /* consume ref */
+  }
+  void fast_preprocess(const ref_t<Message>& m);
+  void enqueue(const ref_t<Message>& m, int priority, uint64_t id);
+  void enqueue(Message* m, int priority, uint64_t id) {
+    return enqueue(ref_t<Message>(m, false), priority, id); /* consume ref */
+  }
   void discard_queue(uint64_t id);
   void discard_local();
   uint64_t get_id() {
@@ -224,9 +234,9 @@ class DispatchQueue {
       stop(false)
     {}
   ~DispatchQueue() {
-    assert(mqueue.empty());
-    assert(marrival.empty());
-    assert(local_messages.empty());
+    ceph_assert(mqueue.empty());
+    ceph_assert(marrival.empty());
+    ceph_assert(local_messages.empty());
   }
 };
 

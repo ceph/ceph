@@ -20,18 +20,6 @@
 
 class MDirUpdate : public Message {
 public:
-  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
-  MDirUpdate(mds_rank_t f,
-	     dirfrag_t dirfrag,
-             int dir_rep,
-             const std::set<int32_t>& dir_rep_by,
-             filepath& path,
-             bool discover = false) :
-    Message(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
-    dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
-    this->discover = discover ? 5 : 0;
-  }
-
   mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   int get_dir_rep() const { return dir_rep; }
@@ -40,15 +28,15 @@ public:
   const filepath& get_path() const { return path; }
 
   bool has_tried_discover() const { return tried_discover > 0; }
-  void inc_tried_discover() { ++tried_discover; }
+  void inc_tried_discover() const { ++tried_discover; }
 
-  const char *get_type_name() const override { return "dir_update"; }
+  std::string_view get_type_name() const override { return "dir_update"; }
   void print(ostream& out) const override {
     out << "dir_update(" << get_dirfrag() << ")";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(from_mds, p);
     decode(dirfrag, p);
     decode(dir_rep, p);
@@ -67,8 +55,29 @@ public:
     encode(path, payload);
   }
 
-private:
-  ~MDirUpdate() override {}
+protected:
+  ~MDirUpdate() {}
+  MDirUpdate() : Message{MSG_MDS_DIRUPDATE} {}
+  MDirUpdate(mds_rank_t f,
+	     dirfrag_t dirfrag,
+             int dir_rep,
+             const std::set<int32_t>& dir_rep_by,
+             filepath& path,
+             bool discover = false) :
+    Message{MSG_MDS_DIRUPDATE}, from_mds(f), dirfrag(dirfrag),
+    dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
+    this->discover = discover ? 5 : 0;
+  }
+  MDirUpdate(const MDirUpdate& m)
+  : Message{MSG_MDS_DIRUPDATE},
+    from_mds(m.from_mds),
+    dirfrag(m.dirfrag),
+    dir_rep(m.dir_rep),
+    discover(m.discover),
+    dir_rep_by(m.dir_rep_by),
+    path(m.path),
+    tried_discover(m.tried_discover)
+  {}
 
   mds_rank_t from_mds = -1;
   dirfrag_t dirfrag;
@@ -76,7 +85,11 @@ private:
   int32_t discover = 5;
   std::set<int32_t> dir_rep_by;
   filepath path;
-  int tried_discover = 0;
+  mutable int tried_discover = 0; // XXX HACK
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

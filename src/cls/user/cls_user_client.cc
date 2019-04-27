@@ -51,7 +51,7 @@ public:
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
 	  *entries = ret.entries;
@@ -104,7 +104,7 @@ public:
     if (r >= 0) {
       cls_user_get_header_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (header)
 	  *header = ret.header;
@@ -130,6 +130,15 @@ void cls_user_get_header(librados::ObjectReadOperation& op,
   encode(call, inbl);
 
   op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header, NULL, pret));
+}
+
+void cls_user_reset_stats(librados::ObjectWriteOperation &op)
+{
+  bufferlist inbl;
+  cls_user_reset_stats_op call;
+  call.time = real_clock::now();
+  encode(call, inbl);
+  op.exec("user", "reset_user_stats", inbl);
 }
 
 int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *ctx)

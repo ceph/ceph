@@ -21,6 +21,8 @@ The following contains includes and globals that will be used in later examples:
 	const char sample_bucket[] = "sample_bucket";
 	const char sample_key[] = "hello.txt";
 	const char sample_file[] = "resource/hello.txt";
+	const char *security_token = NULL;
+	const char *auth_region = NULL;
 
 	S3BucketContext bucketContext =
 	{
@@ -29,7 +31,9 @@ The following contains includes and globals that will be used in later examples:
 		S3ProtocolHTTP,
 		S3UriStylePath,
 		access_key,
-		secret_key
+		secret_key,
+		security_token,
+		auth_region
 	};
 
 	S3Status responsePropertiesCallback(
@@ -105,7 +109,8 @@ for each bucket.
 		&listServiceCallback
 	};
 	bool header_printed = false;
-	S3_list_service(S3ProtocolHTTP, access_key, secret_key, host, 0, NULL, &listServiceHandler, &header_printed);
+	S3_list_service(S3ProtocolHTTP, access_key, secret_key, security_token, host, 
+                    auth_region, NULL, 0, &listServiceHandler, &header_printed);
 
 
 Creating a Bucket
@@ -162,7 +167,7 @@ last modified date.
 		responseHandler,
 		&listBucketCallback
 	};
-	S3_list_bucket(&bucketContext, NULL, NULL, NULL, 0, NULL, &listBucketHandler, NULL);
+	S3_list_bucket(&bucketContext, NULL, NULL, NULL, 0, NULL, 0, &listBucketHandler, NULL);
 
 The output will look something like this::
 
@@ -179,7 +184,7 @@ Deleting a Bucket
 
 .. code-block:: cpp
 
-	S3_delete_bucket(S3ProtocolHTTP, S3UriStylePath, access_key, secret_key, host, sample_bucket, NULL, &responseHandler, NULL);
+	S3_delete_bucket(S3ProtocolHTTP, S3UriStylePath, access_key, secret_key, 0, host, sample_bucket, NULL, NULL, 0, &responseHandler, NULL);
 
 
 Creating an Object (from a file)
@@ -234,7 +239,8 @@ This creates a file ``hello.txt``.
 		&putObjectDataCallback
 	};
 
-	S3_put_object(&bucketContext, sample_key, contentLength, NULL, NULL, &putObjectHandler, &data);
+	S3_put_object(&bucketContext, sample_key, contentLength, NULL, NULL, 0, &putObjectHandler, &data);
+	fclose(data.infile);
 
 
 Download an Object (to a file)
@@ -257,7 +263,7 @@ This downloads a file and prints the contents.
 		&getObjectDataCallback
 	};
 	FILE *outfile = stdout;
-	S3_get_object(&bucketContext, sample_key, NULL, 0, 0, NULL, &getObjectHandler, outfile);
+	S3_get_object(&bucketContext, sample_key, NULL, 0, 0, NULL, 0, &getObjectHandler, outfile);
 
 
 Delete an Object
@@ -272,7 +278,7 @@ This deletes an object.
 		0,
 		&responseCompleteCallback
 	};
-	S3_delete_object(&bucketContext, sample_key, 0, &deleteResponseHandler, 0);
+	S3_delete_object(&bucketContext, sample_key, 0, 0, &deleteResponseHandler, 0);
 
 
 Change an Object's ACL
@@ -327,5 +333,5 @@ This generates a signed download URL that will be valid for 5 minutes.
 	char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE];
 	int64_t expires = time(NULL) + 60 * 5; // Current time + 5 minutes
 
-	S3_generate_authenticated_query_string(buffer, &bucketContext, sample_key, expires, NULL);
+	S3_generate_authenticated_query_string(buffer, &bucketContext, sample_key, expires, NULL, "GET");
 

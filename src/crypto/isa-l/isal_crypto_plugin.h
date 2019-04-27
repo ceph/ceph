@@ -24,7 +24,6 @@
 
 class ISALCryptoPlugin : public CryptoPlugin {
 
-  CryptoAccelRef cryptoaccel;
 public:
 
   explicit ISALCryptoPlugin(CephContext* cct) : CryptoPlugin(cct)

@@ -16,16 +16,16 @@
 
 void ExtentCache::extent::_link_pin_state(pin_state &pin_state)
 {
-  assert(parent_extent_set);
-  assert(!parent_pin_state);
+  ceph_assert(parent_extent_set);
+  ceph_assert(!parent_pin_state);
   parent_pin_state = &pin_state;
   pin_state.pin_list.push_back(*this);
 }
 
 void ExtentCache::extent::_unlink_pin_state()
 {
-  assert(parent_extent_set);
-  assert(parent_pin_state);
+  ceph_assert(parent_extent_set);
+  ceph_assert(parent_pin_state);
   auto liter = pin_state::list::s_iterator_to(*this);
   parent_pin_state->pin_list.erase(liter);
   parent_pin_state = nullptr;
@@ -33,8 +33,8 @@ void ExtentCache::extent::_unlink_pin_state()
 
 void ExtentCache::extent::unlink()
 {
-  assert(parent_extent_set);
-  assert(parent_pin_state);
+  ceph_assert(parent_extent_set);
+  ceph_assert(parent_pin_state);
 
   _unlink_pin_state();
 
@@ -42,19 +42,19 @@ void ExtentCache::extent::unlink()
   {
     auto siter = object_extent_set::set::s_iterator_to(*this);
     auto &set = object_extent_set::set::container_from_iterator(siter);
-    assert(&set == &(parent_extent_set->extent_set));
+    ceph_assert(&set == &(parent_extent_set->extent_set));
     set.erase(siter);
   }
 
   parent_extent_set = nullptr;
-  assert(!parent_pin_state);
+  ceph_assert(!parent_pin_state);
 }
 
 void ExtentCache::extent::link(
   object_extent_set &extent_set,
   pin_state &pin_state)
 {
-  assert(!parent_extent_set);
+  ceph_assert(!parent_extent_set);
   parent_extent_set = &extent_set;
   extent_set.extent_set.insert(*this);
 
@@ -73,7 +73,7 @@ void ExtentCache::remove_and_destroy_if_empty(object_extent_set &eset)
   if (eset.extent_set.empty()) {
     auto siter = cache_set::s_iterator_to(eset);
     auto &set = cache_set::container_from_iterator(siter);
-    assert(&set == &per_object_caches);
+    ceph_assert(&set == &per_object_caches);
 
     // per_object_caches owns eset
     per_object_caches.erase(eset);
@@ -175,10 +175,10 @@ extent_map ExtentCache::get_remaining_extents_for_rmw(
       res.second,
       [&](uint64_t off, uint64_t len,
 	  extent *ext, object_extent_set::update_action *action) {
-	assert(off == cur);
+	ceph_assert(off == cur);
 	cur = off + len;
 	action->action = object_extent_set::update_action::NONE;
-	assert(ext && ext->bl && ext->pinned_by_write());
+	ceph_assert(ext && ext->bl && ext->pinned_by_write());
 	bl.substr_of(
 	  *(ext->bl),
 	  off - ext->offset,
@@ -206,7 +206,7 @@ void ExtentCache::present_rmw_update(
       [&](uint64_t off, uint64_t len,
 	  extent *ext, object_extent_set::update_action *action) {
 	action->action = object_extent_set::update_action::NONE;
-	assert(ext && ext->pinned_by_write());
+	ceph_assert(ext && ext->pinned_by_write());
 	action->bl = bufferlist();
 	action->bl->substr_of(
 	  res.get_val(),

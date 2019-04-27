@@ -14,10 +14,8 @@
 #ifndef CEPH_WATCH_H
 #define CEPH_WATCH_H
 
-#include "include/memory.h"
 #include <set>
-
-#include "msg/Messenger.h"
+#include "msg/Connection.h"
 #include "include/Context.h"
 
 enum WatcherState {
@@ -33,12 +31,12 @@ struct ObjectContext;
 class MWatchNotify;
 
 class Watch;
-typedef ceph::shared_ptr<Watch> WatchRef;
-typedef ceph::weak_ptr<Watch> WWatchRef;
+typedef std::shared_ptr<Watch> WatchRef;
+typedef std::weak_ptr<Watch> WWatchRef;
 
 class Notify;
-typedef ceph::shared_ptr<Notify> NotifyRef;
-typedef ceph::weak_ptr<Notify> WNotifyRef;
+typedef std::shared_ptr<Notify> NotifyRef;
+typedef std::weak_ptr<Notify> WNotifyRef;
 
 struct CancelableContext;
 
@@ -56,9 +54,9 @@ class Notify {
   bool complete;
   bool discarded;
   bool timed_out;  ///< true if the notify timed out
-  set<WatchRef> watchers;
+  std::set<WatchRef> watchers;
 
-  bufferlist payload;
+  ceph::buffer::list payload;
   uint32_t timeout;
   uint64_t cookie;
   uint64_t notify_id;
@@ -69,7 +67,7 @@ class Notify {
   Mutex lock;
 
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
-  multimap<pair<uint64_t,uint64_t>,bufferlist> notify_replies;
+  std::multimap<std::pair<uint64_t,uint64_t>, ceph::buffer::list> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
@@ -85,7 +83,7 @@ class Notify {
   Notify(
     ConnectionRef client,
     uint64_t client_gid,
-    bufferlist &payload,
+    ceph::buffer::list& payload,
     uint32_t timeout,
     uint64_t cookie,
     uint64_t notify_id,
@@ -99,12 +97,10 @@ class Notify {
   void unregister_cb();
 public:
 
-  string gen_dbg_prefix() {
-    stringstream ss;
-    ss << "Notify(" << make_pair(cookie, notify_id) << " "
-       << " watchers=" << watchers.size()
-       << ") ";
-    return ss.str();
+  std::ostream& gen_dbg_prefix(std::ostream& out) {
+    return out << "Notify(" << std::make_pair(cookie, notify_id) << " "
+        << " watchers=" << watchers.size()
+        << ") ";
   }
   void set_self(NotifyRef _self) {
     self = _self;
@@ -112,7 +108,7 @@ public:
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
     uint64_t client_gid,
-    bufferlist &payload,
+    ceph::buffer::list &payload,
     uint32_t timeout,
     uint64_t cookie,
     uint64_t notify_id,
@@ -130,7 +126,7 @@ public:
   /// Called once per NotifyAck
   void complete_watcher(
     WatchRef watcher, ///< [in] watcher to complete
-    bufferlist& reply_bl ///< [in] reply buffer from the notified watcher
+    ceph::buffer::list& reply_bl ///< [in] reply buffer from the notified watcher
     );
   /// Called when a watcher unregisters or times out
   void complete_watcher_remove(
@@ -157,7 +153,7 @@ class Watch {
 
   OSDService *osd;
   boost::intrusive_ptr<PrimaryLogPG> pg;
-  ceph::shared_ptr<ObjectContext> obc;
+  std::shared_ptr<ObjectContext> obc;
 
   std::map<uint64_t, NotifyRef> in_progress_notifies;
 
@@ -174,7 +170,7 @@ class Watch {
 
   Watch(
     PrimaryLogPG *pg, OSDService *osd,
-    ceph::shared_ptr<ObjectContext> obc, uint32_t timeout,
+    std::shared_ptr<ObjectContext> obc, uint32_t timeout,
     uint64_t cookie, entity_name_t entity,
     const entity_addr_t& addr);
 
@@ -210,10 +206,10 @@ public:
     return entity.num();
   }
 
-  string gen_dbg_prefix();
+  std::ostream& gen_dbg_prefix(std::ostream& out);
   static WatchRef makeWatchRef(
     PrimaryLogPG *pg, OSDService *osd,
-    ceph::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, const entity_addr_t &addr);
+    std::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, const entity_addr_t &addr);
   void set_self(WatchRef _self) {
     self = _self;
   }
@@ -221,7 +217,7 @@ public:
   /// Does not grant a ref count!
   boost::intrusive_ptr<PrimaryLogPG> get_pg() { return pg; }
 
-  ceph::shared_ptr<ObjectContext> get_obc() { return obc; }
+  std::shared_ptr<ObjectContext> get_obc() { return obc; }
 
   uint64_t get_cookie() const { return cookie; }
   entity_name_t get_entity() const { return entity; }
@@ -265,7 +261,7 @@ public:
   /// Call when notify_ack received on notify_id
   void notify_ack(
     uint64_t notify_id, ///< [in] id of acked notify
-    bufferlist& reply_bl ///< [in] notify reply buffer
+    ceph::buffer::list& reply_bl ///< [in] notify reply buffer
     );
 };
 
@@ -278,7 +274,7 @@ class WatchConState {
   std::set<WatchRef> watches;
 public:
   CephContext* cct;
-  WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
+  explicit WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
 
   /// Add a watch
   void addWatch(

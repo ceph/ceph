@@ -34,7 +34,8 @@ extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, strin
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
-extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
+extern int rgw_bucket_instance_remove_entry(RGWRados *store, const string& entry,
+					    RGWObjVersionTracker *objv_tracker);
 extern void rgw_bucket_instance_key_to_oid(string& key);
 extern void rgw_bucket_instance_oid_to_key(string& oid);
 
@@ -116,7 +117,7 @@ public:
     using ceph::encode;
     encode(buckets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(buckets, bl);
   }
@@ -139,7 +140,7 @@ public:
   /**
    * Remove a bucket from the user's list by name.
    */
-  void remove(string& name) {
+  void remove(const string& name) {
     map<string, RGWBucketEnt>::iterator iter;
     iter = buckets.find(name);
     if (iter != buckets.end()) {
@@ -162,6 +163,27 @@ public:
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
 class RGWMetadataManager;
+class RGWMetadataHandler;
+
+class RGWBucketMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWBucketInstanceMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWArchiveBucketMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
+
+class RGWArchiveBucketInstanceMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc();
+};
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
@@ -337,6 +359,14 @@ public:
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
   static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
+
+  static int list_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+				  RGWFormatterFlusher& flusher);
+
+  static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+				   RGWFormatterFlusher& flusher);
+  static int fix_lc_shards(RGWRados *store, RGWBucketAdminOpState& op_state,
+                           RGWFormatterFlusher& flusher);
 };
 
 
@@ -359,7 +389,7 @@ struct rgw_data_change {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      uint8_t t;
      decode(t, bl);
@@ -387,7 +417,7 @@ struct rgw_data_change_log_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(log_id, bl);
      decode(log_timestamp, bl);
@@ -408,9 +438,14 @@ struct RGWDataChangesLogInfo {
   void decode_json(JSONObj *obj);
 };
 
+namespace rgw {
+struct BucketChangeObserver;
+}
+
 class RGWDataChangesLog {
   CephContext *cct;
   RGWRados *store;
+  rgw::BucketChangeObserver *observer = nullptr;
 
   int num_shards;
   string *oids;
@@ -437,7 +472,7 @@ class RGWDataChangesLog {
     }
   };
 
-  typedef ceph::shared_ptr<ChangeStatus> ChangeStatusPtr;
+  typedef std::shared_ptr<ChangeStatus> ChangeStatusPtr;
 
   lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
 
@@ -503,12 +538,8 @@ public:
   int trim_entries(const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
-  int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
-    return store->lock_exclusive(store->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
-  }
-  int unlock(int shard_id, string& zone_id, string& owner_id) {
-    return store->unlock(store->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
-  }
+  int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id);
+  int unlock(int shard_id, string& zone_id, string& owner_id);
   struct LogMarker {
     int shard;
     string marker;
@@ -520,6 +551,10 @@ public:
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs);
   void read_clear_modified(map<int, set<string> > &modified);
+
+  void set_observer(rgw::BucketChangeObserver *observer) {
+    this->observer = observer;
+  }
 
   bool going_down();
 };

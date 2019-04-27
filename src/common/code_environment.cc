@@ -16,9 +16,13 @@
 
 #include <iostream>
 
+#include "acconfig.h"
+
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
+
+#include <string.h>
 
 code_environment_t g_code_env = CODE_ENVIRONMENT_UTILITY;
 

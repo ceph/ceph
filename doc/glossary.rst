@@ -44,7 +44,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		The core set of storage software which stores the user's data (MON+OSD).
 
 	Ceph Cluster Map
-	cluster map
+	Cluster Map
 		The set of maps comprising the monitor map, OSD map, PG map, MDS map and
 		CRUSH map. See `Cluster Map`_ for details.
 
@@ -69,7 +69,9 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Filesystem
 	CephFS
 	Ceph FS
-		The POSIX filesystem components of Ceph.
+		The POSIX filesystem components of Ceph. Refer
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		more details.
 
 	Cloud Platforms
 	Cloud Stacks
@@ -101,7 +103,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		``fsid`` term is used interchangeably with ``uuid``
 
 	OSD uuid
-		Just like the OSD fsid, this is the OSD unique identifer and is used
+		Just like the OSD fsid, this is the OSD unique identifier and is used
 		interchangeably with ``fsid``
 
 	bluestore
@@ -121,6 +123,16 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	MGR
 		The Ceph manager software, which collects all the state from the whole
 		cluster in one place.
+
+	Ceph Manager Dashboard
+	Ceph Dashboard
+	Dashboard Module
+	Dashboard Plugin
+	Dashboard
+		A built-in web-based Ceph management and monitoring application to
+		administer various aspects and objects of the cluster. The dashboard is
+		implemented as a Ceph Manager module. See :ref:`mgr-dashboard` for more
+		details.
 
 	Ceph Metadata Server
 	MDS

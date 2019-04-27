@@ -24,7 +24,7 @@ const char *MetaSession::get_state_name() const
 void MetaSession::dump(Formatter *f) const
 {
   f->dump_int("mds", mds_num);
-  f->dump_stream("addr") << inst.addr;
+  f->dump_object("addrs", addrs);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("cap_gen", cap_gen);
   f->dump_stream("cap_ttl") << cap_ttl;

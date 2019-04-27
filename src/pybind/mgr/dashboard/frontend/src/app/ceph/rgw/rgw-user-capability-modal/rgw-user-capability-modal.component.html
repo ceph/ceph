@@ -1,0 +1,84 @@
+<div class="modal-header">
+  <h4 i18n="form title|Example: Create Pool@@formTitle"
+      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form class="form-horizontal"
+      #frm="ngForm"
+      [formGroup]="formGroup"
+      novalidate>
+  <div class="modal-body">
+
+    <!-- Type -->
+    <div class="form-group"
+         [ngClass]="{'has-error': formGroup.showError('type', frm)}">
+      <label class="control-label col-sm-3"
+             for="type">
+        <ng-container i18n>Type</ng-container>
+        <span class="required"
+              *ngIf="!editing">
+        </span>
+      </label>
+      <div class="col-sm-9">
+        <input id="type"
+               class="form-control"
+               type="text"
+               *ngIf="editing"
+               [readonly]="true"
+               formControlName="type">
+        <select id="type"
+                class="form-control"
+                formControlName="type"
+                *ngIf="!editing"
+                autofocus>
+          <option i18n
+                  *ngIf="types !== null"
+                  [ngValue]="null">-- Select a type --</option>
+          <option *ngFor="let type of types"
+                  [value]="type">{{ type }}</option>
+        </select>
+        <span class="help-block"
+              *ngIf="formGroup.showError('type', frm, 'required')"
+              i18n>This field is required.</span>
+      </div>
+    </div>
+
+    <!-- Permission -->
+    <div class="form-group"
+         [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
+      <label class="control-label col-sm-3"
+             for="perm">
+        <ng-container i18n>Permission</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <select id="perm"
+                class="form-control"
+                formControlName="perm">
+          <option i18n
+                  [ngValue]="null">-- Select a permission --</option>
+          <option *ngFor="let perm of ['read', 'write', '*']"
+                  [value]="perm">
+            {{ perm }}
+          </option>
+        </select>
+        <span class="help-block"
+              *ngIf="formGroup.showError('perm', frm, 'required')"
+              i18n>This field is required.</span>
+      </div>
+    </div>
+
+  </div>
+  <div class="modal-footer">
+    <cd-submit-button
+      (submitAction)="onSubmit()"
+      i18n="form action button|Example: Create Pool@@formActionButton"
+      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
+  </div>
+</form>

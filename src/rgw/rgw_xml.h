@@ -11,111 +11,165 @@
 #include <common/Formatter.h>
 
 class XMLObj;
+class RGWXMLParser;
 
 class XMLObjIter {
-  typedef map<string, XMLObj *>::iterator map_iter_t;
-  map_iter_t cur;
-  map_iter_t end;
 public:
+  typedef map<std::string, XMLObj *>::iterator map_iter_t;
+  typedef map<std::string, XMLObj *>::iterator const_map_iter_t;
+
   XMLObjIter();
   ~XMLObjIter();
-  void set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end);
+  void set(const XMLObjIter::const_map_iter_t &_cur, const XMLObjIter::const_map_iter_t &_end);
   XMLObj *get_next();
+  bool get_name(std::string& name) const;
+
+private:
+  map_iter_t cur;
+  map_iter_t end;
 };
 
 /**
  * Represents a block of XML.
  * Give the class an XML blob, and it will parse the blob into
  * an attr_name->value map.
- * This really ought to be an abstract class or something; it
- * shouldn't be the startpoint for any parsing. Look at RGWXMLParser for that.
+ * It shouldn't be the start point for any parsing. Look at RGWXMLParser for that.
  */
 class XMLObj
 {
+private:
   XMLObj *parent;
-  string obj_type;
+  std::string obj_type;
+
 protected:
-  string data;
-  multimap<string, XMLObj *> children;
-  map<string, string> attr_map;
-public:
+  std::string data;
+  std::multimap<std::string, XMLObj *> children;
+  std::map<std::string, std::string> attr_map;
 
-  XMLObj() : parent(NULL) {}
-
-  virtual ~XMLObj();
+  // invoked at the beginning of the XML tag, and populate any attributes
   bool xml_start(XMLObj *parent, const char *el, const char **attr);
+  // callback invoked at the end of the XML tag
+  // if objects are created while parsing, this should be overwritten in the drived class
   virtual bool xml_end(const char *el);
+  // callback invoked for storing the data of the XML tag
+  // if data manipulation is needed this could be overwritten in the drived class
   virtual void xml_handle_data(const char *s, int len);
-  string& get_data();
+  // get the parent object
   XMLObj *get_parent();
-  void add_child(string el, XMLObj *obj);
-  bool get_attr(string name, string& attr);
-  XMLObjIter find(string name);
-  XMLObj *find_first(string name);
+  // add a child XML object
+  void add_child(const std::string& el, XMLObj *obj);
+
+public:
+  XMLObj() : parent(nullptr) {}
+  virtual ~XMLObj();
+
+  // get the data (as string)
+  const std::string& get_data() const;
+  // get the type of the object (as string)
+  const std::string& get_obj_type() const;
+  bool get_attr(const std::string& name, std::string& attr) const;
+  // return a list of sub-tags matching the name
+  XMLObjIter find(const std::string& name);
+  // return the first sub-tag
+  XMLObjIter find_first();
+  // return the first sub-tags matching the name
+  XMLObj *find_first(const std::string& name);
 
   friend ostream& operator<<(ostream &out, const XMLObj &obj);
+  friend RGWXMLParser;
 };
 
 struct XML_ParserStruct;
+
+// an XML parser is an XML object without a parent (root of the tree)
+// the parser could be used in 2 ways:
+//
+// (1) lazy object creation/intrusive API: usually used within the RGWXMLDecode namespace (as RGWXMLDecode::XMLParser)
+// the parser will parse the input and store info, but will not generate the target object. The object can be allocated outside
+// of the parser (stack or heap), and require to implement the decode_xml() API for the values to be populated.
+// note that the decode_xml() calls may throw exceptions if parsing fails
+//
+// (2) object creation while parsing: a new class needs to be derived from RGWXMLParser and implement alloc_obj()
+// API that should create a set of classes derived from XMLObj implementing xml_end() to create the actual target objects
+//
+// There could be a mix-and-match of the 2 types, control over that is in the alloc_obj() call
+// deciding for which tags objects are allocate during parsing and for which tags object allocation is external
+
 class RGWXMLParser : public XMLObj
 {
+private:
   XML_ParserStruct *p;
   char *buf;
   int buf_len;
   XMLObj *cur_obj;
-  vector<XMLObj *> objs;
-  list<XMLObj *> allocated_objs;
-  list<XMLObj> unallocated_objs;
+  std::vector<XMLObj *> objs;
+  std::list<XMLObj *> allocated_objs;
+  std::list<XMLObj> unallocated_objs;
+  bool success;
+  bool init_called;
+
+  // calls xml_start() on each parsed object
+  // passed as static callback to actual parser, passes itself as user_data
+  static void call_xml_start(void* user_data, const char *el, const char **attr);
+  // calls xml_end() on each parsed object
+  // passed as static callback to actual parser, passes itself as user_data
+  static void call_xml_end(void* user_data, const char *el);
+  // calls xml_handle_data() on each parsed object
+  // passed as static callback to actual parser, passes itself as user_data
+  static void call_xml_handle_data(void* user_data, const char *s, int len);
+
 protected:
+  // if objects are created while parsing, this should be implemented in the derived class
+  // and be a factory for creating the classes derived from XMLObj
+  // note that not all sub-tags has to be constructed here, any such tag which is not 
+  // constructed will be lazily created when decode_xml() is invoked on it
+  //
+  // note that in case of different tags sharing the same name at different levels
+  // this method should not be used
   virtual XMLObj *alloc_obj(const char *el) {
-    return NULL;
+    return nullptr;
   }
+
 public:
   RGWXMLParser();
   ~RGWXMLParser() override;
+
+  // initialize the parser, must be called before parsing
   bool init();
-  bool xml_start(const char *el, const char **attr);
-  bool xml_end(const char *el) override;
-  void handle_data(const char *s, int len);
-
+  // parse the XML buffer (can be invoked multiple times for incremental parsing)
+  // receives the buffer to parse, its length, and boolean indication (0,1)
+  // whether this is the final chunk of the buffer
   bool parse(const char *buf, int len, int done);
-  const char *get_xml() { return buf; }
-  void set_failure() { success = false; }
-
-private:
-  bool success;
+  // get the XML blob being parsed
+  const char *get_xml() const { return buf; }
 };
 
-class RGWXMLDecoder {
-public:
+namespace RGWXMLDecoder {
   struct err {
-    string message;
+    std::string message;
 
-    explicit err(const string& m) : message(m) {}
+    explicit err(const std::string& m) : message(m) {}
   };
 
-  class XMLParser : public RGWXMLParser {
-  public:
-    XMLParser() {}
-    ~XMLParser() override {}
-  } parser;
-
-  explicit RGWXMLDecoder(bufferlist& bl) {
-    if (!parser.parse(bl.c_str(), bl.length(), 1)) {
-      cout << "RGWXMLDecoder::err()" << std::endl;
-      throw RGWXMLDecoder::err("failed to parse XML input");
-    }
-  }
+  typedef RGWXMLParser XMLParser;
 
   template<class T>
-  static bool decode_xml(const char *name, T& val, XMLObj *obj, bool mandatory = false);
+  bool decode_xml(const char *name, T& val, XMLObj* obj, bool mandatory = false);
+
+  template<class T>
+  bool decode_xml(const char *name, std::vector<T>& v, XMLObj* obj, bool mandatory = false);
 
   template<class C>
-  static bool decode_xml(const char *name, C& container, void (*cb)(C&, XMLObj *obj), XMLObj *obj, bool mandatory = false);
+  bool decode_xml(const char *name, C& container, void (*cb)(C&, XMLObj *obj), XMLObj *obj, bool mandatory = false);
 
   template<class T>
-  static void decode_xml(const char *name, T& val, T& default_val, XMLObj *obj);
-};
+  void decode_xml(const char *name, T& val, T& default_val, XMLObj* obj);
+}
+
+static inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
+{
+  return out << err.message;
+}
 
 template<class T>
 void decode_xml_obj(T& val, XMLObj *obj)
@@ -155,21 +209,6 @@ void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 }
 
 template<class T>
-void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
-{
-  l.clear();
-
-  XMLObjIter iter = obj->find(name);
-  XMLObj *o;
-
-  while (o = iter.get_next()) {
-    T val;
-    decode_xml_obj(val, o);
-    l.push_back(val);
-  }
-}
-
-template<class T>
 bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool mandatory)
 {
   XMLObjIter iter = obj->find(name);
@@ -191,6 +230,36 @@ bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool manda
     throw err(s);
   }
 
+  return true;
+}
+
+template<class T>
+bool RGWXMLDecoder::decode_xml(const char *name, std::vector<T>& v, XMLObj *obj, bool mandatory)
+{
+  XMLObjIter iter = obj->find(name);
+  XMLObj *o = iter.get_next();
+
+  v.clear();
+
+  if (!o) {
+    if (mandatory) {
+      string s = "missing mandatory field " + string(name);
+      throw err(s);
+    }
+    return false;
+  }
+
+  do {
+    T val;
+    try {
+      decode_xml_obj(val, o);
+    } catch (err& e) {
+      string s = string(name) + ": ";
+      s.append(e.message);
+      throw err(s);
+    }
+    v.push_back(val);
+  } while ((o = iter.get_next()));
   return true;
 }
 
@@ -244,6 +313,14 @@ template<class T>
 static void encode_xml(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
+  val.dump_xml(f);
+  f->close_section();
+}
+
+template<class T>
+static void encode_xml(const char *name, const char *ns, const T& val, ceph::Formatter *f)
+{
+  f->open_object_section_in_ns(name, ns);
   val.dump_xml(f);
   f->close_section();
 }

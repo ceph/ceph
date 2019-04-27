@@ -24,12 +24,12 @@ void RGWFCGXProcess::run()
   int socket_backlog;
 
   conf->get_val("socket_path", "", &socket_path);
-  conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
-  conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
-  socket_backlog = g_conf->rgw_fcgi_socket_backlog;
+  conf->get_val("socket_port", g_conf()->rgw_port, &socket_port);
+  conf->get_val("socket_host", g_conf()->rgw_host, &socket_host);
+  socket_backlog = g_conf()->rgw_fcgi_socket_backlog;
 
   if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
-    socket_path = g_conf->rgw_socket_path;
+    socket_path = g_conf()->rgw_socket_path;
     if (socket_path.empty()) {
       dout(0) << "ERROR: no socket server point defined, cannot "
 	"start fcgi frontend" << dendl;
@@ -125,7 +125,8 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
 
  
   int ret = process_request(store, rest, req, uri_prefix,
-                            *auth_registry, &client_io, olog);
+                            *auth_registry, &client_io, olog,
+                            null_yield, nullptr);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;

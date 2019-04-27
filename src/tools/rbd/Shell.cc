@@ -31,9 +31,9 @@ boost::intrusive_ptr<CephContext> global_init(
   std::vector<const char*> cmd_args;
   argv_to_vec(argc, argv, cmd_args);
   std::vector<const char*> args(cmd_args);
-  env_to_vec(args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+                         CODE_ENVIRONMENT_UTILITY,
+                         CINIT_FLAG_NO_MON_CONFIG);
 
   *command_args = {args.begin(), args.end()};
 
@@ -63,11 +63,31 @@ std::string format_command_spec(const Shell::CommandSpec &spec) {
   return joinify<std::string>(spec.begin(), spec.end(), " ");
 }
 
+std::string format_alias_spec(const Shell::CommandSpec &spec,
+                              const Shell::CommandSpec &alias_spec) {
+    auto spec_it = spec.begin();
+    auto alias_it = alias_spec.begin();
+    int level = 0;
+    while (spec_it != spec.end() && alias_it != alias_spec.end() &&
+           *spec_it == *alias_it) {
+      spec_it++;
+      alias_it++;
+      level++;
+    }
+    ceph_assert(spec_it != spec.end() && alias_it != alias_spec.end());
+
+    if (level < 2) {
+      return joinify<std::string>(alias_spec.begin(), alias_spec.end(), " ");
+    } else {
+      return "... " + joinify<std::string>(alias_it, alias_spec.end(), " ");
+    }
+}
+
 std::string format_command_name(const Shell::CommandSpec &spec,
                                 const Shell::CommandSpec &alias_spec) {
   std::string name = format_command_spec(spec);
   if (!alias_spec.empty()) {
-    name += " (" + format_command_spec(alias_spec) + ")";
+    name += " (" + format_alias_spec(spec, alias_spec) + ")";
   }
   return name;
 }

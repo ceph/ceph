@@ -78,3 +78,27 @@ void cls_refcount_read_ret::generate_test_instances(list<cls_refcount_read_ret*>
   ls.back()->refs.push_back("foo");
   ls.back()->refs.push_back("bar");
 }
+
+void obj_refcount::dump(ceph::Formatter *f) const
+{
+  f->open_array_section("refs");
+  for (const auto &kv: refs) {
+    f->open_object_section("ref");
+    f->dump_string("oid", kv.first.c_str());
+    f->dump_bool("active",kv.second);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("retired_refs");
+  for (const auto& it: retired_refs)
+    f->dump_string("ref", it.c_str());
+  f->close_section();
+}
+
+void obj_refcount::generate_test_instances(list<obj_refcount*>& ls)
+{
+  ls.push_back(new obj_refcount);
+  ls.back()->refs.emplace("foo",true);
+  ls.back()->retired_refs.emplace("bar");
+}

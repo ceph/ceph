@@ -5,25 +5,22 @@
 #define CEPH_TEST_LIBRBD_MOCK_JOURNAL_H
 
 #include "gmock/gmock.h"
+#include "include/rados/librados_fwd.hpp"
 #include "librbd/Journal.h"
 #include "librbd/journal/Types.h"
 #include <list>
 
 struct Context;
 struct ContextWQ;
-namespace librados { class IoCtx; }
 
 namespace librbd {
 
 struct ImageCtx;
-namespace io { struct ObjectRequestHandle; }
 
 struct MockJournal {
-  typedef std::list<io::ObjectRequestHandle *> ObjectRequests;
-
   static MockJournal *s_instance;
   static MockJournal *get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -67,21 +64,6 @@ struct MockJournal {
   MOCK_CONST_METHOD0(get_tag_data, journal::TagData());
 
   MOCK_METHOD0(allocate_op_tid, uint64_t());
-
-  MOCK_METHOD5(append_write_event, uint64_t(uint64_t, size_t,
-                                            const bufferlist &,
-                                            const ObjectRequests &, bool));
-  MOCK_METHOD6(append_io_event_mock, uint64_t(const journal::EventEntry&,
-                                              const ObjectRequests &,
-                                              uint64_t, size_t, bool, int));
-  uint64_t append_io_event(journal::EventEntry &&event_entry,
-                           const ObjectRequests &requests,
-                           uint64_t offset, size_t length,
-                           bool flush_entry, int filter_ret_val) {
-    // googlemock doesn't support move semantics
-    return append_io_event_mock(event_entry, requests, offset, length,
-                                flush_entry, filter_ret_val);
-  }
 
   MOCK_METHOD3(append_op_event_mock, void(uint64_t, const journal::EventEntry&,
                                           Context *));

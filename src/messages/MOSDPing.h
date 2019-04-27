@@ -33,9 +33,9 @@
 
 
 class MOSDPing : public Message {
-
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 4;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 4;
 
  public:
   enum {
@@ -62,21 +62,21 @@ class MOSDPing : public Message {
   epoch_t map_epoch = 0;
   __u8 op = 0;
   utime_t stamp;
-  uint32_t min_message_size;
+  uint32_t min_message_size = 0;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
-    : Message(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
+    : Message{MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
   ~MOSDPing() override {}
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(map_epoch, p);
     decode(op, p);
@@ -102,7 +102,7 @@ public:
     encode((uint32_t)s, payload);
     if (s) {
       // this should be big enough for normal min_message padding sizes. since
-      // we are targetting jumbo ethernet frames around 9000 bytes, 16k should
+      // we are targeting jumbo ethernet frames around 9000 bytes, 16k should
       // be more than sufficient!  the compiler will statically zero this so
       // that at runtime we are only adding a bufferptr reference to it.
       static char zeros[16384] = {};
@@ -116,13 +116,16 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osd_ping"; }
+  std::string_view get_type_name() const override { return "osd_ping"; }
   void print(ostream& out) const override {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch
 	<< " stamp " << stamp
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -56,7 +56,7 @@ static int cls_timeindex_add(cls_method_context_t hctx,
                              bufferlist * const in,
                              bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_add_op op;
   try {
@@ -89,7 +89,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_list_op op;
   try {
@@ -170,7 +170,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
                               bufferlist * const in,
                               bufferlist * const out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_timeindex_trim_op op;
   try {

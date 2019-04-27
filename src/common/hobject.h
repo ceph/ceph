@@ -19,7 +19,7 @@
 #include "include/cmp.h"
 
 #include "json_spirit/json_spirit_value.h"
-#include "include/assert.h"   // spirit clobbers it!
+#include "include/ceph_assert.h"   // spirit clobbers it!
 
 #include "reverse.h"
 
@@ -35,6 +35,21 @@ namespace ceph {
 #endif
 
 struct hobject_t {
+public:
+  static const int64_t POOL_META = -1;
+  static const int64_t POOL_TEMP_START = -2; // and then negative
+
+  static bool is_temp_pool(int64_t pool) {
+    return pool <= POOL_TEMP_START;
+  }
+  static int64_t get_temp_pool(int64_t pool) {
+    return POOL_TEMP_START - pool;
+  }
+  static bool is_meta_pool(int64_t pool) {
+    return pool == POOL_META;
+  }
+
+public:
   object_t oid;
   snapid_t snap;
 private:
@@ -42,31 +57,28 @@ private:
   bool max;
   uint32_t nibblewise_key_cache;
   uint32_t hash_reverse_bits;
-  static const int64_t POOL_META = -1;
-  static const int64_t POOL_TEMP_START = -2; // and then negative
-  friend class spg_t;  // for POOL_TEMP_START
 public:
   int64_t pool;
-  string nspace;
+  std::string nspace;
 
 private:
-  string key;
+  std::string key;
 
   class hobject_t_max {};
 
 public:
-  const string &get_key() const {
+  const std::string& get_key() const {
     return key;
   }
 
-  void set_key(const std::string &key_) {
+  void set_key(const std::string& key_) {
     if (key_ == oid.name)
       key.clear();
     else
       key = key_;
   }
 
-  string to_str() const;
+  std::string to_str() const;
   
   uint32_t get_hash() const { 
     return hash;
@@ -84,10 +96,16 @@ public:
   }
 
   bool is_temp() const {
-    return pool <= POOL_TEMP_START && pool != INT64_MIN;
+    return is_temp_pool(pool) && pool != INT64_MIN;
   }
   bool is_meta() const {
-    return pool == POOL_META;
+    return is_meta_pool(pool);
+  }
+  int64_t get_logical_pool() const {
+    if (is_temp_pool(pool))
+      return get_temp_pool(pool);  // it's reversible
+    else
+      return pool;
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
@@ -112,19 +130,19 @@ public:
     return hobject_t_max();
   }
 
-  hobject_t(object_t oid, const string& key, snapid_t snap, uint32_t hash,
-	    int64_t pool, string nspace)
+  hobject_t(object_t oid, const std::string& key, snapid_t snap, uint32_t hash,
+	    int64_t pool, std::string nspace)
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
-      key(oid.name == key ? string() : key) {
+      key(oid.name == key ? std::string() : key) {
     build_hash_cache();
   }
 
-  hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
-	    int64_t pool, string nspace)
+  hobject_t(const sobject_t &soid, const std::string &key, uint32_t hash,
+	    int64_t pool, std::string nspace)
     : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
-      key(soid.oid.name == key ? string() : key) {
+      key(soid.oid.name == key ? std::string() : key) {
     build_hash_cache();
   }
 
@@ -187,7 +205,7 @@ public:
   }
 
   bool is_max() const {
-    assert(!max || (*this == hobject_t(hobject_t::get_max())));
+    ceph_assert(!max || (*this == hobject_t(hobject_t::get_max())));
     return max;
   }
   bool is_min() const {
@@ -212,14 +230,14 @@ public:
    * Furthermore, for any s $f\in\f$ S, s is a prefix of
    * h.str() implies that h.match(bits, mask).
    */
-  static set<string> get_prefixes(
+  static std::set<std::string> get_prefixes(
     uint32_t bits,
     uint32_t mask,
     int64_t pool);
 
   // filestore nibble-based key
   uint32_t get_nibblewise_key_u32() const {
-    assert(!max);
+    ceph_assert(!max);
     return nibblewise_key_cache;
   }
   uint64_t get_nibblewise_key() const {
@@ -228,7 +246,7 @@ public:
 
   // newer bit-reversed key
   uint32_t get_bitwise_key_u32() const {
-    assert(!max);
+    ceph_assert(!max);
     return hash_reverse_bits;
   }
   uint64_t get_bitwise_key() const {
@@ -249,16 +267,17 @@ public:
     hash_reverse_bits = value;
   }
 
-  const string& get_effective_key() const {
+  const std::string& get_effective_key() const {
     if (key.length())
       return key;
     return oid.name;
   }
 
-  hobject_t make_temp_hobject(const string& name) const {
+  hobject_t make_temp_hobject(const std::string& name) const {
     return hobject_t(object_t(name), "", CEPH_NOSNAP,
 		     hash,
-		     hobject_t::POOL_TEMP_START - pool, "");
+		     get_temp_pool(pool),
+		     "");
   }
 
   void swap(hobject_t &o) {
@@ -267,17 +286,17 @@ public:
     (*this) = temp;
   }
 
-  const string &get_namespace() const {
+  const std::string &get_namespace() const {
     return nspace;
   }
 
-  bool parse(const string& s);
+  bool parse(const std::string& s);
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::bufferlist::const_iterator& bl);
   void decode(json_spirit::Value& v);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<hobject_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<hobject_t*>& o);
   friend int cmp(const hobject_t& l, const hobject_t& r);
   friend bool operator>(const hobject_t& l, const hobject_t& r) {
     return cmp(l, r) > 0;
@@ -298,15 +317,15 @@ public:
 WRITE_CLASS_ENCODER(hobject_t)
 
 namespace std {
-  template<> struct hash<hobject_t> {
-    size_t operator()(const hobject_t &r) const {
-      static rjhash<uint64_t> I;
-      return r.get_hash() ^ I(r.snap);
-    }
-  };
+template<> struct hash<hobject_t> {
+  size_t operator()(const hobject_t &r) const {
+    static rjhash<uint64_t> RJ;
+    return RJ(r.get_hash() ^ r.snap);
+  }
+};
 } // namespace std
 
-ostream& operator<<(ostream& out, const hobject_t& o);
+std::ostream& operator<<(std::ostream& out, const hobject_t& o);
 
 WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
 
@@ -379,7 +398,7 @@ public:
       max(false) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
-    hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
+    hobject_t h(object_t(), std::string(), CEPH_NOSNAP, hash, pool, std::string());
     return ghobject_t(h, NO_GEN, shard);
   }
   bool is_pgmeta() const {
@@ -423,7 +442,7 @@ public:
     shard_id = s;
   }
 
-  bool parse(const string& s);
+  bool parse(const std::string& s);
 
   // maximum sorted value.
   static ghobject_t get_max() {
@@ -445,12 +464,12 @@ public:
     (*this) = temp;
   }
 
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void decode(json_spirit::Value& v);
   size_t encoded_size() const;
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<ghobject_t*>& o);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<ghobject_t*>& o);
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
   friend bool operator>(const ghobject_t& l, const ghobject_t& r) {
     return cmp(l, r) > 0;
@@ -473,13 +492,17 @@ WRITE_CLASS_ENCODER(ghobject_t)
 namespace std {
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
-      static rjhash<uint64_t> I;
-      return r.hobj.get_hash() ^ I(r.hobj.snap);
+      static rjhash<uint64_t> RJ;
+      static hash<hobject_t> HO;
+      size_t hash = HO(r.hobj);
+      hash = RJ(hash ^ r.generation);
+      hash = hash ^ r.shard_id.id;
+      return hash;
     }
   };
 } // namespace std
 
-ostream& operator<<(ostream& out, const ghobject_t& o);
+std::ostream& operator<<(std::ostream& out, const ghobject_t& o);
 
 WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
 

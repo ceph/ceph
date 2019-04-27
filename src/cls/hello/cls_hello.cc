@@ -32,9 +32,12 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
-#include <errno.h>
+#include <cerrno>
 
 #include "objclass/objclass.h"
+
+using ceph::bufferlist;
+using std::string;
 
 CLS_VER(1,0)
 CLS_NAME(hello)
@@ -252,7 +255,7 @@ static int bad_writer(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 class PGLSHelloFilter : public PGLSFilter {
   string val;
 public:
-  int init(bufferlist::iterator& params) override {
+  int init(bufferlist::const_iterator& params) override {
     try {
       decode(xattr, params);
       decode(val, params);

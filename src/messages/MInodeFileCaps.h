@@ -16,25 +16,29 @@
 #ifndef CEPH_MINODEFILECAPS_H
 #define CEPH_MINODEFILECAPS_H
 
+#include "msg/Message.h"
+
 class MInodeFileCaps : public Message {
+private:
   inodeno_t ino;
   __u32     caps = 0;
 
  public:
-  inodeno_t get_ino() { return ino; }
-  int       get_caps() { return caps; }
 
-  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS) {}
+  inodeno_t get_ino() const { return ino; }
+  int       get_caps() const { return caps; }
+
+protected:
+  MInodeFileCaps() : Message{MSG_MDS_INODEFILECAPS} {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    Message(MSG_MDS_INODEFILECAPS) {
+    Message{MSG_MDS_INODEFILECAPS} {
     this->ino = ino;
     this->caps = caps;
   }
-private:
   ~MInodeFileCaps() override {}
 
 public:
-  const char *get_type_name() const override { return "inode_file_caps";}
+  std::string_view get_type_name() const override { return "inode_file_caps";}
   void print(ostream& out) const override {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }
@@ -46,10 +50,13 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(caps, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

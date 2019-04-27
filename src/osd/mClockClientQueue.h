@@ -53,8 +53,8 @@ namespace ceph {
 
     const crimson::dmclock::ClientInfo* op_class_client_info_f(const InnerClient& client);
 
-    inline unsigned length() const override final {
-      return queue.length();
+    inline unsigned get_size_slow() const {
+      return queue.get_size_slow();
     }
 
     // Ops of this priority should be deleted immediately

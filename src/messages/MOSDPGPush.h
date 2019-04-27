@@ -18,17 +18,19 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGPush : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   pg_shard_t from;
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   vector<PushOp> pushes;
+  bool is_repair = false;
 
 private:
-  uint64_t cost;
+  uint64_t cost = 0;
 
 public:
   void compute_cost(CephContext *cct) {
@@ -59,12 +61,11 @@ public:
   }
 
   MOSDPGPush()
-    : MOSDFastDispatchOp(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
-    {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION}
+  {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
     decode(pushes, p);
@@ -75,6 +76,11 @@ public:
       decode(min_epoch, p);
     } else {
       min_epoch = map_epoch;
+    }
+    if (header.version >= 4) {
+      decode(is_repair, p);
+    } else {
+      is_repair = false;
     }
   }
 
@@ -87,9 +93,10 @@ public:
     encode(pgid.shard, payload);
     encode(from, payload);
     encode(min_epoch, payload);
+    encode(is_repair, payload);
   }
 
-  const char *get_type_name() const override { return "MOSDPGPush"; }
+  std::string_view get_type_name() const override { return "MOSDPGPush"; }
 
   void print(ostream& out) const override {
     out << "MOSDPGPush(" << pgid
@@ -97,6 +104,10 @@ public:
 	<< " " << pushes;
     out << ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

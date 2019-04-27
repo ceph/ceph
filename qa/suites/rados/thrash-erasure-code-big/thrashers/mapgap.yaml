@@ -15,6 +15,7 @@ tasks:
 - thrashosds:
     timeout: 1800
     chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
     chance_pgpnum_fix: 1
     chance_test_map_discontinuity: 0.5
     min_in: 8

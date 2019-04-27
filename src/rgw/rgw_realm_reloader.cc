@@ -9,6 +9,8 @@
 #include "rgw_rest.h"
 #include "rgw_user.h"
 
+#include "services/svc_zone.h"
+
 #include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -44,12 +46,12 @@ RGWRealmReloader::~RGWRealmReloader()
 class RGWRealmReloader::C_Reload : public Context {
   RGWRealmReloader* reloader;
  public:
-  C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
+  explicit C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
   void finish(int r) override { reloader->reload(); }
 };
 
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
-                                     bufferlist::iterator& p)
+                                     bufferlist::const_iterator& p)
 {
   if (!store) {
     /* we're in the middle of reload */
@@ -100,12 +102,14 @@ void RGWRealmReloader::reload()
 
   while (!store) {
     // recreate and initialize a new store
-    store = RGWStoreManager::get_storage(cct,
-                                         cct->_conf->rgw_enable_gc_threads,
-                                         cct->_conf->rgw_enable_lc_threads,
-                                         cct->_conf->rgw_enable_quota_threads,
-                                         cct->_conf->rgw_run_sync_thread,
-                                         cct->_conf->rgw_dynamic_resharding);
+    store =
+      RGWStoreManager::get_storage(cct,
+				   cct->_conf->rgw_enable_gc_threads,
+				   cct->_conf->rgw_enable_lc_threads,
+				   cct->_conf->rgw_enable_quota_threads,
+				   cct->_conf->rgw_run_sync_thread,
+				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
+				   cct->_conf->rgw_cache_enabled);
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
@@ -158,7 +162,7 @@ void RGWRealmReloader::reload()
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store, store->get_zonegroup());
+  rgw_rest_init(cct, store, store->svc.zone->get_zonegroup());
   ldout(cct, 1) << " - user subsystem init" << dendl;
   rgw_user_init(store);
   ldout(cct, 1) << " - user subsystem init" << dendl;

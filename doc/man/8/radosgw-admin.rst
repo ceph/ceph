@@ -134,8 +134,8 @@ which are as follows:
 :command:`objects expire`
   Run expired objects cleanup.
 
-:command:`period delete`
-  Delete a period.
+:command:`period rm`
+  Remove a period.
 
 :command:`period get`
   Get the period info.
@@ -182,8 +182,8 @@ which are as follows:
 :command:`realm create`
   Create a new realm.
 
-:command:`realm delete`
-  Delete a realm.
+:command:`realm rm`
+  Remove a realm.
 
 :command:`realm get`
   Show the realm info.
@@ -218,8 +218,8 @@ which are as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup delete`
-  Delete a zone group info.
+:command:`zonegroup rm`
+  Remove a zone group info.
 
 :command:`zonegroup get`
   Show the zone group info.
@@ -257,8 +257,8 @@ which are as follows:
 :command:`zone create`
   Create a new zone.
 
-:command:`zone delete`
-  Delete a zone.
+:command:`zone rm`
+  Remove a zone.
 
 :command:`zone get`
   Show zone cluster params.
@@ -388,27 +388,6 @@ which are as follows:
 :command:`datalog status`
   Read data log status.
 
-:command:`opstate list`
-  List stateful operations entries (use client_id, op_id, object).
-
-:command:`opstate set`
-  Set state on an entry (use client_id, op_id, object, state).
-
-:command:`opstate renew`
-  Renew state on an entry (use client_id, op_id, object).
-
-:command:`opstate rm`
-  Remove entry (use client_id, op_id, object).
-
-:command:`replicalog get`
-  Get replica metadata log entry.
-
-:command:`replicalog update`
-  Update replica metadata log entry.
-
-:command:`replicalog delete`
-  Delete replica metadata log entry.
-
 :command:`orphans find`
   Init and run search for leaked rados objects
 
@@ -421,8 +400,8 @@ which are as follows:
 :command:`role create`
   create a new AWS role for use with STS.
 
-:command:`role delete`
-  Delete a role.
+:command:`role rm`
+  Remove a role.
 
 :command:`role get`
   Get a role.
@@ -442,8 +421,8 @@ which are as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy delete`
-  Delete the policy attached to a role
+:command:`role-policy rm`
+  Remove the policy attached to a role
 
 :command:`reshard add`
   Schedule a resharding of a bucket
@@ -566,12 +545,11 @@ Options
 
 .. option:: --shard-id=<shard-id>
 
-	Optional for mdlog list. Required for ``mdlog trim``,
-	``replica mdlog get/delete``, ``replica datalog get/delete``.
+	Optional for mdlog list, data sync status. Required for ``mdlog trim``.
 
-.. option:: --auth-uid=auid
+.. option:: --max-entries=<entries>
 
-   The librados auid.
+	Optional for listing operations to specify the max entires
 
 .. option:: --purge-data
 
@@ -596,6 +574,10 @@ Options
 .. option:: --period=<id>
 
    Period id.
+
+.. option:: --url=<url>
+
+   url for pushing/pulling period or realm.
 
 .. option:: --epoch=<number>
 
@@ -758,15 +740,6 @@ Options
 .. option:: --infile
 
 	Specify a file to read in when setting data.
-
-.. option:: --state=<state>
-
-	Specify a state for the opstate set command.
-
-.. option:: --replica-log-type <logtypestr>
-
-	Replica log type (metadata, data, bucket), required for replica log
-	operations.
 
 .. option:: --categories=<list>
 

@@ -1,0 +1,27 @@
+<cd-table [data]="data"
+          columnMode="flex"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
+          [columns]="columns">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+</cd-table>
+
+<ng-template #protectTpl
+             let-value="value">
+  <span *ngIf="value"
+        class="label label-success"
+        i18n>PROTECTED</span>
+  <span *ngIf="!value"
+        class="label label-info"
+        i18n>UNPROTECTED</span>
+</ng-template>
+
+<ng-template #rollbackTpl
+             let-value>
+  <ng-container i18n>You are about to rollback</ng-container>
+  <strong>{{ value.snapName }}</strong>.
+</ng-template>

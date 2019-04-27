@@ -401,3 +401,60 @@ Syntax
 ::
 
     DELETE /{bucket}/{object}?uploadId= HTTP/1.1
+
+
+Append Object
+-------------
+Append data to an object. You must have write permissions on the bucket to perform this operation.
+It is used to upload files in appending mode. The type of the objects created by the Append Object
+operation is Appendable Object, and the type of the objects uploaded with the Put Object operation is Normal Object.
+**Append Object can't be used if bucket versioning is enabled or suspended.**
+**Synced object will become normal in multisite, but you can still append to the original object.**
+
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}/{object}?append&position= HTTP/1.1
+
+Request Headers
+~~~~~~~~~~~~~~~
+
++----------------------+--------------------------------------------+-------------------------------------------------------------------------------+------------+
+| Name                 | Description                                | Valid Values                                                                  | Required   |
++======================+============================================+===============================================================================+============+
+| **content-md5**      | A base64 encoded MD-5 hash of the message. | A string. No defaults or constraints.                                         | No         |
++----------------------+--------------------------------------------+-------------------------------------------------------------------------------+------------+
+| **content-type**     | A standard MIME type.                      | Any MIME type. Default: ``binary/octet-stream``                               | No         |
++----------------------+--------------------------------------------+-------------------------------------------------------------------------------+------------+
+| **x-amz-meta-<...>** | User metadata.  Stored with the object.    | A string up to 8kb. No defaults.                                              | No         |
++----------------------+--------------------------------------------+-------------------------------------------------------------------------------+------------+
+| **x-amz-acl**        | A canned ACL.                              | ``private``, ``public-read``, ``public-read-write``, ``authenticated-read``   | No         |
++----------------------+--------------------------------------------+-------------------------------------------------------------------------------+------------+
+
+Response Headers
+~~~~~~~~~~~~~~~~
+
++--------------------------------+------------------------------------------------------------------+
+| Name                           | Description                                                      |
++================================+==================================================================+
+| **x-rgw-next-append-position** | Next position to append object                                   |
++--------------------------------+------------------------------------------------------------------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
+The following HTTP response may be returned:
+
++---------------+----------------------------+---------------------------------------------------+
+| HTTP Status   | Status Code                | Description                                       |
++===============+============================+===================================================+
+| **409**       | PositionNotEqualToLength   | Specified position does not match object length   |
++---------------+----------------------------+---------------------------------------------------+
+| **409**       | ObjectNotAppendable        | Specified object can not be appended              |
++---------------+----------------------------+---------------------------------------------------+
+| **409**       | InvalidBucketstate         | Bucket versioning is enabled or suspended         |
++---------------+----------------------------+---------------------------------------------------+
+

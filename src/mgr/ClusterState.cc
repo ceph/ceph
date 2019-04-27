@@ -34,27 +34,27 @@ ClusterState::ClusterState(
 
 void ClusterState::set_objecter(Objecter *objecter_)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   objecter = objecter_;
 }
 
 void ClusterState::set_fsmap(FSMap const &new_fsmap)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   fsmap = new_fsmap;
 }
 
 void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   mgr_map = new_mgrmap;
 }
 
 void ClusterState::set_service_map(ServiceMap const &new_service_map)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   servicemap = new_service_map;
 }
 
@@ -64,12 +64,11 @@ void ClusterState::load_digest(MMgrDigest *m)
   mon_status_json = std::move(m->mon_status_json);
 }
 
-void ClusterState::ingest_pgstats(MPGStats *stats)
+void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
-
   pending_inc.update_stat(from, std::move(stats->osd_stat));
 
   for (auto p : stats->pg_stat) {
@@ -78,12 +77,22 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
     // In case we're hearing about a PG that according to last
     // OSDMap update should not exist
-    if (existing_pools.count(pgid.pool()) == 0) {
+    auto r = existing_pools.find(pgid.pool());
+    if (r == existing_pools.end()) {
       dout(15) << " got " << pgid
 	       << " reported at " << pg_stats.reported_epoch << ":"
                << pg_stats.reported_seq
                << " state " << pg_state_string(pg_stats.state)
                << " but pool not in " << existing_pools
+               << dendl;
+      continue;
+    }
+    if (pgid.ps() >= r->second) {
+      dout(15) << " got " << pgid
+	       << " reported at " << pg_stats.reported_epoch << ":"
+               << pg_stats.reported_seq
+               << " state " << pg_state_string(pg_stats.state)
+               << " but > pg_num " << r->second
                << dendl;
       continue;
     }
@@ -94,11 +103,14 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 	q->second.get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from "
 	       << q->second.reported_epoch << ":"
-               << q->second.reported_seq << dendl;
+	       << q->second.reported_seq << dendl;
       continue;
     }
 
     pending_inc.pg_stat_updates[pgid] = pg_stats;
+  }
+  for (auto p : stats->pool_stat) {
+    pending_inc.pool_statfs_updates[std::make_pair(p.first, from)] = p.second;
   }
 }
 
@@ -118,14 +130,13 @@ void ClusterState::update_delta_stats()
   jf.dump_object("pending_inc", pending_inc);
   jf.flush(*_dout);
   *_dout << dendl;
-
   pg_map.apply_incremental(g_ceph_context, pending_inc);
   pending_inc = PGMap::Incremental();
 }
 
 void ClusterState::notify_osdmap(const OSDMap &osd_map)
 {
-  Mutex::Locker l(lock);
+  assert(ceph_mutex_is_locked(lock));
 
   pending_inc.stamp = ceph_clock_now();
   pending_inc.version = pg_map.version + 1; // to make apply_incremental happy
@@ -137,7 +148,7 @@ void ClusterState::notify_osdmap(const OSDMap &osd_map)
   // in synchrony with this OSDMap.
   existing_pools.clear();
   for (auto& p : osd_map.get_pools()) {
-    existing_pools.insert(p.first);
+    existing_pools[p.first] = p.second.get_pg_num();
   }
 
   // brute force this for now (don't bother being clever by only

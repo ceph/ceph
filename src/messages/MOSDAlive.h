@@ -20,11 +20,11 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MOSDAlive : public PaxosServiceMessage {
- public:
+public:
   epoch_t want = 0;
 
-  MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage(MSG_OSD_ALIVE, h), want(w) { }
-  MOSDAlive() : PaxosServiceMessage(MSG_OSD_ALIVE, 0) {}
+  MOSDAlive(epoch_t h, epoch_t w) : PaxosServiceMessage{MSG_OSD_ALIVE, h}, want(w) {}
+  MOSDAlive() : MOSDAlive{0, 0} {}
 private:
   ~MOSDAlive() override {}
 
@@ -35,16 +35,18 @@ public:
     encode(want, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(want, p);
   }
 
-  const char *get_type_name() const override { return "osd_alive"; }
+  std::string_view get_type_name() const override { return "osd_alive"; }
   void print(ostream &out) const override {
     out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }
-  
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

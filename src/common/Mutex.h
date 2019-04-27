@@ -15,21 +15,14 @@
 #ifndef CEPH_MUTEX_H
 #define CEPH_MUTEX_H
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "lockdep.h"
-#include "common/ceph_context.h"
 
+#include <string>
 #include <pthread.h>
+#include <mutex>
 
 using namespace ceph;
-
-class PerfCounters;
-
-enum {
-  l_mutex_first = 999082,
-  l_mutex_wait,
-  l_mutex_last
-};
 
 class Mutex {
 private:
@@ -42,8 +35,6 @@ private:
   pthread_mutex_t _m;
   int nlock;
   pthread_t locked_by;
-  CephContext *cct;
-  PerfCounters *logger;
 
   // don't allow copying.
   void operator=(const Mutex &M);
@@ -53,7 +44,7 @@ private:
     id = lockdep_register(name.c_str());
   }
   void _will_lock() { // about to lock
-    id = lockdep_will_lock(name.c_str(), id, backtrace);
+    id = lockdep_will_lock(name.c_str(), id, backtrace, recursive);
   }
   void _locked() {    // just locked
     id = lockdep_locked(name.c_str(), id, backtrace);
@@ -63,8 +54,7 @@ private:
   }
 
 public:
-  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false,
-	CephContext *cct = 0);
+  Mutex(const std::string &n, bool r = false, bool ld=true, bool bt=false);
   ~Mutex();
   bool is_locked() const {
     return (nlock > 0);
@@ -74,6 +64,9 @@ public:
   }
 
   bool TryLock() {
+    return try_lock();
+  }
+  bool try_lock() {
     int r = pthread_mutex_trylock(&_m);
     if (r == 0) {
       if (lockdep && g_lockdep) _locked();
@@ -82,42 +75,38 @@ public:
     return r == 0;
   }
 
-  void Lock(bool no_lockdep=false);
+  void Lock(bool no_lockdep=false) {
+    lock(no_lockdep);
+  }
+  void lock(bool no_lockdep=false);
 
   void _post_lock() {
     if (!recursive) {
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
       locked_by = pthread_self();
     };
     nlock++;
   }
 
   void _pre_unlock() {
-    assert(nlock > 0);
+    ceph_assert(nlock > 0);
     --nlock;
     if (!recursive) {
-      assert(locked_by == pthread_self());
+      ceph_assert(locked_by == pthread_self());
       locked_by = 0;
-      assert(nlock == 0);
+      ceph_assert(nlock == 0);
     }
   }
-  void Unlock();
+  void Unlock() {
+    unlock();
+  }
+  void unlock();
 
   friend class Cond;
 
 
 public:
-  class Locker {
-    Mutex &mutex;
-
-  public:
-    explicit Locker(Mutex& m) : mutex(m) {
-      mutex.Lock();
-    }
-    ~Locker() {
-      mutex.Unlock();
-    }
-  };
+  typedef std::lock_guard<Mutex> Locker;
 };
 
 

@@ -10,12 +10,12 @@
 
 class bluefs_extent_t {
 public:
-  uint8_t bdev;
   uint64_t offset = 0;
   uint32_t length = 0;
+  uint8_t bdev;
 
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
-    : bdev(b), offset(o), length(l) {}
+    : offset(o), length(l), bdev(b) {}
 
   uint64_t end() const { return  offset + length; }
   DENC(bluefs_extent_t, v, p) {
@@ -54,7 +54,21 @@ struct bluefs_fnode_t {
       allocated += p.length;
   }
 
-  DENC(bluefs_fnode_t, v, p) {
+  DENC_HELPERS
+  void bound_encode(size_t& p) const {
+    _denc_friend(*this, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    DENC_DUMP_PRE(bluefs_fnode_t);
+    _denc_friend(*this, p);
+  }
+  void decode(buffer::ptr::const_iterator& p) {
+    _denc_friend(*this, p);
+    recalc_allocated();
+  }
+  template<typename T, typename P>
+  friend std::enable_if_t<std::is_same_v<bluefs_fnode_t, std::remove_const_t<T>>>
+  _denc_friend(T& v, P& p) {
     DENC_START(1, 1, p);
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
@@ -113,11 +127,11 @@ struct bluefs_super_t {
       block_size(4096) { }
 
   uint64_t block_mask() const {
-    return ~(block_size - 1);
+    return ~((uint64_t)block_size - 1);
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_super_t*>& ls);
 };
@@ -131,7 +145,7 @@ struct bluefs_transaction_t {
     OP_NONE = 0,
     OP_INIT,        ///< initial (empty) file system marker
     OP_ALLOC_ADD,   ///< add extent to available block storage (extent)
-    OP_ALLOC_RM,    ///< remove extent from availabe block storage (extent)
+    OP_ALLOC_RM,    ///< remove extent from available block storage (extent)
     OP_DIR_LINK,    ///< (re)set a dir entry (dirname, filename, ino)
     OP_DIR_UNLINK,  ///< remove a dir entry (dirname, filename)
     OP_DIR_CREATE,  ///< create a dir (dirname)
@@ -217,11 +231,14 @@ struct bluefs_transaction_t {
     encode((__u8)OP_JUMP_SEQ, op_bl);
     encode(next_seq, op_bl);
   }
+  void claim_ops(bluefs_transaction_t& from) {
+    op_bl.claim_append(from.op_bl);
+  }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instance(list<bluefs_transaction_t*>& ls);
+  static void generate_test_instances(list<bluefs_transaction_t*>& ls);
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 

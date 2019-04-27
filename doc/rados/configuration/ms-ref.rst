@@ -120,27 +120,6 @@ Async messenger options
 :Default: ``5``
 
 
-``ms async set affinity``
-
-:Description: Set to true to bind Async Messenger workers to particular CPU cores. 
-:Type: Boolean
-:Required: No
-:Default: ``true``
-
-
-``ms async affinity cores``
-
-:Description: When ``ms async set affinity`` is true, this string specifies how Async
-              Messenger workers are bound to CPU cores. For example, "0,2" will bind
-              workers #1 and #2 to CPU cores #0 and #2, respectively.
-              NOTE: when manually setting affinity, make sure to not assign workers to
-              processors that are virtual CPUs created as an effect of Hyperthreading
-              or similar technology, because they are slower than regular CPU cores.
-:Type: String
-:Required: No
-:Default: ``(empty)``
-
-
 ``ms async send inline``
 
 :Description: Send messages directly from the thread that generated them instead of

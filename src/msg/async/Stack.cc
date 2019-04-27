@@ -28,7 +28,7 @@
 #endif
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -41,7 +41,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
       char tp_name[16];
       sprintf(tp_name, "msgr-worker-%u", w->id);
       ceph_pthread_setname(pthread_self(), tp_name);
-      const uint64_t EventMaxWaitUs = 30000000;
+      const unsigned EventMaxWaitUs = 30000000;
       w->center.set_owner();
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
@@ -103,9 +103,9 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
 
 NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(false), cct(c)
 {
-  assert(cct->_conf->ms_async_op_threads > 0);
+  ceph_assert(cct->_conf->ms_async_op_threads > 0);
 
-  const uint64_t InitEventNumber = 5000;
+  const int InitEventNumber = 5000;
   num_workers = cct->_conf->ms_async_op_threads;
   if (num_workers >= EventCenter::MAX_EVENTCENTER) {
     ldout(cct, 0) << __func__ << " max thread limit is "
@@ -120,7 +120,6 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
     w->center.init(InitEventNumber, i, type);
     workers.push_back(w);
   }
-  cct->register_fork_watcher(this);
 }
 
 void NetworkStack::start()
@@ -165,7 +164,7 @@ Worker* NetworkStack::get_worker()
   }
 
   pool_spin.unlock();
-  assert(current_best);
+  ceph_assert(current_best);
   ++current_best->references;
   return current_best;
 }
@@ -209,7 +208,7 @@ void NetworkStack::drain()
   pool_spin.lock();
   C_drain drain(num_workers);
   for (unsigned i = 0; i < num_workers; ++i) {
-    assert(cur != workers[i]->center.get_owner());
+    ceph_assert(cur != workers[i]->center.get_owner());
     workers[i]->center.dispatch_event_external(EventCallbackRef(&drain));
   }
   pool_spin.unlock();

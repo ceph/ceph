@@ -153,8 +153,7 @@ class MDSThrasher(Greenlet):
 
     thrash_max_mds: [default: 0.05] likelihood that the max_mds of the mds
       cluster will be modified to a value [1, current) or (current, starting
-      max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
-      deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
+      max_mds]. Value should be between 0.0 and 1.0.
 
     thrash_while_stopping: [default: false] thrash an MDS while there
       are MDS in up:stopping (because max_mds was changed and some
@@ -230,7 +229,7 @@ class MDSThrasher(Greenlet):
             self.do_thrash()
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
-            # Also allow succesful completion as gevent exception handling is a broken mess:
+            # Also allow successful completion as gevent exception handling is a broken mess:
             #
             # 2017-02-03T14:34:01.259 CRITICAL:root:  File "gevent.libev.corecext.pyx", line 367, in gevent.libev.corecext.loop.handle_error (src/gevent/libev/gevent.corecext.c:5051)
             #   File "/home/teuthworker/src/git.ceph.com_git_teuthology_master/virtualenv/local/lib/python2.7/site-packages/gevent/hub.py", line 558, in handle_error
@@ -270,10 +269,10 @@ class MDSThrasher(Greenlet):
             "powercycling requested but RemoteConsole is not "
             "initialized.  Check ipmi config.")
 
-    def revive_mds(self, mds, standby_for_rank=None):
+    def revive_mds(self, mds):
         """
         Revive mds -- do an ipmpi powercycle (if indicated by the config)
-        and then restart (using --hot-standby if specified.
+        and then restart.
         """
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
@@ -284,8 +283,6 @@ class MDSThrasher(Greenlet):
             remote.console.power_on()
             self.manager.make_admin_daemon_dir(self.ctx, remote)
         args = []
-        if standby_for_rank:
-            args.extend(['--hot-standby', standby_for_rank])
         self.ctx.daemons.get_daemon('mds', mds).restart(*args)
 
     def wait_for_stable(self, rank = None, gid = None):
@@ -314,7 +311,7 @@ class MDSThrasher(Greenlet):
                         self.log("cluster has %d actives (max_mds is %d), no MDS can replace rank %d".format(len(actives), max_mds, rank))
                         return status
                 else:
-                    if len(actives) >= max_mds:
+                    if len(actives) == max_mds:
                         self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
                         return status, None
             if itercount > 300/2: # 5 minutes
@@ -359,18 +356,7 @@ class MDSThrasher(Greenlet):
                     self.log('thrashing max_mds: %d -> %d' % (max_mds, new_max_mds))
                     self.fs.set_max_mds(new_max_mds)
                     stats['max_mds'] += 1
-
-                    targets = filter(lambda r: r['rank'] >= new_max_mds, status.get_ranks(self.fs.id))
-                    if len(targets) > 0:
-                        # deactivate mds in decending order
-                        targets = sorted(targets, key=lambda r: r['rank'], reverse=True)
-                        for target in targets:
-                            self.log("deactivating rank %d" % target['rank'])
-                            self.fs.deactivate(target['rank'])
-                            stats['deactivate'] += 1
-                            status = self.wait_for_stable()[0]
-                    else:
-                        status = self.wait_for_stable()[0]
+                    self.wait_for_stable()
 
             count = 0
             for info in status.get_ranks(self.fs.id):

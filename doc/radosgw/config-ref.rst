@@ -22,7 +22,7 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
               `HTTP Frontends`_ for more on supported options.
 
 :Type: String
-:Default: ``civetweb port=7480``
+:Default: ``beast port=7480``
 
 ``rgw data``
 
@@ -34,6 +34,11 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 ``rgw enable apis``
 
 :Description: Enables the specified APIs.
+
+              .. note:: Enabling the ``s3`` API is a requirement for
+                        any radosgw instance that is meant to
+                        participate in a `multi-site <../multisite>`_
+                        configuration.
 :Type: String
 :Default: ``s3, swift, swift_auth, admin`` All APIs.
 
@@ -150,18 +155,6 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Description: The size of the thread pool.
 :Type: Integer 
 :Default: 100 threads.
-
-
-``rgw num rados handles``
-
-:Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
-              Having a configurable number of RADOS handles is resulting in
-              significant performance boost for all types of workloads. Each RGW
-              worker thread would now get to pick a RADOS handle for its lifetime,
-              from the available bunch.
-
-:Type: Integer
-:Default: ``1``
 
 
 ``rgw num control oids``
@@ -347,7 +340,7 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 
 ``rgw content length compat``
 
-:Description: Enable compatability handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
+:Description: Enable compatibility handling of FCGI requests with both CONTENT_LENGTH AND HTTP_CONTENT_LENGTH set.
 :Type: Boolean
 :Default: ``false``
 
@@ -534,14 +527,29 @@ Swift Settings
 
 ``rgw swift url prefix``
 
-:Description: The URL prefix for the Swift StorageURL that goes in front of
-              the "/v1" part. This allows to run several Gateway instances
-              on the same host. For compatibility, setting this configuration
-              variable to empty causes the default "/swift" to be used.
-              Use explicit prefix "/" to start StorageURL at the root.
-              WARNING: setting this option to "/" will NOT work if S3 API is
-              enabled. From the other side disabling S3 will make impossible
-              to deploy RadosGW in the multi-site configuration!
+:Description: The URL prefix for the Swift API, to distinguish it from
+              the S3 API endpoint. The default is ``swift``, which
+              makes the Swift API available at the URL
+              ``http://host:port/swift/v1`` (or
+              ``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if
+              ``rgw swift account in url`` is enabled).
+
+              For compatibility, setting this configuration variable
+              to the empty string causes the default ``swift`` to be
+              used; if you do want an empty prefix, set this option to
+              ``/``.
+
+              .. warning:: If you set this option to ``/``, you must
+                           disable the S3 API by modifying ``rgw
+                           enable apis`` to exclude ``s3``. It is not
+                           possible to operate radosgw with ``rgw
+                           swift url prefix = /`` and simultaneously
+                           support both the S3 and Swift APIs. If you
+                           do need to support both APIs without
+                           prefixes, deploy multiple radosgw instances
+                           to listen on different hosts (or ports)
+                           instead, enabling some for S3 and some for
+                           Swift.
 :Default: ``swift``
 :Example: "/swift-testing"
 
@@ -562,6 +570,35 @@ Swift Settings
 :Default: ``auth``
 
 
+``rgw swift account in url``
+
+:Description: Whether or not the Swift account name should be included
+              in the Swift API URL.
+
+              If set to ``false`` (the default), then the Swift API
+              will listen on a URL formed like
+              ``http://host:port/<rgw_swift_url_prefix>/v1``, and the
+              account name (commonly a Keystone project UUID if
+              radosgw is configured with `Keystone integration
+              <../keystone>`_) will be inferred from request
+              headers.
+
+              If set to ``true``, the Swift API URL will be
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>``
+              (or
+              ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``)
+              instead, and the Keystone ``object-store`` endpoint must
+              accordingly be configured to include the
+              ``AUTH_%(tenant_id)s`` suffix.
+
+              You **must** set this option to ``true`` (and update the
+              Keystone service catalog) if you want radosgw to support
+              publicly-readable containers and `temporary URLs
+              <../swift/tempurl>`_.
+:Type: Boolean
+:Default: ``false``
+
+
 ``rgw swift versioning enabled``
 
 :Description: Enables the Object Versioning of OpenStack Object Storage API.
@@ -572,6 +609,24 @@ Swift Settings
               control verification - ACLs are NOT taken into consideration.
               Those containers cannot be versioned by the S3 object versioning
               mechanism.
+
+	      The ``X-History-Location`` attribute, also understood by
+	      OpenStack Swift for handling ``DELETE`` operations
+	      `slightly differently
+	      <https://docs.openstack.org/swift/latest/overview_object_versioning.html>`_
+	      from ``X-Versions-Location``, is currently not
+	      supported.
+:Type: Boolean
+:Default: ``false``
+
+
+``rgw trust forwarded https``
+
+:Description: When a proxy in front of radosgw is used for ssl termination, radosgw
+              does not know whether incoming http connections are secure. Enable
+              this option to trust the ``Forwarded`` and ``X-Forwarded-Proto`` headers
+              sent by the proxy when determining whether the connection is secure.
+              This is required for some features, such as server side encryption.
 :Type: Boolean
 :Default: ``false``
 
@@ -752,11 +807,26 @@ Keystone Settings
               authentication with the admin credentials
               (``rgw keystone admin user``, ``rgw keystone admin password``,
               ``rgw keystone admin tenant``, ``rgw keystone admin project``,
-              ``rgw keystone admin domain``). Admin token feature is considered
-              as deprecated.
+              ``rgw keystone admin domain``). The Keystone admin token
+              has been deprecated, but can be used to integrate with
+              older environments.  Prefer ``rgw keystone admin token path``
+              to avoid exposing the token.
 :Type: String
 :Default: None
 
+``rgw keystone admin token path``
+
+:Description: Path to a file containing the Keystone admin token
+	      (shared secret).  In Ceph RadosGW authentication with
+	      the admin token has priority over authentication with
+	      the admin credentials
+              (``rgw keystone admin user``, ``rgw keystone admin password``,
+              ``rgw keystone admin tenant``, ``rgw keystone admin project``,
+              ``rgw keystone admin domain``).
+              The Keystone admin token has been deprecated, but can be
+              used to integrate with older environments.
+:Type: String
+:Default: None
 
 ``rgw keystone admin tenant``
 
@@ -777,7 +847,15 @@ Keystone Settings
 ``rgw keystone admin password``
 
 :Description: The password for OpenStack admin user when using OpenStack
-              Identity API v2
+              Identity API v2.  Prefer ``rgw keystone admin password path``
+              to avoid exposing the token.
+:Type: String
+:Default: None
+
+``rgw keystone admin password path``
+
+:Description: Path to a file containing the password for OpenStack
+              admin user when using OpenStack Identity API v2.
 :Type: String
 :Default: None
 
@@ -851,6 +929,66 @@ Barbican Settings
               user when using OpenStack Identity API v3.
 :Type: String
 :Default: None
+
+
+QoS settings
+------------
+
+.. versionadded:: Nautilus
+
+The ``civetweb`` frontend has a threading model that uses a thread per
+connection and hence automatically throttled by ``rgw thread pool size``
+configurable when it comes to accepting connections. The ``beast`` frontend is
+not restricted by the thread pool size when it comes to accepting new
+connections, so a scheduler abstraction is introduced in Nautilus release which
+for supporting ways for scheduling requests in the future.
+
+Currently the scheduler defaults to a throttler which throttles the active
+connections to a configured limit. QoS based on mClock is currently in an
+*experimental* phase and not recommended for production yet. Current
+implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
+(swift auth, sts) metadata & data requests.
+
+
+``rgw max concurrent requests``
+
+:Description: Maximum number of concurrent HTTP requests that the beast frontend
+              will process. Tuning this can help to limit memory usage under
+              heavy load.
+:Type: Integer
+:Default: 1024
+
+
+``rgw scheduler type``
+
+:Description: The type of RGW Scheduler to use. Valid values are throttler,
+              dmclock. Currently defaults to throttler which throttles beast
+              frontend requests. dmclock is *experimental* and will need the
+              experimental flag set
+
+
+The options below are to tune the experimental dmclock scheduler. For some
+further reading on dmclock, see :ref:`dmclock-qos`. `op_class` for the flags below is
+one of admin, auth, metadata or data.
+
+``rgw_dmclock_<op_class>_res``
+
+:Description: The mclock reservation for `op_class` requests
+:Type: float
+:Default: 100.0
+
+``rgw_dmclock_<op_class>_wgt``
+
+:Description: The mclock weight for `op_class` requests
+:Type: float
+:Default: 1.0
+
+``rgw_dmclock_<op_class>_lim``
+
+:Description: The mclock limit for `op_class` requests
+:Type: float
+:Default: 0.0
+
 
 
 .. _Architecture: ../../architecture#data-striping

@@ -27,7 +27,7 @@ public:
     std::string name;
     fs_info_t() : cid(FS_CLUSTER_ID_NONE) {}
     void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::iterator &bl);
+    void decode(bufferlist::const_iterator &bl);
   };
 
   epoch_t epoch;
@@ -48,12 +48,12 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void print(ostream& out) const;
   void print_summary(Formatter *f, ostream *out);
 
-  static void generate_test_instances(list<FSMapUser*>& ls);
+  static void generate_test_instances(std::list<FSMapUser*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser::fs_info_t)
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser)

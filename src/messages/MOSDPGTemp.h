@@ -20,13 +20,13 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MOSDPGTemp : public PaxosServiceMessage {
- public:
+public:
   epoch_t map_epoch = 0;
   map<pg_t, vector<int32_t> > pg_temp;
   bool forced = false;
 
   MOSDPGTemp(epoch_t e)
-    : PaxosServiceMessage(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(e)
   {}
   MOSDPGTemp()
@@ -44,7 +44,7 @@ public:
     encode(forced, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
     decode(pg_temp, p);
@@ -53,13 +53,16 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osd_pgtemp"; }
+  std::string_view get_type_name() const override { return "osd_pgtemp"; }
   void print(ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
+
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

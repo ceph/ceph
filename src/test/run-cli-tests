@@ -48,6 +48,7 @@ for tool in "$SRCDIR"/cli/*; do
     if ! env -i \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
 	CEPH_CONF=/dev/null \
+	CEPH_ARGS="--no-mon-config" \
 	CCACHE_DIR="$CCACHE_DIR" \
 	CC="$CC" \
 	CXX="$CXX" \

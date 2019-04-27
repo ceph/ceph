@@ -6,13 +6,15 @@
 
 #include "MOSDFastDispatchOp.h"
 
-struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
+public:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   pg_shard_t from;
   spg_t pgid;
-  epoch_t map_epoch, min_epoch;
+  epoch_t map_epoch = 0;
+  epoch_t min_epoch = 0;
   list<pair<hobject_t, eversion_t> > objects;
 
   epoch_t get_map_epoch() const override {
@@ -26,12 +28,11 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
-      map_epoch(0), min_epoch(0)
-    {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION}
+  {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
     decode(min_epoch, p);
@@ -55,7 +56,11 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
         << " e" << map_epoch << "," << min_epoch << " " << objects << ")";
   }
 
-  const char *get_type_name() const override { return "recovery_delete_reply"; }
+  std::string_view get_type_name() const override { return "recovery_delete_reply"; }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

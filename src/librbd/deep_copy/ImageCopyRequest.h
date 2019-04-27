@@ -31,20 +31,21 @@ public:
   static ImageCopyRequest* create(ImageCtxT *src_image_ctx,
                                   ImageCtxT *dst_image_ctx,
                                   librados::snap_t snap_id_start,
-                                  librados::snap_t snap_id_end,
+                                  librados::snap_t snap_id_end, bool flatten,
                                   const ObjectNumber &object_number,
                                   const SnapSeqs &snap_seqs,
                                   ProgressContext *prog_ctx,
                                   Context *on_finish) {
     return new ImageCopyRequest(src_image_ctx, dst_image_ctx, snap_id_start,
-                                snap_id_end, object_number, snap_seqs, prog_ctx,
-                                on_finish);
+                                snap_id_end, flatten, object_number, snap_seqs,
+                                prog_ctx, on_finish);
   }
 
   ImageCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
                    librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-                   const ObjectNumber &object_number, const SnapSeqs &snap_seqs,
-                   ProgressContext *prog_ctx, Context *on_finish);
+                   bool flatten, const ObjectNumber &object_number,
+                   const SnapSeqs &snap_seqs, ProgressContext *prog_ctx,
+                   Context *on_finish);
 
   void send();
   void cancel();
@@ -53,7 +54,8 @@ private:
   /**
    * @verbatim
    *
-   * <start>   . . . . .
+   * <start>
+   *    |      . . . . .
    *    |      .       .  (parallel execution of
    *    v      v       .   multiple objects at once)
    * COPY_OBJECT . . . .
@@ -68,6 +70,7 @@ private:
   ImageCtxT *m_dst_image_ctx;
   librados::snap_t m_snap_id_start;
   librados::snap_t m_snap_id_end;
+  bool m_flatten;
   ObjectNumber m_object_number;
   SnapSeqs m_snap_seqs;
   ProgressContext *m_prog_ctx;
@@ -82,6 +85,7 @@ private:
   uint64_t m_current_ops = 0;
   std::priority_queue<
     uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> m_copied_objects;
+  bool m_updating_progress = false;
   SnapMap m_snap_map;
   int m_ret_val = 0;
 

@@ -13,8 +13,7 @@ set(server_srcs
   crushtool.rst
   ceph-run.rst
   mount.ceph.rst
-  ceph-create-keys.rst
-  ceph-rest-api.rst)
+  ceph-create-keys.rst)
 if(WITH_TESTS)
 list(APPEND server_srcs
   ceph-debugpack.rst)
@@ -22,8 +21,6 @@ endif(WITH_TESTS)
 
 set(osd_srcs
   ceph-clsinfo.rst
-  ceph-detect-init.rst
-  ceph-disk.rst
   ceph-volume.rst
   ceph-volume-systemd.rst
   ceph-osd.rst
@@ -71,6 +68,7 @@ if(WITH_RBD)
   endif()
 endif()
 
+list(APPEND man_srcs ceph-immutable-object-cache.rst)
 foreach(man ${man_srcs})
   list(APPEND sphinx_input ${CMAKE_CURRENT_SOURCE_DIR}/${man})
   # mount.ceph.rst => mount if we use

@@ -1,0 +1,57 @@
+<ng-template #notificationsTpl>
+  <div *ngIf="notifications.length > 0">
+    <button type="button" class="btn btn-default btn-sm btn-block" (click)="removeAll()">
+      <i class="fa fa-trash-o" aria-hidden="true"></i>
+      &nbsp;
+      <ng-container i18n>Remove all</ng-container>
+    </button>
+    <hr>
+    <div *ngFor="let notification of notifications">
+      <table>
+        <tr>
+          <td rowspan="3" class="icon-col text-center">
+            <span [ngClass]="['fa-stack fa-2x', notification.textClass]">
+              <i class="fa fa-circle fa-stack-2x"></i>
+              <i [ngClass]="['fa fa-stack-1x fa-inverse', notification.iconClass]"></i>
+            </span>
+          </td>
+          <td>
+            <strong>{{ notification.title }}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td [innerHtml]="notification.message">
+          </td>
+        </tr>
+        <tr>
+          <td [innerHtml]="notificationService.renderTimeAndApplicationHtml(notification)"></td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #emptyTpl>
+  <div *ngIf="notifications.length === 0">
+    <div class="message">
+      There are no notifications.
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #popTpl>
+  <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
+  <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
+</ng-template>
+
+<a [popover]="popTpl"
+   placement="bottom"
+   container="body"
+   outsideClick="true"
+   i18n-title
+   title="Recent Notifications">
+  <i class="fa fa-fw fa-bell"></i>
+  <span i18n
+        class="visible-xs-inline-block">Recent Notifications</span>
+</a>

@@ -43,7 +43,7 @@ run_expect_succ() {
 run_expect_nosignal() {
     echo "RUN_EXPECT_NOSIGNAL: " "$@"
     do_run "$@"
-    [ $? -ge 128 ] && die "expected succes or fail, but got signal! cmd: $@"
+    [ $? -ge 128 ] && die "expected success or fail, but got signal! cmd: $@"
 }
 
 run() {
@@ -88,7 +88,7 @@ run_expect_nosignal "$RADOS_TOOL" --snapid "0" ls
 run_expect_nosignal "$RADOS_TOOL" --object_locator "asdf" ls
 run_expect_nosignal "$RADOS_TOOL" --namespace "asdf" ls
 
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
 run_expect_succ "$CEPH_TOOL" osd erasure-code-profile set myprofile k=2 m=1 stripe_unit=2K crush-failure-domain=osd --force
 run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_EC" 100 100 erasure myprofile
 
@@ -112,11 +112,11 @@ run_expect_succ "$RADOS_TOOL" -p "$POOL" setomapheader foo2 "foo2.header"
 run_expect_succ "$RADOS_TOOL" -p "$POOL" export "$TDIR/expc"
 
 # make sure that --create works
-run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" -p "$POOL" --create import "$TDIR/expa"
 
 # make sure that lack of --create fails
-run_expect_succ "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_fail "$RADOS_TOOL" -p "$POOL" import "$TDIR/expa"
 
 run_expect_succ "$RADOS_TOOL" -p "$POOL" --create import "$TDIR/expa"
@@ -153,10 +153,10 @@ VAL=`"$RADOS_TOOL" -p "$POOL" getxattr foo "rados.toothbrush"`
 [ "${VAL}" = "toothbrush" ] || die "Invalid attribute after second import"
 
 # test copy pool
-run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
-run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
-run_expect_succ "$RADOS_TOOL" mkpool "$POOL_CP_TARGET"
+run "$CEPH_TOOL" osd pool rm "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$CEPH_TOOL" osd pool rm "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
+run_expect_succ "$CEPH_TOOL" osd pool create "$POOL_CP_TARGET" 8
 
 # create src files
 mkdir -p "$TDIR/dir_cp_src"
@@ -233,16 +233,11 @@ snapid=$("$RADOS_TOOL" lssnap --pool "$POOL" | grep snap1 | cut -f1)
 run_expect_succ "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"
 run_expect_fail "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"k
 
-run_expect_succ "$RADOS_TOOL" chown 1 --pool "$POOL"
-run_expect_fail "$RADOS_TOOL" chown 1k --pool "$POOL"
-
 run_expect_succ "$RADOS_TOOL" truncate f.1 0 --pool "$POOL"
 run_expect_fail "$RADOS_TOOL" truncate f.1 0k --pool "$POOL"
 
-run "$RADOS_TOOL" rmpool delete_me_mkpool_test delete_me_mkpool_test --yes-i-really-really-mean-it
-run_expect_succ "$RADOS_TOOL" mkpool delete_me_mkpool_test 0 0
-run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test2 0k 0
-run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
+run "$CEPH_TOOL" osd pool rm delete_me_mkpool_test delete_me_mkpool_test --yes-i-really-really-mean-it
+run_expect_succ "$CEPH_TOOL" osd pool create delete_me_mkpool_test 1
 
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
@@ -357,7 +352,7 @@ test_rmobj() {
 	sleep 2
     done
     $RADOS_TOOL -p $p rm $OBJ --force-full
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
     rm $V1
 }
 
@@ -399,7 +394,7 @@ test_ls() {
         die "Created $TOTAL objects but saw $CHECK"
     fi
 
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
 }
 
 test_cleanup() {
@@ -461,7 +456,7 @@ test_cleanup() {
     run_expect_succ $RADOS_TOOL -p $p cleanup --prefix benchmark_data_otherhost
     set -e
 
-    $RADOS_TOOL rmpool $p $p --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool rm $p $p --yes-i-really-really-mean-it
 }
 
 function test_append()
@@ -564,6 +559,353 @@ function test_put()
   rm -rf ./rados_object_10k ./rados_object_10k_out ./rados_object_offset_0_out ./rados_object_offset_1000_out
 }
 
+function test_stat()
+{
+  bluestore=$("$CEPH_TOOL" osd metadata | grep '"osd_objectstore": "bluestore"' | cut -f1)
+  # create file in local fs
+  dd if=/dev/urandom of=rados_object_128k bs=64K count=2
+
+  # rados df test (replicated_pool):
+  $RADOS_TOOL purge $POOL --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool rm $POOL $POOL --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool create $POOL 8
+  $CEPH_TOOL osd pool set $POOL size 3
+
+  # put object with 1 MB gap in front
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_128k --offset=1048576
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=1.1
+    STORED_UNIT="MiB"
+  else
+    STORED=384
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL df | grep $POOL ; [[ ! -z $? ]] && echo "")
+    [[ -z $IN ]] && sleep 1 && continue
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 3
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "1" ] && [ ${VALS[13]} == 128 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  [[ -z $IN ]] && die "Failed to retrieve any pool stats within 60 seconds"
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "1" ] || [ ${VALS[13]} != 128 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  # overwrite data at 1MB offset
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_128k --offset=1048576
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=1.1
+    STORED_UNIT="MiB"
+  else
+    STORED=384
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL df | grep $POOL ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 3
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "2" ] && [ ${VALS[13]} == 256 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "2" ] || [ ${VALS[13]} != 256 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  # write data at 64K offset
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_128k --offset=65536
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=1.1
+    STORED_UNIT="MiB"
+  else
+    STORED=768
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL df | grep $POOL ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 3
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "3" ] && [ ${VALS[13]} == 384 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "3" ] || [ ${VALS[13]} != 384 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  # overwrite object totally
+  $RADOS_TOOL -p $POOL put $OBJ ./rados_object_128k
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=128
+    STORED_UNIT="KiB"
+  else
+    STORED=384
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL df | grep $POOL ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 3
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "4" ] && [ ${VALS[13]} == 512 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "4" ] || [ ${VALS[13]} != 512 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  cleanup
+
+  # after cleanup?
+  MATCH_CNT=0
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL df | grep $POOL ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 3
+    if [ ${VALS[1]} == 0 ] && [ ${VALS[2]} == "B" ] && [ ${VALS[3]} == "0" ] && [ ${VALS[5]} == "0" ] && [ ${VALS[12]} == "5" ] && [ ${VALS[13]} == 512 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != 0 ] || [ ${VALS[2]} != "B" ] || [ ${VALS[3]} != "0" ] || [ ${VALS[5]} != "0" ] || [ ${VALS[12]} != "5" ] || [ ${VALS[13]} != 512 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  ############ rados df test (EC pool): ##############
+  $RADOS_TOOL purge $POOL_EC --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool rm $POOL_EC $POOL_EC --yes-i-really-really-mean-it
+  $CEPH_TOOL osd erasure-code-profile set myprofile k=2 m=1 stripe_unit=2K crush-failure-domain=osd --force
+  $CEPH_TOOL osd pool create $POOL_EC 8 8 erasure
+
+  # put object
+  $RADOS_TOOL -p $POOL_EC put $OBJ ./rados_object_128k
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=128
+    STORED_UNIT="KiB"
+  else
+    STORED=192
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL_EC df | grep $POOL_EC ; [[ ! -z $? ]] && echo "")
+    [[ -z $IN ]] && sleep 1 && continue
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 2+1
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "1" ] && [ ${VALS[13]} == 128 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  [[ -z $IN ]] && die "Failed to retrieve any pool stats within 60 seconds"
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "1" ] || [ ${VALS[13]} != 128 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  # overwrite object
+  $RADOS_TOOL -p $POOL_EC put $OBJ ./rados_object_128k
+  MATCH_CNT=0
+  if [ "" == "$bluestore" ];
+  then
+    STORED=128
+    STORED_UNIT="KiB"
+  else
+    STORED=192
+    STORED_UNIT="KiB"
+  fi
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL_EC df | grep $POOL_EC ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 2+1
+    if [ ${VALS[1]} == $STORED ] && [ ${VALS[2]} == $STORED_UNIT ] && [ ${VALS[3]} == "1" ] && [ ${VALS[5]} == "3" ] && [ ${VALS[12]} == "2" ] && [ ${VALS[13]} == 256 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != $STORED ] || [ ${VALS[2]} != $STORED_UNIT ] || [ ${VALS[3]} != "1" ] || [ ${VALS[5]} != "3" ] || [ ${VALS[12]} != "2" ] || [ ${VALS[13]} != 256 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  cleanup
+
+  # after cleanup?
+  MATCH_CNT=0
+  for i in {1..60}
+  do
+    IN=$($RADOS_TOOL -p $POOL_EC df | grep $POOL_EC ; [[ ! -z $? ]] && echo "")
+    IFS=' ' read -ra VALS <<< "$IN"
+
+    # verification is a bit tricky due to stats report's eventual model
+    # VALS[1] - STORED
+    # VALS[2] - STORED units
+    # VALS[3] - OBJECTS
+    # VALS[5] - COPIES
+    # VALS[12] - WR_OPS
+    # VALS[13] - WR
+    # VALS[14] - WR uints
+    # implies replication factor 2+1
+    if [ ${VALS[1]} == 0 ] && [ ${VALS[2]} == "B" ] && [ ${VALS[3]} == "0" ] && [ ${VALS[5]} == "0" ] && [ ${VALS[12]} == "3" ] && [ ${VALS[13]} == 256 ] && [ ${VALS[14]} == "KiB" ]
+    then
+      # enforce multiple match to make sure stats aren't changing any more
+      MATCH_CNT=$((MATCH_CNT+1))
+      [[ $MATCH_CNT == 3 ]] && break
+      sleep 1
+      continue
+    fi
+    MATCH_CNT=0
+    sleep 1
+    continue
+  done
+  if [ ${VALS[1]} != 0 ] || [ ${VALS[2]} != "B" ] || [ ${VALS[3]} != "0" ] || [ ${VALS[5]} != "0" ] || [ ${VALS[12]} != "3" ] || [ ${VALS[13]} != 256 ] || [ ${VALS[14]} != "KiB" ]
+  then
+    die "Failed to retrieve proper pool stats within 60 seconds"
+  fi
+
+  rm -rf ./rados_object_128k
+}
+
 test_xattr
 test_omap
 test_rmobj
@@ -571,6 +913,7 @@ test_ls
 test_cleanup
 test_append
 test_put
+test_stat
 
 # clean up environment, delete pool
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it

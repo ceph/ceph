@@ -1,0 +1,64 @@
+<tabset *ngIf="selectedItem">
+  <tab i18n-heading
+       heading="Details">
+    <div class="row">
+      <div class="col-sm-6">
+        <legend i18n>Ranks</legend>
+
+        <cd-table [data]="ranks.data"
+                  [columns]="ranks.columns"
+                  (fetchData)="refresh()"
+                  [toolHeader]="false">
+        </cd-table>
+
+        <cd-table-key-value [data]="standbys">
+        </cd-table-key-value>
+      </div>
+
+      <div class="col-sm-6">
+        <legend i18n>Pools</legend>
+
+        <cd-table [data]="pools.data"
+                  [columns]="pools.columns"
+                  [toolHeader]="false">
+        </cd-table>
+      </div>
+    </div>
+
+    <div class="row"
+         *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
+      <div class="cold-md-12">
+        <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+      </div>
+    </div>
+  </tab>
+  <tab i18n-heading
+       heading="Clients: {{ clientCount }}"
+       (select)="clientsSelect=true"
+       (deselect)="clientsSelect=false">
+    <cd-cephfs-clients [id]="id"
+                       *ngIf="clientsSelect">
+    </cd-cephfs-clients>
+  </tab>
+  <tab i18n-heading
+       *ngIf="grafanaPermission.read"
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
+                uid="rRfFzWtik"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
+</tabset>
+
+<!-- templates -->
+<ng-template #poolUsageTpl
+             let-row="row">
+  <cd-usage-bar [totalBytes]="row.size"
+                [usedBytes]="row.used"></cd-usage-bar>
+</ng-template>
+
+<ng-template #activityTmpl
+             let-row="row"
+             let-value="value">
+  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+</ng-template>

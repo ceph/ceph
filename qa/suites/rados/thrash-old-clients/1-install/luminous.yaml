@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        mon warn on msgr2 not enabled: false
+tasks:
+- install:
+    branch: luminous
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr-ssh
+    extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:

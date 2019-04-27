@@ -34,7 +34,8 @@ public:
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
   ssize_t write(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
-  ssize_t discard(uint64_t off, uint64_t len, bool skip_partial_discard);
+  ssize_t discard(uint64_t off, uint64_t len,
+                  uint32_t discard_granularity_bytes);
   ssize_t writesame(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
   ssize_t compare_and_write(uint64_t off, uint64_t len,
                             bufferlist &&cmp_bl, bufferlist &&bl,
@@ -46,7 +47,7 @@ public:
   void aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                  bufferlist &&bl, int op_flags, bool native_async=true);
   void aio_discard(AioCompletion *c, uint64_t off, uint64_t len,
-                   bool skip_partial_discard, bool native_async=true);
+                   uint32_t discard_granularity_bytes, bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
   void aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                      bufferlist &&bl, int op_flags, bool native_async=true);
@@ -69,13 +70,21 @@ public:
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
+  void wait_on_writes_unblocked(Context *on_unblocked);
+
   void set_require_lock(Direction direction, bool enabled);
 
-  void apply_qos_iops_limit(uint64_t limit);
+  void apply_qos_schedule_tick_min(uint64_t tick);
 
+  void apply_qos_limit(const uint64_t flag, uint64_t limit, uint64_t burst);
 protected:
   void *_void_dequeue() override;
   void process(ImageDispatchSpec<ImageCtxT> *req) override;
+  bool _empty() override {
+    return (ThreadPool::PointerWQ<ImageDispatchSpec<ImageCtxT>>::_empty() &&
+            m_io_throttled.load() == 0);
+  }
+
 
 private:
   typedef std::list<Context *> Contexts;
@@ -88,6 +97,7 @@ private:
   mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers = 0;
+  Contexts m_unblocked_write_waiter_contexts;
   bool m_require_lock_on_read = false;
   bool m_require_lock_on_write = false;
   std::atomic<unsigned> m_queued_reads { 0 };
@@ -95,8 +105,10 @@ private:
   std::atomic<unsigned> m_in_flight_ios { 0 };
   std::atomic<unsigned> m_in_flight_writes { 0 };
   std::atomic<unsigned> m_io_blockers { 0 };
+  std::atomic<unsigned> m_io_throttled { 0 };
 
-  TokenBucketThrottle *iops_throttle;
+  std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
+  uint64_t m_qos_enabled_flag = 0;
 
   bool m_shutdown = false;
   Context *m_on_shutdown = nullptr;
@@ -112,6 +124,8 @@ private:
     return (m_queued_writes == 0);
   }
 
+  bool needs_throttle(ImageDispatchSpec<ImageCtxT> *item);
+
   void finish_queued_io(ImageDispatchSpec<ImageCtxT> *req);
   void finish_in_flight_write();
 
@@ -125,7 +139,7 @@ private:
   void handle_refreshed(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 
-  void handle_iops_throttle_ready(int r, ImageDispatchSpec<ImageCtxT> *item);
+  void handle_throttle_ready(int r, ImageDispatchSpec<ImageCtxT> *item, uint64_t flag);
 };
 
 } // namespace io

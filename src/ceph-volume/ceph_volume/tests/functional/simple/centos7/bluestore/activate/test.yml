@@ -29,3 +29,42 @@
         CEPH_VOLUME_DEBUG: 1
       with_items:
         - "{{ osd_configs.files }}"
+
+
+# zap tests
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: stop ceph-osd daemons
+      service:
+        name: "ceph-osd@{{ item }}"
+        state: stopped
+      with_items:
+        - "0"
+        - "1"
+
+
+- hosts: mons
+  become: yes
+  tasks:
+
+    - name: purge osds
+      command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
+      with_items:
+        - "0"
+        - "1"
+
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: zap devices used for OSDs
+      command: "ceph-volume --cluster {{ cluster }} lvm zap --osd-id {{ item }} --destroy"
+      with_items:
+        - "0"
+        - "1"
+      environment:
+        CEPH_VOLUME_DEBUG: 1

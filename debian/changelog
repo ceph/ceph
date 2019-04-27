@@ -1,3 +1,27 @@
+ceph (14.2.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Mon, 18 Mar 2019 10:08:27 +0000
+
+ceph (14.1.1-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Mon, 11 Mar 2019 16:42:54 +0000
+
+ceph (14.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Fri, 22 Feb 2019 18:07:06 +0000
+
+ceph (13.1.0-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Thu, 03 May 2018 17:57:32 +0000
+
 ceph (12.1.2-1) stable; urgency=medium
 
   * New upstream release
@@ -246,25 +270,25 @@ ceph (0.81-1) stable; urgency=low
 
 ceph (0.80-1) stable; urgency=low
 
-  * New upsream release
+  * New upstream release
 
  -- Alfredo Deza <alfredo.deza@inktank.com>  Tue, 06 May 2014 14:03:27 +0000
 
 ceph (0.80-rc1-1) stable; urgency=low
 
-  * New upsream release
+  * New upstream release
 
  -- Alfredo Deza <alfredo.deza@inktank.com>  Tue, 22 Apr 2014 21:21:44 +0000
 
 ceph (0.79-1) stable; urgency=low
 
-  * New upsream release
+  * New upstream release
 
  -- Alfredo Deza <alfredo.deza@inktank.com>  Mon, 07 Apr 2014 16:48:36 +0000
 
 ceph (0.78-1) stable; urgency=low
 
-  * New upsream release
+  * New upstream release
 
  -- Alfredo Deza <alfredo.deza@inktank.com>  Fri, 21 Mar 2014 22:05:12 +0000
 
@@ -552,7 +576,7 @@ ceph (0.42.1-1) experimental; urgency=low
 
 ceph (0.42-1) experimental; urgency=low
 
-  * New upstream relese 
+  * New upstream release 
 
  -- Sage Weil <sage@newdream.net>  Sun, 19 Feb 2012 15:30:20 -0800
 

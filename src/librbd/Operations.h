@@ -100,6 +100,13 @@ public:
   int metadata_remove(const std::string &key);
   void execute_metadata_remove(const std::string &key, Context *on_finish);
 
+  int migrate(ProgressContext &prog_ctx);
+  void execute_migrate(ProgressContext &prog_ctx, Context *on_finish);
+
+  int sparsify(size_t sparse_size, ProgressContext &prog_ctx);
+  void execute_sparsify(size_t sparse_size, ProgressContext &prog_ctx,
+                        Context *on_finish);
+
   int prepare_image_update(bool request_lock);
 
 private:

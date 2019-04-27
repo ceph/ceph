@@ -11,7 +11,7 @@ There are two ways for a pg to be removed from an OSD:
 
 In either case, our general strategy for removing the pg is to
 atomically set the metadata objects (pg->log_oid, pg->biginfo_oid) to
-backfill and asynronously remove the pg collections.  We do not do
+backfill and asynchronously remove the pg collections.  We do not do
 this inline because scanning the collections to remove the objects is
 an expensive operation.
 
@@ -30,12 +30,12 @@ The possible states are:
   2. CLEARING_DIR: the PG's contents are being removed synchronously
   3. DELETING_DIR: the PG's directories and metadata being queued for removal
   4. DELETED_DIR: the final removal transaction has been queued
-  5. CANCELED: the deletion has been canceled
+  5. CANCELED: the deletion has been cancelled
 
-In 1 and 2, the deletion can be canceled.  Each state transition
+In 1 and 2, the deletion can be cancelled.  Each state transition
 method (and check_canceled) returns false if deletion has been
-canceled and true if the state transition was successful.  Similarly,
-try_stop_deletion() returns true if it succeeds in canceling the
+cancelled and true if the state transition was successful.  Similarly,
+try_stop_deletion() returns true if it succeeds in cancelling the
 deletion.  Additionally, try_stop_deletion() in the event that it
 fails to stop the deletion will not return until the final removal
 transaction is queued.  This ensures that any operations queued after
@@ -44,7 +44,7 @@ that point will be ordered after the pg deletion.
 OSD::_create_lock_pg must handle two cases:
 
   1. Either there is no DeletingStateRef for the pg, or it failed to cancel
-  2. We succeeded in canceling the deletion.
+  2. We succeeded in cancelling the deletion.
 
 In case 1., we proceed as if there were no deletion occurring, except that
 we avoid writing to the PG until the deletion finishes.  In case 2., we

@@ -1,0 +1,50 @@
+<cd-modal>
+  <ng-container i18n
+                class="modal-title">Purge Trash</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="purgeForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="purgeForm"
+          novalidate>
+      <div class="modal-body">
+        <p>
+          <ng-container i18n>To purge, select one or All images and click</ng-container>&nbsp;
+          <kbd i18n>Purge Trash</kbd>.&nbsp;
+        </p>
+
+        <div class="form-group">
+          <label class="center-block"
+                 i18n>Pool:</label>
+          <input class="form-control"
+                 type="text"
+                 placeholder="Pool name..."
+                 i18n-placeholder
+                 formControlName="poolName"
+                 *ngIf="!poolPermission.read">
+          <select class="form-control"
+                  formControlName="poolName"
+                  *ngIf="poolPermission.read">
+            <option value=""
+                    i18n>All</option>
+            <option *ngFor="let pool of pools"
+                    [value]="pool">{{ pool }}</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="purgeForm"
+                            (submitAction)="purge()"
+                            i18n>Purge Trash</cd-submit-button>
+          <cd-back-button [back]="modalRef.hide"
+                          name="Cancel"
+                          i18n-name>
+          </cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

@@ -20,48 +20,9 @@ import time
 
 from boto.connection import AWSAuthConnection
 from teuthology import misc as teuthology
-from util.rgw import get_user_summary, get_user_successful_ops
+from util.rgw import get_user_summary, get_user_successful_ops, rgwadmin
 
 log = logging.getLogger(__name__)
-
-def rgwadmin(ctx, client, cmd):
-    """
-    Perform rgw admin command
-
-    :param client: client
-    :param cmd: command to execute.
-    :return: command exit status, json result.
-    """
-    log.info('radosgw-admin: %s' % cmd)
-    testdir = teuthology.get_testdir(ctx)
-    pre = [
-        'adjust-ulimits',
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin',
-        '--log-to-stderr',
-        '--format', 'json',
-        ]
-    pre.extend(cmd)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        stdout=StringIO(),
-        stderr=StringIO(),
-        )
-    r = proc.exitstatus
-    out = proc.stdout.getvalue()
-    j = None
-    if not r and out != '':
-        try:
-            j = json.loads(out)
-            log.info(' json result: %s' % j)
-        except ValueError:
-            j = out
-            log.info(' raw result: %s' % j)
-    return (r, j)
-
 
 def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     """
@@ -143,8 +104,12 @@ def rgwadmin_rest(connection, cmd, params=None, headers=None, raw=False):
     result = handler(url, params=params, headers=request.headers)
 
     if raw:
-        log.info(' text result: %s' % result.txt)
-        return result.status_code, result.txt
+        log.info(' text result: %s' % result.text)
+        return result.status_code, result.text
+    elif len(result.content) == 0:
+        # many admin requests return no body, so json() throws a JSONDecodeError
+        log.info(' empty result')
+        return result.status_code, None
     else:
         log.info(' json result: %s' % result.json())
         return result.status_code, result.json()
@@ -207,14 +172,16 @@ def task(ctx, config):
     logging.error(err)
     assert not err
 
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    remote_host = remote.name.split('@')[1]
+    assert hasattr(ctx, 'rgw'), 'radosgw-admin-rest must run after the rgw task'
+    endpoint = ctx.rgw.role_endpoints.get(client)
+    assert endpoint, 'no rgw endpoint for {}'.format(client)
+
     admin_conn = boto.s3.connection.S3Connection(
         aws_access_key_id=admin_access_key,
         aws_secret_access_key=admin_secret_key,
-        is_secure=False,
-        port=7280,
-        host=remote_host,
+        is_secure=True if endpoint.cert else False,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
@@ -235,6 +202,30 @@ def task(ctx, config):
 
     assert ret == 200
 
+    # TESTCASE 'list-no-user','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 0})
+    assert ret == 200
+    assert out['count'] == 0
+    assert out['truncated'] == True
+    assert len(out['keys']) == 0
+    assert len(out['marker']) > 0
+
+    # TESTCASE 'list-user-without-marker','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1})
+    assert ret == 200
+    assert out['count'] == 1
+    assert out['truncated'] == True
+    assert len(out['keys']) == 1
+    assert len(out['marker']) > 0
+    marker = out['marker']
+
+    # TESTCASE 'list-user-with-marker','user','list','list user keys','user list object'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'list'], {'list' : '', 'max-entries' : 1, 'marker': marker})
+    assert ret == 200
+    assert out['count'] == 1
+    assert out['truncated'] == False
+    assert len(out['keys']) == 1
+
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
 
@@ -245,6 +236,56 @@ def task(ctx, config):
     assert out['keys'][0]['access_key'] == access_key
     assert out['keys'][0]['secret_key'] == secret_key
     assert not out['suspended']
+    assert out['tenant'] == ''
+    assert out['max_buckets'] == 4
+    assert out['caps'] == []
+    assert out['op_mask'] == 'read, write, delete'
+    assert out['default_placement'] == ''
+    assert out['default_storage_class'] == ''
+    assert out['placement_tags'] == []
+    assert not out['bucket_quota']['enabled']
+    assert not out['bucket_quota']['check_on_raw']
+    assert out['bucket_quota']['max_size'] == -1
+    assert out['bucket_quota']['max_size_kb'] == 0
+    assert out['bucket_quota']['max_objects'] == -1
+    assert not out['user_quota']['enabled']
+    assert not out['user_quota']['check_on_raw']
+    assert out['user_quota']['max_size'] == -1
+    assert out['user_quota']['max_size_kb'] == 0
+    assert out['user_quota']['max_objects'] == -1
+    assert out['temp_url_keys'] == []
+    assert out['type'] == 'rgw'
+    assert out['mfa_ids'] == []
+    # TESTCASE 'info-existing','user','info','existing user query with wrong uid but correct access key','returns correct info'
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'access-key' : access_key, 'uid': 'uid_not_exist'})
+
+    assert out['user_id'] == user1
+    assert out['email'] == email
+    assert out['display_name'] == display_name1
+    assert len(out['keys']) == 1
+    assert out['keys'][0]['access_key'] == access_key
+    assert out['keys'][0]['secret_key'] == secret_key
+    assert not out['suspended']
+    assert out['tenant'] == ''
+    assert out['max_buckets'] == 4
+    assert out['caps'] == []
+    assert out['op_mask'] == "read, write, delete"
+    assert out['default_placement'] == ''
+    assert out['default_storage_class'] == ''
+    assert out['placement_tags'] == []
+    assert not out['bucket_quota']['enabled']
+    assert not out['bucket_quota']['check_on_raw']
+    assert out ['bucket_quota']['max_size'] == -1
+    assert out ['bucket_quota']['max_size_kb'] == 0
+    assert out ['bucket_quota']['max_objects'] == -1
+    assert not out['user_quota']['enabled']
+    assert not out['user_quota']['check_on_raw']
+    assert out['user_quota']['max_size'] == -1
+    assert out['user_quota']['max_size_kb'] == 0
+    assert out['user_quota']['max_objects'] == -1
+    assert out['temp_url_keys'] == []
+    assert out['type'] == 'rgw'
+    assert out['mfa_ids'] == []
 
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
@@ -254,6 +295,7 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert out['suspended']
+    assert out['email'] == email
 
     # TESTCASE 're-enable','user','enable','suspended user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : 'false'})
@@ -377,9 +419,9 @@ def task(ctx, config):
     connection = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        is_secure=False,
-        port=7280,
-        host=remote_host,
+        is_secure=True if endpoint.cert else False,
+        port=endpoint.port,
+        host=endpoint.hostname,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
 
@@ -403,6 +445,7 @@ def task(ctx, config):
 
     assert ret == 200
     assert out['owner'] == user1
+    assert out['tenant'] == ''
     bucket_id = out['id']
 
     # TESTCASE 'bucket-stats4','bucket','stats','new empty bucket','succeeds, expected bucket ID'
@@ -457,7 +500,12 @@ def task(ctx, config):
     key.delete()
 
     # link the bucket to another user
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'link'], {'uid' : user2, 'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['bucket', 'link'],
+            {'uid' : user2,
+             'bucket' : bucket_name,
+             'bucket-id' : bucket_id,
+            })
 
     assert ret == 200
 
@@ -472,7 +520,12 @@ def task(ctx, config):
     assert denied
 
     # relink the bucket to the first user and delete the second user
-    (ret, out) = rgwadmin_rest(admin_conn, ['bucket', 'link'], {'uid' : user1, 'bucket' : bucket_name})
+    (ret, out) = rgwadmin_rest(admin_conn,
+            ['bucket', 'link'],
+            {'uid' : user1,
+             'bucket' : bucket_name,
+             'bucket-id' : bucket_id,
+            })
     assert ret == 200
 
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'rm'], {'uid' : user2})
@@ -613,18 +666,14 @@ def task(ctx, config):
 
     (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
-
-    acl = key.get_xml_acl()
-    assert acl == out.strip('\n')
+    assert len(out['acl']['grant_map']) == 1
 
     # add another grantee by making the object public read
     key.set_acl('public-read')
 
     (ret, out) = rgwadmin_rest(admin_conn, ['policy', 'show'], {'bucket' : bucket.name, 'object' : key.key})
     assert ret == 200
-
-    acl = key.get_xml_acl()
-    assert acl == out.strip('\n')
+    assert len(out['acl']['grant_map']) == 2
 
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects', 'succeeds'
     bucket = connection.create_bucket(bucket_name)

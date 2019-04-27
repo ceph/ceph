@@ -230,7 +230,7 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  bufferlist::iterator iter = ops[0].outdata.begin();
+  auto iter = ops[0].outdata.cbegin();
   utime_t ut;
   uint64_t s;
   try {
@@ -255,7 +255,7 @@ int cls_cxx_stat2(cls_method_context_t hctx, uint64_t *size, ceph::real_time *mt
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
   if (ret < 0)
     return ret;
-  bufferlist::iterator iter = ops[0].outdata.begin();
+  auto iter = ops[0].outdata.cbegin();
   real_time ut;
   uint64_t s;
   try {
@@ -368,7 +368,7 @@ int cls_cxx_getxattrs(cls_method_context_t hctx, map<string, bufferlist> *attrse
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*attrset, iter);
   } catch (buffer::error& err) {
@@ -427,7 +427,7 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx, map<string, bufferlist>*
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*vals, iter);
     decode(*more, iter);
@@ -455,7 +455,7 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx, const string &start_obj,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*keys, iter);
     decode(*more, iter);
@@ -484,7 +484,7 @@ int cls_cxx_map_get_vals(cls_method_context_t hctx, const string &start_obj,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*vals, iter);
     decode(*more, iter);
@@ -527,7 +527,7 @@ int cls_cxx_map_get_val(cls_method_context_t hctx, const string &key,
   if (ret < 0)
     return ret;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     map<string, bufferlist> m;
 
@@ -625,7 +625,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = op.outdata.begin();
+  auto iter = op.outdata.cbegin();
   try {
     decode(*watchers, iter);
   } catch (buffer::error& err) {
@@ -692,6 +692,12 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   return ctx->op->get_req()->get_connection()->get_features();
 }
 
+int8_t cls_get_required_osd_release(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_osdmap()->require_osd_release;
+}
+
 void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
 {
   if (!s)
@@ -705,6 +711,16 @@ void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
   *s = buf;
 }
 
+int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  if (!ctx->new_obs.exists || (ctx->new_obs.oi.is_whiteout() &&
+                               ctx->obc->ssc->snapset.clones.empty())) {
+    return -ENOENT;
+  }
+  *snap_seq = ctx->obc->ssc->snapset.seq;
+  return 0;
+}
+
 int cls_log(int level, const char *format, ...)
 {
    int size = 256;
@@ -716,9 +732,51 @@ int cls_log(int level, const char *format, ...)
      va_end(ap);
 #define MAX_SIZE 8196
      if ((n > -1 && n < size) || size > MAX_SIZE) {
-       ldout(ch->cct, level) << buf << dendl;
+       ldout(ch->cct, ceph::dout::need_dynamic(level)) << buf << dendl;
        return n;
      }
      size *= 2;
    }
+}
+
+int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
+		   int set_len)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  char cname[] = "cas";
+  char method[] = "chunk_set";
+
+  vector<OSDOp> ops(2);
+  ops[0].op.op = CEPH_OSD_OP_WRITE;
+  ops[0].op.extent.offset = ofs;
+  ops[0].op.extent.length = len;
+  ops[0].op.flags = op_flags;
+  ops[0].indata = *write_inbl;
+
+  ops[1].op.op = CEPH_OSD_OP_CALL;
+  ops[1].op.cls.class_len = strlen(cname);
+  ops[1].op.cls.method_len = strlen(method);
+  ops[1].op.cls.indata_len = set_len;
+  ops[1].indata.append(cname, ops[1].op.cls.class_len);
+  ops[1].indata.append(method, ops[1].op.cls.method_len);
+  ops[1].indata.append(*set_inbl);
+
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
+bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  if (!ctx->obc->obs.oi.has_manifest()) {
+    return false;
+  }
+
+  for (auto &p : ctx->obc->obs.oi.manifest.chunk_map) {
+    if (p.second.oid.oid.name == fp_oid) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -1,0 +1,42 @@
+<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+               [status]="viewCacheStatus.status"
+               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+<cd-table #table
+          [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-rbd-details cdTableDetail
+                  [selection]="selection">
+  </cd-rbd-details>
+</cd-table>
+
+<ng-template #usageNotAvailableTooltipTpl>
+  <div i18n
+       [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+</ng-template>
+
+<ng-template #parentTpl
+             let-value="value">
+  <span *ngIf="value">{{ value.pool_name }}/{{ value.image_name }}@{{ value.snap_name }}</span>
+  <span *ngIf="!value">-</span>
+</ng-template>
+
+<ng-template #flattenTpl
+             let-value>
+  You are about to flatten
+  <strong>{{ value.child }}</strong>.
+  <br>
+  <br> All blocks will be copied from parent
+  <strong>{{ value.parent }}</strong> to child
+  <strong>{{ value.child }}</strong>.
+</ng-template>

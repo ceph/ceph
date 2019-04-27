@@ -46,8 +46,8 @@ struct CompatSet {
     friend std::ostream& operator<<(std::ostream& out, const CompatSet& compat);
     FeatureSet() : mask(1), names() {}
     void insert(const Feature& f) {
-      assert(f.id > 0);
-      assert(f.id < 64);
+      ceph_assert(f.id > 0);
+      ceph_assert(f.id < 64);
       mask |= ((uint64_t)1<<f.id);
       names[f.id] = f.name;
     }
@@ -63,7 +63,7 @@ struct CompatSet {
      */
     std::string get_name(uint64_t const f) const {
       std::map<uint64_t, std::string>::const_iterator i = names.find(f);
-      assert(i != names.end());
+      ceph_assert(i != names.end());
       return i->second;
     }
 
@@ -77,7 +77,7 @@ struct CompatSet {
       remove(f.id);
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       /* See below, mask always has the lowest bit set in memory, but
        * unset in the encoding */
@@ -85,7 +85,7 @@ struct CompatSet {
       encode(names, bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(mask, bl);
       decode(names, bl);
@@ -111,7 +111,7 @@ struct CompatSet {
       }
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       for (auto p = names.cbegin(); p != names.cend(); ++p) {
 	char s[18];
 	snprintf(s, sizeof(s), "feature_%llu", (unsigned long long)p->first);
@@ -222,19 +222,19 @@ struct CompatSet {
     return true;
   }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     compat.encode(bl);
     ro_compat.encode(bl);
     incompat.encode(bl);
   }
-  
-  void decode(bufferlist::iterator& bl) {
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
     compat.decode(bl);
     ro_compat.decode(bl);
     incompat.decode(bl);
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->open_object_section("compat");
     compat.dump(f);
     f->close_section();

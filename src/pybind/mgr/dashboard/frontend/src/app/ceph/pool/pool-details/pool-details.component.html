@@ -1,0 +1,34 @@
+<tabset #tabsetChild
+        cdTableDetail
+        *ngIf="selection.hasSingleSelection">
+  <tab i18n-heading
+       heading="Details">
+    <cd-table-key-value [renderObjects]="true"
+                        [data]="selection.first()"
+                        [autoReload]="false">
+    </cd-table-key-value>
+  </tab>
+  <tab i18n-heading
+       *ngIf="permissions.grafana.read"
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'ceph-pool-detail?var-pool_name='
+                + selection.first()['pool_name']"
+                uid="8ypfkWpik"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
+  <tab *ngIf="selection.first().type === 'replicated'"
+       i18n-heading
+       heading="Configuration">
+    <cd-rbd-configuration-table [data]="selectedPoolConfiguration"></cd-rbd-configuration-table>
+  </tab>
+  <tab i18n-heading
+       *ngIf="selection.first()['tiers'].length > 0"
+       heading="Cache Tiers Details">
+    <cd-table [data]="cacheTiers"
+              [columns]="cacheTierColumns"
+              [autoSave]="false"
+              columnMode="flex">
+    </cd-table>
+  </tab>
+</tabset>

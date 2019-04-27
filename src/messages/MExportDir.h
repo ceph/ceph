@@ -20,22 +20,22 @@
 
 
 class MExportDir : public Message {
- public:  
+public:
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
-  MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
+protected:
+  MExportDir() : Message{MSG_MDS_EXPORTDIR} {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIR}, dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDir() override {}
 
 public:
-  const char *get_type_name() const override { return "Ex"; }
+  std::string_view get_type_name() const override { return "Ex"; }
   void print(ostream& o) const override {
     o << "export(" << dirfrag << ")";
   }
@@ -52,13 +52,15 @@ public:
     encode(client_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(bounds, p);
     decode(export_data, p);
     decode(client_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

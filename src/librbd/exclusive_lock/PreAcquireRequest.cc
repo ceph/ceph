@@ -78,7 +78,7 @@ void PreAcquireRequest<I>::handle_flush_notifies(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  assert(r == 0);
+  ceph_assert(r == 0);
   finish();
 }
 

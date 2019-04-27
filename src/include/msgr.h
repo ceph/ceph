@@ -11,7 +11,8 @@
  * Data types for message passing layer used by Ceph.
  */
 
-#define CEPH_MON_PORT    6789  /* default monitor port */
+#define CEPH_MON_PORT_LEGACY    6789  /* legacy default monitor port */
+#define CEPH_MON_PORT_IANA      3300  /* IANA monitor port */
 
 /*
  * client-side processes will try to bind to ports in this
@@ -26,6 +27,33 @@
  * constant.
  */
 #define CEPH_BANNER "ceph v027"
+
+
+/*
+ * messenger V2 connection banner prefix.
+ * The full banner string should have the form: "ceph v2\n<le16>"
+ * the 2 bytes are the length of the remaining banner.
+ */
+#define CEPH_BANNER_V2_PREFIX "ceph v2\n"
+
+/*
+ * messenger V2 features
+ */
+#define CEPH_MSGR2_INCARNATION_1 (0ull)
+
+#define DEFINE_MSGR2_FEATURE(bit, incarnation, name)               \
+	const static uint64_t CEPH_MSGR2_FEATURE_##name = (1ULL << bit); \
+	const static uint64_t CEPH_MSGR2_FEATUREMASK_##name =            \
+			(1ULL << bit | CEPH_FEATURE_INCARNATION_##incarnation);
+
+#define HAVE_MSGR2_FEATURE(x, name) \
+	(((x) & (CEPH_MSGR2_FEATUREMASK_##name)) == (CEPH_MSGR2_FEATUREMASK_##name))
+
+
+#define CEPH_MSGR2_SUPPORTED_FEATURES (0ull)
+
+#define CEPH_MSGR2_REQUIRED_FEATURES (CEPH_MSGR2_SUPPORTED_FEATURES)
+
 
 /*
  * Rollover-safe type and comparator for 32-bit sequence numbers.
@@ -93,7 +121,7 @@ struct ceph_entity_inst {
 #define CEPH_MSGR_TAG_SEQ           13 /* 64-bit int follows with seen seq number */
 #define CEPH_MSGR_TAG_KEEPALIVE2     14
 #define CEPH_MSGR_TAG_KEEPALIVE2_ACK 15  /* keepalive reply */
-
+#define CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER 16  /* ceph v2 doing server challenge */
 
 /*
  * connection negotiation
@@ -162,6 +190,24 @@ struct ceph_msg_header {
 	__le16 compat_version;
 	__le16 reserved;
 	__le32 crc;       /* header crc32c */
+} __attribute__ ((packed));
+
+struct ceph_msg_header2 {
+	__le64 seq;       /* message seq# for this session */
+	__le64 tid;       /* transaction id */
+	__le16 type;      /* message type */
+	__le16 priority;  /* priority.  higher value == higher priority */
+	__le16 version;   /* version of message encoding */
+
+	__le32 data_pre_padding_len;
+	__le16 data_off;  /* sender: include full offset;
+			     receiver: mask against ~PAGE_MASK */
+
+	__le64 ack_seq;
+	__u8 flags;
+	/* oldest code we think can decode this.  unknown if zero. */
+	__le16 compat_version;
+	__le16 reserved;
 } __attribute__ ((packed));
 
 #define CEPH_MSG_PRIO_LOW     64

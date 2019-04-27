@@ -155,9 +155,9 @@ public:
       const hobject_t &hoid,
       int err,
       extent_map &&buffers) {
-      assert(objects_to_read);
+      ceph_assert(objects_to_read);
       --objects_to_read;
-      assert(!results.count(hoid));
+      ceph_assert(!results.count(hoid));
       results.emplace(hoid, make_pair(err, std::move(buffers)));
     }
     bool is_complete() const {
@@ -306,13 +306,15 @@ private:
     RecoveryMessages *m);
   void handle_recovery_push(
     const PushOp &op,
-    RecoveryMessages *m);
+    RecoveryMessages *m,
+    bool is_repair);
   void handle_recovery_push_reply(
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
   void get_all_avail_shards(
     const hobject_t &hoid,
+    const set<pg_shard_t> &error_shards,
     set<int> &have,
     map<shard_id_t, pg_shard_t> &shards,
     bool for_recovery);
@@ -377,6 +379,7 @@ public:
 
     ZTracer::Trace trace;
 
+    map<hobject_t, set<int>> want_to_read;
     map<hobject_t, read_request_t> to_read;
     map<hobject_t, read_result_t> complete;
 
@@ -393,9 +396,11 @@ public:
       bool do_redundant_reads,
       bool for_recovery,
       OpRequestRef op,
+      map<hobject_t, set<int>> &&_want_to_read,
       map<hobject_t, read_request_t> &&_to_read)
       : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
-	for_recovery(for_recovery), to_read(std::move(_to_read)) {
+	for_recovery(for_recovery), want_to_read(std::move(_want_to_read)),
+	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
 	auto &returned = complete[hpair.first].returned;
 	for (auto &&extent: hpair.second.to_read) {
@@ -421,6 +426,7 @@ public:
   map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
+    map<hobject_t, set<int>> &want_to_read,
     map<hobject_t, read_request_t> &to_read,
     OpRequestRef op,
     bool do_redundant_reads, bool for_recovery);
@@ -445,7 +451,7 @@ public:
    * on the writing list.
    */
   struct Op : boost::intrusive::list_base_hook<> {
-    /// From submit_transaction caller, decribes operation
+    /// From submit_transaction caller, describes operation
     hobject_t hoid;
     object_stat_sum_t delta_stats;
     eversion_t version;
@@ -473,7 +479,7 @@ public:
     bool invalidates_cache() const { return plan.invalidates_cache; }
 
     // must be true if requires_rmw(), must be false if invalidates_cache()
-    bool using_cache = false;
+    bool using_cache = true;
 
     /// In progress read state;
     map<hobject_t,extent_set> pending_read; // subset already being read
@@ -527,7 +533,7 @@ public:
    * reused).  Next, factor this part into a class and maintain one per
    * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
    * partitioned by ordering token.  Finally, refactor the op pipeline
-   * so that the log entries passed into submit_tranaction aren't
+   * so that the log entries passed into submit_transaction aren't
    * versioned.  We can't assign versions to them until we actually
    * submit the operation.  That's probably going to be the hard part.
    */
@@ -570,7 +576,7 @@ public:
   /**
    * ECRecPred
    *
-   * Determines the whether _have is suffient to recover an object
+   * Determines the whether _have is sufficient to recover an object
    */
   class ECRecPred : public IsPGRecoverablePredicate {
     set<int> want;
@@ -596,10 +602,17 @@ public:
     return new ECRecPred(ec_impl);
   }
 
+  int get_ec_data_chunk_count() const override {
+    return ec_impl->get_data_chunk_count();
+  }
+  int get_ec_stripe_chunk_size() const override {
+    return sinfo.get_chunk_size();
+  }
+
   /**
    * ECReadPred
    *
-   * Determines the whether _have is suffient to read an object
+   * Determines the whether _have is sufficient to read an object
    */
   class ECReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
@@ -626,7 +639,7 @@ public:
 public:
   ECBackend(
     PGBackend::Listener *pg,
-    coll_t coll,
+    const coll_t &coll,
     ObjectStore::CollectionHandle &ch,
     ObjectStore *store,
     CephContext *cct,
@@ -645,6 +658,8 @@ public:
   int get_remaining_shards(
     const hobject_t &hoid,
     const set<int> &avail,
+    const set<int> &want,
+    const read_result_t &result,
     map<pg_shard_t, vector<pair<int, int>>> *to_read,
     bool for_recovery);
 

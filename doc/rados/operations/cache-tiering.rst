@@ -88,7 +88,7 @@ extreme caution before using this feature.
 
 * *librados object enumeration*: The librados-level object enumeration
   API is not meant to be coherent in the presence of the case.  If
-  your applicatoin is using librados directly and relies on object
+  your application is using librados directly and relies on object
   enumeration, cache tiering will probably not work as expected.
   (This is not a problem for RGW, RBD, or CephFS.)
 
@@ -415,14 +415,14 @@ that you do not lose any recent changes to objects in the cache before you
 disable and remove it.
 
 
-#. Change the cache mode to ``forward`` so that new and modified objects will 
+#. Change the cache mode to ``proxy`` so that new and modified objects will 
    flush to the backing storage pool. ::
 
-	ceph osd tier cache-mode {cachepool} forward
+	ceph osd tier cache-mode {cachepool} proxy
 
    For example:: 
 
-	ceph osd tier cache-mode hot-storage forward
+	ceph osd tier cache-mode hot-storage proxy
 
 
 #. Ensure that the cache pool has been flushed. This may take a few minutes::

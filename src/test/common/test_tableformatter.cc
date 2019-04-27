@@ -25,6 +25,22 @@ TEST(tableformatter, singleline)
   EXPECT_EQ(cmp, sout.str());
 }
 
+TEST(tableformatter, longfloat)
+{
+  std::stringstream sout;
+  TableFormatter formatter;
+  formatter.dump_float("float", 1.0 / 7);
+  formatter.flush(sout);
+
+  std::string cmp = ""
+    "+----------------------+\n"
+    "| float                |\n"
+    "+----------------------+\n"
+    "| 0.14285714285714285  |\n"
+    "+----------------------+\n";
+  EXPECT_EQ(cmp, sout.str());
+}
+
 TEST(tableformatter, multiline)
 {
   std::stringstream sout;

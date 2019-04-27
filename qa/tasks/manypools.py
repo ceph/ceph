@@ -54,9 +54,9 @@ def task(ctx, config):
             log.info('creating pool{num} on {role}'.format(num=poolnum, role=role_))
 	    proc = remote.run(
 	        args=[
-		    'rados',
+		    'ceph',
 		    '--name', role_,
-		    'mkpool', 'pool{num}'.format(num=poolnum), '-1',
+		    'osd', 'pool', 'create', 'pool{num}'.format(num=poolnum), '8',
 		    run.Raw('&&'),
 		    'rados',
 		    '--name', role_,

@@ -1,14 +1,16 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /**
  * Crypto filters for Put/Post/Get operations.
  */
+
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_crypt.h>
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include <boost/utility/string_view.hpp>
 #include <rgw/rgw_keystone.h>
 #include "include/str_map.h"
@@ -37,7 +39,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CTR(CephContext* cct): cct(cct) {
+  explicit AES_256_CTR(CephContext* cct): cct(cct) {
   }
   ~AES_256_CTR() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -200,7 +202,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CBC(CephContext* cct): cct(cct) {
+  explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -516,7 +518,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
-                                               RGWGetDataCB* next,
+                                               RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt):
     RGWGetObj_Filter(next),
     cct(cct),
@@ -536,7 +538,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   parts_len.clear();
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
-    bufferlist::iterator miter = manifest_bl.begin();
+    auto miter = manifest_bl.cbegin();
     try {
       decode(manifest, miter);
     } catch (buffer::error& err) {
@@ -550,7 +552,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
       }
       parts_len.back() += mi.get_stripe_size();
     }
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (size_t i = 0; i<parts_len.size(); i++) {
         ldout(cct, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
       }
@@ -567,29 +569,28 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
     off_t in_end = bl_end;
 
     size_t i = 0;
-    while (i<parts_len.size() && (in_ofs > (off_t)parts_len[i])) {
+    while (i<parts_len.size() && (in_ofs >= (off_t)parts_len[i])) {
       in_ofs -= parts_len[i];
       i++;
     }
     //in_ofs is inside block i
     size_t j = 0;
-    while (j<parts_len.size() && (in_end > (off_t)parts_len[j])) {
+    while (j<(parts_len.size() - 1) && (in_end >= (off_t)parts_len[j])) {
       in_end -= parts_len[j];
       j++;
     }
-    //in_end is inside block j
+    //in_end is inside part j, OR j is the last part
 
-    size_t rounded_end;
-    rounded_end = ( in_end & ~(block_size - 1) ) + (block_size - 1);
-    if (rounded_end + 1 >= parts_len[j]) {
+    size_t rounded_end = ( in_end & ~(block_size - 1) ) + (block_size - 1);
+    if (rounded_end > parts_len[j]) {
       rounded_end = parts_len[j] - 1;
     }
 
     enc_begin_skip = in_ofs & (block_size - 1);
     ofs = bl_ofs - enc_begin_skip;
     end = bl_end;
-    bl_ofs = bl_ofs - enc_begin_skip;
     bl_end += rounded_end - in_end;
+    bl_ofs = std::min(bl_ofs - enc_begin_skip, bl_end);
   }
   else
   {
@@ -604,31 +605,47 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
   return 0;
 }
 
+int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size)
+{
+  bufferlist data;
+  if (!crypt->decrypt(in, 0, size, data, part_ofs)) {
+    return -ERR_INTERNAL_ERROR;
+  }
+  off_t send_size = size - enc_begin_skip;
+  if (ofs + enc_begin_skip + send_size > end + 1) {
+    send_size = end + 1 - ofs - enc_begin_skip;
+  }
+  int res = next->handle_data(data, enc_begin_skip, send_size);
+  enc_begin_skip = 0;
+  ofs += size;
+  in.splice(0, size);
+  return res;
+}
 
 int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
-  int res = 0;
   ldout(cct, 25) << "Decrypt " << bl_len << " bytes" << dendl;
-  size_t part_ofs = ofs;
-  size_t i = 0;
-  while (i<parts_len.size() && (part_ofs >= parts_len[i])) {
-    part_ofs -= parts_len[i];
-    i++;
-  }
   bl.copy(bl_ofs, bl_len, cache);
+
+  int res = 0;
+  size_t part_ofs = ofs;
+  for (size_t part : parts_len) {
+    if (part_ofs >= part) {
+      part_ofs -= part;
+    } else if (part_ofs + cache.length() >= part) {
+      // flush data up to part boundaries, aligned or not
+      res = process(cache, part_ofs, part - part_ofs);
+      if (res < 0) {
+        return res;
+      }
+      part_ofs = 0;
+    } else {
+      break;
+    }
+  }
+  // write up to block boundaries, aligned only
   off_t aligned_size = cache.length() & ~(block_size - 1);
   if (aligned_size > 0) {
-    bufferlist data;
-    if (! crypt->decrypt(cache, 0, aligned_size, data, part_ofs) ) {
-      return -ERR_INTERNAL_ERROR;
-    }
-    off_t send_size = aligned_size - enc_begin_skip;
-    if (ofs + enc_begin_skip + send_size > end + 1) {
-      send_size = end + 1 - ofs - enc_begin_skip;
-    }
-    res = next->handle_data(data, enc_begin_skip, send_size);
-    enc_begin_skip = 0;
-    ofs += aligned_size;
-    cache.splice(0, aligned_size);
+    res = process(cache, part_ofs, aligned_size);
   }
   return res;
 }
@@ -637,93 +654,74 @@ int RGWGetObj_BlockDecrypt::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_l
  * flush remainder of data to output
  */
 int RGWGetObj_BlockDecrypt::flush() {
+  ldout(cct, 25) << "Decrypt flushing " << cache.length() << " bytes" << dendl;
   int res = 0;
   size_t part_ofs = ofs;
-  size_t i = 0;
-  while (i<parts_len.size() && (part_ofs > parts_len[i])) {
-    part_ofs -= parts_len[i];
-    i++;
+  for (size_t part : parts_len) {
+    if (part_ofs >= part) {
+      part_ofs -= part;
+    } else if (part_ofs + cache.length() >= part) {
+      // flush data up to part boundaries, aligned or not
+      res = process(cache, part_ofs, part - part_ofs);
+      if (res < 0) {
+        return res;
+      }
+      part_ofs = 0;
+    } else {
+      break;
+    }
   }
+  // flush up to block boundaries, aligned or not
   if (cache.length() > 0) {
-    bufferlist data;
-    if (! crypt->decrypt(cache, 0, cache.length(), data, part_ofs) ) {
-      return -ERR_INTERNAL_ERROR;
-    }
-    off_t send_size = cache.length() - enc_begin_skip;
-    if (ofs + enc_begin_skip + send_size > end + 1) {
-      send_size = end + 1 - ofs - enc_begin_skip;
-    }
-    res = next->handle_data(data, enc_begin_skip, send_size);
-    enc_begin_skip = 0;
-    ofs += send_size;
+    res = process(cache, part_ofs, cache.length());
   }
   return res;
 }
 
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
-                                               RGWPutObjDataProcessor* next,
-                                               std::unique_ptr<BlockCrypt> crypt):
-    RGWPutObj_Filter(next),
+                                               rgw::putobj::DataProcessor *next,
+                                               std::unique_ptr<BlockCrypt> crypt)
+  : Pipe(next),
     cct(cct),
     crypt(std::move(crypt)),
-    ofs(0),
-    cache()
+    block_size(this->crypt->get_block_size())
 {
-  block_size = this->crypt->get_block_size();
 }
 
-RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
-}
+int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
+{
+  ldout(cct, 25) << "Encrypt " << data.length() << " bytes" << dendl;
 
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
-                                        off_t in_ofs,
-                                        void **phandle,
-                                        rgw_raw_obj *pobj,
-                                        bool *again) {
-  int res = 0;
-  ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
+  // adjust logical offset to beginning of cached data
+  ceph_assert(logical_offset >= cache.length());
+  logical_offset -= cache.length();
 
-  if (*again) {
-    bufferlist no_data;
-    res = next->handle_data(no_data, in_ofs, phandle, pobj, again);
-    //if *again is not set to false, we will have endless loop
-    //drop info on log
-    if (*again) {
-      ldout(cct, 20) << "*again==true" << dendl;
-    }
-    return res;
-  }
+  const bool flush = (data.length() == 0);
+  cache.claim_append(data);
 
-  cache.append(bl);
-  off_t proc_size = cache.length() & ~(block_size - 1);
-  if (bl.length() == 0) {
+  uint64_t proc_size = cache.length() & ~(block_size - 1);
+  if (flush) {
     proc_size = cache.length();
   }
   if (proc_size > 0) {
-    bufferlist data;
-    if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
+    bufferlist in, out;
+    cache.splice(0, proc_size, &in);
+    if (!crypt->encrypt(in, 0, proc_size, out, logical_offset)) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs, phandle, pobj, again);
-    ofs += proc_size;
-    cache.splice(0, proc_size);
-    if (res < 0)
-      return res;
+    int r = Pipe::process(std::move(out), logical_offset);
+    logical_offset += proc_size;
+    if (r < 0)
+      return r;
   }
 
-  if (bl.length() == 0) {
+  if (flush) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs, phandle, pobj, again);
+    return Pipe::process({}, logical_offset);
   }
-  return res;
+  return 0;
 }
 
-int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
-                                          const rgw_raw_obj& obj,
-                                          uint64_t size,
-                                          bool need_to_wait) {
-  return next->throttle_data(handle, obj, size, need_to_wait);
-}
 
 std::string create_random_key_selector(CephContext * const cct) {
   char random[AES_256_KEYSIZE];
@@ -761,11 +759,11 @@ static int request_key_from_barbican(CephContext *cct,
   secret_url += "v1/secrets/" + std::string(key_id);
 
   bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, &secret_bl);
+  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process("GET", secret_url.c_str());
+  res = secret_req.process(null_yield);
   if (res < 0) {
     return res;
   }
@@ -936,7 +934,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -ERR_INVALID_ENCRYPTION_ALGORITHM;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1042,7 +1040,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1158,7 +1156,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
@@ -1240,7 +1238,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-KMS") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }

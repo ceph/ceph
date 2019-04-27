@@ -1,8 +1,0 @@
-meta:
-- desc: install ceph/kraken latest
-tasks:
-- install:
-    branch: kraken
-- print: "**** done install kraken"
-- ceph:
-- print: "**** done ceph"

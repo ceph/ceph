@@ -13,7 +13,7 @@ them. Start by looking to see if either side has stuck operations
 RADOS Health
 ============
 
-If part of the CephFS metadata or data pools is unavaible and CephFS is not
+If part of the CephFS metadata or data pools is unavailable and CephFS is not
 responding, it is probably because RADOS itself is unhealthy. Resolve those
 problems first (:doc:`../../rados/troubleshooting/index`).
 

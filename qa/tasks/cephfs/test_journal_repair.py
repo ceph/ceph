@@ -77,7 +77,7 @@ class TestJournalRepair(CephFSTestCase):
         self.assertEqual(self.fs.list_dirfrag(ROOT_INO), [])
 
         # Execute the dentry recovery, this should populate the backing store
-        self.fs.journal_tool(['event', 'recover_dentries', 'list'])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list'], 0)
 
         # Dentries in ROOT_INO are present
         self.assertEqual(sorted(self.fs.list_dirfrag(ROOT_INO)), sorted(['rootfile_head', 'subdir_head', 'linkdir_head']))
@@ -87,7 +87,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
-        self.fs.journal_tool(['journal', 'reset'])
+        self.fs.journal_tool(['journal', 'reset'], 0)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
@@ -265,10 +265,10 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.mds_stop(active_mds_names[0])
         self.fs.mds_fail(active_mds_names[0])
         # Invoke recover_dentries quietly, because otherwise log spews millions of lines
-        self.fs.journal_tool(["event", "recover_dentries", "summary"], rank=0, quiet=True)
-        self.fs.journal_tool(["event", "recover_dentries", "summary"], rank=1, quiet=True)
+        self.fs.journal_tool(["event", "recover_dentries", "summary"], 0, quiet=True)
+        self.fs.journal_tool(["event", "recover_dentries", "summary"], 1, quiet=True)
         self.fs.table_tool(["0", "reset", "session"])
-        self.fs.journal_tool(["journal", "reset"], rank=0)
+        self.fs.journal_tool(["journal", "reset"], 0)
         self.fs.erase_mds_objects(1)
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
@@ -321,8 +321,10 @@ class TestJournalRepair(CephFSTestCase):
         # Should see no snaps
         self.assertEqual(
             json.loads(self.fs.table_tool(["all", "show", "snap"])),
-            {"version": 0,
+            {"version": 1,
              "snapserver": {"last_snap": 1,
+                            "last_created": 1,
+                            "last_destroyed": 1,
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},
@@ -363,6 +365,8 @@ class TestJournalRepair(CephFSTestCase):
             json.loads(self.fs.table_tool(["all", "show", "snap"])),
             {"version": 1,
              "snapserver": {"last_snap": 1,
+                            "last_created": 1,
+                            "last_destroyed": 1,
                             "pending_noop": [],
                             "snaps": [],
                             "need_to_purge": {},

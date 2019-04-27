@@ -17,7 +17,6 @@
 
 
 #include "auth/Auth.h"
-#include "common/RWLock.h"
 
 class CephContext;
 struct MAuthReply;
@@ -31,18 +30,16 @@ protected:
   uint32_t want;
   uint32_t have;
   uint32_t need;
-  RWLock lock;
 
 public:
   explicit AuthClientHandler(CephContext *cct_)
-    : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0),
-      lock("AuthClientHandler::lock") {}
+    : cct(cct_), global_id(0), want(CEPH_ENTITY_TYPE_AUTH), have(0), need(0)
+  {}
   virtual ~AuthClientHandler() {}
 
   void init(const EntityName& n) { name = n; }
   
   void set_want_keys(__u32 keys) {
-    RWLock::WLocker l(lock);
     want = keys | CEPH_ENTITY_TYPE_AUTH;
     validate_tickets();
   }
@@ -51,22 +48,25 @@ public:
 
   virtual void reset() = 0;
   virtual void prepare_build_request() = 0;
-  virtual int build_request(bufferlist& bl) const = 0;
-  virtual int handle_response(int ret, bufferlist::iterator& iter) = 0;
-  virtual bool build_rotating_request(bufferlist& bl) const = 0;
+  virtual void build_initial_request(ceph::buffer::list *bl) const {
+    // this is empty for methods cephx and none.
+  }
+  virtual int build_request(ceph::buffer::list& bl) const = 0;
+  virtual int handle_response(int ret, ceph::buffer::list::const_iterator& iter,
+			      CryptoKey *session_key,
+			      std::string *connection_secret) = 0;
+  virtual bool build_rotating_request(ceph::buffer::list& bl) const = 0;
 
   virtual AuthAuthorizer *build_authorizer(uint32_t service_id) const = 0;
 
   virtual bool need_tickets() = 0;
 
   virtual void set_global_id(uint64_t id) = 0;
+
+  static AuthClientHandler* create(CephContext* cct, int proto, RotatingKeyRing* rkeys);
 protected:
   virtual void validate_tickets() = 0;
 };
-
-
-extern AuthClientHandler *get_auth_client_handler(CephContext *cct,
-				      int proto, RotatingKeyRing *rkeys);
 
 #endif
 

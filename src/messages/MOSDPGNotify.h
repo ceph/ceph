@@ -24,38 +24,38 @@
  */
 
 class MOSDPGNotify : public Message {
-
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 6;
+private:
+  static constexpr int HEAD_VERSION = 6;
+  static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
   /// query_epoch is the epoch of the query being responded to, or
   /// the current epoch if this is not being sent in response to a
   /// query. This allows the recipient to disregard responses to old
   /// queries.
-  vector<pair<pg_notify_t,PastIntervals> > pg_list;   // pgid -> version
+  using pg_list_t = std::vector<std::pair<pg_notify_t,PastIntervals>>;
+  pg_list_t pg_list;   // pgid -> version
 
  public:
   version_t get_epoch() const { return epoch; }
-  const vector<pair<pg_notify_t,PastIntervals> >& get_pg_list() const {
+  const pg_list_t& get_pg_list() const {
     return pg_list;
   }
 
   MOSDPGNotify()
-    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { 
-    set_priority(CEPH_MSG_PRIO_HIGH);
-  }
-  MOSDPGNotify(epoch_t e, vector<pair<pg_notify_t,PastIntervals> >& l)
-    : Message(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
-      epoch(e) {
-    pg_list.swap(l);
+    : MOSDPGNotify(0, {})
+  {}
+  MOSDPGNotify(epoch_t e, pg_list_t&& l)
+    : Message{MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION},
+      epoch(e),
+      pg_list(std::move(l)) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
   ~MOSDPGNotify() override {}
 
 public:  
-  const char *get_type_name() const override { return "PGnot"; }
+  std::string_view get_type_name() const override { return "PGnot"; }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -64,7 +64,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(pg_list, p);
   }
@@ -80,6 +80,9 @@ public:
     out << " epoch " << epoch
 	<< ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

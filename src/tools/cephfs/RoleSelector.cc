@@ -29,13 +29,14 @@ int MDSRoleSelector::parse_rank(
   }
 }
 
-int MDSRoleSelector::parse(const FSMap &fsmap, std::string const &str)
+int MDSRoleSelector::parse(const FSMap &fsmap, std::string const &str,
+                           bool allow_unqualified_rank)
 {
   auto colon_pos = str.find(":");
   if (colon_pos == std::string::npos) {
     // An unqualified rank.  Only valid if there is only one
     // namespace.
-    if (fsmap.filesystem_count() == 1) {
+    if (fsmap.filesystem_count() == 1 && allow_unqualified_rank) {
       fscid = fsmap.get_filesystem()->fscid;
       return parse_rank(fsmap, str);
     } else {

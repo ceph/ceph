@@ -19,9 +19,9 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGUpdateLogMissingReply : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 
 public:
@@ -29,6 +29,8 @@ public:
   spg_t pgid;
   shard_id_t from;
   ceph_tid_t rep_tid = 0;
+  // piggybacked osd state
+  eversion_t last_complete_ondisk;
 
   epoch_t get_epoch() const { return map_epoch; }
   spg_t get_pgid() const { return pgid; }
@@ -48,37 +50,36 @@ public:
   }
 
   MOSDPGUpdateLogMissingReply()
-    : MOSDFastDispatchOp(
-      MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
-      HEAD_VERSION,
-      COMPAT_VERSION)
-      {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY, HEAD_VERSION,
+			 COMPAT_VERSION}
+  {}
   MOSDPGUpdateLogMissingReply(
     spg_t pgid,
     shard_id_t from,
     epoch_t epoch,
     epoch_t min_epoch,
-    ceph_tid_t rep_tid)
-    : MOSDFastDispatchOp(
-        MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
-        HEAD_VERSION,
-        COMPAT_VERSION),
+    ceph_tid_t rep_tid,
+    eversion_t last_complete_ondisk)
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY, HEAD_VERSION,
+			 COMPAT_VERSION},
       map_epoch(epoch),
       min_epoch(min_epoch),
       pgid(pgid),
       from(from),
-      rep_tid(rep_tid)
+      rep_tid(rep_tid),
+      last_complete_ondisk(last_complete_ondisk)
     {}
 
 private:
   ~MOSDPGUpdateLogMissingReply() override {}
 
 public:
-  const char *get_type_name() const override { return "PGUpdateLogMissingReply"; }
+  std::string_view get_type_name() const override { return "PGUpdateLogMissingReply"; }
   void print(ostream& out) const override {
     out << "pg_update_log_missing_reply(" << pgid << " epoch " << map_epoch
 	<< "/" << min_epoch
-	<< " rep_tid " << rep_tid << ")";
+	<< " rep_tid " << rep_tid
+	<< " lcod " << last_complete_ondisk << ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -88,9 +89,10 @@ public:
     encode(from, payload);
     encode(rep_tid, payload);
     encode(min_epoch, payload);
+    encode(last_complete_ondisk, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(map_epoch, p);
     decode(pgid, p);
     decode(from, p);
@@ -100,7 +102,13 @@ public:
     } else {
       min_epoch = map_epoch;
     }
+    if (header.version >= 3) {
+      decode(last_complete_ondisk, p);
+    }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

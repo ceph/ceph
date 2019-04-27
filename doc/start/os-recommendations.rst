@@ -21,8 +21,8 @@ Linux Kernel
   For RBD, if you choose to *track* long-term kernels, we currently recommend
   4.x-based "longterm maintenance" kernel series:
 
+  - 4.14.z
   - 4.9.z
-  - 4.4.z
 
   For CephFS, see `CephFS best practices`_ for kernel version guidance.
 

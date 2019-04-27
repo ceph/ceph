@@ -1,14 +1,17 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /**
  * Crypto filters for Put/Post/Get operations.
  */
+
 #ifndef CEPH_RGW_CRYPT_H
 #define CEPH_RGW_CRYPT_H
 
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_rest.h>
 #include <rgw/rgw_rest_s3.h>
+#include "rgw_putobj.h"
 #include <boost/utility/string_view.hpp>
 
 /**
@@ -93,10 +96,14 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   off_t end; /**< stream offset of last byte that is requested */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+
+  int process(bufferlist& cipher, size_t part_ofs, size_t size);
+
+protected:
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
   RGWGetObj_BlockDecrypt(CephContext* cct,
-                         RGWGetDataCB* next,
+                         RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt);
   virtual ~RGWGetObj_BlockDecrypt();
 
@@ -111,28 +118,19 @@ public:
 }; /* RGWGetObj_BlockDecrypt */
 
 
-class RGWPutObj_BlockEncrypt : public RGWPutObj_Filter
+class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
 {
   CephContext* cct;
   std::unique_ptr<BlockCrypt> crypt; /**< already configured stateless BlockCrypt
                                           for operations when enough data is accumulated */
-  off_t ofs; /**< stream offset of data we expect to show up next through \ref handle_data */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
-  size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+  const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
 public:
   RGWPutObj_BlockEncrypt(CephContext* cct,
-                         RGWPutObjDataProcessor* next,
+                         rgw::putobj::DataProcessor *next,
                          std::unique_ptr<BlockCrypt> crypt);
-  virtual ~RGWPutObj_BlockEncrypt();
-  virtual int handle_data(bufferlist& bl,
-                          off_t ofs,
-                          void **phandle,
-                          rgw_raw_obj *pobj,
-                          bool *again) override;
-  virtual int throttle_data(void *handle,
-                            const rgw_raw_obj& obj,
-                            uint64_t size,
-                            bool need_to_wait) override;
+
+  int process(bufferlist&& data, uint64_t logical_offset) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 

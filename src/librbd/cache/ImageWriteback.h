@@ -24,14 +24,14 @@ class ImageWriteback {
 public:
   typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
-  ImageWriteback(ImageCtxT &image_ctx);
+  explicit ImageWriteback(ImageCtxT &image_ctx);
 
   void aio_read(Extents &&image_extents, ceph::bufferlist *bl,
                 int fadvise_flags, Context *on_finish);
   void aio_write(Extents &&image_extents, ceph::bufferlist&& bl,
                  int fadvise_flags, Context *on_finish);
   void aio_discard(uint64_t offset, uint64_t length,
-                   bool skip_partial_discard, Context *on_finish);
+                   uint32_t discard_granularity_bytes, Context *on_finish);
   void aio_flush(Context *on_finish);
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,

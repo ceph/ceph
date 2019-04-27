@@ -16,30 +16,31 @@
 #define CEPH_MEXPORTDIRACK_H
 
 #include "MExportDir.h"
+#include "msg/Message.h"
 
 class MExportDirAck : public Message {
 public:
   dirfrag_t dirfrag;
   bufferlist imported_caps;
 
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
   
-  MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
+protected:
+  MExportDirAck() : Message{MSG_MDS_EXPORTDIRACK} {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIRACK}, dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDirAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExAck"; }
+  std::string_view get_type_name() const override { return "ExAck"; }
     void print(ostream& o) const override {
     o << "export_ack(" << dirfrag << ")";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(imported_caps, p);
   }
@@ -48,7 +49,9 @@ public:
     encode(dirfrag, payload);
     encode(imported_caps, payload);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

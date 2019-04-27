@@ -1,0 +1,11 @@
+nuke-on-error: false
+overrides:
+  nuke-on-error: false
+tasks:
+- ceph-fuse:
+- print: "**** done mimic client"
+#- workunit:
+#    clients:
+#      all:
+#      - suites/fsstress.sh
+- print: "**** done fsstress"

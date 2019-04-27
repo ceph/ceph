@@ -15,7 +15,7 @@ struct ImageDispatchSpec<I>::SendVisitor
   : public boost::static_visitor<void> {
   ImageDispatchSpec* spec;
 
-  SendVisitor(ImageDispatchSpec* spec)
+  explicit SendVisitor(ImageDispatchSpec* spec)
     : spec(spec) {
   }
 
@@ -28,7 +28,7 @@ struct ImageDispatchSpec<I>::SendVisitor
   void operator()(Discard& discard) const {
     ImageRequest<I>::aio_discard(
       &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      discard.skip_partial_discard, spec->m_parent_trace);
+      discard.discard_granularity_bytes, spec->m_parent_trace);
   }
 
   void operator()(Write& write) const {
@@ -53,7 +53,7 @@ struct ImageDispatchSpec<I>::SendVisitor
 
   void operator()(Flush& flush) const {
     ImageRequest<I>::aio_flush(
-      &spec->m_image_ctx, spec->m_aio_comp, FLUSH_SOURCE_USER,
+      &spec->m_image_ctx, spec->m_aio_comp, flush.flush_source,
       spec->m_parent_trace);
   }
 };
@@ -72,6 +72,45 @@ struct ImageDispatchSpec<I>::IsWriteOpVisitor
 };
 
 template <typename I>
+struct ImageDispatchSpec<I>::TokenRequestedVisitor
+  : public boost::static_visitor<uint64_t> {
+  ImageDispatchSpec* spec;
+  uint64_t flag;
+  uint64_t *tokens;
+
+  TokenRequestedVisitor(ImageDispatchSpec* spec, uint64_t _flag,
+                        uint64_t *tokens)
+    : spec(spec), flag(_flag), tokens(tokens) {
+  }
+
+  uint64_t operator()(const Read&) const {
+    if (flag & RBD_QOS_WRITE_MASK) {
+      *tokens = 0;
+      return false;
+    }
+
+    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
+    return true;
+  }
+
+  uint64_t operator()(const Flush&) const {
+    *tokens = 0;
+    return true;
+  }
+
+  template <typename T>
+  uint64_t operator()(const T&) const {
+    if (flag & RBD_QOS_READ_MASK) {
+      *tokens = 0;
+      return false;
+    }
+
+    *tokens = (flag & RBD_QOS_BPS_MASK) ? spec->extents_length() : 1;
+    return true;
+  }
+};
+
+template <typename I>
 void ImageDispatchSpec<I>::send() {
   boost::apply_visitor(SendVisitor{this}, m_request);
 }
@@ -83,8 +122,25 @@ void ImageDispatchSpec<I>::fail(int r) {
 }
 
 template <typename I>
+uint64_t ImageDispatchSpec<I>::extents_length() {
+  uint64_t length = 0;
+  auto &extents = this->m_image_extents;
+
+  for (auto &extent : extents) {
+    length += extent.second;
+  }
+  return length;
+}
+
+template <typename I>
 bool ImageDispatchSpec<I>::is_write_op() const {
-  return boost::apply_visitor(IsWriteOpVisitor{}, m_request);
+  return boost::apply_visitor(IsWriteOpVisitor(), m_request);
+}
+
+template <typename I>
+bool ImageDispatchSpec<I>::tokens_requested(uint64_t flag, uint64_t *tokens) {
+  return boost::apply_visitor(TokenRequestedVisitor{this, flag, tokens},
+                              m_request);
 }
 
 template <typename I>

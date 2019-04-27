@@ -18,8 +18,9 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDScrubReserve : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   spg_t pgid;
   epoch_t map_epoch;
@@ -40,17 +41,17 @@ public:
   }
 
   MOSDScrubReserve()
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
 		   pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     return "MOSDScrubReserve";
   }
 
@@ -75,7 +76,7 @@ public:
   }
 
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(type, p);
@@ -89,6 +90,9 @@ public:
     encode(type, payload);
     encode(from, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

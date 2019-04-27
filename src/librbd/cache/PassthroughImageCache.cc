@@ -45,13 +45,15 @@ void PassthroughImageCache<I>::aio_write(Extents &&image_extents,
 
 template <typename I>
 void PassthroughImageCache<I>::aio_discard(uint64_t offset, uint64_t length,
-                                           bool skip_partial_discard, Context *on_finish) {
+                                           uint32_t discard_granularity_bytes,
+                                           Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
                  << "on_finish=" << on_finish << dendl;
 
-  m_image_writeback.aio_discard(offset, length, skip_partial_discard, on_finish);
+  m_image_writeback.aio_discard(offset, length, discard_granularity_bytes,
+                                on_finish);
 }
 
 template <typename I>

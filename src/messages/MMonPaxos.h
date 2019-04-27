@@ -21,20 +21,20 @@
 #include "include/ceph_features.h"
 
 class MMonPaxos : public Message {
-
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 3;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 3;
 
  public:
   // op types
-  const static int OP_COLLECT =   1; // proposer: propose round
-  const static int OP_LAST =      2; // voter:    accept proposed round
-  const static int OP_BEGIN =     3; // proposer: value proposed for this round
-  const static int OP_ACCEPT =    4; // voter:    accept propsed value
-  const static int OP_COMMIT =    5; // proposer: notify learners of agreed value
-  const static int OP_LEASE =     6; // leader: extend peon lease
-  const static int OP_LEASE_ACK = 7; // peon: lease ack
-  const static char *get_opname(int op) {
+  static constexpr int OP_COLLECT =   1; // proposer: propose round
+  static constexpr int OP_LAST =      2; // voter:    accept proposed round
+  static constexpr int OP_BEGIN =     3; // proposer: value proposed for this round
+  static constexpr int OP_ACCEPT =    4; // voter:    accept propsed value
+  static constexpr int OP_COMMIT =    5; // proposer: notify learners of agreed value
+  static constexpr int OP_LEASE =     6; // leader: extend peon lease
+  static constexpr int OP_LEASE_ACK = 7; // peon: lease ack
+  static const char *get_opname(int op) {
     switch (op) {
     case OP_COLLECT: return "collect";
     case OP_LAST: return "last";
@@ -65,9 +65,9 @@ class MMonPaxos : public Message {
 
   bufferlist feature_map;
 
-  MMonPaxos() : Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonPaxos() : Message{MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION} { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
-    Message(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION},
     epoch(e),
     op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),
@@ -79,7 +79,7 @@ private:
   ~MMonPaxos() override {}
 
 public:  
-  const char *get_type_name() const override { return "paxos"; }
+  std::string_view get_type_name() const override { return "paxos"; }
   
   void print(ostream& out) const override {
     out << "paxos(" << get_opname(op) 
@@ -109,7 +109,7 @@ public:
     encode(feature_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(op, p);
     decode(first_committed, p);
@@ -126,6 +126,9 @@ public:
       decode(feature_map, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

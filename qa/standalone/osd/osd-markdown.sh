@@ -45,7 +45,10 @@ function markdown_N_impl() {
     ceph osd tree
     ceph osd tree | grep osd.0 |grep up || return 1
     # mark the OSD down.
-    ceph osd down 0
+    # override any dup setting in the environment to ensure we do this
+    # exactly once (modulo messenger failures, at least; we can't *actually*
+    # provide exactly-once semantics for mon commands).
+    ( unset CEPH_CLI_TEST_DUP_COMMAND ; ceph osd down 0 )
     sleep $sleeptime
   done
 }
@@ -70,7 +73,7 @@ function TEST_markdown_exceed_maxdown_count() {
     ceph tell osd.0 injectargs '--osd_max_markdown_period '$period'' || return 1
 
     markdown_N_impl $(($count+1)) $period $sleeptime
-    # down N+1 times ,the osd.0 shoud die
+    # down N+1 times ,the osd.0 should die
     ceph osd tree | grep down | grep osd.0 || return 1
 }
 
@@ -121,8 +124,23 @@ function TEST_markdown_boot_exceed_time() {
     ceph osd tree | grep up | grep osd.0 || return 1
 }
 
-main osd-markdown "$@"
+function TEST_osd_stop() {
 
-# Local Variables:
-# compile-command: "cd ../.. ; make -j4 && test/osd/osd-bench.sh"
-# End:
+    local dir=$1
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    osd_0_pid=$(cat $dir/osd.0.pid)
+    ps -p $osd_0_pid || return 1
+
+    ceph osd tree | grep osd.0 | grep up || return 1
+    ceph osd stop osd.0
+    sleep 15 # give osd plenty of time to notice and exit
+    ceph osd tree | grep down | grep osd.0 || return 1
+    ! ps -p $osd_0_pid || return 1
+}
+
+main osd-markdown "$@"

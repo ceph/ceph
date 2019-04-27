@@ -41,8 +41,8 @@ int AioCompletion::wait_for_complete() {
 
 void AioCompletion::finalize(ssize_t rval)
 {
-  assert(lock.is_locked());
-  assert(ictx != nullptr);
+  ceph_assert(lock.is_locked());
+  ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   ldout(cct, 20) << "r=" << rval << dendl;
@@ -52,38 +52,41 @@ void AioCompletion::finalize(ssize_t rval)
 }
 
 void AioCompletion::complete() {
-  assert(lock.is_locked());
-  assert(ictx != nullptr);
+  ceph_assert(lock.is_locked());
+  ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   tracepoint(librbd, aio_complete_enter, this, rval);
-  ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
-  switch (aio_type) {
-  case AIO_TYPE_GENERIC:
-  case AIO_TYPE_OPEN:
-  case AIO_TYPE_CLOSE:
-    break;
-  case AIO_TYPE_READ:
-    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
-  case AIO_TYPE_WRITE:
-    ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
-  case AIO_TYPE_DISCARD:
-    ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
-  case AIO_TYPE_FLUSH:
-    ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
-  case AIO_TYPE_WRITESAME:
-    ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
-  case AIO_TYPE_COMPARE_AND_WRITE:
-    ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
-  default:
-    lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
-    break;
+  if (ictx->perfcounter != nullptr) {
+    ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
+    switch (aio_type) {
+    case AIO_TYPE_GENERIC:
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
+    case AIO_TYPE_READ:
+      ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
+    case AIO_TYPE_WRITE:
+      ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
+    case AIO_TYPE_DISCARD:
+      ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
+    case AIO_TYPE_FLUSH:
+      ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
+    case AIO_TYPE_WRITESAME:
+      ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
+    case AIO_TYPE_COMPARE_AND_WRITE:
+      ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
+    default:
+      lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
+      break;
+    }
   }
 
-  // inform the journal that the op has successfully committed
-  if (journal_tid != 0) {
-    assert(ictx->journal != NULL);
-    ictx->journal->commit_io_event(journal_tid, rval);
+  if ((aio_type == AIO_TYPE_CLOSE) ||
+      (aio_type == AIO_TYPE_OPEN && rval < 0)) {
+    // must destroy ImageCtx prior to invoking callback
+    delete ictx;
+    ictx = nullptr;
   }
 
   state = AIO_STATE_CALLBACK;
@@ -93,7 +96,7 @@ void AioCompletion::complete() {
     lock.Lock();
   }
 
-  if (event_notify && ictx->event_socket.is_valid()) {
+  if (ictx != nullptr && event_notify && ictx->event_socket.is_valid()) {
     ictx->completed_reqs_lock.Lock();
     ictx->completed_reqs.push_back(&m_xlist_item);
     ictx->completed_reqs_lock.Unlock();
@@ -121,8 +124,14 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
 
 void AioCompletion::start_op(bool ignore_type) {
   Mutex::Locker locker(lock);
-  assert(ictx != nullptr);
-  assert(!async_op.started());
+  ceph_assert(ictx != nullptr);
+  ceph_assert(!async_op.started());
+
+  if (aio_type == AIO_TYPE_OPEN || aio_type == AIO_TYPE_CLOSE) {
+    // no need to track async open/close operations
+    return;
+  }
+
   if (state == AIO_STATE_PENDING &&
       (ignore_type || aio_type != AIO_TYPE_FLUSH)) {
     async_op.start_op(*ictx);
@@ -132,11 +141,11 @@ void AioCompletion::start_op(bool ignore_type) {
 void AioCompletion::fail(int r)
 {
   lock.Lock();
-  assert(ictx != nullptr);
+  ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   lderr(cct) << cpp_strerror(r) << dendl;
-  assert(pending_count == 0);
+  ceph_assert(pending_count == 0);
   rval = r;
   complete();
   put_unlock();
@@ -144,22 +153,28 @@ void AioCompletion::fail(int r)
 
 void AioCompletion::set_request_count(uint32_t count) {
   lock.Lock();
-  assert(ictx != nullptr);
+  ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   ldout(cct, 20) << "pending=" << count << dendl;
-  assert(pending_count == 0);
-  pending_count = count;
-  lock.Unlock();
+  ceph_assert(pending_count == 0);
 
-  // if no pending requests, completion will fire now
-  unblock();
+  if (count > 0) {
+    pending_count = count;
+    lock.Unlock();
+  } else {
+    pending_count = 1;
+    lock.Unlock();
+
+    // ensure completion fires in clean lock context
+    ictx->op_work_queue->queue(new C_AioRequest(this), 0);
+  }
 }
 
 void AioCompletion::complete_request(ssize_t r)
 {
   lock.Lock();
-  assert(ictx != nullptr);
+  ceph_assert(ictx != nullptr);
   CephContext *cct = ictx->cct;
 
   if (rval >= 0) {
@@ -168,22 +183,16 @@ void AioCompletion::complete_request(ssize_t r)
     else if (r > 0)
       rval += r;
   }
-  assert(pending_count);
+  ceph_assert(pending_count);
   int count = --pending_count;
 
   ldout(cct, 20) << "cb=" << complete_cb << ", "
                  << "pending=" << pending_count << dendl;
-  if (!count && blockers == 0) {
+  if (!count) {
     finalize(rval);
     complete();
   }
   put_unlock();
-}
-
-void AioCompletion::associate_journal_event(uint64_t tid) {
-  Mutex::Locker l(lock);
-  assert(state == AIO_STATE_PENDING);
-  journal_tid = tid;
 }
 
 bool AioCompletion::is_complete() {

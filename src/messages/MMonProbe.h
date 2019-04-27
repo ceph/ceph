@@ -22,8 +22,8 @@
 
 class MMonProbe : public Message {
 public:
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 5;
+  static constexpr int HEAD_VERSION = 7;
+  static constexpr int COMPAT_VERSION = 5;
 
   enum {
     OP_PROBE = 1,
@@ -55,23 +55,25 @@ public:
   version_t paxos_last_version = 0;
   bool has_ever_joined = 0;
   uint64_t required_features = 0;
+  uint8_t mon_release = 0;
 
   MMonProbe()
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
-  MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION} {}
+  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, uint8_t mr)
+    : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION},
       fsid(f),
       op(o),
       name(n),
       paxos_first_version(0),
       paxos_last_version(0),
       has_ever_joined(hej),
-      required_features(0) {}
+      required_features(0),
+      mon_release(mr) {}
 private:
   ~MMonProbe() override {}
 
 public:  
-  const char *get_type_name() const override { return "mon_probe"; }
+  std::string_view get_type_name() const override { return "mon_probe"; }
   void print(ostream& out) const override {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
@@ -86,6 +88,8 @@ public:
       out << " new";
     if (required_features)
       out << " required_features " << required_features;
+    if (mon_release)
+      out << " mon_release " << (int)mon_release;
     out << ")";
   }
   
@@ -110,9 +114,10 @@ public:
     encode(paxos_first_version, payload);
     encode(paxos_last_version, payload);
     encode(required_features, payload);
+    encode(mon_release, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);
     decode(name, p);
@@ -125,7 +130,14 @@ public:
       decode(required_features, p);
     else
       required_features = 0;
+    if (header.version >= 7)
+      decode(mon_release, p);
+    else
+      mon_release = 0;
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -3,7 +3,7 @@
 set -e
 set -x
 
-export BIN="${BIN:-cephfs-journal-tool}"
+export BIN="${BIN:-cephfs-journal-tool --rank=cephfs:0}"
 export JOURNAL_FILE=/tmp/journal.bin
 export JSON_OUTPUT=/tmp/json.tmp
 export BINARY_OUTPUT=/tmp/binary.tmp

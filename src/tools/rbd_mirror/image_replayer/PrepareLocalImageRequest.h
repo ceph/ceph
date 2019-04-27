@@ -5,9 +5,9 @@
 #define RBD_MIRROR_IMAGE_REPLAYER_PREPARE_LOCAL_IMAGE_REQUEST_H
 
 #include "include/buffer.h"
+#include "include/rados/librados_fwd.hpp"
 #include <string>
 
-namespace librados { struct IoCtx; }
 namespace librbd { struct ImageCtx; }
 
 struct Context;
@@ -23,22 +23,25 @@ public:
   static PrepareLocalImageRequest *create(librados::IoCtx &io_ctx,
                                           const std::string &global_image_id,
                                           std::string *local_image_id,
+                                          std::string *local_image_name,
                                           std::string *tag_owner,
                                           ContextWQ *work_queue,
                                           Context *on_finish) {
     return new PrepareLocalImageRequest(io_ctx, global_image_id, local_image_id,
-                                        tag_owner, work_queue, on_finish);
+                                        local_image_name, tag_owner, work_queue,
+                                        on_finish);
   }
 
   PrepareLocalImageRequest(librados::IoCtx &io_ctx,
                            const std::string &global_image_id,
                            std::string *local_image_id,
+                           std::string *local_image_name,
                            std::string *tag_owner,
                            ContextWQ *work_queue,
                            Context *on_finish)
     : m_io_ctx(io_ctx), m_global_image_id(global_image_id),
-      m_local_image_id(local_image_id), m_tag_owner(tag_owner),
-      m_work_queue(work_queue), m_on_finish(on_finish) {
+      m_local_image_id(local_image_id), m_local_image_name(local_image_name),
+      m_tag_owner(tag_owner), m_work_queue(work_queue), m_on_finish(on_finish) {
   }
 
   void send();
@@ -53,6 +56,9 @@ private:
    * GET_LOCAL_IMAGE_ID
    *    |
    *    v
+   * GET_LOCAL_IMAGE_NAME
+   *    |
+   *    v
    * GET_MIRROR_STATE
    *    |
    *    v
@@ -64,6 +70,7 @@ private:
   librados::IoCtx &m_io_ctx;
   std::string m_global_image_id;
   std::string *m_local_image_id;
+  std::string *m_local_image_name;
   std::string *m_tag_owner;
   ContextWQ *m_work_queue;
   Context *m_on_finish;
@@ -72,6 +79,9 @@ private:
 
   void get_local_image_id();
   void handle_get_local_image_id(int r);
+
+  void get_local_image_name();
+  void handle_get_local_image_name(int r);
 
   void get_mirror_state();
   void handle_get_mirror_state(int r);

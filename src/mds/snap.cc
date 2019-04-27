@@ -32,7 +32,7 @@ void SnapInfo::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void SnapInfo::decode(bufferlist::iterator& bl)
+void SnapInfo::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(snapid, bl);
@@ -50,7 +50,7 @@ void SnapInfo::dump(Formatter *f) const
   f->dump_string("name", name);
 }
 
-void SnapInfo::generate_test_instances(list<SnapInfo*>& ls)
+void SnapInfo::generate_test_instances(std::list<SnapInfo*>& ls)
 {
   ls.push_back(new SnapInfo);
   ls.push_back(new SnapInfo);
@@ -68,9 +68,11 @@ ostream& operator<<(ostream& out, const SnapInfo &sn)
 	     << "' " << sn.stamp << ")";
 }
 
-std::string_view SnapInfo::get_long_name()
+std::string_view SnapInfo::get_long_name() const
 {
-  if (long_name.length() == 0) {
+  if (long_name.empty() ||
+      long_name.compare(1, name.size(), name) ||
+      long_name.find_last_of("_") != name.size() + 1) {
     char nm[80];
     snprintf(nm, sizeof(nm), "_%s_%llu", name.c_str(), (unsigned long long)ino);
     long_name = nm;
@@ -90,7 +92,7 @@ void snaplink_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void snaplink_t::decode(bufferlist::iterator& bl)
+void snaplink_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(ino, bl);
@@ -104,7 +106,7 @@ void snaplink_t::dump(Formatter *f) const
   f->dump_unsigned("first", first);
 }
 
-void snaplink_t::generate_test_instances(list<snaplink_t*>& ls)
+void snaplink_t::generate_test_instances(std::list<snaplink_t*>& ls)
 {
   ls.push_back(new snaplink_t);
   ls.push_back(new snaplink_t);
@@ -123,7 +125,7 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(6, 4, bl);
   encode(seq, bl);
   encode(created, bl);
   encode(last_created, bl);
@@ -131,12 +133,14 @@ void sr_t::encode(bufferlist& bl) const
   encode(current_parent_since, bl);
   encode(snaps, bl);
   encode(past_parents, bl);
+  encode(past_parent_snaps, bl);
+  encode(flags, bl);
   ENCODE_FINISH(bl);
 }
 
-void sr_t::decode(bufferlist::iterator& p)
+void sr_t::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, p);
   if (struct_v == 2) {
     __u8 struct_v;
     decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
@@ -148,6 +152,12 @@ void sr_t::decode(bufferlist::iterator& p)
   decode(current_parent_since, p);
   decode(snaps, p);
   decode(past_parents, p);
+  if (struct_v >= 5)
+    decode(past_parent_snaps, p);
+  if (struct_v >= 6)
+    decode(flags, p);
+  else
+    flags = 0;
   DECODE_FINISH(p);
 }
 
@@ -176,9 +186,17 @@ void sr_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+
+  f->open_array_section("past_parent_snaps");
+  for (auto p = past_parent_snaps.begin(); p != past_parent_snaps.end(); ++p) {
+    f->open_object_section("snapinfo");
+    f->dump_unsigned("snapid", *p);
+    f->close_section();
+  }
+  f->close_section();
 }
 
-void sr_t::generate_test_instances(list<sr_t*>& ls)
+void sr_t::generate_test_instances(std::list<sr_t*>& ls)
 {
   ls.push_back(new sr_t);
   ls.push_back(new sr_t);
@@ -193,5 +211,8 @@ void sr_t::generate_test_instances(list<sr_t*>& ls)
   ls.back()->snaps[123].name = "name1";
   ls.back()->past_parents[12].ino = 12;
   ls.back()->past_parents[12].first = 3;
+
+  ls.back()->past_parent_snaps.insert(5);
+  ls.back()->past_parent_snaps.insert(6);
 }
 

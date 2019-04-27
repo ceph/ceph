@@ -25,11 +25,12 @@
 
 #include "common/perf_histogram.h"
 #include "include/utime.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 
 class CephContext;
 class PerfCountersBuilder;
+class PerfCounters;
 
 enum perfcounter_type_d : uint8_t
 {
@@ -37,14 +38,14 @@ enum perfcounter_type_d : uint8_t
   PERFCOUNTER_TIME = 0x1,       // float (measuring seconds)
   PERFCOUNTER_U64 = 0x2,        // integer (note: either TIME or U64 *must* be set)
   PERFCOUNTER_LONGRUNAVG = 0x4, // paired counter + sum (time)
-  PERFCOUNTER_COUNTER = 0x8,    // counter (vs guage)
+  PERFCOUNTER_COUNTER = 0x8,    // counter (vs gauge)
   PERFCOUNTER_HISTOGRAM = 0x10, // histogram (vector) of values
 };
 
 enum unit_t : uint8_t
 {
-  BYTES,
-  NONE
+  UNIT_BYTES,
+  UNIT_NONE
 };
 
 /* Class for constructing a PerfCounters object.
@@ -78,15 +79,15 @@ public:
   };
   void add_u64(int key, const char *name,
 	       const char *description=NULL, const char *nick = NULL,
-	       int prio=0, int unit=NONE);
+	       int prio=0, int unit=UNIT_NONE);
   void add_u64_counter(int key, const char *name,
 		       const char *description=NULL,
 		       const char *nick = NULL,
-		       int prio=0, int unit=NONE);
+		       int prio=0, int unit=UNIT_NONE);
   void add_u64_avg(int key, const char *name,
 		   const char *description=NULL,
 		   const char *nick = NULL,
-		   int prio=0, int unit=NONE);
+		   int prio=0, int unit=UNIT_NONE);
   void add_time(int key, const char *name,
 		const char *description=NULL,
 		const char *nick = NULL,
@@ -101,7 +102,7 @@ public:
     PerfHistogramCommon::axis_config_d y_axis_config,
     const char *description=NULL,
     const char* nick = NULL,
-    int prio=0, int unit=NONE);
+    int prio=0, int unit=UNIT_NONE);
 
   void set_prio_default(int prio_)
   {
@@ -113,8 +114,8 @@ private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
   PerfCountersBuilder& operator=(const PerfCountersBuilder &rhs);
   void add_impl(int idx, const char *name,
-                const char *description, const char *nick, int prio, int ty, int unit=NONE,
-                unique_ptr<PerfHistogram<>> histogram = nullptr);
+                const char *description, const char *nick, int prio, int ty, int unit=UNIT_NONE,
+                std::unique_ptr<PerfHistogram<>> histogram = nullptr);
 
   PerfCounters *m_perf_counters;
 
@@ -156,7 +157,7 @@ public:
         description(NULL),
         nick(NULL),
 	 type(PERFCOUNTER_NONE),
-	 unit(NONE)
+	 unit(UNIT_NONE)
     {}
     perf_counter_data_any_d(const perf_counter_data_any_d& other)
       : name(other.name),
@@ -165,7 +166,7 @@ public:
 	 type(other.type),
 	 unit(other.unit),
 	 u64(other.u64.load()) {
-      pair<uint64_t,uint64_t> a = other.read_avg();
+      auto a = other.read_avg();
       u64 = a.first;
       avgcount = a.second;
       avgcount2 = a.second;
@@ -200,27 +201,27 @@ public:
     // read <sum, count> safely by making sure the post- and pre-count
     // are identical; in other words the whole loop needs to be run
     // without any intervening calls to inc, set, or tinc.
-    pair<uint64_t,uint64_t> read_avg() const {
+    std::pair<uint64_t,uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
-	count = avgcount;
+	count = avgcount2;
 	sum = u64;
-      } while (avgcount2 != count);
-      return make_pair(sum, count);
+      } while (avgcount != count);
+      return { sum, count };
     }
   };
 
   template <typename T>
   struct avg_tracker {
-    pair<uint64_t, T> last;
-    pair<uint64_t, T> cur;
+    std::pair<uint64_t, T> last;
+    std::pair<uint64_t, T> cur;
     avg_tracker() : last(0, 0), cur(0, 0) {}
     T current_avg() const {
       if (cur.first == last.first)
         return 0;
       return (cur.second - last.second) / (cur.first - last.first);
     }
-    void consume_next(const pair<uint64_t, T> &next) {
+    void consume_next(const std::pair<uint64_t, T> &next) {
       last = cur;
       cur = next;
     }
@@ -249,7 +250,7 @@ public:
                                  const std::string &counter = "") {
     dump_formatted_generic(f, schema, true, counter);
   }
-  pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
+  std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
   const std::string& get_name() const;
   void set_name(std::string s) {
@@ -281,17 +282,19 @@ private:
   int m_lower_bound;
   int m_upper_bound;
   std::string m_name;
-  const std::string m_lock_name;
 
   int prio_adjust = 0;
 
+#ifndef WITH_SEASTAR
+  const std::string m_lock_name;
   /** Protects m_data */
-  mutable Mutex m_lock;
+  ceph::mutex m_lock;
+#endif
 
   perf_counter_data_vec_t m_data;
 
   friend class PerfCountersBuilder;
-  friend class PerfCountersCollection;
+  friend class PerfCountersCollectionImpl;
 };
 
 class SortPerfCountersByName {
@@ -304,15 +307,15 @@ public:
 typedef std::set <PerfCounters*, SortPerfCountersByName> perf_counters_set_t;
 
 /*
- * PerfCountersCollection manages PerfCounters objects for a Ceph process.
+ * PerfCountersCollectionImp manages PerfCounters objects for a Ceph process.
  */
-class PerfCountersCollection
+class PerfCountersCollectionImpl
 {
 public:
-  PerfCountersCollection(CephContext *cct);
-  ~PerfCountersCollection();
-  void add(class PerfCounters *l);
-  void remove(class PerfCounters *l);
+  PerfCountersCollectionImpl();
+  ~PerfCountersCollectionImpl();
+  void add(PerfCounters *l);
+  void remove(PerfCounters *l);
   void clear();
   bool reset(const std::string &name);
 
@@ -347,16 +350,9 @@ private:
                               const std::string &logger = "",
                               const std::string &counter = "");
 
-  CephContext *m_cct;
-
-  /** Protects m_loggers */
-  mutable Mutex m_lock;
-
   perf_counters_set_t m_loggers;
 
   CounterMap by_path; 
-
-  friend class PerfCountersCollectionTest;
 };
 
 
@@ -378,20 +374,5 @@ public:
   }
 };
 
-
-class PerfCountersDeleter {
-  CephContext* cct;
-
-public:
-  PerfCountersDeleter() noexcept : cct(nullptr) {}
-  PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
-  void operator()(PerfCounters* p) noexcept {
-    if (cct)
-      cct->get_perfcounters_collection()->remove(p);
-    delete p;
-  }
-};
-
-using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
 
 #endif

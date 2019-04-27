@@ -1,7 +1,7 @@
-restful plugin
+Restful Module
 ==============
 
-RESTful plugin offers the REST API access to the status of the cluster
+RESTful module offers the REST API access to the status of the cluster
 over an SSL-secured connection.
 
 Enabling
@@ -62,20 +62,53 @@ Since each ``ceph-mgr`` hosts its own instance of *restful*, it may
 also be necessary to configure them separately. The IP and port
 can be changed via the configuration key facility::
 
-  ceph config-key set mgr/restful/$name/server_addr $IP
-  ceph config-key set mgr/restful/$name/server_port $PORT
+  ceph config set mgr mgr/restful/$name/server_addr $IP
+  ceph config set mgr mgr/restful/$name/server_port $PORT
 
 where ``$name`` is the ID of the ceph-mgr daemon (usually the hostname).
 
 These settings can also be configured cluster-wide and not manager
 specific.  For example,::
 
-  ceph config-key set mgr/restful/server_addr $IP
-  ceph config-key set mgr/restful/server_port $PORT
+  ceph config set mgr mgr/restful/server_addr $IP
+  ceph config set mgr mgr/restful/server_port $PORT
 
 If the port is not configured, *restful* will bind to port ``8003``.
 If the address it not configured, the *restful* will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
+
+.. _creating-an-api-user:
+
+Creating an API User
+-----------------------
+
+To create an API user, please run the following command::
+
+  ceph restful create-key <username>
+
+Replace ``<username>`` with the desired name of the user. For example, to create a user named
+``api``::
+
+  $ ceph restful create-key api
+  52dffd92-a103-4a10-bfce-5b60f48f764e
+
+The UUID generated from ``ceph restful create-key api`` acts as the key for the user.
+
+To list all of your API keys, please run the following command::
+
+  ceph restful list-keys
+
+The ``ceph restful list-keys`` command will output in JSON::
+
+  {
+  	"api": "52dffd92-a103-4a10-bfce-5b60f48f764e"
+  }
+
+You can use ``curl`` in order to test your user with the API. Here is an example::
+
+  curl -k https://api:52dffd92-a103-4a10-bfce-5b60f48f764e@<ceph-mgr>:<port>/server
+
+In the case above, we are using ``GET`` to fetch information from the ``server`` endpoint.
 
 Load balancer
 -------------
@@ -87,3 +120,70 @@ API available via a consistent URL regardless of which manager
 daemon is currently active, you may want to set up a load balancer
 front-end to direct traffic to whichever manager endpoint is
 available.
+
+Available methods
+-----------------
+
+You can navigate to the ``/doc`` endpoint for full list of available
+endpoints and HTTP methods implemented for each endpoint.
+
+For example, if you want to use the PATCH method of the ``/osd/<id>``
+endpoint to set the state ``up`` of the OSD id ``1``, you can use the
+following curl command::
+
+  echo -En '{"up": true}' | curl --request PATCH --data @- --silent --insecure --user <user> 'https://<ceph-mgr>:<port>/osd/1'
+
+or you can use python to do so::
+
+  $ python
+  >> import requests
+  >> result = requests.patch(
+         'https://<ceph-mgr>:<port>/osd/1',
+         json={"up": True},
+         auth=("<user>", "<password>")
+     )
+  >> print result.json()
+
+Some of the other endpoints implemented in the *restful* module include
+
+* ``/config/cluster``: **GET**
+* ``/config/osd``: **GET**, **PATCH**
+* ``/crush/rule``: **GET**
+* ``/mon``: **GET**
+* ``/osd``: **GET**
+* ``/pool``: **GET**, **POST**
+* ``/pool/<arg>``: **DELETE**, **GET**, **PATCH**
+* ``/request``: **DELETE**, **GET**, **POST**
+* ``/request/<arg>``: **DELETE**, **GET**
+* ``/server``: **GET**
+
+The ``/request`` endpoint
+-------------------------
+
+You can use the ``/request`` endpoint to poll the state of a request
+you scheduled with any **DELETE**, **POST** or **PATCH** method. These
+methods are by default asynchronous since it may take longer for them
+to finish execution. You can modify this behaviour by appending
+``?wait=1`` to the request url. The returned request will then always
+be completed.
+
+The **POST** method of the ``/request`` method provides a passthrough
+for the ceph mon commands as defined in ``src/mon/MonCommands.h``.
+Let's consider the following command::
+
+  COMMAND("osd ls " \
+          "name=epoch,type=CephInt,range=0,req=false", \
+          "show all OSD ids", "osd", "r", "cli,rest")
+
+The **prefix** is **osd ls**. The optional argument's name is **epoch**
+and it is of type ``CephInt``, i.e. ``integer``. This means that you
+need to do the following **POST** request to schedule the command::
+
+  $ python
+  >> import requests
+  >> result = requests.post(
+         'https://<ceph-mgr>:<port>/request',
+         json={'prefix': 'osd ls', 'epoch': 0},
+         auth=("<user>", "<password>")
+     )
+  >> print result.json()

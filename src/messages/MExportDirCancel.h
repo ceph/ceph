@@ -19,21 +19,22 @@
 #include "include/types.h"
 
 class MExportDirCancel : public Message {
+private:
   dirfrag_t dirfrag;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
 
-  MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
+protected:
+  MExportDirCancel() : Message{MSG_MDS_EXPORTDIRCANCEL} {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIRCANCEL}, dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDirCancel() override {}
 
 public:
-  const char *get_type_name() const override { return "ExCancel"; }
+  std::string_view get_type_name() const override { return "ExCancel"; }
   void print(ostream& o) const override {
     o << "export_cancel(" << dirfrag << ")";
   }
@@ -43,9 +44,12 @@ public:
     encode(dirfrag, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

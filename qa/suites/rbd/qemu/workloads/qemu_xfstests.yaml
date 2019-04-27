@@ -4,5 +4,5 @@ tasks:
       clone: true
       type: block
       disks: 3
-      test: http://git.ceph.com/?p={repo};a=blob_plain;hb={branch};f=qa/run_xfstests_qemu.sh
+      test: qa/run_xfstests_qemu.sh
 exclude_arch: armv7l

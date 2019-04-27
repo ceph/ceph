@@ -19,8 +19,9 @@
 #include "osd/ECMsgTypes.h"
 
 class MOSDECSubOpRead : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   spg_t pgid;
@@ -41,11 +42,11 @@ public:
   }
 
   MOSDECSubOpRead()
-    : MOSDFastDispatchOp(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+    : MOSDFastDispatchOp{MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION}
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(op, p);
@@ -66,7 +67,7 @@ public:
     encode_trace(payload, features);
   }
 
-  const char *get_type_name() const override { return "MOSDECSubOpRead"; }
+  std::string_view get_type_name() const override { return "MOSDECSubOpRead"; }
 
   void print(ostream& out) const override {
     out << "MOSDECSubOpRead(" << pgid
@@ -74,6 +75,9 @@ public:
 	<< " " << op;
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

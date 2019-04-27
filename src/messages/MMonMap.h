@@ -15,23 +15,25 @@
 #ifndef CEPH_MMONMAP_H
 #define CEPH_MMONMAP_H
 
+#include "include/encoding.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
 class MMonMap : public Message {
 public:
-  bufferlist monmapbl;
+  ceph::buffer::list monmapbl;
 
-  MMonMap() : Message(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(bufferlist &bl) : Message(CEPH_MSG_MON_MAP) { 
+  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
+  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
     monmapbl.claim(bl);
   }
 private:
   ~MMonMap() override {}
 
 public:
-  const char *get_type_name() const override { return "mon_map"; }
+  std::string_view get_type_name() const override { return "mon_map"; }
 
   void encode_payload(uint64_t features) override { 
     if (monmapbl.length() &&
@@ -48,9 +50,13 @@ public:
     encode(monmapbl, payload);
   }
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     decode(monmapbl, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -33,7 +34,7 @@ public:
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
   virtual void send_response_end();
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "list_bucket_index_log";
   }
 };
@@ -55,7 +56,7 @@ public:
   }
   void send_response() override;
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "bucket_index_log_info";
   }
 };
@@ -69,7 +70,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "trim_bucket_index_log";
   }
 };
@@ -90,7 +91,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "list_metadata_log";
   }
 };
@@ -110,7 +111,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "get_metadata_log_info";
   }
 };
@@ -129,7 +130,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "get_metadata_log_shard_info";
   }
 };
@@ -143,7 +144,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "lock_mdlog_object";
   }
 };
@@ -157,7 +158,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "unlock_mdlog_object";
   }
 };
@@ -171,7 +172,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "mdlog_notify";
   }
 };
@@ -185,7 +186,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "trim_metadata_log";
   }
 };
@@ -207,7 +208,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "list_data_changes_log";
   }
 };
@@ -226,7 +227,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "get_data_changes_log_info";
   }
 };
@@ -245,7 +246,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override {
+  const char* name() const override {
     return "get_data_changes_log_shard_info";
   }
 };
@@ -259,7 +260,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "lock_datalog_object";
   }
 };
@@ -273,7 +274,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "unlock_datalog_object";
   }
 };
@@ -287,7 +288,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "datalog_notify";
   }
 };
@@ -301,7 +302,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "trim_data_changes_log";
   }
 };

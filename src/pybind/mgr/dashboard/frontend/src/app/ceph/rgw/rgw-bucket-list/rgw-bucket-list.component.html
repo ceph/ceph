@@ -1,0 +1,18 @@
+<cd-table #table
+          [autoReload]="false"
+          [data]="buckets"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="multi"
+          (updateSelection)="updateSelection($event)"
+          identifier="bucket"
+          (fetchData)="getBucketList($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-rgw-bucket-details cdTableDetail
+                         [selection]="selection">
+  </cd-rgw-bucket-details>
+</cd-table>

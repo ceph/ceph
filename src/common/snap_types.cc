@@ -12,7 +12,7 @@ void SnapRealmInfo::encode(bufferlist& bl) const
   encode_nohead(prior_parent_snaps, bl);
 }
 
-void SnapRealmInfo::decode(bufferlist::iterator& bl)
+void SnapRealmInfo::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(h, bl);

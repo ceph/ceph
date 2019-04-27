@@ -33,6 +33,7 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+  virtual int socket_fd() const = 0;
 };
 
 class ConnectedSocket;
@@ -47,6 +48,10 @@ struct SocketOptions {
 /// \cond internal
 class ServerSocketImpl {
  public:
+  unsigned addr_type; ///< entity_addr_t::TYPE_*
+  unsigned addr_slot; ///< position of our addr in myaddrs().v
+  ServerSocketImpl(unsigned type, unsigned slot)
+    : addr_type(type), addr_slot(slot) {}
   virtual ~ServerSocketImpl() {}
   virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
@@ -125,6 +130,9 @@ class ConnectedSocket {
   int fd() const {
     return _csi->fd();
   }
+  int socket_fd() const {
+    return _csi->socket_fd();
+  }
 
   explicit operator bool() const {
     return _csi.get();
@@ -176,6 +184,11 @@ class ServerSocket {
     return _ssi->fd();
   }
 
+  /// get listen/bind addr
+  unsigned get_addr_slot() {
+    return _ssi->addr_slot;
+  }
+
   explicit operator bool() const {
     return _ssi.get();
   }
@@ -197,6 +210,9 @@ enum {
   l_msgr_running_send_time,
   l_msgr_running_recv_time,
   l_msgr_running_fast_dispatch_time,
+
+  l_msgr_send_messages_queue_lat,
+  l_msgr_handle_ack_lat,
 
   l_msgr_last,
 };
@@ -228,8 +244,8 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
-    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(BYTES));
-    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(BYTES));
+    plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes", NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network sent bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_active_connections, "msgr_active_connections", "Active connection number");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_created_connections", "Created connection number");
 
@@ -237,6 +253,9 @@ class Worker {
     plb.add_time(l_msgr_running_send_time, "msgr_running_send_time", "The total time of message sending");
     plb.add_time(l_msgr_running_recv_time, "msgr_running_recv_time", "The total time of message receiving");
     plb.add_time(l_msgr_running_fast_dispatch_time, "msgr_running_fast_dispatch_time", "The total time of fast dispatch");
+
+    plb.add_time_avg(l_msgr_send_messages_queue_lat, "msgr_send_messages_queue_lat", "Network sent messages lat");
+    plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);
@@ -248,7 +267,7 @@ class Worker {
     }
   }
 
-  virtual int listen(entity_addr_t &addr,
+  virtual int listen(entity_addr_t &addr, unsigned addr_slot,
                      const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr,
                       const SocketOptions &opts, ConnectedSocket *socket) = 0;
@@ -258,7 +277,7 @@ class Worker {
   PerfCounters *get_perf_counter() { return perf_logger; }
   void release_worker() {
     int oldref = references.fetch_sub(1);
-    assert(oldref > 0);
+    ceph_assert(oldref > 0);
   }
   void init_done() {
     init_lock.lock();
@@ -284,7 +303,7 @@ class Worker {
   }
 };
 
-class NetworkStack : public CephContext::ForkWatcher {
+class NetworkStack {
   std::string type;
   unsigned num_workers = 0;
   ceph::spinlock pool_spin;
@@ -300,7 +319,7 @@ class NetworkStack : public CephContext::ForkWatcher {
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
-  ~NetworkStack() override {
+  virtual ~NetworkStack() {
     for (auto &&w : workers)
       delete w;
   }
@@ -335,14 +354,6 @@ class NetworkStack : public CephContext::ForkWatcher {
   // direct is used in tests only
   virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
-
-  void handle_pre_fork() override {
-    stop();
-  }
-
-  void handle_post_fork() override {
-    start();
-  }
 
   virtual bool is_ready() { return true; };
   virtual void ready() { };

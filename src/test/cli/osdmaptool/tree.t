@@ -20,7 +20,7 @@
               "id": -1,
               "name": "default",
               "type": "root",
-              "type_id": 10,
+              "type_id": 11,
               "children": [
                   -3
               ]
@@ -52,39 +52,39 @@
               "name": "osd.0",
               "type": "osd",
               "type_id": 0,
-              "crush_weight": 1.000000,
+              "crush_weight": 1,
               "depth": 3,
               "pool_weights": {},
               "exists": 0,
               "status": "down",
-              "reweight": 0.000000,
-              "primary_affinity": 1.000000
+              "reweight": 0,
+              "primary_affinity": 1
           },
           {
               "id": 1,
               "name": "osd.1",
               "type": "osd",
               "type_id": 0,
-              "crush_weight": 1.000000,
+              "crush_weight": 1,
               "depth": 3,
               "pool_weights": {},
               "exists": 0,
               "status": "down",
-              "reweight": 0.000000,
-              "primary_affinity": 1.000000
+              "reweight": 0,
+              "primary_affinity": 1
           },
           {
               "id": 2,
               "name": "osd.2",
               "type": "osd",
               "type_id": 0,
-              "crush_weight": 1.000000,
+              "crush_weight": 1,
               "depth": 3,
               "pool_weights": {},
               "exists": 0,
               "status": "down",
-              "reweight": 0.000000,
-              "primary_affinity": 1.000000
+              "reweight": 0,
+              "primary_affinity": 1
           }
       ],
       "stray": []

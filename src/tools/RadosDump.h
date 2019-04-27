@@ -73,7 +73,7 @@ struct super_header {
     encode(header_size, bl);
     encode(footer_size, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(magic, bl);
     decode(version, bl);
@@ -96,7 +96,7 @@ struct header {
     encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     uint32_t debug_type;
     DECODE_START(1, bl);
     decode(debug_type, bl);
@@ -115,7 +115,7 @@ struct footer {
     encode(magic, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(magic, bl);
     DECODE_FINISH(bl);
@@ -141,7 +141,7 @@ struct pg_begin {
     ENCODE_FINISH(bl);
   }
   // NOTE: New super_ver prevents decode from ver 1
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
     decode(pgid.pgid, bl);
     if (struct_v > 1) {
@@ -177,7 +177,7 @@ struct object_begin {
     encode(oi, bl, -1);  /* FIXME: we always encode with full features */
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
     decode(hoid.hobj, bl);
     if (struct_v > 1) {
@@ -209,7 +209,7 @@ struct data_section {
     encode(databl, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(offset, bl);
     decode(len, bl);
@@ -226,7 +226,7 @@ struct attr_section {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {
       bufferlist bl;
-      bl.push_front(i->second);
+      bl.push_back(i->second);
       data[i->first] = bl;
     }
   }
@@ -238,7 +238,7 @@ struct attr_section {
     encode(data, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(data, bl);
     DECODE_FINISH(bl);
@@ -255,7 +255,7 @@ struct omap_hdr_section {
     encode(hdr, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(hdr, bl);
     DECODE_FINISH(bl);
@@ -273,7 +273,7 @@ struct omap_section {
     encode(omap, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(omap, bl);
     DECODE_FINISH(bl);
@@ -323,7 +323,7 @@ struct metadata_section {
     encode(missing, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(6, bl);
     decode(struct_ver, bl);
     decode(map_epoch, bl);

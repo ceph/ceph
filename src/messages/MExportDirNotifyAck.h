@@ -18,23 +18,24 @@
 #include "msg/Message.h"
 
 class MExportDirNotifyAck : public Message {
+private:
   dirfrag_t dirfrag;
   pair<__s32,__s32> new_auth;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  pair<__s32,__s32> get_new_auth() { return new_auth; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  pair<__s32,__s32> get_new_auth() const { return new_auth; }
   
+protected:
   MExportDirNotifyAck() {}
   MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
-    Message(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df), new_auth(na) {
+    Message{MSG_MDS_EXPORTDIRNOTIFYACK}, dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
-private:
   ~MExportDirNotifyAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExNotA"; }
+  std::string_view get_type_name() const override { return "ExNotA"; }
   void print(ostream& o) const override {
     o << "export_notify_ack(" << dirfrag << ")";
   }
@@ -46,11 +47,13 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(new_auth, p);
   }
-  
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);  
 };
 
 #endif

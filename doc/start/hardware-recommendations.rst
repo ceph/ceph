@@ -1,3 +1,5 @@
+.. _hardware-recommendations:
+
 ==========================
  Hardware Recommendations
 ==========================
@@ -13,10 +15,7 @@ of daemon. We recommend using other hosts for processes that utilize your
 data cluster (e.g., OpenStack, CloudStack, etc).
 
 
-.. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
-   `Ceph Write Throughput 2`_, `Argonaut v. Bobtail Performance Preview`_, 
-   `Bobtail Performance - I/O Scheduler Comparison`_ and others are an
-   excellent source of information. 
+.. tip:: Check out the `Ceph blog`_ too.
 
 
 CPU
@@ -39,11 +38,29 @@ separate hosts.
 RAM
 ===
 
-Metadata servers and monitors must be capable of serving their data quickly, so
-they should have plenty of RAM (e.g., 1GB of RAM per daemon instance). OSDs do
-not require as much RAM for regular operations (e.g., 500MB of RAM per daemon
-instance); however, during recovery they need significantly more RAM (e.g., ~1GB
-per 1TB of storage per daemon). Generally, more RAM is better.
+Generally, more RAM is better.
+
+Monitors and managers (ceph-mon and ceph-mgr)
+---------------------------------------------
+
+Monitor and manager daemon memory usage generally scales with the size of the
+cluster.  For small clusters, 1-2 GB is generally sufficient.  For
+large clusters, you should provide more (5-10 GB).  You may also want
+to consider tuning settings like ``mon_osd_cache_size`` or
+``rocksdb_cache_size``.
+
+Metadata servers (ceph-mds)
+---------------------------
+
+The metadata daemon memory utilization depends on how much memory its cache is
+configured to consume.  We recommend 1 GB as a minimum for most systems.  See
+``mds_cache_memory``.
+
+OSDs (ceph-osd)
+---------------
+
+By default, OSDs that use the BlueStore backend require 3-5 GB of RAM.  You can
+adjust the amount of memory the OSD consumes with the ``osd_memory_target`` configuration option when BlueStore is in use.  When using the legacy FileStore backend, the operating system page cache is used for caching data, so no tuning is normally needed, and the OSD memory consumption is generally related to the number of PGs per daemon in the system.
 
 
 Data Storage
@@ -167,7 +184,7 @@ Disk controllers also have a significant impact on write throughput. Carefully,
 consider your selection of disk controllers to ensure that they do not create
 a performance bottleneck.
 
-.. tip:: The Ceph blog is often an excellent source of information on Ceph
+.. tip:: The `Ceph blog`_ is often an excellent source of information on Ceph
    performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
    Throughput 2`_ for additional details.
 
@@ -341,10 +358,8 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 
 
 
-
+.. _Ceph blog: https://ceph.com/community/blog/
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
-.. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
-.. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
 .. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations

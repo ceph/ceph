@@ -24,11 +24,12 @@
 
 #include "include/compat.h"
 
+extern pid_t ceph_gettid();
+
 class Thread {
  private:
   pthread_t thread_id;
   pid_t pid;
-  int ioprio_class, ioprio_priority;
   int cpuid;
   const char *thread_name;
 
@@ -57,7 +58,6 @@ class Thread {
   void create(const char *name, size_t stacksize = 0);
   int join(void **prval = 0);
   int detach();
-  int set_ioprio(int cls, int prio);
   int set_affinity(int cpuid);
 };
 

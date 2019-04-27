@@ -24,7 +24,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -139,9 +139,10 @@ public:
   }
 
   void expect_start_op(librbd::MockTestImageCtx &mock_image_ctx, bool success) {
-    EXPECT_CALL(*mock_image_ctx.exclusive_lock, start_op())
-      .WillOnce(Invoke([success]() {
+    EXPECT_CALL(*mock_image_ctx.exclusive_lock, start_op(_))
+      .WillOnce(Invoke([success](int* r) {
                   if (!success) {
+                    *r = -EROFS;
                     return static_cast<FunctionContext*>(nullptr);
                   }
                   return new FunctionContext([](int r) {});

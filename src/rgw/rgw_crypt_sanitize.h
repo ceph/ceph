@@ -57,7 +57,7 @@ struct auth {
  */
 struct log_content {
   const boost::string_view buf;
-  log_content(const boost::string_view buf)
+  explicit log_content(const boost::string_view buf)
   : buf(buf) {}
 };
 

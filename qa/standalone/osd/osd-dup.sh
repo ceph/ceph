@@ -33,17 +33,17 @@ function TEST_filestore_to_bluestore() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd $dir 0 || return 1
+    run_osd_filestore $dir 0 || return 1
     osd_pid=$(cat $dir/osd.0.pid)
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
+    run_osd_filestore $dir 1 || return 1
+    run_osd_filestore $dir 2 || return 1
 
     sleep 5
 
     create_pool foo 16
 
     # write some objects
-    rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
+    timeout 20 rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
 
     # kill
     while kill $osd_pid; do sleep 1 ; done
@@ -56,12 +56,12 @@ function TEST_filestore_to_bluestore() {
     O=$CEPH_ARGS
     CEPH_ARGS+="--log-file $dir/cot.log --log-max-recent 0 "
     ceph-objectstore-tool --type bluestore --data-path $dir/0 --fsid $ofsid \
-			  --op mkfs || return 1
+			  --op mkfs --no-mon-config || return 1
     ceph-objectstore-tool --data-path $dir/0.old --target-data-path $dir/0 \
 			  --op dup || return 1
     CEPH_ARGS=$O
 
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
 
     while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
     ceph osd metadata 0 | grep bluestore || return 1

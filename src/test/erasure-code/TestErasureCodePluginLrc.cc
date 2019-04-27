@@ -21,7 +21,7 @@
 #include "arch/intel.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
-#include "common/config.h"
+#include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
 
@@ -34,7 +34,7 @@ TEST(ErasureCodePlugin, factory)
   ErasureCodeInterfaceRef erasure_code;
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(0, instance.factory("lrc",
-				g_conf->get_val<std::string>("erasure_code_dir"),
+				g_conf().get_val<std::string>("erasure_code_dir"),
 				profile, &erasure_code, &cerr));
   EXPECT_TRUE(erasure_code.get());
 }

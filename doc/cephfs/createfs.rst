@@ -46,7 +46,7 @@ an *active* state.  For example, in a single MDS system:
 .. code:: bash
 
     $ ceph mds stat
-    e5: 1/1/1 up {0=a=up:active}
+    cephfs-1/1/1 up {0=a=up:active}
 
 Once the filesystem is created and the MDS is active, you are ready to mount
 the filesystem.  If you have created more than one filesystem, you will
@@ -57,6 +57,10 @@ choose which to use when mounting.
 
 .. _Mount CephFS: ../../cephfs/kernel
 .. _Mount CephFS as FUSE: ../../cephfs/fuse
+
+If you have created more than one filesystem, and a client does not
+specify a filesystem when mounting, you can control which filesystem
+they will see by using the `ceph fs set-default` command.
 
 Using Erasure Coded pools with CephFS
 =====================================

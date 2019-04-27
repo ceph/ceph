@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_es_query.h"
@@ -20,6 +23,7 @@ struct es_index_obj_response {
     ceph::real_time mtime;
     string etag;
     string content_type;
+    string storage_class;
     map<string, string> custom_str;
     map<string, int64_t> custom_int;
     map<string, string> custom_date;
@@ -41,6 +45,7 @@ struct es_index_obj_response {
       parse_time(mtime_str.c_str(), &mtime);
       JSONDecoder::decode_json("etag", etag, obj);
       JSONDecoder::decode_json("content_type", content_type, obj);
+      JSONDecoder::decode_json("storage_class", storage_class, obj);
       list<_custom_entry<string> > str_entries;
       JSONDecoder::decode_json("custom-string", str_entries, obj);
       for (auto& e : str_entries) {
@@ -135,17 +140,16 @@ public:
     es_module = static_cast<RGWElasticSyncModuleInstance *>(sync_module_ref.get());
   }
 
-  int verify_permission() {
+  int verify_permission() override {
     return 0;
   }
   virtual int get_params() = 0;
-  void pre_exec();
-  void execute();
+  void pre_exec() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
-  virtual const string name() { return "metadata_search"; }
-  virtual RGWOpType get_type() { return RGW_OP_METADATA_SEARCH; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  const char* name() const override { return "metadata_search"; }
+  virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 void RGWMetadataSearchOp::pre_exec()
@@ -180,7 +184,11 @@ void RGWMetadataSearchOp::execute()
                                   { "size", "meta.size" },
                                   { "mtime", "meta.mtime" },
                                   { "lastmodified", "meta.mtime" },
-                                  { "contenttype", "meta.contenttype" },
+                                  { "last_modified", "meta.mtime" },
+                                  { "contenttype", "meta.content_type" },
+                                  { "content_type", "meta.content_type" },
+                                  { "storageclass", "meta.storage_class" },
+                                  { "storage_class", "meta.storage_class" },
   };
   es_query.set_field_aliases(&aliases);
 
@@ -189,9 +197,10 @@ void RGWMetadataSearchOp::execute()
                                                            {"instance", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"permissions", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
-                                                           {"meta.contenttype", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.content_type", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
-                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
+                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT},
+                                                           {"meta.storage_class", ESEntityTypeMap::ES_ENTITY_STR} };
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
 
@@ -236,7 +245,8 @@ void RGWMetadataSearchOp::execute()
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
   ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
-  op_ret = conn->get_resource(resource, &params, nullptr, out, &in);
+  auto& extra_headers = es_module->get_request_headers();
+  op_ret = conn->get_resource(resource, &params, &extra_headers, out, &in);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
@@ -263,7 +273,7 @@ void RGWMetadataSearchOp::execute()
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
+  explicit RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
     custom_prefix = "x-amz-meta-";
   }
 
@@ -332,6 +342,7 @@ public:
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
+      s->formatter->dump_string("StorageClass", e.meta.storage_class.c_str());
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
       s->formatter->open_array_section("CustomMetadata");
       for (auto& m : e.meta.custom_str) {
@@ -366,7 +377,7 @@ public:
 
 class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
-  RGWOp *op_get() {
+  RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
       return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
     }
@@ -376,14 +387,14 @@ protected:
     }
     return nullptr;
   }
-  RGWOp *op_head() {
+  RGWOp *op_head() override {
     return nullptr;
   }
-  RGWOp *op_post() {
+  RGWOp *op_post() override {
     return nullptr;
   }
 public:
-  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
+  explicit RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
   virtual ~RGWHandler_REST_MDSearch_S3() {}
 };
 

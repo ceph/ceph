@@ -19,14 +19,13 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <memory>
 
 #include "common/LogClient.h"
 
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
-
-
 
 /**
  * This class is responsible for setting up the python runtime environment
@@ -40,7 +39,6 @@ class PyModuleRegistry
 {
 private:
   mutable Mutex lock{"PyModuleRegistry::lock"};
-
   LogChannelRef clog;
 
   std::map<std::string, PyModuleRef> modules;
@@ -59,8 +57,11 @@ private:
    */
   std::set<std::string> probe_modules() const;
 
+  PyModuleConfig module_config;
+
 public:
-  static std::string config_prefix;
+  void handle_config(const std::string &k, const std::string &v);
+  void handle_config_notify();
 
   /**
    * Get references to all modules (whether they have loaded and/or
@@ -68,7 +69,7 @@ public:
    */
   std::list<PyModuleRef> get_modules() const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::list<PyModuleRef> modules_out;
     for (const auto &i : modules) {
       modules_out.push_back(i.second);
@@ -77,38 +78,28 @@ public:
     return modules_out;
   }
 
-  PyModuleRegistry(LogChannelRef clog_)
+  explicit PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
   {}
 
-  bool handle_mgr_map(const MgrMap &mgr_map_)
-  {
-    Mutex::Locker l(lock);
+  /**
+   * @return true if the mgrmap has changed such that the service needs restart
+   */
+  bool handle_mgr_map(const MgrMap &mgr_map_);
 
-    bool modules_changed = mgr_map_.modules != mgr_map.modules;
-    mgr_map = mgr_map_;
+  void init();
 
-    if (standby_modules != nullptr) {
-      standby_modules->handle_mgr_map(mgr_map_);
-    }
-
-    return modules_changed;
-  }
-
-  bool is_initialized() const
-  {
-    return mgr_map.epoch > 0;
-  }
-
-  int init(const MgrMap &map);
+  void upgrade_config(
+      MonClient *monc,
+      const std::map<std::string, std::string> &old_config);
 
   void active_start(
-                PyModuleConfig &config_,
-                DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-                LogChannelRef clog_, Objecter &objecter_, Client &client_,
-                Finisher &f);
-  void standby_start(
-      MonClient *monc);
+                DaemonStateIndex &ds, ClusterState &cs,
+                const std::map<std::string, std::string> &kv_store,
+                MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
+                Objecter &objecter_, Client &client_, Finisher &f,
+                DaemonServer &server);
+  void standby_start(MonClient &mc, Finisher &f);
 
   bool is_standby_running() const
   {
@@ -118,26 +109,23 @@ public:
   void active_shutdown();
   void shutdown();
 
-  template<typename Callback, typename...Args>
-  void with_active_modules(Callback&& cb, Args&&...args) const
-  {
-    Mutex::Locker l(lock);
-    assert(active_modules != nullptr);
-
-    std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
-  }
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 
   /**
-   * module_name **must** exist, but does not have to be loaded
-   * or runnable.
+   * Get the specified module. The module does not have to be
+   * loaded or runnable.
+   *
+   * Returns an empty reference if it does not exist.
    */
   PyModuleRef get_module(const std::string &module_name)
   {
-    Mutex::Locker l(lock);
-    return modules.at(module_name);
+    std::lock_guard l(lock);
+    auto module_iter = modules.find(module_name);
+    if (module_iter == modules.end()) {
+        return {};
+    }
+    return module_iter->second;
   }
 
   /**
@@ -152,6 +140,7 @@ public:
   int handle_command(
     std::string const &module_name,
     const cmdmap_t &cmdmap,
+    const bufferlist &inbuf,
     std::stringstream *ds,
     std::stringstream *ss);
 
@@ -160,6 +149,12 @@ public:
    * modules that have failed (i.e. unhandled exceptions in serve())
    */
   void get_health_checks(health_check_map_t *checks);
+
+  void get_progress_events(map<std::string,ProgressEvent> *events) {
+    if (active_modules) {
+      active_modules->get_progress_events(events);
+    }
+  }
 
   // FIXME: breaking interface so that I don't have to go rewrite all
   // the places that call into these (for now)
@@ -181,7 +176,7 @@ public:
 
   std::map<std::string, std::string> get_services() const
   {
-    assert(active_modules);
+    ceph_assert(active_modules);
     return active_modules->get_services();
   }
   // <<< (end of ActivePyModules cheeky call-throughs)

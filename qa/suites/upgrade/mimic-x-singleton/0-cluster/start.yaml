@@ -1,0 +1,37 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client-only node.
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    fs: xfs
+    conf:
+      global:
+        ms dump corrupt message level: 0
+        ms bind msgr2: false
+      mds:
+        debug ms: 1
+        debug mds: 20
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+- - mon.b
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+- - mon.c
+  - mgr.x
+  - mgr.y
+  - osd.8
+  - osd.9
+  - osd.10
+  - osd.11
+- - client.0

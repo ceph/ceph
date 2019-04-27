@@ -27,7 +27,7 @@
 
 #include "DeterministicOpSequence.h"
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
@@ -79,7 +79,7 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
 
   default:
     cout << "bad op " << op << std::endl;
-    assert(0 == "bad op");
+    ceph_abort_msg("bad op");
   }
   return ok;
 }

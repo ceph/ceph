@@ -314,10 +314,22 @@ first.  You may list the available pools, create a pool, check to see if a pool
 exists,  and delete a pool.
 
 .. automethod:: Rados.list_pools()
-.. automethod:: Rados.create_pool(pool_name, auid=None, crush_rule=None)
+.. automethod:: Rados.create_pool(pool_name, crush_rule=None)
 .. automethod:: Rados.pool_exists()
 .. automethod:: Rados.delete_pool(pool_name)
 
+
+CLI Commands
+------------
+
+The Ceph CLI command is internally using the following librados Python binding methods.
+
+In order to send a command, choose the correct method and choose the correct target.
+
+.. automethod:: Rados.mon_command
+.. automethod:: Rados.osd_command
+.. automethod:: Rados.mgr_command
+.. automethod:: Rados.pg_command
 
 
 Input/Output Context API
@@ -331,7 +343,6 @@ invoking methods of the `Ioctx` and other classes.
 .. automethod:: Rados.open_ioctx(ioctx_name)
 .. automethod:: Ioctx.require_ioctx_open()
 .. automethod:: Ioctx.get_stats()
-.. automethod:: Ioctx.change_auid(auid)
 .. automethod:: Ioctx.get_last_version()
 .. automethod:: Ioctx.close()
 

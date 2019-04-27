@@ -34,7 +34,7 @@
 
 libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
-  assert(pc->ref == 1);
+  ceph_assert(pc->ref == 1);
   pc->put();
 }
 
@@ -337,7 +337,7 @@ libradosstriper::RadosStriper::multi_aio_create_completion(void *cb_arg,
 {
   MultiAioCompletionImpl *c;
   int r = rados_striper_multi_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
-  assert(r == 0);
+  ceph_assert(r == 0);
   return new MultiAioCompletion(c);
 }
 

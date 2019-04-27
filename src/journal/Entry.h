@@ -37,12 +37,12 @@ public:
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &iter);
+  void decode(bufferlist::const_iterator &iter);
   void dump(ceph::Formatter *f) const;
 
   bool operator==(const Entry& rhs) const;
 
-  static bool is_readable(bufferlist::iterator iter, uint32_t *bytes_needed);
+  static bool is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed);
   static void generate_test_instances(std::list<Entry *> &o);
 
 private:

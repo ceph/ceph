@@ -34,7 +34,7 @@ inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 class AdminSocketHook {
 public:
   virtual bool call(std::string_view command, const cmdmap_t& cmdmap,
-		    std::string_view format, bufferlist& out) = 0;
+		    std::string_view format, ceph::buffer::list& out) = 0;
   virtual ~AdminSocketHook() {}
 };
 
@@ -58,12 +58,12 @@ public:
    * registered, and an incoming command is 'foo bar baz', it is
    * matched with 'foo bar', while 'foo fud' will match 'foo'.
    *
-   * The entire incoming command string is passed to the registred
+   * The entire incoming command string is passed to the registered
    * hook.
    *
    * @param command command string
    * @param cmddesc command syntax descriptor
-   * @param hook implementaiton
+   * @param hook implementation
    * @param help help text.  if empty, command will not be included in 'help' output.
    *
    * @return 0 for success, -EEXIST if command already registered.
@@ -85,6 +85,11 @@ public:
    */
   int unregister_command(std::string_view command);
 
+  /*
+   * unregister all commands belong to hook.
+   */
+  void unregister_commands(const AdminSocketHook *hook);
+
   bool init(const std::string& path);
 
   void chown(uid_t uid, gid_t gid);
@@ -103,7 +108,7 @@ private:
   bool do_accept();
   bool validate(const std::string& command,
 		const cmdmap_t& cmdmap,
-		bufferlist& out) const;
+		ceph::buffer::list& out) const;
 
   CephContext *m_cct;
   std::string m_path;

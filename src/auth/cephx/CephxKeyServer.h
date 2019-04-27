@@ -18,7 +18,7 @@
 #include "auth/KeyRing.h"
 #include "CephxProtocol.h"
 #include "CephxKeyServer.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class CephContext;
 
@@ -47,7 +47,7 @@ struct KeyServerData {
     encode(secrets, bl);
     encode(rotating_secrets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -66,7 +66,7 @@ struct KeyServerData {
   }
   void decode_rotating(bufferlist& rotating_bl) {
     using ceph::decode;
-    bufferlist::iterator iter = rotating_bl.begin();
+    auto iter = rotating_bl.cbegin();
     __u8 struct_v;
     decode(struct_v, iter);
     decode(rotating_ver, iter);
@@ -144,14 +144,14 @@ struct KeyServerData {
 	encode(auth, bl);
       }
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       __u8 struct_v;
       decode(struct_v, bl);
       __u32 _op;
       decode(_op, bl);
       op = (IncrementalOp)_op;
-      assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
+      ceph_assert(op >= AUTH_INC_NOP && op <= AUTH_INC_SET_ROTATING);
       if (op == AUTH_INC_SET_ROTATING) {
 	decode(rotating_bl, bl);
       } else {
@@ -193,13 +193,14 @@ WRITE_CLASS_ENCODER(KeyServerData::Incremental)
 class KeyServer : public KeyStore {
   CephContext *cct;
   KeyServerData data;
-  mutable Mutex lock;
+  mutable ceph::mutex lock;
 
   int _rotate_secret(uint32_t service_id);
   bool _check_rotating_secrets();
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
-	CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
+			       const AuthTicket& parent_ticket,
+			       CephXSessionAuthInfo& info);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
@@ -213,13 +214,16 @@ public:
   int start_server();
   void rotate_timeout(double timeout);
 
-  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
-  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info,
-                                        CryptoKey& service_secret, uint64_t secret_id);
+  int build_session_auth_info(uint32_t service_id,
+			      const AuthTicket& parent_ticket,
+			      CephXSessionAuthInfo& info);
+  int build_session_auth_info(uint32_t service_id,
+			      const AuthTicket& parent_ticket,
+			      CephXSessionAuthInfo& info,
+			      CryptoKey& service_secret,
+			      uint64_t secret_id);
 
   /* get current secret for specific service type */
-  bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key,
-			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
 			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
@@ -231,8 +235,8 @@ public:
     using ceph::encode;
     encode(data, bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    Mutex::Locker l(lock);
+  void decode(bufferlist::const_iterator& bl) {
+    std::scoped_lock l{lock};
     using ceph::decode;
     decode(data, bl);
   }
@@ -244,31 +248,31 @@ public:
     return encode_secrets(NULL, &ds);
   }
   version_t get_ver() const {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     return data.version;    
   }
 
   void clear_secrets() {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.clear_secrets();
   }
 
   void apply_data_incremental(KeyServerData::Incremental& inc) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.apply_incremental(inc);
   }
   void set_ver(version_t ver) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.version = ver;
   }
 
   void add_auth(const EntityName& name, EntityAuth& auth) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.add_auth(name, auth);
   }
 
   void remove_secret(const EntityName& name) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     data.remove_secret(name);
   }
 
@@ -277,16 +281,16 @@ public:
     return (b != data.secrets_end());
   }
   int get_num_secrets() {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     return data.secrets.size();
   }
 
   void clone_to(KeyServerData& dst) const {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     dst = data;
   }
   void export_keyring(KeyRing& keyring) {
-    Mutex::Locker l(lock);
+    std::scoped_lock l{lock};
     for (map<EntityName, EntityAuth>::iterator p = data.secrets.begin();
 	 p != data.secrets.end();
 	 ++p) {
@@ -298,7 +302,7 @@ public:
 
   bool get_rotating_encrypted(const EntityName& name, bufferlist& enc_bl) const;
 
-  Mutex& get_lock() const { return lock; }
+  ceph::mutex& get_lock() const { return lock; }
   bool get_service_caps(const EntityName& name, uint32_t service_id,
 			AuthCapsInfo& caps) const;
 

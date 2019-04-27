@@ -21,10 +21,10 @@
  * pass a ScrubMap from a shard back to the primary
  */
 
-struct MOSDRepScrubMap : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepScrubMap : public MOSDFastDispatchOp {
+public:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            // primary spg_t
   epoch_t map_epoch = 0;
@@ -40,10 +40,10 @@ struct MOSDRepScrubMap : public MOSDFastDispatchOp {
   }
 
   MOSDRepScrubMap()
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION} {}
 
   MOSDRepScrubMap(spg_t pgid, epoch_t map_epoch, pg_shard_t from)
-    : MOSDFastDispatchOp(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid),
       map_epoch(map_epoch),
       from(from) {}
@@ -52,7 +52,7 @@ private:
   ~MOSDRepScrubMap() {}
 
 public:
-  const char *get_type_name() const override { return "rep_scrubmap"; }
+  std::string_view get_type_name() const override { return "rep_scrubmap"; }
   void print(ostream& out) const override {
     out << "rep_scrubmap(" << pgid << " e" << map_epoch
 	<< " from shard " << from
@@ -67,7 +67,7 @@ public:
     encode(preempted, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(from, p);
@@ -75,7 +75,9 @@ public:
       decode(preempted, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
 
 #endif

@@ -17,7 +17,7 @@ extern "C" void debugv(int level, const char *fmt, va_list ap) {
 
     vasprintf(&msg, fmt, ap);
 
-    dout(level) << msg << dendl;
+    dout(ceph::dout::need_dynamic(level)) << msg << dendl;
 
     free(msg);
     errno = saved_errno;

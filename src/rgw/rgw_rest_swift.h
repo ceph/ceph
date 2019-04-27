@@ -121,6 +121,8 @@ public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
 
+  int update_slo_segment_size(rgw_slo_entry& entry);
+
   int verify_permission() override;
   int get_params() override;
   void send_response() override;
@@ -233,7 +235,7 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+    function<void (Formatter&, const ConfigProxy&, RGWRados&)> list_data;
   };
 
   static const vector<pair<string, struct info>> swift_info;
@@ -243,11 +245,11 @@ public:
 
   void execute() override;
   void send_response() override;
-  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempauth_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static bool is_expired(const std::string& expires, CephContext* cct);
+  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static bool is_expired(const std::string& expires, const DoutPrefixProvider* dpp);
 };
 
 
@@ -385,7 +387,7 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+  explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
     : auth_strategy(auth_strategy) {
   }
   ~RGWHandler_REST_SWIFT() override = default;
@@ -393,7 +395,7 @@ public:
   int validate_bucket_name(const string& bucket);
 
   int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
@@ -541,7 +543,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -597,7 +599,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -653,7 +655,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 

@@ -1,0 +1,163 @@
+<div class="col-sm-12 col-lg-6">
+  <form name="userForm"
+        class="form-horizontal"
+        #formDir="ngForm"
+        [formGroup]="userForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Username -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('username', formDir)}">
+          <label class="control-label col-sm-3"
+                 for="name">
+            <ng-container i18n>Username</ng-container>
+            <span class="required"
+                  *ngIf="mode !== userFormMode.editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Username..."
+                   id="username"
+                   name="username"
+                   formControlName="username"
+                   autofocus>
+            <span class="help-block"
+                  *ngIf="userForm.showError('username', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('password', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Password</label>
+          <div class="col-sm-9">
+            <div class="input-group">
+              <input class="form-control"
+                     type="password"
+                     placeholder="Password..."
+                     id="password"
+                     name="password"
+                     autocomplete="new-password"
+                     formControlName="password">
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="password">
+                </button>
+              </span>
+            </div>
+            <span class="help-block"
+                  *ngIf="userForm.showError('password', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Confirm password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('confirmpassword', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Confirm password</label>
+          <div class="col-sm-9">
+            <div class="input-group">
+              <input class="form-control"
+                     type="password"
+                     placeholder="Confirm password..."
+                     id="confirmpassword"
+                     name="confirmpassword"
+                     formControlName="confirmpassword">
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="confirmpassword">
+                </button>
+              </span>
+            </div>
+            <span class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                  i18n>Password confirmation doesn't match the password.</span>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Full name</label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Full name..."
+                   id="name"
+                   name="name"
+                   formControlName="name">
+          </div>
+        </div>
+
+        <!-- Email -->
+        <div class="form-group"
+             [ngClass]="{'has-error': userForm.showError('email', formDir)}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="email">Email</label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="email"
+                   placeholder="Email..."
+                   id="email"
+                   name="email"
+                   formControlName="email">
+
+            <span class="help-block"
+                  *ngIf="userForm.showError('email', formDir, 'email')"
+                  i18n>Invalid email.</span>
+          </div>
+        </div>
+
+        <!-- Roles -->
+        <label class="col-sm-3 control-label"
+               i18n>Roles</label>
+        <div class="col-sm-9">
+          <span class="form-control no-border full-height"
+                *ngIf="allRoles">
+            <cd-select-badges [data]="userForm.controls.roles.value"
+                              [options]="allRoles"
+                              [messages]="messages"></cd-select-badges>
+          </span>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button
+            [form]="formDir"
+            (submitAction)="submit()"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<ng-template #removeSelfUserReadUpdatePermissionTpl>
+  <p><strong i18n>You are about to remove "user read / update" permissions from your own user.</strong></p>
+  <br>
+  <p i18n>If you continue, you will no longer be able to add or remove roles from any user.</p>
+
+  <ng-container i18n>Are you sure you want to continue?</ng-container>
+</ng-template>

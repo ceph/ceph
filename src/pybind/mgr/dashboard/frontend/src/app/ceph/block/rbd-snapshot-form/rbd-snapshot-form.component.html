@@ -1,0 +1,53 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>{ editing, select, true {Rename} other {Create}} RBD Snapshot</h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form name="snapshotForm"
+      class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="snapshotForm"
+      novalidate>
+  <div class="modal-body">
+
+    <!-- Name -->
+    <div class="form-group"
+         [ngClass]="{'has-error': snapshotForm.showError('snapshotName', formDir)}">
+      <label class="control-label col-sm-3"
+             for="snapshotName">
+        <ng-container i18n>Name</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input class="form-control"
+               type="text"
+               placeholder="Snapshot name..."
+               id="snapshotName"
+               name="snapshotName"
+               formControlName="snapshotName"
+               autofocus>
+        <span class="help-block"
+              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
+              i18n>This field is required.</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="modal-footer">
+    <div class="button-group text-right">
+      <cd-submit-button [form]="snapshotForm"
+                        (submitAction)="submit()"
+                        i18n>{ editing, select, true {Rename} other {Create}} Snapshot</cd-submit-button>
+      <cd-back-button [back]="modalRef.hide"
+                      name="Close"
+                      i18n-name>
+      </cd-back-button>
+    </div>
+  </div>
+</form>

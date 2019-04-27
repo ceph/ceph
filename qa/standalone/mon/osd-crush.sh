@@ -208,9 +208,19 @@ function TEST_crush_rename_bucket() {
     ceph osd crush rename-bucket nonexistent something 2>&1 | grep "Error ENOENT" || return 1
 }
 
-function TEST_crush_reject_empty() {
+function TEST_crush_ls_node() {
     local dir=$1
     run_mon $dir a || return 1
+    ceph osd crush add-bucket default1 root
+    ceph osd crush add-bucket host1 host
+    ceph osd crush move host1 root=default1
+    ceph osd crush ls default1 | grep host1 || return 1
+    ceph osd crush ls default2 2>&1 | grep "Error ENOENT" || return 1
+}
+
+function TEST_crush_reject_empty() {
+    local dir=$1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
     # should have at least one OSD
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1

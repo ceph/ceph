@@ -6,11 +6,13 @@ void test_rgw_add_placement(RGWZoneGroup *zonegroup, RGWZoneParams *zone_params,
 
   RGWZonePlacementInfo& pinfo = zone_params->placement_pools[name];
   pinfo.index_pool = rgw_pool(name + ".index").to_str();
-  pinfo.data_pool = rgw_pool(name + ".data").to_str();
+
+  rgw_pool data_pool(name + ".data");
+  pinfo.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &data_pool, nullptr);
   pinfo.data_extra_pool = rgw_pool(name + ".extra").to_str();
-  
+
   if (is_default) {
-    zonegroup->default_placement = name;
+    zonegroup->default_placement = rgw_placement_rule(name, RGW_STORAGE_CLASS_STANDARD);
   }
 }
 

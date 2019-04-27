@@ -80,7 +80,7 @@ public:
   /**
      Maps an image name from the name in the original trace to the name that should be used when replaying.
      @param image_name name of the image in the original trace
-     @param snap_name name of the snap in the orginal trace
+     @param snap_name name of the snap in the original trace
      @return image name to replay against
    */
   virtual rbd_loc map_image_name(std::string image_name, std::string snap_name) const = 0;

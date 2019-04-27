@@ -207,7 +207,7 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino, std::string_view path)
 
 bool DamageTable::oversized() const
 {
-  return by_id.size() > (size_t)(g_conf->mds_damage_table_max_entries);
+  return by_id.size() > (size_t)(g_conf()->mds_damage_table_max_entries);
 }
 
 bool DamageTable::is_dentry_damaged(
@@ -258,7 +258,7 @@ void DamageTable::erase(damage_entry_id_t damage_id)
   }
 
   DamageEntryRef entry = by_id_entry->second;
-  assert(entry->id == damage_id);  // Sanity
+  ceph_assert(entry->id == damage_id);  // Sanity
 
   const auto type = entry->get_type();
   if (type == DAMAGE_ENTRY_DIRFRAG) {

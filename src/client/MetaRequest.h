@@ -13,8 +13,8 @@
 #include "UserPerm.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
 
-class MClientReply;
 class Dentry;
 class dir_result_t;
 
@@ -49,7 +49,7 @@ public:
   int      retry_attempt;
   std::atomic<uint64_t> ref = { 1 };
   
-  MClientReply *reply;         // the reply
+  ceph::cref_t<MClientReply> reply;         // the reply
   bool kick;
   bool success;
   
@@ -98,7 +98,7 @@ public:
    */
   void abort(int rc)
   {
-    assert(rc != 0);
+    ceph_assert(rc != 0);
     abort_rc = rc;
   }
 
@@ -199,7 +199,7 @@ public:
   }
   bool auth_is_best() {
     if ((head.op & CEPH_MDS_OP_WRITE) || head.op == CEPH_MDS_OP_OPEN ||
-	head.op == CEPH_MDS_OP_READDIR) 
+	head.op == CEPH_MDS_OP_READDIR || send_to_auth) 
       return true;
     return false;    
   }

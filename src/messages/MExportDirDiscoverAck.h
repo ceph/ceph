@@ -19,25 +19,26 @@
 #include "include/types.h"
 
 class MExportDirDiscoverAck : public Message {
+private:
   dirfrag_t dirfrag;
   bool success;
 
  public:
-  inodeno_t get_ino() { return dirfrag.ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  bool is_success() { return success; }
+  inodeno_t get_ino() const { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  bool is_success() const { return success; }
 
-  MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
+protected:
+  MExportDirDiscoverAck() : Message{MSG_MDS_EXPORTDIRDISCOVERACK} {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
-    Message(MSG_MDS_EXPORTDIRDISCOVERACK),
+    Message{MSG_MDS_EXPORTDIRDISCOVERACK},
     dirfrag(df), success(s) {
     set_tid(tid);
   }
-private:
   ~MExportDirDiscoverAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExDisA"; }
+  std::string_view get_type_name() const override { return "ExDisA"; }
   void print(ostream& o) const override {
     o << "export_discover_ack(" << dirfrag;
     if (success) 
@@ -47,7 +48,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(success, p);
   }
@@ -56,6 +57,9 @@ public:
     encode(dirfrag, payload);
     encode(success, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -22,15 +22,14 @@
 #include "include/types.h"
 
 
-
 class MMgrBeacon : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 7;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 8;
 
 protected:
   uint64_t gid;
-  entity_addr_t server_addr;
+  entity_addrvec_t server_addrs;
   bool available;
   std::string name;
   uuid_d fsid;
@@ -48,27 +47,25 @@ protected:
 
 public:
   MMgrBeacon()
-    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(0), available(false)
-  {
-  }
+  {}
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
-             entity_addr_t server_addr_, bool available_,
+             entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     map<string,string>&& metadata_)
-    : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
-      gid(gid_), server_addr(server_addr_), available(available_), name(name_),
+    : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
+      gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_))
   {
   }
 
   uint64_t get_gid() const { return gid; }
-  entity_addr_t get_server_addr() const { return server_addr; }
+  entity_addrvec_t get_server_addrs() const { return server_addrs; }
   bool get_available() const { return available; }
   const std::string& get_name() const { return name; }
   const uuid_d& get_fsid() const { return fsid; }
-  std::vector<MgrMap::ModuleInfo>& get_modules() { return modules; }
   const std::map<std::string,std::string>& get_metadata() const {
     return metadata;
   }
@@ -102,19 +99,27 @@ private:
 
 public:
 
-  const char *get_type_name() const override { return "mgrbeacon"; }
+  std::string_view get_type_name() const override { return "mgrbeacon"; }
 
   void print(ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << fsid << ","
-	<< gid << ", " << server_addr << ", " << available
+	<< gid << ", " << server_addrs << ", " << available
 	<< ")";
   }
 
   void encode_payload(uint64_t features) override {
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
     using ceph::encode;
     paxos_encode();
 
-    encode(server_addr, payload, features);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = 7;
+      header.compat_version = 1;
+      encode(server_addrs.legacy_addr(), payload, features);
+    } else {
+      encode(server_addrs, payload, features);
+    }
     encode(gid, payload);
     encode(available, payload);
     encode(name, payload);
@@ -135,9 +140,9 @@ public:
     encode(modules, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    decode(server_addr, p);
+    decode(server_addrs, p);  // entity_addr_t for version < 8
     decode(gid, p);
     decode(available, p);
     decode(name, p);
@@ -170,6 +175,9 @@ public:
       decode(modules, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

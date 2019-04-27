@@ -28,7 +28,7 @@ void TestMockFixture::SetUpTestCase() {
 
   // use a mock version of the in-memory cluster
   librados_test_stub::set_cluster(boost::shared_ptr<librados::TestCluster>(
-    new librados::MockTestMemCluster()));
+    new ::testing::NiceMock<librados::MockTestMemCluster>()));
   TestFixture::SetUpTestCase();
 }
 
@@ -45,6 +45,8 @@ void TestMockFixture::TearDown() {
 
   ::testing::Mock::VerifyAndClear(mock_rados_client);
   mock_rados_client->default_to_dispatch();
+  dynamic_cast<librados::MockTestMemCluster*>(
+    librados_test_stub::get_cluster().get())->default_to_dispatch();
 
   TestFixture::TearDown();
 }

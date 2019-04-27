@@ -89,7 +89,7 @@ bool ReplayStatusFormatter<I>::get_or_send_update(std::string *description,
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_on_finish == on_finish);
+    ceph_assert(m_on_finish == on_finish);
     m_on_finish = nullptr;
   }
 
@@ -162,7 +162,7 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
       std::swap(m_on_finish, on_finish);
     }
 
-    assert(on_finish);
+    ceph_assert(on_finish);
     on_finish->complete(0);
     return;
   }
@@ -189,7 +189,7 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
   } else {
     dout(20) << "retrieved tag " << master_tag_tid << ": " << m_tag << dendl;
 
-    bufferlist::iterator it = m_tag.data.begin();
+    auto it = m_tag.data.cbegin();
     try {
       decode(tag_data, it);
     } catch (const buffer::error &err) {

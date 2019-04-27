@@ -30,10 +30,10 @@ public:
   };
 
   struct Discard {
-    bool skip_partial_discard;
+    uint32_t discard_granularity_bytes;
 
-    Discard(bool skip_partial_discard)
-      : skip_partial_discard(skip_partial_discard) {
+    Discard(uint32_t discard_granularity_bytes)
+      : discard_granularity_bytes(discard_granularity_bytes) {
     }
   };
 
@@ -64,6 +64,10 @@ public:
   };
 
   struct Flush {
+    FlushSource flush_source;
+
+    Flush(FlushSource flush_source) : flush_source(flush_source) {
+    }
   };
 
   static ImageDispatchSpec* create_read_request(
@@ -71,32 +75,32 @@ public:
       ReadResult &&read_result, int op_flags,
       const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp,
-                                  std::move(image_extents),
-                                  Read{std::move(read_result)},
-                                  op_flags, parent_trace);
+                                 std::move(image_extents),
+                                 Read{std::move(read_result)},
+                                 op_flags, parent_trace);
   }
 
   static ImageDispatchSpec* create_discard_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bool skip_partial_discard, const ZTracer::Trace &parent_trace) {
+      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
-                                  Discard{skip_partial_discard}, 0,
-                                  parent_trace);
+                                 Discard{discard_granularity_bytes},
+                                 0, parent_trace);
   }
 
   static ImageDispatchSpec* create_write_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, Extents &&image_extents,
       bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, std::move(image_extents),
-                                  Write{std::move(bl)}, op_flags, parent_trace);
+                                 Write{std::move(bl)}, op_flags, parent_trace);
   }
 
   static ImageDispatchSpec* create_write_same_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
       bufferlist &&bl, int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
-                                  WriteSame{std::move(bl)}, op_flags,
-                                  parent_trace);
+                                 WriteSame{std::move(bl)}, op_flags,
+                                 parent_trace);
   }
 
   static ImageDispatchSpec* create_compare_and_write_request(
@@ -104,18 +108,18 @@ public:
       bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
       int op_flags, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp,
-                                  std::move(image_extents),
-                                  CompareAndWrite{std::move(cmp_bl),
-                                                  std::move(bl),
-                                                  mismatch_offset},
-                                  op_flags, parent_trace);
+                                 std::move(image_extents),
+                                 CompareAndWrite{std::move(cmp_bl),
+                                                 std::move(bl),
+                                                 mismatch_offset},
+                                 op_flags, parent_trace);
   }
 
   static ImageDispatchSpec* create_flush_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp,
-      const ZTracer::Trace &parent_trace) {
-    return new ImageDispatchSpec(image_ctx, aio_comp, {}, Flush{}, 0,
-                                  parent_trace);
+      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+    return new ImageDispatchSpec(image_ctx, aio_comp, {}, Flush{flush_source},
+                                 0, parent_trace);
   }
 
   void send();
@@ -125,11 +129,18 @@ public:
 
   void start_op();
 
-  bool was_throttled() {
-    return m_throttled;
+  bool tokens_requested(uint64_t flag, uint64_t *tokens);
+
+  bool was_throttled(uint64_t flag) {
+    return m_throttled_flag & flag;
   }
-  void set_throttled() {
-    m_throttled = true;
+
+  void set_throttled(uint64_t flag) {
+    m_throttled_flag |= flag;
+  }
+
+  bool were_all_throttled() {
+    return (m_throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
   }
 
 private:
@@ -142,6 +153,7 @@ private:
 
   struct SendVisitor;
   struct IsWriteOpVisitor;
+  struct TokenRequestedVisitor;
 
   ImageDispatchSpec(ImageCtxT& image_ctx, AioCompletion* aio_comp,
                      Extents&& image_extents, Request&& request,
@@ -157,9 +169,9 @@ private:
   Request m_request;
   int m_op_flags;
   ZTracer::Trace m_parent_trace;
+  std::atomic<uint64_t> m_throttled_flag = 0;
 
-  bool m_throttled = false;
-
+  uint64_t extents_length();
 };
 
 } // namespace io

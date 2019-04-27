@@ -8,7 +8,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7227" # git grep '\<7227\>' : there must be only one
+    export CEPH_MON="127.0.0.1:$(get_unused_port)"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -44,7 +44,7 @@ function TEST_safe_to_destroy() {
     flush_pg_stats
     wait_for_clean
 
-    expect_failure $dir 'pgs currently' osd safe-to-destroy 0
+    expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 0
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 1
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 2
     expect_failure $dir 'pgs currently' ceph osd safe-to-destroy 3

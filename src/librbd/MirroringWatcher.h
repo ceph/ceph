@@ -5,14 +5,11 @@
 #define CEPH_LIBRBD_MIRRORING_WATCHER_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Watcher.h"
 #include "librbd/mirroring_watcher/Types.h"
-
-namespace librados {
-  class IoCtx;
-}
 
 namespace librbd {
 

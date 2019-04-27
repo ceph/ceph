@@ -25,7 +25,7 @@ function main {
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--no-cache] <branch>[:sha1] <enviornment>\n' "$0"
+                printf '%s: [--no-cache] <branch>[:sha1] <environment>\n' "$0"
                 exit 0
                 ;;
             --no-cache)
@@ -48,8 +48,9 @@ function main {
     else
         branch="$1"
     fi
-    sha=${branch##*:}
-    if [ -z "$sha" ]; then
+    if [ "${branch%%:*}" != "${branch}" ]; then
+        sha=${branch##*:}
+    else
         sha=latest
     fi
     branch=${branch%%:*}
@@ -74,7 +75,7 @@ function main {
         user="$(whoami)"
     fi
 
-    image="${user}/ceph-ci:${branch}:${sha}-${env/:/-}"
+    tag="${user}:ceph-ci-${branch}-${sha}-${env/:/-}"
 
     T=$(mktemp -d)
     pushd "$T"
@@ -86,16 +87,16 @@ FROM ${env}
 
 WORKDIR /root
 RUN apt-get update --yes --quiet && \
-    apt-get install --yes --quiet screen wget gdb software-properties-common python-software-properties apt-transport-https
+    apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl
 COPY cephdev.asc cephdev.asc
-RUN apt-key add cephdev.asc
-RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo)" && \
+RUN apt-key add cephdev.asc && \
+    curl -L https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo | tee /etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
-    apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
-        time run docker build $CACHE --tag "$image" .
+        time run docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
-        time run docker build $CACHE --tag "$image" - <<EOF
+        time run docker build $CACHE --tag "$tag" - <<EOF
 FROM ${env}
 
 WORKDIR /root
@@ -104,15 +105,15 @@ RUN yum update -y && \
 RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/centos/7/repo && \
     yum clean all && \
     yum upgrade -y && \
-    yum install -y ceph ceph-debuginfo ceph-fuse
+    yum install -y ceph ceph-debuginfo ceph-fuse python34-rados python34-cephfs
 EOF
     fi
     popd
     rm -rf -- "$T"
 
-    printf "built image %s\n" "$image"
+    printf "built image %s\n" "$tag"
 
-    run docker run -ti -v /ceph:/ceph:ro "$image"
+    run docker run -ti -v /ceph:/ceph:ro "$tag"
     return 0
 }
 

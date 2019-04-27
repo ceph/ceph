@@ -26,10 +26,11 @@
  */
 class PyModuleRunner
 {
-protected:
+public:
   // Info about the module we're going to run
   PyModuleRef py_module;
 
+protected:
   // Populated by descendent class
   PyObject *pClassInstance = nullptr;
 
@@ -40,27 +41,37 @@ protected:
     PyModuleRunner *mod;
 
   public:
-    PyModuleRunnerThread(PyModuleRunner *mod_)
+    explicit PyModuleRunnerThread(PyModuleRunner *mod_)
       : mod(mod_) {}
 
     void *entry() override;
   };
 
+  std::string thread_name;
 
 public:
   int serve();
   void shutdown();
   void log(int level, const std::string &record);
 
+  const char *get_thread_name() const
+  {
+    return thread_name.c_str();
+  }
+
   PyModuleRunner(
-      PyModuleRef py_module_,
+      const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : 
       py_module(py_module_),
       clog(clog_),
       thread(this)
   {
-    assert(py_module != nullptr);
+    // Shortened name for use as thread name, because thread names
+    // required to be <16 chars
+    thread_name = py_module->get_name().substr(0, 15);
+
+    ceph_assert(py_module != nullptr);
   }
 
   ~PyModuleRunner();

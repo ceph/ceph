@@ -16,10 +16,10 @@
 #include "msg/Message.h"
 #include "mon/mon_types.h"
 
-class MMonScrub : public Message
-{
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 2;
+class MMonScrub : public Message {
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
 
 public:
   typedef enum {
@@ -31,7 +31,7 @@ public:
     switch (op) {
     case OP_SCRUB: return "scrub";
     case OP_RESULT: return "result";
-    default: assert(0 == "unknown op type"); return NULL;
+    default: ceph_abort_msg("unknown op type"); return NULL;
     }
   }
 
@@ -42,16 +42,16 @@ public:
   pair<string,string> key;
 
   MMonScrub()
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION},
       num_keys(-1)
   { }
 
   MMonScrub(op_type_t op, version_t v, int32_t num_keys)
-    : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION},
       op(op), version(v), num_keys(num_keys)
   { }
 
-  const char *get_type_name() const override { return "mon_scrub"; }
+  std::string_view get_type_name() const override { return "mon_scrub"; }
 
   void print(ostream& out) const override {
     out << "mon_scrub(" << get_opname((op_type_t)op);
@@ -74,7 +74,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     uint8_t o;
     decode(o, p);
     op = (op_type_t)o;
@@ -83,6 +83,9 @@ public:
     decode(num_keys, p);
     decode(key, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif /* CEPH_MMONSCRUB_H */

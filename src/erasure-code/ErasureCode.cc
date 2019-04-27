@@ -15,8 +15,8 @@
  * 
  */
 
-#include <errno.h>
 #include <algorithm>
+#include <cerrno>
 
 #include "ErasureCode.h"
 
@@ -25,11 +25,21 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
-
-const unsigned ErasureCode::SIMD_ALIGN = 32;
-
 #define DEFAULT_RULE_ROOT "default"
 #define DEFAULT_RULE_FAILURE_DOMAIN "host"
+
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
+namespace ceph {
+const unsigned ErasureCode::SIMD_ALIGN = 32;
 
 int ErasureCode::init(
   ErasureCodeProfile &profile,
@@ -72,14 +82,17 @@ int ErasureCode::create_rule(
   return ruleid;
 }
 
-int ErasureCode::sanity_check_k(int k, ostream *ss)
+int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
 {
   if (k < 2) {
     *ss << "k=" << k << " must be >= 2" << std::endl;
     return -EINVAL;
-  } else {
-    return 0;
   }
+  if (m < 1) {
+    *ss << "m=" << m << " must be >= 1" << std::endl;
+    return -EINVAL;
+  }
+  return 0;
 }
 
 int ErasureCode::chunk_index(unsigned int i) const
@@ -148,7 +161,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, i * blocksize, blocksize);
     chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
-    assert(chunk.is_contiguous());
+    ceph_assert(chunk.is_contiguous());
   }
   if (padded_chunks) {
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
@@ -193,7 +206,7 @@ int ErasureCode::encode(const set<int> &want_to_encode,
 int ErasureCode::encode_chunks(const set<int> &want_to_encode,
                                map<int, bufferlist> *encoded)
 {
-  assert("ErasureCode::encode_chunks not implemented" == 0);
+  ceph_abort_msg("ErasureCode::encode_chunks not implemented");
 }
  
 int ErasureCode::_decode(const set<int> &want_to_read,
@@ -221,8 +234,11 @@ int ErasureCode::_decode(const set<int> &want_to_read,
   unsigned blocksize = (*chunks.begin()).second.length();
   for (unsigned int i =  0; i < k + m; i++) {
     if (chunks.find(i) == chunks.end()) {
+      bufferlist tmp;
       bufferptr ptr(buffer::create_aligned(blocksize, SIMD_ALIGN));
-      (*decoded)[i].push_front(ptr);
+      tmp.push_back(ptr);
+      tmp.claim_append((*decoded)[i]);
+      (*decoded)[i].swap(tmp);
     } else {
       (*decoded)[i] = chunks.find(i)->second;
       (*decoded)[i].rebuild_aligned(SIMD_ALIGN);
@@ -242,7 +258,7 @@ int ErasureCode::decode_chunks(const set<int> &want_to_read,
                                const map<int, bufferlist> &chunks,
                                map<int, bufferlist> *decoded)
 {
-  assert("ErasureCode::decode_chunks not implemented" == 0);
+  ceph_abort_msg("ErasureCode::decode_chunks not implemented");
 }
 
 int ErasureCode::parse(const ErasureCodeProfile &profile,
@@ -342,4 +358,5 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
     }
   }
   return r;
+}
 }

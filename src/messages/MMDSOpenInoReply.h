@@ -17,19 +17,23 @@
 
 #include "msg/Message.h"
 
-struct MMDSOpenInoReply : public Message {
+class MMDSOpenInoReply : public Message {
+public:
   inodeno_t ino;
   vector<inode_backpointer_t> ancestors;
   mds_rank_t hint;
   int32_t error;
 
-  MMDSOpenInoReply() : Message(MSG_MDS_OPENINOREPLY), error(0) {}
+protected:
+  MMDSOpenInoReply() : Message{MSG_MDS_OPENINOREPLY}, error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    Message(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
+    Message{MSG_MDS_OPENINOREPLY}, ino(i), hint(h), error(e) {
     header.tid = t;
   }
 
-  const char *get_type_name() const override { return "openinoreply"; }
+
+public:
+  std::string_view get_type_name() const override { return "openinoreply"; }
   void print(ostream &out) const override {
     out << "openinoreply(" << header.tid << " "
 	<< ino << " " << hint << " " << ancestors << ")";
@@ -43,12 +47,15 @@ struct MMDSOpenInoReply : public Message {
     encode(error, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(ancestors, p);
     decode(hint, p);
     decode(error, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

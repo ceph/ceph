@@ -6,7 +6,7 @@
 
 When you create pools and set the number of placement groups for the pool, Ceph
 uses default values when you don't specifically override the defaults. **We
-recommend** overridding some of the defaults. Specifically, we recommend setting
+recommend** overriding some of the defaults. Specifically, we recommend setting
 a pool's replica size and overriding the default number of placement groups. You
 can specifically set these values when running `pool`_ commands. You can also
 override the defaults by adding new ones in the ``[global]`` section of  your
@@ -96,8 +96,8 @@ Ceph configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the average object number
               of a certain pool is greater than ``mon pg warn max object skew`` times
-              the average object number of the whole pool. (a non-positive number
-              disables this)
+              the average object number of the whole pool. (zero or a non-positive
+              number disables this). Note that this option applies to the managers.
 :Type: Float
 :Default: ``10``
 
@@ -263,6 +263,20 @@ Ceph configuration file.
 
 :Type: Float
 :Default: ``2``
+
+``osd recovery priority``
+
+:Description: Priority of recovery in the work queue.
+
+:Type: Integer
+:Default: ``5``
+
+``osd recovery op priority``
+
+:Description: Default priority used for recovery operations if pool doesn't override.
+
+:Type: Integer
+:Default: ``3``
 
 .. _pool: ../../operations/pools
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering

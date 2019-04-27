@@ -29,16 +29,22 @@ struct SnapInfo {
   utime_t stamp;
   string name;
 
-  string long_name; ///< cached _$ino_$name
+  mutable string long_name; ///< cached _$ino_$name
   
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<SnapInfo*>& ls);
+  static void generate_test_instances(std::list<SnapInfo*>& ls);
 
-  std::string_view get_long_name();
+  std::string_view get_long_name() const;
 };
 WRITE_CLASS_ENCODER(SnapInfo)
+
+inline bool operator==(const SnapInfo &l, const SnapInfo &r)
+{
+  return l.snapid == r.snapid && l.ino == r.ino &&
+	 l.stamp == r.stamp && l.name == r.name;
+}
 
 ostream& operator<<(ostream& out, const SnapInfo &sn);
 
@@ -59,9 +65,9 @@ struct snaplink_t {
   snapid_t first;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<snaplink_t*>& ls);
+  static void generate_test_instances(std::list<snaplink_t*>& ls);
 };
 WRITE_CLASS_ENCODER(snaplink_t)
 
@@ -77,17 +83,27 @@ struct sr_t {
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
+  set<snapid_t> past_parent_snaps;
+
+  __u32 flags;
+  enum {
+    PARENT_GLOBAL = 1 << 0,
+  };
+
+  void mark_parent_global() { flags |= PARENT_GLOBAL; }
+  void clear_parent_global() { flags &= ~PARENT_GLOBAL; }
+  bool is_parent_global() const { return flags & PARENT_GLOBAL; }
 
   sr_t()
     : seq(0), created(0),
       last_created(0), last_destroyed(0),
-      current_parent_since(1)
+      current_parent_since(1), flags(0)
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<sr_t*>& ls);
+  static void generate_test_instances(std::list<sr_t*>& ls);
 };
 WRITE_CLASS_ENCODER(sr_t)
 

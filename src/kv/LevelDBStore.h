@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -23,14 +22,14 @@
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Formatter.h"
 #include "common/Cond.h"
 
 #include "common/ceph_context.h"
 
 // reinclude our assert to clobber the system one
-# include "include/assert.h"
+# include "include/ceph_assert.h"
 
 class PerfCounters;
 
@@ -97,6 +96,10 @@ class LevelDBStore : public KeyValueDB {
 public:
   /// compact the underlying leveldb store
   void compact() override;
+
+  void compact_async() override {
+    compact_range_async(string(), string());
+  }
 
   /// compact db for all keys with a given prefix
   void compact_prefix(const string& prefix) override {

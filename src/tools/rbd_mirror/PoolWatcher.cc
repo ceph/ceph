@@ -69,7 +69,7 @@ private:
 
 template <typename I>
 PoolWatcher<I>::PoolWatcher(Threads<I> *threads, librados::IoCtx &remote_io_ctx,
-                            Listener &listener)
+                            pool_watcher::Listener &listener)
   : m_threads(threads), m_remote_io_ctx(remote_io_ctx), m_listener(listener),
     m_lock(librbd::util::unique_lock_name("rbd::mirror::PoolWatcher", this)) {
   m_mirroring_watcher = new MirroringWatcher(m_remote_io_ctx,
@@ -95,7 +95,7 @@ void PoolWatcher<I>::init(Context *on_finish) {
     Mutex::Locker locker(m_lock);
     m_on_init_finish = on_finish;
 
-    assert(!m_refresh_in_progress);
+    ceph_assert(!m_refresh_in_progress);
     m_refresh_in_progress = true;
   }
 
@@ -111,7 +111,7 @@ void PoolWatcher<I>::shut_down(Context *on_finish) {
     Mutex::Locker timer_locker(m_threads->timer_lock);
     Mutex::Locker locker(m_lock);
 
-    assert(!m_shutting_down);
+    ceph_assert(!m_shutting_down);
     m_shutting_down = true;
     if (m_timer_ctx != nullptr) {
       m_threads->timer->cancel_event(m_timer_ctx);
@@ -129,8 +129,8 @@ template <typename I>
 void PoolWatcher<I>::register_watcher() {
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ids_invalid);
-    assert(m_refresh_in_progress);
+    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_refresh_in_progress);
   }
 
   // if the watch registration is in-flight, let the watcher
@@ -155,8 +155,8 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ids_invalid);
-    assert(m_refresh_in_progress);
+    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_refresh_in_progress);
     if (r < 0) {
       m_refresh_in_progress = false;
     }
@@ -174,6 +174,9 @@ void PoolWatcher<I>::handle_register_watcher(int r) {
   } else if (r == -ENOENT) {
     dout(5) << "mirroring directory does not exist" << dendl;
     schedule_refresh_images(30);
+
+    Mutex::Locker locker(m_lock);
+    std::swap(on_init_finish, m_on_init_finish);
   } else {
     derr << "unexpected error registering mirroring directory watch: "
          << cpp_strerror(r) << dendl;
@@ -210,8 +213,8 @@ void PoolWatcher<I>::refresh_images() {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ids_invalid);
-    assert(m_refresh_in_progress);
+    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_refresh_in_progress);
 
     // clear all pending notification events since we need to perform
     // a full image list refresh
@@ -237,8 +240,8 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
   Context *on_init_finish = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ids_invalid);
-    assert(m_refresh_in_progress);
+    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_refresh_in_progress);
 
     if (r >= 0) {
       m_pending_image_ids = std::move(m_refresh_image_ids);
@@ -269,7 +272,7 @@ void PoolWatcher<I>::handle_refresh_images(int r) {
 
   m_async_op_tracker.finish_op();
   if (on_init_finish != nullptr) {
-    assert(r == -EBLACKLISTED);
+    ceph_assert(r == -EBLACKLISTED);
     on_init_finish->complete(r);
   }
 }
@@ -285,7 +288,7 @@ void PoolWatcher<I>::get_mirror_uuid() {
   librados::AioCompletion *aio_comp = create_rados_callback<
     PoolWatcher, &PoolWatcher<I>::handle_get_mirror_uuid>(this);
   int r = m_remote_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -298,13 +301,13 @@ void PoolWatcher<I>::handle_get_mirror_uuid(int r) {
   Context *on_init_finish = nullptr;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ids_invalid);
-    assert(m_refresh_in_progress);
+    ceph_assert(m_image_ids_invalid);
+    ceph_assert(m_refresh_in_progress);
     m_refresh_in_progress = false;
 
     m_pending_mirror_uuid = "";
     if (r >= 0) {
-      bufferlist::iterator it = m_out_bl.begin();
+      auto it = m_out_bl.cbegin();
       r = librbd::cls_client::mirror_uuid_get_finish(
         &it, &m_pending_mirror_uuid);
     }
@@ -413,13 +416,13 @@ void PoolWatcher<I>::handle_image_updated(const std::string &remote_image_id,
 
 template <typename I>
 void PoolWatcher<I>::process_refresh_images() {
-  assert(m_threads->timer_lock.is_locked());
-  assert(m_timer_ctx != nullptr);
+  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(m_timer_ctx != nullptr);
   m_timer_ctx = nullptr;
 
   {
     Mutex::Locker locker(m_lock);
-    assert(!m_refresh_in_progress);
+    ceph_assert(!m_refresh_in_progress);
     m_refresh_in_progress = true;
     m_deferred_refresh = false;
   }
@@ -435,7 +438,7 @@ void PoolWatcher<I>::process_refresh_images() {
 
 template <typename I>
 void PoolWatcher<I>::schedule_listener() {
-  assert(m_lock.is_locked());
+  ceph_assert(m_lock.is_locked());
   m_pending_updates = true;
   if (m_shutting_down || m_image_ids_invalid || m_notify_listener_in_progress) {
     return;
@@ -462,7 +465,7 @@ void PoolWatcher<I>::notify_listener() {
   ImageIds removed_image_ids;
   {
     Mutex::Locker locker(m_lock);
-    assert(m_notify_listener_in_progress);
+    ceph_assert(m_notify_listener_in_progress);
 
     // if the mirror uuid is updated, treat it as the removal of all
     // images in the pool
@@ -486,7 +489,7 @@ void PoolWatcher<I>::notify_listener() {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_notify_listener_in_progress);
+    ceph_assert(m_notify_listener_in_progress);
 
     // if the watch failed while we didn't own the lock, we are going
     // to need to perform a full refresh

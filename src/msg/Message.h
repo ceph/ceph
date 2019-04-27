@@ -14,26 +14,25 @@
 
 #ifndef CEPH_MESSAGE_H
 #define CEPH_MESSAGE_H
- 
-#include <stdlib.h>
+
+#include <cstdlib>
 #include <ostream>
+#include <string_view>
 
-#include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
-// Because intrusive_ptr clobbers our assert...
-#include "include/assert.h"
 
-#include "include/types.h"
-#include "include/buffer.h"
-#include "common/Throttle.h"
-#include "common/zipkin_trace.h"
-#include "msg_types.h"
-
+#include "include/Context.h"
 #include "common/RefCountedObj.h"
-#include "msg/Connection.h"
-
-#include "common/debug.h"
+#include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "common/zipkin_trace.h"
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/buffer.h"
+#include "include/types.h"
+#include "msg/Connection.h"
+#include "msg/MessageRef.h"
+#include "msg_types.h"
 
 // monitor internal
 #define MSG_MON_SCRUB              64
@@ -58,6 +57,9 @@
 #define MSG_FORWARD                46
 
 #define MSG_PAXOS                  40
+
+#define MSG_CONFIG           62
+#define MSG_GET_CONFIG       63
 
 
 // osd internal
@@ -122,6 +124,10 @@
 #define MSG_OSD_REP_SCRUBMAP    117
 #define MSG_OSD_PG_RECOVERY_DELETE 118
 #define MSG_OSD_PG_RECOVERY_DELETE_REPLY 119
+#define MSG_OSD_PG_CREATE2      120
+#define MSG_OSD_SCRUB2          121
+
+#define MSG_OSD_PG_READY_TO_MERGE 122
 
 // *** MDS ***
 
@@ -147,7 +153,8 @@
 #define MSG_MDS_FINDINOREPLY       0x20e
 #define MSG_MDS_OPENINO            0x20f
 #define MSG_MDS_OPENINOREPLY       0x210
-
+#define MSG_MDS_SNAPUPDATE         0x211
+#define MSG_MDS_FRAGMENTNOTIFYACK  0x212
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
 
@@ -172,7 +179,7 @@
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
-//#define MSG_MON_HEALTH            0x601  // remove post-luminous
+#define MSG_MON_HEALTH            0x601
 
 // *** Message::encode() crcflags bits ***
 #define MSG_CRC_DATA           (1 << 0)
@@ -180,14 +187,14 @@
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
 // Xio Testing
-#define MSG_DATA_PING		  0x602
-
+//#define MSG_DATA_PING		  0x602
 // Xio intends to define messages 0x603..0x606
 
 // Special
 #define MSG_NOP                   0x607
 
 #define MSG_MON_HEALTH_CHECKS     0x608
+#define MSG_TIMECHECK2            0x609
 
 // *** ceph-mgr <-> OSD/MDS daemons ***
 #define MSG_MGR_OPEN              0x700
@@ -206,11 +213,11 @@
 #define MSG_MON_MGR_REPORT        0x706
 #define MSG_SERVICE_MAP           0x707
 
+#define MSG_MGR_CLOSE             0x708
+
 // ======================================================
 
 // abstract Message class
-
-namespace bi = boost::intrusive;
 
 // XioMessenger conditional trace flags
 #define MSG_MAGIC_XIO          0x0002
@@ -228,9 +235,9 @@ class Message : public RefCountedObject {
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
-  bufferlist       payload;  // "front" unaligned blob
-  bufferlist       middle;   // "middle" unaligned blob
-  bufferlist       data;     // data payload (page-alignment will be preserved where possible)
+  ceph::buffer::list       payload;  // "front" unaligned blob
+  ceph::buffer::list       middle;   // "middle" unaligned blob
+  ceph::buffer::list       data;     // data payload (page-alignment will be preserved where possible)
 
   /* recv_stamp is set when the Messenger starts reading the
    * Message off the wire */
@@ -247,13 +254,13 @@ protected:
 
   uint32_t magic = 0;
 
-  bi::list_member_hook<> dispatch_q;
+  boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
   // zipkin tracing
   ZTracer::Trace trace;
-  void encode_trace(bufferlist &bl, uint64_t features) const;
-  void decode_trace(bufferlist::iterator &p, bool create = false);
+  void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
+  void decode_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {
   protected:
@@ -264,20 +271,22 @@ public:
     virtual void set_message(Message *_m) { m = _m; }
   };
 
-  typedef bi::list< Message,
-		    bi::member_hook< Message,
-				     bi::list_member_hook<>,
-				     &Message::dispatch_q > > Queue;
+  typedef boost::intrusive::list<Message,
+				 boost::intrusive::member_hook<
+				   Message,
+				   boost::intrusive::list_member_hook<>,
+				   &Message::dispatch_q>> Queue;
 
+  ceph::mono_time queue_start;
 protected:
   CompletionHook* completion_hook = nullptr; // owned by Messenger
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler = nullptr;
+  ThrottleInterface *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler = nullptr;
+  ThrottleInterface *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
@@ -324,10 +333,12 @@ public:
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
   void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
-  void set_byte_throttler(Throttle *t) { byte_throttler = t; }
-  Throttle *get_byte_throttler() { return byte_throttler; }
-  void set_message_throttler(Throttle *t) { msg_throttler = t; }
-  Throttle *get_message_throttler() { return msg_throttler; }
+  void set_byte_throttler(ThrottleInterface *t) {
+    byte_throttler = t;
+  }
+  void set_message_throttler(ThrottleInterface *t) {
+    msg_throttler = t;
+  }
 
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() const { return dispatch_throttle_size; }
@@ -345,7 +356,7 @@ public:
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
-   * use it to change those bufferlists unless you KNOW
+   * use it to change those ceph::buffer::lists unless you KNOW
    * there is no throttle being used. The other
    * functions are throttling-aware as appropriate.
    */
@@ -372,25 +383,26 @@ public:
   }
 
   bool empty_payload() const { return payload.length() == 0; }
-  bufferlist& get_payload() { return payload; }
-  void set_payload(bufferlist& bl) {
+  ceph::buffer::list& get_payload() { return payload; }
+  const ceph::buffer::list& get_payload() const { return payload; }
+  void set_payload(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    payload.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
 
-  void set_middle(bufferlist& bl) {
+  void set_middle(ceph::buffer::list& bl) {
     if (byte_throttler)
       byte_throttler->put(middle.length());
-    middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+    middle.claim(bl, ceph::buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(middle.length());
   }
-  bufferlist& get_middle() { return middle; }
+  ceph::buffer::list& get_middle() { return middle; }
 
-  void set_data(const bufferlist &bl) {
+  void set_data(const ceph::buffer::list &bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
     data.share(bl);
@@ -398,10 +410,10 @@ public:
       byte_throttler->take(data.length());
   }
 
-  const bufferlist& get_data() const { return data; }
-  bufferlist& get_data() { return data; }
-  void claim_data(bufferlist& bl,
-		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
+  const ceph::buffer::list& get_data() const { return data; }
+  ceph::buffer::list& get_data() { return data; }
+  void claim_data(ceph::buffer::list& bl,
+		  unsigned int flags = ceph::buffer::list::CLAIM_DEFAULT) {
     if (byte_throttler)
       byte_throttler->put(data.length());
     bl.claim(data, flags);
@@ -458,6 +470,11 @@ public:
       return connection->get_peer_addr();
     return entity_addr_t();
   }
+  entity_addrvec_t get_source_addrs() const {
+    if (connection)
+      return connection->get_peer_addrs();
+    return entity_addrvec_t();
+  }
 
   // forwarded?
   entity_inst_t get_orig_source_inst() const {
@@ -469,35 +486,70 @@ public:
   entity_addr_t get_orig_source_addr() const {
     return get_source_addr();
   }
+  entity_addrvec_t get_orig_source_addrs() const {
+    return get_source_addrs();
+  }
 
   // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
-  virtual const char *get_type_name() const = 0;
-  virtual void print(ostream& out) const {
+  virtual std::string_view get_type_name() const = 0;
+  virtual void print(std::ostream& out) const {
     out << get_type_name() << " magic: " << magic;
   }
 
-  virtual void dump(Formatter *f) const;
+  virtual void dump(ceph::Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
+  void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
-typedef boost::intrusive_ptr<Message> MessageRef;
 
 extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
-			       ceph_msg_footer& footer, bufferlist& front,
-			       bufferlist& middle, bufferlist& data,
+			       ceph_msg_footer& footer, ceph::buffer::list& front,
+			       ceph::buffer::list& middle, ceph::buffer::list& data,
 			       Connection* conn);
-inline ostream& operator<<(ostream& out, const Message& m) {
+inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)
     out << " v" << m.get_header().version;
   return out;
 }
 
-extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
+extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               bufferlist::iterator& bl);
+                               ceph::buffer::list::const_iterator& bl);
+
+/// this is a "safe" version of Message. it does not allow calling get/put
+/// methods on its derived classes. This is intended to prevent some accidental
+/// reference leaks by forcing . Instead, you must either cast the derived class to a
+/// RefCountedObject to do the get/put or detach a temporary reference.
+class SafeMessage : public Message {
+public:
+  using Message::Message;
+private:
+  using RefCountedObject::get;
+  using RefCountedObject::put;
+};
+
+namespace ceph {
+template<typename T> using ref_t = boost::intrusive_ptr<T>;
+template<typename T> using cref_t = boost::intrusive_ptr<const T>;
+template<class T, class U>
+boost::intrusive_ptr<T> ref_cast(const boost::intrusive_ptr<U>& r) noexcept {
+  return static_cast<T*>(r.get());
+}
+template<class T, class U>
+boost::intrusive_ptr<T> ref_cast(boost::intrusive_ptr<U>&& r) noexcept {
+  return {static_cast<T*>(r.detach()), false};
+}
+template<class T, class U>
+boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
+  return static_cast<const T*>(r.get());
+}
+template<class T, typename... Args>
+boost::intrusive_ptr<T> make_message(Args&&... args) {
+  return {new T(std::forward<Args>(args)...), false};
+}
+}
 
 #endif

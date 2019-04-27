@@ -79,10 +79,10 @@ and not done in new code.  Do not ever alter g_conf.
 Changing configuration values
 ====================================================
 
-Configuration values can be changed by calling g_conf->set_val. After changing
-the configuration, you should call g_conf->apply_changes to re-run all the
+Configuration values can be changed by calling ``g_conf()->set_val``. After changing
+the configuration, you should call ``g_conf()->apply_changes`` to re-run all the
 affected configuration observers. For convenience, you can call
-g_conf->set_val_or_die to make a configuration change which you think should
+``g_conf()->set_val_or_die`` to make a configuration change which you think should
 never fail.
 
 Injectargs, parse_argv, and parse_env are three other functions which modify
@@ -122,7 +122,7 @@ Default values
 
 There is a default value for every config option. In some cases, there may
 also be a *daemon default* that only applies to code that declares itself
-as a daemon (in thise case, the regular default only applies to non-daemons).
+as a daemon (in this case, the regular default only applies to non-daemons).
 
 Safety
 ------
@@ -155,3 +155,12 @@ Enums
 For options with a defined set of allowed values::
 
   .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
+
+Flags
+-----
+
+* **RUNTIME**: the value can be updated at runtime
+* **NO_MON_UPDATE**: Daemons/clients do not pull this value from the monitor config database.  We disallow setting this option via 'ceph config set ...'.  This option should be configured via ceph.conf or via the command line.
+* **STARTUP**: option takes effect only during daemon startup
+* **CLUSTER_CREATE**: option only affects cluster creation
+* **CREATE**: option only affects daemon creation

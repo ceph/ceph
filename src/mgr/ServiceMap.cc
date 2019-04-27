@@ -5,6 +5,9 @@
 
 #include "common/Formatter.h"
 
+using ceph::bufferlist;
+using ceph::Formatter;
+
 // Daemon
 
 void ServiceMap::Daemon::encode(bufferlist& bl, uint64_t features) const
@@ -18,7 +21,7 @@ void ServiceMap::Daemon::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::Daemon::decode(bufferlist::iterator& p)
+void ServiceMap::Daemon::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(gid, p);
@@ -34,7 +37,7 @@ void ServiceMap::Daemon::dump(Formatter *f) const
   f->dump_unsigned("start_epoch", start_epoch);
   f->dump_stream("start_stamp") << start_stamp;
   f->dump_unsigned("gid", gid);
-  f->dump_stream("addr") << addr;
+  f->dump_string("addr", addr.get_legacy_str());
   f->open_object_section("metadata");
   for (auto& p : metadata) {
     f->dump_string(p.first.c_str(), p.second);
@@ -60,7 +63,7 @@ void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::Service::decode(bufferlist::iterator& p)
+void ServiceMap::Service::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(daemons, p);
@@ -97,7 +100,7 @@ void ServiceMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::decode(bufferlist::iterator& p)
+void ServiceMap::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(epoch, p);

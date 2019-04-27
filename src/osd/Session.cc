@@ -13,23 +13,23 @@ void Session::clear_backoffs()
 {
   map<spg_t,map<hobject_t,set<BackoffRef>>> ls;
   {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ls.swap(backoffs);
     backoff_count = 0;
   }
   for (auto& i : ls) {
     for (auto& p : i.second) {
       for (auto& b : p.second) {
-	Mutex::Locker l(b->lock);
+	std::lock_guard l(b->lock);
 	if (b->pg) {
-	  assert(b->session == this);
-	  assert(b->is_new() || b->is_acked());
+	  ceph_assert(b->session == this);
+	  ceph_assert(b->is_new() || b->is_acked());
 	  b->pg->rm_backoff(b);
 	  b->pg.reset();
 	  b->session.reset();
 	} else if (b->session) {
-	  assert(b->session == this);
-	  assert(b->is_deleting());
+	  ceph_assert(b->session == this);
+	  ceph_assert(b->is_deleting());
 	  b->session.reset();
 	}
       }
@@ -44,7 +44,7 @@ void Session::ack_backoff(
   const hobject_t& begin,
   const hobject_t& end)
 {
-  Mutex::Locker l(backoff_lock);
+  std::lock_guard l(backoff_lock);
   auto p = backoffs.find(pgid);
   if (p == backoffs.end()) {
     dout(20) << __func__ << " " << pgid << " " << id << " [" << begin << ","
@@ -79,7 +79,7 @@ void Session::ack_backoff(
       backoffs.erase(p);
     }
   }
-  assert(!backoff_count == backoffs.empty());
+  ceph_assert(!backoff_count == backoffs.empty());
 }
 
 bool Session::check_backoff(
@@ -89,7 +89,7 @@ bool Session::check_backoff(
   if (b) {
     dout(10) << __func__ << " session " << this << " has backoff " << *b
 	     << " for " << *m << dendl;
-    assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
+    ceph_assert(!b->is_acked() || !g_conf()->osd_debug_crash_on_ignored_backoff);
     return true;
   }
   // we may race with ms_handle_reset.  it clears session->con before removing

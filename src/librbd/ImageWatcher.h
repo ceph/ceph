@@ -65,6 +65,12 @@ public:
   void notify_update_features(uint64_t features, bool enabled,
                               Context *on_finish);
 
+  void notify_migrate(uint64_t request_id, ProgressContext &prog_ctx,
+                      Context *on_finish);
+
+  void notify_sparsify(uint64_t request_id, size_t sparse_size,
+                       ProgressContext &prog_ctx, Context *on_finish);
+
   void notify_acquired_lock();
   void notify_released_lock();
   void notify_request_lock();
@@ -232,6 +238,10 @@ private:
   bool handle_payload(const watch_notify::RenamePayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UpdateFeaturesPayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::MigratePayload& payload,
+                      C_NotifyAck *ctx);
+  bool handle_payload(const watch_notify::SparsifyPayload& payload,
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);

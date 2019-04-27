@@ -676,7 +676,7 @@ encoding function splits the content into three data chunks simply by dividing
 the content in three: the first contains ``ABC``, the second ``DEF`` and the
 last ``GHI``. The content will be padded if the content length is not a multiple
 of ``K``. The function also creates two coding chunks: the fourth with ``YXY``
-and the fifth with ``GQC``. Each chunk is stored in an OSD in the acting set.
+and the fifth with ``QGC``. Each chunk is stored in an OSD in the acting set.
 The chunks are stored in objects that have the same name (**NYAN**) but reside
 on different OSDs. The order in which the chunks were created must be preserved
 and is stored as an attribute of the object (``shard_t``), in addition to its
@@ -1436,7 +1436,7 @@ Ceph Clients include a number of service interfaces. These include:
   
 - **Filesystem**: The :term:`Ceph Filesystem` (CephFS) service provides 
   a POSIX compliant filesystem usable with ``mount`` or as 
-  a filesytem in user space (FUSE).      
+  a filesystem in user space (FUSE).
 
 Ceph can run additional instances of OSDs, MDSs, and monitors for scalability
 and high availability. The following diagram depicts the high-level
@@ -1444,7 +1444,7 @@ architecture.
 
 .. ditaa::
             +--------------+  +----------------+  +-------------+
-            | Block Device |  | Object Storage |  |   Ceph FS   |
+            | Block Device |  | Object Storage |  |   CephFS    |
             +--------------+  +----------------+  +-------------+            
 
             +--------------+  +----------------+  +-------------+
@@ -1513,14 +1513,16 @@ client. Other virtualization technologies such as Xen can access the Ceph Block
 Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 
-.. index:: Ceph FS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
+.. index:: CephFS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
+
+.. _arch-cephfs:
 
 Ceph Filesystem
 ---------------
 
-The Ceph Filesystem (Ceph FS) provides a POSIX-compliant filesystem as a 
+The Ceph Filesystem (CephFS) provides a POSIX-compliant filesystem as a
 service that is layered on top of the object-based Ceph Storage Cluster.
-Ceph FS files get mapped to objects that Ceph stores in the Ceph Storage
+CephFS files get mapped to objects that Ceph stores in the Ceph Storage
 Cluster. Ceph Clients mount a CephFS filesystem as a kernel object or as
 a Filesystem in User Space (FUSE).
 
@@ -1530,7 +1532,7 @@ a Filesystem in User Space (FUSE).
             +-----------------------+  +------------------------+            
 
             +---------------------------------------------------+
-            |            Ceph FS Library (libcephfs)            |
+            |            CephFS Library (libcephfs)             |
             +---------------------------------------------------+
 
             +---------------------------------------------------+
@@ -1552,7 +1554,7 @@ would tax the Ceph OSD Daemons unnecessarily. So separating the metadata from
 the data means that the Ceph Filesystem can provide high performance services
 without taxing the Ceph Storage Cluster.
 
-Ceph FS separates the metadata from the data, storing the metadata in the MDS, 
+CephFS separates the metadata from the data, storing the metadata in the MDS,
 and storing the file data in one or more objects in the Ceph Storage Cluster.
 The Ceph filesystem aims for POSIX compatibility. ``ceph-mds`` can run as a
 single process, or it can be distributed out to multiple physical machines,

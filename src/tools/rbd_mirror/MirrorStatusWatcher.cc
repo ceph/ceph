@@ -47,7 +47,7 @@ void MirrorStatusWatcher<I>::init(Context *on_finish) {
   librados::AioCompletion *aio_comp = create_rados_callback(on_finish);
 
   int r = m_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 

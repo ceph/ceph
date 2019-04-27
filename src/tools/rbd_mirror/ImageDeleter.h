@@ -18,7 +18,7 @@
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
-#include "types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
 #include <deque>
@@ -47,6 +47,12 @@ namespace image_deleter { template <typename> struct TrashWatcher; }
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
+  static ImageDeleter* create(librados::IoCtx& local_io_ctx,
+                              Threads<librbd::ImageCtx>* threads,
+                              ServiceDaemon<librbd::ImageCtx>* service_daemon) {
+    return new ImageDeleter(local_io_ctx, threads, service_daemon);
+  }
+
   ImageDeleter(librados::IoCtx& local_io_ctx,
                Threads<librbd::ImageCtx>* threads,
                ServiceDaemon<librbd::ImageCtx>* service_daemon);

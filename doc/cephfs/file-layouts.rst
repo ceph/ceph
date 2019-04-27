@@ -99,7 +99,9 @@ Layout fields are modified using ``setfattr``:
 .. code-block:: bash
 
     $ ceph osd lspools
-    0 rbd,1 cephfs_data,2 cephfs_metadata,
+    0 rbd
+    1 cephfs_data
+    2 cephfs_metadata
 
     $ setfattr -n ceph.file.layout.stripe_unit -v 1048576 file2
     $ setfattr -n ceph.file.layout.stripe_count -v 8 file2
@@ -127,7 +129,7 @@ Clearing layouts
 ----------------
 
 If you wish to remove an explicit layout from a directory, to revert to
-inherting the layout of its ancestor, you can do so:
+inheriting the layout of its ancestor, you can do so:
 
 .. code-block:: bash
 

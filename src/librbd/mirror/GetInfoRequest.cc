@@ -66,7 +66,7 @@ void GetInfoRequest<I>::get_mirror_image() {
   librados::AioCompletion *comp = create_rados_callback<
     GetInfoRequest<I>, &GetInfoRequest<I>::handle_get_mirror_image>(this);
   int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -78,7 +78,7 @@ void GetInfoRequest<I>::handle_get_mirror_image(int r) {
   m_mirror_image->state = cls::rbd::MIRROR_IMAGE_STATE_DISABLED;
   *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = cls_client::mirror_image_get_finish(&iter, m_mirror_image);
   }
 

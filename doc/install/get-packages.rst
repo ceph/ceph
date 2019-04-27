@@ -49,7 +49,7 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``hammer``, ``jewel``) and development releases
+major releases (e.g., ``hammer``, ``jewel``, ``luminous``) and development releases
 (``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key.
 
 
@@ -83,7 +83,7 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph are summarized at: :doc:`/releases`.
+The major releases of Ceph are summarized at: :ref:`ceph-releases`
 
 Every second major release is considered Long Term Stable (LTS). Critical
 bugfixes are backported to LTS releases until their retirement. Since retired
@@ -100,11 +100,11 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
 get the short codename, and replace ``{codename}`` in the following command. ::
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-jewel/ {codename} main'
+	sudo apt-add-repository 'deb https://download.ceph.com/debian-luminous/ {codename} main'
 
 For early Linux distributions, you may execute the following command::
 
-	echo deb https://download.ceph.com/debian-jewel/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-luminous/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
@@ -118,13 +118,6 @@ For older Linux distributions, replace ``{release-name}`` with the name of the
 release::
 
 	echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-
-Ceph on ARM processors requires Google's memory profiling tools (``google-perftools``).
-The Ceph repository should have a copy at
-https://download.ceph.com/packages/google-perftools/debian. ::
-
-	echo deb https://download.ceph.com/packages/google-perftools/debian  $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/google-perftools.list
-
 
 For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
@@ -141,7 +134,7 @@ RPM Packages
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``,
+``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``, ``luminous``,
 etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``, etc.).  You
 may view https://download.ceph.com/rpm-{ceph-release}/ directory to see which
 distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
@@ -255,7 +248,7 @@ before attempting an install.
 Debian Packages
 ---------------
 
-Ceph requires additional additional third party libraries.
+Ceph requires additional third party libraries.
 
 - libaio1
 - libsnappy1
@@ -297,15 +290,15 @@ Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
 repository package installs the repository details on your local system for use
 with ``yum``. Replace ``{distro}`` with your distribution. ::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 For example, for CentOS 7  (``el7``)::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	https://download.ceph.com/rpm-jewel
+	https://download.ceph.com/rpm-luminous
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name

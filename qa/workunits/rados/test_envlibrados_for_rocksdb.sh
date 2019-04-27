@@ -14,7 +14,7 @@ function install() {
 function install_one() {
     case $(lsb_release -si) in
         Ubuntu|Debian|Devuan)
-            sudo apt-get install -y --force-yes "$@"
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
             ;;
         CentOS|Fedora|RedHatEnterpriseServer)
             sudo yum install -y "$@"
@@ -31,7 +31,7 @@ function install_one() {
 #			Install required tools
 ############################################
 echo "Install required tools"
-install git automake
+install git cmake
 
 CURRENT_PATH=`pwd`
 
@@ -42,10 +42,10 @@ CURRENT_PATH=`pwd`
 # for rocksdb
 case $(lsb_release -si) in
 	Ubuntu|Debian|Devuan)
-		install g++-4.7 libgflags-dev libsnappy-dev zlib1g-dev libbz2-dev librados-dev
+		install g++ libsnappy-dev zlib1g-dev libbz2-dev libradospp-dev
 		;;
 	CentOS|Fedora|RedHatEnterpriseServer)
-		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
+		install gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64
 		;;
 	*)
         echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
@@ -73,7 +73,8 @@ git clone https://github.com/facebook/rocksdb.git --depth 1
 
 # compile code
 cd rocksdb
-make env_librados_test ROCKSDB_USE_LIBRADOS=1 -j8
+mkdir build && cd build && cmake -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"
 # prepare ceph.conf

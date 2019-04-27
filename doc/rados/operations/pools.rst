@@ -233,14 +233,16 @@ If you rename a pool and you have per-pool capabilities for an authenticated
 user, you must update the user's capabilities (i.e., caps) with the new pool
 name.
 
-.. note:: Version ``0.48`` Argonaut and above.
-
 Show Pool Statistics
 ====================
 
 To show a pool's utilization statistics, execute::
 
 	rados df
+
+Additionally, to obtain I/O information for a specific pool or all, execute::
+
+        ceph osd pool stats [{pool-name}]
 
 
 Make a Snapshot of a Pool
@@ -250,17 +252,12 @@ To make a snapshot of a pool, execute::
 
 	ceph osd pool mksnap {pool-name} {snap-name}
 
-.. note:: Version ``0.48`` Argonaut and above.
-
-
 Remove a Snapshot of a Pool
 ===========================
 
 To remove a snapshot of a pool, execute::
 
 	ceph osd pool rmsnap {pool-name} {snap-name}
-
-.. note:: Version ``0.48`` Argonaut and above.
 
 .. _setpoolvalues:
 
@@ -278,24 +275,21 @@ You may set values for the following keys:
 
 ``compression_algorithm``
 
-:Description: Sets inline compression algorithm to use for underlying BlueStore.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
+:Description: Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression algorithm``.
 
 :Type: String
 :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 ``compression_mode``
 
-:Description: Sets the policy for the inline compression algorithm for underlying BlueStore.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
+:Description: Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression mode``.
 
 :Type: String
 :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 ``compression_min_blob_size``
 
-:Description: Chunks smaller than this are never compressed.
-              This setting overrides the `global setting <rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
+:Description: Chunks smaller than this are never compressed. This setting overrides the `global setting <http://docs.ceph.com/docs/master/rados/configuration/bluestore-config-ref/#inline-compression>`_ of ``bluestore compression min blob *``.
 
 :Type: Unsigned Integer
 
@@ -370,7 +364,6 @@ You may set values for the following keys:
 :Description: Set/Unset HASHPSPOOL flag on a given pool.
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
-:Version: Version ``0.48`` Argonaut and above.
 
 .. _nodelete:
 
@@ -604,6 +597,29 @@ You may set values for the following keys:
 :Default: ``0``
 
 
+.. _recovery_priority:
+
+``recovery_priority``
+
+:Description: When a value is set it will increase or decrease the computed
+              reservation priority. This value must be in the range -10 to
+              10.  Use a negative priority for less important pools so they
+              have lower priority than any new pools.
+
+:Type: Integer
+:Default: ``0``
+
+
+.. _recovery_op_priority:
+
+``recovery_op_priority``
+
+:Description: Specify the recovery operation priority for this pool instead of ``osd_recovery_op_priority``.
+
+:Type: Integer
+:Default: ``0``
+
+
 Get Pool Values
 ===============
 
@@ -749,6 +765,27 @@ You may get values for the following keys:
 :Description: see deep_scrub_interval_
 
 :Type: Double
+
+
+``allow_ec_overwrites``
+
+:Description: see allow_ec_overwrites_
+
+:Type: Boolean
+
+
+``recovery_priority``
+
+:Description: see recovery_priority_
+
+:Type: Integer
+
+
+``recovery_op_priority``
+
+:Description: see recovery_op_priority_
+
+:Type: Integer
 
 
 Set the Number of Object Replicas

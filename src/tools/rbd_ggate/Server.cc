@@ -26,7 +26,7 @@ void Server::run() {
   dout(10) << dendl;
 
   int r = start();
-  assert(r == 0);
+  ceph_assert(r == 0);
 
   dout(20) << "entering run loop" << dendl;
 
@@ -55,7 +55,7 @@ void Server::stop() {
 
   {
     Mutex::Locker locker(m_lock);
-    assert(m_stopping);
+    ceph_assert(m_stopping);
   }
 
   m_reader_thread.join();
@@ -75,7 +75,7 @@ void Server::io_finish(IOContext *ctx) {
   dout(20) << ctx << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(ctx->item.is_on_list());
+  ceph_assert(ctx->item.is_on_list());
 
   ctx->item.remove_myself();
   m_io_finished.push_back(&ctx->item);
@@ -104,7 +104,7 @@ Server::IOContext *Server::wait_io_finish() {
 void Server::wait_clean() {
   dout(20) << dendl;
 
-  assert(!m_reader_thread.is_started());
+  ceph_assert(!m_reader_thread.is_started());
 
   Mutex::Locker locker(m_lock);
 
@@ -113,7 +113,7 @@ void Server::wait_clean() {
   }
 
   while (!m_io_finished.empty()) {
-    ceph::unique_ptr<IOContext> free_ctx(m_io_finished.front());
+    std::unique_ptr<IOContext> free_ctx(m_io_finished.front());
     m_io_finished.pop_front();
   }
 }
@@ -158,7 +158,7 @@ void Server::reader_entry() {
   dout(20) << dendl;
 
   while (!m_stopping) {
-    ceph::unique_ptr<IOContext> ctx(new IOContext(this));
+    std::unique_ptr<IOContext> ctx(new IOContext(this));
 
     dout(20) << "waiting for ggate request" << dendl;
 
@@ -215,7 +215,7 @@ void Server::writer_entry() {
   while (!m_stopping) {
     dout(20) << "waiting for io request" << dendl;
 
-    ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+    std::unique_ptr<IOContext> ctx(wait_io_finish());
     if (!ctx) {
       dout(20) << "no io requests, terminating" << dendl;
       return;

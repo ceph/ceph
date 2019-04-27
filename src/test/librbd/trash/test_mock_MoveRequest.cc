@@ -21,7 +21,7 @@ struct MockTestImageCtx : public MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_name, image_id);
     return s_instance;
   }
@@ -67,7 +67,7 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                              std::string id;
                              cls::rbd::TrashImageSpec trash_image_spec;
 
-                             bufferlist::iterator bl_it = in_bl.begin();
+                             auto bl_it = in_bl.cbegin();
                              decode(id, bl_it);
                              decode(trash_image_spec, bl_it);
 

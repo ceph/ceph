@@ -20,18 +20,19 @@
 
 
 class MExportCapsAck : public Message {
- public:  
+public:  
   inodeno_t ino;
+  bufferlist cap_bl;
 
+protected:
   MExportCapsAck() :
-    Message(MSG_MDS_EXPORTCAPSACK) {}
+    Message{MSG_MDS_EXPORTCAPSACK} {}
   MExportCapsAck(inodeno_t i) :
-    Message(MSG_MDS_EXPORTCAPSACK), ino(i) {}
-private:
+    Message{MSG_MDS_EXPORTCAPSACK}, ino(i) {}
   ~MExportCapsAck() override {}
 
 public:
-  const char *get_type_name() const override { return "export_caps_ack"; }
+  std::string_view get_type_name() const override { return "export_caps_ack"; }
   void print(ostream& o) const override {
     o << "export_caps_ack(" << ino << ")";
   }
@@ -39,12 +40,16 @@ public:
   void encode_payload(uint64_t features) override {
     using ceph::encode;
     encode(ino, payload);
+    encode(cap_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
+    decode(cap_bl, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

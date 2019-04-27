@@ -18,11 +18,11 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
+#include "MDSContext.h"
 #include "mdstypes.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
-#include "MDSContext.h"
 
 #include "include/unordered_set.h"
 using ceph::unordered_set;
@@ -74,11 +74,11 @@ class LogSegment {
   // try to expire
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
 
-  std::list<MDSInternalContextBase*> expiry_waiters;
+  MDSContext::vec expiry_waiters;
 
-  void wait_for_expiry(MDSInternalContextBase *c)
+  void wait_for_expiry(MDSContext *c)
   {
-    assert(c != NULL);
+    ceph_assert(c != NULL);
     expiry_waiters.push_back(c);
   }
 

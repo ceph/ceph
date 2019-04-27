@@ -16,7 +16,7 @@
 #include "common/ceph_argparse.h"
 #include "os/ObjectStore.h"
 #include <gtest/gtest.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/errno.h"
 #include "store_test_fixture.h"
 
@@ -77,7 +77,7 @@ TEST_F(MemStoreClone, CloneRangeAllocated)
   t.write(cid, src, 0, 12, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
   ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
@@ -101,7 +101,7 @@ TEST_F(MemStoreClone, CloneRangeHole)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
   ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
@@ -125,7 +125,7 @@ TEST_F(MemStoreClone, CloneRangeHoleStart)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
   ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
@@ -150,7 +150,7 @@ TEST_F(MemStoreClone, CloneRangeHoleMiddle)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
   ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
@@ -175,7 +175,7 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->queue_transaction(ch, std::move(t)));
+  ASSERT_EQ(0, store->queue_transaction(ch, std::move(t)));
   ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
@@ -183,17 +183,18 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
 int main(int argc, char** argv)
 {
   // default to memstore
-  vector<const char*> defaults{
-    "--osd_objectstore", "memstore",
-    "--osd_data", "msc.test_temp_dir",
-    "--memstore_page_size", "4",
+  map<string,string> defaults = {
+    { "osd_objectstore", "memstore" },
+    { "osd_data", "msc.test_temp_dir" },
+    { "memstore_page_size", "4" }
   };
 
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

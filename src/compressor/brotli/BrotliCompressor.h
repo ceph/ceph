@@ -24,7 +24,7 @@ class BrotliCompressor : public Compressor
   
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;
-  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &out) override;
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &out) override;
 };
 
 #endif //CEPH_BROTLICOMPRESSOR_H

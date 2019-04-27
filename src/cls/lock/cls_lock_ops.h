@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_LOCK_OPS_H
 #define CEPH_CLS_LOCK_OPS_H
 
@@ -29,7 +32,7 @@ struct cls_lock_lock_op
     encode(flags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     uint8_t t;
@@ -60,7 +63,7 @@ struct cls_lock_unlock_op
     encode(cookie, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     decode(cookie, bl);
@@ -86,7 +89,7 @@ struct cls_lock_break_op
     encode(cookie, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     decode(locker, bl);
@@ -109,7 +112,7 @@ struct cls_lock_get_info_op
     encode(name, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     DECODE_FINISH(bl);
@@ -135,7 +138,7 @@ struct cls_lock_get_info_reply
     encode(tag, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(lockers, bl);
     uint8_t t;
@@ -160,7 +163,7 @@ struct cls_lock_list_locks_reply
     encode(locks, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(locks, bl);
     DECODE_FINISH(bl);
@@ -188,7 +191,7 @@ struct cls_lock_assert_op
     encode(tag, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     uint8_t t;
@@ -223,7 +226,7 @@ struct cls_lock_set_cookie_op
     encode(new_cookie, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(name, bl);
     uint8_t t;

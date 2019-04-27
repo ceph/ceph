@@ -19,11 +19,11 @@ namespace io {
 struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
   size_t length;
 
-  SetClipLengthVisitor(size_t length) : length(length) {
+  explicit SetClipLengthVisitor(size_t length) : length(length) {
   }
 
   void operator()(Linear &linear) const {
-    assert(length <= linear.buf_len);
+    ceph_assert(length <= linear.buf_len);
     linear.buf_len = length;
   }
 
@@ -66,7 +66,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }
-    assert(offset == bl.length());
+    ceph_assert(offset == bl.length());
   }
 
   void operator()(Bufferlist &bufferlist) const {
@@ -94,7 +94,7 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
     for (auto &image_extent : image_extents) {
       length += image_extent.second;
     }
-    assert(length == bl.length());
+    ceph_assert(length == bl.length());
 
     aio_completion->lock.Lock();
     aio_completion->read_result.m_destriper.add_partial_result(
@@ -108,10 +108,9 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
 
 ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
     AioCompletion *aio_completion, uint64_t object_off, uint64_t object_len,
-    Extents&& buffer_extents, bool ignore_enoent)
+    Extents&& buffer_extents)
   : aio_completion(aio_completion), object_off(object_off),
-    object_len(object_len), buffer_extents(std::move(buffer_extents)),
-    ignore_enoent(ignore_enoent) {
+    object_len(object_len), buffer_extents(std::move(buffer_extents)) {
   aio_completion->add_request();
 }
 
@@ -120,7 +119,7 @@ void ReadResult::C_ObjectReadRequest::finish(int r) {
   ldout(cct, 10) << "C_ObjectReadRequest: r=" << r
                  << dendl;
 
-  if (ignore_enoent && r == -ENOENT) {
+  if (r == -ENOENT) {
     r = 0;
   }
   if (r >= 0) {

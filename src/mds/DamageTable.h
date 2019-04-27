@@ -57,7 +57,7 @@ class DamageEntry
 };
 
 
-typedef ceph::shared_ptr<DamageEntry> DamageEntryRef;
+typedef std::shared_ptr<DamageEntry> DamageEntryRef;
 
 
 class DirFragIdent
@@ -192,10 +192,10 @@ public:
       const inodeno_t ino) const;
 
 
-  DamageTable(const mds_rank_t rank_)
+  explicit DamageTable(const mds_rank_t rank_)
     : rank(rank_)
   {
-    assert(rank_ != MDS_RANK_NONE);
+    ceph_assert(rank_ != MDS_RANK_NONE);
   }
 
   void dump(Formatter *f) const;

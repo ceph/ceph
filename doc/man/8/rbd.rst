@@ -43,6 +43,10 @@ Options
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --namespace namespace-name
+
+   Use a pre-defined image namespace within a pool
+
 .. option:: --no-progress
 
    Do not output progress information (goes to standard error by
@@ -193,13 +197,52 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config global get` *config-entity* *key*
+  Get a global-level configuration override.
+
+:command:`config global list` [--format plain | json | xml] [--pretty-format] *config-entity*
+  List global-level configuration overrides.
+
+:command:`config global set` *config-entity* *key* *value*
+  Set a global-level configuration override.
+
+:command:`config global remove` *config-entity* *key*
+  Remove a global-level configuration override.
+
+:command:`config image get` *image-spec* *key*
+  Get an image-level configuration override.
+
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec*
+  List image-level configuration overrides.
+
+:command:`config image set` *image-spec* *key* *value*
+  Set an image-level configuration override.
+
+:command:`config image remove` *image-spec* *key*
+  Remove an image-level configuration override.
+
+:command:`config pool get` *pool-name* *key*
+  Get a pool-level configuration override.
+
+:command:`config pool list` [--format plain | json | xml] [--pretty-format] *pool-name*
+  List pool-level configuration overrides.
+
+:command:`config pool set` *pool-name* *key* *value*
+  Set a pool-level configuration override.
+
+:command:`config pool remove` *pool-name* *key*
+  Remove a pool-level configuration override.
+
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--thick-provision] [--no-progress] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
+  If the --thick-provision is enabled, it will fully allocate storage for
+  the image at creation time. It will take a long time to do.
+  Note: thick provisioning requires zeroing the contents of the entire image.
 
 :command:`deep cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Deep copy the content of a src-image into the newly created dest-image.
@@ -282,6 +325,9 @@ Commands
 :command:`group ls` [-p | --pool *pool-name*]
   List rbd groups.
 
+:command:`group rename` *src-group-spec* *dest-group-spec*
+  Rename a group.  Note: rename across pools is not supported.
+
 :command:`group rm` *group-spec*
   Delete a group.
 
@@ -296,6 +342,9 @@ Commands
 
 :command:`group snap rename` *group-snap-spec* *snap-name*
   Rename group's snapshot.
+
+:command:`group snap rollback` *group-snap-spec*
+  Rollback group to snapshot.
 
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
@@ -337,7 +386,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a bakcup
+  Export image journal to path (use - for stdout). It can be make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.
@@ -385,6 +434,29 @@ Commands
   enables multiple diff files to be merged using something like
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
+
+:command:`migration abort` *image-spec*
+  Cancel image migration. This step may be run after successful or
+  failed migration prepare or migration execute steps and returns the
+  image to its initial (before migration) state. All modifications to
+  the destination image are lost.
+
+:command:`migration commit` *image-spec*
+  Commit image migration. This step is run after a successful migration
+  prepare and migration execute steps and removes the source image data.
+
+:command:`migration execute` *image-spec*
+  Execute image migration. This step is run after a successful migration
+  prepare step and copies image data to the destination.
+
+:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] *src-image-spec* [*dest-image-spec*]
+  Prepare image migration. This is the first step when migrating an
+  image, i.e. changing the image location, format or other
+  parameters that can't be changed dynamically. The destination can
+  match the source, and in this case *dest-image-spec* can be omitted.
+  After this step the source image is set as a parent of the
+  destination image, and the image is accessible in copy-on-write mode
+  by its destination spec.
 
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
@@ -465,6 +537,15 @@ Commands
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
+:command:`namespace create` *pool-name* *namespace-name*
+  Create a new image namespace within the pool.
+
+:command:`namespace list` *pool-name*
+  List image namespaces defined within the pool.
+
+:command:`namespace remove` *pool-name* *namespace-name*
+  Remove an empty image namespace from the pool.
+
 :command:`object-map check` *image-spec* | *snap-spec*
   Verify the object map is correct.
 
@@ -507,7 +588,7 @@ Commands
   This requires image format 2.
 
 :command:`snap purge` *image-spec*
-  Remove all snapshots from an image.
+  Remove all unprotected snapshots from an image.
 
 :command:`snap rename` *src-snap-spec* *dest-snap-spec*
   Rename a snapshot. Note: rename across pools and images is not supported.
@@ -525,6 +606,12 @@ Commands
   in different pools than the parent snapshot.)
 
   This requires image format 2.
+
+:command:`sparsify` [--sparse-size *sparse-size*] *image-spec*
+  Reclaim space for zeroed image extents. The default sparse size is
+  4096 bytes and can be changed via --sparse-size option with the
+  following restrictions: it should be power of two, not less than
+  4096, and not larger image object size.
 
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
@@ -553,19 +640,19 @@ Commands
 Image, snap, group and journal specs
 ====================================
 
-| *image-spec*      is [*pool-name*/]\ *image-name*
-| *snap-spec*       is [*pool-name*/]\ *image-name*\ @\ *snap-name*
-| *group-spec*      is [*pool-name*/]\ *group-name*
-| *group-snap-spec* is [*pool-name*/]\ *group-name*\ @\ *snap-name*
-| *journal-spec*    is [*pool-name*/]\ *journal-name*
+| *image-spec*      is [*pool-name*/[*namespace-name*/]]\ *image-name*
+| *snap-spec*       is [*pool-name*/[*namespace-name*/]]\ *image-name*\ @\ *snap-name*
+| *group-spec*      is [*pool-name*/[*namespace-name*/]]\ *group-name*
+| *group-snap-spec* is [*pool-name*/[*namespace-name*/]]\ *group-name*\ @\ *snap-name*
+| *journal-spec*    is [*pool-name*/[*namespace-name*/]]\ *journal-name*
 
-The default for *pool-name* is "rbd".  If an image name contains a slash
-character ('/'), *pool-name* is required.
+The default for *pool-name* is "rbd" and *namespace-name* is "". If an image
+name contains a slash character ('/'), *pool-name* is required.
 
 The *journal-name* is *image-id*.
 
-You may specify each name individually, using --pool, --image and --snap
-options, but this is discouraged in favor of the above spec syntax.
+You may specify each name individually, using --pool, --namespace, --image, and
+--snap options, but this is discouraged in favor of the above spec syntax.
 
 Striping
 ========
@@ -657,6 +744,25 @@ Per mapping (block device) `rbd device map` options:
   discards (since 4.9).
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
+
+* lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
+  (since 4.17, default is 0 seconds, meaning no timeout).
+
+* notrim - Turn off discard and write zeroes offload support to avoid
+  deprovisioning a fully provisioned image (since 4.17). When enabled, discard
+  requests will fail with -EOPNOTSUPP, write zeroes requests will fall back to
+  manually zeroing.
+
+* abort_on_full - Fail write requests with -ENOSPC when the cluster is full or
+  the data pool reaches its quota (since 5.0).  The default behaviour is to
+  block until the full condition is cleared.
+
+* alloc_size - Minimum allocation unit of the underlying OSD object store
+  backend (since 5.1, default is 64K bytes).  This is used to round off and
+  drop discards that are too small.  For bluestore, the recommended setting is
+  bluestore_min_alloc_size (typically 64K for hard disk drives and 16K for
+  solid-state drives).  For filestore with filestore_punch_hole = false, the
+  recommended setting is image object size (typically 4M).
 
 `rbd device unmap` options:
 

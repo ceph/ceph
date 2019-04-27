@@ -29,7 +29,8 @@ public:
 
   void handle_peer_notification(int r);
 
-  Context *start_op();
+  int get_unlocked_op_error() const;
+  Context *start_op(int* ret_val);
 
 protected:
   void shutdown_handler(int r, Context *on_finish) override;

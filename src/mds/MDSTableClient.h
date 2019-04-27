@@ -19,9 +19,10 @@
 #include "MDSContext.h"
 #include "mds_table_types.h"
 
+#include "messages/MMDSTableRequest.h"
+
 class MDSRank;
 class LogSegment;
-class MMDSTableRequest;
 
 class MDSTableClient {
 protected:
@@ -34,13 +35,13 @@ protected:
 
   // prepares
   struct _pending_prepare {
-    MDSInternalContextBase *onfinish;
+    MDSContext *onfinish;
     version_t *ptid;
     bufferlist *pbl; 
     bufferlist mutation;
 
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
-    _pending_prepare(MDSInternalContextBase *c, version_t *pt, bufferlist *pb, bufferlist& m) :
+    _pending_prepare(MDSContext *c, version_t *pt, bufferlist *pb, bufferlist& m) :
       onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
   };
 
@@ -50,7 +51,7 @@ protected:
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;
-  map<version_t, list<MDSInternalContextBase*> > ack_waiters;
+  map<version_t, MDSContext::vec > ack_waiters;
 
   void handle_reply(class MMDSTableQuery *m);  
   void _logged_ack(version_t tid);
@@ -61,9 +62,9 @@ public:
     mds(m), table(tab), last_reqid(~0ULL), server_ready(false) {}
   virtual ~MDSTableClient() {}
 
-  void handle_request(MMDSTableRequest *m);
+  void handle_request(const cref_t<MMDSTableRequest> &m);
 
-  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSInternalContextBase *onfinish);
+  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSContext *onfinish);
   void commit(version_t tid, LogSegment *ls);
 
   void resend_commits();
@@ -76,15 +77,24 @@ public:
   bool has_committed(version_t tid) const {
     return pending_commit.count(tid) == 0;
   }
-  void wait_for_ack(version_t tid, MDSInternalContextBase *c) {
+  void wait_for_ack(version_t tid, MDSContext *c) {
     ack_waiters[tid].push_back(c);
+  }
+
+  set<version_t> get_journaled_tids() const {
+    set<version_t> tids;
+    for (auto p : pending_commit)
+      tids.insert(p.first);
+    return tids;
   }
 
   void handle_mds_failure(mds_rank_t mds);
 
   // child must implement
   virtual void resend_queries() = 0;
-  virtual void handle_query_result(MMDSTableRequest *m) = 0;
+  virtual void handle_query_result(const cref_t<MMDSTableRequest> &m) = 0;
+  virtual void handle_notify_prep(const cref_t<MMDSTableRequest> &m) = 0;
+  virtual void notify_commit(version_t tid) = 0;
 
   // and friendly front-end for _prepare.
 

@@ -38,7 +38,7 @@ PyModuleRunner::~PyModuleRunner()
 
 int PyModuleRunner::serve()
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
@@ -54,19 +54,13 @@ int PyModuleRunner::serve()
     // This is not a very informative log message because it's an
     // unknown/unexpected exception that we can't say much about.
 
-    // Peek at the exception for the cluster log, before
-    // dumping the backtrace to log log next.
-    PyObject *ptype, *pvalue, *ptraceback;
-    PyErr_Fetch(&ptype, &pvalue, &ptraceback);
-    assert(ptype);
-    assert(pvalue);
-    PyObject *pvalue_str = PyObject_Str(pvalue);
-    std::string exc_msg = PyString_AsString(pvalue_str);
-    Py_DECREF(pvalue_str);
-    PyErr_Restore(ptype, pvalue, ptraceback);
+
+    // Get short exception message for the cluster log, before
+    // dumping the full backtrace to the local log.
+    std::string exc_msg = peek_pyerror();
     
     clog->error() << "Unhandled exception from module '" << get_name()
-                  << "' while running on mgr." << g_conf->name.get_id()
+                  << "' while running on mgr." << g_conf()->name.get_id()
                   << ": " << exc_msg;
     derr << get_name() << ".serve:" << dendl;
     derr << handle_pyerror() << dendl;
@@ -81,7 +75,7 @@ int PyModuleRunner::serve()
 
 void PyModuleRunner::shutdown()
 {
-  assert(pClassInstance != nullptr);
+  ceph_assert(pClassInstance != nullptr);
 
   Gil gil(py_module->pMyThreadState, true);
 
@@ -100,7 +94,7 @@ void PyModuleRunner::log(int level, const std::string &record)
 {
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[" << get_name() << "] "
-  dout(level) << record << dendl;
+  dout(ceph::dout::need_dynamic(level)) << record << dendl;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 }

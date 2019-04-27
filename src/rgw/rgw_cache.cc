@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_cache.h"
+#include "rgw_perf_counters.h"
 
 #include <errno.h>
 
@@ -17,11 +18,26 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   }
 
   auto iter = cache_map.find(name);
-  if (iter == cache_map.end() ||
-      (expiry.count() &&
-       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry)) {
+  if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
     if (perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
+    return -ENOENT;
+  }
+  if (expiry.count() &&
+       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
+    ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
+    lock.unlock();
+    lock.get_write();
+    // check that wasn't already removed by other thread
+    iter = cache_map.find(name);
+    if (iter != cache_map.end()) {
+      for (auto &kv : iter->second.chained_entries)
+        kv.first->invalidate(kv.second);
+      remove_lru(name, iter->second.lru_iter);
+      cache_map.erase(iter);
+    }
+    if(perfcounter)
       perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
@@ -124,14 +140,13 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
 
   ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
                  << std::hex << info.flags << std::dec << dendl;
-  auto iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
-    ObjectCacheEntry entry;
-    entry.lru_iter = lru.end();
-    cache_map.insert(pair<string, ObjectCacheEntry>(name, entry));
-    iter = cache_map.find(name);
-  }
+
+  auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
   ObjectCacheEntry& entry = iter->second;
+  entry.info.time_added = ceph::coarse_mono_clock::now();
+  if (inserted) {
+    entry.lru_iter = lru.end();
+  }
   ObjectCacheInfo& target = entry.info;
 
   invalidate_lru(entry);
@@ -306,5 +321,25 @@ void ObjectCache::do_invalidate_all()
 void ObjectCache::chain_cache(RGWChainedCache *cache) {
   RWLock::WLocker l(lock);
   chained_cache.push_back(cache);
+}
+
+void ObjectCache::unchain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+
+  auto iter = chained_cache.begin();
+  for (; iter != chained_cache.end(); ++iter) {
+    if (cache == *iter) {
+      chained_cache.erase(iter);
+      cache->unregistered();
+      return;
+    }
+  }
+}
+
+ObjectCache::~ObjectCache()
+{
+  for (auto cache : chained_cache) {
+    cache->unregistered();
+  }
 }
 

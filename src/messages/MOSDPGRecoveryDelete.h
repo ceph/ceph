@@ -10,10 +10,10 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+public:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   pg_shard_t from;
   spg_t pgid;            ///< target spg_t
@@ -21,7 +21,7 @@ struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
   list<pair<hobject_t, eversion_t> > objects;    ///< objects to remove
 
 private:
-  uint64_t cost;
+  uint64_t cost = 0;
 
 public:
   int get_cost() const override {
@@ -43,24 +43,25 @@ public:
   }
 
   MOSDPGRecoveryDelete()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
-			 COMPAT_VERSION), cost(0) {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+			 COMPAT_VERSION}
+  {}
 
   MOSDPGRecoveryDelete(pg_shard_t from, spg_t pgid, epoch_t map_epoch,
 		       epoch_t min_epoch)
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
-			 COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+			 COMPAT_VERSION},
       from(from),
       pgid(pgid),
       map_epoch(map_epoch),
-      min_epoch(min_epoch),
-      cost(0) {}
+      min_epoch(min_epoch)
+  {}
 
 private:
   ~MOSDPGRecoveryDelete() {}
 
 public:
-  const char *get_type_name() const { return "recovery_delete"; }
+  std::string_view get_type_name() const { return "recovery_delete"; }
   void print(ostream& out) const {
     out << "MOSDPGRecoveryDelete(" << pgid << " e" << map_epoch << ","
 	<< min_epoch << " " << objects << ")";
@@ -76,7 +77,7 @@ public:
     encode(objects, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(from, p);
     decode(pgid, p);
     decode(map_epoch, p);
@@ -84,8 +85,9 @@ public:
     decode(cost, p);
     decode(objects, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
-
 
 #endif

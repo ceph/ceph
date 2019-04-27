@@ -38,10 +38,10 @@ public:
   }
 
   MOSDBackoff()
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
 	      hobject_t begin_, hobject_t end_)
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid_),
       map_epoch(ep),
       op(op_),
@@ -60,7 +60,8 @@ public:
   }
 
   void decode_payload() override {
-    auto p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(op, p);
@@ -69,14 +70,17 @@ public:
     decode(end, p);
   }
 
-  const char *get_type_name() const override { return "osd_backoff"; }
+  std::string_view get_type_name() const override { return "osd_backoff"; }
 
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_backoff(" << pgid << " " << ceph_osd_backoff_op_name(op)
 	<< " id " << id
 	<< " [" << begin << "," << end << ")"
 	<< " e" << map_epoch << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -16,7 +16,7 @@ void inode_backpointer_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode(bufferlist::iterator& bl)
+void inode_backpointer_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(dirino, bl);
@@ -25,7 +25,7 @@ void inode_backpointer_t::decode(bufferlist::iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void inode_backpointer_t::decode_old(bufferlist::iterator& bl)
+void inode_backpointer_t::decode_old(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(dirino, bl);
@@ -40,7 +40,7 @@ void inode_backpointer_t::dump(Formatter *f) const
   f->dump_unsigned("version", version);
 }
 
-void inode_backpointer_t::generate_test_instances(list<inode_backpointer_t*>& ls)
+void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*>& ls)
 {
   ls.push_back(new inode_backpointer_t);
   ls.push_back(new inode_backpointer_t);
@@ -64,7 +64,7 @@ void inode_backtrace_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_backtrace_t::decode(bufferlist::iterator& bl)
+void inode_backtrace_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   if (struct_v < 3)
@@ -105,7 +105,7 @@ void inode_backtrace_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void inode_backtrace_t::generate_test_instances(list<inode_backtrace_t*>& ls)
+void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& ls)
 {
   ls.push_back(new inode_backtrace_t);
   ls.push_back(new inode_backtrace_t);

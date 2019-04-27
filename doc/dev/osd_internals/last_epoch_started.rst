@@ -3,12 +3,12 @@ last_epoch_started
 ======================
 
 info.last_epoch_started records an activation epoch e for interval i
-such that all writes commited in i or earlier are reflected in the
+such that all writes committed in i or earlier are reflected in the
 local info/log and no writes after i are reflected in the local
 info/log.  Since no committed write is ever divergent, even if we
 get an authoritative log/info with an older info.last_epoch_started,
 we can leave our info.last_epoch_started alone since no writes could
-have commited in any intervening interval (See PG::proc_master_log).
+have committed in any intervening interval (See PG::proc_master_log).
 
 info.history.last_epoch_started records a lower bound on the most
 recent interval in which the pg as a whole went active and accepted
@@ -26,7 +26,7 @@ Thus, the minimum last_update across all infos with
 info.last_epoch_started >= MAX(history.last_epoch_started) must be an
 upper bound on writes reported as committed to the client.
 
-We update info.last_epoch_started with the intial activation message,
+We update info.last_epoch_started with the initial activation message,
 but we only update history.last_epoch_started after the new
 info.last_epoch_started is persisted (possibly along with the first
 write).  This ensures that we do not require an osd with the most

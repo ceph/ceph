@@ -27,6 +27,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/Clock.h"
 #include "include/utime.h"
@@ -71,7 +72,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     vm);
   po::notify(vm);
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   vector<string> ceph_option_strings = po::collect_unrecognized(
     parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
@@ -82,11 +83,11 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   }
 
   cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
+    NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -121,8 +122,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
 
-  k = atoi(profile["k"].c_str());
-  m = atoi(profile["m"].c_str());
+  k = stoi(profile["k"]);
+  m = stoi(profile["m"]);
   
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
@@ -153,20 +154,11 @@ int ErasureCodeBench::encode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
-  }
-
-  if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
-      (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
-    cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
-      << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
-      << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
-    return -EINVAL;
   }
 
   bufferlist in;
@@ -257,20 +249,13 @@ int ErasureCodeBench::decode()
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
   int code = instance.factory(plugin,
-			      g_conf->get_val<std::string>("erasure_code_dir"),
+			      g_conf().get_val<std::string>("erasure_code_dir"),
 			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
   }
-  if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
-      (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
-    cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
-      << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
-      << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
-    return -EINVAL;
-  }
+
   bufferlist in;
   in.append(string(in_size, 'X'));
   in.rebuild_aligned(ErasureCode::SIMD_ALIGN);
@@ -341,11 +326,11 @@ int main(int argc, char** argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 ceph_erasure_code_benchmark &&
+ * compile-command: "cd ../../../build ; make -j4 ceph_erasure_code_benchmark &&
  *   valgrind --tool=memcheck --leak-check=full \
- *      ./ceph_erasure_code_benchmark \
+ *      ./bin/ceph_erasure_code_benchmark \
  *      --plugin jerasure \
- *      --parameter directory=.libs \
+ *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \

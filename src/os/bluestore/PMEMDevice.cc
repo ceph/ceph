@@ -36,7 +36,6 @@
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
-    debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
 {
 }
@@ -61,7 +60,7 @@ int PMEMDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd = ::open(path.c_str(), O_RDWR);
+  fd = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
@@ -82,21 +81,11 @@ int PMEMDevice::open(const string& p)
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
-  if (S_ISBLK(st.st_mode)) {
-    int64_t s;
-    r = get_block_device_size(fd, &s);
-    if (r < 0) {
-      goto out_fail;
-    }
-    size = s;
-  } else {
-    size = st.st_size;
-  }
 
   size_t map_len;
-  addr = (char *)pmem_map_file(path.c_str(), size, PMEM_FILE_EXCL, O_RDWR, &map_len, NULL);
+  addr = (char *)pmem_map_file(path.c_str(), 0, PMEM_FILE_EXCL, O_RDWR, &map_len, NULL);
   if (addr == NULL) {
-    derr << __func__ << " pmem_map_file error" << dendl;
+    derr << __func__ << " pmem_map_file failed: " << pmem_errormsg() << dendl;
     goto out_fail;
   }
   size = map_len;
@@ -105,7 +94,7 @@ int PMEMDevice::open(const string& p)
   // blksize doesn't strictly matter except that some file systems may
   // require a read/modify/write if we write something smaller than
   // it.
-  block_size = g_conf->bdev_block_size;
+  block_size = g_conf()->bdev_block_size;
   if (block_size != (unsigned)st.st_blksize) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
       << st.st_blksize << ", using bdev_block_size "
@@ -114,9 +103,9 @@ int PMEMDevice::open(const string& p)
 
   dout(1) << __func__
     << " size " << size
-    << " (" << pretty_si_t(size) << "B)"
+    << " (" << byte_u_t(size) << ")"
     << " block_size " << block_size
-    << " (" << pretty_si_t(block_size) << "B)"
+    << " (" << byte_u_t(block_size) << ")"
     << dendl;
   return 0;
 
@@ -130,20 +119,13 @@ void PMEMDevice::close()
 {
   dout(1) << __func__ << dendl;
 
-  assert(addr != NULL);
+  ceph_assert(addr != NULL);
   pmem_unmap(addr, size);
-  assert(fd >= 0);
+  ceph_assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
 
   path.clear();
-}
-
-static string get_dev_property(const char *dev, const char *property)
-{
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
 }
 
 int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
@@ -160,40 +142,23 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
     return -errno;
   if (S_ISBLK(st.st_mode)) {
     (*pm)[prefix + "access_mode"] = "blk";
-    char partition_path[PATH_MAX];
-    char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd, partition_path, dev_node, PATH_MAX);
-    switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
-      (*pm)[prefix + "partition_path"] = "unknown";
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)[prefix + "partition_path"] = string(partition_path);
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    default:
-      {
-	(*pm)[prefix + "partition_path"] = string(partition_path);
-	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
+    char buffer[1024] = {0};
+    BlkDev blkdev(fd_buffered);
 
-	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, "device/serial");
-	if (serial.length()) {
-	  (*pm)[prefix + "serial"] = serial;
-	}
+    blkdev.model(buffer, sizeof(buffer));
+    (*pm)[prefix + "model"] = buffer;
 
-	// nvme has a device/device/* structure; infer from that.  there
-	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
-	if (nvme_vendor.length()) {
-	  (*pm)[prefix + "type"] = "nvme";
-	}
-      }
-    }
+    buffer[0] = '\0';
+    blkdev.dev(buffer, sizeof(buffer));
+    (*pm)[prefix + "dev"] = buffer;
+
+    // nvme exposes a serial number
+    buffer[0] = '\0';
+    blkdev.serial(buffer, sizeof(buffer));
+    (*pm)[prefix + "serial"] = buffer;
+
+    if (blkdev.is_nvme())
+      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
@@ -210,21 +175,27 @@ int PMEMDevice::flush()
 
 void PMEMDevice::aio_submit(IOContext *ioc)
 {
+  if (ioc->priv) {
+    ceph_assert(ioc->num_running == 0);
+    aio_callback(aio_callback_priv, ioc->priv);
+  } else {
+    ioc->try_aio_wake();
+  }
   return;
 }
 
-int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
+int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   dout(40) << "data: ";
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  if (g_conf->bdev_inject_crash &&
-      rand() % g_conf->bdev_inject_crash == 0) {
+  if (g_conf()->bdev_inject_crash &&
+      rand() % g_conf()->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
       << dendl;
     ++injecting_crash;
@@ -240,7 +211,6 @@ int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
     len -= l;
     off1 += l;
   }
-
   return 0;
 }
 
@@ -248,7 +218,8 @@ int PMEMDevice::aio_write(
   uint64_t off,
   bufferlist &bl,
   IOContext *ioc,
-  bool buffered)
+  bool buffered,
+  int write_hint = WRITE_LIFE_NOT_SET)
 {
   return write(off, bl, buffered);
 }
@@ -259,9 +230,9 @@ int PMEMDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len  << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
-  bufferptr p = buffer::create_page_aligned(len);
+  bufferptr p = buffer::create_small_page_aligned(len);
   memcpy(p.c_str(), addr + off, len);
 
   pbl->clear();
@@ -283,7 +254,7 @@ int PMEMDevice::aio_read(uint64_t off, uint64_t len, bufferlist *pbl,
 int PMEMDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  assert(is_valid_io(off, len));
+  ceph_assert(is_valid_io(off, len));
 
   memcpy(buf, addr + off, len);
   return 0;

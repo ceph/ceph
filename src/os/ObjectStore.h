@@ -38,10 +38,6 @@
 
 class CephContext;
 
-using std::vector;
-using std::string;
-using std::map;
-
 namespace ceph {
   class Formatter;
 }
@@ -51,15 +47,16 @@ namespace ceph {
  */
 
 class Logger;
+class ContextQueue;
 
-
-static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
+static inline void encode(const std::map<std::string,ceph::buffer::ptr> *attrset, ceph::buffer::list &bl) {
+  using ceph::encode;
   encode(*attrset, bl);
 }
 
 // this isn't the best place for these, but...
-void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
-void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_str_map_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
+void decode_str_set_to_bl(ceph::buffer::list::const_iterator& p, ceph::buffer::list *out);
 
 // Flag bits
 typedef uint32_t osflagbits_t;
@@ -68,7 +65,7 @@ const int SKIP_MOUNT_OMAP = 1 << 1;
 
 class ObjectStore {
 protected:
-  string path;
+  std::string path;
 
 public:
   CephContext* cct;
@@ -77,15 +74,15 @@ public:
    *
    * This is invoked once at initialization time.
    *
-   * @param type type of store. This is a string from the configuration file.
+   * @param type type of store. This is a std::string from the configuration file.
    * @param data path (or other descriptor) for data
    * @param journal path (or other descriptor) for journal (optional)
    * @param flags which filestores should check if applicable
    */
   static ObjectStore *create(CephContext *cct,
-			     const string& type,
-			     const string& data,
-			     const string& journal,
+			     const std::string& type,
+			     const std::string& data,
+			     const std::string& journal,
 			     osflagbits_t flags = 0);
 
   /**
@@ -97,7 +94,7 @@ public:
    */
   static int probe_block_device_fsid(
     CephContext *cct,
-    const string& path,
+    const std::string& path,
     uuid_d *fsid);
 
   /**
@@ -146,7 +143,7 @@ public:
      * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
      * 2) collection is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
+     *    called asynchronously with a value of 0 once all transactions
      *    queued on this collection prior to the call have been applied
      *    and committed.
      */
@@ -181,8 +178,8 @@ public:
    * the maximum size of an object, which is typically around 100 MB.
    *
    * Xattrs are equivalent to the extended attributes of file
-   * systems. Xattrs are a set of key/value pairs.  Sub-value access
-   * is not required. It is possible to enumerate the set of xattrs in
+   * systems. Xattrs are a std::set of key/value pairs.  Sub-value access
+   * is not required. It is possible to enumerate the std::set of xattrs in
    * key order.  At the implementation level, xattrs are used
    * exclusively internal to Ceph and the implementer can expect the
    * total size of all of the xattrs on an object to be relatively
@@ -211,7 +208,7 @@ public:
    *
    * A collection is simply a grouping of objects. Collections have
    * names (coll_t) and can be enumerated in order.  Like an
-   * individual object, a collection also has a set of xattrs.
+   * individual object, a collection also has a std::set of xattrs.
    *
    *
    */
@@ -251,10 +248,10 @@ public:
    * At the implementation level, each mutation primitive (and its
    * associated data) can be serialized to a single buffer.  That
    * serialization, however, does not copy any data, but (using the
-   * bufferlist library) will reference the original buffers.  This
+   * ceph::buffer::list library) will reference the original buffers.  This
    * implies that the buffer that contains the data being submitted
    * must remain stable until the on_commit callback completes.  In
-   * practice, bufferlist handles all of this for you and this
+   * practice, ceph::buffer::list handles all of this for you and this
    * subtlety is only relevant if you are referencing an existing
    * buffer via buffer::raw_static.
    *
@@ -269,8 +266,8 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   override for legacy operations/buffers.  For non-legacy
-   *   implementation of ObjectStore, neither of these fields is
+   *   overridden for legacy operations/buffers.  For non-legacy
+   *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
    *
@@ -298,7 +295,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -349,6 +346,8 @@ public:
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
 
       OP_COLL_SET_BITS = 42, // cid, bits
+
+      OP_MERGE_COLLECTION = 43, // cid, destination
     };
 
     // Transaction hint type
@@ -424,10 +423,10 @@ public:
       TransactionData(const TransactionData& other) = default;
       TransactionData& operator=(const TransactionData& other) = default;
 
-      void encode(bufferlist& bl) const {
+      void encode(ceph::buffer::list& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(ceph::buffer::list::const_iterator &bl) {
         bl.copy(sizeof(TransactionData), (char*)this);
       }
     } __attribute__ ((packed)) ;
@@ -435,29 +434,27 @@ public:
   private:
     TransactionData data;
 
-    map<coll_t, __le32> coll_index;
-    map<ghobject_t, __le32> object_index;
+    std::map<coll_t, __le32> coll_index;
+    std::map<ghobject_t, __le32> object_index;
 
     __le32 coll_id {0};
     __le32 object_id {0};
 
-    bufferlist data_bl;
-    bufferlist op_bl;
+    ceph::buffer::list data_bl;
+    ceph::buffer::list op_bl;
 
-    bufferptr op_ptr;
-
-    list<Context *> on_applied;
-    list<Context *> on_commit;
-    list<Context *> on_applied_sync;
+    std::list<Context *> on_applied;
+    std::list<Context *> on_commit;
+    std::list<Context *> on_applied_sync;
 
   public:
     Transaction() = default;
 
-    explicit Transaction(bufferlist::iterator &dp) {
+    explicit Transaction(ceph::buffer::list::const_iterator &dp) {
       decode(dp);
     }
-    explicit Transaction(bufferlist &nbl) {
-      bufferlist::iterator dp = nbl.begin();
+    explicit Transaction(ceph::buffer::list &nbl) {
+      auto dp = nbl.cbegin();
       decode(dp);
     }
 
@@ -470,7 +467,6 @@ public:
       object_id(other.object_id),
       data_bl(std::move(other.data_bl)),
       op_bl(std::move(other.op_bl)),
-      op_ptr(std::move(other.op_ptr)),
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
@@ -486,7 +482,6 @@ public:
       object_id = other.object_id;
       data_bl = std::move(other.data_bl);
       op_bl = std::move(other.op_bl);
-      op_ptr = std::move(other.op_ptr);
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
@@ -499,7 +494,7 @@ public:
     Transaction& operator=(const Transaction& other) = default;
 
     // expose object_index for FileStore::Op's benefit
-    const map<ghobject_t, __le32>& get_object_index() const {
+    const std::map<ghobject_t, __le32>& get_object_index() const {
       return object_index;
     }
 
@@ -522,16 +517,22 @@ public:
       register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
       register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }
+    bool has_contexts() const {
+      return
+	!on_commit.empty() ||
+	!on_applied.empty() ||
+	!on_applied_sync.empty();
+    }
 
     static void collect_contexts(
-      vector<Transaction>& t,
+      std::vector<Transaction>& t,
       Context **out_on_applied,
       Context **out_on_commit,
       Context **out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
-      list<Context *> on_applied, on_commit, on_applied_sync;
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
+      std::list<Context *> on_applied, on_commit, on_applied_sync;
       for (auto& i : t) {
 	on_applied.splice(on_applied.end(), i.on_applied);
 	on_commit.splice(on_commit.end(), i.on_commit);
@@ -542,13 +543,13 @@ public:
       *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
     }
     static void collect_contexts(
-      vector<Transaction>& t,
-      list<Context*> *out_on_applied,
-      list<Context*> *out_on_commit,
-      list<Context*> *out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      std::vector<Transaction>& t,
+      std::list<Context*> *out_on_applied,
+      std::list<Context*> *out_on_commit,
+      std::list<Context*> *out_on_applied_sync) {
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       for (auto& i : t) {
 	out_on_applied->splice(out_on_applied->end(), i.on_applied);
 	out_on_commit->splice(out_on_commit->end(), i.on_commit);
@@ -590,8 +591,8 @@ public:
     }
 
     void _update_op(Op* op,
-      vector<__le32> &cm,
-      vector<__le32> &om) {
+      std::vector<__le32> &cm,
+      std::vector<__le32> &om) {
 
       switch (op->op) {
       case OP_NOP:
@@ -613,17 +614,17 @@ public:
       case OP_ZERO:
       case OP_TRUNCATE:
       case OP_SETALLOCHINT:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         break;
 
       case OP_CLONERANGE2:
       case OP_CLONE:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
@@ -636,24 +637,24 @@ public:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
       case OP_COLL_SET_BITS:
-        assert(op->cid < cm.size());
+        ceph_assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
 
       case OP_COLL_ADD:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < om.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         op->oid = om[op->oid];
         break;
 
       case OP_COLL_MOVE_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < cm.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < cm.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_cid = cm[op->dest_cid];
@@ -661,38 +662,41 @@ public:
         break;
 
       case OP_TRY_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
 	break;
 
       case OP_SPLIT_COLLECTION2:
-        assert(op->cid < cm.size());
-	assert(op->dest_cid < cm.size());
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
+      case OP_MERGE_COLLECTION:
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         break;
 
       default:
-        assert(0 == "Unknown OP");
+        ceph_abort_msg("Unknown OP");
       }
     }
     void _update_op_bl(
-      bufferlist& bl,
-      vector<__le32> &cm,
-      vector<__le32> &om) {
+      ceph::buffer::list& bl,
+      std::vector<__le32> &cm,
+      std::vector<__le32> &om) {
+      for (auto& bp : bl.buffers()) {
+        ceph_assert(bp.length() % sizeof(Op) == 0);
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
-
-      for(p = list.begin(); p != list.end(); ++p) {
-        assert(p->length() % sizeof(Op) == 0);
-
-        char* raw_p = p->c_str();
-        char* raw_end = raw_p + p->length();
+        char* raw_p = const_cast<char*>(bp.c_str());
+        char* raw_end = raw_p + bp.length();
         while (raw_p < raw_end) {
           _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);
@@ -714,16 +718,16 @@ public:
       on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
 
       //append coll_index & object_index
-      vector<__le32> cm(other.coll_index.size());
-      map<coll_t, __le32>::iterator coll_index_p;
+      std::vector<__le32> cm(other.coll_index.size());
+      std::map<coll_t, __le32>::iterator coll_index_p;
       for (coll_index_p = other.coll_index.begin();
            coll_index_p != other.coll_index.end();
            ++coll_index_p) {
         cm[coll_index_p->second] = _get_coll_id(coll_index_p->first);
       }
 
-      vector<__le32> om(other.object_index.size());
-      map<ghobject_t, __le32>::iterator object_index_p;
+      std::vector<__le32> om(other.object_index.size());
+      std::map<ghobject_t, __le32>::iterator object_index_p;
       for (object_index_p = other.object_index.begin();
            object_index_p != other.object_index.end();
            ++object_index_p) {
@@ -731,11 +735,13 @@ public:
       }      
 
       //the other.op_bl SHOULD NOT be changes during append operation,
-      //we use additional bufferlist to avoid this problem
-      bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
-      bufferlist other_op_bl;
-      other_op_bl.append(other_op_bl_ptr);
+      //we use additional ceph::buffer::list to avoid this problem
+      ceph::buffer::list other_op_bl;
+      {
+        ceph::buffer::ptr other_op_bl_ptr(other.op_bl.length());
+        other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+        other_op_bl.append(std::move(other_op_bl_ptr));
+      }
 
       //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
@@ -781,7 +787,7 @@ public:
     uint64_t get_encoded_bytes_test() {
       using ceph::encode;
       //layout: data_bl + op_bl + coll_index + object_index + data
-      bufferlist bl;
+      ceph::buffer::list bl;
       encode(coll_index, bl);
       encode(object_index, bl);
 
@@ -819,7 +825,7 @@ public:
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
     }
@@ -839,30 +845,30 @@ public:
       uint64_t ops;
       char* op_buffer_p;
 
-      bufferlist::iterator data_bl_p;
+      ceph::buffer::list::const_iterator data_bl_p;
 
     public:
-      vector<coll_t> colls;
-      vector<ghobject_t> objects;
+      std::vector<coll_t> colls;
+      std::vector<ghobject_t> objects;
 
     private:
       explicit iterator(Transaction *t)
         : t(t),
-	  data_bl_p(t->data_bl.begin()),
+	  data_bl_p(t->data_bl.cbegin()),
           colls(t->coll_index.size()),
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+        op_buffer_p = t->op_bl.c_str();
 
-        map<coll_t, __le32>::iterator coll_index_p;
+        std::map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
              coll_index_p != t->coll_index.end();
              ++coll_index_p) {
           colls[coll_index_p->second] = coll_index_p->first;
         }
 
-        map<ghobject_t, __le32>::iterator object_index_p;
+        std::map<ghobject_t, __le32>::iterator object_index_p;
         for (object_index_p = t->object_index.begin();
              object_index_p != t->object_index.end();
              ++object_index_p) {
@@ -878,7 +884,7 @@ public:
         return ops > 0;
       }
       Op* decode_op() {
-        assert(ops > 0);
+        ceph_assert(ops > 0);
 
         Op* op = reinterpret_cast<Op*>(op_buffer_p);
         op_buffer_p += sizeof(Op);
@@ -886,45 +892,45 @@ public:
 
         return op;
       }
-      string decode_string() {
+      std::string decode_string() {
 	using ceph::decode;
-        string s;
+        std::string s;
         decode(s, data_bl_p);
         return s;
       }
-      void decode_bp(bufferptr& bp) {
+      void decode_bp(ceph::buffer::ptr& bp) {
 	using ceph::decode;
         decode(bp, data_bl_p);
       }
-      void decode_bl(bufferlist& bl) {
+      void decode_bl(ceph::buffer::list& bl) {
 	using ceph::decode;
         decode(bl, data_bl_p);
       }
-      void decode_attrset(map<string,bufferptr>& aset) {
+      void decode_attrset(std::map<std::string,ceph::buffer::ptr>& aset) {
 	using ceph::decode;
         decode(aset, data_bl_p);
       }
-      void decode_attrset(map<string,bufferlist>& aset) {
+      void decode_attrset(std::map<std::string,ceph::buffer::list>& aset) {
 	using ceph::decode;
         decode(aset, data_bl_p);
       }
-      void decode_attrset_bl(bufferlist *pbl) {
+      void decode_attrset_bl(ceph::buffer::list *pbl) {
 	decode_str_str_map_to_bl(data_bl_p, pbl);
       }
-      void decode_keyset(set<string> &keys){
+      void decode_keyset(std::set<std::string> &keys){
 	using ceph::decode;
         decode(keys, data_bl_p);
       }
-      void decode_keyset_bl(bufferlist *pbl){
+      void decode_keyset_bl(ceph::buffer::list *pbl){
         decode_str_set_to_bl(data_bl_p, pbl);
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
-        assert(oid_id < objects.size());
+        ceph_assert(oid_id < objects.size());
         return objects[oid_id];
       }
       const coll_t &get_cid(__le32 cid_id) {
-        assert(cid_id < colls.size());
+        ceph_assert(cid_id < colls.size());
         return colls[cid_id];
       }
       uint32_t get_fadvise_flags() const {
@@ -948,20 +954,17 @@ private:
      * form of seat belts for the decoder.
      */
     Op* _get_next_op() {
-      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
-        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+      if (op_bl.get_append_buffer_unused_tail_length() < sizeof(Op)) {
+        op_bl.reserve(sizeof(Op) * OPS_PER_PTR);
       }
-      bufferptr ptr(op_ptr, 0, sizeof(Op));
-      op_bl.append(ptr);
-
-      op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
-
-      char* p = ptr.c_str();
+      // append_hole ensures bptr merging. Even huge number of ops
+      // shouldn't result in overpopulating bl::_buffers.
+      char* const p = op_bl.append_hole(sizeof(Op)).c_str();
       memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
     __le32 _get_coll_id(const coll_t& coll) {
-      map<coll_t, __le32>::iterator c = coll_index.find(coll);
+      std::map<coll_t, __le32>::iterator c = coll_index.find(coll);
       if (c != coll_index.end())
         return c->second;
 
@@ -970,7 +973,7 @@ private:
       return index_id;
     }
     __le32 _get_object_id(const ghobject_t& oid) {
-      map<ghobject_t, __le32>::iterator o = object_index.find(oid);
+      std::map<ghobject_t, __le32>::iterator o = object_index.find(oid);
       if (o != object_index.end())
         return o->second;
 
@@ -1012,7 +1015,7 @@ public:
      * Note that a 0-length write does not affect the size of the object.
      */
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
-	       const bufferlist& write_data, uint32_t flags = 0) {
+	       const ceph::buffer::list& write_data, uint32_t flags = 0) {
       using ceph::encode;
       uint32_t orig_len = data_bl.length();
       Op* _op = _get_next_op();
@@ -1023,7 +1026,7 @@ public:
       _op->len = len;
       encode(write_data, data_bl);
 
-      assert(len == write_data.length());
+      ceph_assert(len == write_data.length());
       data.fadvise_flags = data.fadvise_flags | flags;
       if (write_data.length() > data.largest_data_len) {
 	data.largest_data_len = write_data.length();
@@ -1069,12 +1072,12 @@ public:
       data.ops++;
     }
     /// Set an xattr of an object
-    void setattr(const coll_t& cid, const ghobject_t& oid, const char* name, bufferlist& val) {
-      string n(name);
+    void setattr(const coll_t& cid, const ghobject_t& oid, const char* name, ceph::buffer::list& val) {
+      std::string n(name);
       setattr(cid, oid, n, val);
     }
     /// Set an xattr of an object
-    void setattr(const coll_t& cid, const ghobject_t& oid, const string& s, bufferlist& val) {
+    void setattr(const coll_t& cid, const ghobject_t& oid, const std::string& s, ceph::buffer::list& val) {
       using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTR;
@@ -1085,7 +1088,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferptr>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::ptr>& attrset) {
       using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
@@ -1095,7 +1098,7 @@ public:
       data.ops++;
     }
     /// Set multiple xattrs of an object
-    void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferlist>& attrset) {
+    void setattrs(const coll_t& cid, const ghobject_t& oid, const std::map<std::string,ceph::buffer::list>& attrset) {
       using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
@@ -1106,11 +1109,11 @@ public:
     }
     /// remove an xattr from an object
     void rmattr(const coll_t& cid, const ghobject_t& oid, const char *name) {
-      string n(name);
+      std::string n(name);
       rmattr(cid, oid, n);
     }
     /// remove an xattr from an object
-    void rmattr(const coll_t& cid, const ghobject_t& oid, const string& s) {
+    void rmattr(const coll_t& cid, const ghobject_t& oid, const std::string& s) {
       using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_RMATTR;
@@ -1190,7 +1193,7 @@ public:
      * @param hint - the hint payload, which contains the customized
      *               data along with the hint type.
      */
-    void collection_hint(const coll_t& cid, uint32_t type, const bufferlist& hint) {
+    void collection_hint(const coll_t& cid, uint32_t type, const ceph::buffer::list& hint) {
       using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_COLL_HINT;
@@ -1207,7 +1210,7 @@ public:
       _op->cid = _get_coll_id(cid);
       data.ops++;
     }
-    void collection_move(const coll_t& cid, coll_t oldcid, const ghobject_t& oid)
+    void collection_move(const coll_t& cid, const coll_t &oldcid, const ghobject_t& oid)
       __attribute__ ((deprecated)) {
 	// NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
 	// always appear together, so this is effectively a single MOVE.
@@ -1225,7 +1228,7 @@ public:
 	data.ops++;
       }
     void collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
-				coll_t cid, const ghobject_t& oid) {
+				const coll_t &cid, const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_MOVE_RENAME;
       _op->cid = _get_coll_id(oldcid);
@@ -1234,7 +1237,7 @@ public:
       _op->dest_oid = _get_object_id(oid);
       data.ops++;
     }
-    void try_rename(coll_t cid, const ghobject_t& oldoid,
+    void try_rename(const coll_t &cid, const ghobject_t& oldoid,
                     const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_TRY_RENAME;
@@ -1246,7 +1249,7 @@ public:
 
     /// Remove omap from oid
     void omap_clear(
-      coll_t cid,           ///< [in] Collection containing oid
+      const coll_t &cid,           ///< [in] Collection containing oid
       const ghobject_t &oid  ///< [in] Object from which to remove omap
       ) {
       Op* _op = _get_next_op();
@@ -1259,7 +1262,7 @@ public:
     void omap_setkeys(
       const coll_t& cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
-      const map<string, bufferlist> &attrset ///< [in] Replacement keys and values
+      const std::map<std::string, ceph::buffer::list> &attrset ///< [in] Replacement keys and values
       ) {
       using ceph::encode;
       Op* _op = _get_next_op();
@@ -1270,11 +1273,11 @@ public:
       data.ops++;
     }
 
-    /// Set keys on an oid omap (bufferlist variant).
+    /// Set keys on an oid omap (ceph::buffer::list variant).
     void omap_setkeys(
-      coll_t cid,                           ///< [in] Collection containing oid
+      const coll_t &cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
-      const bufferlist &attrset_bl          ///< [in] Replacement keys and values
+      const ceph::buffer::list &attrset_bl          ///< [in] Replacement keys and values
       ) {
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_SETKEYS;
@@ -1286,9 +1289,9 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
-      const set<string> &keys ///< [in] Keys to clear
+      const std::set<std::string> &keys ///< [in] Keys to clear
       ) {
       using ceph::encode;
       Op* _op = _get_next_op();
@@ -1301,9 +1304,9 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
-      const bufferlist &keys_bl ///< [in] Keys to clear
+      const ceph::buffer::list &keys_bl ///< [in] Keys to clear
       ) {
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_RMKEYS;
@@ -1315,10 +1318,10 @@ public:
 
     /// Remove key range from oid omap
     void omap_rmkeyrange(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
-      const string& first,    ///< [in] first key in range
-      const string& last      ///< [in] first key past range, range is [first,last)
+      const std::string& first,    ///< [in] first key in range
+      const std::string& last      ///< [in] first key past range, range is [first,last)
       ) {
         using ceph::encode;
 	Op* _op = _get_next_op();
@@ -1332,9 +1335,9 @@ public:
 
     /// Set omap header
     void omap_setheader(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object
-      const bufferlist &bl    ///< [in] Header value
+      const ceph::buffer::list &bl    ///< [in] Header value
       ) {
       using ceph::encode;
       Op* _op = _get_next_op();
@@ -1348,10 +1351,10 @@ public:
     /// Split collection based on given prefixes, objects matching the specified bits/rem are
     /// moved to the new collection
     void split_collection(
-      coll_t cid,
+      const coll_t &cid,
       uint32_t bits,
       uint32_t rem,
-      coll_t destination) {
+      const coll_t &destination) {
       Op* _op = _get_next_op();
       _op->op = OP_SPLIT_COLLECTION2;
       _op->cid = _get_coll_id(cid);
@@ -1361,8 +1364,21 @@ public:
       data.ops++;
     }
 
-    void collection_set_bits(
+    /// Merge collection into another.
+    void merge_collection(
       coll_t cid,
+      coll_t destination,
+      uint32_t bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_MERGE_COLLECTION;
+      _op->cid = _get_coll_id(cid);
+      _op->dest_cid = _get_coll_id(destination);
+      _op->split_bits = bits;
+      data.ops++;
+    }
+
+    void collection_set_bits(
+      const coll_t &cid,
       int bits) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_SET_BITS;
@@ -1374,7 +1390,7 @@ public:
     /// Set allocation hint for an object
     /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
       uint64_t expected_write_size,
@@ -1390,7 +1406,7 @@ public:
       data.ops++;
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       //layout: data_bl + op_bl + coll_index + object_index + data
       ENCODE_START(9, 9, bl);
       encode(data_bl, bl);
@@ -1401,7 +1417,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(ceph::buffer::list::const_iterator &bl) {
       DECODE_START(9, bl);
       DECODE_OLDEST(9);
 
@@ -1417,20 +1433,20 @@ public:
     }
 
     void dump(ceph::Formatter *f);
-    static void generate_test_instances(list<Transaction*>& o);
+    static void generate_test_instances(std::list<Transaction*>& o);
   };
 
   int queue_transaction(CollectionHandle& ch,
 			Transaction&& t,
 			TrackedOpRef op = TrackedOpRef(),
 			ThreadPool::TPHandle *handle = NULL) {
-    vector<Transaction> tls;
+    std::vector<Transaction> tls;
     tls.push_back(std::move(t));
     return queue_transactions(ch, tls, op, handle);
   }
 
   virtual int queue_transactions(
-    CollectionHandle& ch, vector<Transaction>& tls,
+    CollectionHandle& ch, std::vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
@@ -1449,12 +1465,14 @@ public:
     return 0;
   }
 
-  virtual void get_db_statistics(Formatter *f) { }
-  virtual void generate_db_histogram(Formatter *f) { }
-  virtual void flush_cache() { }
-  virtual void dump_perf_counters(Formatter *f) {}
+  virtual void get_db_statistics(ceph::Formatter *f) { }
+  virtual void generate_db_histogram(ceph::Formatter *f) { }
+  virtual int flush_cache(std::ostream *os = NULL) { return -1; }
+  virtual void dump_perf_counters(ceph::Formatter *f) {}
+  virtual void dump_cache_stats(ceph::Formatter *f) {}
+  virtual void dump_cache_stats(std::ostream& os) {}
 
-  virtual string get_type() = 0;
+  virtual std::string get_type() = 0;
 
   // mgmt
   virtual bool test_mount_in_use() = 0;
@@ -1485,7 +1503,7 @@ public:
   virtual bool allows_journal() = 0; //< allows a journal
 
   /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
-  virtual int get_devices(std::set<string> *devls) {
+  virtual int get_devices(std::set<std::string> *devls) {
     return -EOPNOTSUPP;
   }
 
@@ -1521,17 +1539,27 @@ public:
     return true;
   }
 
-  virtual string get_default_device_class() {
+  virtual std::string get_default_device_class() {
     return is_rotational() ? "hdd" : "ssd";
   }
+
+  virtual int get_numa_node(
+    int *numa_node,
+    std::set<int> *nodes,
+    std::set<std::string> *failed) {
+    return -EOPNOTSUPP;
+  }
+
 
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
 
-  virtual int statfs(struct store_statfs_t *buf) = 0;
+  virtual int statfs(struct store_statfs_t *buf,
+		     osd_alert_list_t* alerts = nullptr) = 0;
+  virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) = 0;
 
-  virtual void collect_metadata(map<string,string> *pm) { }
+  virtual void collect_metadata(std::map<std::string,string> *pm) { }
 
   /**
    * write_meta - write a simple configuration key out-of-band
@@ -1544,7 +1572,7 @@ public:
    * A newline is appended.
    *
    * @param key key name (e.g., "fsid")
-   * @param value value (e.g., a uuid rendered as a string)
+   * @param value value (e.g., a uuid rendered as a std::string)
    * @returns 0 for success, or an error code
    */
   virtual int write_meta(const std::string& key,
@@ -1558,7 +1586,7 @@ public:
    * Trailing whitespace is stripped off.
    *
    * @param key key name
-   * @param value pointer to value string
+   * @param value pointer to value std::string
    * @returns 0 for success, or an error code
    */
   virtual int read_meta(const std::string& key,
@@ -1589,6 +1617,13 @@ public:
    */
   virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
+  /**
+   * std::set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations
@@ -1603,7 +1638,7 @@ public:
    */
   virtual bool exists(CollectionHandle& c, const ghobject_t& oid) = 0;
   /**
-   * set_collection_opts -- set pool options for a collectioninformation for an object
+   * set_collection_opts -- std::set pool options for a collectioninformation for an object
    *
    * @param cid collection
    * @param opts new collection options
@@ -1637,7 +1672,7 @@ public:
    * @param oid oid of object
    * @param offset location offset of first byte to be read
    * @param len number of bytes to be read
-   * @param bl output bufferlist
+   * @param bl output ceph::buffer::list
    * @param op_flags is CEPH_OSD_OP_FLAG_*
    * @returns number of bytes read on success, or negative error code on failure.
    */
@@ -1646,14 +1681,14 @@ public:
      const ghobject_t& oid,
      uint64_t offset,
      size_t len,
-     bufferlist& bl,
+     ceph::buffer::list& bl,
      uint32_t op_flags = 0) = 0;
 
   /**
-   * fiemap -- get extent map of data of an object
+   * fiemap -- get extent std::map of data of an object
    *
-   * Returns an encoded map of the extents of an object's data portion
-   * (map<offset,size>).
+   * Returns an encoded std::map of the extents of an object's data portion
+   * (std::map<offset,size>).
    *
    * A non-enlightened implementation is free to return the extent (offset, len)
    * as the sole extent.
@@ -1662,13 +1697,13 @@ public:
    * @param oid oid of object
    * @param offset location offset of first byte to be read
    * @param len number of bytes to be read
-   * @param bl output bufferlist for extent map information.
+   * @param bl output ceph::buffer::list for extent std::map information.
    * @returns 0 on success, negative error code on failure.
    */
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
-		      uint64_t offset, size_t len, bufferlist& bl) = 0;
+		      uint64_t offset, size_t len, ceph::buffer::list& bl) = 0;
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
-		      uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) = 0;
+		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1680,7 +1715,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int getattr(CollectionHandle &c, const ghobject_t& oid,
-		      const char *name, bufferptr& value) = 0;
+		      const char *name, ceph::buffer::ptr& value) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1693,8 +1728,8 @@ public:
    */
   int getattr(
     CollectionHandle &c, const ghobject_t& oid,
-    const string& name, bufferlist& value) {
-    bufferptr bp;
+    const std::string& name, ceph::buffer::list& value) {
+    ceph::buffer::ptr bp;
     int r = getattr(c, oid, name.c_str(), bp);
     value.push_back(bp);
     return r;
@@ -1709,7 +1744,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
-		       map<string,bufferptr>& aset) = 0;
+		       std::map<std::string,ceph::buffer::ptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1720,12 +1755,10 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
-	       map<string,bufferlist>& aset) {
-    map<string,bufferptr> bmap;
+	       std::map<std::string,ceph::buffer::list>& aset) {
+    std::map<std::string,ceph::buffer::ptr> bmap;
     int r = getattrs(c, oid, bmap);
-    for (map<string,bufferptr>::iterator i = bmap.begin();
-	i != bmap.end();
-	++i) {
+    for (auto i = bmap.begin(); i != bmap.end(); ++i) {
       aset[i->first].append(i->second);
     }
     return r;
@@ -1737,10 +1770,10 @@ public:
   /**
    * list_collections -- get all of the collections known to this ObjectStore
    *
-   * @param ls list of the collections in sorted order.
+   * @param ls std::list of the collections in sorted order.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int list_collections(vector<coll_t>& ls) = 0;
+  virtual int list_collections(std::vector<coll_t>& ls) = 0;
 
   /**
    * does a collection exist?
@@ -1763,14 +1796,14 @@ public:
    * return the number of significant bits of the coll_t::pgid.
    *
    * This should return what the last create_collection or split_collection
-   * set.  A legacy backend may return -EAGAIN if the value is unavailable
+   * std::set.  A legacy backend may return -EAGAIN if the value is unavailable
    * (because we upgraded from an older version, e.g., FileStore).
    */
   virtual int collection_bits(CollectionHandle& c) = 0;
 
 
   /**
-   * list contents of a collection that fall in the range [start, end) and no more than a specified many result
+   * std::list contents of a collection that fall in the range [start, end) and no more than a specified many result
    *
    * @param c collection
    * @param start list object that sort >= this value
@@ -1784,7 +1817,7 @@ public:
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
 			      int max,
-			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
+			      std::vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
 
   /// OMAP
@@ -1792,15 +1825,15 @@ public:
   virtual int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value std::map
     ) = 0;
 
   /// Get omap header
   virtual int omap_get_header(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
+    ceph::buffer::list *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
     ) = 0;
 
@@ -1808,23 +1841,23 @@ public:
   virtual int omap_get_keys(
     CollectionHandle &c,   ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
+    std::set<std::string> *keys      ///< [out] Keys defined on oid
     ) = 0;
 
   /// Get key values
   virtual int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
+    const std::set<std::string> &keys,     ///< [in] Keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
 
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
     ) = 0;
 
   /**
@@ -1843,9 +1876,9 @@ public:
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
-  virtual int dump_journal(ostream& out) { return -EOPNOTSUPP; }
+  virtual int dump_journal(std::ostream& out) { return -EOPNOTSUPP; }
 
-  virtual int snapshot(const string& name) { return -EOPNOTSUPP; }
+  virtual int snapshot(const std::string& name) { return -EOPNOTSUPP; }
 
   /**
    * Set and get internal fsid for this instance. No external data is modified
@@ -1872,6 +1905,6 @@ public:
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
 
-ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx);
+std::ostream& operator<<(std::ostream& out, const ObjectStore::Transaction& tx);
 
 #endif

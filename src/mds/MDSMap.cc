@@ -24,7 +24,7 @@ using std::stringstream;
 #define dout_subsys ceph_subsys_
 
 // features
-CompatSet get_mdsmap_compat_set_all() {
+CompatSet MDSMap::get_compat_set_all() {
   CompatSet::FeatureSet feature_compat;
   CompatSet::FeatureSet feature_ro_compat;
   CompatSet::FeatureSet feature_incompat;
@@ -37,11 +37,12 @@ CompatSet get_mdsmap_compat_set_all() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
 
-CompatSet get_mdsmap_compat_set_default() {
+CompatSet MDSMap::get_compat_set_default() {
   CompatSet::FeatureSet feature_compat;
   CompatSet::FeatureSet feature_ro_compat;
   CompatSet::FeatureSet feature_incompat;
@@ -53,12 +54,13 @@ CompatSet get_mdsmap_compat_set_default() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
 
 // base (pre v0.20)
-CompatSet get_mdsmap_compat_set_base() {
+CompatSet MDSMap::get_compat_set_base() {
   CompatSet::FeatureSet feature_compat_base;
   CompatSet::FeatureSet feature_incompat_base;
   feature_incompat_base.insert(MDS_FEATURE_INCOMPAT_BASE);
@@ -75,14 +77,11 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("incarnation", inc);
   f->dump_stream("state") << ceph_mds_state_name(state);
   f->dump_int("state_seq", state_seq);
-  f->dump_stream("addr") << addr;
+  f->dump_stream("addr") << addrs.get_legacy_str();
+  f->dump_object("addrs", addrs);
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
-  f->dump_int("standby_for_rank", standby_for_rank);
-  f->dump_int("standby_for_fscid", standby_for_fscid);
-  f->dump_string("standby_for_name", standby_for_name);
-  f->dump_bool("standby_replay", standby_replay);
   f->open_array_section("export_targets");
   for (set<mds_rank_t>::iterator p = export_targets.begin();
        p != export_targets.end(); ++p) {
@@ -90,12 +89,13 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_unsigned("features", mds_features);
+  f->dump_unsigned("flags", flags);
 }
 
 void MDSMap::mds_info_t::print_summary(ostream &out) const
 {
   out << global_id << ":\t"
-      << addr
+      << addrs
       << " '" << name << "'"
       << " mds." << rank
       << "." << inc
@@ -104,22 +104,15 @@ void MDSMap::mds_info_t::print_summary(ostream &out) const
   if (laggy()) {
     out << " laggy since " << laggy_since;
   }
-  if (standby_for_rank != -1 ||
-      !standby_for_name.empty()) {
-    out << " (standby for";
-    //if (standby_for_rank >= 0)
-      out << " rank " << standby_for_rank;
-    if (!standby_for_name.empty()) {
-      out << " '" << standby_for_name << "'";
-    }
-    out << ")";
-  }
   if (!export_targets.empty()) {
     out << " export_targets=" << export_targets;
   }
+  if (is_frozen()) {
+    out << " frozen";
+  }
 }
 
-void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
+void MDSMap::mds_info_t::generate_test_instances(std::list<mds_info_t*>& ls)
 {
   mds_info_t *sample = new mds_info_t();
   ls.push_back(sample);
@@ -142,6 +135,8 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("root", root);
   f->dump_int("session_timeout", session_timeout);
   f->dump_int("session_autoclose", session_autoclose);
+  f->dump_stream("min_compat_client") << (int)min_compat_client << " ("
+				      << ceph_release_name(min_compat_client) << ")";
   f->dump_int("max_file_size", max_file_size);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
@@ -192,14 +187,14 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
-void MDSMap::generate_test_instances(list<MDSMap*>& ls)
+void MDSMap::generate_test_instances(std::list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();
   m->max_mds = 1;
   m->data_pools.push_back(0);
   m->metadata_pool = 1;
   m->cas_pool = 2;
-  m->compat = get_mdsmap_compat_set_all();
+  m->compat = get_compat_set_all();
 
   // these aren't the defaults, just in case anybody gets confused
   m->session_timeout = 61;
@@ -220,6 +215,8 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
+  out << "min_compat_client\t" << (int)min_compat_client << " ("
+			       << ceph_release_name(min_compat_client) << ")\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
   out << "compat\t" << compat << "\n";
@@ -367,17 +364,34 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
 	stringstream ss;
 	if (is_resolve(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is resolving";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is resolving";
 	if (is_replay(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is replaying journal";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is replaying journal";
 	if (is_rejoin(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is rejoining";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is rejoining";
 	if (is_reconnect(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is reconnecting to clients";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is reconnecting to clients";
 	if (ss.str().length())
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
+  }
+
+  {
+  stringstream ss;
+  ss << fs_name << " max_mds " << max_mds;
+  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
+  if ((mds_rank_t)up.size() < max_mds) {
+    stringstream ss;
+    ss << fs_name << " has " << up.size()
+       << " active MDS(s), but has max_mds of " << max_mds;
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
   }
 
   map<mds_gid_t, mds_info_t>::const_iterator m_end = mds_info.end();
@@ -387,13 +401,14 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     if (m == m_end) {
       std::cerr << "Up rank " << u.first << " GID " << u.second << " not found!" << std::endl;
     }
-    assert(m != m_end);
+    ceph_assert(m != m_end);
     const mds_info_t &mds_info(m->second);
     if (mds_info.laggy()) {
       laggy.insert(mds_info.name);
       if (detail) {
 	std::ostringstream oss;
-	oss << "mds." << mds_info.name << " at " << mds_info.addr << " is laggy/unresponsive";
+	oss << "mds." << mds_info.name << " at " << mds_info.addrs
+	    << " is laggy/unresponsive";
 	detail->push_back(make_pair(HEALTH_WARN, oss.str()));
       }
     }
@@ -404,6 +419,13 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     oss << "mds " << laggy
 	<< ((laggy.size() > 1) ? " are":" is")
 	<< " laggy";
+    summary.push_back(make_pair(HEALTH_WARN, oss.str()));
+  }
+
+  if (get_max_mds() > 1 &&
+      was_snaps_ever_allowed() && !allows_multimds_snaps()) {
+    std::ostringstream oss;
+    oss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
     summary.push_back(make_pair(HEALTH_WARN, oss.str()));
   }
 }
@@ -438,7 +460,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
       stringstream ss;
       ss << "fs " << fs_name << " mds." << info->second.name << " at "
-	 << info->second.addr << " rank " << i;
+	 << info->second.addrs << " rank " << i;
       if (is_resolve(i))
 	ss << " is resolving";
       if (is_replay(i))
@@ -451,25 +473,67 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 	detail.push_back(ss.str());
     }
   }
+
+  // MDS_UP_LESS_THAN_MAX
+  if ((mds_rank_t)get_num_in_mds() < get_max_mds()) {
+    health_check_t& check = checks->add(
+      "MDS_UP_LESS_THAN_MAX", HEALTH_WARN,
+      "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds");
+    stringstream ss;
+    ss << "fs " << fs_name << " has " << get_num_in_mds()
+       << " MDS online, but wants " << get_max_mds();
+    check.detail.push_back(ss.str());
+  }
+
+  // MDS_ALL_DOWN
+  if ((mds_rank_t)get_num_up_mds() == 0 && get_max_mds() > 0) {
+    health_check_t &check = checks->add(
+      "MDS_ALL_DOWN", HEALTH_ERR,
+      "%num% filesystem%plurals% %isorare% offline");
+    stringstream ss;
+    ss << "fs " << fs_name << " is offline because no MDS is active for it.";
+    check.detail.push_back(ss.str());
+  }
+
+  if (get_max_mds() > 1 &&
+      was_snaps_ever_allowed() && !allows_multimds_snaps()) {
+    health_check_t &check = checks->add(
+      "MULTIMDS_WITH_OLDSNAPS", HEALTH_ERR,
+      "%num% filesystem%plurals% %isorare% multi-active mds with old snapshots");
+    stringstream ss;
+    ss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
+    check.detail.push_back(ss.str());
+  }
 }
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 4, bl);
+  __u8 v = 9;
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 7;
+  }
+  ENCODE_START(v, 4, bl);
   encode(global_id, bl);
   encode(name, bl);
   encode(rank, bl);
   encode(inc, bl);
   encode((int32_t)state, bl);
   encode(state_seq, bl);
-  encode(addr, bl, features);
+  if (v < 8) {
+    encode(addrs.legacy_addr(), bl, features);
+  } else {
+    encode(addrs, bl, features);
+  }
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl); /* standby_for_rank */
+  encode(std::string(), bl); /* standby_for_name */
   encode(export_targets, bl);
   encode(mds_features, bl);
-  encode(standby_for_fscid, bl);
-  encode(standby_replay, bl);
+  encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
+  encode(false, bl);
+  if (v >= 9) {
+    encode(flags, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -484,35 +548,46 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   encode(inc, bl);
   encode((int32_t)state, bl);
   encode(state_seq, bl);
-  encode(addr, bl, 0);
+  encode(addrs.legacy_addr(), bl, 0);
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl);
+  encode(std::string(), bl);
   encode(export_targets, bl);
 }
 
-void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
+void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
   decode(inc, bl);
   decode((int32_t&)(state), bl);
   decode(state_seq, bl);
-  decode(addr, bl);
+  decode(addrs, bl);
   decode(laggy_since, bl);
-  decode(standby_for_rank, bl);
-  decode(standby_for_name, bl);
+  {
+    mds_rank_t standby_for_rank;
+    decode(standby_for_rank, bl);
+  }
+  {
+    std::string standby_for_name;
+    decode(standby_for_name, bl);
+  }
   if (struct_v >= 2)
     decode(export_targets, bl);
   if (struct_v >= 5)
     decode(mds_features, bl);
   if (struct_v >= 6) {
+    fs_cluster_id_t standby_for_fscid;
     decode(standby_for_fscid, bl);
   }
   if (struct_v >= 7) {
+    bool standby_replay;
     decode(standby_replay, bl);
+  }
+  if (struct_v >= 9) {
+    decode(flags, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -615,7 +690,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 12;
+  __u16 ev = 14;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -636,6 +711,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(damaged, bl);
   encode(balancer, bl);
   encode(standby_count_wanted, bl);
+  encode(old_max_mds, bl);
+  encode(min_compat_client, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -656,7 +733,7 @@ void MDSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
   }
 }
 
-void MDSMap::decode(bufferlist::iterator& p)
+void MDSMap::decode(bufferlist::const_iterator& p)
 {
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
 
@@ -694,7 +771,7 @@ void MDSMap::decode(bufferlist::iterator& p)
   if (ev >= 3)
     decode(compat, p);
   else
-    compat = get_mdsmap_compat_set_base();
+    compat = get_compat_set_base();
   if (ev < 5) {
     __u32 n;
     decode(n, p);
@@ -718,28 +795,21 @@ void MDSMap::decode(bufferlist::iterator& p)
       bool flag;
       decode(flag, p);
       ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS|CEPH_MDSMAP_ALLOW_DIRFRAGS;
       decode(flag, p);
       explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      if (max_mds > 1) {
-	set_multimds_allowed();
-      }
     } else {
       decode(ever_allowed_features, p);
       decode(explicitly_allowed_features, p);
     }
   } else {
-    ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
+    ever_allowed_features = 0;
     explicitly_allowed_features = 0;
-    if (max_mds > 1) {
-      set_multimds_allowed();
-    }
   }
   if (ev >= 7)
     decode(inline_data_enabled, p);
 
   if (ev >= 8) {
-    assert(struct_v >= 5);
+    ceph_assert(struct_v >= 5);
     decode(enabled, p);
     decode(fs_name, p);
   } else {
@@ -764,6 +834,14 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 12) {
     decode(standby_count_wanted, p);
+  }
+
+  if (ev >= 13) {
+    decode(old_max_mds, p);
+  }
+
+  if (ev >= 14) {
+    decode(min_compat_client, p);
   }
 
   DECODE_FINISH(p);
@@ -824,12 +902,12 @@ bool MDSMap::state_transition_valid(DaemonState prev, DaemonState next)
         state_valid = false;
       }
     } else if (prev == MDSMap::STATE_REJOIN) {
-      if (next != MDSMap::STATE_ACTIVE
-          && next != MDSMap::STATE_CLIENTREPLAY
-          && next != MDSMap::STATE_STOPPED) {
+      if (next != MDSMap::STATE_ACTIVE &&
+	  next != MDSMap::STATE_CLIENTREPLAY &&
+	  next != MDSMap::STATE_STOPPED) {
         state_valid = false;
       }
-    } else if (prev >= MDSMap::STATE_RECONNECT && prev < MDSMap::STATE_ACTIVE) {
+    } else if (prev >= MDSMap::STATE_RESOLVE && prev < MDSMap::STATE_ACTIVE) {
       // Once I have entered replay, the only allowable transitions are to
       // the next next along in the sequence.
       if (next != prev + 1) {

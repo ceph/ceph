@@ -72,8 +72,8 @@ protected:
    * @param r The return code that will be provided to the next stage
    */
   bool immediate(int stage, int r) {
-    assert(!stages_in_flight.count(stage));
-    assert(!stages_processing.count(stage));
+    ceph_assert(!stages_in_flight.count(stage));
+    ceph_assert(!stages_processing.count(stage));
     stages_in_flight.insert(stage);
     stages_processing.insert(stage);
     return _continue_function(r, stage);
@@ -104,7 +104,7 @@ protected:
    * @param func The function to use
    */
   void set_callback(int stage, stagePtr func) {
-    assert(callbacks.find(stage) == callbacks.end());
+    ceph_assert(callbacks.find(stage) == callbacks.end());
     callbacks[stage] = func;
   }
   
@@ -123,8 +123,8 @@ private:
 
   bool _continue_function(int r, int n) {
     set<int>::iterator stage_iter = stages_in_flight.find(n);
-    assert(stage_iter != stages_in_flight.end());
-    assert(callbacks.count(n));
+    ceph_assert(stage_iter != stages_in_flight.end());
+    ceph_assert(callbacks.count(n));
     stagePtr p = callbacks[n];
 
     pair<set<int>::iterator,bool> insert_r = stages_processing.insert(n);
@@ -166,7 +166,7 @@ public:
   /**
    * Clean up.
    */
-  virtual ~Continuation() { assert(on_finish == NULL); }
+  virtual ~Continuation() { ceph_assert(on_finish == NULL); }
   /**
    * Begin running the Continuation.
    */

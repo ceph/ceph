@@ -58,11 +58,12 @@ static int call_nbd_cmd(const po::variables_map &vm,
 int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string nspace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &nspace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
@@ -70,6 +71,10 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
 
   spec->append(pool_name);
   spec->append("/");
+  if (!nspace_name.empty()) {
+    spec->append(nspace_name);
+    spec->append("/");
+  }
   spec->append(image_name);
   if (!snap_name.empty()) {
     spec->append("@");
@@ -219,31 +224,23 @@ int execute_map_deprecated(const po::variables_map &vm_deprecated,
 
   po::options_description options;
   options.add_options()
-    ("read-only", po::bool_switch(), "")
-    ("exclusive", po::bool_switch(), "")
-    ("options,o", po::value<std::vector<std::string>>(), "");
+    ("options,o", po::value<std::vector<std::string>>()
+                  ->default_value(std::vector<std::string>(), ""), "");
 
-  po::variables_map vm;
+  po::variables_map vm = vm_deprecated;
   po::store(po::command_line_parser({}).options(options).run(), vm);
-
-  if (vm_deprecated["read-only"].as<bool>()) {
-    vm.at("read-only").value() = boost::any(true);
-  }
-  if (vm_deprecated["exclusive"].as<bool>()) {
-    vm.at("exclusive").value() = boost::any(true);
-  }
 
   std::vector<std::string> opts;
   if (vm_deprecated.count("device")) {
     opts.push_back("device=" + vm_deprecated["device"].as<std::string>());
   }
-  if (vm.count("nbds_max")) {
+  if (vm_deprecated.count("nbds_max")) {
     opts.push_back("nbds_max=" + vm_deprecated["nbds_max"].as<std::string>());
   }
-  if (vm.count("max_part")) {
+  if (vm_deprecated.count("max_part")) {
     opts.push_back("max_part=" + vm_deprecated["max_part"].as<std::string>());
   }
-  if (vm.count("timeout")) {
+  if (vm_deprecated.count("timeout")) {
     opts.push_back("timeout=" + vm_deprecated["timeout"].as<std::string>());
   }
 

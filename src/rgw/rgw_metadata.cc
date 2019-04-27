@@ -9,11 +9,15 @@
 #include "cls/version/cls_version_types.h"
 
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_tools.h"
 
 #include "rgw_cr_rados.h"
 
-#include "include/assert.h"
+#include "services/svc_zone.h"
+
+#include "include/ceph_assert.h"
+
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -52,7 +56,7 @@ void RGWMetadataLogData::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void RGWMetadataLogData::decode(bufferlist::iterator& bl) {
+void RGWMetadataLogData::decode(bufferlist::const_iterator& bl) {
    DECODE_START(1, bl);
    decode(read_version, bl);
    decode(write_version, bl);
@@ -94,7 +98,7 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 
 
 int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
-  if (!store->need_to_log_metadata())
+  if (!store->svc.zone->need_to_log_metadata())
     return 0;
 
   string oid;
@@ -236,14 +240,14 @@ int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->lock_exclusive(store->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
+  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
 int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->unlock(store->get_zone_params().log_pool, oid, zone_id, owner_id);
+  return store->unlock(store->svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)
@@ -319,7 +323,7 @@ public:
     delete data;
   }
 
-  virtual string get_marker(void *handle) {
+  virtual string get_marker(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     if (data->iter != data->sections.end()) {
@@ -356,16 +360,27 @@ namespace {
 int read_history(RGWRados *store, RGWMetadataLogHistory *state,
                  RGWObjVersionTracker *objv_tracker)
 {
-  RGWObjectCtx ctx{store};
-  auto& pool = store->get_zone_params().log_pool;
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, ctx, pool, oid, bl, objv_tracker, nullptr);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv_tracker, nullptr);
   if (ret < 0) {
     return ret;
   }
+  if (bl.length() == 0) {
+    /* bad history object, remove it */
+    rgw_raw_obj obj(pool, oid);
+    auto sysobj = obj_ctx.get_obj(obj);
+    ret = sysobj.wop().remove(null_yield);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      return ret;
+    }
+    return -ENOENT;
+  }
   try {
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     state->decode(p);
   } catch (buffer::error& e) {
     ldout(store->ctx(), 1) << "failed to decode the mdlog history: "
@@ -381,7 +396,7 @@ int write_history(RGWRados *store, const RGWMetadataLogHistory& state,
   bufferlist bl;
   state.encode(bl);
 
-  auto& pool = store->get_zone_params().log_pool;
+  auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   return rgw_put_system_obj(store, pool, oid, bl,
                             exclusive, objv_tracker, real_time{});
@@ -405,12 +420,12 @@ class ReadHistoryCR : public RGWCoroutine {
   int operate() {
     reenter(this) {
       yield {
-        rgw_raw_obj obj{store->get_zone_params().log_pool,
+        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
                         RGWMetadataLogHistory::oid};
         constexpr bool empty_on_enoent = false;
 
         using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
-        call(new ReadCR(store->get_async_rados(), store, obj,
+        call(new ReadCR(store->get_async_rados(), store->svc.sysobj, obj,
                         &state, empty_on_enoent, objv_tracker));
       }
       if (retcode < 0) {
@@ -450,11 +465,11 @@ class WriteHistoryCR : public RGWCoroutine {
       state.oldest_realm_epoch = cursor.get_epoch();
 
       yield {
-        rgw_raw_obj obj{store->get_zone_params().log_pool,
+        rgw_raw_obj obj{store->svc.zone->get_zone_params().log_pool,
                         RGWMetadataLogHistory::oid};
 
         using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
-        call(new WriteCR(store->get_async_rados(), store, obj, state, objv));
+        call(new WriteCR(store->get_async_rados(), store->svc.sysobj, obj, state, objv));
       }
       if (retcode < 0) {
         ldout(cct, 1) << "failed to write mdlog history: "
@@ -540,7 +555,7 @@ Cursor find_oldest_period(RGWRados *store)
       }
       ldout(cct, 20) << "find_oldest_period advancing to "
           "predecessor period " << predecessor << dendl;
-      assert(cursor.has_prev());
+      ceph_assert(cursor.has_prev());
     }
     cursor.prev();
   }
@@ -745,8 +760,9 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -779,26 +795,55 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
+int RGWMetadataManager::prepare_mutate(RGWRados *store,
+                                       rgw_pool& pool, const string& oid,
+                                       const real_time& mtime,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMetadataHandler::sync_type_t sync_mode)
+{
+  bufferlist bl;
+  real_time orig_mtime;
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
+                               bl, objv_tracker, &orig_mtime,
+                               nullptr, nullptr);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  if (ret != -ENOENT &&
+      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
+                                          objv_tracker->write_version, mtime, sync_mode)) {
+    return STATUS_NO_APPLY;
+  }
+
+  if (objv_tracker->write_version.tag.empty()) {
+    if (objv_tracker->read_version.tag.empty()) {
+      objv_tracker->generate_new_write_ver(store->ctx());
+    } else {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+  }
+  return 0;
+}
+
 int RGWMetadataManager::remove(string& metadata_key)
 {
   RGWMetadataHandler *handler;
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
-    return ret;
-
-  RGWMetadataObject *obj;
-
-  ret = handler->get(store, entry, &obj);
   if (ret < 0) {
     return ret;
   }
 
+  RGWMetadataObject *obj;
+  ret = handler->get(store, entry, &obj);
+  if (ret < 0) {
+    return ret;
+  }
   RGWObjVersionTracker objv_tracker;
-
   objv_tracker.read_version = obj->get_version();
-
   delete obj;
 
   return handler->remove(store, entry, objv_tracker);
@@ -911,7 +956,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
 
   try {
     RGWMetadataLogData log_data;
-    bufferlist::iterator iter = entry.data.begin();
+    auto iter = entry.data.cbegin();
     decode(log_data, iter);
 
     encode_json("data", log_data, f);
@@ -951,7 +996,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int ret = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
@@ -970,7 +1015,7 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
   bufferlist logbl;
   encode(log_data, logbl);
 
-  assert(current_log); // must have called init()
+  ceph_assert(current_log); // must have called init()
   int r = current_log->add_entry(handler, section, key, logbl);
   if (ret < 0)
     return ret;
@@ -996,7 +1041,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
     return -EINVAL;
   }
 
-  rgw_pool heap_pool(store->get_zone_params().metadata_heap);
+  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
 
   if (heap_pool.empty()) {
     return 0;
@@ -1021,7 +1066,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
     return -EINVAL;
   }
 
-  rgw_pool heap_pool(store->get_zone_params().metadata_heap);
+  rgw_pool heap_pool(store->svc.zone->get_zone_params().metadata_heap);
 
   if (heap_pool.empty()) {
     return 0;
@@ -1029,9 +1074,11 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
 
   string oid = heap_oid(handler, key, objv_tracker->write_version);
   rgw_raw_obj obj(heap_pool, oid);
-  int ret = store->delete_system_obj(obj);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  int ret = sysobj.wop().remove(null_yield);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: store->delete_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: sysobj.wop().remove() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -1077,13 +1124,16 @@ done:
   return 0;
 }
 
-int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker)
+int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
+				     const string& key,
+				     RGWObjVersionTracker *objv_tracker)
 {
   string section;
   RGWMetadataLogData log_data;
   int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_REMOVE);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   string oid;
   rgw_pool pool;
@@ -1092,12 +1142,17 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 
   rgw_raw_obj obj(pool, oid);
 
-  ret = store->delete_system_obj(obj, objv_tracker);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  ret = sysobj.wop()
+              .set_objv_tracker(objv_tracker)
+              .remove(null_yield);
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   return 0;
 }

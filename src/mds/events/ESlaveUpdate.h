@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_ESLAVEUPDATE_H
 #define CEPH_MDS_ESLAVEUPDATE_H
 
+#include <string_view>
+
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
@@ -30,13 +32,14 @@ struct link_rollback {
   utime_t old_ctime;
   utime_t old_dir_mtime;
   utime_t old_dir_rctime;
+  bufferlist snapbl;
 
   link_rollback() : ino(0), was_inc(false) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<link_rollback*>& ls);
+  static void generate_test_instances(std::list<link_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
@@ -52,11 +55,12 @@ struct rmdir_rollback {
   string src_dname;
   dirfrag_t dest_dir;
   string dest_dname;
+  bufferlist snapbl;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<rmdir_rollback*>& ls);
+  static void generate_test_instances(std::list<rmdir_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
@@ -73,9 +77,9 @@ struct rename_rollback {
     drec() : remote_d_type((char)S_IFREG) {}
 
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<drec*>& ls);
+    static void generate_test_instances(std::list<drec*>& ls);
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -83,11 +87,13 @@ struct rename_rollback {
   drec orig_src, orig_dest;
   drec stray; // we know this is null, but we want dname, old mtime/rctime
   utime_t ctime;
+  bufferlist srci_snapbl;
+  bufferlist desti_snapbl;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<rename_rollback*>& ls);
+  static void generate_test_instances(std::list<rename_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
@@ -119,7 +125,7 @@ public:
   __u8 origop; // link | rename
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
-  ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o, int oo) : 
+  ESlaveUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int mastermds, int o, int oo) :
     LogEvent(EVENT_SLAVEUPDATE),
     type(s),
     reqid(ri),
@@ -140,9 +146,9 @@ public:
   EMetaBlob *get_metablob() override { return &commit; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ESlaveUpdate*>& ls);
+  static void generate_test_instances(std::list<ESlaveUpdate*>& ls);
 
   void replay(MDSRank *mds) override;
 };

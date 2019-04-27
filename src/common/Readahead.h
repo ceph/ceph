@@ -4,9 +4,11 @@
 #ifndef CEPH_READAHEAD_H
 #define CEPH_READAHEAD_H
 
-#include "Mutex.h"
-#include "Cond.h"
 #include <list>
+#include <vector>
+
+#include "include/Context.h"
+#include "common/ceph_mutex.h"
 
 /**
    This class provides common state and logic for code that needs to perform readahead
@@ -39,7 +41,7 @@ public:
      @param extents read operations since last call to update
      @param limit size of the thing readahead is being applied to
    */
-  extent_t update(const vector<extent_t>& extents, uint64_t limit);
+  extent_t update(const std::vector<extent_t>& extents, uint64_t limit);
 
   /**
      Update state with a new read and return readahead to be performed.
@@ -132,7 +134,7 @@ private:
   std::vector<uint64_t> m_alignments;
 
   /// Held while reading/modifying any state except m_pending
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("Readahead::m_lock");
 
   /// Number of consecutive read requests in the current sequential stream
   int m_nr_consec_read;
@@ -156,7 +158,7 @@ private:
   int m_pending;
 
   /// Lock for m_pending
-  Mutex m_pending_lock;
+  ceph::mutex m_pending_lock = ceph::make_mutex("Readahead::m_pending_lock");
 
   /// Waiters for pending readahead
   std::list<Context *> m_pending_waiting;

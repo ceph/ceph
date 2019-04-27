@@ -2,6 +2,7 @@
 
 set -e
 
+rgw_frontend=${RGW_FRONTEND:-"beast"}
 script_root=`dirname $0`
 script_root=`(cd $script_root;pwd)`
 if [ -e CMakeCache.txt ]; then
@@ -27,4 +28,4 @@ logfile=$run_root/out/radosgw.${port}.log
 
 $vstart_path/mstop.sh $name radosgw $port
 
-$vstart_path/mrun $name radosgw --rgw-frontends="civetweb port=$port" -n client.rgw --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile
+$vstart_path/mrun $name radosgw --rgw-frontends="$rgw_frontend port=$port" -n client.rgw --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile

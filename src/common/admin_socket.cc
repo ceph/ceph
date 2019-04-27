@@ -18,13 +18,15 @@
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "common/pipe.h"
+#include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -61,7 +63,7 @@ static void remove_cleanup_file(std::string_view file) {
 
   if (auto i = std::find(cleanup_files.cbegin(), cleanup_files.cend(), file);
       i != cleanup_files.cend()) {
-    retry_sys_call(&::unlink, i->c_str());
+    retry_sys_call(::unlink, i->c_str());
     cleanup_files.erase(i);
   }
 }
@@ -69,7 +71,7 @@ static void remove_cleanup_file(std::string_view file) {
 void remove_all_cleanup_files() {
   std::unique_lock l(cleanup_lock);
   for (const auto& s : cleanup_files) {
-    retry_sys_call(&::unlink, s.c_str());
+    retry_sys_call(::unlink, s.c_str());
   }
   cleanup_files.clear();
 }
@@ -105,10 +107,10 @@ AdminSocket::~AdminSocket()
 std::string AdminSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
-  int ret = pipe_cloexec(pipefd);
-  if (ret < 0) {
+  if (pipe_cloexec(pipefd) < 0) {
+    int e = errno;
     ostringstream oss;
-    oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(ret);
+    oss << "AdminSocket::create_shutdown_pipe error: " << cpp_strerror(e);
     return oss.str();
   }
   
@@ -124,7 +126,7 @@ std::string AdminSocket::destroy_shutdown_pipe()
   int ret = safe_write(m_shutdown_wr_fd, buf, sizeof(buf));
 
   // Close write end
-  retry_sys_call(&::close, m_shutdown_wr_fd);
+  retry_sys_call(::close, m_shutdown_wr_fd);
   m_shutdown_wr_fd = -1;
 
   if (ret != 0) {
@@ -138,7 +140,7 @@ std::string AdminSocket::destroy_shutdown_pipe()
 
   // Close read end. Doing this before join() blocks the listenter and prevents
   // joining.
-  retry_sys_call(close, m_shutdown_rd_fd);
+  retry_sys_call(::close, m_shutdown_rd_fd);
   m_shutdown_rd_fd = -1;
 
   return "";
@@ -157,20 +159,12 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	<< (sizeof(address.sun_path) - 1);
     return oss.str();
   }
-  int sock_fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  int sock_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if (sock_fd < 0) {
     int err = errno;
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: "
 	<< "failed to create socket: " << cpp_strerror(err);
-    return oss.str();
-  }
-  int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
-  if (r < 0) {
-    r = errno;
-    retry_sys_call(&::close, sock_fd);
-    ostringstream oss;
-    oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
   }
   memset(&address, 0, sizeof(struct sockaddr_un));
@@ -189,7 +183,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	err = EEXIST;
       } else {
 	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
-	retry_sys_call(&::unlink, sock_path.c_str());
+	retry_sys_call(::unlink, sock_path.c_str());
 	if (::bind(sock_fd, (struct sockaddr*)&address,
 		 sizeof(struct sockaddr_un)) == 0) {
 	  err = 0;
@@ -213,7 +207,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     oss << "AdminSocket::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
     close(sock_fd);
-    retry_sys_call(&::unlink, sock_path.c_str());
+    retry_sys_call(::unlink, sock_path.c_str());
     return oss.str();
   }
   *fd = sock_fd;
@@ -283,15 +277,15 @@ bool AdminSocket::do_accept()
   struct sockaddr_un address;
   socklen_t address_length = sizeof(address);
   ldout(m_cct, 30) << "AdminSocket: calling accept" << dendl;
-  int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
+  int connection_fd = accept_cloexec(m_sock_fd, (struct sockaddr*) &address,
 			     &address_length);
-  ldout(m_cct, 30) << "AdminSocket: finished accept" << dendl;
   if (connection_fd < 0) {
     int err = errno;
     lderr(m_cct) << "AdminSocket: do_accept error: '"
 			   << cpp_strerror(err) << dendl;
     return false;
   }
+  ldout(m_cct, 30) << "AdminSocket: finished accept" << dendl;
 
   char cmd[1024];
   unsigned pos = 0;
@@ -303,7 +297,7 @@ bool AdminSocket::do_accept()
         lderr(m_cct) << "AdminSocket: error reading request code: "
 		     << cpp_strerror(ret) << dendl;
       }
-      retry_sys_call(&::close, connection_fd);
+      retry_sys_call(::close, connection_fd);
       return false;
     }
     if (cmd[0] == '\0') {
@@ -335,7 +329,7 @@ bool AdminSocket::do_accept()
     }
     if (++pos >= sizeof(cmd)) {
       lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
-      retry_sys_call(&::close, connection_fd);
+      retry_sys_call(::close, connection_fd);
       return false;
     }
   }
@@ -349,14 +343,19 @@ bool AdminSocket::do_accept()
   cmdvec.push_back(cmd);
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
-    retry_sys_call(&::close, connection_fd);
+    retry_sys_call(::close, connection_fd);
     return false;
   }
-  cmd_getval(m_cct, cmdmap, "format", format);
+  try {
+    cmd_getval(m_cct, cmdmap, "format", format);
+    cmd_getval(m_cct, cmdmap, "prefix", c);
+  } catch (const bad_cmd_get& e) {
+    retry_sys_call(::close, connection_fd);
+    return false;
+  }
   if (format != "json" && format != "json-pretty" &&
       format != "xml" && format != "xml-pretty")
     format = "json-pretty";
-  cmd_getval(m_cct, cmdmap, "prefix", c);
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;
@@ -419,7 +418,7 @@ bool AdminSocket::do_accept()
   }
   l.unlock();
 
-  retry_sys_call(&::close, connection_fd);
+  retry_sys_call(::close, connection_fd);
   return rval;
 }
 
@@ -482,6 +481,25 @@ int AdminSocket::unregister_command(std::string_view command)
     ret = -ENOENT;
   }
   return ret;
+}
+
+void AdminSocket::unregister_commands(const AdminSocketHook *hook)
+{
+  std::unique_lock l(lock);
+  auto i = hooks.begin();
+  while (i != hooks.end()) {
+    if (i->second.hook == hook) {
+      ldout(m_cct, 5) << __func__ << " " << i->first << dendl;
+
+      // If we are currently processing a command, wait for it to
+      // complete in case it referenced the hook that we are
+      // unregistering.
+      in_hook_cond.wait(l, [this]() { return !in_hook; });
+      hooks.erase(i++);
+    } else {
+      i++;
+    }
+  }
 }
 
 class VersionHook : public AdminSocketHook {
@@ -548,6 +566,7 @@ public:
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(&jf,
+                                CEPH_FEATURES_ALL,
 				secname.str().c_str(),
 				info.desc,
 				info.help);
@@ -621,11 +640,9 @@ void AdminSocket::shutdown()
     lderr(m_cct) << "AdminSocket::shutdown: error: " << err << dendl;
   }
 
-  retry_sys_call(&::close, m_sock_fd);
+  retry_sys_call(::close, m_sock_fd);
 
-  unregister_command("version");
-  unregister_command("git_version");
-  unregister_command("0");
+  unregister_commands(version_hook.get());
   version_hook.reset();
 
   unregister_command("help");

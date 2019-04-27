@@ -4,7 +4,8 @@
 #include "common/errno.h"
 
 #include "rgw_realm_watcher.h"
-#include "rgw_rados.h"
+#include "rgw_tools.h"
+#include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -12,7 +13,7 @@
 #define dout_prefix (*_dout << "rgw realm watcher: ")
 
 
-RGWRealmWatcher::RGWRealmWatcher(CephContext* cct, RGWRealm& realm)
+RGWRealmWatcher::RGWRealmWatcher(CephContext* cct, const RGWRealm& realm)
   : cct(cct)
 {
   // no default realm, nothing to watch
@@ -51,7 +52,7 @@ void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
   pool_ctx.notify_ack(watch_oid, notify_id, cookie, reply);
 
   try {
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     while (!p.end()) {
       RGWRealmNotify notify;
       decode(notify, p);
@@ -79,7 +80,7 @@ void RGWRealmWatcher::handle_error(uint64_t cookie, int err)
   }
 }
 
-int RGWRealmWatcher::watch_start(RGWRealm& realm)
+int RGWRealmWatcher::watch_start(const RGWRealm& realm)
 {
   // initialize a Rados client
   int r = rados.init_with_context(cct);
@@ -123,7 +124,7 @@ int RGWRealmWatcher::watch_start(RGWRealm& realm)
 
 int RGWRealmWatcher::watch_restart()
 {
-  assert(!watch_oid.empty());
+  ceph_assert(!watch_oid.empty());
   int r = pool_ctx.unwatch2(watch_handle);
   if (r < 0) {
     lderr(cct) << "Failed to unwatch on " << watch_oid

@@ -1,5 +1,8 @@
 tasks:
 - install:
+    extra_system_packages:
+      deb: ['bison', 'flex', 'libelf-dev', 'libssl-dev']
+      rpm: ['bison', 'flex', 'elfutils-libelf-devel', 'openssl-devel']
 - ceph:
 - rbd:
     all:

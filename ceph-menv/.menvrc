@@ -1,0 +1,16 @@
+MENV_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+export PATH=${MENV_ROOT}/bin:$PATH
+alias mset='source $MENV_ROOT/mset.sh'
+
+case "$TERM" in
+xterm-*color)
+    PS1='\[\033[$MRUN_PROMPT_COLOR;1m\]${MRUN_PROMPT}\[\033[00m\]'${PS1}
+    ;;
+*)
+    PS1='${MRUN_PROMPT}'${PS1}
+    ;;
+esac
+
+export MRUN_CEPH_ROOT=$HOME/ceph
+

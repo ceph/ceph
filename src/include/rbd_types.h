@@ -41,6 +41,7 @@
 #define RBD_SUFFIX	 	".rbd"
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
+#define RBD_NAMESPACE           "rbd_namespace"
 
 /*
  * rbd_children object in each pool contains omap entries
@@ -98,6 +99,7 @@
 #define RBD_CRYPT_NONE		0
 
 #define RBD_HEADER_TEXT		"<<< Rados Block Device Image >>>\n"
+#define RBD_MIGRATE_HEADER_TEXT	"<<< Migrating RBD Image      >>>\n"
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
 
@@ -108,6 +110,12 @@
 #define RBD_GROUP_DIRECTORY "rbd_group_directory"
 
 #define RBD_TRASH "rbd_trash"
+
+/**
+ * MON config-key prefix for storing optional remote cluster connectivity
+ * parameters
+ */
+#define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX "rbd/mirror/peer/"
 
 struct rbd_info {
 	__le64 max_id;

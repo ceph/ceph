@@ -1,3 +1,0 @@
-overrides:
-   ceph-deploy:
-      separate_journal_disk: yes

@@ -20,18 +20,17 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("entry");
     formatter->dump_string("category", uiter->first);
-    formatter->dump_int("bytes_sent", usage.bytes_sent);
-    formatter->dump_int("bytes_received", usage.bytes_received);
-    formatter->dump_int("ops", usage.ops);
-    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->dump_unsigned("bytes_sent", usage.bytes_sent);
+    formatter->dump_unsigned("bytes_received", usage.bytes_received);
+    formatter->dump_unsigned("ops", usage.ops);
+    formatter->dump_unsigned("successful_ops", usage.successful_ops);
     formatter->close_section(); // entry
   }
   formatter->close_section(); // categories
 }
 
-int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum,
-		   map<string, bool> *categories,
+int RGWUsage::show(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
+		   uint64_t end_epoch, bool show_log_entries, bool show_log_sum, map<string, bool> *categories,
 		   RGWFormatterFlusher& flusher)
 {
   uint32_t max_entries = 1000;
@@ -53,7 +52,7 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   bool user_section_open = false;
   map<string, rgw_usage_log_entry> summary_map;
   while (is_truncated) {
-    int ret = store->read_usage(uid, start_epoch, end_epoch, max_entries,
+    int ret = store->read_usage(uid, bucket_name, start_epoch, end_epoch, max_entries,
                                 &is_truncated, usage_iter, usage);
 
     if (ret == -ENOENT) {
@@ -140,10 +139,10 @@ int RGWUsage::show(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
   return 0;
 }
 
-int RGWUsage::trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
-		   uint64_t end_epoch)
+int RGWUsage::trim(RGWRados *store, const rgw_user& uid, const string& bucket_name, uint64_t start_epoch,
+                   uint64_t end_epoch)
 {
-  return store->trim_usage(uid, start_epoch, end_epoch);
+  return store->trim_usage(uid, bucket_name, start_epoch, end_epoch);
 }
 
 int RGWUsage::clear(RGWRados *store)

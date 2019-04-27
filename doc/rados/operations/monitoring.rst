@@ -57,14 +57,14 @@ cluster with one of each service may print the following:
     health: HEALTH_OK
    
   services:
-    mon: 1 daemons, quorum a
+    mon: 3 daemons, quorum a,b,c
     mgr: x(active)
-    mds: 1/1/1 up {0=a=up:active}
-    osd: 1 osds: 1 up, 1 in
+    mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
+    osd: 3 osds: 3 up, 3 in
   
   data:
     pools:   2 pools, 16 pgs
-    objects: 21 objects, 2246 bytes
+    objects: 21 objects, 2.19K
     usage:   546 GB used, 384 GB / 931 GB avail
     pgs:     16 active+clean
 
@@ -104,14 +104,14 @@ is emitted.  For example:
     health: HEALTH_OK
   
   services:
-    mon: 1 daemons, quorum a
+    mon: 3 daemons, quorum a,b,c
     mgr: x(active)
-    mds: 1/1/1 up {0=a=up:active}
-    osd: 1 osds: 1 up, 1 in
+    mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
+    osd: 3 osds: 3 up, 3 in
   
   data:
     pools:   2 pools, 16 pgs
-    objects: 21 objects, 2246 bytes
+    objects: 21 objects, 2.19K
     usage:   546 GB used, 384 GB / 931 GB avail
     pgs:     16 active+clean
   
@@ -128,7 +128,7 @@ log.
 Monitoring Health Checks
 ========================
 
-Ceph continously runs various *health checks* against its own status.  When
+Ceph continuously runs various *health checks* against its own status.  When
 a health check fails, this is reflected in the output of ``ceph status`` (or
 ``ceph health``).  In addition, messages are sent to the cluster log to
 indicate when a check fails, and when the cluster recovers.
@@ -179,13 +179,15 @@ the following::
 
 	ceph df
 
-The **GLOBAL** section of the output provides an overview of the amount of 
-storage your cluster uses for your data.
+The **RAW STORAGE** section of the output provides an overview of the
+amount of storage that is managed by your cluster.
 
-- **SIZE:** The overall storage capacity of the cluster.
+- **CLASS:** The class of OSD device (or the total for the cluster)
+- **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
-- **RAW USED:** The amount of raw storage used.
-- **% RAW USED:** The percentage of raw storage used. Use this number in 
+- **USED:** The amount of raw storage consumed by user data.
+- **RAW USED:** The amount of raw storage consumed by user data, internal overhead, or reserved capacity.
+- **%RAW USED:** The percentage of raw storage used. Use this number in
   conjunction with the ``full ratio`` and ``near full ratio`` to ensure that 
   you are not reaching your cluster's capacity. See `Storage Capacity`_ for 
   additional details.
@@ -203,12 +205,12 @@ on the number of replicas, clones and snapshots.
 - **%USED:** The notional percentage of storage used per pool.
 - **MAX AVAIL:** An estimate of the notional amount of data that can be written
   to this pool.
-- **Objects:** The notional number of objects stored per pool.
+- **OBJECTS:** The notional number of objects stored per pool.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
-   inclusive of the number of replicas, shapshots or clones. As a result, 
+   inclusive of the number of replicas, snapshots or clones. As a result, 
    the sum of the **USED** and **%USED** amounts will not add up to the 
-   **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
+   **USED** and **%USED** amounts in the **RAW** section of the
    output.
 
 .. note:: The **MAX AVAIL** value is a complicated function of the
@@ -236,13 +238,13 @@ You can also check view OSDs according to their position in the CRUSH map. ::
 Ceph will print out a CRUSH tree with a host, its OSDs, whether they are up
 and their weight. ::  
 
-	# id	weight	type name	up/down	reweight
-	-1	3	pool default
-	-3	3		rack mainrack
-	-2	3			host osd-host
-	0	1				osd.0	up	1	
-	1	1				osd.1	up	1	
-	2	1				osd.2	up	1
+	#ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
+	 -1       3.00000 pool default
+	 -3       3.00000 rack mainrack
+	 -2       3.00000 host osd-host
+	  0   ssd 1.00000         osd.0             up  1.00000 1.00000
+	  1   ssd 1.00000         osd.1             up  1.00000 1.00000
+	  2   ssd 1.00000         osd.2             up  1.00000 1.00000
 
 For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
@@ -250,7 +252,7 @@ Checking Monitor Status
 =======================
 
 If your cluster has multiple monitors (likely), you should check the monitor
-quorum status after you start the cluster before reading and/or writing data. A
+quorum status after you start the cluster and before reading and/or writing data. A
 quorum must be present when multiple monitors are running. You should also check
 monitor status periodically to ensure that they are running.
 
@@ -276,28 +278,42 @@ three monitors may return the following:
 	        0,
 	        1,
 	        2],
+	  "quorum_names": [
+		"a",
+		"b",
+		"c"],
+	  "quorum_leader_name": "a",
 	  "monmap": { "epoch": 1,
 	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
 	      "modified": "2011-12-12 13:28:27.505520",
 	      "created": "2011-12-12 13:28:27.505520",
+	      "features": {"persistent": [
+				"kraken",
+				"luminous",
+				"mimic"],
+		"optional": []
+	      },
 	      "mons": [
 	            { "rank": 0,
 	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
+	              "addr": "127.0.0.1:6789/0",
+		      "public_addr": "127.0.0.1:6789/0"},
 	            { "rank": 1,
 	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
+	              "addr": "127.0.0.1:6790/0",
+		      "public_addr": "127.0.0.1:6790/0"},
 	            { "rank": 2,
 	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}
+	              "addr": "127.0.0.1:6791/0",
+		      "public_addr": "127.0.0.1:6791/0"}
 	           ]
-	    }
+	  }
 	}
 
 Checking MDS Status
 ===================
 
-Metadata servers provide metadata services for  Ceph FS. Metadata servers have
+Metadata servers provide metadata services for  CephFS. Metadata servers have
 two sets of states: ``up | down`` and ``active | inactive``. To ensure your
 metadata servers are ``up`` and ``active``,  execute the following:: 
 
@@ -346,6 +362,6 @@ admin socket bypasses the monitor, unlike ``ceph tell {daemon-type}.{id}
 config set``, which relies on the monitor but doesn't require you to login
 directly to the host in question ).
 
-.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#ceph-runtime-config
+.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
 .. _ceph-medic: http://docs.ceph.com/ceph-medic/master/

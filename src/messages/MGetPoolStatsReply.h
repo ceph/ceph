@@ -19,11 +19,11 @@
 class MGetPoolStatsReply : public PaxosServiceMessage {
 public:
   uuid_d fsid;
-  map<string,pool_stat_t> pool_stats;
+  std::map<std::string,pool_stat_t> pool_stats;
 
-  MGetPoolStatsReply() : PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, 0) {}
+  MGetPoolStatsReply() : PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, 0} {}
   MGetPoolStatsReply(uuid_d& f, ceph_tid_t t, version_t v) :
-    PaxosServiceMessage(MSG_GETPOOLSTATSREPLY, v),
+    PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, v},
     fsid(f) {
     set_tid(t);
   }
@@ -32,8 +32,8 @@ private:
   ~MGetPoolStatsReply() override {}
 
 public:
-  const char *get_type_name() const override { return "getpoolstats"; }
-  void print(ostream& out) const override {
+  std::string_view get_type_name() const override { return "getpoolstats"; }
+  void print(std::ostream& out) const override {
     out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
   }
 
@@ -45,11 +45,14 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(pool_stats, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

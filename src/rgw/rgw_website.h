@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,6 +13,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+
 #ifndef RGW_WEBSITE_H
 #define RGW_WEBSITE_H
 
@@ -35,7 +37,7 @@ struct RGWRedirectInfo
     encode(http_redirect_code, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(protocol, bl);
     decode(hostname, bl);
@@ -62,7 +64,7 @@ struct RGWBWRedirectInfo
     encode(replace_key_with, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(redirect, bl);
     decode(replace_key_prefix_with, bl);
@@ -80,7 +82,7 @@ WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
 struct RGWBWRoutingRuleCondition
 {
   std::string key_prefix_equals;
-  uint16_t http_error_code_returned_equals;
+  uint16_t http_error_code_returned_equals = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -88,7 +90,7 @@ struct RGWBWRoutingRuleCondition
     encode(http_error_code_returned_equals, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(key_prefix_equals, bl);
     decode(http_error_code_returned_equals, bl);
@@ -118,7 +120,7 @@ struct RGWBWRoutingRule
     encode(redirect_info, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(condition, bl);
     decode(redirect_info, bl);
@@ -154,7 +156,7 @@ struct RGWBWRoutingRules
     encode(rules, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(rules, bl);
     DECODE_FINISH(bl);
@@ -197,7 +199,7 @@ struct RGWBucketWebsiteConf
     encode(listing_enabled, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(index_doc_suffix, bl);
     decode(error_doc, bl);

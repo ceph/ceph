@@ -20,7 +20,8 @@
 
 #include "msg/Message.h"
 
-struct MClientLease : public Message {
+class MClientLease : public Message {
+public:
   struct ceph_mds_lease h;
   std::string dname;
   
@@ -31,7 +32,12 @@ struct MClientLease : public Message {
   snapid_t get_first() const { return snapid_t(h.first); }
   snapid_t get_last() const { return snapid_t(h.last); }
 
+protected:
   MClientLease() : Message(CEPH_MSG_CLIENT_LEASE) {}
+  MClientLease(const MClientLease& m) :
+    Message(CEPH_MSG_CLIENT_LEASE),
+    h(m.h),
+    dname(m.dname) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
     Message(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
@@ -53,11 +59,10 @@ struct MClientLease : public Message {
     h.last = sl;
     h.duration_ms = 0;
   }
-private:
   ~MClientLease() override {}
 
 public:
-  const char *get_type_name() const override { return "client_lease"; }
+  std::string_view get_type_name() const override { return "client_lease"; }
   void print(ostream& out) const override {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
@@ -71,7 +76,7 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(h, p);
     decode(dname, p);
   }
@@ -81,6 +86,9 @@ public:
     encode(dname, payload);
   }
 
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

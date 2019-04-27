@@ -1,24 +1,37 @@
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # amqp mock library
+  set(amqp_mock_src
+    amqp_mock.cc amqp_url.c)
+  add_library(amqp_mock STATIC ${amqp_mock_src})
+endif()
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
-target_link_libraries(unittest_rgw_bencode rgw_a)
+target_link_libraries(unittest_rgw_bencode ${rgw_libs})
 
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
-target_link_libraries(unittest_rgw_period_history rgw_a)
+target_link_libraries(unittest_rgw_period_history ${rgw_libs})
 
 # unitttest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_compression)
-target_link_libraries(unittest_rgw_compression rgw_a)
+target_link_libraries(unittest_rgw_compression ${rgw_libs})
 
 # unitttest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
-target_link_libraries(unittest_http_manager rgw_a)
+target_link_libraries(unittest_http_manager ${rgw_libs})
+
+# unitttest_rgw_reshard_wait
+add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
+add_ceph_unittest(unittest_rgw_reshard_wait)
+target_link_libraries(unittest_rgw_reshard_wait ${rgw_libs})
 
 set(test_rgw_a_src
   test_rgw_common.cc)
@@ -30,16 +43,14 @@ add_executable(ceph_test_rgw_manifest
   ${test_rgw_manifest_srcs}
   )
 target_link_libraries(ceph_test_rgw_manifest
-  rgw_a
+  ${rgw_libs}
   test_rgw_a
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_timeindex_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -48,26 +59,20 @@ target_link_libraries(ceph_test_rgw_manifest
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
-  ${CRYPTO_LIBS}
-  )
-set_target_properties(ceph_test_rgw_manifest PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
+  ${CRYPTO_LIBS})
 
-# ceph_test_rgw_obj
 set(test_rgw_obj_srcs test_rgw_obj.cc)
 add_executable(ceph_test_rgw_obj
   ${test_rgw_obj_srcs}
   )
 target_link_libraries(ceph_test_rgw_obj
-  rgw_a
+  ${rgw_libs}
   test_rgw_a
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -77,25 +82,19 @@ target_link_libraries(ceph_test_rgw_obj
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(ceph_test_rgw_obj PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 
-# ceph_test_rgw_crypto
 set(test_rgw_crypto_srcs test_rgw_crypto.cc)
 add_executable(unittest_rgw_crypto
   ${test_rgw_crypto_srcs}
   )
 add_ceph_unittest(unittest_rgw_crypto)
-
 target_link_libraries(unittest_rgw_crypto
-  rgw_a
+  ${rgw_libs}
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -105,20 +104,26 @@ target_link_libraries(unittest_rgw_crypto
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(unittest_rgw_crypto PROPERTIES COMPILE_FLAGS$ {UNITTEST_CXX_FLAGS})
 
-# ceph_test_rgw_iam_policy
+add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
+add_ceph_unittest(unittest_rgw_putobj)
+target_link_libraries(unittest_rgw_putobj rgw_a ${UNITTEST_LIBS})
+
+add_executable(ceph_test_rgw_throttle
+  test_rgw_throttle.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(ceph_test_rgw_throttle ${rgw_libs}
+  librados global ${UNITTEST_LIBS})
+
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
 target_link_libraries(unittest_rgw_iam_policy
-  rgw_a
+  ${rgw_libs}
   cls_rgw_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -128,8 +133,35 @@ target_link_libraries(unittest_rgw_iam_policy
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
   )
-set_target_properties(unittest_rgw_iam_policy PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-# unitttest_rgw_string
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
+
+# unitttest_rgw_dmclock_queue
+add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_dmclock_scheduler)
+
+target_link_libraries(unittest_rgw_dmclock_scheduler radosgw_a dmclock)
+if(WITH_BOOST_CONTEXT)
+  target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+  target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
+endif()
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
+  add_ceph_unittest(unittest_rgw_amqp)
+  target_link_libraries(unittest_rgw_amqp ${rgw_libs})
+endif()
+
+# unittest_rgw_xml
+add_executable(unittest_rgw_xml test_rgw_xml.cc)
+add_ceph_unittest(unittest_rgw_xml)
+
+target_link_libraries(unittest_rgw_xml rgw_a ${EXPAT_LIBRARIES})
+
+# unittest_rgw_arn
+add_executable(unittest_rgw_arn test_rgw_arn.cc)
+add_ceph_unittest(unittest_rgw_arn)
+
+target_link_libraries(unittest_rgw_arn rgw_a)
+

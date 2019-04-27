@@ -52,6 +52,8 @@ public:
 
   virtual void flush() = 0;
 
+  virtual void get_devices(set<string> *ls) {}
+  virtual void collect_metadata(map<string,string> *pm) {}
   /**
    * reserve_throttle_and_backoff
    *

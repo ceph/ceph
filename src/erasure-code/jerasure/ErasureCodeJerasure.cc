@@ -34,6 +34,13 @@ extern "C" {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
+using std::ostream;
+using std::map;
+using std::set;
+
+using ceph::bufferlist;
+using ceph::ErasureCodeProfile;
+
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeJerasure: ";
@@ -66,7 +73,7 @@ int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
     chunk_mapping.clear();
     err = -EINVAL;
   }
-  err |= sanity_check_k(k, ss);
+  err |= sanity_check_k_m(k, m, ss);
   return err;
 }
 
@@ -79,7 +86,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
       chunk_size++;
     dout(20) << "get_chunk_size: chunk_size " << chunk_size
 	     << " must be modulo " << alignment << dendl; 
-    assert(alignment <= chunk_size);
+    ceph_assert(alignment <= chunk_size);
     unsigned modulo = chunk_size % alignment;
     if (modulo) {
       dout(10) << "get_chunk_size: " << chunk_size
@@ -90,7 +97,7 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
   } else {
     unsigned tail = object_size % alignment;
     unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
-    assert(padded_length % k == 0);
+    ceph_assert(padded_length % k == 0);
     return padded_length / k;
   }
 }
@@ -126,7 +133,7 @@ int ErasureCodeJerasure::decode_chunks(const set<int> &want_to_read,
   }
   erasures[erasures_count] = -1;
 
-  assert(erasures_count > 0);
+  ceph_assert(erasures_count > 0);
   return jerasure_decode(erasures, data, coding, blocksize);
 }
 
@@ -452,7 +459,7 @@ void ErasureCodeJerasureLiberation::prepare()
 //
 bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 {
-  // back in Firefly, w = 7 was the default and produced useable 
+  // back in Firefly, w = 7 was the default and produced usable
   // chunks. Tolerate this value for backward compatibility.
   if (w == 7)
     return true;

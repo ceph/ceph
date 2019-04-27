@@ -12,6 +12,10 @@ extern rgw_http_errors rgw_http_s3_errors;
 
 extern rgw_http_errors rgw_http_swift_errors;
 
+extern rgw_http_errors rgw_http_sts_errors;
+
+extern rgw_http_errors rgw_http_iam_errors;
+
 static inline int rgw_http_error_to_errno(int http_err)
 {
   if (http_err >= 200 && http_err <= 299)
@@ -29,6 +33,8 @@ static inline int rgw_http_error_to_errno(int http_err)
         return -ENOENT;
     case 409:
         return -ENOTEMPTY;
+    case 503:
+        return -EBUSY;
     default:
         return -EIO;
   }

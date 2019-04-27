@@ -18,33 +18,37 @@
 
 #include <string_view>
 
+#include "msg/Message.h"
+
 class MDentryUnlink : public Message {
+private:
   dirfrag_t dirfrag;
   string dn;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  string& get_dn() { return dn; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const string& get_dn() const { return dn; }
 
   bufferlist straybl;
+  bufferlist snapbl;
 
+protected:
   MDentryUnlink() :
-    Message(MSG_MDS_DENTRYUNLINK) { }
+    Message{MSG_MDS_DENTRYUNLINK} { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    Message(MSG_MDS_DENTRYUNLINK),
+    Message{MSG_MDS_DENTRYUNLINK},
     dirfrag(df),
     dn(n) {}
-private:
   ~MDentryUnlink() override {}
 
 public:
-  const char *get_type_name() const override { return "dentry_unlink";}
+  std::string_view get_type_name() const override { return "dentry_unlink";}
   void print(ostream& o) const override {
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(dn, p);
     decode(straybl, p);
@@ -55,6 +59,9 @@ public:
     encode(dn, payload);
     encode(straybl, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

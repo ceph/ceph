@@ -28,14 +28,14 @@
 // sent from replica to auth
 
 class MMDSCacheRejoin : public Message {
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
  public:
-  static const int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
-  static const int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
-  static const int OP_ACK     = 3;  // auth -> replica, here is your lock state.
+  static constexpr int OP_WEAK    = 1;  // replica -> auth, i exist, + maybe open files.
+  static constexpr int OP_STRONG  = 2;  // replica -> auth, i exist, + open files and lock state.
+  static constexpr int OP_ACK     = 3;  // auth -> replica, here is your lock state.
   static const char *get_opname(int op) {
     switch (op) {
     case OP_WEAK: return "weak";
@@ -62,7 +62,7 @@ class MMDSCacheRejoin : public Message {
       encode(nestlock, bl);
       encode(dftlock, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(nonce, bl);
       decode(caps_wanted, bl);
@@ -83,7 +83,7 @@ class MMDSCacheRejoin : public Message {
       encode(nonce, bl);
       encode(dir_rep, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(nonce, bl);
       decode(dir_rep, bl);
@@ -102,9 +102,9 @@ class MMDSCacheRejoin : public Message {
       ino(0), remote_ino(0), remote_d_type(0), nonce(0), lock(0) {}
     dn_strong(snapid_t f, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int l) : 
       first(f), ino(pi), remote_ino(ri), remote_d_type(rdt), nonce(n), lock(l) {}
-    bool is_primary() { return ino > 0; }
-    bool is_remote() { return remote_ino > 0; }
-    bool is_null() { return ino == 0 && remote_ino == 0; }
+    bool is_primary() const { return ino > 0; }
+    bool is_remote() const { return remote_ino > 0; }
+    bool is_null() const { return ino == 0 && remote_ino == 0; }
     void encode(bufferlist &bl) const {
       using ceph::encode;
       encode(first, bl);
@@ -114,7 +114,7 @@ class MMDSCacheRejoin : public Message {
       encode(nonce, bl);
       encode(lock, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(first, bl);
       decode(ino, bl);
@@ -136,7 +136,7 @@ class MMDSCacheRejoin : public Message {
       encode(first, bl);
       encode(ino, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(first, bl);
       decode(ino, bl);
@@ -155,7 +155,7 @@ class MMDSCacheRejoin : public Message {
       encode(nest, bl);
       encode(dft, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(file, bl);
       decode(nest, bl);
@@ -178,6 +178,7 @@ class MMDSCacheRejoin : public Message {
   // open
   map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
   map<client_t, entity_inst_t> client_map;
+  map<client_t,client_metadata_t> client_metadata_map;
   bufferlist imported_caps;
 
   // full
@@ -197,7 +198,7 @@ class MMDSCacheRejoin : public Message {
       encode(reqid, bl);
       encode(attempt, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(reqid, bl);
       decode(attempt, bl);
@@ -210,17 +211,17 @@ class MMDSCacheRejoin : public Message {
   map<dirfrag_t, map<string_snap_t, list<slave_reqid> > > authpinned_dentries;
   map<dirfrag_t, map<string_snap_t, slave_reqid> > xlocked_dentries;
   
+protected:
   MMDSCacheRejoin() :
-    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
-    op(0) {}
+    MMDSCacheRejoin{0}
+  {}
   MMDSCacheRejoin(int o) : 
-    Message(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION},
     op(o) {}
-private:
   ~MMDSCacheRejoin() override {}
 
 public:
-  const char *get_type_name() const override { return "cache_rejoin"; }
+  std::string_view get_type_name() const override { return "cache_rejoin"; }
   void print(ostream& out) const override {
     out << "cache_rejoin " << get_opname(op);
   }
@@ -323,9 +324,10 @@ public:
     encode(strong_dentries, payload);
     encode(authpinned_dentries, payload);
     encode(xlocked_dentries, payload);
+    encode(client_metadata_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     using ceph::decode;
     decode(op, p);
     decode(strong_inodes, p);
@@ -347,8 +349,12 @@ public:
     decode(strong_dentries, p);
     decode(authpinned_dentries, p);
     decode(xlocked_dentries, p);
+    if (header.version >= 2)
+      decode(client_metadata_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 WRITE_CLASS_ENCODER(MMDSCacheRejoin::inode_strong)

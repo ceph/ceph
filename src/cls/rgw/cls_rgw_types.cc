@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "common/ceph_json.h"
@@ -39,7 +41,7 @@ void cls_rgw_obj_key::decode_json(JSONObj *obj) {
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
 {
   rgw_bucket_dir_entry_meta *m = new rgw_bucket_dir_entry_meta;
-  m->category = 1;
+  m->category = RGWObjCategory::Main;
   m->size = 100;
   m->etag = "etag";
   m->owner = "owner";
@@ -56,27 +58,31 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   utime_t ut(mtime);
   encode_json("mtime", ut, f);
   encode_json("etag", etag, f);
+  encode_json("storage_class", storage_class, f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("content_type", content_type, f);
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
+  encode_json("appendable", appendable, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   int val;
   JSONDecoder::decode_json("category", val, obj);
-  category = (uint8_t)val;
+  category = static_cast<RGWObjCategory>(val);
   JSONDecoder::decode_json("size", size, obj);
   utime_t ut;
   JSONDecoder::decode_json("mtime", ut, obj);
   mtime = ut.to_real_time();
   JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("storage_class", storage_class, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
   JSONDecoder::decode_json("content_type", content_type, obj);
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
+  JSONDecoder::decode_json("appendable", appendable, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -154,17 +160,17 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   switch (index_type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         decode(entry, iter);
@@ -181,18 +187,18 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
   string s;
   JSONDecoder::decode_json("type", s, obj);
   if (s == "plain") {
-    type = PlainIdx;
+    type = BIIndexType::Plain;
   } else if (s == "instance") {
-    type = InstanceIdx;
+    type = BIIndexType::Instance;
   } else if (s == "olh") {
-    type = OLHIdx;
+    type = BIIndexType::OLH;
   } else {
-    type = InvalidIdx;
+    type = BIIndexType::Invalid;
   }
   using ceph::encode;
   switch (type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
@@ -203,7 +209,7 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
         }
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
@@ -223,31 +229,35 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 {
   string type_str;
   switch (type) {
-    case PlainIdx:
-      type_str = "plain";
-      break;
-    case InstanceIdx:
-      type_str = "instance";
-      break;
-    case OLHIdx:
-      type_str = "olh";
-      break;
-    default:
-      type_str = "invalid";
+  case BIIndexType::Plain:
+    type_str = "plain";
+    break;
+  case BIIndexType::Instance:
+    type_str = "instance";
+    break;
+  case BIIndexType::OLH:
+    type_str = "olh";
+    break;
+  default:
+    type_str = "invalid";
   }
   encode_json("type", type_str, f);
   encode_json("idx", idx, f);
   dump_bi_entry(data, type, f);
 }
 
-bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
+bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
+                                RGWObjCategory *category,
+                                rgw_bucket_category_stats *accounted_stats)
 {
   bool account = false;
-  bufferlist::iterator iter = data.begin();
+  auto iter = data.cbegin();
   using ceph::decode;
   switch (type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+        account = true;
+        // NO BREAK; falls through to case InstanceIdx:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
@@ -256,10 +266,10 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
         accounted_stats->num_entries++;
         accounted_stats->total_size += entry.meta.accounted_size;
         accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
-        account = true;
+        accounted_stats->actual_size += entry.meta.size;
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         decode(entry, iter);
@@ -505,9 +515,10 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
 
   uint8_t i;
   for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    RGWObjCategory c = static_cast<RGWObjCategory>(i);
     rgw_bucket_dir_header *h = new rgw_bucket_dir_header;
     rgw_bucket_category_stats *s = *iter;
-    h->stats[i] = *s;
+    h->stats[c] = *s;
 
     o.push_back(h);
 
@@ -521,10 +532,9 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
 {
   f->dump_int("ver", ver);
   f->dump_int("master_ver", master_ver);
-  map<uint8_t, struct rgw_bucket_category_stats>::const_iterator iter = stats.begin();
   f->open_array_section("stats");
-  for (; iter != stats.end(); ++iter) {
-    f->dump_int("category", (int)iter->first);
+  for (auto iter = stats.begin(); iter != stats.end(); ++iter) {
+    f->dump_int("category", int(iter->first));
     f->open_object_section("category_stats");
     iter->second.dump(f);
     f->close_section();
@@ -567,7 +577,7 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->open_object_section("header");
   header.dump(f);
   f->close_section();
-  map<string, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  map<string, rgw_bucket_dir_entry>::const_iterator iter = m.begin();
   f->open_array_section("map");
   for (; iter != m.end(); ++iter) {
     f->dump_string("key", iter->first);
@@ -576,6 +586,54 @@ void rgw_bucket_dir::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+void rgw_usage_log_entry::dump(Formatter *f) const
+{
+  f->dump_string("owner", owner.to_str());
+  f->dump_string("payer", payer.to_str());
+  f->dump_string("bucket", bucket);
+  f->dump_unsigned("epoch", epoch);
+
+  f->open_object_section("total_usage");
+  f->dump_unsigned("bytes_sent", total_usage.bytes_sent);
+  f->dump_unsigned("bytes_received", total_usage.bytes_received);
+  f->dump_unsigned("ops", total_usage.ops);
+  f->dump_unsigned("successful_ops", total_usage.successful_ops);
+  f->close_section();
+
+  f->open_array_section("categories");
+  if (usage_map.size() > 0) {
+    map<string, rgw_usage_data>::const_iterator it;
+    for (it = usage_map.begin(); it != usage_map.end(); it++) {
+      const rgw_usage_data& total_usage = it->second;
+      f->open_object_section("entry");
+      f->dump_string("category", it->first.c_str());
+      f->dump_unsigned("bytes_sent", total_usage.bytes_sent);
+      f->dump_unsigned("bytes_received", total_usage.bytes_received);
+      f->dump_unsigned("ops", total_usage.ops);
+      f->dump_unsigned("successful_ops", total_usage.successful_ops);
+      f->close_section();
+    }
+  }
+  f->close_section();
+}
+
+void rgw_usage_log_entry::generate_test_instances(list<rgw_usage_log_entry *> &o)
+{
+  rgw_usage_log_entry *entry = new rgw_usage_log_entry;
+  rgw_usage_data usage_data{1024, 2048};
+  entry->owner = rgw_user("owner");
+  entry->payer = rgw_user("payer");
+  entry->bucket = "bucket";
+  entry->epoch = 1234;
+  entry->total_usage.bytes_sent = usage_data.bytes_sent;
+  entry->total_usage.bytes_received = usage_data.bytes_received;
+  entry->total_usage.ops = usage_data.ops;
+  entry->total_usage.successful_ops = usage_data.successful_ops;
+  entry->usage_map["get_obj"] = usage_data;
+  o.push_back(entry);
+  o.push_back(new rgw_usage_log_entry);
 }
 
 void cls_rgw_reshard_entry::generate_key(const string& tenant, const string& bucket_name, string *key)
@@ -616,7 +674,21 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 
 void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
-  encode_json("reshard_status", (int)reshard_status, f);
+  string status_str;
+  switch(reshard_status) {
+    case CLS_RGW_RESHARD_NONE:
+      status_str= "none";
+      break;
+    case CLS_RGW_RESHARD_IN_PROGRESS:
+      status_str = "in-progress";
+      break;
+    case CLS_RGW_RESHARD_DONE:
+      status_str = "done";
+      break;
+    default:
+      status_str = "invalid";
+  }
+  encode_json("reshard_status", status_str, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   encode_json("num_shards", num_shards, f);
 

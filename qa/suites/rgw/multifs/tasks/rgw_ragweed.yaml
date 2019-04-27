@@ -4,12 +4,12 @@ tasks:
 - rgw: [client.0]
 - ragweed:
     client.0:
-      force-branch: ceph-master
+      default-branch: ceph-master
       rgw_server: client.0
       stages: prepare
 - ragweed:
     client.0:
-      force-branch: ceph-master
+      default-branch: ceph-master
       rgw_server: client.0
       stages: check
 overrides:

@@ -19,10 +19,9 @@
 #include "MOSDFastDispatchOp.h"
 
 class MOSDPGUpdateLogMissing : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
-
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   epoch_t map_epoch = 0, min_epoch = 0;
@@ -30,6 +29,9 @@ public:
   shard_id_t from;
   ceph_tid_t rep_tid = 0;
   mempool::osd_pglog::list<pg_log_entry_t> entries;
+  // piggybacked osd/pg state
+  eversion_t pg_trim_to; // primary->replica: trim to here
+  eversion_t pg_roll_forward_to; // primary->replica: trim rollback info to here
 
   epoch_t get_epoch() const { return map_epoch; }
   spg_t get_pgid() const { return pgid; }
@@ -47,34 +49,42 @@ public:
   }
 
   MOSDPGUpdateLogMissing()
-    : MOSDFastDispatchOp(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
-			 COMPAT_VERSION) { }
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+			 COMPAT_VERSION} {}
   MOSDPGUpdateLogMissing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     spg_t pgid,
     shard_id_t from,
     epoch_t epoch,
     epoch_t min_epoch,
-    ceph_tid_t rep_tid)
-    : MOSDFastDispatchOp(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
-			 COMPAT_VERSION),
+    ceph_tid_t rep_tid,
+    eversion_t pg_trim_to,
+    eversion_t pg_roll_forward_to)
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+			 COMPAT_VERSION},
       map_epoch(epoch),
       min_epoch(min_epoch),
       pgid(pgid),
       from(from),
       rep_tid(rep_tid),
-      entries(entries) {}
+      entries(entries),
+      pg_trim_to(pg_trim_to),
+      pg_roll_forward_to(pg_roll_forward_to)
+  {}
 
 private:
   ~MOSDPGUpdateLogMissing() override {}
 
 public:
-  const char *get_type_name() const override { return "PGUpdateLogMissing"; }
+  std::string_view get_type_name() const override { return "PGUpdateLogMissing"; }
   void print(ostream& out) const override {
     out << "pg_update_log_missing(" << pgid << " epoch " << map_epoch
 	<< "/" << min_epoch
 	<< " rep_tid " << rep_tid
-	<< " entries " << entries << ")";
+	<< " entries " << entries
+	<< " trim_to " << pg_trim_to
+	<< " roll_forward_to " << pg_roll_forward_to
+	<< ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -85,9 +95,11 @@ public:
     encode(rep_tid, payload);
     encode(entries, payload);
     encode(min_epoch, payload);
+    encode(pg_trim_to, payload);
+    encode(pg_roll_forward_to, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(map_epoch, p);
     decode(pgid, p);
     decode(from, p);
@@ -98,7 +110,14 @@ public:
     } else {
       min_epoch = map_epoch;
     }
+    if (header.version >= 3) {
+      decode(pg_trim_to, p);
+      decode(pg_roll_forward_to, p);
+    }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

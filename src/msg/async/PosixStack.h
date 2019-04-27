@@ -30,29 +30,25 @@ class PosixWorker : public Worker {
  public:
   PosixWorker(CephContext *c, unsigned i)
       : Worker(c, i), net(c) {}
-  int listen(entity_addr_t &sa, const SocketOptions &opt,
-                     ServerSocket *socks) override;
+  int listen(entity_addr_t &sa,
+	     unsigned addr_slot,
+	     const SocketOptions &opt,
+	     ServerSocket *socks) override;
   int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
 };
 
 class PosixNetworkStack : public NetworkStack {
-  vector<int> coreids;
   vector<std::thread> threads;
 
  public:
   explicit PosixNetworkStack(CephContext *c, const string &t);
 
-  int get_cpuid(int id) const {
-    if (coreids.empty())
-      return -1;
-    return coreids[id % coreids.size()];
-  }
   void spawn_worker(unsigned i, std::function<void ()> &&func) override {
     threads.resize(i+1);
     threads[i] = std::thread(func);
   }
   void join_worker(unsigned i) override {
-    assert(threads.size() > i && threads[i].joinable());
+    ceph_assert(threads.size() > i && threads[i].joinable());
     threads[i].join();
   }
 };

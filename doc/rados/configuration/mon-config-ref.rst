@@ -212,10 +212,8 @@ these under ``[mon]`` or under the entry for a specific monitor.
 
 .. code-block:: ini
 
-	[mon]
-		mon host = hostname1,hostname2,hostname3
-		mon addr = 10.0.0.10:6789,10.0.0.11:6789,10.0.0.12:6789
-
+	[global]
+		mon host = 10.0.0.2,10.0.0.3,10.0.0.4
 
 .. code-block:: ini
 
@@ -348,8 +346,8 @@ by setting it in the ``[mon]`` section of the configuration file.
 ``mon warn on cache pools without hit sets``
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if a cache pool does not
-              have the hitset type set set.
-              See `hit set type <../operations/pools#hit-set-type>`_ for more
+              have the ``hit_set_type`` value configured.
+              See :ref:`hit_set_type <hit_set_type>` for more
               details.
 :Type: Boolean
 :Default: True
@@ -359,7 +357,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
               ``straw_calc_version`` is zero. See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: Boolean
 :Default: True
@@ -377,7 +375,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: The minimum tunable profile version required by the cluster.
               See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: String
 :Default: ``firefly``
@@ -388,7 +386,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Description: Issue a ``HEALTH_WARN`` in cluster log if
               ``mon osd down out interval`` is zero. Having this option set to
               zero on the leader acts much like the ``noout`` flag. It's hard
-              to figure out what's going wrong with clusters witout the
+              to figure out what's going wrong with clusters without the
               ``noout`` flag set but acting like that just the same, so we
               report a warning in this case.
 :Type: Boolean
@@ -520,6 +518,9 @@ you expect to fail to arrive at a reasonable full ratio. Repeat the foregoing
 process with a higher number of OSD failures (e.g., a rack of OSDs) to arrive at
 a reasonable number for a near full ratio.
 
+The following settings only apply on cluster creation and are then stored in
+the OSDMap.
+
 .. code-block:: ini
 
 	[global]
@@ -558,6 +559,10 @@ a reasonable number for a near full ratio.
 
 .. tip:: If some OSDs are nearfull, but others have plenty of capacity, you 
          may have a problem with the CRUSH weight for the nearfull OSDs.
+
+.. tip:: These settings only apply during cluster creation. Afterwards they need
+         to be changed in the OSDMap using ``ceph osd set-nearfull-ratio`` and
+         ``ceph osd set-full-ratio``
 
 .. index:: heartbeat
 
@@ -983,6 +988,14 @@ Monitors can also disallow removal of pools if configured that way.
 :Type: Boolean
 :Default: ``false``
 
+``osd pool default ec fast read``
+
+:Description: Whether to turn on fast read on the pool or not. It will be used as
+              the default setting of newly created erasure coded pools if ``fast_read``
+              is not specified at create time.
+:Type: Boolean
+:Default: ``false``
+
 ``osd pool default flag hashpspool``
 
 :Description: Set the hashpspool flag on new pools
@@ -1096,15 +1109,6 @@ Miscellaneous
 :Default: False
 
 
-``mon osd pool ec fast read``
-
-:Description: Whether turn on fast read on the pool or not. It will be used as
-              the default setting of newly created erasure pools if ``fast_read``
-              is not specified at create time.
-:Type: Boolean
-:Default: False
-
-
 ``mon mds skip sanity``
 
 :Description: Skip safety assertions on FSMap (in case of bugs where we want to
@@ -1184,17 +1188,6 @@ Miscellaneous
               This option specifies the number of placement groups per chunk.
 :Type: Integer
 :Default: 4096
-
-
-``mon osd max split count``
-
-:Description: Largest number of PGs per "involved" OSD to let split create.
-              When we increase the ``pg_num`` of a pool, the placement groups
-              will be splitted on all OSDs serving that pool. We want to avoid
-              extreme multipliers on PG splits.
-:Type: Integer
-:Default: 300
-
 
 ``mon session timeout``
 

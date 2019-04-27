@@ -28,7 +28,7 @@
 
 #include "include/unordered_map.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "os/ObjectStore.h"
 #include "JournalingObjectStore.h"
@@ -48,21 +48,15 @@
 
 #include "include/uuid.h"
 
-
-// from include/linux/falloc.h:
-#ifndef FALLOC_FL_PUNCH_HOLE
-# define FALLOC_FL_PUNCH_HOLE 0x2
-#endif
-
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683EL
+#define BTRFS_SUPER_MAGIC 0x9123683EUL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342L
+#define XFS_SUPER_MAGIC 0x58465342UL
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1L
+#define ZFS_SUPER_MAGIC 0x2fc12fc1UL
 # endif
 #endif
 
@@ -105,7 +99,7 @@ public:
   FSSuperblock() { }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<FSSuperblock*>& o);
 };
@@ -164,7 +158,12 @@ private:
 
   FileStoreBackend *backend;
 
-  void create_backend(long f_type);
+  void create_backend(unsigned long f_type);
+
+  string devname;
+
+  int vdo_fd = -1;
+  string vdo_name;
 
   deque<uint64_t> snaps;
 
@@ -179,6 +178,8 @@ private:
     return cid.is_pg() && oid.hobj.pool <= -1;
   }
   void init_temp_collections();
+
+  void handle_eio();
 
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;
@@ -242,8 +243,8 @@ private:
     bool _get_max_uncompleted(
       uint64_t *seq ///< [out] max uncompleted seq
       ) {
-      assert(qlock.is_locked());
-      assert(seq);
+      ceph_assert(qlock.is_locked());
+      ceph_assert(seq);
       *seq = 0;
       if (q.empty() && jq.empty())
 	return true;
@@ -260,8 +261,8 @@ private:
     bool _get_min_uncompleted(
       uint64_t *seq ///< [out] min uncompleted seq
       ) {
-      assert(qlock.is_locked());
-      assert(seq);
+      ceph_assert(qlock.is_locked());
+      ceph_assert(seq);
       *seq = 0;
       if (q.empty() && jq.empty())
 	return true;
@@ -309,13 +310,13 @@ private:
     void wait_for_apply(const ghobject_t& oid);
     Op *peek_queue() {
       Mutex::Locker l(qlock);
-      assert(apply_lock.is_locked());
+      ceph_assert(apply_lock.is_locked());
       return q.front();
     }
 
     Op *dequeue(list<Context*> *to_queue) {
-      assert(to_queue);
-      assert(apply_lock.is_locked());
+      ceph_assert(to_queue);
+      ceph_assert(apply_lock.is_locked());
       Mutex::Locker l(qlock);
       Op *o = q.front();
       q.pop_front();
@@ -366,7 +367,7 @@ private:
         id(i),
 	osr_name(osr_name_str.c_str()) {}
     ~OpSequencer() override {
-      assert(q.empty());
+      ceph_assert(q.empty());
     }
   };
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
@@ -418,7 +419,7 @@ private:
       store->_finish_op(osr);
     }
     void _clear() override {
-      assert(store->op_queue.empty());
+      ceph_assert(store->op_queue.empty());
     }
   } op_wq;
 
@@ -507,6 +508,7 @@ public:
     f->close_section();
   }
 
+  int flush_cache(ostream *os = NULL) override;
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
@@ -519,7 +521,9 @@ public:
   void collect_metadata(map<string,string> *pm) override;
   int get_devices(set<string> *ls) override;
 
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
@@ -534,6 +538,9 @@ public:
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
@@ -661,7 +668,7 @@ public:
   void inject_mdata_error(const ghobject_t &oid) override;
 
   void compact() override {
-    assert(object_map);
+    ceph_assert(object_map);
     object_map->compact();
   }
 
@@ -770,6 +777,8 @@ public:
 
   virtual int apply_layout_settings(const coll_t &cid, int target_level);
 
+  void get_db_statistics(Formatter* f) override;
+
 private:
   void _inject_failure();
 
@@ -788,12 +797,11 @@ private:
 		      const SequencerPosition &spos);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         const SequencerPosition &spos);
-  int _split_collection_create(const coll_t& cid, uint32_t bits, uint32_t rem,
-			       coll_t dest,
-			       const SequencerPosition &spos);
+  int _merge_collection(const coll_t& cid, uint32_t bits, coll_t dest,
+                        const SequencerPosition &spos);
 
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed) override;
   int set_throttle_params();
   float m_filestore_commit_timeout;
@@ -816,7 +824,7 @@ private:
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
-  long m_fs_type;
+  unsigned long m_fs_type;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();
@@ -896,7 +904,7 @@ public:
     return filestore->cct;
   }
 
-  static FileStoreBackend *create(long f_type, FileStore *fs);
+  static FileStoreBackend *create(unsigned long f_type, FileStore *fs);
 
   virtual const char *get_name() = 0;
   virtual int detect_features() = 0;

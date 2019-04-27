@@ -52,21 +52,24 @@ struct LeaseStat {
   __u32 seq;
 
   LeaseStat() : mask(0), duration_ms(0), seq(0) {}
+  LeaseStat(__u16 msk, __u32 dur, __u32 sq) : mask{msk}, duration_ms{dur}, seq{sq} {}
 
-  void encode(bufferlist &bl) const {
-    using ceph::encode;
-    encode(mask, bl);
-    encode(duration_ms, bl);
-    encode(seq, bl);
-  }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl, const uint64_t features) {
     using ceph::decode;
-    decode(mask, bl);
-    decode(duration_ms, bl);
-    decode(seq, bl);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, bl);
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+      DECODE_FINISH(bl);
+    }
+    else {
+      decode(mask, bl);
+      decode(duration_ms, bl);
+      decode(seq, bl);
+    }
   }
 };
-WRITE_CLASS_ENCODER(LeaseStat)
 
 inline ostream& operator<<(ostream& out, const LeaseStat& l) {
   return out << "lease(mask " << l.mask << " dur " << l.duration_ms << ")";
@@ -79,21 +82,24 @@ struct DirStat {
   set<__s32> dist;
   
   DirStat() : auth(CDIR_AUTH_PARENT) {}
-  DirStat(bufferlist::iterator& p) {
-    decode(p);
+  DirStat(bufferlist::const_iterator& p, const uint64_t features) {
+    decode(p, features);
   }
 
-  void encode(bufferlist& bl) {
-    using ceph::encode;
-    encode(frag, bl);
-    encode(auth, bl);
-    encode(dist, bl);
-  }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p, const uint64_t features) {
     using ceph::decode;
-    decode(frag, p);
-    decode(auth, p);
-    decode(dist, p);
+    if (features == (uint64_t)-1) {
+      DECODE_START(1, p);
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+      DECODE_FINISH(p);
+    }
+    else {
+      decode(frag, p);
+      decode(auth, p);
+      decode(dist, p);
+    }
   }
 
   // see CDir::encode_dirstat for encoder.
@@ -106,7 +112,7 @@ struct InodeStat {
   version_t xattr_version = 0;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
-  utime_t ctime, btime, mtime, atime;
+  utime_t ctime, btime, mtime, atime, snap_btime;
   uint32_t time_warp_seq = 0;
   uint64_t size = 0, max_size = 0;
   uint64_t change_attr = 0;
@@ -128,75 +134,128 @@ struct InodeStat {
 
   quota_info_t quota;
 
+  mds_rank_t dir_pin;
+
  public:
   InodeStat() {}
-  InodeStat(bufferlist::iterator& p, uint64_t features) {
+  InodeStat(bufferlist::const_iterator& p, const uint64_t features) {
     decode(p, features);
   }
 
-  void decode(bufferlist::iterator &p, uint64_t features) {
+  void decode(bufferlist::const_iterator &p, const uint64_t features) {
     using ceph::decode;
-    decode(vino.ino, p);
-    decode(vino.snapid, p);
-    decode(rdev, p);
-    decode(version, p);
-    decode(xattr_version, p);
-    decode(cap, p);
-    {
-      ceph_file_layout legacy_layout;
-      decode(legacy_layout, p);
-      layout.from_legacy(legacy_layout);
-    }
-    decode(ctime, p);
-    decode(mtime, p);
-    decode(atime, p);
-    decode(time_warp_seq, p);
-    decode(size, p);
-    decode(max_size, p);
-    decode(truncate_size, p);
-    decode(truncate_seq, p);
-    decode(mode, p);
-    decode(uid, p);
-    decode(gid, p);
-    decode(nlink, p);
-    decode(dirstat.nfiles, p);
-    decode(dirstat.nsubdirs, p);
-    decode(rstat.rbytes, p);
-    decode(rstat.rfiles, p);
-    decode(rstat.rsubdirs, p);
-    decode(rstat.rctime, p);
-
-    decode(dirfragtree, p);
-
-    decode(symlink, p);
-    
-    if (features & CEPH_FEATURE_DIRLAYOUTHASH)
+    if (features == (uint64_t)-1) {
+      DECODE_START(2, p);
+      decode(vino.ino, p);
+      decode(vino.snapid, p);
+      decode(rdev, p);
+      decode(version, p);
+      decode(xattr_version, p);
+      decode(cap, p);
+      {
+        ceph_file_layout legacy_layout;
+        decode(legacy_layout, p);
+        layout.from_legacy(legacy_layout);
+      }
+      decode(ctime, p);
+      decode(mtime, p);
+      decode(atime, p);
+      decode(time_warp_seq, p);
+      decode(size, p);
+      decode(max_size, p);
+      decode(truncate_size, p);
+      decode(truncate_seq, p);
+      decode(mode, p);
+      decode(uid, p);
+      decode(gid, p);
+      decode(nlink, p);
+      decode(dirstat.nfiles, p);
+      decode(dirstat.nsubdirs, p);
+      decode(rstat.rbytes, p);
+      decode(rstat.rfiles, p);
+      decode(rstat.rsubdirs, p);
+      decode(rstat.rctime, p);
+      decode(dirfragtree, p);
+      decode(symlink, p);
       decode(dir_layout, p);
-    else
-      memset(&dir_layout, 0, sizeof(dir_layout));
-
-    decode(xattrbl, p);
-
-    if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
+      decode(xattrbl, p);
       decode(inline_version, p);
       decode(inline_data, p);
-    } else {
-      inline_version = CEPH_INLINE_NONE;
-    }
-
-    if (features & CEPH_FEATURE_MDS_QUOTA)
       decode(quota, p);
-    else
-      memset(&quota, 0, sizeof(quota));
-
-    if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
       decode(layout.pool_ns, p);
-    if ((features & CEPH_FEATURE_FS_BTIME)) {
       decode(btime, p);
       decode(change_attr, p);
-    } else {
-      btime = utime_t();
-      change_attr = 0;
+      if (struct_v > 1) {
+        decode(dir_pin, p);
+      } else {
+        dir_pin = -ENODATA;
+      }
+      if (struct_v >= 3) {
+        decode(snap_btime, p);
+      } // else remains zero
+      DECODE_FINISH(p);
+    }
+    else {
+      decode(vino.ino, p);
+      decode(vino.snapid, p);
+      decode(rdev, p);
+      decode(version, p);
+      decode(xattr_version, p);
+      decode(cap, p);
+      {
+        ceph_file_layout legacy_layout;
+        decode(legacy_layout, p);
+        layout.from_legacy(legacy_layout);
+      }
+      decode(ctime, p);
+      decode(mtime, p);
+      decode(atime, p);
+      decode(time_warp_seq, p);
+      decode(size, p);
+      decode(max_size, p);
+      decode(truncate_size, p);
+      decode(truncate_seq, p);
+      decode(mode, p);
+      decode(uid, p);
+      decode(gid, p);
+      decode(nlink, p);
+      decode(dirstat.nfiles, p);
+      decode(dirstat.nsubdirs, p);
+      decode(rstat.rbytes, p);
+      decode(rstat.rfiles, p);
+      decode(rstat.rsubdirs, p);
+      decode(rstat.rctime, p);
+      decode(dirfragtree, p);
+      decode(symlink, p);
+      if (features & CEPH_FEATURE_DIRLAYOUTHASH)
+        decode(dir_layout, p);
+      else
+        memset(&dir_layout, 0, sizeof(dir_layout));
+
+      decode(xattrbl, p);
+
+      if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
+        decode(inline_version, p);
+        decode(inline_data, p);
+      } else {
+        inline_version = CEPH_INLINE_NONE;
+      }
+
+      if (features & CEPH_FEATURE_MDS_QUOTA)
+        decode(quota, p);
+      else
+        quota = quota_info_t{};
+
+      if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+        decode(layout.pool_ns, p);
+
+      if ((features & CEPH_FEATURE_FS_BTIME)) {
+        decode(btime, p);
+        decode(change_attr, p);
+      } else {
+        btime = utime_t();
+        change_attr = 0;
+      }
     }
   }
   
@@ -205,14 +264,13 @@ struct InodeStat {
 
 
 class MClientReply : public Message {
-  // reply data
 public:
+  // reply data
   struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;
 
- public:
   int get_op() const { return head.op; }
 
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
@@ -228,20 +286,20 @@ public:
 
   bool is_safe() const { return head.safe; }
 
-  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
-  MClientReply(MClientRequest *req, int result = 0) : 
-    Message(CEPH_MSG_CLIENT_REPLY) {
+protected:
+  MClientReply() : Message{CEPH_MSG_CLIENT_REPLY} {}
+  MClientReply(const MClientRequest &req, int result = 0) :
+    Message{CEPH_MSG_CLIENT_REPLY} {
     memset(&head, 0, sizeof(head));
-    header.tid = req->get_tid();
-    head.op = req->get_op();
+    header.tid = req.get_tid();
+    head.op = req.get_op();
     head.result = result;
     head.safe = 1;
   }
-private:
   ~MClientReply() override {}
 
 public:
-  const char *get_type_name() const override { return "creply"; }
+  std::string_view get_type_name() const override { return "creply"; }
   void print(ostream& o) const override {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
@@ -259,12 +317,12 @@ public:
 
   // serialization
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode(trace_bl, p);
     decode(extra_bl, p);
     decode(snapbl, p);
-    assert(p.end());
+    ceph_assert(p.end());
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -279,7 +337,10 @@ public:
   void set_extra_bl(bufferlist& bl) {
     extra_bl.claim(bl);
   }
-  bufferlist &get_extra_bl() {
+  bufferlist& get_extra_bl() {
+    return extra_bl;
+  }
+  const bufferlist& get_extra_bl() const {
     return extra_bl;
   }
 
@@ -290,6 +351,12 @@ public:
   bufferlist& get_trace_bl() {
     return trace_bl;
   }
+  const bufferlist& get_trace_bl() const {
+    return trace_bl;
+  }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

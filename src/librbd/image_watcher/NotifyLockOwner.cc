@@ -36,7 +36,7 @@ void NotifyLockOwner::send_notify() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
   m_notifier.notify(m_bl, &m_notify_response, create_context_callback<
     NotifyLockOwner, &NotifyLockOwner::handle_notify>(this));
 }
@@ -73,7 +73,7 @@ void NotifyLockOwner::handle_notify(int r) {
   }
 
   try {
-    bufferlist::iterator iter = response.begin();
+    auto iter = response.cbegin();
 
     ResponseMessage response_message;
     using ceph::decode;

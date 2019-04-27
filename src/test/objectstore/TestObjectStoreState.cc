@@ -23,7 +23,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include "TestObjectStoreState.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_filestore
@@ -125,7 +125,7 @@ TestObjectStoreState::get_coll_at(int pos, bool erase)
   if (m_collections.empty())
     return NULL;
 
-  assert((size_t) pos < m_collections_ids.size());
+  ceph_assert((size_t) pos < m_collections_ids.size());
 
   coll_t cid = m_collections_ids[pos];
   coll_entry_t *entry = m_collections[cid];
@@ -293,5 +293,5 @@ int TestObjectStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
       return it->first;
     }
   }
-  ceph_assert(0 == "INTERNAL ERROR");
+  ceph_abort_msg("INTERNAL ERROR");
 }

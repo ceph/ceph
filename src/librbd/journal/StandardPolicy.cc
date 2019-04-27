@@ -15,7 +15,7 @@ namespace journal {
 
 template<typename I>
 void StandardPolicy<I>::allocate_tag_on_lock(Context *on_finish) {
-  assert(m_image_ctx->journal != nullptr);
+  ceph_assert(m_image_ctx->journal != nullptr);
 
   if (!m_image_ctx->journal->is_tag_owner()) {
     lderr(m_image_ctx->cct) << "local image not promoted" << dendl;

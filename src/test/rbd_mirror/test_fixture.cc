@@ -8,7 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "tools/rbd_mirror/Threads.h"
 
 namespace rbd {
@@ -89,16 +89,18 @@ void TestFixture::TearDown() {
 int TestFixture::create_image(librbd::RBD &rbd, librados::IoCtx &ioctx,
                               const std::string &name, uint64_t size) {
   int order = 18;
-  return rbd.create2(ioctx, name.c_str(), size, RBD_FEATURES_ALL, &order);
+  return rbd.create2(ioctx, name.c_str(), size,
+                     (RBD_FEATURES_ALL & ~RBD_FEATURES_IMPLICIT_ENABLE),
+                     &order);
 }
 
 int TestFixture::open_image(librados::IoCtx &io_ctx,
                             const std::string &image_name,
                             librbd::ImageCtx **image_ctx) {
-  *image_ctx = new librbd::ImageCtx(image_name.c_str(), "", NULL, io_ctx,
+  *image_ctx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, io_ctx,
                                     false);
   m_image_ctxs.insert(*image_ctx);
-  return (*image_ctx)->state->open(false);
+  return (*image_ctx)->state->open(0);
 }
 
 int TestFixture::create_snap(librbd::ImageCtx *image_ctx, const char* snap_name,

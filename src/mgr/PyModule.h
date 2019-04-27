@@ -13,14 +13,22 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
+#include <boost/optional.hpp>
+#include "common/Mutex.h"
 #include "Python.h"
 #include "Gil.h"
+#include "mon/MgrMap.h"
 
-#include <string>
-#include "common/Mutex.h"
-#include <memory>
+
+class MonClient;
 
 std::string handle_pyerror();
+
+std::string peek_pyerror();
 
 /**
  * A Ceph CLI command description provided from a Python module
@@ -30,6 +38,7 @@ public:
   std::string cmdstring;
   std::string helpstring;
   std::string perm;
+  bool polling;
 
   // Call the ActivePyModule of this name to handle the command
   std::string module_name;
@@ -46,6 +55,9 @@ private:
   // Did the MgrMap identify this module as one that should run?
   bool enabled = false;
 
+  // Did the MgrMap flag this module as always on?
+  bool always_on = false;
+
   // Did we successfully import this python module and look up symbols?
   // (i.e. is it possible to instantiate a MgrModule subclass instance?)
   bool loaded = false;
@@ -61,20 +73,39 @@ private:
   // Populated if loaded, can_run or failed indicates a problem
   std::string error_string;
 
+  // Helper for loading MODULE_OPTIONS and COMMANDS members
+  int walk_dict_list(
+      const std::string &attr_name,
+      std::function<int(PyObject*)> fn);
+
   int load_commands();
   std::vector<ModuleCommand> commands;
 
+  int load_options();
+  std::map<std::string, MgrMap::ModuleOption> options;
+
 public:
+  static std::string config_prefix;
+
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  PyModule(const std::string &module_name_, bool const enabled_)
-    : module_name(module_name_), enabled(enabled_)
+  explicit PyModule(const std::string &module_name_)
+    : module_name(module_name_)
   {
   }
 
   ~PyModule();
+
+  bool is_option(const std::string &option_name);
+  const std::map<std::string,MgrMap::ModuleOption>& get_options() const {
+    return options;
+  }
+
+  PyObject *get_typed_option_value(
+    const std::string& option,
+    const std::string& value);
 
   int load(PyThreadState *pMainThreadState);
 #if PY_MAJOR_VERSION >= 3
@@ -85,13 +116,22 @@ public:
   static void init_ceph_module();
 #endif
 
+  void set_enabled(const bool enabled_)
+  {
+    enabled = enabled_;
+  }
+
+  void set_always_on(const bool always_on_) {
+    always_on = always_on_;
+  }
+
   /**
    * Extend `out` with the contents of `this->commands`
    */
   void get_commands(std::vector<ModuleCommand> *out) const
   {
-    Mutex::Locker l(lock);
-    assert(out != nullptr);
+    std::lock_guard l(lock);
+    ceph_assert(out != nullptr);
     out->insert(out->end(), commands.begin(), commands.end());
   }
 
@@ -102,25 +142,47 @@ public:
    */
   void fail(const std::string &reason)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     failed = true;
     error_string = reason;
   }
 
-  bool is_enabled() const { Mutex::Locker l(lock) ; return enabled; }
-  bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
-  bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
+  bool is_enabled() const {
+    std::lock_guard l(lock);
+    return enabled || always_on;
+  }
+
+  bool is_failed() const { std::lock_guard l(lock) ; return failed; }
+  bool is_loaded() const { std::lock_guard l(lock) ; return loaded; }
+  bool is_always_on() const { std::lock_guard l(lock) ; return always_on; }
 
   const std::string &get_name() const {
-    Mutex::Locker l(lock) ; return module_name;
+    std::lock_guard l(lock) ; return module_name;
   }
   const std::string &get_error_string() const {
-    Mutex::Locker l(lock) ; return error_string;
+    std::lock_guard l(lock) ; return error_string;
   }
   bool get_can_run() const {
-    Mutex::Locker l(lock) ; return can_run;
+    std::lock_guard l(lock) ; return can_run;
   }
 };
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
 
+class PyModuleConfig {
+public:
+  mutable Mutex lock{"PyModuleConfig::lock"};
+  std::map<std::string, std::string> config;
+
+  PyModuleConfig();
+  
+  PyModuleConfig(PyModuleConfig &mconfig);
+  
+  ~PyModuleConfig();
+
+  void set_config(
+    MonClient *monc,
+    const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val);
+
+};

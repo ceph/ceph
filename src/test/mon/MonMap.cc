@@ -97,9 +97,9 @@ TEST_F(MonMapTest, build_initial_config_from_dns) {
 
 
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
-  cct->_conf->set_val("mon_dns_srv_name", "cephmon", false);
+  cct->_conf.set_val("mon_dns_srv_name", "cephmon");
   MonMap monmap;
-  int r = monmap.build_initial(cct, std::cerr);
+  int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, 0);
   ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)3);
@@ -136,7 +136,7 @@ TEST_F(MonMapTest, build_initial_config_from_dns_fail) {
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
   // using default value of mon_dns_srv_name option
   MonMap monmap;
-  int r = monmap.build_initial(cct, std::cerr);
+  int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, -ENOENT);
   ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)0);
@@ -195,9 +195,9 @@ TEST_F(MonMapTest, build_initial_config_from_dns_with_domain) {
 
 
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_MON))->get();
-  cct->_conf->set_val("mon_dns_srv_name", "cephmon_ceph.com", false);
+  cct->_conf.set_val("mon_dns_srv_name", "cephmon_ceph.com");
   MonMap monmap;
-  int r = monmap.build_initial(cct, std::cerr);
+  int r = monmap.build_initial(cct, false, std::cerr);
 
   ASSERT_EQ(r, 0);
   ASSERT_EQ(monmap.mon_addr.size(), (unsigned int)3);

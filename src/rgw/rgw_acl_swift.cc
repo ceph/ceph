@@ -23,10 +23,10 @@
 
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
-static int parse_list(const std::string& uid_list,
+static int parse_list(const char* uid_list,
                       std::vector<std::string>& uids)           /* out */
 {
-  char *s = strdup(uid_list.c_str());
+  char *s = strdup(uid_list);
   if (!s) {
     return -ENOMEM;
   }
@@ -106,7 +106,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 
     grant.set_referer(url_spec, is_negative ? 0 : perm);
     return grant;
-  } catch (std::out_of_range) {
+  } catch (const std::out_of_range&) {
     return boost::none;
   }
 }
@@ -176,8 +176,8 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados* const store,
 int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
                                          const rgw_user& id,
                                          const std::string& name,
-                                         const std::string& read_list,
-                                         const std::string& write_list,
+                                         const char* read_list,
+                                         const char* write_list,
                                          uint32_t& rw_mask)
 {
   acl.create_default(id, name);
@@ -185,7 +185,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
   owner.set_name(name);
   rw_mask = 0;
 
-  if (read_list.size()) {
+  if (read_list) {
     std::vector<std::string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
@@ -202,7 +202,7 @@ int RGWAccessControlPolicy_SWIFT::create(RGWRados* const store,
     }
     rw_mask |= SWIFT_PERM_READ;
   }
-  if (write_list.size()) {
+  if (write_list) {
     std::vector<std::string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {

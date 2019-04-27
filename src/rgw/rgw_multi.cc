@@ -12,8 +12,35 @@
 #include "rgw_multi.h"
 #include "rgw_op.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
+
+
+bool MultipartMetaFilter::filter(const string& name, string& key) {
+  // the length of the suffix so we can skip past it
+  static const size_t MP_META_SUFFIX_LEN = MP_META_SUFFIX.length();
+
+  size_t len = name.size();
+
+  // make sure there's room for suffix plus at least one more
+  // character
+  if (len <= MP_META_SUFFIX_LEN)
+    return false;
+
+  size_t pos = name.find(MP_META_SUFFIX, len - MP_META_SUFFIX_LEN);
+  if (pos == string::npos)
+    return false;
+
+  pos = name.rfind('.', pos - 1);
+  if (pos == string::npos)
+    return false;
+
+  key = name.substr(0, pos);
+
+  return true;
+}
 
 
 bool RGWMultiPart::xml_end(const char *el)
@@ -73,16 +100,16 @@ bool is_v2_upload_id(const string& upload_id)
          (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
-int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContext *cct,
-                                const string& upload_id,
-                                string& meta_oid, int num_parts,
-                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated,
-                                bool assume_unsorted)
+int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info,
+			 CephContext *cct,
+			 const string& upload_id,
+			 const string& meta_oid, int num_parts,
+			 int marker, map<uint32_t, RGWUploadPartInfo>& parts,
+			 int *next_marker, bool *truncated,
+			 bool assume_unsorted)
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
-  bufferlist header;
 
   rgw_obj obj;
   obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
@@ -97,6 +124,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   parts.clear();
 
+
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_obj);
+
   if (sorted_omap) {
     string p;
     p = "part.";
@@ -105,9 +136,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = store->omap_get_vals(raw_obj, header, p, num_parts + 1, parts_map);
+    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map,
+                                 nullptr, null_yield);
   } else {
-    ret = store->omap_get_all(raw_obj, header, parts_map);
+    ret = sysobj.omap().get_all(&parts_map, null_yield);
   }
   if (ret < 0)
     return ret;
@@ -119,7 +151,7 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
+    auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
       decode(info, bli);
@@ -173,11 +205,11 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 }
 
 int list_multipart_parts(RGWRados *store, struct req_state *s,
-                                const string& upload_id,
-                                string& meta_oid, int num_parts,
-                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated,
-                                bool assume_unsorted)
+			 const string& upload_id,
+			 const string& meta_oid, int num_parts,
+			 int marker, map<uint32_t, RGWUploadPartInfo>& parts,
+			 int *next_marker, bool *truncated,
+			 bool assume_unsorted)
 {
   return list_multipart_parts(store, s->bucket_info, s->cct, upload_id, meta_oid, num_parts, marker, parts, next_marker, truncated, assume_unsorted);
 }
@@ -285,7 +317,7 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
         if (!mp.from_meta(key.name))
           continue;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
-        if (ret < 0) {
+        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
           return ret;
         }
         num_deleted++;

@@ -7,6 +7,7 @@
 #include "common/bit_vector.hpp"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/api/Image.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -98,9 +99,9 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateSnapOnDisk) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
-  ASSERT_EQ(0, librbd::snap_set(ictx,
-				cls::rbd::UserSnapshotNamespace(),
-				"snap1"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
+				              cls::rbd::UserSnapshotNamespace(),
+				              "snap1"));
 
   uint64_t snap_id = ictx->snap_id;
   expect_resize(ictx, snap_id, 0);

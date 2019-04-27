@@ -8,7 +8,7 @@
 uint64_t MDSCacheObject::last_wait_seq = 0;
 
 void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
-  std::list<MDSInternalContextBase*> finished;
+  MDSContext::vec finished;
   take_waiting(mask, finished);
   finish_contexts(g_ceph_context, finished, result);
 }
@@ -42,15 +42,13 @@ void MDSCacheObject::dump(Formatter *f) const
   f->close_section();  // replica_state
 
   f->dump_int("auth_pins", auth_pins);
-  f->dump_int("nested_auth_pins", nested_auth_pins);
   f->dump_bool("is_frozen", is_frozen());
   f->dump_bool("is_freezing", is_freezing());
 
 #ifdef MDS_REF_SET
     f->open_object_section("pins");
-    for(std::map<int, int>::const_iterator it = ref_map.begin();
-        it != ref_map.end(); ++it) {
-      f->dump_int(pin_name(it->first), it->second);
+    for(const auto& p : ref_map) {
+      f->dump_int(pin_name(p.first).data(), p.second);
     }
     f->close_section();
 #endif

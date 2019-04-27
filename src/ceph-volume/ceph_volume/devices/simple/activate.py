@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import base64
+import glob
 import json
 import logging
 import os
@@ -19,9 +20,10 @@ class Activate(object):
 
     help = 'Enable systemd units to mount configured devices and start a Ceph OSD'
 
-    def __init__(self, argv, systemd=False):
+    def __init__(self, argv, from_trigger=False):
         self.argv = argv
-        self.systemd = systemd
+        self.from_trigger = from_trigger
+        self.skip_systemd = False
 
     def validate_devices(self, json_config):
         """
@@ -82,6 +84,43 @@ class Activate(object):
             encryption_utils.plain_open(self.dmcrypt_secret, device, uuid)
 
         return '/dev/mapper/%s' % uuid
+
+    def enable_systemd_units(self, osd_id, osd_fsid):
+        """
+        * disables the ceph-disk systemd units to prevent them from running when
+          a UDEV event matches Ceph rules
+        * creates the ``simple`` systemd units to handle the activation and
+          startup of the OSD with ``osd_id`` and ``osd_fsid``
+        * enables the OSD systemd unit and finally starts the OSD.
+        """
+        if not self.from_trigger and not self.skip_systemd:
+            # means it was scanned and now activated directly, so ensure that
+            # ceph-disk units are disabled, and that the `simple` systemd unit
+            # is created and enabled
+
+            # enable the ceph-volume unit for this OSD
+            systemctl.enable_volume(osd_id, osd_fsid, 'simple')
+
+            # disable any/all ceph-disk units
+            systemctl.mask_ceph_disk()
+            terminal.warning(
+                ('All ceph-disk systemd units have been disabled to '
+                 'prevent OSDs getting triggered by UDEV events')
+            )
+        else:
+            terminal.info('Skipping enabling of `simple` systemd unit')
+            terminal.info('Skipping masking of ceph-disk systemd units')
+
+        if not self.skip_systemd:
+            # enable the OSD
+            systemctl.enable_osd(osd_id)
+
+            # start the OSD
+            systemctl.start_osd(osd_id)
+        else:
+            terminal.info(
+                'Skipping enabling and starting OSD simple systemd unit because --no-systemd was used'
+            )
 
     @decorators.needs_root
     def activate(self, args):
@@ -148,24 +187,9 @@ class Activate(object):
             # make sure that the journal has proper permissions
             system.chown(device)
 
-        if not self.systemd:
-            # enable the ceph-volume unit for this OSD
-            systemctl.enable_volume(osd_id, osd_fsid, 'simple')
-
-            # disable any/all ceph-disk units
-            systemctl.mask_ceph_disk()
-
-        # enable the OSD
-        systemctl.enable_osd(osd_id)
-
-        # start the OSD
-        systemctl.start_osd(osd_id)
+        self.enable_systemd_units(osd_id, osd_fsid)
 
         terminal.success('Successfully activated OSD %s with FSID %s' % (osd_id, osd_fsid))
-        terminal.warning(
-            ('All ceph-disk systemd units have been disabled to '
-             'prevent OSDs getting triggered by UDEV events')
-        )
 
     def main(self):
         sub_command_help = dedent("""
@@ -208,14 +232,26 @@ class Activate(object):
             help='The FSID of the OSD, similar to a SHA1'
         )
         parser.add_argument(
+            '--all',
+            help='Activate all OSDs with a OSD JSON config',
+            action='store_true',
+            default=False,
+        )
+        parser.add_argument(
             '--file',
             help='The path to a JSON file, from a scanned OSD'
+        )
+        parser.add_argument(
+            '--no-systemd',
+            dest='skip_systemd',
+            action='store_true',
+            help='Skip creating and enabling systemd units and starting OSD services',
         )
         if len(self.argv) == 0:
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
-        if not args.file:
+        if not args.file and not args.all:
             if not args.osd_id and not args.osd_fsid:
                 terminal.error('ID and FSID are required to find the right OSD to activate')
                 terminal.error('from a scanned OSD location in /etc/ceph/osd/')
@@ -224,12 +260,22 @@ class Activate(object):
         # implicitly indicate that it would be possible to activate a json file
         # at a non-default location which would not work at boot time if the
         # custom location is not exposed through an ENV var
+        self.skip_systemd = args.skip_systemd
         json_dir = os.environ.get('CEPH_VOLUME_SIMPLE_JSON_DIR', '/etc/ceph/osd/')
-        if args.file:
-            json_config = args.file
+        if args.all:
+            if args.file or args.osd_id:
+                mlogger.warn('--all was passed, ignoring --file and ID/FSID arguments')
+            json_configs = glob.glob('{}/*.json'.format(json_dir))
+            for json_config in json_configs:
+                mlogger.info('activating OSD specified in {}'.format(json_config))
+                args.json_config = json_config
+                self.activate(args)
         else:
-            json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
-        if not os.path.exists(json_config):
-            raise RuntimeError('Expected JSON config path not found: %s' % json_config)
-        args.json_config = json_config
-        self.activate(args)
+            if args.file:
+                json_config = args.file
+            else:
+                json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
+            if not os.path.exists(json_config):
+                raise RuntimeError('Expected JSON config path not found: %s' % json_config)
+            args.json_config = json_config
+            self.activate(args)

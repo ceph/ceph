@@ -77,7 +77,7 @@ static char *mount_resolve_src(const char *orig_str)
 }
 
 /*
- * this one is partialy based on parse_options() from cifs.mount.c
+ * this one is partially based on parse_options() from cifs.mount.c
  */
 static char *parse_options(const char *data, int *filesys_flags)
 {
@@ -149,6 +149,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "noauto", 6) == 0) {
 			skip = 1;  /* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
+			skip = 1;  /* ignore */
+		} else if (strncmp(data, "nofail", 6) == 0) {
 			skip = 1;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {

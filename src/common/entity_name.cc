@@ -20,25 +20,14 @@ using std::string;
 
 extern const char *ceph_entity_type_name(int type);
 
-struct str_to_entity_type_t {
-  uint32_t type;
-  const char *str;
-};
-
-static const str_to_entity_type_t STR_TO_ENTITY_TYPE[] = {
+const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_TYPE = {{
   { CEPH_ENTITY_TYPE_AUTH, "auth" },
   { CEPH_ENTITY_TYPE_MON, "mon" },
   { CEPH_ENTITY_TYPE_OSD, "osd" },
   { CEPH_ENTITY_TYPE_MDS, "mds" },
   { CEPH_ENTITY_TYPE_MGR, "mgr" },
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
-};
-
-EntityName::
-EntityName()
-  : type(0)
-{
-}
+}};
 
 const std::string& EntityName::
 to_str() const
@@ -144,15 +133,25 @@ has_default_id() const
 std::string EntityName::
 get_valid_types_as_str()
 {
-  std::string out;
+  std::ostringstream out;
   size_t i;
-  std::string sep("");
-  for (i = 0; i < sizeof(STR_TO_ENTITY_TYPE)/sizeof(STR_TO_ENTITY_TYPE[0]); ++i) {
-    out += sep;
-    out += STR_TO_ENTITY_TYPE[i].str;
-    sep = ", ";
+  for (i = 0; i < STR_TO_ENTITY_TYPE.size(); ++i) {
+    if (i > 0) {
+      out << ", ";
+    }
+    out << STR_TO_ENTITY_TYPE[i].str;
   }
-  return out;
+  return out.str();
+}
+
+uint32_t EntityName::str_to_ceph_entity_type(std::string_view s)
+{
+  size_t i;
+  for (i = 0; i < STR_TO_ENTITY_TYPE.size(); ++i) {
+    if (s == STR_TO_ENTITY_TYPE[i].str)
+      return STR_TO_ENTITY_TYPE[i].type;
+  }
+  return CEPH_ENTITY_TYPE_ANY;
 }
 
 bool operator<(const EntityName& a, const EntityName& b)
@@ -163,14 +162,4 @@ bool operator<(const EntityName& a, const EntityName& b)
 std::ostream& operator<<(std::ostream& out, const EntityName& n)
 {
   return out << n.to_str();
-}
-
-uint32_t str_to_ceph_entity_type(const char * str)
-{
-  size_t i;
-  for (i = 0; i < sizeof(STR_TO_ENTITY_TYPE)/sizeof(STR_TO_ENTITY_TYPE[0]); ++i) {
-    if (strcmp(str, STR_TO_ENTITY_TYPE[i].str) == 0)
-      return STR_TO_ENTITY_TYPE[i].type;
-  }
-  return CEPH_ENTITY_TYPE_ANY;
 }

@@ -16,7 +16,7 @@
 #include <set>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class SafeTimer;
 
@@ -41,7 +41,8 @@ public:
                  uint64_t object_number, std::shared_ptr<Mutex> lock,
                  ContextWQ *work_queue, SafeTimer &timer, Mutex &timer_lock,
                  Handler *handler, uint8_t order, uint32_t flush_interval,
-                 uint64_t flush_bytes, double flush_age);
+                 uint64_t flush_bytes, double flush_age,
+                 uint64_t max_in_flight_appends);
   ~ObjectRecorder() override;
 
   inline uint64_t get_object_number() const {
@@ -58,7 +59,7 @@ public:
   void claim_append_buffers(AppendBuffers *append_buffers);
 
   bool is_closed() const {
-    assert(m_lock->is_locked());
+    ceph_assert(m_lock->is_locked());
     return (m_object_closed && m_in_flight_appends.empty());
   }
   bool close();
@@ -121,6 +122,7 @@ private:
   uint32_t m_flush_interval;
   uint64_t m_flush_bytes;
   double m_flush_age;
+  uint32_t m_max_in_flight_appends;
 
   FlushHandler m_flush_handler;
 
@@ -143,6 +145,7 @@ private:
   Cond m_in_flight_flushes_cond;
 
   AppendBuffers m_pending_buffers;
+  uint64_t m_aio_sent_size = 0;
   bool m_aio_scheduled;
 
   void handle_append_task();

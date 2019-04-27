@@ -50,7 +50,7 @@ static int read_header(cls_method_context_t hctx, cls_log_header& header)
     return 0;
   }
 
-  bufferlist::iterator iter = header_bl.begin();
+  auto iter = header_bl.cbegin();
   try {
     decode(header, iter);
   } catch (buffer::error& err) {
@@ -85,7 +85,7 @@ static void get_index(cls_method_context_t hctx, utime_t& ts, string& index)
 
 static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_log_add_op op;
   try {
@@ -140,7 +140,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
 static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_log_list_op op;
   try {
@@ -190,7 +190,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     }
 
     bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
+    auto biter = bl.cbegin();
     try {
       cls_log_entry e;
       decode(e, biter);
@@ -210,7 +210,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_log_trim_op op;
   try {
@@ -273,7 +273,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
 static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_log_info_op op;
   try {

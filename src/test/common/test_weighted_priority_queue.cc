@@ -163,30 +163,30 @@ protected:
 TEST_F(WeightedPriorityQueueTest, wpq_size){
   WQ wq(0, 0);
   EXPECT_TRUE(wq.empty());
-  EXPECT_EQ(0u, wq.length());
+  EXPECT_EQ(0u, wq.get_size_slow());
 
   // Test the strict queue size.
   for (unsigned i = 1; i < 5; ++i) {
     wq.enqueue_strict(Klass(i),i, std::make_tuple(i, i, i));
     EXPECT_FALSE(wq.empty());
-    EXPECT_EQ(i, wq.length());
+    EXPECT_EQ(i, wq.get_size_slow());
   }
   // Test the normal queue size.
   for (unsigned i = 5; i < 10; ++i) {
     wq.enqueue(Klass(i), i, i, std::make_tuple(i, i, i));
     EXPECT_FALSE(wq.empty());
-    EXPECT_EQ(i, wq.length());
+    EXPECT_EQ(i, wq.get_size_slow());
   }
   // Test that as both queues are emptied
   // the size is correct.
   for (unsigned i = 8; i >0; --i) {
     wq.dequeue();
     EXPECT_FALSE(wq.empty());
-    EXPECT_EQ(i, wq.length());
+    EXPECT_EQ(i, wq.get_size_slow());
   }
   wq.dequeue();
   EXPECT_TRUE(wq.empty());
-  EXPECT_EQ(0u, wq.length());
+  EXPECT_EQ(0u, wq.get_size_slow());
 }
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_static) {
@@ -228,7 +228,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {
   wq.remove_by_class(k, &wq_removed);
   // Check that the right ops were removed.
   EXPECT_EQ(num_to_remove, wq_removed.size());
-  EXPECT_EQ(num_items - num_to_remove, wq.length());
+  EXPECT_EQ(num_items - num_to_remove, wq.get_size_slow());
   for (Removed::iterator it = wq_removed.begin();
        it != wq_removed.end(); ++it) {
     EXPECT_EQ(k, std::get<1>(*it));

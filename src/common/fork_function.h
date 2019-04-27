@@ -6,10 +6,14 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
+#include <ostream>
+
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <ostream>
+
+#include "include/ceph_assert.h"
 #include "common/errno.h"
 
 static void _fork_function_dummy_sighandler(int sig) {}
@@ -29,7 +33,7 @@ static inline int fork_function(
     // just wait
     int status;
     while (waitpid(forker_pid, &status, 0) == -1) {
-      assert(errno == EINTR);
+      ceph_assert(errno == EINTR);
     }
     if (WIFSIGNALED(status)) {
       errstr << ": got signal: " << WTERMSIG(status) << "\n";

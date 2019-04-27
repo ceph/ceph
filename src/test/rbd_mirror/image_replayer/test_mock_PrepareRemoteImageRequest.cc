@@ -60,7 +60,7 @@ struct GetMirrorImageIdRequest<librbd::MockTestImageCtx> {
                                          const std::string& global_image_id,
                                          std::string* image_id,
                                          Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_id = image_id;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -179,7 +179,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id",
+                                                   "local image id", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -227,7 +227,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id",
+                                                   "local image id", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -260,7 +260,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorUuidError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "",
+                                                   "", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -292,7 +292,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorImageIdError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "",
+                                                   "", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -331,7 +331,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, GetClientError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id",
+                                                   "local image id", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,
@@ -377,7 +377,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, RegisterClientError) {
                                                    m_remote_io_ctx,
                                                    "global image id",
                                                    "local mirror uuid",
-                                                   "local image id",
+                                                   "local image id", {},
                                                    &remote_mirror_uuid,
                                                    &remote_image_id,
                                                    &remote_journaler,

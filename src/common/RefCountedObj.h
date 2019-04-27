@@ -15,22 +15,21 @@
 #ifndef CEPH_REFCOUNTEDOBJ_H
 #define CEPH_REFCOUNTEDOBJ_H
  
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_context.h"
 #include "common/valgrind.h"
+#include "common/debug.h"
+
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 struct RefCountedObject {
-private:
-  mutable std::atomic<uint64_t> nref;
-  CephContext *cct;
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
-    assert(nref == 0);
+    ceph_assert(nref == 0);
   }
   
   const RefCountedObject *get() const {
@@ -51,7 +50,11 @@ public:
   }
   void put() const {
     CephContext *local_cct = cct;
-    int v = --nref;
+    auto v = --nref;
+    if (local_cct)
+      lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
+				   << (v + 1) << " -> " << v
+				   << dendl;
     if (v == 0) {
       ANNOTATE_HAPPENS_AFTER(&nref);
       ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
@@ -59,10 +62,6 @@ public:
     } else {
       ANNOTATE_HAPPENS_BEFORE(&nref);
     }
-    if (local_cct)
-      lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
-				   << (v + 1) << " -> " << v
-				   << dendl;
   }
   void set_cct(CephContext *c) {
     cct = c;
@@ -71,7 +70,13 @@ public:
   uint64_t get_nref() const {
     return nref;
   }
+
+private:
+  mutable std::atomic<uint64_t> nref;
+  CephContext *cct;
 };
+
+#ifndef WITH_SEASTAR
 
 /**
  * RefCountedCond
@@ -81,25 +86,25 @@ public:
 
 struct RefCountedCond : public RefCountedObject {
   bool complete;
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("RefCountedCond::lock");
+  ceph::condition_variable cond;
   int rval;
 
-  RefCountedCond() : complete(false), lock("RefCountedCond"), rval(0) {}
+  RefCountedCond() : complete(false), rval(0) {}
 
   int wait() {
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     while (!complete) {
-      cond.Wait(lock);
+      cond.wait(l);
     }
     return rval;
   }
 
   void done(int r) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     rval = r;
     complete = true;
-    cond.SignalAll();
+    cond.notify_all();
   }
 
   void done() {
@@ -161,7 +166,15 @@ struct RefCountedWaitObject {
   }
 };
 
-void intrusive_ptr_add_ref(const RefCountedObject *p);
-void intrusive_ptr_release(const RefCountedObject *p);
+#endif // WITH_SEASTAR
+
+static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
+  p->get();
+}
+static inline void intrusive_ptr_release(const RefCountedObject *p) {
+  p->put();
+}
+
+using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 
 #endif

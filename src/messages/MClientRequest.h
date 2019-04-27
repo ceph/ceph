@@ -49,11 +49,12 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 4;
-  static const int COMPAT_VERSION = 1;
+private:
+  static constexpr int HEAD_VERSION = 4;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
-  struct ceph_mds_request_head head;
+  mutable struct ceph_mds_request_head head; /* XXX HACK! */
   utime_t stamp;
 
   struct Release {
@@ -70,21 +71,22 @@ public:
       encode(item, bl);
       encode_nohead(dname, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(item, bl);
       decode_nohead(item.dname_len, dname, bl);
     }
   };
-  vector<Release> releases;
+  mutable vector<Release> releases; /* XXX HACK! */
 
   // path arguments
   filepath path, path2;
   vector<uint64_t> gid_list;
 
-  bool queued_for_replay = false;
+  /* XXX HACK */
+  mutable bool queued_for_replay = false;
 
- public:
+protected:
   // cons
   MClientRequest()
     : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
@@ -93,25 +95,24 @@ public:
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
-private:
   ~MClientRequest() override {}
 
 public:
   void set_mdsmap_epoch(epoch_t e) { head.mdsmap_epoch = e; }
-  epoch_t get_mdsmap_epoch() { return head.mdsmap_epoch; }
+  epoch_t get_mdsmap_epoch() const { return head.mdsmap_epoch; }
   epoch_t get_osdmap_epoch() const {
-    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    ceph_assert(head.op == CEPH_MDS_OP_SETXATTR);
     if (header.version >= 3)
       return head.args.setxattr.osdmap_epoch;
     else
       return 0;
   }
   void set_osdmap_epoch(epoch_t e) {
-    assert(head.op == CEPH_MDS_OP_SETXATTR);
+    ceph_assert(head.op == CEPH_MDS_OP_SETXATTR);
     head.args.setxattr.osdmap_epoch = e;
   }
 
-  metareqid_t get_reqid() {
+  metareqid_t get_reqid() const {
     // FIXME: for now, assume clients always have 1 incarnation
     return metareqid_t(get_orig_source(), header.tid); 
   }
@@ -119,7 +120,7 @@ public:
   /*bool open_file_mode_is_readonly() {
     return file_mode_is_readonly(ceph_flags_to_mode(head.args.open.flags));
     }*/
-  bool may_write() {
+  bool may_write() const {
     return
       (head.op & CEPH_MDS_OP_WRITE) || 
       (head.op == CEPH_MDS_OP_OPEN && (head.args.open.flags & (O_CREAT|O_TRUNC)));
@@ -128,7 +129,7 @@ public:
   int get_flags() const {
     return head.flags;
   }
-  bool is_replay() {
+  bool is_replay() const {
     return get_flags() & CEPH_MDS_FLAG_REPLAY;
   }
 
@@ -169,13 +170,13 @@ public:
   const string& get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
 
-  int get_dentry_wanted() { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
+  int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
-  void mark_queued_for_replay() { queued_for_replay = true; }
-  bool is_queued_for_replay() { return queued_for_replay; }
+  void mark_queued_for_replay() const { queued_for_replay = true; }
+  bool is_queued_for_replay() const { return queued_for_replay; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
 
     if (header.version >= 4) {
       decode(head, p);
@@ -227,7 +228,7 @@ public:
     encode(gid_list, payload);
   }
 
-  const char *get_type_name() const override { return "creq"; }
+  std::string_view get_type_name() const override { return "creq"; }
   void print(ostream& out) const override {
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 
@@ -250,7 +251,7 @@ public:
     }
     if (head.op == CEPH_MDS_OP_SETFILELOCK ||
 	head.op == CEPH_MDS_OP_GETFILELOCK) {
-      out << "rule " << (int)head.args.filelock_change.rule
+      out << " rule " << (int)head.args.filelock_change.rule
 	  << ", type " << (int)head.args.filelock_change.type
 	  << ", owner " << head.args.filelock_change.owner
 	  << ", pid " << head.args.filelock_change.pid
@@ -278,7 +279,9 @@ public:
     out << '}'
 	<< ")";
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 WRITE_CLASS_ENCODER(MClientRequest::Release)

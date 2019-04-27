@@ -3,10 +3,20 @@ from os import O_NONBLOCK, read
 import subprocess
 from select import select
 from ceph_volume import terminal
+from ceph_volume.util import as_bytes
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def which(executable):
+    """
+    Proxy function to ceph_volume.util.system.which because the ``system``
+    module does import ``process``
+    """
+    from ceph_volume.util import system
+    return system.which(executable)
 
 
 def log_output(descriptor, message, terminal_logging, logfile_logging):
@@ -43,7 +53,10 @@ def log_descriptors(reads, process, terminal_logging):
     for descriptor in reads:
         descriptor_name = descriptor_names[descriptor]
         try:
-            log_output(descriptor_name, read(descriptor, 1024), terminal_logging, True)
+            message = read(descriptor, 1024)
+            if not isinstance(message, str):
+                message = message.decode('utf-8')
+            log_output(descriptor_name, message, terminal_logging, True)
         except (IOError, OSError):
             # nothing else to log
             pass
@@ -52,7 +65,7 @@ def log_descriptors(reads, process, terminal_logging):
 def obfuscate(command_, on=None):
     """
     Certain commands that are useful to log might contain information that
-    should be replaced by '*' like when creating OSDs and the keyryings are
+    should be replaced by '*' like when creating OSDs and the keyrings are
     being passed, which should not be logged.
 
     :param on: A string (will match a flag) or an integer (will match an index)
@@ -99,6 +112,8 @@ def run(command, **kw):
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
     :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
@@ -162,9 +177,14 @@ def call(command, **kw):
     :param terminal_verbose: Log command output to terminal, defaults to False, and
                              it is forcefully set to True if a return code is non-zero
     :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
+    :param verbose_on_failure: On a non-zero exit status, it will forcefully set logging ON for
+                               the terminal. Defaults to True
     """
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
+    verbose_on_failure = kw.pop('verbose_on_failure', True)
     show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
@@ -180,8 +200,9 @@ def call(command, **kw):
         close_fds=True,
         **kw
     )
+
     if stdin:
-        stdout_stream, stderr_stream = process.communicate(stdin)
+        stdout_stream, stderr_stream = process.communicate(as_bytes(stdin))
     else:
         stdout_stream = process.stdout.read()
         stderr_stream = process.stderr.read()
@@ -195,8 +216,11 @@ def call(command, **kw):
 
     if returncode != 0:
         # set to true so that we can log the stderr/stdout that callers would
-        # do anyway
-        terminal_verbose = True
+        # do anyway as long as verbose_on_failure is set (defaults to True)
+        if verbose_on_failure:
+            terminal_verbose = True
+        # logfiles aren't disruptive visually, unlike the terminal, so this
+        # should always be on when there is a failure
         logfile_verbose = True
 
     # the following can get a messed up order in the log if the system call

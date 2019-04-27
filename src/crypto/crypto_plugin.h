@@ -16,7 +16,6 @@
 #define CRYPTO_PLUGIN_H
 
 // -----------------------------------------------------------------------------
-#include "include/memory.h"
 #include "common/PluginRegistry.h"
 #include "ostream"
 
@@ -26,6 +25,7 @@
 class CryptoPlugin : public Plugin {
 
 public:
+  CryptoAccelRef cryptoaccel;
   explicit CryptoPlugin(CephContext* cct) : Plugin(cct)
   {}
   ~CryptoPlugin()

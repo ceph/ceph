@@ -277,7 +277,7 @@ it and connecting to the cluster might look something like this:
 		rados_t cluster;
 		char cluster_name[] = "ceph";
 		char user_name[] = "client.admin";
-		uint64_t flags; 
+		uint64_t flags = 0;
 	
 		/* Initialize the cluster handle with the "ceph" cluster name and the "client.admin" user */  
 		int err;

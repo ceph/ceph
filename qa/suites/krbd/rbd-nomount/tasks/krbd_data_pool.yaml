@@ -1,21 +1,3 @@
-overrides:
-  thrashosds:
-    bdev_inject_crash: 2
-    bdev_inject_crash_probability: .5
-  ceph:
-    fs: xfs
-    conf:
-      osd: # force bluestore since it's required for ec overwrites
-        osd objectstore: bluestore
-        bluestore block size: 96636764160
-        debug bluestore: 30
-        debug bdev: 20
-        debug bluefs: 20
-        debug rocksdb: 10
-        enable experimental unrecoverable data corrupting features: "*"
-        osd debug randomize hobject sort order: false
-# this doesn't work with failures bc the log writes are not atomic across the two backends
-#        bluestore bluefs env mirror: true
 tasks:
 - workunit:
     clients:

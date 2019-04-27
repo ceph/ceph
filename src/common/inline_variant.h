@@ -14,6 +14,7 @@
 #include <boost/mpl/map.hpp>
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/range_c.hpp>
+#include <boost/noncopyable.hpp>
 
 #include "function_signature.h"
 

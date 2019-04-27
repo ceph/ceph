@@ -19,30 +19,31 @@
 #include "include/types.h"
 
 class MExportDirPrepAck : public Message {
+private:
   dirfrag_t dirfrag;
   bool success = false;
 
  public:
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+
+protected:
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
+    Message{MSG_MDS_EXPORTDIRPREPACK}, dirfrag(df), success(s) {
     set_tid(tid);
   }
-private:
   ~MExportDirPrepAck() override {}
 
 public:  
-  bool is_success() { return success; }
-  const char *get_type_name() const override { return "ExPAck"; }
+  bool is_success() const { return success; }
+  std::string_view get_type_name() const override { return "ExPAck"; }
   void print(ostream& o) const override {
     o << "export_prep_ack(" << dirfrag << (success ? " success)" : " fail)");
   }
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(success, p);
   }
@@ -51,6 +52,9 @@ public:
     encode(dirfrag, payload);
     encode(success, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

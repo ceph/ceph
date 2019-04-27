@@ -3,7 +3,7 @@
 #include "include/utime.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include "gtest/gtest.h"
 #include <semaphore.h>
@@ -14,7 +14,7 @@
 #include <string>
 #include <atomic>
 
-#include "test/librados/TestCase.h"
+#include "test/librados/testcase_cxx.h"
 
 
 using namespace librados;

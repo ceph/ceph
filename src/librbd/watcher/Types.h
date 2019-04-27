@@ -24,7 +24,7 @@ struct ClientId {
   ClientId(uint64_t gid, uint64_t handle) : gid(gid), handle(handle) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   inline bool is_valid() const {
@@ -51,7 +51,7 @@ struct NotifyResponse {
   std::vector<ClientId> timeouts;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
 };
 
 template <typename ImageCtxT>

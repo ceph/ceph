@@ -54,7 +54,7 @@ private:
 
 class DecodePayloadVisitor : public boost::static_visitor<void> {
 public:
-  DecodePayloadVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodePayloadVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {}
 
   template <typename P>
@@ -64,7 +64,7 @@ public:
 
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 } // namespace util

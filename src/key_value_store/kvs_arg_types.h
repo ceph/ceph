@@ -27,7 +27,7 @@ struct assert_size_args {
     encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(bound, p);
     decode(comparator, p);
@@ -48,7 +48,7 @@ struct idata_from_key_args {
     encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(key, p);
     decode(idata, p);
@@ -68,7 +68,7 @@ struct idata_from_idata_args {
     encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(idata, p);
     decode(next_idata, p);
@@ -89,7 +89,7 @@ struct omap_set_args {
     encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(omap, p);
     decode(bound, p);
@@ -109,7 +109,7 @@ struct omap_rm_args {
     encode(bound, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(omap, p);
     decode(bound, p);
@@ -130,7 +130,7 @@ struct rebalance_args {
     encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(odata,p);
     decode(bound, p);

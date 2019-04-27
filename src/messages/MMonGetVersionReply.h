@@ -25,17 +25,17 @@
  * back.
  */
 class MMonGetVersionReply : public Message {
-
-  static const int HEAD_VERSION = 2;
+private:
+  static constexpr int HEAD_VERSION = 2;
 
 public:
-  MMonGetVersionReply() : Message(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
+  MMonGetVersionReply() : Message{CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION} { }
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "mon_get_version_reply";
   }
 
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_get_version_reply(handle=" << handle << " version=" << version << ")";
   }
 
@@ -47,7 +47,8 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     decode(handle, p);
     decode(version, p);
     if (header.version >= 2)

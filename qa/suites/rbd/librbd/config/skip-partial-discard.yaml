@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rbd skip partial discard: true

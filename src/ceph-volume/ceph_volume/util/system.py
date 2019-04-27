@@ -5,10 +5,11 @@ import pwd
 import platform
 import tempfile
 import uuid
-from ceph_volume import process
+from ceph_volume import process, terminal
 from . import as_string
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 # TODO: get these out of here and into a common area for others to consume
 if platform.system() == 'FreeBSD':
@@ -30,6 +31,28 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
+def which(executable):
+    """find the location of an executable"""
+    locations = (
+        '/usr/local/bin',
+        '/bin',
+        '/usr/bin',
+        '/usr/local/sbin',
+        '/usr/sbin',
+        '/sbin',
+    )
+
+    for location in locations:
+        executable_path = os.path.join(location, executable)
+        if os.path.exists(executable_path) and os.path.isfile(executable_path):
+            return executable_path
+    mlogger.warning('Absolute path not found for executable: %s', executable)
+    mlogger.warning('Ensure $PATH environment variable contains common executable locations')
+    # fallback to just returning the argument as-is, to prevent a hard fail,
+    # and hoping that the system might have the executable somewhere custom
+    return executable
+
+
 def get_ceph_user_ids():
     """
     Return the id and gid of the ceph user
@@ -40,6 +63,19 @@ def get_ceph_user_ids():
         # is this even possible?
         raise RuntimeError('"ceph" user is not available in the current system')
     return user[2], user[3]
+
+
+def get_file_contents(path, default=''):
+    contents = default
+    if not os.path.exists(path):
+        return contents
+    try:
+        with open(path, 'r') as open_file:
+            contents = open_file.read().strip()
+    except Exception:
+        logger.exception('Failed to read contents from: %s' % path)
+
+    return contents
 
 
 def mkdir_p(path, chown=True):
@@ -64,6 +100,7 @@ def chown(path, recursive=True):
     """
     uid, gid = get_ceph_user_ids()
     if os.path.islink(path):
+        process.run(['chown', '-h', 'ceph:ceph', path])
         path = os.path.realpath(path)
     if recursive:
         process.run(['chown', '-R', 'ceph:ceph', path])
@@ -236,3 +273,12 @@ def get_mounts(devices=False, paths=False, realpath=False):
         return devices_mounted
     else:
         return paths_mounted
+
+
+def set_context(path, recursive = False):
+    # restore selinux context to default policy values
+    if which('restorecon').startswith('/'):
+        if recursive:
+            process.run(['restorecon', '-R', path])
+        else:
+            process.run(['restorecon', path])

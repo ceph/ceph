@@ -17,7 +17,7 @@
 #pragma once
 
 // re-include our assert to clobber boost's
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
@@ -34,13 +34,11 @@ constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
-  DoutPrefixProvider *prefix_provider;
-  string gen_prefix() const override {
-    return prefix_provider ? prefix_provider->gen_prefix() : "";
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out;
   }
   unsigned get_subsys() const override {
-    return prefix_provider ? prefix_provider->get_subsys() :
-      (unsigned)ceph_subsys_osd;
+    return static_cast<unsigned>(ceph_subsys_osd);
   }
   CephContext *get_cct() const override {
     return cct;
@@ -60,19 +58,6 @@ struct PGLog : DoutPrefixProvider {
       const hobject_t &hoid,
       version_t v) = 0;
     virtual ~LogEntryHandler() {}
-  };
-
-  /* Exceptions */
-  class read_log_and_missing_error : public buffer::error {
-  public:
-    explicit read_log_and_missing_error(const char *what) {
-      snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
-    }
-    const char *what() const throw () override {
-      return buf;
-    }
-  private:
-    char buf[512];
   };
 
 public:
@@ -138,7 +123,7 @@ public:
     { }
 
     template <typename... Args>
-    IndexedLog(Args&&... args) :
+    explicit IndexedLog(Args&&... args) :
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
       last_requested(0),
@@ -210,8 +195,8 @@ public:
     /****/
     void claim_log_and_clear_rollback_info(const pg_log_t& o) {
       // we must have already trimmed the old entries
-      assert(rollback_info_trimmed_to == head);
-      assert(rollback_info_trimmed_to_riter == log.rbegin());
+      ceph_assert(rollback_info_trimmed_to == head);
+      ceph_assert(rollback_info_trimmed_to_riter == log.rbegin());
 
       *this = IndexedLog(o);
 
@@ -226,8 +211,8 @@ public:
 
     void zero() {
       // we must have already trimmed the old entries
-      assert(rollback_info_trimmed_to == head);
-      assert(rollback_info_trimmed_to_riter == log.rbegin());
+      ceph_assert(rollback_info_trimmed_to == head);
+      ceph_assert(rollback_info_trimmed_to_riter == log.rbegin());
 
       unindex();
       pg_log_t::clear();
@@ -269,9 +254,9 @@ public:
       version_t *user_version,
       int *return_code) const
     {
-      assert(version);
-      assert(user_version);
-      assert(return_code);
+      ceph_assert(version);
+      ceph_assert(user_version);
+      ceph_assert(return_code);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
       if (!(indexed_data & PGLOG_INDEXED_CALLER_OPS)) {
         index_caller_ops();
@@ -291,17 +276,24 @@ public:
       }
       p = extra_caller_ops.find(r);
       if (p != extra_caller_ops.end()) {
+	uint32_t idx = 0;
 	for (auto i = p->second->extra_reqids.begin();
 	     i != p->second->extra_reqids.end();
-	     ++i) {
+	     ++idx, ++i) {
 	  if (i->first == r) {
 	    *version = p->second->version;
 	    *user_version = i->second;
 	    *return_code = p->second->return_code;
+	    if (*return_code >= 0) {
+	      auto it = p->second->extra_reqid_return_codes.find(idx);
+	      if (it != p->second->extra_reqid_return_codes.end()) {
+		*return_code = it->second;
+	      }
+	    }
 	    return true;
 	  }
 	}
-	assert(0 == "in extra_caller_ops but not extra_reqids");
+	ceph_abort_msg("in extra_caller_ops but not extra_reqids");
       }
 
       if (!(indexed_data & PGLOG_INDEXED_DUPS)) {
@@ -320,7 +312,8 @@ public:
 
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
-			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls) const {
+			   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *pls,
+			   mempool::osd_pglog::map<uint32_t, int> *return_codes) const {
        // make sure object is present at least once before we do an
        // O(n) search.
       if (!(indexed_data & PGLOG_INDEXED_OBJECTS)) {
@@ -328,12 +321,19 @@ public:
       }
       if (objects.count(oid) == 0)
 	return;
+
       for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
            i != log.rend();
            ++i) {
 	if (i->soid == oid) {
-	  if (i->reqid_is_indexed())
+	  if (i->reqid_is_indexed()) {
+	    if (i->op == pg_log_entry_t::ERROR) {
+	      // propagate op errors to the cache tier's PG log
+	      return_codes->emplace(pls->size(), i->return_code);
+	    }
 	    pls->push_back(make_pair(i->reqid, i->user_version));
+	  }
+
 	  pls->insert(pls->end(), i->extra_reqids.begin(), i->extra_reqids.end());
 	  if (pls->size() >= max) {
 	    if (pls->size() > max) {
@@ -494,7 +494,7 @@ public:
     // actors
     void add(const pg_log_entry_t& e, bool applied = true) {
       if (!applied) {
-	assert(get_can_rollback_to() == head);
+	ceph_assert(get_can_rollback_to() == head);
       }
 
       // make sure our buffers don't pin bigger buffers
@@ -507,8 +507,8 @@ public:
       if (rollback_info_trimmed_to_riter == log.rbegin())
 	++rollback_info_trimmed_to_riter;
 
-      assert(e.version > head);
-      assert(head.version == 0 || e.version.version > head.version);
+      ceph_assert(e.version > head);
+      ceph_assert(head.version == 0 || e.version.version > head.version);
       head = e.version;
 
       // to our index
@@ -646,8 +646,7 @@ protected:
 public:
 
   // cppcheck-suppress noExplicitConstructor
-  PGLog(CephContext *cct, DoutPrefixProvider *dpp = nullptr) :
-    prefix_provider(dpp),
+  PGLog(CephContext *cct) :
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()),
     dirty_from_dups(eversion_t::max()),
@@ -666,8 +665,12 @@ public:
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
 
-  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have, false);
+  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete=false) {
+    missing.add(oid, need, have, is_delete);
+  }
+
+  void missing_add_next_entry(const pg_log_entry_t& e) {
+    missing.add_next_event(e);
   }
 
   //////////////////// get or set log ////////////////////
@@ -703,7 +706,9 @@ public:
 
   void trim(
     eversion_t trim_to,
-    pg_info_t &info);
+    pg_info_t &info,
+    bool transaction_applied = true,
+    bool async = false);
 
   void roll_forward_to(
     eversion_t roll_forward_to,
@@ -721,6 +726,10 @@ public:
     roll_forward_to(
       log.head,
       h);
+  }
+
+  void skip_rollforward() {
+    log.skip_can_rollback_to_to_head();
   }
 
   //////////////////// get or set log & missing ////////////////////
@@ -747,9 +756,27 @@ public:
       opg_log->rebuilt_missing_with_deletes = true;
   }
 
+  void merge_from(
+    const vector<PGLog*>& sources,
+    eversion_t last_update) {
+    unindex();
+    missing.clear();
+
+    vector<pg_log_t*> slogs;
+    for (auto s : sources) {
+      slogs.push_back(&s->log);
+    }
+    log.merge_from(slogs, last_update);
+
+    index();
+
+    mark_log_for_rewrite();
+  }
+
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);
+      info.stats.stats.sum.num_objects_missing = missing.num_missing();
 
       // raise last_complete?
       if (missing.get_items().empty()) {
@@ -766,26 +793,28 @@ public:
       }
     }
 
-    assert(log.get_can_rollback_to() >= v);
+    ceph_assert(log.get_can_rollback_to() >= v);
   }
 
   void reset_complete_to(pg_info_t *info) {
+    if (log.log.empty()) // caller is split_into()
+      return;
     log.complete_to = log.log.begin();
+    ceph_assert(log.complete_to != log.log.end());
     auto oldest_need = missing.get_oldest_need();
     if (oldest_need != eversion_t()) {
       while (log.complete_to->version < oldest_need) {
-        assert(log.complete_to != log.log.end());
         ++log.complete_to;
+        ceph_assert(log.complete_to != log.log.end());
       }
     }
-    assert(log.complete_to != log.log.end());
+    if (!info)
+      return;
     if (log.complete_to == log.log.begin()) {
-      if (info)
-	info->last_complete = eversion_t();
+      info->last_complete = eversion_t();
     } else {
       --log.complete_to;
-      if (info)
-	info->last_complete = log.complete_to->version;
+      info->last_complete = log.complete_to->version;
       ++log.complete_to;
     }
   }
@@ -840,6 +869,7 @@ protected:
     const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
+    eversion_t original_can_rollback_to,     ///< [in] original rollback boundary
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -854,7 +884,7 @@ protected:
     }
 
     // entries is non-empty
-    assert(!orig_entries.empty());
+    ceph_assert(!orig_entries.empty());
     // strip out and ignore ERROR entries
     mempool::osd_pglog::list<pg_log_entry_t> entries;
     eversion_t last;
@@ -863,7 +893,7 @@ protected:
 	 i != orig_entries.end();
 	 ++i) {
       // all entries are on hoid
-      assert(i->soid == hoid);
+      ceph_assert(i->soid == hoid);
       // did not see error entries before this entry and this entry is not error
       // then this entry is the first non error entry
       bool first_non_error = ! seen_non_error && ! i->is_error();
@@ -880,9 +910,9 @@ protected:
       if (i != orig_entries.begin() && i->prior_version != eversion_t() &&
           ! first_non_error) {
 	// in increasing order of version
-	assert(i->version > last);
+	ceph_assert(i->version > last);
 	// prior_version correct (unless it is an ERROR entry)
-	assert(i->prior_version == last || i->is_error());
+	ceph_assert(i->prior_version == last || i->is_error());
       }
       if (i->is_error()) {
 	ldpp_dout(dpp, 20) << __func__ << ": ignoring " << *i << dendl;
@@ -903,6 +933,8 @@ protected:
     const bool object_not_in_store =
       !missing.is_missing(hoid) &&
       entries.rbegin()->is_delete();
+    ldpp_dout(dpp, 10) << __func__ << ": hoid " << " object_not_in_store: "
+                       << object_not_in_store << dendl;
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 		       << " prior_version: " << prior_version
 		       << " first_divergent_update: " << first_divergent_update
@@ -917,15 +949,15 @@ protected:
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
 			 << *objiter->second << ", already merged" << dendl;
 
-      assert(objiter->second->version > last_divergent_update);
+      ceph_assert(objiter->second->version > last_divergent_update);
 
       // ensure missing has been updated appropriately
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
-	assert(missing.is_missing(hoid) &&
+	ceph_assert(missing.is_missing(hoid) &&
 	       missing.get_items().at(hoid).need == objiter->second->version);
       } else {
-	assert(!missing.is_missing(hoid));
+	ceph_assert(!missing.is_missing(hoid));
       }
       missing.revise_have(hoid, eversion_t());
       if (rollbacker) {
@@ -996,11 +1028,22 @@ protected:
 		       << " attempting to rollback"
 		       << dendl;
     bool can_rollback = true;
+    // We are going to make an important decision based on the
+    // olog_can_rollback_to value we have received, better known it.
+    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                       << " olog_can_rollback_to: "
+                       << olog_can_rollback_to << dendl;
+    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
+                       << " original_crt: "
+                       << original_can_rollback_to << dendl;
     /// Distinguish between 4) and 5)
     for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	 i != entries.rend();
 	 ++i) {
-      if (!i->can_rollback() || i->version <= olog_can_rollback_to) {
+      /// Use original_can_rollback_to instead of olog_can_rollback_to to check
+      //  if we can rollback or not. This is to ensure that we don't try to rollback
+      //  to an object that has been deleted and doesn't exist.
+      if (!i->can_rollback() || i->version <= original_can_rollback_to) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
 			   << *i << dendl;
 	can_rollback = false;
@@ -1013,7 +1056,7 @@ protected:
       for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	   i != entries.rend();
 	   ++i) {
-	assert(i->can_rollback() && i->version > olog_can_rollback_to);
+	ceph_assert(i->can_rollback() && i->version > original_can_rollback_to);
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " rolling back " << *i << dendl;
 	if (rollbacker)
@@ -1050,6 +1093,7 @@ protected:
     mempool::osd_pglog::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
     const pg_info_t &oinfo,              ///< [in] info for merging entries
     eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
+    eversion_t original_can_rollback_to, ///< [in] original rollback boundary
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -1065,6 +1109,7 @@ protected:
 	i->second,
 	oinfo,
 	olog_can_rollback_to,
+        original_can_rollback_to,
 	omissing,
 	rollbacker,
 	dpp);
@@ -1087,6 +1132,7 @@ protected:
       oe.soid,
       entries,
       info,
+      log.get_can_rollback_to(),
       log.get_can_rollback_to(),
       missing,
       rollbacker,
@@ -1121,7 +1167,7 @@ public:
     const DoutPrefixProvider *dpp) {
     bool invalidate_stats = false;
     if (log && !entries.empty()) {
-      assert(log->head < entries.begin()->version);
+      ceph_assert(log->head < entries.begin()->version);
     }
     for (list<pg_log_entry_t>::const_iterator p = entries.begin();
 	 p != entries.end();
@@ -1289,8 +1335,8 @@ public:
     // legacy?
     struct stat st;
     int r = store->stat(ch, pgmeta_oid, &st);
-    assert(r == 0);
-    assert(st.st_size == 0);
+    ceph_assert(r == 0);
+    ceph_assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
@@ -1303,12 +1349,12 @@ public:
     list<pg_log_entry_t> entries;
     list<pg_log_dup_t> dups;
     if (p) {
-      for (p->seek_to_first(); p->valid() ; p->next(false)) {
+      for (p->seek_to_first(); p->valid() ; p->next()) {
 	// non-log pgmeta_oid keys are prefixed with _; skip those
 	if (p->key()[0] == '_')
 	  continue;
 	bufferlist bl = p->value();//Copy bufferlist before creating iterator
-	bufferlist::iterator bp = bl.begin();
+	auto bp = bl.cbegin();
 	if (p->key() == "divergent_priors") {
 	  decode(divergent_priors, bp);
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
@@ -1327,14 +1373,14 @@ public:
 	  decode(oid, bp);
 	  decode(item, bp);
 	  if (item.is_delete()) {
-	    assert(missing.may_include_deletes);
+	    ceph_assert(missing.may_include_deletes);
 	  }
 	  missing.add(oid, item.need, item.have, item.is_delete());
 	} else if (p->key().substr(0, 4) == string("dup_")) {
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
 	  if (!dups.empty()) {
-	    assert(dups.back().version < dup.version);
+	    ceph_assert(dups.back().version < dup.version);
 	  }
 	  dups.push_back(dup);
 	} else {
@@ -1343,8 +1389,8 @@ public:
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << e << dendl;
 	  if (!entries.empty()) {
 	    pg_log_entry_t last_e(entries.back());
-	    assert(last_e.version.version < e.version.version);
-	    assert(last_e.version.epoch <= e.version.epoch);
+	    ceph_assert(last_e.version.version < e.version.version);
+	    ceph_assert(last_e.version.epoch <= e.version.epoch);
 	  }
 	  entries.push_back(e);
 	  if (log_keys_debug)
@@ -1398,11 +1444,11 @@ public:
 				 << " (have " << oi.version << ")" << dendl;
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
-		assert(miter != missing.get_items().end());
-		assert(miter->second.need == i->version);
+		ceph_assert(miter != missing.get_items().end());
+		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
@@ -1413,13 +1459,13 @@ public:
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
 	      if (i->is_delete()) {
-		assert(miter == missing.get_items().end() ||
+		ceph_assert(miter == missing.get_items().end() ||
 		       (miter->second.need == i->version &&
 			miter->second.have == eversion_t()));
 	      } else {
-		assert(miter != missing.get_items().end());
-		assert(miter->second.need == i->version);
-		assert(miter->second.have == eversion_t());
+		ceph_assert(miter != missing.get_items().end());
+		ceph_assert(miter->second.need == i->version);
+		ceph_assert(miter->second.have == eversion_t());
 	      }
 	      checked.insert(i->soid);
 	    } else {
@@ -1437,7 +1483,7 @@ public:
 				<< i.first << " " << i.second
 				<< " last_backfill = " << info.last_backfill
 				<< dendl;
-	      assert(0 == "invalid missing set entry found");
+	      ceph_abort_msg("invalid missing set entry found");
 	    }
 	    bufferlist bv;
 	    int r = store->getattr(
@@ -1447,13 +1493,13 @@ public:
 	      bv);
 	    if (r >= 0) {
 	      object_info_t oi(bv);
-	      assert(oi.version == i.second.have || eversion_t() == i.second.have);
+	      ceph_assert(oi.version == i.second.have || eversion_t() == i.second.have);
 	    } else {
-	      assert(i.second.is_delete() || eversion_t() == i.second.have);
+	      ceph_assert(i.second.is_delete() || eversion_t() == i.second.have);
 	    }
 	  }
 	} else {
-	  assert(must_rebuild);
+	  ceph_assert(must_rebuild);
 	  for (map<eversion_t, hobject_t>::reverse_iterator i =
 		 divergent_priors.rbegin();
 	       i != divergent_priors.rend();
@@ -1494,7 +1540,7 @@ public:
 				  << "), assuming it is tracker.ceph.com/issues/17916"
 				  << dendl;
 	      } else {
-		assert(oi.version == i->first);
+		ceph_assert(oi.version == i->first);
 	      }
 	    } else {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
