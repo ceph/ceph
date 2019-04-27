@@ -165,7 +165,7 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
 
   if (new_features.empty() &&
       pending_map.min_mon_release == min_mon_release) {
-    dout(10) << __func__ << " min_mon_release (" << min_mon_release
+    dout(10) << __func__ << " min_mon_release (" << (int)min_mon_release
 	     << ") and features (" << features << ") match" << dendl;
     return;
   }
@@ -180,7 +180,7 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
   }
   if (min_mon_release > pending_map.min_mon_release) {
     dout(1) << __func__ << " increasing min_mon_release to "
-	    << min_mon_release << " (" << ceph_release_name(min_mon_release)
+	    << (int)min_mon_release << " (" << ceph_release_name(min_mon_release)
 	    << ")" << dendl;
     pending_map.min_mon_release = min_mon_release;
   }
