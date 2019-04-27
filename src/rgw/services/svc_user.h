@@ -26,19 +26,25 @@ class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
-class RGWMetadataHandler;
+class RGWSI_MetaBackend_Handler;
 
 struct rgw_cache_entry_info;
 
 template <class T>
 class RGWChainedCacheImpl;
 
+/* FIXME:
+ * split RGWSI_User to base class and RGWSI_User_SObj
+ */
+
 class RGWSI_User : public RGWServiceInstance
 {
   friend class User;
   friend class PutOperation;
 
-  RGWMetadataHandler *user_meta_handler;
+  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
+
+  RGWSI_MetaBackend_Handler *be_handler;
 
   struct user_info_cache_entry {
     RGWUserInfo info;
@@ -82,18 +88,22 @@ public:
             RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
+  RGWSI_MetaBackend_Handler *get_be_handler() {
+    return be_handler;
+  }
+
   static string get_meta_key(const rgw_user& user) {
     return user.to_str();
   }
 
-  static string get_buckets_oid(const rgw_user& user_id) {
-#define RGW_BUCKETS_OID_SUFFIX ".buckets"
-    return user_id.to_str() + RGW_BUCKETS_OID_SUFFIX;
+  static rgw_user user_from_meta_key(const string& key) {
+    return rgw_user(key);
   }
 
   /* base svc_user interfaces */
 
   int read_user_info(RGWSI_MetaBackend::Context *ctx,
+                     const rgw_user& user,
                      RGWUserInfo *info,
                      RGWObjVersionTracker * const objv_tracker,
                      real_time * const pmtime,

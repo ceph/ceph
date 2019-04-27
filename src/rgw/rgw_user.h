@@ -808,14 +808,12 @@ class RGWUserCtl
   } svc;
 
   RGWUserMetadataHandler *umhandler;
+  RGWSI_MetaBackend_Handler *be_handler;
   
 public:
   RGWUserCtl(RGWSI_Zone *zone_svc,
              RGWSI_User *user_svc,
-             RGWUserMetadataHandler *_umhandler) : umhandler(_umhandler) {
-    svc.zone = zone_svc;
-    svc.user = user_svc;
-  }
+             RGWUserMetadataHandler *_umhandler);
 
   struct GetParams {
     RGWUserInfo *info{nullptr};

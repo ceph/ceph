@@ -57,22 +57,23 @@ class RGWMetadataHandler {
   friend class RGWMetadataManager;
   friend class Put;
 
+protected:
+  RGWSI_MetaBackend_Handler *meta_be;
 public:
   class Put {
   protected:
-    RGWSI_MetaBackend *meta_be;
     RGWMetadataHandler *handler;
-    RGWSI_MetaBackend::Context *ctx;
+    RGWSI_MetaBackend_Handler::Op *op;
     string& entry;
     RGWMetadataObject *obj;
     RGWObjVersionTracker& objv_tracker;
     RGWMDLogSyncType apply_type;
 
     int get(RGWMetadataObject **obj) {
-      return handler->do_get(ctx, entry, obj);
+      return handler->do_get(op, entry, obj);
     }
   public:
-    Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
+    Put(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handler::Op *_op,
         string& _entry, RGWMetadataObject *_obj,
         RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type);
 
@@ -93,29 +94,19 @@ public:
   };
 
 protected:
-  RGWSI_MetaBackend *meta_be{nullptr};
-  RGWSI_MetaBackend_Handle be_handle{0};
-  RGWSI_MetaBackend::ModuleRef be_module;
+  virtual int init_handler() {
+    return 0;
+  }
 
-  virtual int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
+  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
                      RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
   virtual int do_put_operate(Put *put_op);
-  virtual int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
-
-  virtual int init_module() = 0;
+  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
-
-  virtual RGWSI_MetaBackend::ModuleRef& get_be_module() {
-    return be_module;
-  }
-
-  RGWSI_MetaBackend  *get_meta_be() {
-    return meta_be;
-  }
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
@@ -129,7 +120,7 @@ public:
 
   virtual string get_marker(void *handle) = 0;
 
-  int init(RGWMetadataManager *manager);
+  virtual int init(RGWMetadataManager *manager);
 
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
@@ -160,10 +151,6 @@ public:
     }
     return true;
   }
-
-  int call_with_ctx(std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
-  int call_with_ctx(const string& entry, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
-
 };
 
 class RGWMetadataTopHandler;
@@ -177,10 +164,8 @@ class RGWMetadataManager {
   std::unique_ptr<RGWMetadataTopHandler> md_top_handler;
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
-  int register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle);
+  int register_handler(RGWMetadataHandler *handler);
 
-protected:
-  int call_with_ctx(const string& entry, RGWMetadataObject *obj, std::function<int(RGWSI_MetaBackend::Context *ctx)> f);
 public:
   RGWMetadataManager(RGWSI_Meta *_meta_svc);
   ~RGWMetadataManager();
@@ -212,9 +197,9 @@ public:
 class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler::Put
 {
 public:
-  RGWMetadataHandlerPut_SObj(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *ctx,
+  RGWMetadataHandlerPut_SObj(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handler::Op *op,
                              string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-                             RGWMDLogSyncType type) : Put(handler, ctx, entry, obj, objv_tracker, type) {}
+                             RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, type) {}
   ~RGWMetadataHandlerPut_SObj() {}
 
   int put() override;
