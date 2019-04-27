@@ -286,13 +286,6 @@ class RGWMetadataTopHandler : public RGWMetadataHandler {
     set<string>::iterator iter;
   };
 
-  class HandlerModule : public RGWSI_MetaBackend::Module {
-  public:
-    void get_pool_and_oid(const string& key, rgw_pool& pool, string& oid) {}
-    void key_to_oid(string& key) {}
-    void oid_to_key(string& oid) {}
-  };
-
   struct Svc {
     RGWSI_Meta *meta{nullptr};
   } svc;
@@ -313,10 +306,10 @@ public:
     return new RGWMetadataObject;
   }
 
-  int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj, optional_yield y) override { return -ENOTSUP; }
-  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject *obj,
+  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y) override { return -ENOTSUP; }
+  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
              RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type) override { return -ENOTSUP; }
-  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) override { return -ENOTSUP; }
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) override { return -ENOTSUP; }
 
   int list_keys_init(const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
@@ -377,15 +370,15 @@ RGWMetadataManager::~RGWMetadataManager()
 
 int RGWMetadataHandler::init(RGWMetadataManager *manager)
 {
-  int r = init_module();
+  int r = init_handler();
   if (r < 0) {
     return r;
   }
 
-  return manager->register_handler(this, &meta_be, &be_handle);
+  return manager->register_handler(this);
 }
 
-RGWMetadataHandler::Put::Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Context *_ctx,
+RGWMetadataHandler::Put::Put(RGWMetadataHandler *handler,
                              string& _entry, RGWMetadataObject *_obj,
                              RGWObjVersionTracker& _objv_tracker,
                              optional_yield _y,
@@ -394,7 +387,7 @@ RGWMetadataHandler::Put::Put(RGWMetadataHandler *handler, RGWSI_MetaBackend::Con
   obj(_obj), objv_tracker(_objv_tracker),
   apply_type(_type), y(_y)
 {
-  meta_be = handler->get_meta_be();
+  meta_be = handler->meta_be;
 }
 
 int RGWMetadataHandlerPut_SObj::put()
@@ -460,49 +453,34 @@ int RGWMetadataHandler::do_put_operate(Put *put_op)
   return 0;
 }
 
-int RGWMetadataHandler::call_with_ctx(std::function<int(RGWSI_MetaBackend::Context *ctx)> f)
+int RGWMetadataHandler::get(string& entry, RGWMetadataObject **obj)
 {
-  RGWSI_Meta_Ctx ctx;
-  meta_be->init_ctx(be_handle, &ctx);
-  return f(ctx.get());
-}
-
-int RGWMetadataHandler::call_with_ctx(const string& entry, std::function<int(RGWSI_MetaBackend::Context *ctx)> f)
-{
-  RGWSI_Meta_Ctx ctx;
-  meta_be->init_ctx(be_handle, &ctx);
-  ctx->set_key(entry);
-  return f(ctx.get());
-}
-
-int RGWMetadataHandler::get(string& entry, RGWMetadataObject **obj, optional_yield y)
-{
-  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
-    return do_get(ctx, entry, obj, y);
+  return meta_be->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return do_get(op, entry, obj, y);
   });
 }
 
 int RGWMetadataHandler::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                             optional_yield y, RGWMDLogSyncType type)
 {
-  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
-    return do_put(ctx, entry, obj, objv_tracker, y, type);
+  return meta_be->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return do_put(op, entry, obj, objv_tracker, y, type);
   });
 }
 
 int RGWMetadataHandler::remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y)
 {
-  return call_with_ctx(entry, [&](RGWSI_MetaBackend::Context *ctx) {
-    return do_remove(ctx, entry, objv_tracker, y);
+  return handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return do_remove(op, entry, objv_tracker, y);
   });
 }
 
-int RGWMetadataManager::register_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend **pmeta_be, RGWSI_MetaBackend_Handle *phandle)
+int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
 {
   string type = handler->get_type();
 
   if (handlers.find(type) != handlers.end())
-    return -EINVAL;
+    return -EEXIST;
 
   int ret = meta_svc->init_handler(handler, pmeta_be, phandle);
   if (ret < 0) {

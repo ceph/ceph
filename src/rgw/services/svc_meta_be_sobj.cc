@@ -14,46 +14,22 @@ RGWSI_MetaBackend_SObj::RGWSI_MetaBackend_SObj(CephContext *cct) : RGWSI_MetaBac
 RGWSI_MetaBackend_SObj::~RGWSI_MetaBackend_SObj() {
 }
 
-int RGWSI_MetaBackend_SObj::init_handler(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handle *phandle)
+RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
 {
-  const auto& section = handler->get_type();
-
-  auto& info = handlers[section];
-  info.section = section;
-  info._module = handler->get_be_module();
-  info.module = static_cast<RGWSI_MBSObj_Handler_Module *>(info._module.get());
-  
-  *phandle = (RGWSI_MetaBackend_Handle)(&info);
-
-  return 0;
+  return new RGWSI_MetaBackend_Handler_SObj(this);
 }
 
-void RGWSI_MetaBackend_SObj::init_ctx(RGWSI_MetaBackend_Handle handle, RGWSI_MetaBackend::Context *_ctx)
+int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
 {
-  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-  rgwsi_meta_be_sobj_handler_info *h = static_cast<rgwsi_meta_be_sobj_handler_info *>(handle);
-
-  ctx->handle = handle;
-  ctx->module = h->module;
-  ctx->section = h->section;
-  ctx->_obj_ctx.emplace(sysobj_svc->init_obj_ctx());
-  ctx->obj_ctx = &(*ctx->_obj_ctx);
+  RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
+  return f(&ctx);
 }
 
-void RGWSI_MetaBackend_SObj::Context_SObj::set_key(const string& _key)
+void RGWSI_MetaBackend_SObj::Context_SObj::init(RGWSI_MetaBackend_Handler *h)
 {
-  RGWSI_MetaBackend::Context::set_key(_key);
-  static_cast<RGWSI_MBSObj_Handler_Module *>(module)->get_pool_and_oid(key, pool, oid);
-}
-
-RGWSI_MetaBackend_SObj::Context_SObj *RGWSI_MetaBackend_SObj::Context_SObj::clone(const string& key)
-{
-  if (!_ctx2) {
-    _ctx2.reset(new RGWSI_MetaBackend_SObj::Context_SObj);
-  }
-  *_ctx2 = *this;
-  _ctx2->set_key(key);
-  return _ctx2.get();
+  RGWSI_MetaBackend_Handler_SObj *handler = static_cast<RGWSI_MetaBackend_Handler_SObj *>(h);
+  module = handler->module;
+  obj_ctx.emplace(sysobj_svc->init_obj_ctx());
 }
 
 RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_SObj::alloc_default_get_params(ceph::real_time *pmtime)
@@ -66,13 +42,18 @@ RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_SObj::alloc_default_get_params(c
 }
 
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
+                                      const string& key,
                                       GetParams& _params,
                                       RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   RGWSI_MBSObj_GetParams& params = static_cast<RGWSI_MBSObj_GetParams&>(_params);
 
-  return rgw_get_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, *params.pbl,
+  rgw_pool pool;
+  string oid;
+  ctx->module->get_pool_and_oid(key, &pool, &oid);
+
+  return rgw_get_system_obj(*ctx->obj_ctx, pool, oid, *params.pbl,
                             objv_tracker, params.pmtime,
                             params.y,
                             params.pattrs, params.cache_info,
@@ -80,23 +61,32 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
 }
 
 int RGWSI_MetaBackend_SObj::put_entry(RGWSI_MetaBackend::Context *_ctx,
+                                      const string& key,
                                       PutParams& _params,
                                       RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   RGWSI_MBSObj_PutParams& params = static_cast<RGWSI_MBSObj_PutParams&>(_params);
 
-  return rgw_put_system_obj(*ctx->obj_ctx, ctx->pool, ctx->oid, params.bl, params.exclusive,
+  rgw_pool pool;
+  string oid;
+  ctx->module->get_pool_and_oid(key, &pool, &oid);
+
+  return rgw_put_system_obj(*ctx->obj_ctx, pool, oid, params.bl, params.exclusive,
                             objv_tracker, params.mtime, params.y, params.pattrs);
 }
 
 int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
+                                         const string& key,
                                          RemoveParams& params,
                                          RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
-  rgw_raw_obj k(ctx->pool, ctx->oid);
+  rgw_pool pool;
+  string oid;
+  ctx->module->get_pool_and_oid(key, &pool, &oid);
+  rgw_raw_obj k(pool, oid);
 
   auto sysobj = ctx->obj_ctx->get_obj(k);
   return sysobj.wop()
