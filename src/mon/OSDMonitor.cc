@@ -5804,13 +5804,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(poolid);
-
+    const pool_stat_t* pstat = mon->mgrstatmon()->get_pool_stat(poolid);
+    const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
       f->dump_string("pool_name", pool_name);
       f->dump_unsigned("pool_id", poolid);
       f->dump_unsigned("quota_max_objects", p->quota_max_objects);
+      f->dump_int("current_num_objects", sum.num_objects);
       f->dump_unsigned("quota_max_bytes", p->quota_max_bytes);
+      f->dump_int("current_num_bytes", sum.num_bytes);
       f->close_section();
       f->flush(rdata);
     } else {
@@ -5819,14 +5822,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
          << "  max objects: ";
       if (p->quota_max_objects == 0)
         rs << "N/A";
-      else
+      else {
         rs << si_u_t(p->quota_max_objects) << " objects";
+        rs << "  (current num objects: " << sum.num_objects << " objects)";
+      }
       rs << "\n"
          << "  max bytes  : ";
       if (p->quota_max_bytes == 0)
         rs << "N/A";
-      else
+      else {
         rs << byte_u_t(p->quota_max_bytes);
+        rs << "  (current num bytes: " << sum.num_bytes << " bytes)";
+      }
       rdata.append(rs.str());
     }
     rdata.append("\n");
