@@ -983,7 +983,9 @@ vc.disconnect()
             obj_data = obj_data
         )))
 
-    def test_put_object_versioned(self):
+    # test that put_object_versioned() matches the object version with
+    # supplied version number before writing to the object.
+    def test_version_check_for_put_object_versioned(self):
         vc_mount = self.mounts[1]
         vc_mount.umount_wait()
         self._configure_vc_auth(vc_mount, "manila")
