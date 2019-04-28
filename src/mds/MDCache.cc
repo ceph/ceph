@@ -1853,6 +1853,14 @@ void MDCache::_project_rstat_inode_to_frag(CInode::mempool_inode& inode, snapid_
     ceph_assert(last >= first);
     prstat->add(delta);
     if (prstat == &pf->rstat) {
+      if (parent->is_auth() && !parent->get_inode()->is_auth() && //this means the parent is a subtree root the parent of whom this rank isn't auth for
+          pf->rstat_dirty_from_delivered) {
+        if (pf->last_rstat_dirty_from == pf->rstat_dirty_from) {
+          pf->last_rstat_dirty_from = pf->rstat_dirty_from = utime_t();
+        }
+        pf->rstat_dirty_from_delivered = false;
+      }
+
       if (!inode.rstat_dirty_from.is_zero() &&
           (pf->rstat_dirty_from.is_zero() ||
            pf->rstat_dirty_from > inode.rstat_dirty_from))

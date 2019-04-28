@@ -142,6 +142,12 @@ ostream& operator<<(ostream& out, const CDir& dir)
     out << "->" << pf->rstat_dirty_from;
   }
 
+  out << " rstat_dirty_from_delivered=" << dir.fnode.rstat_dirty_from_delivered;
+  if (g_conf()->mds_debug_scatterstat && dir.is_projected()) {
+    const fnode_t* pf = dir.get_projected_fnode();
+    out << "->" << pf->rstat_dirty_from_delivered;
+  }
+
   out << " " << dir.fnode.fragstat;
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;

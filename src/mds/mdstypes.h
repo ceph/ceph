@@ -1029,6 +1029,8 @@ struct fnode_t {
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
   utime_t rstat_dirty_from;
+  utime_t last_rstat_dirty_from;
+  bool rstat_dirty_from_delivered = false;
   damage_flags_t damage_flags = 0;
 
   // we know we and all our descendants have been scrubbed since this version

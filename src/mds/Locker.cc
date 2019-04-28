@@ -984,7 +984,15 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
 	}
 	break;
       }
-
+      
+      if(lock->get_type() == CEPH_LOCK_INEST &&
+          lock->get_parent()->is_replicated() &&
+          (lock->get_state() == LOCK_MIX_LOCK ||
+           lock->get_state() == LOCK_MIX_LOCK2 ||
+           lock->get_state() == LOCK_MIX_TSYN ||
+           lock->get_state() == LOCK_MIX_SYNC)) {
+        send_lock_message(lock, LOCK_AC_RSTATDELIVERED);
+      }
     }
 
     lock->set_state(next);
@@ -5449,10 +5457,30 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     } else {
       dout(7) << "handle_file_lock trying nudge on " << *lock
 	      << " on " << *lock->get_parent() << dendl;
-      scatter_nudge(lock, 0, true);
+      if (lock->get_type() == CEPH_LOCK_INEST) {
+        nudging_nestlocks[empty_propagate_id].push_back(lock->get_nudging_item());
+        lock->set_nudging();
+        lock->set_nudged_by(empty_propagate_id);
+      }
+      scatter_nudge(lock, 0);
+
       mds->mdlog->flush();
     }
     break;
+  case LOCK_AC_RSTATDELIVERED:
+    {
+      assert(!lock->get_parent()->is_auth());
+      list<CDir*> ls;
+      CInode* inode = static_cast<CInode*>(lock->get_parent());
+      inode->get_dirfrags(ls);
+      for (auto dir : ls ) {
+        if (dir->is_auth()) {
+          fnode_t* pf = dir->get_projected_fnode();
+          pf->rstat_dirty_from_delivered = true;
+        }
+      }
+      break;
+    }
 
   default:
     ceph_abort();
@@ -5531,7 +5559,9 @@ void Locker::propagate_rstat(MDRequestRef& mdr) {
           lock->get_updated_item()->remove_myself();
           lock->set_nudging();
           lock->set_nudged_by(PropagationId(mdr->rstat_propagate_time, to));
-          scatter_nudge(lock, new C_MDS_RetryRequests_AfterLockNudge(mdcache, mdr, lock));
+          auto cb = new C_MDS_RetryRequests_AfterLockNudge(mdcache, mdr, lock);
+          if (!scatter_nudge(lock, cb))
+            delete cb;
           ceph_assert(!lock->get_nudging_item()->is_on_list());
           nudging_nestlocks[PropagationId(mdr->rstat_propagate_time, to)].push_back(lock->get_nudging_item());
         }

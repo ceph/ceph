@@ -1664,6 +1664,10 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(10) << fg << " " << dir->dirty_old_rstat << dendl;
 	  encode(fg, tmp);
 	  encode(dir->first, tmp);
+          if (!is_auth()) {
+            encode(pf->rstat_dirty_from, tmp);
+            pf->last_rstat_dirty_from = pf->rstat_dirty_from;
+          }
 	  encode(pf->rstat, tmp);
 	  encode(pf->accounted_rstat, tmp);
 	  encode(dir->dirty_old_rstat, tmp);
@@ -1888,11 +1892,14 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
       while (n--) {
 	frag_t fg;
 	snapid_t fgfirst;
+        utime_t rstat_dirty_from;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
 	decltype(CDir::dirty_old_rstat) dirty_old_rstat;
 	decode(fg, p);
 	decode(fgfirst, p);
+        if (is_auth())
+          decode(rstat_dirty_from, p);
 	decode(rstat, p);
 	decode(accounted_rstat, p);
 	decode(dirty_old_rstat, p);
@@ -1907,6 +1914,9 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
 	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		   << " on " << *dir << dendl;
 	  dir->first = fgfirst;
+          if (dir->fnode.rstat_dirty_from.is_zero() ||
+              dir->fnode.rstat_dirty_from > rstat_dirty_from)
+            dir->fnode.rstat_dirty_from = rstat_dirty_from;
 	  dir->fnode.rstat = rstat;
 	  dir->fnode.accounted_rstat = accounted_rstat;
 	  dir->dirty_old_rstat.swap(dirty_old_rstat);
