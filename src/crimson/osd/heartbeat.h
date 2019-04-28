@@ -41,6 +41,8 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
+  void set_require_authorizer(bool);
+
   // Dispatcher methods
   seastar::future<> ms_dispatch(ceph::net::Connection* conn,
 				MessageRef m) override;

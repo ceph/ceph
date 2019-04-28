@@ -620,6 +620,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
           std::chrono::seconds(TICK_INTERVAL));
       }
     }
+    check_osdmap_features();
     // yay!
     return consume_map(osdmap->get_epoch());
   }).then([m, this] {
@@ -820,6 +821,15 @@ seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
                                               true,
                                               create_info);
   return do_peering_event(m->get_spg(), std::move(evt));
+}
+
+void OSD::check_osdmap_features()
+{
+  if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    heartbeat->set_require_authorizer(false);
+  } else {
+    heartbeat->set_require_authorizer(true);
+  }
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)
