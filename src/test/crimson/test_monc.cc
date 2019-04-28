@@ -50,6 +50,7 @@ static seastar::future<> test_monc()
       if (conf->ms_crc_header) {
         msgr->set_crc_header();
       }
+      msgr->set_require_authorizer(false);
       return seastar::do_with(MonClient{*msgr, dummy_handler},
                               [msgr](auto& monc) {
         return msgr->start(&monc).then([&monc] {
