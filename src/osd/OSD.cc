@@ -8433,6 +8433,9 @@ void OSD::check_osdmap_features()
   if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
     hb_front_server_messenger->set_require_authorizer(false);
     hb_back_server_messenger->set_require_authorizer(false);
+  } else {
+    hb_front_server_messenger->set_require_authorizer(true);
+    hb_back_server_messenger->set_require_authorizer(true);
   }
 
   if (osdmap->require_osd_release != last_require_osd_release) {
