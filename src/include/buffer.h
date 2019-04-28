@@ -829,7 +829,7 @@ inline namespace v14_2_0 {
 	pos += len;
 	return r;
       }
-      char *get_pos() {
+      char *get_pos() const {
 	return pos;
       }
 
@@ -860,7 +860,7 @@ inline namespace v14_2_0 {
 	}
       }
 
-      size_t get_logical_offset() {
+      size_t get_logical_offset() const {
 	return out_of_band_offset + (pos - space.bp_data);
       }
     };
