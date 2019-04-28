@@ -78,8 +78,8 @@ struct TestDeepCopy : public TestFixture {
                      dst_snap_name));
       uint64_t src_size, dst_size;
       {
-        RWLock::RLocker src_locker(m_src_ictx->snap_lock);
-        RWLock::RLocker dst_locker(m_dst_ictx->snap_lock);
+        RWLock::RLocker src_locker(m_src_ictx->image_lock);
+        RWLock::RLocker dst_locker(m_dst_ictx->image_lock);
         src_size = m_src_ictx->get_image_size(m_src_ictx->snap_id);
         dst_size = m_dst_ictx->get_image_size(m_dst_ictx->snap_id);
       }
@@ -87,10 +87,10 @@ struct TestDeepCopy : public TestFixture {
 
       if (m_dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
         bool flags_set;
-        RWLock::RLocker dst_locker(m_dst_ictx->snap_lock);
+        RWLock::RLocker dst_locker(m_dst_ictx->image_lock);
         EXPECT_EQ(0, m_dst_ictx->test_flags(m_dst_ictx->snap_id,
                                             RBD_FLAG_OBJECT_MAP_INVALID,
-                                            m_dst_ictx->snap_lock, &flags_set));
+                                            m_dst_ictx->image_lock, &flags_set));
         EXPECT_FALSE(flags_set);
       }
 
@@ -357,7 +357,7 @@ struct TestDeepCopy : public TestFixture {
   void test_stress() {
     uint64_t initial_size, size;
     {
-      RWLock::RLocker src_locker(m_src_ictx->snap_lock);
+      RWLock::RLocker src_locker(m_src_ictx->image_lock);
       size = initial_size = m_src_ictx->get_image_size(CEPH_NOSNAP);
     }
 
@@ -429,7 +429,7 @@ struct TestDeepCopy : public TestFixture {
         std::cout << "resize: " << new_size << std::endl;
         ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
         {
-          RWLock::RLocker src_locker(m_src_ictx->snap_lock);
+          RWLock::RLocker src_locker(m_src_ictx->image_lock);
           size = m_src_ictx->get_image_size(CEPH_NOSNAP);
         }
         ASSERT_EQ(new_size, size);

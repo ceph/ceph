@@ -158,7 +158,7 @@ public:
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, Success) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_PROTECTED, 0, {});
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap2", 2,
@@ -206,7 +206,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, Success) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, OpenError) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_UNPROTECTED, 0,
                                 {});
@@ -230,7 +230,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, OpenError) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, AcquireLockError) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_UNPROTECTED, 0,
                                 {});
@@ -256,7 +256,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, AcquireLockError) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapUnprotectBusy) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_PROTECTED, 0, {});
   }
@@ -290,7 +290,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapUnprotectBusy) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapUnprotectError) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_PROTECTED, 0, {});
   }
@@ -324,7 +324,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapUnprotectError) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapRemoveError) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_UNPROTECTED, 0,
                                 {});
@@ -359,7 +359,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, SnapRemoveError) {
 
 TEST_F(TestMockImageDeleterSnapshotPurgeRequest, CloseError) {
   {
-    RWLock::WLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_local_image_ctx->image_lock);
     m_local_image_ctx->add_snap(cls::rbd::UserSnapshotNamespace{}, "snap1", 1,
                                 0, {}, RBD_PROTECTION_STATUS_UNPROTECTED, 0,
                                 {});

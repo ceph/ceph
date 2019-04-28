@@ -93,7 +93,7 @@ void AttachChildRequest<I>::handle_v1_refresh(int r) {
 
   bool snap_protected = false;
   if (r == 0) {
-    RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_parent_image_ctx->image_lock);
     r = m_parent_image_ctx->is_snap_protected(m_parent_snap_id,
                                               &snap_protected);
   }

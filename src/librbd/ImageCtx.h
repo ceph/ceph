@@ -5,6 +5,7 @@
 
 #include "include/int_types.h"
 
+#include <atomic>
 #include <list>
 #include <map>
 #include <set>
@@ -97,23 +98,24 @@ namespace librbd {
     /**
      * Lock ordering:
      *
-     * owner_lock, md_lock, snap_lock, parent_lock,
-     * object_map_lock, async_op_lock, timestamp_lock
+     * owner_lock, image_lock
+     * async_op_lock, timestamp_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
-    RWLock md_lock; // protects access to the mutable image metadata that
-                   // isn't guarded by other locks below, and blocks writes
-                   // when held exclusively, so snapshots can be consistent.
-                   // Fields guarded include:
-                   // total_bytes_read
-                   // exclusive_locked
-                   // lock_tag
-                   // lockers
-    RWLock snap_lock; // protects snapshot-related member variables,
-                      // features (and associated helper classes), and flags
-    RWLock timestamp_lock;
-    RWLock parent_lock; // protects parent_md and parent
-    RWLock object_map_lock; // protects object map updates and object_map itself
+    RWLock image_lock; // protects snapshot-related member variables,
+                       // features (and associated helper classes), and flags
+                       // protects access to the mutable image metadata that
+                       // isn't guarded by other locks below, and blocks writes
+                       // when held exclusively, so snapshots can be consistent.
+                       // Fields guarded include:
+                       // total_bytes_read
+                       // exclusive_locked
+                       // lock_tag
+                       // lockers
+                       // object_map
+                       // parent_md and parent
+
+    RWLock timestamp_lock; // protects (create/access/modify)_timestamp
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
     Mutex completed_reqs_lock; // protects completed_reqs
@@ -146,7 +148,7 @@ namespace librbd {
     cache::ImageCache *image_cache = nullptr;
 
     Readahead readahead;
-    uint64_t total_bytes_read;
+    std::atomic<uint64_t> total_bytes_read = {0};
 
     std::map<uint64_t, io::CopyupRequest<ImageCtx>*> copyup_list;
 
@@ -267,15 +269,15 @@ namespace librbd {
     uint64_t get_object_count(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
     bool test_features(uint64_t test_features,
-                       const RWLock &in_snap_lock) const;
+                       const RWLock &in_image_lock) const;
     bool test_op_features(uint64_t op_features) const;
     bool test_op_features(uint64_t op_features,
-                          const RWLock &in_snap_lock) const;
+                          const RWLock &in_image_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     int test_flags(librados::snap_t in_snap_id,
                    uint64_t test_flags, bool *flags_set) const;
     int test_flags(librados::snap_t in_snap_id,
-                   uint64_t test_flags, const RWLock &in_snap_lock,
+                   uint64_t test_flags, const RWLock &in_image_lock,
                    bool *flags_set) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 

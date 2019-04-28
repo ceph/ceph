@@ -174,7 +174,7 @@ template <typename I>
 bool EventPreprocessor<I>::prune_snap_map(SnapSeqs *snap_seqs) {
   bool pruned = false;
 
-  RWLock::RLocker snap_locker(m_local_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_local_image_ctx.image_lock);
   for (auto it = snap_seqs->begin(); it != snap_seqs->end(); ) {
     auto current_it(it++);
     if (m_local_image_ctx.snap_info.count(current_it->second) == 0) {

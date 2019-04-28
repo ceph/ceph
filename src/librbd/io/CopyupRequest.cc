@@ -55,7 +55,7 @@ public:
     }
     ceph_assert(image_ctx.exclusive_lock->is_lock_owner());
 
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.object_map == nullptr) {
       return 1;
     }
@@ -70,7 +70,8 @@ public:
 
   int update_head() {
     auto& image_ctx = this->m_image_ctx;
-    RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
+    ceph_assert(image_ctx.image_lock.is_locked());
+
     bool sent = image_ctx.object_map->template aio_update<Context>(
       CEPH_NOSNAP, m_object_no, m_head_object_map_state, {}, m_trace, false,
       this);
@@ -79,15 +80,16 @@ public:
 
   int update_snapshot(uint64_t snap_id) {
     auto& image_ctx = this->m_image_ctx;
+    ceph_assert(image_ctx.image_lock.is_locked());
+
     uint8_t state = OBJECT_EXISTS;
-    if (image_ctx.test_features(RBD_FEATURE_FAST_DIFF, image_ctx.snap_lock) &&
+    if (image_ctx.test_features(RBD_FEATURE_FAST_DIFF, image_ctx.image_lock) &&
         (m_snap_id_idx > 0 || m_first_snap_is_clean)) {
       // first snapshot should be exists+dirty since it contains
       // the copyup data -- later snapshots inherit the data.
       state = OBJECT_EXISTS_CLEAN;
     }
 
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
     bool sent = image_ctx.object_map->template aio_update<Context>(
       snap_id, m_object_no, state, {}, m_trace, true, this);
     ceph_assert(sent);
@@ -146,8 +148,7 @@ void CopyupRequest<I>::send() {
 template <typename I>
 void CopyupRequest<I>::read_from_parent() {
   auto cct = m_image_ctx->cct;
-  RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
-  RWLock::RLocker parent_locker(m_image_ctx->parent_lock);
+  RWLock::RLocker image_locker(m_image_ctx->image_lock);
 
   if (m_image_ctx->parent == nullptr) {
     ldout(cct, 5) << "parent detached" << dendl;
@@ -181,7 +182,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << ", r=" << r << dendl;
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   m_lock.Lock();
   m_copyup_is_zero = m_copyup_data.is_zero();
   m_copyup_required = is_copyup_required();
@@ -189,7 +190,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 
   if (r < 0 && r != -ENOENT) {
     m_lock.Unlock();
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     lderr(cct) << "error reading from parent: " << cpp_strerror(r) << dendl;
     finish(r);
@@ -198,7 +199,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 
   if (!m_copyup_required) {
     m_lock.Unlock();
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     ldout(cct, 20) << "no-op, skipping" << dendl;
     finish(0);
@@ -213,7 +214,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   }
 
   m_lock.Unlock();
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   update_object_maps();
 }
@@ -221,8 +222,7 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 template <typename I>
 void CopyupRequest<I>::deep_copy() {
   auto cct = m_image_ctx->cct;
-  ceph_assert(m_image_ctx->snap_lock.is_locked());
-  ceph_assert(m_image_ctx->parent_lock.is_locked());
+  ceph_assert(m_image_ctx->image_lock.is_locked());
   ceph_assert(m_image_ctx->parent != nullptr);
 
   m_lock.Lock();
@@ -245,12 +245,12 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << ", r=" << r << dendl;
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   m_lock.Lock();
   m_copyup_required = is_copyup_required();
   if (r == -ENOENT && !m_flatten && m_copyup_required) {
     m_lock.Unlock();
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     ldout(cct, 10) << "restart deep-copy with flatten" << dendl;
     send();
@@ -261,7 +261,7 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
 
   if (r < 0 && r != -ENOENT) {
     m_lock.Unlock();
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     lderr(cct) << "error encountered during deep-copy: " << cpp_strerror(r)
                << dendl;
@@ -271,7 +271,7 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
 
   if (!m_copyup_required && !is_update_object_map_required(r)) {
     m_lock.Unlock();
-    m_image_ctx->snap_lock.put_read();
+    m_image_ctx->image_lock.put_read();
 
     if (r == -ENOENT) {
       r = 0;
@@ -291,7 +291,7 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
   }
 
   m_lock.Unlock();
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   update_object_maps();
 }
@@ -299,9 +299,9 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
 template <typename I>
 void CopyupRequest<I>::update_object_maps() {
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx->image_lock);
   if (m_image_ctx->object_map == nullptr) {
-    snap_locker.unlock();
+    image_locker.unlock();
     owner_locker.unlock();
 
     copyup();
@@ -315,7 +315,7 @@ void CopyupRequest<I>::update_object_maps() {
   uint8_t head_object_map_state = OBJECT_EXISTS;
   if (copy_on_read && !m_snap_ids.empty() &&
       m_image_ctx->test_features(RBD_FEATURE_FAST_DIFF,
-                                 m_image_ctx->snap_lock)) {
+                                 m_image_ctx->image_lock)) {
     // HEAD is non-dirty since data is tied to first snapshot
     head_object_map_state = OBJECT_EXISTS_CLEAN;
   }
@@ -326,13 +326,11 @@ void CopyupRequest<I>::update_object_maps() {
     head_object_map_state = (*r_it)->get_pre_write_object_map_state();
   }
 
-  RWLock::WLocker object_map_locker(m_image_ctx->object_map_lock);
   if ((*m_image_ctx->object_map)[m_object_no] != head_object_map_state) {
     // (maybe) need to update the HEAD object map state
     m_snap_ids.push_back(CEPH_NOSNAP);
   }
-  object_map_locker.unlock();
-  snap_locker.unlock();
+  image_locker.unlock();
 
   ceph_assert(m_image_ctx->exclusive_lock->is_lock_owner());
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
@@ -366,9 +364,9 @@ void CopyupRequest<I>::handle_update_object_maps(int r) {
 template <typename I>
 void CopyupRequest<I>::copyup() {
   auto cct = m_image_ctx->cct;
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   auto snapc = m_image_ctx->snapc;
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   m_lock.Lock();
   if (!m_copyup_required) {
@@ -549,13 +547,13 @@ bool CopyupRequest<I>::is_copyup_required() {
 
 template <typename I>
 bool CopyupRequest<I>::is_deep_copy() const {
-  ceph_assert(m_image_ctx->snap_lock.is_locked());
+  ceph_assert(m_image_ctx->image_lock.is_locked());
   return !m_image_ctx->migration_info.empty();
 }
 
 template <typename I>
 bool CopyupRequest<I>::is_update_object_map_required(int r) {
-  ceph_assert(m_image_ctx->snap_lock.is_locked());
+  ceph_assert(m_image_ctx->image_lock.is_locked());
 
   if (r < 0) {
     return false;
@@ -578,7 +576,7 @@ bool CopyupRequest<I>::is_update_object_map_required(int r) {
 
 template <typename I>
 void CopyupRequest<I>::compute_deep_copy_snap_ids() {
-  ceph_assert(m_image_ctx->snap_lock.is_locked());
+  ceph_assert(m_image_ctx->image_lock.is_locked());
 
   // don't copy ids for the snaps updated by object deep copy or
   // that don't overlap
@@ -589,7 +587,6 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
     }
   }
 
-  RWLock::RLocker parent_locker(m_image_ctx->parent_lock);
   std::copy_if(m_image_ctx->snaps.rbegin(), m_image_ctx->snaps.rend(),
                std::back_inserter(m_snap_ids),
                [this, cct=m_image_ctx->cct, &deep_copied](uint64_t snap_id) {

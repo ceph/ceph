@@ -12,6 +12,7 @@
 #include <boost/optional.hpp>
 
 class Context;
+class RWLock;
 
 namespace librbd {
 
@@ -23,24 +24,28 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class UpdateRequest : public Request {
 public:
   static UpdateRequest *create(ImageCtx &image_ctx,
+                               RWLock* object_map_lock,
                                ceph::BitVector<2> *object_map,
                                uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
                                const boost::optional<uint8_t> &current_state,
                                const ZTracer::Trace &parent_trace,
                                bool ignore_enoent, Context *on_finish) {
-    return new UpdateRequest(image_ctx, object_map, snap_id, start_object_no,
-                             end_object_no, new_state, current_state,
-                             parent_trace, ignore_enoent, on_finish);
+    return new UpdateRequest(image_ctx, object_map_lock, object_map, snap_id,
+                             start_object_no, end_object_no, new_state,
+                             current_state, parent_trace, ignore_enoent,
+                             on_finish);
   }
 
-  UpdateRequest(ImageCtx &image_ctx, ceph::BitVector<2> *object_map,
-                uint64_t snap_id, uint64_t start_object_no,
-                uint64_t end_object_no, uint8_t new_state,
+  UpdateRequest(ImageCtx &image_ctx, RWLock* object_map_lock,
+                ceph::BitVector<2> *object_map, uint64_t snap_id,
+                uint64_t start_object_no, uint64_t end_object_no,
+                uint8_t new_state,
                 const boost::optional<uint8_t> &current_state,
       	        const ZTracer::Trace &parent_trace, bool ignore_enoent,
                 Context *on_finish)
-    : Request(image_ctx, snap_id, on_finish), m_object_map(*object_map),
+    : Request(image_ctx, snap_id, on_finish),
+      m_object_map_lock(object_map_lock), m_object_map(*object_map),
       m_start_object_no(start_object_no), m_end_object_no(end_object_no),
       m_update_start_object_no(start_object_no), m_new_state(new_state),
       m_current_state(current_state),
@@ -74,6 +79,7 @@ private:
    * @endverbatim
    */
 
+  RWLock* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_start_object_no;
   uint64_t m_end_object_no;

@@ -64,7 +64,7 @@ void PreRemoveRequest<I>::acquire_exclusive_lock() {
   // do not attempt to open the journal when removing the image in case
   // it's corrupt
   if (m_image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
   }
 
@@ -136,19 +136,19 @@ void PreRemoveRequest<I>::check_image_snaps() {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   for (auto& snap_info : m_image_ctx->snap_info) {
     if (auto_delete_snapshot(snap_info.second)) {
       m_snap_infos.insert(snap_info);
     } else {
-      m_image_ctx->snap_lock.put_read();
+      m_image_ctx->image_lock.put_read();
 
       ldout(cct, 5) << "image has snapshots - not removing" << dendl;
       finish(-ENOTEMPTY);
       return;
     }
   }
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   list_image_watchers();
 }
