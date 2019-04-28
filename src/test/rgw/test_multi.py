@@ -347,13 +347,16 @@ def init(parse_args):
                     arg = ['--display-name', '"Test User"']
                     arg += user_creds.credential_args()
                     if args.tenant:
-                        cmd += ['--tenant', args.tenant]
+                        arg += ['--tenant', args.tenant]
                     user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
                     admin_creds = admin_user.credentials[0]
-                    user.info(zone)
+                    arg = []
+                    if args.tenant:
+                        arg += ['--tenant', args.tenant]
+                    user.info(zone, arg)
                     user_creds = user.credentials[0]
 
     if not bootstrap:
@@ -361,7 +364,8 @@ def init(parse_args):
 
     config = Config(checkpoint_retries=args.checkpoint_retries,
                     checkpoint_delay=args.checkpoint_delay,
-                    reconfigure_delay=args.reconfigure_delay)
+                    reconfigure_delay=args.reconfigure_delay,
+                    tenant=args.tenant)
     init_multi(realm, user, config)
 
 def setup_module():
