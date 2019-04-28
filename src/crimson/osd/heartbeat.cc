@@ -311,14 +311,14 @@ seastar::future<> Heartbeat::send_heartbeats()
       const auto now = clock::now();
       const auto deadline =
         now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
-      auto& [peer, info] = item;
+      auto& info = item.second;
       info.last_tx = now;
       if (clock::is_zero(info.first_tx)) {
         info.first_tx = now;
       }
       const utime_t sent_stamp{now};
-      auto [reply, added] = info.ping_history.emplace(sent_stamp,
-                                                      reply_t{deadline, 0});
+      [[maybe_unused]] auto [reply, added] =
+        info.ping_history.emplace(sent_stamp, reply_t{deadline, 0});
       std::vector<ceph::net::ConnectionRef> conns{info.con_front,
                                                   info.con_back};
       return seastar::parallel_for_each(std::move(conns),
