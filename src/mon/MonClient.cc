@@ -1433,7 +1433,7 @@ int MonClient::handle_auth_request(
   // for some channels prior to nautilus (osd heartbeat), we tolerate the lack of
   // an authorizer.
   if (payload.length() == 0 &&
-      !handle_authentication_dispatcher->require_authorizer) {
+      !con->get_messenger()->require_authorizer) {
     handle_authentication_dispatcher->ms_handle_authentication(con);
     return 1;
   }

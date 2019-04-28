@@ -113,6 +113,12 @@ public:
 
   using Policy = ceph::net::Policy<Throttle>;
 
+public:
+  // allow unauthenticated connections.  This is needed for
+  // compatibility with pre-nautilus OSDs, which do not authenticate
+  // the heartbeat sessions.
+  bool require_authorizer = true;
+
 protected:
   // for authentication
   AuthRegistry auth_registry;
@@ -786,6 +792,10 @@ public:
       if (dispatcher->ms_handle_refused(con))
         return;
     }
+  }
+
+  void set_require_authorizer(bool b) {
+    require_authorizer = b;
   }
 
   /**
