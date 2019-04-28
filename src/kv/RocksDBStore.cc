@@ -68,20 +68,21 @@ public:
     // do this in a way that doesn't constrain the ordering of calls
     // to set_merge_operator, so sort the merge operators and then
     // construct a name from all of those parts.
-    store.assoc_name.clear();
-    map<std::string,std::string> names;
+    if (store.assoc_name.empty()) {
+      map<std::string,std::string> names;
 
-    for (auto& p : store.merge_ops) {
-      names[p.first] = p.second->name();
-    }
-    for (auto& p : store.cf_handles) {
-      names.erase(p.first);
-    }
-    for (auto& p : names) {
-      store.assoc_name += '.';
-      store.assoc_name += p.first;
-      store.assoc_name += ':';
-      store.assoc_name += p.second;
+      for (auto& p : store.merge_ops) {
+        names[p.first] = p.second->name();
+      }
+      for (auto& p : store.cf_handles) {
+        names.erase(p.first);
+      }
+      for (auto& p : names) {
+        store.assoc_name += '.';
+        store.assoc_name += p.first;
+        store.assoc_name += ':';
+        store.assoc_name += p.second;
+      }
     }
     return store.assoc_name.c_str();
   }
