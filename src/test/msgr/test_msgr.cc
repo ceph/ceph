@@ -81,6 +81,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     server_msgr->set_auth_server(&dummy_auth);
     client_msgr->set_auth_client(&dummy_auth);
     client_msgr->set_auth_server(&dummy_auth);
+    server_msgr->set_require_authorizer(false);
   }
   void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
@@ -115,8 +116,6 @@ class FakeDispatcher : public Dispatcher {
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -1509,8 +1508,6 @@ class SyntheticDispatcher : public Dispatcher {
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -2087,8 +2084,6 @@ class MarkdownDispatcher : public Dispatcher {
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
