@@ -160,40 +160,6 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
-    const std::string& topic_name, 
-    const std::string& zonegroup_name,
-    const std::string& user_name) {
-  rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name, user_name, "");
-  rgw::ARNResource arn_resource;
-  const auto endpoint_type = RGWPubSubEndpoint::get_schema(dest.push_endpoint);
-  if (endpoint_type.empty()) {
-    arn_resource.resource = topic_name;
-  } else {
-    // add endpoint info as resource
-    arn_resource.resource_type = endpoint_type;
-    arn_resource.resource = dest.push_endpoint;
-    arn_resource.qualifier = topic_name;
-  }
-  arn.resource = arn_resource.to_string();
-  return arn.to_string();
-}
-
-std::string topic_name_from_arn(const std::string& topic_arn) {
-  const auto arn = rgw::ARN::parse(topic_arn);
-  if (!arn || arn->resource.empty()) {
-    return "";
-  }
-  const auto arn_resource = rgw::ARNResource::parse(arn->resource);
-  if (!arn_resource) {
-    return "";
-  }
-  if (arn_resource->resource_type.empty()) {
-    return arn_resource->resource;
-  }
-  return arn_resource->qualifier;
-}
-
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   int ret = rgw_delete_system_obj(store, obj.pool, obj.oid, objv_tracker);

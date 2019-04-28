@@ -1,15 +1,18 @@
 import logging
 import json
 import tempfile
-from rgw_multi.tests import get_realm, \
+from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
     zone_meta_checkpoint, \
     zone_bucket_checkpoint, \
     zone_data_checkpoint, \
     check_bucket_eq, \
-    gen_bucket_name
-from rgw_multi.zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3, print_connection_info
+    gen_bucket_name, \
+    get_user, \
+    get_tenant
+from .zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3, print_connection_info
+from multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 
@@ -126,6 +129,7 @@ NOTIFICATION_SUFFIX = "_notif"
 # pubsub tests
 ##############
 
+
 def test_ps_info():
     """ log information for manual testing """
     return SkipTest("only used in manual testing")
@@ -141,29 +145,33 @@ def test_ps_info():
         key = bucket.new_key(str(i))
         key.set_contents_from_string('bar')
     print('Zonegroup: ' + zonegroup.name)
+    print('user: ' + get_user())
+    print('tenant: ' + get_tenant())
     print('Master Zone')
     print_connection_info(zones[0].conn)
     print('PubSub Zone')
     print_connection_info(ps_zones[0].conn)
     print('Bucket: ' + bucket_name)
 
+
 def test_ps_s3_notification_low_level():
     """ test low level implementation of s3 notifications """
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     # create bucket on the first of the rados zones
-    bucket = zones[0].create_bucket(bucket_name)
+    zones[0].create_bucket(bucket_name)
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
     # create topic
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zones[0].conn, topic_name)
-    _, status = topic_conf.set_config()
+    result, status = topic_conf.set_config()
     assert_equal(status/100, 2)
+    parsed_result = json.loads(result)
+    topic_arn = parsed_result['arn']
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     generated_topic_name = notification_name+'_'+topic_name
-    topic_arn = 'arn:aws:sns:::' + topic_name
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
                                             notification_name, topic_arn, ['s3:ObjectCreated:*'])
     response, status = s3_notification_conf.set_config()
@@ -227,11 +235,12 @@ def test_ps_s3_notification_records():
     # create topic
     topic_name = bucket_name + TOPIC_SUFFIX
     topic_conf = PSTopic(ps_zones[0].conn, topic_name)
-    _, status = topic_conf.set_config()
+    result, status = topic_conf.set_config()
     assert_equal(status/100, 2)
+    parsed_result = json.loads(result)
+    topic_arn = parsed_result['arn']
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_arn = 'arn:aws:sns:::' + topic_name
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, 
                                             notification_name, topic_arn, ['s3:ObjectCreated:*'])
     response, status = s3_notification_conf.set_config()
@@ -273,18 +282,17 @@ def test_ps_s3_notification():
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     # create bucket on the first of the rados zones
-    bucket = zones[0].create_bucket(bucket_name)
+    zones[0].create_bucket(bucket_name)
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
     topic_name = bucket_name + TOPIC_SUFFIX
     # create topic
     topic_name = bucket_name + TOPIC_SUFFIX
-    topic_arn = 'arn:aws:sns:::' + topic_name
     topic_conf = PSTopic(ps_zones[0].conn, topic_name)
     response, status = topic_conf.set_config()
     assert_equal(status/100, 2)
     parsed_result = json.loads(response)
-    assert_equal(parsed_result['arn'], topic_arn)
+    topic_arn = parsed_result['arn']
     # create one s3 notification
     notification_name1 = bucket_name + NOTIFICATION_SUFFIX + '_1'
     s3_notification_conf1 = PSNotificationS3(ps_zones[0].conn, bucket_name,
@@ -332,6 +340,8 @@ def test_ps_s3_notification():
 def test_ps_topic():
     """ test set/get/delete of topic """
     _, ps_zones = init_env()
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
 
@@ -345,6 +355,8 @@ def test_ps_topic():
     parsed_result = json.loads(result)
     assert_equal(parsed_result['topic']['name'], topic_name)
     assert_equal(len(parsed_result['subs']), 0)
+    assert_equal(parsed_result['topic']['arn'],
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
     # delete topic
     _, status = topic_conf.del_config()
     assert_equal(status/100, 2)
@@ -352,6 +364,30 @@ def test_ps_topic():
     result, _ = topic_conf.get_config()
     parsed_result = json.loads(result)
     assert_equal(parsed_result['Code'], 'NoSuchKey')
+
+
+def test_ps_topic_with_endpoint():
+    """ test set topic with endpoint"""
+    _, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    dest_endpoint = 'amqp://localhost:7001'
+    dest_args = 'amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name, 
+                         endpoint=dest_endpoint,
+                         endpoint_args=dest_args)
+    _, status = topic_conf.set_config()
+    assert_equal(status/100, 2)
+    # get topic
+    result, _ = topic_conf.get_config()
+    # verify topic content
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic']['name'], topic_name)
+    assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint)
+    # cleanup
+    topic_conf.del_config()
 
 
 def test_ps_notification():
@@ -930,15 +966,16 @@ def test_ps_s3_push_http():
     # create topic
     topic_conf = PSTopic(ps_zones[0].conn, topic_name,
                          endpoint='http://localhost:9001')
-    _, status = topic_conf.set_config()
+    result, status = topic_conf.set_config()
     assert_equal(status/100, 2)
+    parsed_result = json.loads(result)
+    topic_arn = parsed_result['arn']
     # create bucket on the first of the rados zones
     bucket = zones[0].create_bucket(bucket_name)
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_arn = 'arn:aws:sns:::' + topic_name
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
                                             notification_name, topic_arn, ['s3:ObjectCreated:*'])
     _, status = s3_notification_conf.set_config()
@@ -1027,15 +1064,15 @@ def test_ps_s3_push_amqp():
     topic_conf = PSTopic(ps_zones[0].conn, topic_name,
                          endpoint='amqp://localhost',
                          endpoint_args='amqp-exchange=ex1&amqp-ack-level=none')
-    _, status = topic_conf.set_config()
+    result, status = topic_conf.set_config()
     assert_equal(status/100, 2)
+    topic_arn = 'arn:aws:sns:::' + topic_name
     # create bucket on the first of the rados zones
     bucket = zones[0].create_bucket(bucket_name)
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_arn = 'arn:aws:sns:::' + topic_name
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,
                                             notification_name, topic_arn, ['s3:ObjectCreated:*'])
     _, status = s3_notification_conf.set_config()
@@ -1074,12 +1111,11 @@ def test_ps_delete_bucket():
     topic_name = bucket_name + TOPIC_SUFFIX
     # create topic
     topic_name = bucket_name + TOPIC_SUFFIX
-    topic_arn = 'arn:aws:sns:::' + topic_name
     topic_conf = PSTopic(ps_zones[0].conn, topic_name)
     response, status = topic_conf.set_config()
     assert_equal(status/100, 2)
     parsed_result = json.loads(response)
-    assert_equal(parsed_result['arn'], topic_arn)
+    topic_arn = parsed_result['arn']
     # create one s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name,

@@ -66,8 +66,11 @@ public:
     // bucket to store events/records will be set only when subscription is created
     dest.bucket_name = "";
     dest.oid_prefix = "";
-    // the ARN will be sent in the reply
-    topic_arn = dest_to_topic_arn(dest, topic_name, s->zonegroup_name, s->account_name);
+    // the topic ARN will be sent in the reply
+    const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
+        store->svc.zone->get_zonegroup().get_name(),
+        s->user->user_id.tenant, topic_name);
+    topic_arn = arn.to_string();
     return 0;
   }
 
@@ -252,12 +255,15 @@ protected:
   int init_permissions(RGWOp* op) override {
     return 0;
   }
+
   int read_permissions(RGWOp* op) override {
     return 0;
   }
+
   bool supports_quota() override {
     return false;
   }
+
   RGWOp *op_get() override {
     if (s->init_state.url_bucket.empty()) {
       return nullptr;
@@ -687,11 +693,12 @@ public:
     ret = store->get_bucket_info(*s->sysobj_ctx, id.tenant, bucket_name,
                                  bucket_info, nullptr, nullptr);
     if (ret < 0) {
+      ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
       return ret;
     }
 
     if (bucket_info.owner != id) {
-      ldout(s->cct, 1) << "user doesn't own bucket, cannot create notification" << dendl;
+      ldout(s->cct, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
       return -EPERM;
     }
     return 0;
@@ -869,12 +876,14 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       return;
     }
 
-    const auto topic_name = topic_name_from_arn(c.topic_arn);
-    if (topic_name.empty()) {
+    const auto arn = rgw::ARN::parse(c.topic_arn);
+    if (!arn || arn->resource.empty()) {
       ldout(s->cct, 1) << "topic ARN has invalid format:" << c.topic_arn << dendl;
       op_ret = -EINVAL;
       return;
     }
+
+    const auto topic_name = arn->resource;
 
     // get topic information. destination information is stored in the topic
     rgw_pubsub_topic_subs topic_info;  
