@@ -190,9 +190,9 @@ bool ObjectCacherObjectDispatch<I>::read(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   auto rd = m_object_cacher->prepare_read(snap_id, read_data, op_flags);
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ObjectExtent extent(oid, object_no, object_off, object_len, 0);
   extent.oloc.pool = m_image_ctx->data_ctx.get_id();
@@ -267,10 +267,10 @@ bool ObjectCacherObjectDispatch<I>::write(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
     snapc, data, ceph::real_time::min(), op_flags, *journal_tid);
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ObjectExtent extent(oid, 0, object_off, data.length(), 0);
   extent.oloc.pool = m_image_ctx->data_ctx.get_id();

@@ -19,7 +19,7 @@ namespace object_map {
 
 void SnapshotRemoveRequest::send() {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
-  ceph_assert(m_image_ctx.snap_lock.is_wlocked());
+  ceph_assert(m_image_ctx.image_lock.is_wlocked());
 
   if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) != 0) {
     int r = m_image_ctx.get_flags(m_snap_id, &m_flags);
@@ -67,7 +67,7 @@ void SnapshotRemoveRequest::handle_load_map(int r) {
                << cpp_strerror(r) << dendl;
 
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     invalidate_next_map();
     return;
   }
@@ -80,7 +80,7 @@ void SnapshotRemoveRequest::remove_snapshot() {
     // snapshot object map exists on disk but is invalid. cannot clean fast-diff
     // on next snapshot if current snapshot was invalid.
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     invalidate_next_map();
     return;
   }
@@ -113,19 +113,19 @@ void SnapshotRemoveRequest::handle_remove_snapshot(int r) {
                << cpp_strerror(r) << dendl;
 
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     invalidate_next_map();
     return;
   }
 
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
   update_object_map();
   remove_map();
 }
 
 void SnapshotRemoveRequest::invalidate_next_map() {
   ceph_assert(m_image_ctx.owner_lock.is_locked());
-  ceph_assert(m_image_ctx.snap_lock.is_wlocked());
+  ceph_assert(m_image_ctx.image_lock.is_wlocked());
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << dendl;
@@ -185,7 +185,7 @@ void SnapshotRemoveRequest::handle_remove_map(int r) {
 }
 
 void SnapshotRemoveRequest::compute_next_snap_id() {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
 
   m_next_snap_id = CEPH_NOSNAP;
   std::map<librados::snap_t, SnapInfo>::const_iterator it =
@@ -199,8 +199,8 @@ void SnapshotRemoveRequest::compute_next_snap_id() {
 }
 
 void SnapshotRemoveRequest::update_object_map() {
-  assert(m_image_ctx.snap_lock.is_locked());
-  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+  assert(m_image_ctx.image_lock.is_locked());
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
   if (m_next_snap_id == m_image_ctx.snap_id && m_next_snap_id == CEPH_NOSNAP) {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 5) << dendl;

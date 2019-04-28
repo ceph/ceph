@@ -108,17 +108,17 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
     return;
   }
 
-  m_dst_image_ctx->snap_lock.get_read();
+  m_dst_image_ctx->image_lock.get_read();
   auto snap_it = m_dst_image_ctx->snap_ids.find(
     {cls::rbd::UserSnapshotNamespace(), m_snap_name});
   if (snap_it == m_dst_image_ctx->snap_ids.end()) {
     lderr(m_cct) << "failed to locate snap: " << m_snap_name << dendl;
-    m_dst_image_ctx->snap_lock.put_read();
+    m_dst_image_ctx->image_lock.put_read();
     finish(-ENOENT);
     return;
   }
   librados::snap_t local_snap_id = snap_it->second;
-  m_dst_image_ctx->snap_lock.put_read();
+  m_dst_image_ctx->image_lock.put_read();
 
   std::string object_map_oid(librbd::ObjectMap<>::object_map_name(
     m_dst_image_ctx->id, local_snap_id));
