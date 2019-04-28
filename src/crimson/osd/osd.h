@@ -153,7 +153,7 @@ private:
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
-
+  void check_osdmap_features();
   // order the promises in descending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
   // than a given epoch

@@ -75,6 +75,14 @@ const entity_addrvec_t& Heartbeat::get_back_addrs() const
   return back_msgr.get_myaddrs();
 }
 
+void Heartbeat::set_require_authorizer(bool require_authorizer)
+{
+  if (front_msgr.get_require_authorizer() != require_authorizer) {
+    front_msgr.set_require_authorizer(require_authorizer);
+    back_msgr.set_require_authorizer(require_authorizer);
+  }
+}
+
 seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
   auto found = peers.find(peer);
