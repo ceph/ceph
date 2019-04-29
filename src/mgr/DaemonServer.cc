@@ -2575,7 +2575,8 @@ void DaemonServer::adjust_pgs()
 	      }
 	      dout(20) << " room " << room << " estmax " << estmax
 		       << " delta " << delta << " next " << next << dendl;
-	      if (p.get_pgp_num_target() == p.get_pg_num_target()) {
+	      if (p.get_pgp_num_target() == p.get_pg_num_target() &&
+		  p.get_pgp_num_target() < p.get_pg_num()) {
 		// since pgp_num is tracking pg_num, ceph is handling
 		// pgp_num.  so, be responsible: don't let pgp_num get
 		// too far out ahead of merges (if we are merging).
