@@ -690,7 +690,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 14;
+  __u16 ev = 15;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -840,7 +840,15 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(old_max_mds, p);
   }
 
-  if (ev >= 14) {
+  if (ev == 14) {
+    int8_t r;
+    decode(r, p);
+    if (r < 0) {
+      min_compat_client = ceph_release_t::unknown;
+    } else {
+      min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
+    }
+  } else if (ev > 14) {
     decode(min_compat_client, p);
   }
 
