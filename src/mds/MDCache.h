@@ -545,6 +545,7 @@ public:
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
+  bool dump_inode(Formatter *f, uint64_t number);
 protected:
   // [rejoin]
   bool rejoins_pending;

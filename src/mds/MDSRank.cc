@@ -2578,6 +2578,8 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     command_dirfrag_ls(cmdmap, ss, f);
   } else if (command == "openfiles ls") {
     command_openfiles_ls(f);
+  } else if (command == "dump inode") {
+    command_dump_inode(f, cmdmap, ss);
   } else {
     return false;
   }
@@ -2998,6 +3000,22 @@ void MDSRank::command_openfiles_ls(Formatter *f)
 {
   Mutex::Locker l(mds_lock);
   mdcache->dump_openfiles(f);
+}
+
+void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)
+{
+  Mutex::Locker l(mds_lock);
+  int64_t number;
+  bool got = cmd_getval(g_ceph_context, cmdmap, "number", number);
+  if (!got) {
+    ss << "missing inode number";
+    return;
+  }
+  
+  bool success = mdcache->dump_inode(f, number);
+  if (!success) {
+    ss << "dump inode failed, wrong inode number or the inode is not cached";
+  }
 }
 
 void MDSRank::dump_status(Formatter *f) const

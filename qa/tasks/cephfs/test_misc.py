@@ -285,3 +285,8 @@ class TestMisc(CephFSTestCase):
         here.
         """
         self._drop_cache_command_timeout(5)
+    
+    def test_dump_inode(self):
+        info = self.fs.mds_asok(['dump', 'inode', '1'])
+        assert(info['path'] == "/")
+
