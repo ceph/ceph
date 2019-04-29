@@ -42,7 +42,7 @@ public:
 				   uint32_t truncate_seq,
 				   uint32_t flags);
   seastar::future<> writefull(
-    const ObjectState& os,
+    ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   seastar::future<> submit_transaction(ceph::os::Transaction&& txn);
