@@ -41,11 +41,12 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
+  void set_require_authorizer(bool);
+
   // Dispatcher methods
   seastar::future<> ms_dispatch(ceph::net::Connection* conn,
 				MessageRef m) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
 private:
   seastar::future<> handle_osd_ping(ceph::net::Connection* conn,

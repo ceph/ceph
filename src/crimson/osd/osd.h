@@ -86,7 +86,7 @@ class OSD : public ceph::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m) override;
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) override;
   seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
@@ -137,23 +137,23 @@ private:
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
-  seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_osd_map(ceph::net::Connection* conn,
                                    Ref<MOSDMap> m);
-  seastar::future<> handle_osd_op(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_osd_op(ceph::net::Connection* conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_pg_log(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
 				  Ref<MOSDPGLog> m);
-  seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_notify(ceph::net::Connection* conn,
 				     Ref<MOSDPGNotify> m);
-  seastar::future<> handle_pg_info(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_info(ceph::net::Connection* conn,
 				   Ref<MOSDPGInfo> m);
-  seastar::future<> handle_pg_query(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_query(ceph::net::Connection* conn,
 				    Ref<MOSDPGQuery> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
-
+  void check_osdmap_features();
   // order the promises in descending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
   // than a given epoch

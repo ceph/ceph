@@ -424,7 +424,7 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
  */
 extern bool cephx_verify_authorizer(
   CephContext *cct,
-  KeyStore *keys,
+  const KeyStore& keys,
   bufferlist::const_iterator& indata,
   size_t connection_secret_required_len,
   CephXServiceTicketInfo& ticket_info,

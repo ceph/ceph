@@ -792,6 +792,13 @@ void ProtocolV2::execute_connecting()
             dispatch_reset();
             abort_in_close();
           }
+          if (messenger.get_myaddrs().empty() ||
+              messenger.get_myaddrs().front().is_blank_ip()) {
+            logger().debug("peer {} says I am {}", conn.target_addr, _peer_addr);
+            return messenger.learned_addr(_peer_addr);
+          } else {
+            return seastar::now();
+          }
         }).then([this] {
           return client_auth();
         }).then([this] {

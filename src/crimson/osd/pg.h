@@ -114,7 +114,7 @@ public:
   seastar::future<> handle_activate_map();
   seastar::future<> share_pg_info();
   void reply_pg_query(const MQuery& query, recovery::Context* ctx);
-  seastar::future<> handle_op(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
   void print(ostream& os) const;
 private:

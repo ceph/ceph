@@ -409,7 +409,7 @@ PG::find_best_info(const PG::peer_info_t& infos) const
   // when you find bugs!
   auto min_last_update_acceptable = eversion_t::max();
   epoch_t max_les = 0;
-  for (auto& [shard, info] : infos) {
+  for ([[maybe_unused]] auto& [shard, info] : infos) {
     if (max_les < info.history.last_epoch_started) {
       max_les = info.history.last_epoch_started;
     }
@@ -418,7 +418,7 @@ PG::find_best_info(const PG::peer_info_t& infos) const
       max_les = info.last_epoch_started;
     }
   }
-  for (auto& [shard, info] : infos) {
+  for ([[maybe_unused]] auto& [shard, info] : infos) {
     if (max_les <= info.last_epoch_started &&
         min_last_update_acceptable > info.last_update) {
       min_last_update_acceptable = info.last_update;
@@ -1018,7 +1018,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   });
 }
 
-seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
+seastar::future<> PG::handle_op(ceph::net::Connection* conn,
                                 Ref<MOSDOp> m)
 {
   return wait_for_active().then([conn, m, this] {
