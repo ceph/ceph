@@ -2144,7 +2144,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
     dout(20) << __func__ << ": find_object_context got error " << r << dendl;
     if (op->may_write() &&
-	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -2198,7 +2198,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     dout(20) << __func__ << " returned an error: " << r << dendl;
     close_op_ctx(ctx);
     if (op->may_write() &&
-	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       record_write_error(op, oid, nullptr, r);
     } else {
       osd->reply_op_error(op, r);
@@ -6704,7 +6704,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	if (get_osdmap()->require_osd_release < ceph_release_t::luminous) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
@@ -6806,7 +6806,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	if (get_osdmap()->require_osd_release < ceph_release_t::luminous) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
@@ -6913,7 +6913,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	if (get_osdmap()->require_osd_release < ceph_release_t::luminous) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
@@ -6975,7 +6975,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EOPNOTSUPP;
 	  break;
 	}
-	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	if (get_osdmap()->require_osd_release < ceph_release_t::luminous) {
 	  result = -EOPNOTSUPP;
 	  break;
 	}
@@ -8258,7 +8258,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   int result = do_osd_ops(ctx, *ctx->ops);
   if (result < 0) {
     if (ctx->op->may_write() &&
-	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       // need to save the error code in the pg log, to detect dup ops,
       // but do nothing else
       ctx->update_log_only = true;
@@ -8271,7 +8271,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     if (ctx->pending_async_reads.empty())
       unstable_stats.add(ctx->delta_stats);
     if (ctx->op->may_write() &&
-	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       ctx->update_log_only = true;
     }
     return result;
@@ -9588,7 +9588,7 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     ceph_assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     tctx->new_snapset.from_snap_set(
       results->snapset,
-      get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
+      get_osdmap()->require_osd_release < ceph_release_t::luminous);
   }
   dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
 
@@ -10463,7 +10463,7 @@ void PrimaryLogPG::submit_log_entries(
 
   boost::intrusive_ptr<RepGather> repop;
   boost::optional<std::function<void(void)> > on_complete;
-  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
+  if (get_osdmap()->require_osd_release >= ceph_release_t::jewel) {
     repop = new_repop(
       version,
       r,
@@ -10490,7 +10490,7 @@ void PrimaryLogPG::submit_log_entries(
 	if (peer == pg_whoami) continue;
 	ceph_assert(recovery_state.get_peer_missing().count(peer));
 	ceph_assert(recovery_state.has_peer_info(peer));
-	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
+	if (get_osdmap()->require_osd_release >= ceph_release_t::jewel) {
 	  ceph_assert(repop);
 	  MOSDPGUpdateLogMissing *m = new MOSDPGUpdateLogMissing(
 	    entries,
@@ -11514,7 +11514,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
       unlock();
     });
 
-  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+  if (get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
     t.register_on_commit(complete);
   } else {
     /* Hack to work around the fact that ReplicatedBackend sends
@@ -11633,7 +11633,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
       {
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, v, m->second.need,
 			 0, osd_reqid_t(), mtime, 0);
-	if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
+	if (get_osdmap()->require_osd_release >= ceph_release_t::jewel) {
 	  if (pool.info.require_rollback()) {
 	    e.mod_desc.try_rmobject(v.version);
 	  } else {

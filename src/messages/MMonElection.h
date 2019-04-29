@@ -16,6 +16,7 @@
 #ifndef CEPH_MMONELECTION_H
 #define CEPH_MMONELECTION_H
 
+#include "common/ceph_releases.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
@@ -47,7 +48,7 @@ public:
   set<int32_t> quorum;
   uint64_t quorum_features;
   mon_feature_t mon_features;
-  uint8_t mon_release = 0;
+  ceph_release_t mon_release{ceph_release_t::unknown};
   bufferlist sharing_bl;
   map<string,string> metadata;
   

@@ -17,11 +17,12 @@
 
 #include <map>
 
-#include "include/utime.h"
+#include "include/Context.h"
 #include "include/util.h"
+#include "include/utime.h"
 #include "common/Formatter.h"
 #include "common/bit_str.h"
-#include "include/Context.h"
+#include "common/ceph_releases.h"
 
 #define PAXOS_MDSMAP     0
 #define PAXOS_OSDMAP     1
@@ -550,24 +551,24 @@ namespace ceph {
   }
 }
 
-static inline int infer_ceph_release_from_mon_features(mon_feature_t f)
+static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
   if (f.contains_all(ceph::features::mon::FEATURE_OCTOPUS)) {
-    return CEPH_RELEASE_OCTOPUS;
+    return ceph_release_t::octopus;
   }
   if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
-    return CEPH_RELEASE_NAUTILUS;
+    return ceph_release_t::nautilus;
   }
   if (f.contains_all(ceph::features::mon::FEATURE_MIMIC)) {
-    return CEPH_RELEASE_MIMIC;
+    return ceph_release_t::mimic;
   }
   if (f.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
-    return CEPH_RELEASE_LUMINOUS;
+    return ceph_release_t::luminous;
   }
   if (f.contains_all(ceph::features::mon::FEATURE_KRAKEN)) {
-    return CEPH_RELEASE_KRAKEN;
+    return ceph_release_t::kraken;
   }
-  return 0;
+  return ceph_release_t::unknown;
 }
 
 static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {

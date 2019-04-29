@@ -12,13 +12,13 @@
  *
  */
 
+#include "common/version.h"
+
 #include <string.h>
+#include <sstream>
 
 #include "ceph_ver.h"
-#include "common/version.h"
-#include "include/rados.h"
-
-#include <sstream>
+#include "common/ceph_strings.h"
 
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
@@ -46,11 +46,6 @@ std::string const pretty_version_to_str(void)
       << ceph_release_name(CEPH_RELEASE)
       << " (" << CEPH_RELEASE_TYPE << ")";
   return oss.str();
-}
-
-unsigned ceph_release(void)
-{
-  return CEPH_RELEASE;
 }
 
 const char *ceph_release_type(void)

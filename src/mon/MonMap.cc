@@ -319,8 +319,8 @@ void MonMap::print(ostream& out) const
   out << "fsid " << fsid << "\n";
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
-  out << "min_mon_release " << (int)min_mon_release
-      << " (" << ceph_release_name(min_mon_release) << ")\n";
+  out << "min_mon_release " << ceph::to_integer<unsigned>(min_mon_release)
+      << " (" << min_mon_release << ")\n";
   unsigned i = 0;
   for (auto p = ranks.begin(); p != ranks.end(); ++p) {
     out << i++ << ": " << get_addrs(*p) << " mon." << *p << "\n";
@@ -333,8 +333,8 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("fsid") <<  fsid;
   f->dump_stream("modified") << last_changed;
   f->dump_stream("created") << created;
-  f->dump_unsigned("min_mon_release", min_mon_release);
-  f->dump_string("min_mon_release_name", ceph_release_name(min_mon_release));
+  f->dump_unsigned("min_mon_release", ceph::to_integer<unsigned>(min_mon_release));
+  f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");

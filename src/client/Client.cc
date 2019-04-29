@@ -2480,7 +2480,7 @@ void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
   bool new_blacklist = false;
   bool prenautilus = objecter->with_osdmap(
     [&](const OSDMap& o) {
-      return o.require_osd_release < CEPH_RELEASE_NAUTILUS;
+      return o.require_osd_release < ceph_release_t::nautilus;
     });
   if (!blacklisted) {
     for (auto a : myaddrs.v) {

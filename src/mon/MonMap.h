@@ -20,6 +20,7 @@
 #endif
 
 #include "common/config_fwd.h"
+#include "common/ceph_releases.h"
 
 #include "include/err.h"
 #include "include/types.h"
@@ -134,7 +135,7 @@ class MonMap {
   }
 
   // upgrade gate
-  uint8_t min_mon_release = 0;
+  ceph_release_t min_mon_release{ceph_release_t::unknown};
 
   void _add_ambiguous_addr(const std::string& name,
                            entity_addr_t addr,
