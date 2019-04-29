@@ -34,6 +34,7 @@ public:
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
+  seastar::future<> evict_object_state(const hobject_t& oid);
   seastar::future<bufferlist> read(const object_info_t& oi,
 				   uint64_t off,
 				   uint64_t len,
