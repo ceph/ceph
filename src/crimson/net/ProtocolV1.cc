@@ -790,21 +790,23 @@ seastar::future<> ProtocolV1::read_message()
       ::decode(m.footer, p);
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
                                   m.front, m.middle, m.data, nullptr);
-      if (!msg) {
-	logger().debug("decode message failed");
-	return;
+      if (unlikely(!msg)) {
+        logger().warn("{} decode message failed", conn);
+        throw std::system_error(make_error_code(error::negotiation_failure));
       }
       if (session_security) {
-	if (session_security->check_message_signature(msg)) {
-	  logger().debug("signature check failed");
-	  return;
-	}
+        if (unlikely(session_security->check_message_signature(msg))) {
+          logger().warn("{} message signature check failed", conn);
+          msg->put();
+          throw std::system_error(make_error_code(error::negotiation_failure));
+        }
       }
       // TODO: set time stamps
       msg->set_byte_throttler(conn.policy.throttler_bytes);
 
-      if (!conn.update_rx_seq(msg->get_seq())) {
+      if (unlikely(!conn.update_rx_seq(msg->get_seq()))) {
         // skip this message
+        msg->put();
         return;
       }
 
