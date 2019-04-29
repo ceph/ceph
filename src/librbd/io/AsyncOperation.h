@@ -37,6 +37,7 @@ public:
   void finish_op();
 
   void add_flush_context(Context *on_finish);
+  void flush(Context *on_finish);
 
 private:
 

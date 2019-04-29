@@ -196,9 +196,11 @@ struct TestMockIoImageRequest : public TestMockFixture {
     EXPECT_CALL(mock_image_ctx, user_flushed());
   }
 
-  void expect_flush(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(mock_image_ctx, flush(_))
-      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  void expect_flush_cache(MockImageCtx &mock_image_ctx, int r) {
+    if (mock_image_ctx.object_cacher != nullptr) {
+      EXPECT_CALL(mock_image_ctx, flush_cache(_))
+        .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+    }
   }
 };
 
@@ -280,10 +282,12 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   MockJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
 
+  expect_op_work_queue(mock_image_ctx);
+
   InSequence seq;
   expect_user_flushed(mock_image_ctx);
   expect_is_journal_appending(mock_journal, false);
-  expect_flush(mock_image_ctx, 0);
+  expect_flush_cache(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
