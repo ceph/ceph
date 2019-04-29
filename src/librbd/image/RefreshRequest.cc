@@ -1081,7 +1081,7 @@ Context *RefreshRequest<I>::send_flush_aio() {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     auto ctx = create_context_callback<
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
-    auto aio_comp = io::AioCompletion::create(
+    auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec<I>::create_flush_request(
       m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});

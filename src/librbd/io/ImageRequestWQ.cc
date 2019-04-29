@@ -28,7 +28,7 @@ namespace {
 
 template <typename I>
 void flush_image(I& image_ctx, Context* on_finish) {
-  auto aio_comp = librbd::io::AioCompletion::create(
+  auto aio_comp = librbd::io::AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(&image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<I>::create_flush_request(
     image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
@@ -385,6 +385,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     queue(ImageDispatchSpec<I>::create_flush_request(
             m_image_ctx, c, FLUSH_SOURCE_USER, trace));
   } else {
+    c->start_op();
     ImageRequest<I>::aio_flush(&m_image_ctx, c, FLUSH_SOURCE_USER, trace);
     finish_in_flight_io();
   }
