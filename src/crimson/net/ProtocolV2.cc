@@ -5,8 +5,11 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
+#if __has_include(<fmt/chrono.h>)
+#include <fmt/chrono.h>
+#else
 #include <fmt/time.h>
-
+#endif
 #include "include/msgr.h"
 #include "include/random.h"
 
