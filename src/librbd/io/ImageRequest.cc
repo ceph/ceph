@@ -708,8 +708,8 @@ void ImageFlushRequest<I>::send_request() {
     });
 
   // ensure all in-flight IOs are settled if non-user flush request
-  image_ctx.flush_async_operations(ctx);
   aio_comp->start_op(true);
+  aio_comp->async_op.flush(ctx);
   aio_comp->put();
 
   // might be flushing during image shutdown

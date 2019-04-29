@@ -36,7 +36,7 @@ public:
   void start_op(ImageCtx &image_ctx);
   void finish_op();
 
-  void add_flush_context(Context *on_finish);
+  void flush(Context *on_finish);
 
 private:
 

@@ -291,9 +291,6 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
-    void flush_async_operations();
-    void flush_async_operations(Context *on_finish);
-
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
 
