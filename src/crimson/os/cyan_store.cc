@@ -170,8 +170,8 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
     return seastar::make_ready_future<ceph::bufferptr>(found->second);
   } else {
-    throw std::runtime_error(fmt::format("attr does not exist: {}/{}",
-                                         oid, name));
+    return seastar::make_exception_future<ceph::bufferptr>(
+      EnoentException(fmt::format("attr does not exist: {}/{}", oid, name)));
   }
 }
 

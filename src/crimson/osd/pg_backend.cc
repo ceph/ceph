@@ -4,6 +4,8 @@
 #include <fmt/ostream.h>
 #include <seastar/core/print.hh>
 
+#include "messages/MOSDOp.h"
+
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
@@ -150,6 +152,37 @@ PGBackend::_load_ss(const hobject_t& oid)
 }
 
 seastar::future<>
+PGBackend::store_object_state(
+  //const hobject_t& oid,
+  const cached_os_t os,
+  const MOSDOp& m,
+  ceph::os::Transaction& txn)
+{
+  if (os->exists) {
+#if 0
+    os.oi.version = ctx->at_version;
+    os.oi.prior_version = ctx->obs->oi.version;
+#endif
+
+    os->oi.last_reqid = m.get_reqid();
+    os->oi.mtime = m.get_mtime();
+    os->oi.local_mtime = ceph_clock_now();
+
+    // object_info_t
+    {
+      ceph::bufferlist osv;
+      encode(os->oi, osv, 0);
+      // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      txn.setattr(coll->cid, ghobject_t{os->oi.soid}, OI_ATTR, std::move(osv));
+    }
+  } else {
+    // reset cached ObjectState without enforcing eviction
+    os->oi = object_info_t(os->oi.soid);
+  }
+  return seastar::now();
+}
+
+seastar::future<>
 PGBackend::evict_object_state(const hobject_t& oid)
 {
   os_cache.erase(oid);
@@ -198,6 +231,25 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
     });
 }
 
+bool PGBackend::maybe_create_new_object(
+  ObjectState& os,
+  ceph::os::Transaction& txn)
+{
+  if (!os.exists) {
+    ceph_assert(!os.oi.is_whiteout());
+    os.exists = true;
+    os.oi.new_object();
+
+    txn.touch(coll->cid, ghobject_t{os.oi.soid});
+    // TODO: delta_stats.num_objects++
+    return false;
+  } else if (os.oi.is_whiteout()) {
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    // TODO: delta_stats.num_whiteouts--
+  }
+  return true;
+}
+
 seastar::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,
@@ -208,12 +260,14 @@ seastar::future<> PGBackend::writefull(
     throw ::invalid_argument();
   }
 
-  if (os.exists && op.extent.length < os.oi.size) {
+  const bool existing = maybe_create_new_object(os, txn);
+  if (existing && op.extent.length < os.oi.size) {
     txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.length);
   }
   if (op.extent.length) {
     txn.write(coll->cid, ghobject_t{os.oi.soid}, 0, op.extent.length,
               osd_op.indata, op.flags);
+    os.oi.size = op.extent.length;
   }
   return seastar::now();
 }

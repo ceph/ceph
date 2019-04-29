@@ -1015,8 +1015,13 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
       // TODO: issue requests in parallel if they don't write,
       // with writes being basically a synchronization barrier
       return seastar::do_for_each(std::begin(m->ops), std::end(m->ops),
-                                  [m,&txn,this,os=std::move(os)](OSDOp& osd_op) {
+                                  [m,&txn,this,os](OSDOp& osd_op) {
         return do_osd_op(*os, osd_op, txn);
+      }).then([m,&txn,this,os=std::move(os)] {
+        // XXX: the entire lambda can be scheduled conditionally
+        // XXX: I'm not txn.empty() is what we want here
+        return !txn.empty() ? backend->store_object_state(os, *m, txn)
+                            : seastar::now();
       });
     }).then([&] {
       return txn.empty() ? seastar::now()
