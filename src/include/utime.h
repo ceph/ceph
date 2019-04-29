@@ -83,8 +83,8 @@ public:
 
 #if defined(WITH_SEASTAR)
   explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
-    tv.tv_sec = std::time_t(std::chrono::duration_cast<std::chrono::seconds>(
-        t.time_since_epoch()).count());
+    tv.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(
+        t.time_since_epoch()).count();
     tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(
         t.time_since_epoch() % std::chrono::seconds(1)).count();
   }
