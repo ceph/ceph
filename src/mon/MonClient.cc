@@ -1430,14 +1430,15 @@ int MonClient::handle_auth_request(
   const ceph::buffer::list& payload,
   ceph::buffer::list *reply)
 {
-  // for some channels prior to nautilus (osd heartbeat), we tolerate the lack of
-  // an authorizer.
-  if (payload.length() == 0 &&
-      !handle_authentication_dispatcher->require_authorizer) {
-    handle_authentication_dispatcher->ms_handle_authentication(con);
-    return 1;
+  if (payload.length() == 0) {
+    // for some channels prior to nautilus (osd heartbeat), we
+    // tolerate the lack of an authorizer.
+    if (!con->get_messenger()->require_authorizer) {
+      handle_authentication_dispatcher->ms_handle_authentication(con);
+      return 1;
+    }
+    return -EACCES;
   }
-
   auth_meta->auth_mode = payload[0];
   if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
