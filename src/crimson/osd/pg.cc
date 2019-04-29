@@ -1005,20 +1005,16 @@ PG::do_osd_op(const ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
-  // todo: issue requests in parallel if they don't write,
-  // with writes being basically a synchronization barrier
   return seastar::do_with(std::move(m), ceph::os::Transaction{},
                           [this](auto& m, auto& txn) {
-    return seastar::do_for_each(begin(m->ops), end(m->ops),
-                                [m,&txn,this](OSDOp& osd_op) {
-      const auto oid = (m->get_snapid() == CEPH_SNAPDIR ?
-                        m->get_hobj().get_head() :
-                        m->get_hobj());
-      return backend->get_object_state(oid).then([&osd_op,&txn,this](auto os) {
+    const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
+                                                     : m->get_hobj();
+    return backend->get_object_state(oid).then([m,&txn,this](auto os) {
+      // TODO: issue requests in parallel if they don't write,
+      // with writes being basically a synchronization barrier
+      return seastar::do_for_each(std::begin(m->ops), std::end(m->ops),
+                                  [m,&txn,this,os=std::move(os)](OSDOp& osd_op) {
         return do_osd_op(*os, osd_op, txn);
-      }).handle_exception_type([&osd_op](const object_not_found&) {
-        osd_op.rval = -ENOENT;
-        throw;
       });
     }).then([&] {
       return txn.empty() ? seastar::now()
