@@ -436,7 +436,8 @@ static int convert_old_bucket_info(RGWRados *store,
 
 int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
-                         RGWObjVersionTracker *objv_tracker)
+                         RGWObjVersionTracker *objv_tracker,
+                         optional_yield y)
 {
   rgw_bucket& bucket = bucket_info.bucket;
 
@@ -452,7 +453,7 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
 
   bufferlist bl;
 
-  return store->svc.bucket->store_bucket_instance_info(bucket_info, false, attrs, objv_tracker, real_time());
+  return store->svc.bucket->store_bucket_instance_info(bucket_info, false, attrs, objv_tracker, real_time(), y);
 }
 
 static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,

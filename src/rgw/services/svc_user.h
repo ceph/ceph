@@ -43,7 +43,6 @@ class RGWSI_User : public RGWServiceInstance
   friend class PutOperation;
 
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
-
   RGWSI_MetaBackend_Handler *be_handler;
 
   struct user_info_cache_entry {
