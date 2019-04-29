@@ -224,6 +224,7 @@ public:
   static void generate_test_instances(std::list<BitVector *> &o);
 private:
   struct NoInitAllocator : public std::allocator<__u32> {
+    NoInitAllocator() {}
     NoInitAllocator(const std::allocator<__u32>& alloc)
       : std::allocator<__u32>(alloc) {
     }
