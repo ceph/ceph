@@ -661,25 +661,6 @@ public:
     return len;
   }
 
-  void ImageCtx::flush_async_operations() {
-    C_SaferCond ctx;
-    flush_async_operations(&ctx);
-    ctx.wait();
-  }
-
-  void ImageCtx::flush_async_operations(Context *on_finish) {
-    {
-      Mutex::Locker l(async_ops_lock);
-      if (!async_ops.empty()) {
-        ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                       << "count=" << async_ops.size() << dendl;
-        async_ops.front()->add_flush_context(on_finish);
-        return;
-      }
-    }
-    on_finish->complete(0);
-  }
-
   void ImageCtx::cancel_async_requests() {
     C_SaferCond ctx;
     cancel_async_requests(&ctx);
