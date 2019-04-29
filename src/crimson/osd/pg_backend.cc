@@ -62,7 +62,8 @@ PGBackend::get_object_state(const hobject_t& oid)
         auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
                                       oid.snap);
         if (clone == end(ss->clones)) {
-          throw object_not_found{};
+          return seastar::make_exception_future<PGBackend::cached_os_t>(
+            object_not_found{});
         }
         // clone
         auto soid = oid;
@@ -72,14 +73,16 @@ PGBackend::get_object_state(const hobject_t& oid)
           assert(clone_snap != end(ss->clone_snaps));
           if (clone_snap->second.empty()) {
             logger().trace("find_object: {}@[] -- DNE", soid);
-            throw object_not_found{};
+            return seastar::make_exception_future<PGBackend::cached_os_t>(
+              object_not_found{});
           }
           auto first = clone_snap->second.back();
           auto last = clone_snap->second.front();
           if (first > soid.snap) {
             logger().trace("find_object: {}@[{},{}] -- DNE",
                            soid, first, last);
-            throw object_not_found{};
+            return seastar::make_exception_future<PGBackend::cached_os_t>(
+              object_not_found{});
           }
           logger().trace("find_object: {}@[{},{}] -- HIT",
                          soid, first, last);
