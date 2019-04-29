@@ -137,10 +137,6 @@ class Module(MgrModule):
 
         return False
 
-    @staticmethod
-    def parse_timestamp(timestamp):
-        return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
-
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
             raise RuntimeError('{0} is a unknown configuration '
@@ -239,7 +235,7 @@ class Module(MgrModule):
         df = self.get('df')
 
         report['report_id'] = self.report_id
-        report['created'] = self.parse_timestamp(mon_map['created']).isoformat()
+        report['created'] = mon_map['created']
 
         report['mon'] = {
             'count': len(mon_map['mons']),
