@@ -2594,7 +2594,7 @@ void DaemonServer::adjust_pgs()
 	    } else {
 	      double room =
 		std::min<double>(max_misplaced - misplaced_ratio,
-				 misplaced_ratio / 2.0);
+				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
 	      int delta = target - p.get_pgp_num();
