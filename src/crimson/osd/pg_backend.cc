@@ -199,7 +199,7 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
 }
 
 seastar::future<> PGBackend::writefull(
-  const ObjectState& os,
+  ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
