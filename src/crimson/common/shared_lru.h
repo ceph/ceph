@@ -29,11 +29,11 @@ class SharedLRU {
     SharedLRU<K,V>* cache;
     const K key;
     void operator()(V* ptr) {
-      cache->_erase(key);
+      cache->_erase_weak(key);
       delete ptr;
     }
   };
-  void _erase(const K& key) {
+  void _erase_weak(const K& key) {
     weak_refs.erase(key);
   }
 public:
@@ -85,6 +85,11 @@ public:
   shared_ptr_t lower_bound(const K& key);
   // return the first element that is greater than key
   std::optional<value_type> upper_bound(const K& key);
+
+  void erase(const K& key) {
+    cache.erase(key);
+    _erase_weak(key);
+  }
 };
 
 template<class K, class V>

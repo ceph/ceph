@@ -149,6 +149,13 @@ PGBackend::_load_ss(const hobject_t& oid)
   });
 }
 
+seastar::future<>
+PGBackend::evict_object_state(const hobject_t& oid)
+{
+  os_cache.erase(oid);
+  return seastar::now();
+}
+
 seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
                                             size_t offset,
                                             size_t length,
