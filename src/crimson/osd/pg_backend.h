@@ -9,7 +9,7 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "crimson/common/shared_lru.h"
-#include "crimson/os/Transaction.h"
+#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 

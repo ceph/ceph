@@ -173,7 +173,7 @@ PGBackend::store_object_state(
       ceph::bufferlist osv;
       encode(os->oi, osv, 0);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll->cid, ghobject_t{os->oi.soid}, OI_ATTR, std::move(osv));
+      txn.setattr(coll->cid, ghobject_t{os->oi.soid}, OI_ATTR, osv);
     }
   } else {
     // reset cached ObjectState without enforcing eviction
