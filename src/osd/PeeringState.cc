@@ -840,7 +840,7 @@ void PeeringState::check_past_interval_bounds() const
     pl->oldest_stored_osdmap());
   if (rpib.first >= rpib.second) {
     if (!past_intervals.empty()) {
-      pl->get_clog().error() << info.pgid << " required past_interval bounds are"
+      pl->get_clog_error() << info.pgid << " required past_interval bounds are"
 			     << " empty [" << rpib << ") but past_intervals is not: "
 			     << past_intervals;
       derr << info.pgid << " required past_interval bounds are"
@@ -849,7 +849,7 @@ void PeeringState::check_past_interval_bounds() const
     }
   } else {
     if (past_intervals.empty()) {
-      pl->get_clog().error() << info.pgid << " required past_interval bounds are"
+      pl->get_clog_error() << info.pgid << " required past_interval bounds are"
 			     << " not empty [" << rpib << ") but past_intervals "
 			     << past_intervals << " is empty";
       derr << info.pgid << " required past_interval bounds are"
@@ -860,7 +860,7 @@ void PeeringState::check_past_interval_bounds() const
 
     auto apib = past_intervals.get_bounds();
     if (apib.first > rpib.first) {
-      pl->get_clog().error() << info.pgid << " past_intervals [" << apib
+      pl->get_clog_error() << info.pgid << " past_intervals [" << apib
 			     << ") start interval does not contain the required"
 			     << " bound [" << rpib << ") start";
       derr << info.pgid << " past_intervals [" << apib
@@ -869,7 +869,7 @@ void PeeringState::check_past_interval_bounds() const
       ceph_abort_msg("past_interval start interval mismatch");
     }
     if (apib.second != rpib.second) {
-      pl->get_clog().error() << info.pgid << " past_interal bound [" << apib
+      pl->get_clog_error() << info.pgid << " past_interal bound [" << apib
 			     << ") end does not match required [" << rpib
 			     << ") end";
       derr << info.pgid << " past_interal bound [" << apib
@@ -1922,18 +1922,18 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
 void PeeringState::log_weirdness()
 {
   if (pg_log.get_tail() != info.log_tail)
-    pl->get_clog().error() << info.pgid
+    pl->get_clog_error() << info.pgid
 			   << " info mismatch, log.tail " << pg_log.get_tail()
 			   << " != info.log_tail " << info.log_tail;
   if (pg_log.get_head() != info.last_update)
-    pl->get_clog().error() << info.pgid
+    pl->get_clog_error() << info.pgid
 			   << " info mismatch, log.head " << pg_log.get_head()
 			   << " != info.last_update " << info.last_update;
 
   if (!pg_log.get_log().empty()) {
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
-      pl->get_clog().error() << info.pgid
+      pl->get_clog_error() << info.pgid
 			     << " log bound mismatch, info (tail,head] ("
 			     << pg_log.get_tail() << ","
 			     << pg_log.get_head() << "]"
@@ -1943,7 +1943,7 @@ void PeeringState::log_weirdness()
   }
 
   if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
-    pl->get_clog().error() << info.pgid
+    pl->get_clog_error() << info.pgid
 			   << " caller_ops.size "
 			   << pg_log.get_log().caller_ops.size()
 			   << " > log size " << pg_log.get_log().log.size();
@@ -2211,7 +2211,7 @@ void PeeringState::activate(
       if (pi.last_update == info.last_update && !force_restart_backfill) {
         // empty log
 	if (!pi.last_backfill.is_max())
-	  pl->get_clog().info() << info.pgid << " continuing backfill to osd."
+	  pl->get_clog_info() << info.pgid << " continuing backfill to osd."
 				<< peer
 				<< " from (" << pi.log_tail << "," << pi.last_update
 				<< "] " << pi.last_backfill
@@ -2247,7 +2247,7 @@ void PeeringState::activate(
 	 * behind.
 	 */
 	// backfill
-	pl->get_clog().debug() << info.pgid << " starting backfill to osd." << peer
+	pl->get_clog_debug() << info.pgid << " starting backfill to osd." << peer
 			       << " from (" << pi.log_tail << "," << pi.last_update
 			       << "] " << pi.last_backfill
 			       << " to " << info.last_update;
@@ -2576,7 +2576,7 @@ void PeeringState::fulfill_log(
     psdout(10) << " sending info+missing+log since " << query.since
 	       << dendl;
     if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
-      pl->get_clog().error() << info.pgid << " got broken pg_query_t::LOG since "
+      pl->get_clog_error() << info.pgid << " got broken pg_query_t::LOG since "
 			     << query.since
 			     << " when my log.tail is " << pg_log.get_tail()
 			     << ", sending full log instead";
@@ -5377,12 +5377,12 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   if (unfound > 0 &&
       ps->all_unfound_are_queried_or_lost(ps->get_osdmap())) {
     if (ps->cct->_conf->osd_auto_mark_unfound_lost) {
-      pl->get_clog().error() << context< PeeringMachine >().spgid.pgid << " has " << unfound
+      pl->get_clog_error() << context< PeeringMachine >().spgid.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically "
 			    << "mark these objects lost but this feature is not yet implemented "
 			    << "(osd_auto_mark_unfound_lost)";
     } else
-      pl->get_clog().error() << context< PeeringMachine >().spgid.pgid << " has "
+      pl->get_clog_error() << context< PeeringMachine >().spgid.pgid << " has "
                              << unfound << " objects unfound and apparently lost";
   }
 

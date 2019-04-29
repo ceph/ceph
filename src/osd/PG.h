@@ -410,7 +410,9 @@ public:
   void clear_primary_state() override;
 
   epoch_t oldest_stored_osdmap() override;
-  LogChannel &get_clog() override;
+  OstreamTemp &get_clog_error() override;
+  OstreamTemp &get_clog_info() override;
+  OstreamTemp &get_clog_debug() override;
 
   void schedule_event_after(
     PGPeeringEventRef event,

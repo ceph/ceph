@@ -1625,8 +1625,16 @@ epoch_t PG::oldest_stored_osdmap() {
   return osd->get_superblock().oldest_map;
 }
 
-LogChannel &PG::get_clog() {
-  return *(osd->clog);
+OstreamTemp PG::get_clog_info() {
+  return osd->clog->info();
+}
+
+OstreamTemp PG::get_clog_debug() {
+  return osd->clog->debug();
+}
+
+OstreamTemp PG::get_clog_error() {
+  return osd->clog->error();
 }
 
 void PG::schedule_event_after(
