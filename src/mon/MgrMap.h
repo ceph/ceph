@@ -18,9 +18,10 @@
 #include <set>
 
 #include "msg/msg_types.h"
-#include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/utime.h"
+#include "common/Formatter.h"
+#include "common/ceph_releases.h"
 #include "common/version.h"
 #include "common/options.h"
 #include "common/Clock.h"
@@ -340,7 +341,7 @@ public:
   }
 
   std::set<std::string> get_always_on_modules() const {
-    auto it = always_on_modules.find(ceph_release());
+    auto it = always_on_modules.find(ceph::to_integer<uint32_t>(ceph_release()));
     if (it == always_on_modules.end())
       return {};
     return it->second;

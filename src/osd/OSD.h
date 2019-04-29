@@ -1297,7 +1297,7 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
-  int last_require_osd_release = 0;
+  ceph_release_t last_require_osd_release{ceph_release_t::unknown};
 
   int numa_node = -1;
   size_t numa_cpu_set_size = 0;
@@ -2288,7 +2288,7 @@ public:
 		       uuid_d *cluster_fsid,
 		       uuid_d *osd_fsid,
 		       int *whoami,
-		       int *min_osd_release);
+		       ceph_release_t *min_osd_release);
   
 
   // startup/shutdown

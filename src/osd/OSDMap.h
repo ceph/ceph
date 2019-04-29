@@ -24,17 +24,19 @@
  *   disks, disk groups, total # osds,
  *
  */
-#include "include/types.h"
-#include "osd_types.h"
-
-//#include "include/ceph_features.h"
-#include "crush/CrushWrapper.h"
 #include <vector>
 #include <list>
 #include <set>
 #include <map>
 #include <memory>
+
 #include "include/btree_map.h"
+#include "include/types.h"
+#include "common/ceph_releases.h"
+#include "osd_types.h"
+
+//#include "include/ceph_features.h"
+#include "crush/CrushWrapper.h"
 
 // forward declaration
 class CephContext;
@@ -362,7 +364,7 @@ public:
     utime_t modified;
     int64_t new_pool_max; //incremented by the OSDMonitor on each pool create
     int32_t new_flags;
-    int8_t new_require_osd_release = -1;
+    ceph_release_t new_require_osd_release{0xff};
 
     // full (rare)
     ceph::buffer::list fullmap;  // in lieu of below.
@@ -407,7 +409,7 @@ public:
     float new_backfillfull_ratio = -1;
     float new_full_ratio = -1;
 
-    int8_t new_require_min_compat_client = -1;
+    ceph_release_t new_require_min_compat_client{0xff};
 
     utime_t new_last_up_change, new_last_in_change;
 
@@ -580,11 +582,11 @@ private:
   float full_ratio = 0, backfillfull_ratio = 0, nearfull_ratio = 0;
 
   /// min compat client we want to support
-  uint8_t require_min_compat_client = 0;  // CEPH_RELEASE_*
+  ceph_release_t require_min_compat_client{ceph_release_t::unknown};
 
 public:
   /// require osds to run at least this release
-  uint8_t require_osd_release = 0;    // CEPH_RELEASE_*
+  ceph_release_t require_osd_release{ceph_release_t::unknown};
 
 private:
   mutable uint64_t cached_up_osd_features;
@@ -1011,12 +1013,12 @@ public:
    * get oldest *client* version (firefly, hammer, etc.) that can connect given
    * the feature bits required (according to get_features()).
    */
-  uint8_t get_min_compat_client() const;
+  ceph_release_t get_min_compat_client() const;
 
   /**
    * gets the required minimum *client* version that can connect to the cluster.
    */
-  uint8_t get_require_min_compat_client() const;
+  ceph_release_t get_require_min_compat_client() const;
 
   /**
    * get intersection of features supported by up osds

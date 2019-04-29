@@ -122,9 +122,9 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 class C_ApplyFeatures : public Context {
   MonmapMonitor *svc;
   mon_feature_t features;
-  int min_mon_release;
+  ceph_release_t min_mon_release;
 public:
-  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f, int mmr) :
+  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f, ceph_release_t mmr) :
     svc(s), features(f), min_mon_release(mmr) { }
   void finish(int r) override {
     if (r >= 0) {
@@ -140,7 +140,7 @@ public:
 };
 
 void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
-				       int min_mon_release)
+				       ceph_release_t min_mon_release)
 {
   if (!is_writeable()) {
     dout(5) << __func__ << " wait for service to be writeable" << dendl;
@@ -180,7 +180,7 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
   }
   if (min_mon_release > pending_map.min_mon_release) {
     dout(1) << __func__ << " increasing min_mon_release to "
-	    << (int)min_mon_release << " (" << ceph_release_name(min_mon_release)
+	    << ceph::to_integer<int>(min_mon_release) << " (" << min_mon_release
 	    << ")" << dendl;
     pending_map.min_mon_release = min_mon_release;
   }
