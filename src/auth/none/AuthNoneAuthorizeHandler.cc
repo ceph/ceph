@@ -19,7 +19,7 @@
 
 bool AuthNoneAuthorizeHandler::verify_authorizer(
   CephContext *cct,
-  KeyStore *keys,
+  const KeyStore& keys,
   const bufferlist& authorizer_data,
   size_t connection_secret_required_len,
   bufferlist *authorizer_reply,

@@ -58,10 +58,6 @@ struct Server {
       return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(
           0, bufferlist{});
     }
-    std::unique_ptr<AuthAuthorizer> authorizer = std::make_unique<DummyAuthAuthorizer>();
-    AuthAuthorizer* ms_get_authorizer(peer_type_t) const override {
-      return authorizer.get();
-    }
   } dispatcher;
   Server(ceph::net::Messenger& msgr)
     : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
@@ -165,6 +161,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
             server.msgr.set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
             server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &server.byte_throttler);
+            client.msgr->set_require_authorizer(false);
             server.msgr.set_auth_client(&server.dummy_auth);
             server.msgr.set_auth_server(&server.dummy_auth);
             return server.msgr.bind(entity_addrvec_t{addr})
@@ -190,6 +187,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
             client.msgr.set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
             client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &client.byte_throttler);
+            client.msgr->set_require_authorizer(false);
             client.msgr.set_auth_client(&client.dummy_auth);
             client.msgr.set_auth_server(&client.dummy_auth);
             return client.msgr.start(&client.dispatcher)

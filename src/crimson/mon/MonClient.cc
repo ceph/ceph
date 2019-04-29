@@ -46,6 +46,7 @@ namespace {
 
 namespace ceph::mon {
 
+using ceph::common::local_conf;
 
 class Connection {
 public:
@@ -79,6 +80,8 @@ public:
   AuthAuthorizer* get_authorizer(peer_type_t peer) const;
   KeyStore& get_keys();
   seastar::future<> renew_tickets();
+  seastar::future<> renew_rotating_keyring();
+
   ceph::net::ConnectionRef get_conn();
 
 private:
@@ -88,7 +91,11 @@ private:
                                                  uint64_t global_id,
                                                  const EntityName& name,
                                                  uint32_t want_keys);
-  seastar::future<bool> do_auth();
+  enum class request_t {
+    rotating,
+    general,
+  };
+  seastar::future<bool> do_auth(request_t);
 
 private:
   bool closed = false;
@@ -103,8 +110,9 @@ private:
   const AuthRegistry& auth_registry;
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
-  RotatingKeyRing rotating_keyring;
+  std::unique_ptr<RotatingKeyRing> rotating_keyring;
   uint64_t global_id;
+  clock_t::time_point last_rotating_renew_sent;
 };
 
 Connection::Connection(const AuthRegistry& auth_registry,
@@ -112,7 +120,10 @@ Connection::Connection(const AuthRegistry& auth_registry,
                        KeyRing* keyring)
   : auth_registry{auth_registry},
     conn{conn},
-    rotating_keyring{nullptr, CEPH_ENTITY_TYPE_OSD, keyring}
+    rotating_keyring{
+      std::make_unique<RotatingKeyRing>(nullptr,
+                                        CEPH_ENTITY_TYPE_OSD,
+                                        keyring)}
 {}
 
 seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
@@ -124,7 +135,7 @@ seastar::future<> Connection::handle_auth_reply(Ref<MAuthReply> m)
 seastar::future<> Connection::renew_tickets()
 {
   if (auth->need_tickets()) {
-    return do_auth().then([](bool success) {
+    return do_auth(request_t::general).then([](bool success) {
       if (!success)  {
         throw std::system_error(make_error_code(
           ceph::net::error::negotiation_failure));
@@ -132,6 +143,28 @@ seastar::future<> Connection::renew_tickets()
     });
   }
   return seastar::now();
+}
+
+seastar::future<> Connection::renew_rotating_keyring()
+{
+  auto now = clock_t::now();
+  auto ttl = std::chrono::seconds{
+    static_cast<long>(ceph::common::local_conf()->auth_service_ticket_ttl)};
+  auto cutoff = now - ttl / 4;
+  if (!rotating_keyring->need_new_secrets(utime_t(cutoff))) {
+    return seastar::now();
+  }
+  if (now - last_rotating_renew_sent < std::chrono::seconds{1}) {
+    logger().info("renew_rotating_keyring called too often");
+    return seastar::now();
+  }
+  last_rotating_renew_sent = now;
+  return do_auth(request_t::rotating).then([](bool success) {
+    if (!success)  {
+      throw std::system_error(make_error_code(
+        ceph::net::error::negotiation_failure));
+    }
+  });
 }
 
 AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
@@ -144,7 +177,7 @@ AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
 }
 
 KeyStore& Connection::get_keys() {
-  return rotating_keyring;
+  return *rotating_keyring;
 }
 
 std::unique_ptr<AuthClientHandler>
@@ -157,7 +190,7 @@ Connection::create_auth(ceph::auth::method_t protocol,
   std::unique_ptr<AuthClientHandler> auth;
   auth.reset(AuthClientHandler::create(&cct,
                                        protocol,
-                                       &rotating_keyring));
+                                       rotating_keyring.get()));
   if (!auth) {
     logger().error("no handler for protocol {}", protocol);
     throw std::system_error(make_error_code(
@@ -186,16 +219,24 @@ Connection::setup_session(epoch_t epoch,
   return conn->send(m);
 }
 
-seastar::future<bool> Connection::do_auth()
+seastar::future<bool> Connection::do_auth(Connection::request_t what)
 {
   auto m = make_message<MAuth>();
   m->protocol = auth->get_protocol();
   auth->prepare_build_request();
-  if (int ret = auth->build_request(m->auth_payload); ret) {
-    logger().error("missing/bad key for '{}'",
-                   ceph::common::local_conf()->name);
-    throw std::system_error(make_error_code(
-      ceph::net::error::negotiation_failure));
+  switch (what) {
+  case request_t::rotating:
+    auth->build_rotating_request(m->auth_payload);
+    break;
+  case request_t::general:
+    if (int ret = auth->build_request(m->auth_payload); ret) {
+      logger().error("missing/bad key for '{}'", local_conf()->name);
+      throw std::system_error(make_error_code(
+        ceph::net::error::negotiation_failure));
+    }
+    break;
+  default:
+    assert(0);
   }
   logger().info("sending {}", *m);
   return conn->send(m).then([this] {
@@ -245,7 +286,7 @@ Connection::authenticate_v1(epoch_t epoch,
     case -EAGAIN:
       // cephx
       return seastar::repeat([this] {
-        return do_auth().then([](bool success) {
+        return do_auth(request_t::general).then([](bool success) {
           return seastar::make_ready_future<seastar::stop_iteration>(
             success ?
             seastar::stop_iteration::yes:
@@ -398,6 +439,7 @@ Client::Client(Client&&) = default;
 Client::~Client() = default;
 
 seastar::future<> Client::start() {
+  entity_name = ceph::common::local_conf()->name;
   auth_registry.refresh_config();
   return load_keyring().then([this] {
     return monmap.build_initial(ceph::common::local_conf(), false);
@@ -424,7 +466,8 @@ seastar::future<> Client::load_keyring()
 void Client::tick()
 {
   seastar::with_gate(tick_gate, [this] {
-    return active_con->renew_tickets();
+    return seastar::when_all_succeed(active_con->renew_tickets(),
+                                     active_con->renew_rotating_keyring());
   });
 }
 
@@ -481,20 +524,6 @@ seastar::future<> Client::ms_handle_reset(ceph::net::ConnectionRef conn)
   }
 }
 
-AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
-{
-  if (active_con) {
-    return active_con->get_authorizer(peer);
-  } else {
-    return nullptr;
-  }
-}
-
-AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
-{
-  return ms_get_authorizer(peer);
-}
-
 std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
 Client::get_supported_auth_methods(int peer_type)
 {
@@ -525,6 +554,16 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
                                 const ceph::bufferlist& payload,
                                 ceph::bufferlist *reply)
 {
+  // for some channels prior to nautilus (osd heartbeat), we tolerate the lack of
+  // an authorizer.
+  if (payload.length() == 0) {
+    if (con->get_messenger()->get_require_authorizer()) {
+      return -EACCES;
+    } else {
+      auth_handler.handle_authentication({}, {}, {});
+      return 1;
+    }
+  }
   auth_meta->auth_mode = payload[0];
   if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
@@ -543,8 +582,8 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   uint64_t global_id;
   AuthCapsInfo caps_info;
   bool is_valid = ah->verify_authorizer(
-    nullptr,
-    &active_con->get_keys(),
+    &cct,
+    active_con->get_keys(),
     payload,
     auth_meta->get_connection_secret_length(),
     reply,
@@ -700,7 +739,12 @@ seastar::future<> Client::handle_monmap(ceph::net::Connection* conn,
   sub.got("monmap", monmap.get_epoch());
 
   if (monmap.get_addr_name(peer_addr, cur_mon)) {
-    return seastar::now();
+    if (active_con) {
+      return seastar::when_all_succeed(active_con->renew_tickets(),
+                                       active_con->renew_rotating_keyring());
+    } else {
+      return seastar::now();
+    }
   } else {
     logger().warn("mon.{} went away", cur_mon);
     return reopen_session(-1);
@@ -873,6 +917,7 @@ seastar::future<> Client::reopen_session(int rank)
                                 });
       ceph_assert_always(found != pending_conns.end());
       active_con.reset(new Connection{std::move(*found)});
+      logger().info("found mon.{}", monmap.get_name(peer));
       return seastar::parallel_for_each(pending_conns, [] (auto& conn) {
         return conn.close();
       });

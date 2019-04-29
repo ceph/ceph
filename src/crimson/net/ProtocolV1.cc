@@ -12,6 +12,8 @@
 #include "auth/Auth.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "crimson/auth/AuthClient.h"
+#include "crimson/auth/AuthServer.h"
 #include "crimson/common/log.h"
 #include "Config.h"
 #include "Dispatcher.h"
@@ -170,6 +172,22 @@ void ProtocolV1::reset_session()
 seastar::future<stop_t>
 ProtocolV1::handle_connect_reply(msgr_tag_t tag)
 {
+  if (h.auth_payload.length() && conn.peer_type != CEPH_ENTITY_TYPE_MON) {
+    if (tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER) { // more
+      h.auth_more = messenger.get_auth_client()->handle_auth_reply_more(
+          conn.shared_from_this(), auth_meta, h.auth_payload);
+      return seastar::make_ready_future<stop_t>(stop_t::no);
+    } else {
+      int ret = messenger.get_auth_client()->handle_auth_done(
+          conn.shared_from_this(), auth_meta, 0, 0, h.auth_payload);
+      if (ret < 0) {
+        // fault
+        logger().warn("{} AuthClient::handle_auth_done() return {}", conn, ret);
+        throw std::system_error(make_error_code(error::negotiation_failure));
+      }
+    }
+  }
+
   switch (tag) {
   case CEPH_MSGR_TAG_FEATURES:
     logger().error("{} connect protocol feature mispatch", __func__);
@@ -218,14 +236,15 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
         h.connect_seq++;
         h.backoff = 0ms;
         conn.set_features(h.reply.features & h.connect.features);
-        if (h.authorizer) {
+        if (auth_meta->authorizer) {
           session_security.reset(
               get_auth_session_handler(nullptr,
-                                       h.authorizer->protocol,
-                                       h.authorizer->session_key,
+                                       auth_meta->authorizer->protocol,
+                                       auth_meta->session_key,
                                        conn.features));
+        } else {
+          session_security.reset();
         }
-        h.authorizer = nullptr;
         return seastar::make_ready_future<stop_t>(stop_t::yes);
       });
     break;
@@ -233,6 +252,26 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
     // unknown tag
     logger().error("{} got unknown tag", __func__, int(tag));
     throw std::system_error(make_error_code(error::negotiation_failure));
+  }
+}
+
+ceph::bufferlist ProtocolV1::get_auth_payload()
+{
+  // only non-mons connectings to mons use MAuth messages
+  if (conn.peer_type == CEPH_ENTITY_TYPE_MON &&
+     messenger.get_mytype() != CEPH_ENTITY_TYPE_MON) {
+    return {};
+  } else {
+    if (h.auth_more.length()) {
+      logger().info("using augmented (challenge) auth payload");
+      return std::move(h.auth_more);
+    } else {
+      auto [auth_method, preferred_modes, auth_bl] =
+	messenger.get_auth_client()->get_auth_request(
+            conn.shared_from_this(), auth_meta);
+      auth_meta->auth_method = auth_method;
+      return auth_bl;
+    }
   }
 }
 
@@ -249,13 +288,15 @@ ProtocolV1::repeat_connect()
   // this is fyi, actually, server decides!
   h.connect.flags = conn.policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  h.authorizer = dispatcher.ms_get_authorizer(conn.peer_type);
+  ceph_assert(messenger.get_auth_client());
+
   bufferlist bl;
-  if (h.authorizer) {
-    h.connect.authorizer_protocol = h.authorizer->protocol;
-    h.connect.authorizer_len = h.authorizer->bl.length();
+  bufferlist auth_bl = get_auth_payload();
+  if (auth_bl.length()) {
+    h.connect.authorizer_protocol = auth_meta->auth_method;
+    h.connect.authorizer_len = auth_bl.length();
     bl.append(create_static(h.connect));
-    bl.append(h.authorizer->bl);
+    bl.claim_append(auth_bl);
   } else {
     h.connect.authorizer_protocol = 0;
     h.connect.authorizer_len = 0;
@@ -271,13 +312,7 @@ ProtocolV1::repeat_connect()
       ceph_assert(p.end());
       return socket->read(h.reply.authorizer_len);
     }).then([this] (bufferlist bl) {
-      if (h.authorizer) {
-        auto reply = bl.cbegin();
-        if (!h.authorizer->verify_reply(reply, nullptr)) {
-          logger().error("{} authorizer failed to verify reply", __func__);
-          throw std::system_error(make_error_code(error::negotiation_failure));
-        }
-      }
+      h.auth_payload = std::move(bl);
       return handle_connect_reply(h.reply.tag);
     });
 }
@@ -377,6 +412,13 @@ seastar::future<stop_t> ProtocolV1::send_connect_reply_ready(
     h.reply.flags = h.reply.flags | CEPH_MSG_CONNECT_LOSSY;
   }
   h.reply.authorizer_len = authorizer_reply.length();
+
+  session_security.reset(
+      get_auth_session_handler(nullptr,
+                               auth_meta->auth_method,
+                               auth_meta->session_key,
+                               conn.features));
+
   return socket->write(make_static_packet(h.reply))
     .then([this, reply=std::move(authorizer_reply)]() mutable {
       if (reply.length()) {
@@ -494,8 +536,10 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
       conn.peer_type = h.connect.host_type;
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
+      memset(&h.reply, 0, sizeof(h.reply));
+      // TODO: set reply.protocol_version
       if (h.connect.protocol_version != get_proto_version(h.connect.host_type, false)) {
-        return seastar::make_ready_future<msgr_tag_t, bufferlist>(
+        return send_connect_reply(
             CEPH_MSGR_TAG_BADPROTOVER, bufferlist{});
       }
       if (require_auth_feature()) {
@@ -503,17 +547,29 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
       }
       if (auto feat_missing = conn.policy.features_required & ~(uint64_t)h.connect.features;
           feat_missing != 0) {
-        return seastar::make_ready_future<msgr_tag_t, bufferlist>(
+        return send_connect_reply(
             CEPH_MSGR_TAG_FEATURES, bufferlist{});
       }
-      return dispatcher.ms_verify_authorizer(conn.peer_type,
-                                             h.connect.authorizer_protocol,
-                                             authorizer);
-    }).then([this] (ceph::net::msgr_tag_t tag, bufferlist&& authorizer_reply) {
-      memset(&h.reply, 0, sizeof(h.reply));
-      if (tag) {
-        return send_connect_reply(tag, std::move(authorizer_reply));
+
+      bufferlist authorizer_reply;
+      auth_meta->auth_method = h.connect.authorizer_protocol;
+      auto more = static_cast<bool>(auth_meta->authorizer_challenge);
+      ceph_assert(messenger.get_auth_server());
+      int r = messenger.get_auth_server()->handle_auth_request(
+          conn.shared_from_this(), auth_meta, more, auth_meta->auth_method, authorizer,
+          &authorizer_reply);
+
+      if (r < 0) {
+        session_security.reset();
+        return send_connect_reply(
+            CEPH_MSGR_TAG_BADAUTHORIZER, std::move(authorizer_reply));
+      } else if (r == 0) {
+        ceph_assert(authorizer_reply.length());
+        return send_connect_reply(
+            CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER, std::move(authorizer_reply));
       }
+
+      // r > 0
       if (auto existing = messenger.lookup_conn(conn.peer_addr); existing) {
         if (existing->protocol->proto_type != proto_t::v1) {
           logger().warn("{} existing {} proto version is {} not 1, close existing",
@@ -601,6 +657,9 @@ seastar::future<> ProtocolV1::write_message(MessageRef msg)
   auto& header = msg->get_header();
   header.src = messenger.get_myname();
   msg->encode(conn.features, messenger.get_crc_flags());
+  if (session_security) {
+    session_security->sign_message(msg.get());
+  }
   bufferlist bl;
   bl.append(CEPH_MSGR_TAG_MSG);
   bl.append((const char*)&header, sizeof(header));
@@ -718,6 +777,16 @@ seastar::future<> ProtocolV1::read_message()
       ::decode(m.footer, p);
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
                                   m.front, m.middle, m.data, nullptr);
+      if (!msg) {
+	logger().debug("decode message failed");
+	return;
+      }
+      if (session_security) {
+	if (session_security->check_message_signature(msg)) {
+	  logger().debug("signature check failed");
+	  return;
+	}
+      }
       // TODO: set time stamps
       msg->set_byte_throttler(conn.policy.throttler_bytes);
 
