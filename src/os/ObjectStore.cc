@@ -24,41 +24,6 @@
 #endif
 #include "kstore/KStore.h"
 
-void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
-			      bufferlist *out)
-{
-  auto start = p;
-  __u32 n;
-  decode(n, p);
-  unsigned len = 4;
-  while (n--) {
-    __u32 l;
-    decode(l, p);
-    p.advance(l);
-    len += 4 + l;
-    decode(l, p);
-    p.advance(l);
-    len += 4 + l;
-  }
-  start.copy(len, *out);
-}
-
-void decode_str_set_to_bl(bufferlist::const_iterator& p,
-			  bufferlist *out)
-{
-  auto start = p;
-  __u32 n;
-  decode(n, p);
-  unsigned len = 4;
-  while (n--) {
-    __u32 l;
-    decode(l, p);
-    p.advance(l);
-    len += 4 + l;
-  }
-  start.copy(len, *out);
-}
-
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
@@ -149,12 +114,4 @@ int ObjectStore::read_meta(const std::string& key,
   }
   *value = string(buf, r);
   return 0;
-}
-
-
-
-
-ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
-
-  return out << "Transaction(" << &tx << ")"; 
 }

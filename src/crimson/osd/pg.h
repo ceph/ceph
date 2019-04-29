@@ -12,7 +12,7 @@
 #include <seastar/core/shared_future.hh>
 
 #include "crimson/net/Fwd.h"
-#include "crimson/os/Transaction.h"
+#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 #include "recovery_state.h"
