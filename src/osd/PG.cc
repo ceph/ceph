@@ -253,7 +253,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   recovery_ops_active(0),
   need_up_thru(false),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
-  backfill_reserved(false),
   backfill_reserving(false),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
@@ -1999,162 +1998,6 @@ void PG::try_mark_clean()
   share_pg_info();
   publish_stats_to_osd();
   requeue_ops(waiting_for_clean_to_primary_repair);
-}
-
-bool PG::set_force_recovery(bool b)
-{
-  bool did = false;
-  if (b) {
-    if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	(state & (PG_STATE_DEGRADED |
-		  PG_STATE_RECOVERY_WAIT |
-		  PG_STATE_RECOVERING))) {
-      dout(20) << __func__ << " set" << dendl;
-      state_set(PG_STATE_FORCED_RECOVERY);
-      publish_stats_to_osd();
-      did = true;
-    }
-  } else if (state & PG_STATE_FORCED_RECOVERY) {
-    dout(20) << __func__ << " clear" << dendl;
-    state_clear(PG_STATE_FORCED_RECOVERY);
-    publish_stats_to_osd();
-    did = true;
-  }
-  if (did) {
-    dout(20) << __func__ << " state " << recovery_state.get_current_state()
-	     << dendl;
-    osd->local_reserver.update_priority(info.pgid, get_recovery_priority());
-  }
-  return did;
-}
-
-bool PG::set_force_backfill(bool b)
-{
-  bool did = false;
-  if (b) {
-    if (!(state & PG_STATE_FORCED_BACKFILL) &&
-	(state & (PG_STATE_DEGRADED |
-		  PG_STATE_BACKFILL_WAIT |
-		  PG_STATE_BACKFILLING))) {
-      dout(10) << __func__ << " set" << dendl;
-      state_set(PG_STATE_FORCED_BACKFILL);
-      publish_stats_to_osd();
-      did = true;
-    }
-  } else if (state & PG_STATE_FORCED_BACKFILL) {
-    dout(10) << __func__ << " clear" << dendl;
-    state_clear(PG_STATE_FORCED_BACKFILL);
-    publish_stats_to_osd();
-    did = true;
-  }
-  if (did) {
-    dout(20) << __func__ << " state " << recovery_state.get_current_state()
-	     << dendl;
-    osd->local_reserver.update_priority(info.pgid, get_backfill_priority());
-  }
-  return did;
-}
-
-int PG::clamp_recovery_priority(int priority, int pool_recovery_priority, int max)
-{
-  static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
-  static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
-
-  ceph_assert(max <= OSD_RECOVERY_PRIORITY_MAX);
-
-  // User can't set this too high anymore, but might be a legacy value
-  if (pool_recovery_priority > OSD_POOL_PRIORITY_MAX)
-    pool_recovery_priority = OSD_POOL_PRIORITY_MAX;
-  if (pool_recovery_priority < OSD_POOL_PRIORITY_MIN)
-    pool_recovery_priority = OSD_POOL_PRIORITY_MIN;
-  // Shift range from min to max to 0 to max - min
-  pool_recovery_priority += (0 - OSD_POOL_PRIORITY_MIN);
-  ceph_assert(pool_recovery_priority >= 0 && pool_recovery_priority <= (OSD_POOL_PRIORITY_MAX - OSD_POOL_PRIORITY_MIN));
-
-  priority += pool_recovery_priority;
-
-  // Clamp to valid range
-  if (priority > max) {
-    return max;
-  } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
-    return OSD_RECOVERY_PRIORITY_MIN;
-  } else {
-    return priority;
-  }
-}
-
-unsigned PG::get_recovery_priority()
-{
-  // a higher value -> a higher priority
-  int ret = OSD_RECOVERY_PRIORITY_BASE;
-  int base = ret;
-
-  if (state & PG_STATE_FORCED_RECOVERY) {
-    ret = OSD_RECOVERY_PRIORITY_FORCED;
-  } else {
-    // XXX: This priority boost isn't so much about inactive, but about data-at-risk
-    if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
-      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
-    }
-
-    int64_t pool_recovery_priority = 0;
-    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
-
-    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
-  }
-  dout(20) << __func__ << " recovery priority is " << ret << dendl;
-  return static_cast<unsigned>(ret);
-}
-
-unsigned PG::get_backfill_priority()
-{
-  // a higher value -> a higher priority
-  int ret = OSD_BACKFILL_PRIORITY_BASE;
-  int base = ret;
-
-  if (state & PG_STATE_FORCED_BACKFILL) {
-    ret = OSD_BACKFILL_PRIORITY_FORCED;
-  } else {
-    if (acting.size() < pool.info.min_size) {
-      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
-      // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = base + (pool.info.min_size - acting.size());
-
-    } else if (is_undersized()) {
-      // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
-      ceph_assert(pool.info.size > actingset.size());
-      base = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
-      ret = base + (pool.info.size - actingset.size());
-
-    } else if (is_degraded()) {
-      // degraded: baseline degraded
-      base = ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
-    }
-
-    // Adjust with pool's recovery priority
-    int64_t pool_recovery_priority = 0;
-    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
-
-    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
-  }
-
-  dout(20) << __func__ << " backfill priority is " << ret << dendl;
-  return static_cast<unsigned>(ret);
-}
-
-unsigned PG::get_delete_priority()
-{
-  auto state = get_osdmap()->get_state(osd->whoami);
-  if (state & (CEPH_OSD_BACKFILLFULL |
-               CEPH_OSD_FULL)) {
-    return OSD_DELETE_PRIORITY_FULL;
-  } else if (state & CEPH_OSD_NEARFULL) {
-    return OSD_DELETE_PRIORITY_FULLISH;
-  } else {
-    return OSD_DELETE_PRIORITY_NORMAL;
-  }
 }
 
 Context *PG::finish_recovery()
@@ -4087,6 +3930,60 @@ LogChannel &PG::get_clog() {
   return *(osd->clog);
 }
 
+void PG::schedule_event_after(
+  PGPeeringEventRef event,
+  float delay) {
+  std::lock_guard lock(osd->recovery_request_lock);
+  osd->recovery_request_timer.add_event_after(
+    delay,
+    new QueuePeeringEvt(
+      this,
+      std::move(event)));
+}
+
+void PG::request_local_background_io_reservation(
+  unsigned priority,
+  PGPeeringEventRef on_grant,
+  PGPeeringEventRef on_preempt) {
+  osd->local_reserver.request_reservation(
+    pg_id,
+    on_grant ? new QueuePeeringEvt(
+      this, on_grant) : nullptr,
+    priority,
+    on_preempt ? new QueuePeeringEvt(
+      this, on_preempt) : nullptr);
+}
+
+void PG::update_local_background_io_priority(
+  unsigned priority) {
+  osd->local_reserver.update_priority(
+    pg_id,
+    priority);
+}
+
+void PG::cancel_local_background_io_reservation() {
+  osd->local_reserver.cancel_reservation(
+    pg_id);
+}
+
+void PG::request_remote_recovery_reservation(
+  unsigned priority,
+  PGPeeringEventRef on_grant,
+  PGPeeringEventRef on_preempt) {
+  osd->remote_reserver.request_reservation(
+    pg_id,
+    on_grant ? new QueuePeeringEvt(
+      this, on_grant) : nullptr,
+    priority,
+    on_preempt ? new QueuePeeringEvt(
+      this, on_preempt) : nullptr);
+}
+
+void PG::cancel_remote_recovery_reservation() {
+  osd->remote_reserver.cancel_reservation(
+    pg_id);
+}
+
 void PG::do_replica_scrub_map(OpRequestRef op)
 {
   const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());
@@ -4241,26 +4138,6 @@ void PG::reject_reservation()
       spg_t(info.pgid.pgid, primary.shard),
       get_osdmap_epoch()),
     get_osdmap_epoch());
-}
-
-void PG::schedule_backfill_retry(float delay)
-{
-  std::lock_guard lock(osd->recovery_request_lock);
-  osd->recovery_request_timer.add_event_after(
-    delay,
-    new QueuePeeringEvt<PeeringState::PeeringState::PeeringState::RequestBackfill>(
-      this, get_osdmap_epoch(),
-      PeeringState::RequestBackfill()));
-}
-
-void PG::schedule_recovery_retry(float delay)
-{
-  std::lock_guard lock(osd->recovery_request_lock);
-  osd->recovery_request_timer.add_event_after(
-    delay,
-    new QueuePeeringEvt<PeeringState::PeeringState::DoRecovery>(
-      this, get_osdmap_epoch(),
-      PeeringState::DoRecovery()));
 }
 
 void PG::clear_scrub_reserved()
@@ -5757,7 +5634,7 @@ void PG::start_flush_on_transaction(ObjectStore::Transaction *t)
 bool PG::try_flush_or_schedule_async()
 {
   
-  Context *c = new QueuePeeringEvt<PeeringState::PeeringState::IntervalFlush>(
+  Context *c = new QueuePeeringEvt(
     this, get_osdmap_epoch(), PeeringState::IntervalFlush());
   if (!ch->flush_commit(c)) {
     return false;
