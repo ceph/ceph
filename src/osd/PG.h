@@ -428,6 +428,10 @@ public:
 
   void scrub_requested(bool deep, bool repair) override;
 
+  uint64_t get_snap_trimq_size() const override {
+    return snap_trimq.size();
+  }
+
   void clear_publish_stats() override;
   void clear_primary_state() override;
 
@@ -998,8 +1002,6 @@ protected:
   bool pg_stats_publish_valid;
   pg_stat_t pg_stats_publish;
 
-  void _update_calc_stats();
-  void _update_blocked_by();
   friend class TestOpsSocketHook;
   void publish_stats_to_osd() override;
 
