@@ -172,7 +172,9 @@ public:
     denc(v.tv.tv_nsec, p);
   }
 
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<utime_t*>& o);
+  
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_nsec;

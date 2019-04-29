@@ -15,6 +15,10 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
+namespace ceph {
+  class Formatter;
+}
+
 struct uuid_d {
   boost::uuids::uuid uuid;
 
@@ -61,6 +65,9 @@ struct uuid_d {
   void decode(ceph::buffer::list::const_iterator& p) const {
     ceph::decode_raw(uuid, p);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<uuid_d*>& o);
 };
 WRITE_CLASS_ENCODER(uuid_d)
 
