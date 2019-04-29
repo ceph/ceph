@@ -17,6 +17,7 @@
 
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
 class MRecoveryReserve : public MOSDPeeringOp {
 private:
