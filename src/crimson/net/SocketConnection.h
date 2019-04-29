@@ -58,9 +58,9 @@ class SocketConnection : public Connection {
   bool update_rx_seq(seq_num_t seq);
 
   // messages to be resent after connection gets reset
-  std::queue<MessageRef> out_q;
+  std::deque<MessageRef> out_q;
   // messages sent, but not yet acked by peer
-  std::queue<MessageRef> sent;
+  std::deque<MessageRef> sent;
 
   // which of the peer_addrs we're connecting to (as client)
   // or should reconnect to (as peer)
@@ -115,7 +115,7 @@ class SocketConnection : public Connection {
   /// move all messages in the sent list back into the queue
   void requeue_sent();
 
-  std::tuple<seq_num_t, std::queue<MessageRef>> get_out_queue() {
+  std::tuple<seq_num_t, std::deque<MessageRef>> get_out_queue() {
     return {out_seq, std::move(out_q)};
   }
 
