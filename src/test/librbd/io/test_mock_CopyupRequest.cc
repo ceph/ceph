@@ -13,6 +13,7 @@
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/CopyupRequest.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ReadResult.h"
 
@@ -310,6 +311,10 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
         }));
   }
 
+  void flush_async_operations(librbd::ImageCtx* ictx) {
+    ictx->io_work_queue->flush();
+  }
+
   std::string m_parent_image_name;
 };
 
@@ -450,7 +455,7 @@ TEST_F(TestMockIoCopyupRequest, CopyOnRead) {
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
-  ictx->flush_async_operations();
+  flush_async_operations(ictx);
 }
 
 TEST_F(TestMockIoCopyupRequest, CopyOnReadWithSnaps) {
@@ -496,7 +501,7 @@ TEST_F(TestMockIoCopyupRequest, CopyOnReadWithSnaps) {
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
-  ictx->flush_async_operations();
+  flush_async_operations(ictx);
 }
 
 TEST_F(TestMockIoCopyupRequest, DeepCopy) {
@@ -580,7 +585,7 @@ TEST_F(TestMockIoCopyupRequest, DeepCopyOnRead) {
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
-  ictx->flush_async_operations();
+  flush_async_operations(ictx);
 }
 
 TEST_F(TestMockIoCopyupRequest, DeepCopyWithSnaps) {
@@ -723,7 +728,7 @@ TEST_F(TestMockIoCopyupRequest, ZeroedCopyOnRead) {
                                    {{0, 4096}}, {});
   mock_image_ctx.copyup_list[0] = req;
   req->send();
-  ictx->flush_async_operations();
+  flush_async_operations(ictx);
 }
 
 TEST_F(TestMockIoCopyupRequest, NoOpCopyup) {
@@ -980,7 +985,7 @@ TEST_F(TestMockIoCopyupRequest, CopyupError) {
   req->send();
 
   ASSERT_EQ(-EPERM, mock_write_request.ctx.wait());
-  ictx->flush_async_operations();
+  flush_async_operations(ictx);
 }
 
 } // namespace io
