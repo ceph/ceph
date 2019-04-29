@@ -857,7 +857,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
 
   // user flush requests are ignored when journaling + cache are enabled
   C_SaferCond flush_ctx;
-  aio_comp = librbd::io::AioCompletion::create(
+  aio_comp = librbd::io::AioCompletion::create_and_start(
     &flush_ctx, ictx, librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
     *ictx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
