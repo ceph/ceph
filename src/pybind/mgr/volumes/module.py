@@ -45,35 +45,58 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup create '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Create a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup rm '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=force,type=CephBool,req=false ',
+            'desc': "Delete a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolume create '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=size,type=CephInt,req=false ',
-            'desc': "Create a CephFS subvolume in a volume, and "
-                    "optionally with a specific size(in bytes)",
+                   'name=size,type=CephInt,req=false '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Create a CephFS subvolume in a volume, and optionally, "
+                    "with a specific size (in bytes) and in a specific "
+                    "subvolume group",
             'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume rm '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
                    'name=force,type=CephBool,req=false ',
-            'desc': "Delete a CephFS subvolume in a volume",
+            'desc': "Delete a CephFS subvolume in a volume, and optionally, "
+                    "in a specific subvolume group",
             'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume getpath '
                    'name=vol_name,type=CephString '
-                   'name=sub_name,type=CephString ',
-            'desc': "Get the mountpath of a CephFS subvolume in a volume",
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Get the mountpath of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
         {
             'cmd': 'fs subvolume snapshot create '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=snap_name,type=CephString ',
-            'desc': "Create a snapshot of a CephFS subvolume in a volume",
+                   'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Create a snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
         {
@@ -81,8 +104,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
                    'name=snap_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
                    'name=force,type=CephBool,req=false ',
-            'desc': "Delete a snapshot of a CephFS subvolume in a volume",
+            'desc': "Delete a snapshot of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
             'perm': 'rw'
         },
 
@@ -225,6 +250,55 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _volume_exists(self, vol_name):
         return self._volume_get_fs(vol_name) is not None
 
+    def _cmd_fs_subvolumegroup_create(self, inbuf, cmd):
+        """
+        :return: a 3-tuple of return code(int), empty string(str), error message (str)
+        """
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+
+        if not self._volume_exists(vol_name):
+            return -errno.ENOENT, "", \
+                   "Volume '{0}' not found, create it with `ceph fs volume create` " \
+                   "before trying to create subvolume groups".format(vol_name)
+
+        # TODO: validate that subvol size fits in volume size
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            svc.create_group(group_name)
+
+        return 0, "", ""
+
+    def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
+        """
+        :return: a 3-tuple of return code(int), empty string(str), error message (str)
+        """
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+
+        force = cmd.get('force', False)
+
+        if not self._volume_exists(vol_name):
+            if force:
+                return 0, "", ""
+            else:
+                return -errno.ENOENT, "", \
+                       "Volume '{0}' not found, cannot remove subvolume group '{0}'".format(vol_name, group_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            # TODO: check whether there are no subvolumes in the group
+            try:
+                svc.delete_group(group_name)
+            except cephfs.ObjectNotFound:
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume group '{0}' not found, cannot remove it".format(group_name)
+
+
+        return 0, "", ""
+
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
@@ -233,6 +307,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         sub_name = cmd['sub_name']
 
         size = cmd.get('size', None)
+        group_name = cmd.get('group_name', None)
 
         if not self._volume_exists(vol_name):
             return -errno.ENOENT, "", \
@@ -242,9 +317,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # TODO: validate that subvol size fits in volume size
 
         with SubvolumeClient(self, fs_name=vol_name) as svc:
-            # TODO: support real subvolume groups rather than just
-            # always having them 1:1 with subvolumes.
-            svp = SubvolumePath(sub_name, sub_name)
+            if group_name and not svc.get_group_path(group_name):
+                return -errno.ENOENT, "", \
+                    "Subvolume group '{0}' not found, create it with `ceph fs subvolumegroup create` " \
+                    "before trying to create subvolumes".format(group_name)
+            svp = SubvolumePath(group_name, sub_name)
             svc.create_subvolume(svp, size)
 
         return 0, "", ""
@@ -257,6 +334,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         sub_name = cmd['sub_name']
 
         force = cmd.get('force', False)
+        group_name = cmd.get('group_name', None)
 
         fs = self._volume_get_fs(vol_name)
         if fs is None:
@@ -269,9 +347,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         vol_fscid = fs['id']
 
         with SubvolumeClient(self, fs_name=vol_name) as svc:
-            # TODO: support real subvolume groups rather than just
-            # always having them 1:1 with subvolumes.
-            svp = SubvolumePath(sub_name, sub_name)
+            if group_name and not svc.get_group_path(group_name):
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume group '{0}' not found, cannot remove subvolume '{1}'".format(group_name, sub_name)
+            svp = SubvolumePath(group_name, sub_name)
             try:
                 svc.delete_subvolume(svp)
             except cephfs.ObjectNotFound:
@@ -378,11 +460,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         vol_name = cmd['vol_name']
         sub_name = cmd['sub_name']
 
+        group_name = cmd.get('group_name', None)
+
         if not self._volume_exists(vol_name):
             return -errno.ENOENT, "", "Volume '{0}' not found".format(vol_name)
 
         with SubvolumeClient(self, fs_name=vol_name) as svc:
-            svp = SubvolumePath(sub_name, sub_name)
+            if group_name and not svc.get_group_path(group_name):
+                return -errno.ENOENT, "", \
+                    "Subvolume group '{0}' not found".format(group_name)
+            svp = SubvolumePath(group_name, sub_name)
             path = svc.get_subvolume_path(svp)
             if not path:
                 return -errno.ENOENT, "", \
@@ -394,12 +481,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         sub_name = cmd['sub_name']
         snap_name = cmd['snap_name']
 
+        group_name = cmd.get('group_name', None)
+
         if not self._volume_exists(vol_name):
             return -errno.ENOENT, "", \
                    "Volume '{0}' not found, cannot create snapshot '{1}'".format(vol_name, snap_name)
 
         with SubvolumeClient(self, fs_name=vol_name) as svc:
-            svp = SubvolumePath(sub_name, sub_name)
+            if group_name and not svc.get_group_path(group_name):
+                return -errno.ENOENT, "", \
+                    "Subvolume group '{0}' not found, cannot create snapshot '{1}'".format(group_name, snap_name)
+            svp = SubvolumePath(group_name, sub_name)
             if not svc.get_subvolume_path(svp):
                 return -errno.ENOENT, "", \
                        "Subvolume '{0}' not found, cannot create snapshot '{1}'".format(sub_name, snap_name)
@@ -413,6 +505,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         snap_name = cmd['snap_name']
 
         force = cmd.get('force', False)
+        group_name = cmd.get('group_name', None)
 
         if not self._volume_exists(vol_name):
             if force:
@@ -422,7 +515,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                        "Volume '{0}' not found, cannot remove subvolume snapshot '{1}'".format(vol_name, snap_name)
 
         with SubvolumeClient(self, fs_name=vol_name) as svc:
-            svp = SubvolumePath(sub_name, sub_name)
+            if group_name and not svc.get_group_path(group_name):
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume group '{0}' not found, cannot remove subvolume snapshot '{1}'".format(group_name, snap_name)
+            svp = SubvolumePath(group_name, sub_name)
             if not svc.get_subvolume_path(svp):
                 if force:
                     return 0, "", ""

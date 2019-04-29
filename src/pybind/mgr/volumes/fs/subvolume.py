@@ -76,6 +76,19 @@ class SubvolumeClient(object):
             subvolume_path.group_id if subvolume_path.group_id is not None else NO_GROUP_NAME,
             subvolume_path.subvolume_id)
 
+    def _group_path(self, group_id):
+        """
+        Determine the path within CephFS where this subvolume group will live
+        :return: absolute path (string)
+        """
+        if group_id is None:
+            raise ValueError("group_id may not be None")
+
+        return os.path.join(
+            self.subvolume_prefix,
+            group_id
+        )
+
     def connect(self):
         log.debug("Connecting to cephfs...")
         self.fs = cephfs.LibCephFS(rados_inst=self.rados)
@@ -119,6 +132,14 @@ class SubvolumeClient(object):
                 self.fs.stat(subpath)
             except cephfs.ObjectNotFound:
                 self.fs.mkdir(subpath, mode)
+
+    def create_group(self, group_id, mode=0o755):
+        path = self._group_path(group_id)
+        self._mkdir_p(path, mode)
+
+    def delete_group(self, group_id):
+        path = self._group_path(group_id)
+        self.fs.rmdir(path)
 
     def create_subvolume(self, subvolume_path, size=None, namespace_isolated=True, mode=0o755):
         """
@@ -230,6 +251,14 @@ class SubvolumeClient(object):
                 raise
             else:
                 return self._get_ancestor_xattr(os.path.split(path)[0], attr)
+
+    def get_group_path(self, group_id):
+        path = self._group_path(group_id)
+        try:
+            self.fs.stat(path)
+        except cephfs.ObjectNotFound:
+            return None
+        return path
 
     def get_subvolume_path(self, subvolume_path):
         path = self._subvolume_path(subvolume_path)
