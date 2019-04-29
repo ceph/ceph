@@ -106,7 +106,7 @@ def list_items(dir_name=''):
         d = cephfs.opendir(cephfs.getcwd())
     else:
         try:
-             d = cephfs.opendir(dir_name)
+            d = cephfs.opendir(dir_name)
         except:
             dir_name = dir_name.decode('utf-8')
             return []
@@ -199,6 +199,10 @@ def word_len(word):
 
 
 def is_dir_exists(dir_name, dir_=''):
+    if isinstance(dir_name, bytes):
+        dir_name = dir_name.decode('utf-8')
+    if isinstance(dir_, bytes):
+        dir_ = dir_.decode('utf-8')
     path_to_stat = os.path.join(dir_, dir_name)
     try:
         return ((cephfs.stat(path_to_stat).st_mode & 0o0040000) != 0)
@@ -207,6 +211,10 @@ def is_dir_exists(dir_name, dir_=''):
 
 
 def is_file_exists(file_name, dir_=''):
+    if isinstance(file_name, bytes):
+        file_name = file_name.decode('utf-8')
+    if isinstance(dir_, bytes):
+        dir_ = dir_.decode('utf-8')
     try:
         # if its not a directory, then its a file
         return ((cephfs.stat(os.path.join(dir_, file_name)).st_mode & 0o0040000) == 0)
@@ -301,7 +309,7 @@ def dirwalk(dir_name):
     """
     dir_name = os.path.normpath(dir_name)
     for item in list_items(dir_name)[2:]:
-        fullpath = os.path.join(dir_name, item.d_name)
+        fullpath = os.path.join(dir_name, item.d_name.decode('utf-8'))
         src_path = fullpath.rsplit('/', 1)[0]
 
         yield os.path.normpath(fullpath)
@@ -422,11 +430,11 @@ class CephFSShell(Cmd):
                         parser.error("need assignment operator between user "
                                      "and mode specifiers")
                     if val[4] == '':
-                        parser.error("invalid mode: %s"
+                        parser.error("invalid mode: %s\n"
                                      "mode must be combination of: r | w | x" %
                                      values)
                     users = ''
-                    if val[2] == None:
+                    if val[2] is None:
                         users = val[1]
                     else:
                         users = val[2]
@@ -715,12 +723,12 @@ exists.')
                 items = sorted(list_items(dir_name),
                                key=lambda item: item.d_name)
             if not args.all:
-                items = [i for i in items if not i.d_name.startswith('.')]
+                items = [i for i in items if not i.d_name.startswith(b'.')]
 
             flag = 0
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
-                    to_bytes(dir_name + '/' + item.d_name)).st_size)
+                    to_bytes(dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
 
             if args.reverse:
                 items = reversed(items)
@@ -728,17 +736,24 @@ exists.')
                 path = item
                 is_dir = False
                 if not isinstance(item, str):
-                    path = item.d_name
+                    path = item.d_name.decode('utf-8')
                     is_dir = item.is_dir()
 
                 if args.long and args.H:
                     print_long(cephfs.getcwd().decode(
                         'utf-8') + dir_name + '/' + path, is_dir, True)
                 elif args.long:
-                    print_long(cephfs.getcwd().decode(
-                        'utf-8') + dir_name + '/' + path, is_dir, False)
+                    print_long(cephfs.getcwd().decode( 'utf-8') +
+                               dir_name +
+                               '/' +
+                               path,
+                               is_dir, False)
                 elif is_dir:
-                    values.append(colorama.Style.BRIGHT + colorama.Fore.CYAN + path + '/' + colorama.Style.RESET_ALL)
+                    values.append(colorama.Style.BRIGHT +
+                                  colorama.Fore.CYAN +
+                                  path +
+                                  '/' +
+                                  colorama.Style.RESET_ALL)
                 else:
                     values.append(path)
             if not args.long:
