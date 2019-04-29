@@ -3850,7 +3850,7 @@ bool PastIntervals::check_new_interval(
   const OSDMap *osdmap,
   const OSDMap *lastmap,
   pg_t pgid,
-  IsPGRecoverablePredicate &could_have_gone_active,
+  const IsPGRecoverablePredicate &could_have_gone_active,
   PastIntervals *past_intervals,
   std::ostream *out)
 {

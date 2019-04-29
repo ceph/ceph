@@ -120,7 +120,7 @@ class MissingLoc {
     is_readable.reset(_is_readable);
     is_recoverable.reset(_is_recoverable);
   }
-  IsPGRecoverablePredicate &get_recoverable_predicate() {
+  const IsPGRecoverablePredicate &get_recoverable_predicate() const {
     return *is_recoverable;
   }
   std::ostream& gen_prefix(std::ostream& out) const {
