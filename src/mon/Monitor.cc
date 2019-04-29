@@ -1834,8 +1834,9 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " require release " << m->mon_release << " > "
-	 << ceph_release() << ", or missing features (have " << CEPH_FEATURES_ALL
+    derr << __func__ << " require release " << (int)m->mon_release << " > "
+	 << (int)ceph_release()
+	 << ", or missing features (have " << CEPH_FEATURES_ALL
 	 << ", required " << m->required_features
 	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
 	 << dendl;
@@ -1850,9 +1851,11 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
   uint64_t missing = required_features & ~m->get_connection()->get_features();
-  if (m->mon_release < monmap->min_mon_release || missing) {
-    dout(1) << " peer " << m->get_source_addr() << " release " << m->mon_release
-	    << " < min_mon_release " << monmap->min_mon_release
+  if ((m->mon_release > 0 && m->mon_release < monmap->min_mon_release) ||
+      missing) {
+    dout(1) << " peer " << m->get_source_addr()
+	    << " release " << (int)m->mon_release
+	    << " < min_mon_release " << (int)monmap->min_mon_release
 	    << ", or missing features " << missing << dendl;
     MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
 				 name, has_ever_joined, monmap->min_mon_release);
