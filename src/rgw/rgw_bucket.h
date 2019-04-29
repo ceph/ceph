@@ -222,7 +222,8 @@ extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int 
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
-                                RGWObjVersionTracker *objv_tracker);
+                                RGWObjVersionTracker *objv_tracker,
+                                optional_yield y);
 extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
                                const rgw_obj& obj, const char* attr_name,
                                bufferlist& out_bl, optional_yield y);

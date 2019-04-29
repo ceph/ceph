@@ -19,14 +19,13 @@
 
 #include "rgw/rgw_service.h"
 
-#define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
+#include "svc_meta_be.h"
 
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
-class RGWMetadataHandler;
 
 struct rgw_cache_entry_info;
 
@@ -37,18 +36,6 @@ class RGWSI_Bucket : public RGWServiceInstance
 {
   friend class Instance;
 
-  struct Svc {
-    RGWSI_Bucket *bucket{nullptr};
-    RGWSI_Zone *zone{nullptr};
-    RGWSI_SysObj *sysobj{nullptr};
-    RGWSI_SysObj_Cache *cache{nullptr};
-    RGWSI_Meta *meta{nullptr};
-    RGWSI_SyncModules *sync_modules{nullptr};
-  } svc;
-
-  RGWMetadataHandler *bucket_meta_handler;
-  RGWMetadataHandler *bucket_instance_meta_handler;
-
   struct bucket_info_cache_entry {
     RGWBucketInfo info;
     real_time mtime;
@@ -58,180 +45,92 @@ class RGWSI_Bucket : public RGWServiceInstance
   using RGWChainedCacheImpl_bucket_info_cache_entry = RGWChainedCacheImpl<bucket_info_cache_entry>;
   unique_ptr<RGWChainedCacheImpl_bucket_info_cache_entry> binfo_cache;
 
+  RGWSI_MetaBackend_Handler *ep_be_handler;
+  std::unique_ptr<RGWSI_MetaBackend::Module> ep_be_module;
+  RGWSI_MetaBackend_Handler *bi_be_handler;
+  std::unique_ptr<RGWSI_MetaBackend::Module> bi_be_module;
+
   int do_start() override;
+
+  int do_read_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                   const string& key,
+                                   RGWBucketInfo *info,
+                                   real_time *pmtime, map<string, bufferlist> *pattrs,
+                                   rgw_cache_entry_info *cache_info,
+                                   boost::optional<obj_version> refresh_version);
 public:
+  struct Svc {
+    RGWSI_Bucket *bucket{nullptr};
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_SysObj *sysobj{nullptr};
+    RGWSI_SysObj_Cache *cache{nullptr};
+    RGWSI_Meta *meta{nullptr};
+    RGWSI_MetaBackend *meta_be{nullptr};
+    RGWSI_SyncModules *sync_modules{nullptr};
+  } svc;
+
   RGWSI_Bucket(CephContext *cct);
   ~RGWSI_Bucket();
 
+  static string get_entrypoint_meta_key(const rgw_bucket& bucket);
+  static string get_bi_meta_key(const rgw_bucket& bucket);
+
   void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+            RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
-  class Instance {
-    friend class Op;
 
-    RGWSI_Bucket::Svc& svc;
-    RGWSysObjectCtx& ctx;
-    rgw_bucket bucket;
-    RGWBucketInfo bucket_info;
-
-    static string get_meta_oid(const rgw_bucket& bucket) {
-      return RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.get_key(':');
-    }
-
-    int read_bucket_entrypoint_info(const rgw_bucket& bucket,
-                                    RGWBucketEntryPoint *entry_point,
-                                    RGWObjVersionTracker *objv_tracker,
-                                    real_time *pmtime,
-                                    map<string, bufferlist> *pattrs,
-                                    rgw_cache_entry_info *cache_info,
-                                    boost::optional<obj_version> refresh_version);
-
-    int read_bucket_info(const rgw_raw_obj& obj,
-                         RGWBucketInfo *info,
-                         real_time *pmtime, map<string, bufferlist> *pattrs,
-                         rgw_cache_entry_info *cache_info,
-                         boost::optional<obj_version> refresh_version);
-
-    int read_bucket_instance_info(const rgw_bucket& bucket,
-                                  RGWBucketInfo *info,
+  int read_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
+                                  const rgw_bucket& bucket,
+                                  RGWBucketEntryPoint *entry_point,
+                                  RGWObjVersionTracker *objv_tracker,
                                   real_time *pmtime,
                                   map<string, bufferlist> *pattrs,
                                   rgw_cache_entry_info *cache_info,
                                   boost::optional<obj_version> refresh_version,
                                   optional_yield y);
 
-    int read_bucket_info(const rgw_bucket& bucket,
-                         RGWBucketInfo *info,
-                         real_time *pmtime,
-                         map<string, bufferlist> *pattrs,
-                         boost::optional<obj_version> refresh_version,
-                         optional_yield y);
-
-    int write_bucket_instance_info(RGWBucketInfo& info,
+  int store_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
+                                   const rgw_bucket& bucket,
+                                   RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
-                                   map<string, bufferlist> *pattrs);
-  public:
-    Instance(RGWSI_Bucket *_bucket_svc,
-         RGWSysObjectCtx& _ctx,
-         const string& _tenant,
-         const string& _bucket_name) : svc(_bucket_svc->svc),
-                                       ctx(_ctx) {
-      bucket.tenant = _tenant;
-      bucket.name = _bucket_name;
-    }
+                                   map<string, bufferlist> *pattrs,
+                                   RGWObjVersionTracker *objv_tracker,
+                                   optional_yield y);
 
-    Instance(RGWSI_Bucket *_bucket_svc,
-             RGWSysObjectCtx& _ctx,
-             const rgw_bucket& _bucket) : svc(_bucket_svc->svc),
-                                          ctx(_ctx),
-                                          bucket(_bucket) {}
+  int remove_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
+                                    const rgw_bucket& bucket,
+                                    RGWObjVersionTracker *objv_tracker,
+                                    optional_yield y);
 
-    RGWSysObjectCtx& get_ctx() {
-      return ctx;
-    }
+  int read_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                const string& key,
+                                RGWBucketInfo *info,
+                                real_time *pmtime, map<string, bufferlist> *pattrs,
+                                rgw_cache_entry_info *cache_info,
+                                boost::optional<obj_version> refresh_version,
+                                optional_yield y);
 
-    rgw_bucket& get_bucket() {
-      return bucket;
-    }
+  int read_bucket_info(RGWSI_MetaBackend::Context *ctx,
+                       const rgw_bucket& bucket,
+                       RGWBucketInfo *info,
+                       real_time *pmtime,
+                       map<string, bufferlist> *pattrs,
+                       boost::optional<obj_version> refresh_version,
+                       optional_yield y);
 
-    RGWBucketInfo& get_bucket_info() {
-      return bucket_info;
-    }
+  int store_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                 RGWBucketInfo& info,
+                                 bool exclusive,
+                                 real_time mtime,
+                                 map<string, bufferlist> *pattrs,
+                                 optional_yield y);
 
-    struct GetOp {
-      Instance& source;
-
-      ceph::real_time *pmtime{nullptr};
-      map<string, bufferlist> *pattrs{nullptr};
-      boost::optional<obj_version> refresh_version;
-      RGWBucketInfo *pinfo{nullptr};
-      optional_yield y{null_yield};
-
-
-      GetOp& set_mtime(ceph::real_time *_mtime) {
-        pmtime = _mtime;
-        return *this;
-      }
-
-      GetOp& set_attrs(map<string, bufferlist> *_attrs) {
-        pattrs = _attrs;
-        return *this;
-      }
-
-      GetOp& set_refresh_version(const obj_version& rf) {
-        refresh_version = rf;
-        return *this;
-      }
-
-      GetOp& set_pinfo(RGWBucketInfo *_pinfo) {
-        pinfo = _pinfo;
-        return *this;
-      }
-
-      GetOp& set_yield(optional_yield& _y) {
-        y = _y;
-        return *this;
-      }
-
-      GetOp(Instance& _source) : source(_source) {}
-
-      int exec();
-    };
-
-    struct SetOp {
-      Instance& source;
-
-      ceph::real_time mtime;
-      map<string, bufferlist> *pattrs{nullptr};
-      bool exclusive{false};
-
-
-      SetOp& set_mtime(const ceph::real_time& _mtime) {
-        mtime = _mtime;
-        return *this;
-      }
-
-      SetOp& set_attrs(map<string, bufferlist> *_attrs) {
-        pattrs = _attrs;
-        return *this;
-      }
-
-      SetOp& set_exclusive(bool _exclusive) {
-        exclusive = _exclusive;
-        return *this;
-      }
-
-      SetOp(Instance& _source) : source(_source) {}
-
-      int exec();
-    };
-
-    GetOp get_op() {
-      return GetOp(*this);
-    }
-
-    SetOp set_op() {
-      return SetOp(*this);
-    }
-  };
-
-  Instance instance(RGWSysObjectCtx& _ctx,
-                    const string& _tenant,
-                    const string& _bucket_name);
-
-  Instance instance(RGWSysObjectCtx& _ctx,
-                    const rgw_bucket& _bucket);
-
-  int store_bucket_entrypoint_info(const string& tenant, const string& bucket_name,
-				   RGWBucketEntryPoint& be, bool exclusive,
-				   RGWObjVersionTracker *objv_tracker, real_time mtime,
-                                   std::map<string, bufferlist>&& attrs);
-  int store_bucket_instance_info(RGWBucketInfo& bucket_info, bool exclusive,
-				 map<string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
-				 real_time mtime);
-  int remove_bucket_instance_info(const rgw_bucket& bucket,
-				  RGWObjVersionTracker *objv_tracker);
+  int remove_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                  const rgw_bucket& bucket,
+                                  RGWObjVersionTracker *objv_tracker,
+                                  optional_yield y);
 };
 

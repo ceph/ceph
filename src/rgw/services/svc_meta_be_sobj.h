@@ -47,8 +47,17 @@ struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
   RGWSI_MBSObj_GetParams(bufferlist *_pbl,
                          std::map<string, bufferlist> *_pattrs,
                          ceph::real_time *_pmtime) : RGWSI_MetaBackend::GetParams(_pmtime),
-                                              pbl(_pbl),
-                                              pattrs(_pattrs) {}
+                                                     pbl(_pbl),
+                                                     pattrs(_pattrs) {}
+
+  RGWSI_MBSObj_GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+    cache_info = _cache_info;
+    return *this;
+  }
+  RGWSI_MBSObj_GetParams& set_refresh_version(boost::optional<obj_version>& _refresh_version) {
+    refresh_version = _refresh_version;
+    return *this;
+  }
 };
 
 struct RGWSI_MBSObj_PutParams : public RGWSI_MetaBackend::PutParams {
