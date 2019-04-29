@@ -1,6 +1,7 @@
 /*
  * Ceph string constants
  */
+#include "ceph_strings.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
 
