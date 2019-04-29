@@ -326,7 +326,7 @@ installed and enabled on the iSCSI gateways.
   The iSCSI management functionality of Ceph Dashboard depends on the latest
   version 3 of the `ceph-iscsi <https://github.com/ceph/ceph-iscsi>`_ project.
   Make sure that your operating system provides the correct version, otherwise
-  the dashboard won't enable the managemement features.
+  the dashboard won't enable the management features.
 
 If ceph-iscsi REST API is configured in HTTPS mode and its using a self-signed
 certificate, then you need to configure the dashboard to avoid SSL certificate
