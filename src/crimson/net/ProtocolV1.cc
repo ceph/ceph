@@ -777,27 +777,28 @@ seastar::future<> ProtocolV1::read_message()
       ::decode(m.footer, p);
       auto msg = ::decode_message(nullptr, 0, m.header, m.footer,
                                   m.front, m.middle, m.data, nullptr);
-      if (!msg) {
-	logger().debug("decode message failed");
-	return;
+      if (unlikely(!msg)) {
+        logger().warn("{} decode message failed", conn);
+        throw std::system_error{make_error_code(error::corrupted_message)};
       }
+      constexpr bool add_ref = false; // Message starts with 1 ref
+      // TODO: change MessageRef with foreign_ptr
+      auto msg_ref = MessageRef{msg, add_ref};
+
       if (session_security) {
-	if (session_security->check_message_signature(msg)) {
-	  logger().debug("signature check failed");
-	  return;
-	}
+        if (unlikely(session_security->check_message_signature(msg))) {
+          logger().warn("{} message signature check failed", conn);
+          throw std::system_error{make_error_code(error::corrupted_message)};
+        }
       }
       // TODO: set time stamps
       msg->set_byte_throttler(conn.policy.throttler_bytes);
 
-      if (!conn.update_rx_seq(msg->get_seq())) {
+      if (unlikely(!conn.update_rx_seq(msg->get_seq()))) {
         // skip this message
         return;
       }
 
-      constexpr bool add_ref = false; // Message starts with 1 ref
-      // TODO: change MessageRef with foreign_ptr
-      auto msg_ref = MessageRef{msg, add_ref};
       // start dispatch, ignoring exceptions from the application layer
       seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
           logger().debug("{} <= {}@{} === {}", messenger,
