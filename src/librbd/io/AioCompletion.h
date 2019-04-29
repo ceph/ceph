@@ -123,7 +123,7 @@ struct AioCompletion {
   }
 
   void init_time(ImageCtx *i, aio_type_t t);
-  void start_op(bool ignore_type = false);
+  void start_op();
   void fail(int r);
 
   void complete();
