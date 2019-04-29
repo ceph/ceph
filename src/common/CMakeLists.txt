@@ -20,6 +20,7 @@ set(common_srcs
   HeartbeatMap.cc
   LogClient.cc
   LogEntry.cc
+  ostream_temp.cc
   Mutex.cc
   OutputDataSocket.cc
   PluginRegistry.cc

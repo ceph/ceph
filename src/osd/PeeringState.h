@@ -22,8 +22,8 @@
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
-#include "common/LogClient.h"
 #include "osd/osd_perf_counters.h"
+#include "common/ostream_temp.h"
 
 struct PGPool {
   CephContext* cct;
@@ -218,7 +218,10 @@ public:
       const char *state_name, utime_t enter_time,
       uint64_t events, utime_t event_dur) = 0;
     virtual void dump_recovery_info(Formatter *f) const = 0;
-    virtual LogChannel &get_clog() = 0;
+
+    virtual OstreamTemp get_clog_info() = 0;
+    virtual OstreamTemp get_clog_error() = 0;
+    virtual OstreamTemp get_clog_debug() = 0;
 
     virtual ~PeeringListener() {}
   };

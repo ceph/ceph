@@ -25,6 +25,7 @@
 #include "common/LogClient.h"
 #include <string>
 #include "PGTransaction.h"
+#include "common/ostream_temp.h"
 
 namespace Scrub {
   class Store;
@@ -287,8 +288,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ceph_tid_t get_tid() = 0;
 
-     virtual LogClientTemp clog_error() = 0;
-     virtual LogClientTemp clog_warn() = 0;
+     virtual OstreamTemp clog_error() = 0;
+     virtual OstreamTemp clog_warn() = 0;
 
      virtual bool check_failsafe_full() = 0;
 
