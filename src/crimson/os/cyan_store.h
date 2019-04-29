@@ -91,9 +91,13 @@ public:
   uuid_d get_fsid() const;
 
 private:
+  int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, const bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
+  int _setattrs(const coll_t& cid, const ghobject_t& oid,
+                map<string,bufferptr>& aset);
   int _create_collection(const coll_t& cid, int bits);
 };
 
