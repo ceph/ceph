@@ -411,6 +411,7 @@ public:
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
     friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
 
+    void dump(Formatter* f) const;
     friend ostream& operator<<(ostream& out, const SharedBlob& sb);
 
     void get() {
@@ -516,6 +517,7 @@ public:
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
+    void dump(Formatter* f) const;
     friend ostream& operator<<(ostream& out, const Blob &b);
 
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
@@ -693,6 +695,8 @@ public:
       }
     }
 
+    void dump(Formatter* f) const;
+
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
@@ -810,6 +814,8 @@ public:
       inline_bl.clear();
       clear_needs_reshard();
     }
+
+    void dump(Formatter* f) const;
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
@@ -1064,6 +1070,8 @@ public:
 	exists(false),
 	extent_map(this) {
     }
+
+    void dump(Formatter* f) const;
 
     void flush();
     void get() {
@@ -2523,6 +2531,8 @@ public:
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
 
+  int dump_onode(CollectionHandle &c, const ghobject_t& oid,
+    const string& section_name, Formatter *f) override;
 
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
