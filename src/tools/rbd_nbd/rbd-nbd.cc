@@ -141,6 +141,7 @@ public:
   NBDServer(int _fd, librbd::Image& _image)
     : fd(_fd)
     , image(_image)
+    , disconnect_lock("NBDServer::DisconnectLocker")
     , lock("NBDServer::Locker")
     , reader_thread(*this, &NBDServer::reader_entry)
     , writer_thread(*this, &NBDServer::writer_entry)
@@ -148,6 +149,8 @@ public:
   {}
 
 private:
+  Mutex disconnect_lock;
+  Cond disconnect_cond;
   std::atomic<bool> terminated = { false };
 
   void shutdown()
@@ -272,12 +275,12 @@ private:
       if (r < 0) {
 	derr << "failed to read nbd request header: " << cpp_strerror(r)
 	     << dendl;
-	return;
+	goto signal;
       }
 
       if (ctx->request.magic != htonl(NBD_REQUEST_MAGIC)) {
 	derr << "invalid nbd request header" << dendl;
-	return;
+	goto signal;
       }
 
       ctx->request.from = ntohll(ctx->request.from);
@@ -296,14 +299,14 @@ private:
         case NBD_CMD_DISC:
           // NBD_DO_IT will return when pipe is closed
 	  dout(0) << "disconnect request received" << dendl;
-          return;
+          goto signal;
         case NBD_CMD_WRITE:
           bufferptr ptr(ctx->request.len);
 	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
           if (r < 0) {
 	    derr << *ctx << ": failed to read nbd request data: "
 		 << cpp_strerror(r) << dendl;
-            return;
+            goto signal;
 	  }
           ctx->data.push_back(ptr);
           break;
@@ -329,10 +332,14 @@ private:
         default:
 	  derr << *pctx << ": invalid request command" << dendl;
           c->release();
-          return;
+          goto signal;
       }
     }
     dout(20) << __func__ << ": terminated" << dendl;
+
+signal:
+    Mutex::Locker l(disconnect_lock);
+    disconnect_cond.Signal();
   }
 
   void writer_entry()
@@ -399,6 +406,15 @@ public:
       reader_thread.create("rbd_reader");
       writer_thread.create("rbd_writer");
     }
+  }
+
+  void wait_for_disconnect()
+  {
+    if (!started)
+      return;
+
+    Mutex::Locker l(disconnect_lock);
+    disconnect_cond.Wait(disconnect_lock);
   }
 
   ~NBDServer()
