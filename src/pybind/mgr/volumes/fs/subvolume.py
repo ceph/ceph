@@ -299,3 +299,9 @@ class SubvolumeClient(object):
 
     def delete_subvolume_snapshot(self, subvolume_path, snapshot_name):
         return self._snapshot_delete(self._subvolume_path(subvolume_path), snapshot_name)
+
+    def create_group_snapshot(self, group_id, snapshot_name, mode=0o755):
+        return self._snapshot_create(self._group_path(group_id), snapshot_name, mode)
+
+    def delete_group_snapshot(self, group_id, snapshot_name):
+        return self._snapshot_delete(self._group_path(group_id), snapshot_name)

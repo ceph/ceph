@@ -90,6 +90,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup snapshot create '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=snap_name,type=CephString ',
+            'desc': "Create a snapshot of a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup snapshot rm '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=snap_name,type=CephString '
+                   'name=force,type=CephBool,req=false ',
+                   'desc': "Delete a snapshot of a CephFS subvolume group in a volume",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolume snapshot create '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -486,6 +503,55 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 return -errno.ENOENT, "", \
                        "Subvolume '{0}' not found".format(sub_name)
         return 0, path, ""
+
+    def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+        snap_name = cmd['snap_name']
+
+        if not self._volume_exists(vol_name):
+            return -errno.ENOENT, "", \
+                   "Volume '{0}' not found, cannot create snapshot '{1}'".format(vol_name, snap_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            if group_name and not svc.get_group_path(group_name):
+                return -errno.ENOENT, "", \
+                    "Subvolume group '{0}' not found, cannot create snapshot '{1}'".format(group_name, snap_name)
+            svc.create_group_snapshot(group_name, snap_name)
+
+        return 0, "", ""
+
+    def _cmd_fs_subvolumegroup_snapshot_rm(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+        snap_name = cmd['snap_name']
+
+        force = cmd.get('force', False)
+
+        if not self._volume_exists(vol_name):
+            if force:
+                return 0, "", ""
+            else:
+                return -errno.ENOENT, "", \
+                       "Volume '{0}' not found, cannot remove subvolumegroup snapshot '{1}'".format(vol_name, snap_name)
+
+        with SubvolumeClient(self, fs_name=vol_name) as svc:
+            if group_name and not svc.get_group_path(group_name):
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume group '{0}' not found, cannot remove subvolumegroup snapshot '{1}'".format(group_name, snap_name)
+            try:
+                svc.delete_group_snapshot(group_name, snap_name)
+            except cephfs.ObjectNotFound:
+                if force:
+                    return 0, "", ""
+                else:
+                    return -errno.ENOENT, "", \
+                           "Subvolume group snapshot '{0}' not found, cannot remove it".format(sub_name)
+
+        return 0, "", ""
 
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
         vol_name = cmd['vol_name']
