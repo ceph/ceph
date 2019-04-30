@@ -843,7 +843,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   RGWBucketInfo bucket_info;
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs, null_yield);
   if (r < 0) {
     return r;
   }
@@ -1051,7 +1051,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
   RGWBucketInfo bucket_info;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): get_bucket_instance_info(bucket=" << bucket << ") returned r=" << r << dendl;
     return r;
@@ -1719,7 +1719,7 @@ void get_stale_instances(RGWRados *store, const std::string& bucket_name,
   for (const auto& bucket_instance : lst){
     RGWBucketInfo binfo;
     int r = store->get_bucket_instance_info(obj_ctx, bucket_instance,
-                                            binfo, nullptr,nullptr);
+                                            binfo, nullptr,nullptr, null_yield);
     if (r < 0){
       // this can only happen if someone deletes us right when we're processing
       lderr(store->ctx()) << "Bucket instance is invalid: " << bucket_instance
@@ -2756,7 +2756,7 @@ public:
     ceph::real_time orig_mtime;
     RGWBucketInfo old_bi;
 
-    ret = store->get_bucket_instance_info(obj_ctx, be.bucket, old_bi, &orig_mtime, &attrs_m);
+    ret = store->get_bucket_instance_info(obj_ctx, be.bucket, old_bi, &orig_mtime, &attrs_m, null_yield);
     if (ret < 0) {
         return ret;
     }
@@ -2876,7 +2876,7 @@ public:
     real_time mtime;
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-    int ret = store->get_bucket_instance_info(obj_ctx, oid, bci.info, &mtime, &bci.attrs);
+    int ret = store->get_bucket_instance_info(obj_ctx, oid, bci.info, &mtime, &bci.attrs, null_yield);
     if (ret < 0)
       return ret;
 
@@ -2900,7 +2900,7 @@ public:
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
     int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
-            &orig_mtime, &old_bci.attrs);
+            &orig_mtime, &old_bci.attrs, null_yield);
     bool exists = (ret != -ENOENT);
     if (ret < 0 && exists)
       return ret;
@@ -2992,7 +2992,7 @@ public:
     RGWBucketInfo info;
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-    int ret = store->get_bucket_instance_info(obj_ctx, entry, info, NULL, NULL);
+    int ret = store->get_bucket_instance_info(obj_ctx, entry, info, NULL, NULL, null_yield);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 

@@ -587,7 +587,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     if (s->bucket_instance_id.empty()) {
       ret = store->get_bucket_info(obj_ctx, s->src_tenant_name, s->src_bucket_name, source_info, NULL, s->yield);
     } else {
-      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL);
+      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL, s->yield);
     }
     if (ret == 0) {
       string& zonegroup = source_info.zonegroup;
@@ -612,7 +612,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     } else {
       ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id,
                                             s->bucket_info, &s->bucket_mtime,
-                                            &s->bucket_attrs);
+                                            &s->bucket_attrs, s->yield);
     }
     if (ret < 0) {
       if (ret != -ENOENT) {
@@ -4668,7 +4668,7 @@ int RGWCopyObj::verify_permission()
     op_ret = store->get_bucket_info(*s->sysobj_ctx, src_tenant_name, src_bucket_name, src_bucket_info, NULL, s->yield, &src_attrs);
   } else {
     /* will only happen in intra region sync where the source and dest bucket is the same */
-    op_ret = store->get_bucket_instance_info(*s->sysobj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
+    op_ret = store->get_bucket_instance_info(*s->sysobj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs, s->yield);
   }
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
