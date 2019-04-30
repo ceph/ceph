@@ -15,6 +15,7 @@
 
 #include <errno.h>
 
+#include "common/deleter.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/TracepointProvider.h"
@@ -69,11 +70,35 @@ namespace {
 
 TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
 
+struct UserBufferDeleter : public deleter::impl {
+  CephContext* cct;
+  librbd::io::AioCompletion* aio_completion;
+
+  UserBufferDeleter(CephContext* cct, librbd::io::AioCompletion* aio_completion)
+    : deleter::impl(deleter()), cct(cct), aio_completion(aio_completion) {
+   aio_completion->block(cct);
+  }
+
+  ~UserBufferDeleter() override {
+    aio_completion->unblock(cct);
+  }
+};
+
 static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
-                             size_t len) {
-  // TODO: until librados can guarantee memory won't be referenced after
-  // it ACKs a request, always make a copy of the user-provided memory
-  return buffer::copy(buf, len);
+                             size_t len,
+                             librbd::io::AioCompletion* aio_completion) {
+  if (ictx->disable_zero_copy || aio_completion == nullptr) {
+    // must copy the buffer if writeback/writearound cache is in-use (or using
+    // non-AIO)
+    return buffer::copy(buf, len);
+  }
+
+  // avoid copying memory for AIO operations, but possibly delay completions
+  // until the last reference to the user's memory has been released
+  return ceph::unique_leakable_ptr<ceph::buffer::raw>(
+    buffer::claim_buffer(
+      len, const_cast<char*>(buf),
+      deleter(new UserBufferDeleter(ictx->cct, aio_completion))));
 }
 
 CephContext* get_cct(IoCtx &io_ctx) {
@@ -5096,7 +5121,7 @@ extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
   tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf);
 
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
+  bl.push_back(create_write_raw(ictx, buf, len, nullptr));
   int r = ictx->io_work_queue->write(ofs, len, std::move(bl), 0);
   tracepoint(librbd, write_exit, r);
   return r;
@@ -5110,7 +5135,7 @@ extern "C" ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
 	      ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf, op_flags);
 
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
+  bl.push_back(create_write_raw(ictx, buf, len, nullptr));
   int r = ictx->io_work_queue->write(ofs, len, std::move(bl), op_flags);
   tracepoint(librbd, write_exit, r);
   return r;
@@ -5154,7 +5179,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
   }
 
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, data_len));
+  bl.push_back(create_write_raw(ictx, buf, data_len, nullptr));
   int r = ictx->io_work_queue->writesame(ofs, len, std::move(bl), op_flags);
   tracepoint(librbd, writesame_exit, r);
   return r;
@@ -5173,9 +5198,9 @@ extern "C" ssize_t rbd_compare_and_write(rbd_image_t image,
              len, cmp_buf, buf, op_flags);
 
   bufferlist cmp_bl;
-  cmp_bl.push_back(create_write_raw(ictx, cmp_buf, len));
+  cmp_bl.push_back(create_write_raw(ictx, cmp_buf, len, nullptr));
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
+  bl.push_back(create_write_raw(ictx, buf, len, nullptr));
 
   int r = ictx->io_work_queue->compare_and_write(ofs, len, std::move(cmp_bl),
                                                  std::move(bl), mismatch_off,
@@ -5201,10 +5226,10 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
 
+  auto aio_completion = get_aio_completion(comp);
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
-  ictx->io_work_queue->aio_write(get_aio_completion(comp), off, len,
-                                 std::move(bl), 0);
+  bl.push_back(create_write_raw(ictx, buf, len, aio_completion));
+  ictx->io_work_queue->aio_write(aio_completion, off, len, std::move(bl), 0);
   tracepoint(librbd, aio_write_exit, 0);
   return 0;
 }
@@ -5217,10 +5242,11 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   tracepoint(librbd, aio_write2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 	      ictx->read_only, off, len, buf, comp->pc, op_flags);
 
+  auto aio_completion = get_aio_completion(comp);
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
-  ictx->io_work_queue->aio_write(get_aio_completion(comp), off, len,
-                                 std::move(bl), op_flags);
+  bl.push_back(create_write_raw(ictx, buf, len, aio_completion));
+  ictx->io_work_queue->aio_write(aio_completion, off, len, std::move(bl),
+                                 op_flags);
   tracepoint(librbd, aio_write_exit, 0);
   return 0;
 }
@@ -5232,6 +5258,7 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
 
   // convert the scatter list into a bufferlist
+  auto aio_completion = get_aio_completion(comp);
   ssize_t len = 0;
   bufferlist bl;
   for (int i = 0; i < iovcnt; ++i) {
@@ -5242,7 +5269,7 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
     }
 
     bl.push_back(create_write_raw(ictx, static_cast<char*>(io.iov_base),
-                                  io.iov_len));
+                                  io.iov_len, aio_completion));
   }
 
   int r = 0;
@@ -5254,8 +5281,7 @@ extern "C" int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
              ictx->snap_name.c_str(), ictx->read_only, off, len, NULL,
              comp->pc);
   if (r == 0) {
-    ictx->io_work_queue->aio_write(get_aio_completion(comp), off, len,
-                                   std::move(bl), 0);
+    ictx->io_work_queue->aio_write(aio_completion, off, len, std::move(bl), 0);
   }
   tracepoint(librbd, aio_write_exit, r);
   return r;
@@ -5376,10 +5402,11 @@ extern "C" int rbd_aio_writesame(rbd_image_t image, uint64_t off, size_t len,
     return 0;
   }
 
+  auto aio_completion = get_aio_completion(comp);
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, data_len));
-  ictx->io_work_queue->aio_writesame(get_aio_completion(comp), off, len,
-                                     std::move(bl), op_flags);
+  bl.push_back(create_write_raw(ictx, buf, data_len, aio_completion));
+  ictx->io_work_queue->aio_writesame(aio_completion, off, len, std::move(bl),
+                                     op_flags);
   tracepoint(librbd, aio_writesame_exit, 0);
   return 0;
 }
@@ -5395,11 +5422,12 @@ extern "C" ssize_t rbd_aio_compare_and_write(rbd_image_t image, uint64_t off,
   tracepoint(librbd, aio_compare_and_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 	      ictx->read_only, off, len, cmp_buf, buf, comp->pc, op_flags);
 
+  auto aio_completion = get_aio_completion(comp);
   bufferlist cmp_bl;
-  cmp_bl.push_back(create_write_raw(ictx, cmp_buf, len));
+  cmp_bl.push_back(create_write_raw(ictx, cmp_buf, len, aio_completion));
   bufferlist bl;
-  bl.push_back(create_write_raw(ictx, buf, len));
-  ictx->io_work_queue->aio_compare_and_write(get_aio_completion(comp), off, len,
+  bl.push_back(create_write_raw(ictx, buf, len, aio_completion));
+  ictx->io_work_queue->aio_compare_and_write(aio_completion, off, len,
                                              std::move(cmp_bl), std::move(bl),
                                              mismatch_off, op_flags, false);
 

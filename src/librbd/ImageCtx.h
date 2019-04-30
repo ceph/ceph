@@ -174,6 +174,7 @@ namespace librbd {
     EventSocket event_socket;
 
     bool ignore_migrating = false;
+    bool disable_zero_copy = false;
 
     /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;

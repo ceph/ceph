@@ -144,6 +144,9 @@ void ObjectCacherObjectDispatch<I>::init() {
   m_cache_lock.Unlock();
 
   // add ourself to the IO object dispatcher chain
+  if (m_max_dirty > 0) {
+    m_image_ctx->disable_zero_copy = true;
+  }
   m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
 }
 
