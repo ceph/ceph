@@ -108,7 +108,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   RGWBucketInfo bucket_info;
   int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
-                                   bucket_info, nullptr);
+                                   bucket_info, nullptr, null_yield);
   if (ret < 0) {
     throw ret;
   }

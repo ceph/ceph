@@ -1397,7 +1397,7 @@ int RGWPutObj_ObjStore_S3::get_params()
                                  copy_source_tenant_name,
                                  copy_source_bucket_name,
                                  copy_source_bucket_info,
-                                 NULL, &src_attrs);
+                                 NULL, s->yield, &src_attrs);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket_info() returned ret=" << ret << dendl;
       return ret;
@@ -3671,7 +3671,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
 
   int ret = store->get_bucket_info(*s->sysobj_ctx, s->bucket_tenant,
 				  s->bucket_name, s->bucket_info, NULL,
-				  &s->bucket_attrs);
+				  s->yield, &s->bucket_attrs);
   if (ret < 0) {
       // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
       return -ERR_NO_SUCH_BUCKET;
