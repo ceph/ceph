@@ -2151,7 +2151,8 @@ private:
 		       const string& bucket_name, RGWBucketInfo& info,
 		       real_time *pmtime,
 		       map<string, bufferlist> *pattrs,
-		       boost::optional<obj_version> refresh_version);
+		       boost::optional<obj_version> refresh_version,
+                       optional_yield y);
 public:
 
   bool call(std::string_view command, const cmdmap_t& cmdmap,

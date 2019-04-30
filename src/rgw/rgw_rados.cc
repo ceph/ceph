@@ -8242,7 +8242,8 @@ int RGWRados::_get_bucket_info(RGWSysObjectCtx& obj_ctx,
                                RGWBucketInfo& info,
                                real_time *pmtime,
                                map<string, bufferlist> *pattrs,
-                               boost::optional<obj_version> refresh_version)
+                               boost::optional<obj_version> refresh_version,
+                               optional_yield y)
 {
   string bucket_entry;
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
@@ -8345,7 +8346,7 @@ int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
                               optional_yield y, map<string, bufferlist> *pattrs)
 {
   return _get_bucket_info(obj_ctx, tenant, bucket_name, info, pmtime,
-                          pattrs, boost::none);
+                          pattrs, boost::none, y);
 }
 
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
@@ -8355,7 +8356,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
   RGWSysObjectCtx obj_ctx = svc.sysobj->init_obj_ctx();
 
   return _get_bucket_info(obj_ctx, info.bucket.tenant, info.bucket.name,
-                          info, pmtime, pattrs, info.objv_tracker.read_version);
+                          info, pmtime, pattrs, info.objv_tracker.read_version, null_yield);
 }
 
 int RGWRados::put_bucket_entrypoint_info(const string& tenant_name, const string& bucket_name, RGWBucketEntryPoint& entry_point,
