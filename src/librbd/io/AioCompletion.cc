@@ -146,12 +146,11 @@ void AioCompletion::fail(int r)
   CephContext *cct = ictx->cct;
 
   lderr(cct) << cpp_strerror(r) << dendl;
-  ceph_assert(pending_count == 0);
+  uint32_t previous_pending_count = pending_count.exchange(1);
+  ceph_assert(previous_pending_count == 0);
 
-  get();
-  rval = r;
-  complete();
-  put();
+  // ensure completion fires in clean lock context
+  ictx->op_work_queue->queue(new C_AioRequest(this), r);
 }
 
 void AioCompletion::set_request_count(uint32_t count) {
