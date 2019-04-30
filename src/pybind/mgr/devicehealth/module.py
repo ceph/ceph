@@ -478,11 +478,11 @@ class Module(MgrModule):
                dev['life_expectancy_max'] == '0.000000':
                 continue
             # life_expectancy_(min/max) is in the format of:
-            # '%Y-%m-%d %H:%M:%S.%f', e.g.:
-            # '2019-01-20 21:12:12.000000'
+            # '%Y-%m-%dT%H:%M:%S.%f%z', e.g.:
+            # '2019-01-20T21:12:12.000000Z'
             life_expectancy_max = datetime.strptime(
                 dev['life_expectancy_max'],
-                '%Y-%m-%d %H:%M:%S.%f')
+                '%Y-%m-%dT%H:%M:%S.%f%z')
             self.log.debug('device %s expectancy max %s', dev,
                            life_expectancy_max)
 
