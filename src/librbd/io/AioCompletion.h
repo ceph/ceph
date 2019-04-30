@@ -57,7 +57,7 @@ struct AioCompletion {
   std::atomic<ssize_t> rval{0};
   std::atomic<int> error_rval{0};
   std::atomic<uint32_t> ref{1};
-  std::atomic<uint32_t> pending_count{0};   ///< number of requests
+  std::atomic<uint32_t> pending_count{0};   ///< number of requests/blocks
   std::atomic<bool> released{false};
 
   ImageCtx *ictx = nullptr;
@@ -69,6 +69,7 @@ struct AioCompletion {
   AsyncOperation async_op;
 
   bool event_notify = false;
+  bool was_armed = false;
 
   template <typename T, void (T::*MF)(int)>
   static void callback_adapter(completion_t cb, void *arg) {
@@ -122,6 +123,9 @@ struct AioCompletion {
     return async_op.started();
   }
 
+  void block(CephContext* cct);
+  void unblock(CephContext* cct);
+
   void init_time(ImageCtx *i, aio_type_t t);
   void start_op();
   void fail(int r);
@@ -169,6 +173,10 @@ struct AioCompletion {
   void *get_arg() {
     return complete_arg;
   }
+
+private:
+  void queue_complete();
+
 };
 
 class C_AioRequest : public Context {
