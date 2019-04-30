@@ -2558,12 +2558,13 @@ void DaemonServer::adjust_pgs()
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
 	    int next;
-
+	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
 	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
 	    if (aggro ||
 		// pool is (virtually) empty; just jump to final pgp_num?
 		(p.get_pgp_num_target() > p.get_pgp_num() &&
-		 s.stats.sum.num_objects <= p.get_pgp_num_target())) {
+		 s.stats.sum.num_objects <= (MAX_NUM_OBJECTS_PER_PG_FOR_LEAP *
+					     p.get_pgp_num_target()))) {
 	      next = target;
 	    } else {
 	      double room =
