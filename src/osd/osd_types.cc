@@ -4357,26 +4357,6 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
   }
 }
 
-void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
-{
-  can_rollback_to = other.can_rollback_to;
-  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-  assert(i != other.log.rend());
-  while (i->version > to) {
-    ++i;
-    assert(i != other.log.rend());
-  }
-  assert(i->version == to);
-  head = to;
-  for ( ; i != other.log.rend(); ++i) {
-    if (i->version <= from) {
-      tail = i->version;
-      break;
-    }
-    log.push_front(*i);
-  }
-}
-
 void pg_log_t::copy_up_to(const pg_log_t &other, int max)
 {
   can_rollback_to = other.can_rollback_to;
