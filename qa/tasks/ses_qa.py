@@ -82,15 +82,6 @@ class Validation(SESQA):
         super(Validation, self).__init__(ctx, config)
         self.log.debug("munged config is {}".format(self.config))
 
-    def mgr_plugin_dashboard(self, **kwargs):
-        """
-        Minimal/smoke test for the MGR dashboard plugin
-        """
-        self.scripts.run(
-            self.master_remote,
-            'mgr_plugin_dashboard_smoke.sh',
-            )
-
     def mgr_plugin_influx(self, **kwargs):
         """
         Minimal/smoke test for the MGR influx plugin
