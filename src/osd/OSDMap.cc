@@ -581,7 +581,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
-    uint8_t target_v = 7;
+    uint8_t target_v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -621,6 +621,9 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     if (target_v >= 6) {
       encode(new_require_min_compat_client, bl);
       encode(new_require_osd_release, bl);
+    }
+    if (target_v >= 8) {
+      encode(new_crush_node_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -831,7 +834,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
   }
 
   {
-    DECODE_START(7, bl); // extended, osd-only data
+    DECODE_START(8, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -881,6 +884,9 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
       } else {
 	new_require_osd_release = -1;
       }
+    }
+    if (struct_v >= 8) {
+      decode(new_crush_node_flags, bl);
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1185,6 +1191,18 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();
     f->close_section();
   }
+  f->open_array_section("new_crush_node_flags");
+  for (auto& i : new_crush_node_flags) {
+    f->open_object_section("node");
+    f->dump_int("id", i.first);
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
   f->close_section();
 }
 
@@ -2087,6 +2105,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &addr : inc.old_blacklist)
     blacklist.erase(addr);
 
+  for (auto& i : inc.new_crush_node_flags) {
+    if (i.second) {
+      crush_node_flags[i.first] = i.second;
+    } else {
+      crush_node_flags.erase(i.first);
+    }
+  }
+
   // cluster snapshot?
   if (inc.cluster_snapshot.length()) {
     cluster_snapshot = inc.cluster_snapshot;
@@ -2785,7 +2811,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 7;
+    uint8_t target_v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2834,6 +2860,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     }
     if (target_v >= 6) {
       encode(removed_snaps_queue, bl);
+    }
+    if (target_v >= 8) {
+      encode(crush_node_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3095,7 +3124,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
   }
 
   {
-    DECODE_START(7, bl); // extended, osd-only data
+    DECODE_START(8, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blacklist, bl);
@@ -3150,6 +3179,11 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     }
     if (struct_v >= 6) {
       decode(removed_snaps_queue, bl);
+    }
+    if (struct_v >= 8) {
+      decode(crush_node_flags, bl);
+    } else {
+      crush_node_flags.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -3392,6 +3426,19 @@ void OSDMap::dump(Formatter *f) const
       f->close_section();
     }
     f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("crush_node_flags");
+  for (auto& i : crush_node_flags) {
+    string s = crush->item_exists(i.first) ? crush->get_item_name(i.first)
+      : stringify(i.first);
+    f->open_array_section(s.c_str());
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
     f->close_section();
   }
   f->close_section();
@@ -5565,9 +5612,21 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	detail.push_back(ss.str());
       }
     }
+    for (auto& i : crush_node_flags) {
+      if (i.second && crush->item_exists(i.first)) {
+	ostringstream ss;
+	set<string> states;
+	OSDMap::calc_state_set(i.second, states);
+	int t = i.first >= 0 ? 0 : crush->get_bucket_type(i.first);
+	const char *tn = crush->get_type_name(t);
+	ss << (tn ? tn : "node") << " "
+	   << crush->get_item_name(i.first) << " has flags " << states;
+	detail.push_back(ss.str());
+      }
+    }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " osd(s) have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH nodes have {NOUP,NODOWN,NOIN,NOOUT} flags set";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
       d.detail.swap(detail);
     }
@@ -5765,4 +5824,21 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   default:
     ceph_abort_msg("unrecognized pool type");
   }
+}
+
+unsigned OSDMap::get_crush_node_flags(int osd) const
+{
+  unsigned flags = 0;
+  if (!crush_node_flags.empty()) {
+    // the map will contain type -> name
+    std::map<std::string,std::string> ploc = crush->get_full_location(osd);
+    for (auto& i : ploc) {
+      int id = crush->get_item_id(i.second);
+      auto p = crush_node_flags.find(id);
+      if (p != crush_node_flags.end()) {
+	flags |= p->second;
+      }
+    }
+  }
+  return flags;
 }

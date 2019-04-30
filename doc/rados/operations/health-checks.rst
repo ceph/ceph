@@ -223,23 +223,24 @@ With the exception of *full*, these flags can be set or cleared with::
 OSD_FLAGS
 _________
 
-One or more OSDs has a per-OSD flag of interest set.  These flags include:
+One or more OSDs or CRUSH nodes has a flag of interest set.  These flags include:
 
-* *noup*: OSD is not allowed to start
-* *nodown*: failure reports for this OSD will be ignored
-* *noin*: if this OSD was previously marked `out` automatically
-  after a failure, it will not be marked in when it stats
-* *noout*: if this OSD is down it will not automatically be marked
+* *noup*: these OSDs are not allowed to start
+* *nodown*: failure reports for these OSDs will be ignored
+* *noin*: if these OSDs were previously marked `out` automatically
+  after a failure, they will not be marked in when they start
+* *noout*: if these OSDs are down they will not automatically be marked
   `out` after the configured interval
 
-Per-OSD flags can be set and cleared with::
+These flags can be set and cleared with::
 
-  ceph osd add-<flag> <osd-id>
-  ceph osd rm-<flag> <osd-id>
+  ceph osd add-<flag> <osd-id-or-crush-node-name>
+  ceph osd rm-<flag> <osd-id-or-crush-node-name>
 
 For example, ::
 
   ceph osd rm-nodown osd.123
+  ceph osd rm-noout hostfoo
 
 OLD_CRUSH_TUNABLES
 __________________
