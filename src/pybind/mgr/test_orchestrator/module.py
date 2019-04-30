@@ -23,6 +23,7 @@ class TestCompletionMixin(object):
         self._complete = False
 
         self.message = message
+        self.id = str(uuid.uuid4())
 
         TestCompletionMixin.all_completions.append(self)
 
@@ -52,7 +53,6 @@ class TestReadCompletion(TestCompletionMixin, orchestrator.ReadCompletion):
 class TestWriteCompletion(TestCompletionMixin, orchestrator.WriteCompletion):
     def __init__(self, cb, message):
         super(TestWriteCompletion, self).__init__(cb, message)
-        self.id = str(uuid.uuid4())
 
     @property
     def is_persistent(self):
