@@ -120,7 +120,10 @@ public:
 
   bool need_to_log_data() const;
   bool need_to_log_metadata() const;
-  bool can_reshard() const;
+  bool is_multisite() const;
+  bool can_reshard() const {
+    return ! is_multisite();
+  }
   bool is_syncing_bucket_meta(const rgw_bucket& bucket);
 
   int list_zonegroups(list<string>& zonegroups);

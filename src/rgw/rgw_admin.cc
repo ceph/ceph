@@ -6465,12 +6465,32 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
+    // NB: we are using the yes_i_really_mean_it option to both
+    // override two safety measures -- prevention of --bypass-gc in
+    // multi-site and to prevent bucket removal during an inconsistent
+    // index. Since the outcomes of overriding either safety measure
+    // is essentially the same, we allow the yes_i_really_mean_it
+    // option to work for either and for both. (The alternative would
+    // be to convert yes_i_really_mean_it to a counter and require two
+    // in cases where two safety measures are overridden.)
+
+    if (bypass_gc && store->svc.zone->is_multisite() && !yes_i_really_mean_it) {
+      cerr << "using --bypass-gc with bucket removal in a multisite "
+	"environment is not supported and could prevent full synchronization "
+	"across zones from ever being achieved." << std::endl <<
+	"do you really mean it? (requires --yes-i-really-mean-it)" <<
+	std::endl;
+      return EINVAL;
+    }
+
     if (!inconsistent_index) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
     } else {
       if (!yes_i_really_mean_it) {
-	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
-	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+	cerr << "using --inconsistent_index can corrupt the bucket index " <<
+	  std::endl <<
+	  "do you really mean it? (requires --yes-i-really-mean-it)" <<
+	  std::endl;
 	return 1;
       }
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, false);

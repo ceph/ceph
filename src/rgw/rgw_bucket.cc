@@ -967,7 +967,9 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, bool bypass_gc,
     if (delete_children) {
       ret = rgw_remove_bucket_bypass_gc(store, bucket, op_state.get_max_aio(), keep_index_consistent);
     } else {
-      set_err_msg(err_msg, "purge objects should be set for gc to be bypassed");
+      set_err_msg(err_msg,
+		  "option --purge-objects must be used for gc to be bypassed "
+		  "during bucket removal");
       return -EINVAL;
     }
   } else {

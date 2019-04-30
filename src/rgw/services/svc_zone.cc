@@ -904,10 +904,10 @@ bool RGWSI_Zone::need_to_log_metadata() const
     (zonegroup->zones.size() > 1 || current_period->is_multi_zonegroups_with_zones());
 }
 
-bool RGWSI_Zone::can_reshard() const
+bool RGWSI_Zone::is_multisite() const
 {
-  return current_period->get_id().empty() ||
-    (zonegroup->zones.size() == 1 && current_period->is_single_zonegroup());
+  return ! current_period->get_id().empty() &&
+    (zonegroup->zones.size() != 1 || ! current_period->is_single_zonegroup());
 }
 
 /**
