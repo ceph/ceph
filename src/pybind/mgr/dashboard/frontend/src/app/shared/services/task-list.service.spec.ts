@@ -62,9 +62,10 @@ describe('TaskListService', () => {
     expect(service).toBeTruthy();
   });
 
-  const addTask = (name: string, itemName: string) => {
+  const addTask = (name: string, itemName: string, progress?: number) => {
     const task = new ExecutingTask();
     task.name = name;
+    task.progress = progress;
     task.metadata = { name: itemName };
     tasks.push(task);
     summaryService.addRunningTask(task);
@@ -83,6 +84,14 @@ describe('TaskListService', () => {
     addTask('test/create', 'd');
     expect(list.length).toBe(4);
     expectItemTasks(list[3], 'Creating');
+  });
+
+  it('shows progress of current task if any above 0', () => {
+    addTask('test/edit', 'd', 97);
+    addTask('test/edit', 'e', 0);
+    expect(list.length).toBe(5);
+    expectItemTasks(list[3], 'Updating 97%');
+    expectItemTasks(list[4], 'Updating');
   });
 
   it('gets all items with one executing items', () => {

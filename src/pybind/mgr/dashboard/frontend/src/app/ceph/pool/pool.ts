@@ -21,6 +21,12 @@ export class Pool {
   min_read_recency_for_promote: number;
   target_max_objects: number;
   pg_num: number;
+  pg_num_target: number;
+  pg_num_pending: number;
+  pg_placement_num: number;
+  pg_placement_num_target: number;
+  pg_autoscale_mode: string;
+  pg_status: string;
   type: string;
   pool_name: string;
   cache_min_evict_age: number;
@@ -57,7 +63,6 @@ export class Pool {
   last_change: string;
   min_write_recency_for_promote: number;
   read_tier: number;
-  pg_status: string;
   stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
