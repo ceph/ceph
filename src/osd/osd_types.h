@@ -4113,15 +4113,6 @@ public:
   void copy_after(const pg_log_t &other, eversion_t from);
 
   /**
-   * copy a range of entries from another pg_log_t
-   *
-   * @param other pg_log_t to copy from
-   * @param from copy entries after this version
-   * @param to up to and including this version
-   */
-  void copy_range(const pg_log_t &other, eversion_t from, eversion_t to);
-
-  /**
    * copy up to N entries
    *
    * @param other source log
