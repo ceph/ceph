@@ -531,9 +531,8 @@ def write_file(remote, path, data):
     """
     remote.run(
         args=[
-            'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            'cat',
+            run.Raw('>'),
             path,
         ],
         stdin=data,
@@ -561,10 +560,9 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
     remote.run(
         args=[
             'sudo',
-            'python',
+            'sh',
             '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            path,
+            'cat > ' + path,
         ] + owner_args + permargs,
         stdin=data,
     )
@@ -638,7 +636,7 @@ def move_file(remote, from_path, to_path, sudo=False, preserve_perms=True):
         )
 
 
-def delete_file(remote, path, sudo=False, force=False):
+def delete_file(remote, path, sudo=False, force=False, check=True):
     """
     rm a file on a remote site. Use force=True if the call should succeed even
     if the file is absent or rm path would otherwise fail.
@@ -656,6 +654,7 @@ def delete_file(remote, path, sudo=False, force=False):
     remote.run(
         args=args,
         stdout=StringIO(),
+        check_status=check
     )
 
 
@@ -1283,7 +1282,7 @@ def get_system_type(remote, distro=False, version=False):
     if system_value in ['Ubuntu', 'Debian']:
         return "deb"
     if system_value in ['CentOS', 'Fedora', 'RedHatEnterpriseServer',
-                        'openSUSE project', 'SUSE LINUX']:
+                        'openSUSE', 'openSUSE project', 'SUSE', 'SUSE LINUX']:
         return "rpm"
     return system_value
 

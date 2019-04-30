@@ -40,6 +40,8 @@ DISTRO_CODENAME_MAP = {
         "20": "heisenbug",
     },
     "opensuse": {
+        "15.0": "leap",
+        "15.1": "leap",
         "42.2": "leap",
         "42.3": "leap",
     },
@@ -47,19 +49,14 @@ DISTRO_CODENAME_MAP = {
         "12.2": "sle",
         "12.3": "sle",
     },
-    "opensuse-leap": {
-        "42.2": "leap",
-        "42.3": "leap",
-        "15.0": "leap",
-    },
 }
 
 DEFAULT_OS_VERSION = dict(
     ubuntu="18.04",
     fedora="25",
     centos="7.6",
-    opensuse="42.1",
-    sle="12.3",
+    opensuse="15.0",
+    sle="15.0",
     rhel="7.6",
     debian='8.0'
 )
@@ -76,7 +73,7 @@ class OS(object):
     __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
-    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'opensuse-leap', 'sles')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'opensuse', 'sle')
 
     def __init__(self, name=None, version=None, codename=None):
         self.name = name
@@ -158,6 +155,8 @@ class OS(object):
         name = cls._get_value(str_, 'ID').lower()
         if name == 'sles':
             name = 'sle'
+        elif name == 'opensuse-leap':
+            name = 'opensuse'
         version = cls._get_value(str_, 'VERSION_ID')
         obj = cls(name=name, version=version)
 
