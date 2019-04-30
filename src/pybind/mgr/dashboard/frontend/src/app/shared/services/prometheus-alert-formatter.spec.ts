@@ -28,7 +28,7 @@ describe('PrometheusAlertFormatter', () => {
     prometheus = new PrometheusHelper();
     service = TestBed.get(PrometheusAlertFormatter);
     notificationService = TestBed.get(NotificationService);
-    spyOn(notificationService, 'queueNotifications').and.stub();
+    spyOn(notificationService, 'show').and.stub();
   });
 
   it('should create', () => {
@@ -38,13 +38,13 @@ describe('PrometheusAlertFormatter', () => {
   describe('sendNotifications', () => {
     it('should not call queue notifications with no notification', () => {
       service.sendNotifications([]);
-      expect(notificationService.queueNotifications).not.toHaveBeenCalled();
+      expect(notificationService.show).not.toHaveBeenCalled();
     });
 
     it('should call queue notifications with notifications', () => {
       const notifications = [new CdNotificationConfig(NotificationType.success, 'test')];
       service.sendNotifications(notifications);
-      expect(notificationService.queueNotifications).toHaveBeenCalledWith(notifications);
+      expect(notificationService.show).toHaveBeenCalledWith(notifications[0]);
     });
   });
 
