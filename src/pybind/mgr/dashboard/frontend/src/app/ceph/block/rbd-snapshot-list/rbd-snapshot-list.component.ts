@@ -167,9 +167,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     } else {
       // Auto-create a name for the snapshot: <image_name>_<timestamp_ISO_8601>
       // https://en.wikipedia.org/wiki/ISO_8601
-      snapName = `${this.rbdName}-${moment()
-        .utc()
-        .format('YYYYMMDD[T]HHmmss[Z]')}`;
+      snapName = `${this.rbdName}_${moment().toISOString(true)}`;
     }
     this.modalRef.content.setSnapName(snapName);
     this.modalRef.content.onSubmit.subscribe((snapshotName: string) => {
