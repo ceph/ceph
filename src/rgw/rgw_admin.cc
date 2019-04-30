@@ -1191,7 +1191,7 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
       r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, null_yield, pattrs);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
-      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs);
+      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs, null_yield);
     }
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;

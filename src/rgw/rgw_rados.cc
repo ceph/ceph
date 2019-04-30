@@ -2369,7 +2369,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   bucket_info.objv_tracker.clear();
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr);
+  int ret = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -3212,7 +3212,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   RGWBucketInfo* bucket_info_p =
     bucket_info_out ? bucket_info_out : &bucket_info;
   
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info_p, NULL, NULL);
+  int ret = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info_p, NULL, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -3239,7 +3239,7 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   RGWBucketInfo bucket_info;
   RGWBucketInfo* bucket_info_p =
     bucket_info_out ? bucket_info_out : &bucket_info;
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info_p, NULL, NULL);
+  int ret = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info_p, NULL, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -5052,7 +5052,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
   if (bucket.bucket_id.empty()) {
     r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, null_yield, &attrs);
   } else {
-    r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs);
+    r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs, null_yield);
   }
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
@@ -5634,7 +5634,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime)
   auto obj_ctx = svc.sysobj->init_obj_ctx();
 
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_instance_info(obj_ctx, obj.bucket, bucket_info, NULL, NULL);
+  int ret = get_bucket_instance_info(obj_ctx, obj.bucket, bucket_info, NULL, NULL, null_yield);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: " << __func__ << "() get_bucket_instance_info(bucket=" << obj.bucket << ") returned ret=" << ret << dendl;
     return ret;
@@ -8113,7 +8113,7 @@ void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_raw_obj& ob
 }
 
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
-                                       real_time *pmtime, map<string, bufferlist> *pattrs)
+                                       real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y)
 {
   size_t pos = meta_key.find(':');
   if (pos == string::npos) {
@@ -8126,7 +8126,7 @@ int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& m
 }
 
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info,
-                                       real_time *pmtime, map<string, bufferlist> *pattrs)
+                                       real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y)
 {
   string oid;
   if (bucket.oid.empty()) {
@@ -8442,7 +8442,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     vector<rgw_bucket_dir_header> headers;
 
     RGWBucketInfo bucket_info;
-    int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+    int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -9696,7 +9696,7 @@ int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucke
   vector<rgw_bucket_dir_header> headers;
   RGWBucketInfo bucket_info;
   auto obj_ctx = svc.sysobj->init_obj_ctx();
-  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }

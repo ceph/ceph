@@ -296,7 +296,7 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
@@ -367,7 +367,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
@@ -630,7 +630,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
