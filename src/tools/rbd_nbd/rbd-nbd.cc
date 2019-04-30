@@ -644,6 +644,113 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   return 0;
 }
 
+static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, int *nbd_index,
+                           uint64_t flags)
+{
+  int index = 0, r;
+
+  if (cfg->devpath.empty()) {
+    char dev[64];
+    bool try_load_module = true;
+    const char *path = "/sys/module/nbd/parameters/nbds_max";
+    int nbds_max = -1;
+    if (access(path, F_OK) == 0) {
+      std::ifstream ifs;
+      ifs.open(path, std::ifstream::in);
+      if (ifs.is_open()) {
+        ifs >> nbds_max;
+        ifs.close();
+      }
+    }
+
+    while (true) {
+      snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
+
+      nbd = open_device(dev, cfg, try_load_module);
+      try_load_module = false;
+      if (nbd < 0) {
+        if (nbd == -EPERM && nbds_max != -1 && index < (nbds_max-1)) {
+          ++index;
+          continue;
+        }
+        r = nbd;
+        cerr << "rbd-nbd: failed to find unused device" << std::endl;
+        goto done;
+      }
+
+      r = ioctl(nbd, NBD_SET_SOCK, fd);
+      if (r < 0) {
+        close(nbd);
+        ++index;
+        continue;
+      }
+
+      cfg->devpath = dev;
+      break;
+    }
+  } else {
+    r = sscanf(cfg->devpath.c_str(), "/dev/nbd%d", &index);
+    if (r <= 0) {
+      // mean an early matching failure. But some cases need a negative value.
+      if (r == 0)
+	r = -EINVAL;
+      cerr << "rbd-nbd: invalid device path: " << cfg->devpath
+           << " (expected /dev/nbd{num})" << std::endl;
+      goto done;
+    }
+    nbd = open_device(cfg->devpath.c_str(), cfg, true);
+    if (nbd < 0) {
+      r = nbd;
+      cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
+      goto done;
+    }
+
+    r = ioctl(nbd, NBD_SET_SOCK, fd);
+    if (r < 0) {
+      r = -errno;
+      cerr << "rbd-nbd: the device " << cfg->devpath << " is busy" << std::endl;
+      close(nbd);
+      goto done;
+    }
+  }
+
+  r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
+  if (r < 0) {
+    r = -errno;
+    goto close_nbd;
+  }
+
+  r = ioctl(nbd, NBD_SET_SIZE, size);
+  if (r < 0) {
+    r = -errno;
+    goto close_nbd;
+  }
+
+  ioctl(nbd, NBD_SET_FLAGS, flags);
+
+  if (cfg->timeout >= 0) {
+    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->timeout);
+    if (r < 0) {
+      r = -errno;
+      cerr << "rbd-nbd: failed to set timeout: " << cpp_strerror(r)
+           << std::endl;
+      goto close_nbd;
+    }
+  }
+
+  *nbd_index = index;
+  return 0;
+
+close_nbd:
+  if (r < 0) {
+    ioctl(nbd, NBD_CLEAR_SOCK);
+    cerr << "rbd-nbd: failed to map, status: " << cpp_strerror(-r) << std::endl;
+  }
+  close(nbd);
+done:
+  return r;
+}
+
 static int do_map(int argc, const char *argv[], Config *cfg)
 {
   int r;
@@ -657,7 +764,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   unsigned long flags;
   unsigned long size;
 
-  int index = 0;
+  int nbd_index;
   int fd[2];
 
   librbd::image_info_t info;
@@ -741,119 +848,34 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   if (r < 0)
     goto close_fd;
 
-  if (cfg->devpath.empty()) {
-    char dev[64];
-    bool try_load_module = true;
-    const char *path = "/sys/module/nbd/parameters/nbds_max";
-    int nbds_max = -1;
-    if (access(path, F_OK) == 0) {
-      std::ifstream ifs;
-      ifs.open(path, std::ifstream::in);
-      if (ifs.is_open()) {
-        ifs >> nbds_max;
-        ifs.close();
-      }
-    }
-
-    while (true) {
-      snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
-
-      nbd = open_device(dev, cfg, try_load_module);
-      try_load_module = false;
-      if (nbd < 0) {
-        if (nbd == -EPERM && nbds_max != -1 && index < (nbds_max-1)) {
-          ++index;
-          continue;
-        }
-        r = nbd;
-        cerr << "rbd-nbd: failed to find unused device" << std::endl;
-        goto close_fd;
-      }
-
-      r = ioctl(nbd, NBD_SET_SOCK, fd[0]);
-      if (r < 0) {
-        close(nbd);
-        ++index;
-        continue;
-      }
-
-      cfg->devpath = dev;
-      break;
-    }
-  } else {
-    r = sscanf(cfg->devpath.c_str(), "/dev/nbd%d", &index);
-    if (r <= 0) {
-      // mean an early matching failure. But some cases need a negative value.
-      if (r == 0)
-	r = -EINVAL;
-      cerr << "rbd-nbd: invalid device path: " << cfg->devpath
-           << " (expected /dev/nbd{num})" << std::endl;
-      goto close_fd;
-    }
-    nbd = open_device(cfg->devpath.c_str(), cfg, true);
-    if (nbd < 0) {
-      r = nbd;
-      cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
-      goto close_fd;
-    }
-
-    r = ioctl(nbd, NBD_SET_SOCK, fd[0]);
-    if (r < 0) {
-      r = -errno;
-      cerr << "rbd-nbd: the device " << cfg->devpath << " is busy" << std::endl;
-      close(nbd);
-      goto close_fd;
-    }
-  }
-
   flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_SEND_TRIM | NBD_FLAG_HAS_FLAGS;
   if (!cfg->snapname.empty() || cfg->readonly) {
     flags |= NBD_FLAG_READ_ONLY;
     read_only = 1;
   }
 
-  r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
-  if (r < 0) {
-    r = -errno;
-    goto close_nbd;
-  }
-
   if (info.size > ULONG_MAX) {
     r = -EFBIG;
     cerr << "rbd-nbd: image is too large (" << byte_u_t(info.size)
          << ", max is " << byte_u_t(ULONG_MAX) << ")" << std::endl;
-    goto close_nbd;
+    goto close_fd;
   }
 
   size = info.size;
 
-  r = ioctl(nbd, NBD_SET_SIZE, size);
-  if (r < 0) {
-    r = -errno;
-    goto close_nbd;
-  }
+  r = try_ioctl_setup(cfg, fd[0], size, &nbd_index, flags);
+  if (r < 0)
+    goto close_fd;
 
-  r = check_device_size(index, size);
+  r = check_device_size(nbd_index, size);
   if (r < 0) {
     goto close_nbd;
   }
-
-  ioctl(nbd, NBD_SET_FLAGS, flags);
 
   r = ioctl(nbd, BLKROSET, (unsigned long) &read_only);
   if (r < 0) {
     r = -errno;
     goto close_nbd;
-  }
-
-  if (cfg->timeout >= 0) {
-    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->timeout);
-    if (r < 0) {
-      r = -errno;
-      cerr << "rbd-nbd: failed to set timeout: " << cpp_strerror(r)
-           << std::endl;
-      goto close_nbd;
-    }
   }
 
   {
