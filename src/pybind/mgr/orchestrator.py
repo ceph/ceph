@@ -438,7 +438,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
     # version of Ceph
