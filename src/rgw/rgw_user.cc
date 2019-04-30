@@ -73,7 +73,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       RGWBucketInfo bucket_info;
 
       ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
-                                   bucket_info, nullptr, nullptr);
+                                   bucket_info, nullptr, null_yield, nullptr);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;

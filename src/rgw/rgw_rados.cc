@@ -2854,7 +2854,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
       RGWObjVersionTracker instance_ver = info.objv_tracker;
       info.objv_tracker.clear();
       auto obj_ctx = svc.sysobj->init_obj_ctx();
-      r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, NULL);
+      r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, null_yield, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -3365,7 +3365,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   auto sysobj_ctx = svc.sysobj->init_obj_ctx();
 
-  r = get_bucket_info(sysobj_ctx, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, NULL);
+  r = get_bucket_info(sysobj_ctx, bucket_info.bucket.tenant, bucket_info.swift_ver_location, dest_bucket_info, NULL, null_yield, NULL);
   if (r < 0) {
     ldout(cct, 10) << "failed to read dest bucket info: r=" << r << dendl;
     if (r == -ENOENT) {
@@ -3442,7 +3442,7 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
 
   int ret = get_bucket_info(sysobj_ctx, bucket_info.bucket.tenant,
                             bucket_info.swift_ver_location, archive_binfo,
-                            nullptr, nullptr);
+                            nullptr, null_yield, nullptr);
   if (ret < 0) {
     return ret;
   }
@@ -5050,7 +5050,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   int r;
   if (bucket.bucket_id.empty()) {
-    r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, &attrs);
+    r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, null_yield, &attrs);
   } else {
     r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs);
   }
@@ -5087,7 +5087,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
     auto obj_ctx = svc.sysobj->init_obj_ctx();
-    int r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, &attrs);
+    int r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, null_yield, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -5113,7 +5113,7 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
   RGWBucketInfo bucket_info;
   auto obj_ctx = svc.sysobj->init_obj_ctx();
-  int ret = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL);
+  int ret = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, bucket_info, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -8341,7 +8341,8 @@ int RGWRados::_get_bucket_info(RGWSysObjectCtx& obj_ctx,
 int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
                               const string& tenant, const string& bucket_name,
                               RGWBucketInfo& info,
-                              real_time *pmtime, map<string, bufferlist> *pattrs)
+                              real_time *pmtime,
+                              optional_yield y, map<string, bufferlist> *pattrs)
 {
   return _get_bucket_info(obj_ctx, tenant, bucket_name, info, pmtime,
                           pattrs, boost::none);

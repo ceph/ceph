@@ -398,7 +398,7 @@ void RGWOp_BILog_List::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -489,7 +489,7 @@ void RGWOp_BILog_Info::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -551,7 +551,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;

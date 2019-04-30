@@ -1007,7 +1007,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	map<string, bufferlist> attrs;
 
 	ret = store->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name,
-				     bucket_info, nullptr, &attrs);
+				     bucket_info, nullptr, null_yield, &attrs);
 	if (ret < 0) {
 	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
 	    cpp_strerror(-ret) << dendl;

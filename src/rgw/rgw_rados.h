@@ -2182,7 +2182,7 @@ public:
   int get_bucket_info(RGWSysObjectCtx& obj_ctx,
 		      const string& tenant_name, const string& bucket_name,
 		      RGWBucketInfo& info,
-		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+		      ceph::real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
 
   // Returns 0 on successful refresh. Returns error code if there was
   // an error or the version stored on the OSD is the same as that

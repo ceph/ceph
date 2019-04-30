@@ -394,6 +394,7 @@ int RGWDataAccess::Bucket::init()
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
+                                       null_yield,
 				       &attrs);
   if (ret < 0) {
     return ret;
