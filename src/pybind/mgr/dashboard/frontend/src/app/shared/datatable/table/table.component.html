@@ -104,8 +104,9 @@
 </ng-template>
 
 <ng-template #sparklineTpl
+             let-row="row"
              let-value="value">
-  <cd-sparkline [data]="value"></cd-sparkline>
+  <cd-sparkline [data]="value" [isBinary]="row.cdIsBinary"></cd-sparkline>
 </ng-template>
 
 <ng-template #routerLinkTpl
