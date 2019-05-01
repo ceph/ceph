@@ -190,7 +190,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						   osdmap,
 						   lastmap,
 						   pgid,
-                                                   recoverable.get(),
+                                                   *recoverable,
 						   &past_intervals));
     ASSERT_TRUE(past_intervals.empty());
   }
@@ -219,7 +219,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
     old_primary = new_primary;
   }
@@ -248,7 +248,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -275,7 +275,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -309,7 +309,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -343,7 +343,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pg_t(pg_num - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -378,7 +378,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  lastmap,  // reverse order!
 						  osdmap,
 						  pg_t(pg_num - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -411,7 +411,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pg_t(pg_num - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -444,7 +444,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pg_t(pg_num / 2 - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -477,7 +477,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  lastmap,  // reverse order!
 						  osdmap,
 						  pg_t(pg_num / 2 - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -510,7 +510,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pg_t(pg_num / 2 - 1, pool_id),
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -544,7 +544,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals));
   }
 
@@ -573,7 +573,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals,
 						  &out));
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
@@ -623,7 +623,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals,
 						  &out));
     ASSERT_NE(string::npos, out.str().find("acting set is too small"));
@@ -656,7 +656,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals,
 						  &out));
     ASSERT_NE(string::npos, out.str().find("includes interval"));
@@ -699,7 +699,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals,
 						  &out));
     ASSERT_NE(string::npos, out.str().find("presumed to have been rw"));
@@ -746,7 +746,7 @@ for (unsigned i = 0; i < 4; ++i) {
 						  osdmap,
 						  lastmap,
 						  pgid,
-                                                  recoverable.get(),
+                                                  *recoverable,
 						  &past_intervals,
 						  &out));
     ASSERT_NE(string::npos, out.str().find("does not include interval"));

@@ -282,25 +282,29 @@ public:
     pg_shard_t peer,
     const hobject_t &oid,
     const ObjectRecoveryInfo &recovery_info
-    ) override;
+    ) override {
+    recovery_state.on_peer_recover(peer, oid, recovery_info.version);
+  }
   void begin_peer_recover(
     pg_shard_t peer,
-    const hobject_t oid) override;
+    const hobject_t oid) override {
+    recovery_state.begin_peer_recover(peer, oid);
+  }
   void on_global_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     bool is_delete) override;
-  void failed_push(const list<pg_shard_t> &from,
-                   const hobject_t &soid,
-                   const eversion_t &need = eversion_t()) override;
-  void primary_failed(const hobject_t &soid) override;
-  bool primary_error(const hobject_t& soid, eversion_t v) override;
+  void on_failed_pull(
+    const set<pg_shard_t> &from,
+    const hobject_t &soid,
+    const eversion_t &version) override;
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
-  void on_primary_error(const hobject_t &oid, eversion_t v) override;
-  void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
+
+  bool primary_error(const hobject_t& soid, eversion_t v);
+
   void remove_missing_object(const hobject_t &oid,
 			     eversion_t v,
 			     Context *on_complete) override;
@@ -333,13 +337,13 @@ public:
     return get_last_peering_reset();
   }
   const set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
-    return acting_recovery_backfill;
+    return get_acting_recovery_backfill();
   }
   const set<pg_shard_t> &get_acting_shards() const override {
-    return actingset;
+    return recovery_state.get_actingset();
   }
   const set<pg_shard_t> &get_backfill_shards() const override {
-    return backfill_targets;
+    return get_backfill_targets();
   }
 
   std::ostream& gen_dbg_prefix(std::ostream& out) const override {
@@ -348,24 +352,24 @@ public:
 
   const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
-    return missing_loc.get_missing_locs();
+    return recovery_state.get_missing_loc().get_missing_locs();
   }
   const map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
-    return peer_missing;
+    return recovery_state.get_peer_missing();
   }
   using PGBackend::Listener::get_shard_missing;
   const map<pg_shard_t, pg_info_t> &get_shard_info() const override {
-    return peer_info;
+    return recovery_state.get_peer_info();
   }
   using PGBackend::Listener::get_shard_info;  
   const pg_missing_tracker_t &get_local_missing() const override {
-    return pg_log.get_missing();
+    return recovery_state.get_pg_log().get_missing();
   }
   const PGLog &get_log() const override {
-    return pg_log;
+    return recovery_state.get_pg_log();
   }
   void add_local_next_event(const pg_log_entry_t& e) override {
-    pg_log.missing_add_next_entry(e);
+    recovery_state.add_local_next_event(e);
   }
   bool pgb_is_primary() const override {
     return is_primary();
@@ -447,9 +451,18 @@ public:
     ObjectStore::Transaction &t,
     bool async = false) override {
     if (hset_history) {
-      info.hit_set = *hset_history;
+      recovery_state.update_hset(*hset_history);
     }
-    append_log(logv, trim_to, roll_forward_to, t, transaction_applied, async);
+    if (transaction_applied) {
+      update_snap_map(logv, t);
+    }
+    auto last = logv.rbegin();
+    if (is_primary() && last != logv.rend()) {
+      projected_log.skip_can_rollback_to_to_head();
+      projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
+    }
+    recovery_state.append_log(
+      logv, trim_to, roll_forward_to, t, transaction_applied, async);
   }
 
   void op_applied(const eversion_t &applied_version) override;
@@ -469,17 +482,21 @@ public:
   void update_peer_last_complete_ondisk(
     pg_shard_t fromosd,
     eversion_t lcod) override {
-    peer_last_complete_ondisk[fromosd] = lcod;
+    recovery_state.update_peer_last_complete_ondisk(fromosd, lcod);
   }
 
   void update_last_complete_ondisk(
     eversion_t lcod) override {
-    last_complete_ondisk = lcod;
+    recovery_state.update_last_complete_ondisk(lcod);
   }
 
   void update_stats(
     const pg_stat_t &stat) override {
-    info.stats = stat;
+    recovery_state.update_stats(
+      [&stat](auto &history, auto &stats) {
+	stats = stat;
+	return false;
+      });
   }
 
   void schedule_recovery_work(
@@ -489,10 +506,10 @@ public:
     return pg_whoami;
   }
   spg_t primary_spg_t() const override {
-    return spg_t(info.pgid.pgid, primary.shard);
+    return spg_t(info.pgid.pgid, get_primary().shard);
   }
   pg_shard_t primary_shard() const override {
-    return primary;
+    return get_primary();
   }
 
   void send_message_osd_cluster(
@@ -1062,11 +1079,6 @@ protected:
   map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const override {
-    f->open_array_section("backfill_targets");
-    for (set<pg_shard_t>::const_iterator p = backfill_targets.begin();
-        p != backfill_targets.end(); ++p)
-      f->dump_stream("replica") << *p;
-    f->close_section();
     f->open_array_section("waiting_on_backfill");
     for (set<pg_shard_t>::const_iterator p = waiting_on_backfill.begin();
         p != waiting_on_backfill.end(); ++p)
@@ -1126,7 +1138,7 @@ protected:
 				  PGBackend::RecoveryHandle *h,
 				  bool *work_started);
 
-  void finish_degraded_object(const hobject_t& oid) override;
+  void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef& map) override ;
@@ -1374,8 +1386,6 @@ protected:
                    unsigned split_bits) override;
   void apply_and_flush_repops(bool requeue);
 
-  void calc_trim_to() override;
-  void calc_trim_to_aggressive() override;
   int do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr);
   int do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr);
 
@@ -1601,7 +1611,7 @@ private:
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming") {
+	NamedState(nullptr, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context< SnapTrimmer >().can_trim());
       ceph_assert(in_flight.empty());
@@ -1626,7 +1636,7 @@ private:
     Context *wakeup = nullptr;
     explicit WaitTrimTimer(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitTrimTimer") {
+	NamedState(nullptr, "Trimming/WaitTrimTimer") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
       struct OnTimer : Context {
@@ -1676,7 +1686,7 @@ private:
       > reactions;
     explicit WaitRWLock(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRWLock") {
+	NamedState(nullptr, "Trimming/WaitRWLock") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
     }
@@ -1699,7 +1709,7 @@ private:
       > reactions;
     explicit WaitRepops(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitRepops") {
+	NamedState(nullptr, "Trimming/WaitRepops") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(!context<Trimming>().in_flight.empty());
     }
@@ -1753,7 +1763,7 @@ private:
 
     explicit WaitReservation(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitReservation") {
+	NamedState(nullptr, "Trimming/WaitReservation") {
       context< SnapTrimmer >().log_enter(state_name);
       ceph_assert(context<Trimming>().in_flight.empty());
       auto *pg = context< SnapTrimmer >().pg;
@@ -1786,7 +1796,7 @@ private:
       > reactions;
     explicit WaitScrub(my_context ctx)
       : my_base(ctx),
-	NamedState(context< SnapTrimmer >().pg, "Trimming/WaitScrub") {
+	NamedState(nullptr, "Trimming/WaitScrub") {
       context< SnapTrimmer >().log_enter(state_name);
     }
     void exit() {
@@ -1822,12 +1832,25 @@ public:
   bool is_missing_object(const hobject_t& oid) const;
   bool is_unreadable_object(const hobject_t &oid) const {
     return is_missing_object(oid) ||
-      !missing_loc.readable_with_acting(oid, actingset);
+      !recovery_state.get_missing_loc().readable_with_acting(
+	oid, get_actingset());
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
+  bool is_backfill_target(pg_shard_t osd) const {
+    return recovery_state.is_backfill_target(osd);
+  }
+  const set<pg_shard_t> &get_backfill_targets() const {
+    return recovery_state.get_backfill_targets();
+  }
+  bool is_async_recovery_target(pg_shard_t peer) const {
+    return recovery_state.is_async_recovery_target(peer);
+  }
+  const set<pg_shard_t> &get_async_recovery_targets() const {
+    return recovery_state.get_async_recovery_targets();
+  }
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   bool is_degraded_on_async_recovery_target(const hobject_t& soid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
@@ -1858,17 +1881,15 @@ public:
   void do_update_log_missing_reply(
     OpRequestRef &op);
 
-  void on_role_change() override;
-  void on_pool_change() override;
-  void _on_new_interval() override;
+  void plpg_on_role_change() override;
+  void plpg_on_pool_change() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction *t) override;
-  void on_activate() override;
+  void on_activate_complete() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction *t) override;
   void on_shutdown() override;
   bool check_failsafe_full() override;
-  bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
     return write_blocked_by_scrub(oid);
   }
