@@ -8128,7 +8128,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
 		       << dendl;
     pg->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
-    if (pg->have_unfound()) {
+    if (pg->have_unfound() || (pg->is_degraded() && pg->might_have_unfound.count(notevt.from))) {
       pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
     }
   }
