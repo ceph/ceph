@@ -334,9 +334,9 @@ of the *compression mode* and any hints associated with a write
 operation.  The modes are:
 
 * **none**: Never compress data.
-* **passive**: Do not compress data unless the write operation as a
+* **passive**: Do not compress data unless the write operation has a
   *compressible* hint set.
-* **aggressive**: Compress data unless the write operation as an
+* **aggressive**: Compress data unless the write operation has an
   *incompressible* hint set.
 * **force**: Try to compress data no matter what.
 
