@@ -839,6 +839,24 @@ int copyup(librados::IoCtx *ioctx, const std::string &oid,
   return ioctx->exec(oid, "rbd", "copyup", data, out);
 }
 
+void sparse_copyup(librados::ObjectWriteOperation *op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   bufferlist data) {
+  bufferlist bl;
+  encode(extent_map, bl);
+  encode(data, bl);
+  op->exec("rbd", "sparse_copyup", bl);
+}
+
+int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
+                  const std::map<uint64_t, uint64_t> &extent_map,
+                  bufferlist data) {
+  librados::ObjectWriteOperation op;
+  sparse_copyup(&op, extent_map, data);
+
+  return ioctx->operate(oid, &op);
+}
+
 void get_protection_status_start(librados::ObjectReadOperation *op,
                                  snapid_t snap_id)
 {
