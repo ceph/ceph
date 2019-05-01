@@ -108,6 +108,8 @@ public:
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
 protected:  bool objs_container;
+virtual int get_common_params();
+void send_common_response();
 public:
   RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
@@ -126,7 +128,7 @@ public:
   }
   ~RGWListBucket_ObjStore_S3v2() override {}
 
-   int get_params() override;
+  int get_params() override;
   void send_response() override;
   void send_versioned_response();
 };
