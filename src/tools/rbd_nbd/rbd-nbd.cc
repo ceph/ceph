@@ -131,18 +131,6 @@ static Command cmd = None;
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg);
 
-static void handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
-  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
-    derr << "rbd-nbd: disconnect failed: " << cpp_strerror(errno) << dendl;
-  } else {
-    dout(20) << __func__ << ": " << "disconnected" << dendl;
-  }
-}
-
 class NBDServer
 {
 private:
@@ -762,6 +750,18 @@ close_nbd:
   close(nbd);
 done:
   return r;
+}
+
+static void handle_signal(int signum)
+{
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
+  dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
+  if (ioctl(nbd, NBD_DISCONNECT) < 0) {
+    derr << "rbd-nbd: disconnect failed: " << cpp_strerror(errno) << dendl;
+  } else {
+    dout(20) << __func__ << ": " << "disconnected" << dendl;
+  }
 }
 
 static NBDServer *start_server(Preforker& forker, int fd, librbd::Image& image)
