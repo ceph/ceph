@@ -8528,7 +8528,7 @@ struct C_Copyfrom : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  PrimaryLogPG::CopyOpRef cop;
+  PrimaryLogPG::CopyOpRef cop;	// used for keeping the cop alive
   C_Copyfrom(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 	     const PrimaryLogPG::CopyOpRef& c)
     : pg(p), oid(o), last_peering_reset(lpr),
@@ -8540,6 +8540,7 @@ struct C_Copyfrom : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->process_copy_chunk(oid, tid, r);
+      cop.reset();
     }
     pg->unlock();
   }
@@ -8572,7 +8573,7 @@ struct C_CopyChunk : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  PrimaryLogPG::CopyOpRef cop;
+  PrimaryLogPG::CopyOpRef cop;	// used for keeping the cop alive
   uint64_t offset = 0;
   C_CopyChunk(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 	     const PrimaryLogPG::CopyOpRef& c)
@@ -8585,6 +8586,7 @@ struct C_CopyChunk : public Context {
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->process_copy_chunk_manifest(oid, tid, r, offset);
+      cop.reset();
     }
     pg->unlock();
   }
