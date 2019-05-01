@@ -1,0 +1,11 @@
+tasks:
+- install:
+    branch: mimic
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-cephfs','python34-rados']
+- print: "**** done install mimic"
+- install.upgrade:
+   exclude_packages: ['ceph-test', 'ceph-test-dbg','libcephfs1']
+   client.1:
+- print: "**** done install.upgrade to -x on client.0"
+- ceph:
+- print: "**** done ceph task"
