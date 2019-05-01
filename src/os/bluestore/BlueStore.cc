@@ -2147,6 +2147,8 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
       if (bid < 0) bid = 0;
     }
   } while (bid != begin_bid);
+  auto cct = onode->c->store->cct; // used by dout
+  _dump_onode(cct, *onode, 0);
   assert(0 == "no available blob id");
 }
 
