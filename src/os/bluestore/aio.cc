@@ -37,7 +37,10 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   int done = 0;
   while (left > 0) {
 #if defined(HAVE_LIBAIO)
-    r = io_submit(ctx, std::min(left, max_iodepth), (struct iocb**)(piocb + done));
+    {
+      std::unique_lock l{lock};
+      r = io_submit(ctx, std::min(left, max_iodepth), (struct iocb**)(piocb + done));
+    }
 #elif defined(HAVE_POSIXAIO)
     if (piocb[done]->n_aiocb == 1) {
       // TODO: consider batching multiple reads together with lio_listio
@@ -71,18 +74,66 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   return done;
 }
 
+namespace {
+
+// see linux kernel source source/fs/aio.c
+struct aio_ring_t {
+  unsigned id; // kernel internal index number
+  unsigned nr; // number of io_events
+  // Written to by userland or under ring_lock mutex by aio_read_events_ring().
+  std::atomic<unsigned> head;
+  std::atomic<unsigned> tail;
+
+  static constexpr unsigned MAGIC = 0xa10a10a1;
+  unsigned magic;
+  unsigned compat_features;
+  unsigned incompat_features;
+  unsigned header_length; // size of aio_ring
+  struct io_event io_events[0];
+};
+
+int user_io_getevent(aio_ring_t* ring, long max_nr, io_event* events)
+{
+  auto head = ring->head.load(std::memory_order_relaxed);
+  auto tail = ring->tail.load(std::memory_order_acquire);
+  auto avail = (head <= tail ? tail : tail + ring->nr) - head;
+  if (!avail) {
+    return 0;
+  }
+  auto nr = std::min<uint32_t>(max_nr, avail);
+  auto start = std::next(ring->io_events, head);
+  head += nr;
+  if (head < ring->nr) {
+    std::copy(start, start + nr, events);
+  } else {
+    head -= ring->nr;
+    auto p = std::copy(start, start + ring->nr, events);
+    start = ring->io_events;
+    std::copy(start, start + head, p);
+  }
+  ring->head.store(head, std::memory_order_release);
+  return nr;
+}
+}
+
 int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
 #if defined(HAVE_LIBAIO)
   io_event events[max];
-  struct timespec t = {
-    timeout_ms / 1000,
-    (timeout_ms % 1000) * 1000 * 1000
-  };
   int r = 0;
-  do {
-    r = io_getevents(ctx, 1, max, events, &t);
-  } while (r == -EINTR);
+  if (auto ring = reinterpret_cast<aio_ring_t*>(ctx);
+      ring->magic == aio_ring_t::MAGIC) {
+    std::unique_lock l{lock};
+    r = user_io_getevent(ring, max, events);
+  } else {
+    struct timespec t = {
+      timeout_ms / 1000,
+      (timeout_ms % 1000) * 1000 * 1000
+    };
+    do {
+      r = io_getevents(ctx, 1, max, events, &t);
+    } while (r == -EINTR);
+  }
   for (int i=0; i<r; ++i) {
     paio[i] = (aio_t *)events[i].obj;
     paio[i]->rval = events[i].res;

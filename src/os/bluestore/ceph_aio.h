@@ -11,7 +11,7 @@
 #include <aio.h>
 #include <sys/event.h>
 #endif
-
+#include <mutex>
 #include <boost/intrusive/list.hpp>
 #include <boost/container/small_vector.hpp>
 
@@ -96,6 +96,7 @@ typedef boost::intrusive::list<
 struct aio_queue_t {
   int max_iodepth;
 #if defined(HAVE_LIBAIO)
+  std::mutex lock;
   io_context_t ctx;
 #elif defined(HAVE_POSIXAIO)
   int ctx;
