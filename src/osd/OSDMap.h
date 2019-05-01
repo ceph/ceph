@@ -1401,6 +1401,14 @@ public:
       pg_upmap_items.count(pg);
   }
 
+  bool check_full(const set<pg_shard_t> &missing_on) const {
+    for (auto shard : missing_on) {
+      if (get_state(shard.osd) & CEPH_OSD_FULL)
+	return true;
+    }
+    return false;
+  }
+
   /*
    * handy helpers to build simple maps...
    */

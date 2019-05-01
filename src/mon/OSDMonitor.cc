@@ -914,7 +914,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	      &nextmap,
 	      &osdmap,
 	      pgid,
-	      &min_size_predicate,
+	      min_size_predicate,
 	      &i.second.past_intervals,
 	      &debug)) {
 	  epoch_t e = inc.epoch;
