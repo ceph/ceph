@@ -1,7 +1,7 @@
 tasks:
 - install:
     branch: jewel 
-    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-cephfs','python34-rados']
 - print: "**** done install jewel"
 upgrade_workload:
   sequential:
