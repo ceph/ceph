@@ -75,30 +75,31 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
 #if defined(HAVE_LIBAIO)
   io_event events[max];
-#elif defined(HAVE_POSIXAIO)
-  struct kevent events[max];
-#endif
   struct timespec t = {
     timeout_ms / 1000,
     (timeout_ms % 1000) * 1000 * 1000
   };
-
   int r = 0;
   do {
-#if defined(HAVE_LIBAIO)
     r = io_getevents(ctx, 1, max, events, &t);
+  } while (r == -EINTR);
+  for (int i=0; i<r; ++i) {
+    paio[i] = (aio_t *)events[i].obj;
+    paio[i]->rval = events[i].res;
+  }
 #elif defined(HAVE_POSIXAIO)
+  struct kevent events[max];
+  struct timespec t = {
+    timeout_ms / 1000,
+    (timeout_ms % 1000) * 1000 * 1000
+  };
+  int r = 0;
+  do {
     r = kevent(ctx, NULL, 0, events, max, &t);
     if (r < 0)
       r = -errno;
-#endif
   } while (r == -EINTR);
-
   for (int i=0; i<r; ++i) {
-#if defined(HAVE_LIBAIO)
-    paio[i] = (aio_t *)events[i].obj;
-    paio[i]->rval = events[i].res;
-#else
     paio[i] = (aio_t*)events[i].udata;
     if (paio[i]->n_aiocb == 1) {
       paio[i]->rval = aio_return(&paio[i]->aio.aiocb);
@@ -118,7 +119,7 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
       }
       free(paio[i]->aio.aiocbp);
     }
-#endif
   }
+#endif
   return r;
 }
