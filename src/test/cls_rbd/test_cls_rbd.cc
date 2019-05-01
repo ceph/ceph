@@ -179,6 +179,74 @@ TEST_F(TestClsRbd, copyup)
   ioctx.close();
 }
 
+TEST_F(TestClsRbd, sparse_copyup)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ioctx.remove(oid);
+
+  bool sparse_read_supported = is_sparse_read_supported(ioctx, oid);
+
+  // copyup of 0-len nonexistent object should create new 0-len object
+  uint64_t size;
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, nullptr));
+  std::map<uint64_t, uint64_t> m;
+  bufferlist inbl;
+  ASSERT_EQ(0, sparse_copyup(&ioctx, oid, m, inbl));
+  ASSERT_EQ(0, ioctx.stat(oid, &size, nullptr));
+  ASSERT_EQ(0U, size);
+
+  // create some data to write
+  inbl.append(std::string(4096, '1'));
+  inbl.append(std::string(4096, '2'));
+  m = {{1024, 4096}, {8192, 4096}};
+
+  // copyup to nonexistent object should create new object
+  ioctx.remove(oid);
+  ASSERT_EQ(-ENOENT, ioctx.remove(oid));
+  ASSERT_EQ(0, sparse_copyup(&ioctx, oid, m, inbl));
+  // and its contents should match
+  bufferlist outbl;
+  bufferlist expected_outbl;
+  expected_outbl.append(std::string(1024, '\0'));
+  expected_outbl.append(std::string(4096, '1'));
+  expected_outbl.append(std::string(8192 - 4096 - 1024, '\0'));
+  expected_outbl.append(std::string(4096, '2'));
+  ASSERT_EQ((int)expected_outbl.length(),
+            ioctx.read(oid, outbl, expected_outbl.length() + 1, 0));
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+  std::map<uint64_t, uint64_t> expected_m;
+  if (sparse_read_supported) {
+    expected_m = m;
+    expected_outbl = inbl;
+  } else {
+    expected_m = {{0, expected_outbl.length()}};
+  }
+  m.clear();
+  outbl.clear();
+  ASSERT_EQ((int)expected_m.size(), ioctx.sparse_read(oid, m, outbl, 65536, 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+
+  // now send different data, but with a preexisting object
+  bufferlist inbl2;
+  inbl2.append(std::string(1024, 'X'));
+
+  // should still succeed
+  ASSERT_EQ(0, sparse_copyup(&ioctx, oid, {{0, 1024}}, inbl2));
+  // but contents should not have changed
+  m.clear();
+  outbl.clear();
+  ASSERT_EQ((int)expected_m.size(), ioctx.sparse_read(oid, m, outbl, 65536, 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+
+  ASSERT_EQ(0, ioctx.remove(oid));
+  ioctx.close();
+}
+
 TEST_F(TestClsRbd, get_and_set_id)
 {
   librados::IoCtx ioctx;
