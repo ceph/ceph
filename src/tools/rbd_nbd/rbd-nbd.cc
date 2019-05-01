@@ -751,6 +751,36 @@ done:
   return r;
 }
 
+static NBDServer *start_server(Preforker& forker, int fd, librbd::Image& image)
+{
+  NBDServer *server;
+
+  if (g_conf()->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
+
+  server = new NBDServer(fd, image);
+  server->start();
+
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+
+  return server;
+}
+
+static void run_server(void)
+{
+  ioctl(nbd, NBD_DO_IT);
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_signal);
+  unregister_async_signal_handler(SIGTERM, handle_signal);
+  shutdown_async_signal_handler();
+}
+
 static int do_map(int argc, const char *argv[], Config *cfg)
 {
   int r;
@@ -770,6 +800,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   librbd::image_info_t info;
 
   Preforker forker;
+  NBDServer *server;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -888,33 +919,14 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
     cout << cfg->devpath << std::endl;
 
-    if (g_conf()->daemonize) {
-      global_init_postfork_finish(g_ceph_context);
-      forker.daemonize();
-    }
-
-    {
-      NBDServer server(fd[1], image);
-
-      server.start();
-
-      init_async_signal_handler();
-      register_async_signal_handler(SIGHUP, sighup_handler);
-      register_async_signal_handler_oneshot(SIGINT, handle_signal);
-      register_async_signal_handler_oneshot(SIGTERM, handle_signal);
-
-      ioctl(nbd, NBD_DO_IT);
-
-      unregister_async_signal_handler(SIGHUP, sighup_handler);
-      unregister_async_signal_handler(SIGINT, handle_signal);
-      unregister_async_signal_handler(SIGTERM, handle_signal);
-      shutdown_async_signal_handler();
-    }
+    server = start_server(forker, fd[1], image);
+    run_server();
 
     r = image.update_unwatch(handle);
     ceph_assert(r == 0);
   }
 
+  delete server;
 close_nbd:
   if (r < 0) {
     ioctl(nbd, NBD_CLEAR_SOCK);
