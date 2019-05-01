@@ -644,6 +644,23 @@ static int check_device_size(int nbd_index, unsigned long expected_size)
   return 0;
 }
 
+static int parse_nbd_index(const std::string& devpath)
+{
+  int index, ret;
+
+  ret = sscanf(devpath.c_str(), "/dev/nbd%d", &index);
+  if (ret <= 0) {
+    // mean an early matching failure. But some cases need a negative value.
+    if (ret == 0)
+      ret = -EINVAL;
+    cerr << "rbd-nbd: invalid device path: " <<  devpath
+         << " (expected /dev/nbd{num})" << std::endl;
+    return ret;
+  }
+
+  return index;
+}
+
 static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, int *nbd_index,
                            uint64_t flags)
 {
@@ -689,15 +706,11 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, int *nbd_index,
       break;
     }
   } else {
-    r = sscanf(cfg->devpath.c_str(), "/dev/nbd%d", &index);
-    if (r <= 0) {
-      // mean an early matching failure. But some cases need a negative value.
-      if (r == 0)
-	r = -EINVAL;
-      cerr << "rbd-nbd: invalid device path: " << cfg->devpath
-           << " (expected /dev/nbd{num})" << std::endl;
+    r = parse_nbd_index(cfg->devpath);
+    if (r < 0)
       goto done;
-    }
+    index = r;
+
     nbd = open_device(cfg->devpath.c_str(), cfg, true);
     if (nbd < 0) {
       r = nbd;
