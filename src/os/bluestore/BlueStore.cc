@@ -2541,9 +2541,14 @@ void BlueStore::ExtentMap::reshard(
       shard_end = sp->offset;
     }
     Extent dummy(needs_reshard_begin);
-    bool was_too_many_dump = false;
+
+    bool was_too_many_blobs_check = false;
     auto too_many_blobs_threshold =
       g_conf()->bluestore_debug_too_many_blobs_threshold;
+    auto& dumped_onodes = onode->c->cache->dumped_onodes;
+    decltype(onode->c->cache->dumped_onodes)::value_type* oid_slot = nullptr;
+    decltype(onode->c->cache->dumped_onodes)::value_type* oldest_slot = nullptr;
+
     for (auto e = extent_map.lower_bound(dummy); e != extent_map.end(); ++e) {
       if (e->logical_offset >= needs_reshard_end) {
 	break;
@@ -2561,6 +2566,7 @@ void BlueStore::ExtentMap::reshard(
 	dout(30) << __func__ << "  shard 0x" << std::hex << shard_start
 		 << " to 0x" << shard_end << std::dec << dendl;
       }
+
       if (e->blob_escapes_range(shard_start, shard_end - shard_start)) {
 	if (!e->blob->is_spanning()) {
 	  // We have two options: (1) split the blob into pieces at the
@@ -2600,15 +2606,21 @@ void BlueStore::ExtentMap::reshard(
             b->id = bid;
 	    spanning_blob_map[b->id] = b;
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
-	    if (!was_too_many_dump &&
+	    if (!was_too_many_blobs_check &&
 	      too_many_blobs_threshold &&
 	      spanning_blob_map.size() >= size_t(too_many_blobs_threshold)) {
-		dout(0) << __func__
-		        << " spanning blob count exceeds threshold, "
-			<< spanning_blob_map.size() << " spanning blobs"
-			<< dendl;
-		_dump_onode<0>(cct, *onode);
-	      was_too_many_dump = true;
+
+	      was_too_many_blobs_check = true;
+	      for (size_t i = 0; i < dumped_onodes.size(); ++i) {
+		if (dumped_onodes[i].first == onode->oid) {
+		  oid_slot = &dumped_onodes[i];
+		  break;
+		}
+		if (!oldest_slot || (oldest_slot &&
+		    dumped_onodes[i].second < oldest_slot->second)) {
+		  oldest_slot = &dumped_onodes[i];
+		}
+	      }
 	    }
 	  }
 	}
@@ -2618,6 +2630,23 @@ void BlueStore::ExtentMap::reshard(
 	  e->blob->id = -1;
 	  dout(30) << __func__ << "    un-spanning " << *e->blob << dendl;
 	}
+      }
+    }
+    bool do_dump = (!oid_slot && was_too_many_blobs_check) ||
+      (oid_slot &&
+	(mono_clock::now() - oid_slot->second >= make_timespan(5 * 60)));
+    if (do_dump) {
+      dout(0) << __func__
+	      << " spanning blob count exceeds threshold, "
+	      << spanning_blob_map.size() << " spanning blobs"
+	      << dendl;
+      _dump_onode<0>(cct, *onode);
+      if (oid_slot) {
+	oid_slot->second = mono_clock::now();
+      } else {
+	ceph_assert(oldest_slot);
+	oldest_slot->first = onode->oid;
+	oldest_slot->second = mono_clock::now();
       }
     }
   }
