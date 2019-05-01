@@ -2541,6 +2541,9 @@ void BlueStore::ExtentMap::reshard(
       shard_end = sp->offset;
     }
     Extent dummy(needs_reshard_begin);
+    bool was_too_many_dump = false;
+    auto too_many_blobs_threshold =
+      g_conf()->bluestore_debug_too_many_blobs_threshold;
     for (auto e = extent_map.lower_bound(dummy); e != extent_map.end(); ++e) {
       if (e->logical_offset >= needs_reshard_end) {
 	break;
@@ -2597,6 +2600,16 @@ void BlueStore::ExtentMap::reshard(
             b->id = bid;
 	    spanning_blob_map[b->id] = b;
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
+	    if (!was_too_many_dump &&
+	      too_many_blobs_threshold &&
+	      spanning_blob_map.size() >= size_t(too_many_blobs_threshold)) {
+		dout(0) << __func__
+		        << " spanning blob count exceeds threshold, "
+			<< spanning_blob_map.size() << " spanning blobs"
+			<< dendl;
+		_dump_onode<0>(cct, *onode);
+	      was_too_many_dump = true;
+	    }
 	  }
 	}
       } else {
