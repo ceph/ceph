@@ -176,7 +176,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p),
   osd(o),
   cct(o->cct),
-  pool(recovery_state.get_pool()),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
   snap_mapper(
     cct,
@@ -208,6 +207,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     curmap,
     this,
     this),
+  pool(recovery_state.get_pool()),
   info(recovery_state.get_info())
 {
 #ifdef PG_DEBUG_REFS
