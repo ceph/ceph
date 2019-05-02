@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_QUOTA_H
-#define CEPH_RGW_SERVICES_QUOTA_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -19,5 +20,3 @@ public:
   const RGWQuotaInfo& get_bucket_quota() const;
   const RGWQuotaInfo& get_user_quota() const;
 };
-
-#endif

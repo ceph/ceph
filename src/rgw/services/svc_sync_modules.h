@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_SYNC_MODULES_H
-#define CEPH_RGW_SERVICES_SYNC_MODULES_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -21,6 +22,3 @@ public:
 
   void init();
 };
-
-#endif
-
