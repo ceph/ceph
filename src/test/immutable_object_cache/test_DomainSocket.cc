@@ -58,7 +58,7 @@ public:
       }
     }
 
-    auto ctx = new FunctionContext([this](bool reg) {
+    auto ctx = new FunctionContext([](bool reg) {
       ASSERT_TRUE(reg);
     });
     m_cache_client->register_client(ctx);
