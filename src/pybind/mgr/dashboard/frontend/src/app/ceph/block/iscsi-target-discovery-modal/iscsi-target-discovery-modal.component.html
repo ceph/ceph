@@ -9,8 +9,7 @@
           novalidate>
       <div class="modal-body">
         <!-- User -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': discoveryForm.showError('user', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-4"
                  for="user"
                  i18n>User</label>
@@ -19,11 +18,11 @@
                    class="form-control"
                    formControlName="user"
                    type="text">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('user', formDir, 'required')"
                   i18n>This field is required.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('user', formDir, 'pattern')"
                   i18n>Usernames must have a length of 8 to 64 characters and
               can only contain letters, '.', '@', '-', '_' or ':'.</span>
@@ -31,8 +30,7 @@
         </div>
 
         <!-- Password -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': discoveryForm.showError('password', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-4"
                  for="password"
                  i18n>Password</label>
@@ -54,11 +52,11 @@
                 </button>
               </span>
             </div>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('password', formDir, 'pattern')"
                   i18n>Passwords must have a length of 12 to 16 characters
               and can only contain letters, '@', '-', '_' or '/'.</span>
@@ -66,8 +64,7 @@
         </div>
 
         <!-- mutual_user -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': discoveryForm.showError('mutual_user', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-4"
                  for="mutual_user">
             <ng-container i18n>Mutual User</ng-container>
@@ -78,11 +75,11 @@
                    formControlName="mutual_user"
                    type="text">
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_user', formDir, 'required')"
                   i18n>This field is required.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_user', formDir, 'pattern')"
                   i18n>Usernames must have a length of 8 to 64 characters and
               can only contain letters, '.', '@', '-', '_' or ':'.</span>
@@ -90,8 +87,7 @@
         </div>
 
         <!-- mutual_password -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': discoveryForm.showError('mutual_password', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-4"
                  for="mutual_password"
                  i18n>Mutual Password</label>
@@ -113,11 +109,11 @@
                 </button>
               </span>
             </div>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_password', formDir, 'required')"
                   i18n>This field is required.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="discoveryForm.showError('mutual_password', formDir, 'pattern')"
                   i18n>Passwords must have a length of 12 to 16 characters and
               can only contain letters, '@', '-', '_' or '/'.</span>

@@ -15,8 +15,7 @@
   <div class="modal-body">
 
     <!-- Name -->
-    <div class="form-group row"
-         [ngClass]="{':invalid': snapshotForm.showError('snapshotName', formDir)}">
+    <div class="form-group row">
       <label class="col-form-label col-sm-3"
              for="snapshotName">
         <ng-container i18n>Name</ng-container>
@@ -30,8 +29,8 @@
                name="snapshotName"
                formControlName="snapshotName"
                autofocus>
-        <span class="form-text text-muted"
-              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')">
+        <span class="invalid-feedback"
+              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
               i18n>This field is required.</span>
       </div>
     </div>

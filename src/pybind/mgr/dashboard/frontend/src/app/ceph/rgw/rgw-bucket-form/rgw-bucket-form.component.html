@@ -32,8 +32,7 @@
         </div>
 
         <!-- Name -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': bucketForm.showError('bid', frm)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="bid">
             <ng-container i18n>Name</ng-container>
@@ -50,21 +49,20 @@
                    formControlName="bid"
                    [readonly]="editing"
                    autofocus>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'required')"
                   i18n>This field is required.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
                   i18n>The value is not valid.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameExists')"
                   i18n>The chosen name is already in use.</span>
           </div>
         </div>
 
         <!-- Owner -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': bucketForm.showError('owner', frm)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="owner">
             <ng-container i18n>Owner</ng-container>
@@ -84,7 +82,7 @@
               <option *ngFor="let owner of owners"
                       [value]="owner">{{ owner }}</option>
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
                   i18n>This field is required.</span>
           </div>

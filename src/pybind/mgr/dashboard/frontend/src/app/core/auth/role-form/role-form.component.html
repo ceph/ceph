@@ -9,8 +9,7 @@
       <div class="card-body">
 
         <!-- Name -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': roleForm.showError('name', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="name">
             <ng-container i18n>Name</ng-container>
@@ -26,18 +25,17 @@
                    name="name"
                    formControlName="name"
                    autofocus>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="roleForm.showError('name', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="roleForm.showError('name', formDir, 'notUnique')"
                   i18n>The chosen name is already in use.</span>
           </div>
         </div>
 
         <!-- Description -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': roleForm.showError('description', formDir)}">
+        <div class="form-group row">
           <label i18n
                  class="col-form-label col-sm-3"
                  for="description">Description</label>

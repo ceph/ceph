@@ -10,8 +10,7 @@
 
       <div class="card-body">
         <!-- Target IQN -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': targetForm.showError('target_iqn', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="target_iqn">
             <ng-container i18n>Target IQN</ng-container>
@@ -35,15 +34,15 @@
               </span>
             </div>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="targetForm.showError('target_iqn', formDir, 'required')"
                   i18n>This field is required.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="targetForm.showError('target_iqn', formDir, 'pattern')"
                   i18n>IQN has wrong pattern.</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="targetForm.showError('target_iqn', formDir, 'iqn')">
               <ng-container i18n>An IQN has the following notation
                 'iqn.$year-$month.$reversedAddress:$definedName'</ng-container>
@@ -63,8 +62,7 @@
         </div>
 
         <!-- Portals -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': targetForm.showError('portals', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="portals">
             <ng-container i18n>Portals</ng-container>
@@ -89,7 +87,7 @@
               </div>
             </ng-container>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
                   i18n>At least {{ minimum_gateways }} gateways are required.</span>
 
@@ -111,8 +109,7 @@
         </div>
 
         <!-- Images -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': targetForm.showError('disks', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="disks"
                  i18n>Images</label>
@@ -149,7 +146,7 @@
               </span>
             </ng-container>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="targetForm.showError('disks', formDir, 'required')"
                   i18n>At least 1 image is required.</span>
 
@@ -209,8 +206,7 @@
               </div>
               <div class="card-body">
                 <!-- Initiator: Name -->
-                <div class="form-group row"
-                     [ngClass]="{':invalid': initiator.showError('client_iqn', formDir)}">
+                <div class="form-group row">
                   <label class="col-form-label col-sm-3"
                          for="client_iqn">
                     <ng-container i18n>Client IQN</ng-container>
@@ -222,15 +218,15 @@
                            formControlName="client_iqn"
                            (blur)="updatedInitiatorSelector()">
 
-                    <span class="form-text text-muted"
+                    <span class="invalid-feedback"
                           *ngIf="initiator.showError('client_iqn', formDir, 'notUnique')"
                           i18n>Initiator IQN needs to be unique.</span>
 
-                    <span class="form-text text-muted"
+                    <span class="invalid-feedback"
                           *ngIf="initiator.showError('client_iqn', formDir, 'required')"
                           i18n>This field is required.</span>
 
-                    <span class="form-text text-muted"
+                    <span class="invalid-feedback"
                           *ngIf="initiator.showError('client_iqn', formDir, 'pattern')"
                           i18n>IQN has wrong pattern.</span>
                   </div>
@@ -238,8 +234,7 @@
 
                 <ng-container formGroupName="auth">
                   <!-- Initiator: User -->
-                  <div class="form-group row"
-                       [ngClass]="{':invalid': initiator.showError('user', formDir)}">
+                  <div class="form-group row">
                     <label class="col-form-label col-sm-3"
                            for="user"
                            i18n>User</label>
@@ -248,11 +243,11 @@
                              class="form-control"
                              formControlName="user"
                              type="text">
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('user', formDir, 'required')"
                             i18n>This field is required.</span>
 
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('user', formDir, 'pattern')"
                             i18n>Usernames must have a length of 8 to 64 characters and
                         can only contain letters, '.', '@', '-', '_' or ':'.</span>
@@ -260,8 +255,7 @@
                   </div>
 
                   <!-- Initiator: Password -->
-                  <div class="form-group row"
-                       [ngClass]="{':invalid': initiator.showError('password', formDir)}">
+                  <div class="form-group row">
                     <label class="col-form-label col-sm-3"
                            for="password"
                            i18n>Password</label>
@@ -283,11 +277,11 @@
                           </button>
                         </span>
                       </div>
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('password', formDir, 'required')"
                             i18n>This field is required.</span>
 
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('password', formDir, 'pattern')"
                             i18n>Passwords must have a length of 12 to 16 characters
                         and can only contain letters, '@', '-', '_' or '/'.</span>
@@ -296,8 +290,7 @@
 
 
                   <!-- Initiator: mutual_user -->
-                  <div class="form-group row"
-                       [ngClass]="{':invalid': initiator.showError('mutual_user', formDir)}">
+                  <div class="form-group row">
                     <label class="col-form-label col-sm-3"
                            for="mutual_user">
                       <ng-container i18n>Mutual User</ng-container>
@@ -308,11 +301,11 @@
                              formControlName="mutual_user"
                              type="text">
 
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_user', formDir, 'required')"
                             i18n>This field is required.</span>
 
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_user', formDir, 'pattern')"
                             i18n>Usernames must have a length of 8 to 64 characters and
                         can only contain letters, '.', '@', '-', '_' or ':'.</span>
@@ -320,8 +313,7 @@
                   </div>
 
                   <!-- Initiator: mutual_password -->
-                  <div class="form-group row"
-                       [ngClass]="{':invalid': initiator.showError('mutual_password', formDir)}">
+                  <div class="form-group row">
                     <label class="col-form-label col-sm-3"
                            for="mutual_password"
                            i18n>Mutual Password</label>
@@ -343,11 +335,11 @@
                           </button>
                         </span>
                       </div>
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_password', formDir, 'required')"
                             i18n>This field is required.</span>
 
-                      <span class="form-text text-muted"
+                      <span class="invalid-feedback"
                             *ngIf="initiator.showError('mutual_password', formDir, 'pattern')"
                             i18n>Passwords must have a length of 12 to 16 characters and
                         can only contain letters, '@', '-', '_' or '/'.</span>
@@ -356,8 +348,7 @@
                 </ng-container>
 
                 <!-- Initiator: Images -->
-                <div class="form-group row"
-                     [ngClass]="{':invalid': initiator.showError('luns', formDir)}">
+                <div class="form-group row">
                   <label class="col-form-label col-sm-3"
                          for="luns"
                          i18n>Images</label>
@@ -419,8 +410,7 @@
 
         <!-- Groups -->
         <div class="form-group row"
-             *ngIf="targetForm.getValue('acl_enabled')"
-             [ngClass]="{':invalid': targetForm.showError('groups', formDir)}">
+             *ngIf="targetForm.getValue('acl_enabled')">
           <label class="col-form-label col-sm-3"
                  for="initiators"
                  i18n>Groups</label>
@@ -453,8 +443,7 @@
                 </div>
 
                 <!-- Group: members -->
-                <div class="form-group row"
-                     [ngClass]="{':invalid': group.showError('members', formDir)}">
+                <div class="form-group row">
                   <label class="col-form-label col-sm-3"
                          for="members">
                     <ng-container i18n>Initiators</ng-container>
@@ -495,8 +484,7 @@
                 </div>
 
                 <!-- Group: disks -->
-                <div class="form-group row"
-                     [ngClass]="{':invalid': group.showError('disks', formDir)}">
+                <div class="form-group row">
                   <label class="col-form-label col-sm-3"
                          for="disks">
                     <ng-container i18n>Images</ng-container>

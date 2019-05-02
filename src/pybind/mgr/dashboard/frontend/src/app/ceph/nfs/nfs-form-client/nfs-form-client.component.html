@@ -24,8 +24,7 @@
 
           <div class="card-body">
             <!-- Addresses -->
-            <div class="form-group row"
-                 [ngClass]="{ ':invalid': showError(index, 'addresses', formDir) }">
+            <div class="form-group row">
               <label i18n
                      class="col-sm-3 col-form-label"
                      for="addresses">Addresses</label>
@@ -36,7 +35,7 @@
                        id="addresses"
                        formControlName="addresses"
                        placeholder="192.168.0.10, 192.168.1.0/8">
-                <span class="form-text text-muted">
+                <span class="invalid-feedback">
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
                         i18n>Required field</span>
 

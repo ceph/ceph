@@ -16,8 +16,7 @@
 
       <div class="card-body">
         <!-- Name -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': form.showError('name', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="name">
             <ng-container i18n>Name</ng-container>
@@ -32,18 +31,17 @@
                    i18n-placeholder
                    formControlName="name"
                    autofocus>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="form.showError('name', formDir, 'required')"
                   i18n>This field is required!</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="form.showError('name', formDir, 'uniqueName')"
                   i18n>The chosen Ceph pool name is already in use.</span>
           </div>
         </div>
 
         <!-- Pool type selection -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': form.showError('poolType', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-3"
                  for="poolType">
             <ng-container i18n>Pool type</ng-container>
@@ -61,7 +59,7 @@
                 {{ poolType }}
               </option>
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="form.showError('poolType', formDir, 'required')"
                   i18n>This field is required!</span>
           </div>
@@ -69,8 +67,7 @@
 
         <div *ngIf="form.getValue('poolType')">
           <!-- Pg number -->
-          <div class="form-group row"
-               [ngClass]="{':invalid': form.showError('pgNum', formDir)}">
+          <div class="form-group row">
             <label class="col-form-label col-sm-3"
                    for="pgNum">
               <ng-container i18n>Placement groups</ng-container>
@@ -86,13 +83,13 @@
                      (focus)="externalPgChange = false"
                      (blur)="alignPgs()"
                      required>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('pgNum', formDir, 'required')"
                     i18n>This field is required!</span>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('pgNum', formDir, 'min')"
                     i18n>At least one placement group is needed!</span>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('pgNum', formDir, '34')"
                     i18n>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</span>
               <span class="form-text text-muted">
@@ -109,7 +106,6 @@
 
           <!-- Crush ruleset selection -->
           <div class="form-group row"
-               [ngClass]="{':invalid': form.showError('crushRule', formDir)}"
                *ngIf="form.getValue('poolType') && current.rules.length > 0">
             <label class="col-form-label col-sm-3"
                    for="crushRule"
@@ -161,7 +157,7 @@
                   </tab>
                 </tabset>
               </span>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('crushRule', formDir, 'tooFewOsds')"
                     i18n>The rule can't be used in the current cluster as it has
                 to few OSDs to meet the minimum required OSD by this rule.</span>
@@ -170,7 +166,6 @@
 
           <!-- Replica Size -->
           <div class="form-group row"
-               [ngClass]="{':invalid': form.showError('size', formDir)}"
                *ngIf="form.getValue('poolType') === 'replicated'">
             <label class="col-form-label col-sm-3"
                    for="size">
@@ -185,14 +180,14 @@
                      name="size"
                      type="number"
                      formControlName="size">
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('size', formDir)">
                 <ul class="list-inline">
                   <li i18n>Minimum: {{ getMinSize() }}</li>
                   <li i18n>Maximum: {{ getMaxSize() }}</li>
                 </ul>
               </span>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="form.showError('size', formDir)"
                     i18n>The size specified is out of range. A value from
                 {{ getMinSize() }} to {{ getMaxSize() }} is valid.</span>
@@ -322,8 +317,7 @@
           </div>
           <div *ngIf="hasCompressionEnabled()">
             <!-- Compression algorithm selection -->
-            <div class="form-group row"
-                 [ngClass]="{':invalid': form.showError('algorithm', formDir)}">
+            <div class="form-group row">
               <label i18n
                      class="col-form-label col-sm-3"
                      for="algorithm">Algorithm</label>
@@ -346,35 +340,33 @@
               </div>
             </div>
 
-              <!-- Compression min blob size -->
-              <div class="form-group row"
-                   [ngClass]="{':invalid': form.showError('minBlobSize', formDir)}">
-                <label i18n
-                       class="col-form-label col-sm-3"
-                       for="minBlobSize">Minimum blob size</label>
-                <div class="col-sm-9">
-                  <input id="minBlobSize"
-                         name="minBlobSize"
-                         formControlName="minBlobSize"
-                         type="text"
-                         min="0"
-                         class="form-control"
-                         i18n-placeholder
-                         placeholder="e.g., 128KiB"
-                         defaultUnit="KiB"
-                         cdDimlessBinary>
-                  <span class="form-text text-muted"
-                        *ngIf="form.showError('minBlobSize', formDir, 'min')"
-                        i18n>Value should be greater than 0</span>
-                  <span class="form-text text-muted"
-                        *ngIf="form.showError('minBlobSize', formDir, 'maximum')"
-                        i18n>Value should be less than the maximum blob size</span>
+            <!-- Compression min blob size -->
+            <div class="form-group row">
+              <label i18n
+                     class="col-form-label col-sm-3"
+                     for="minBlobSize">Minimum blob size</label>
+              <div class="col-sm-9">
+                <input id="minBlobSize"
+                       name="minBlobSize"
+                       formControlName="minBlobSize"
+                       type="text"
+                       min="0"
+                       class="form-control"
+                       i18n-placeholder
+                       placeholder="e.g., 128KiB"
+                       defaultUnit="KiB"
+                       cdDimlessBinary>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('minBlobSize', formDir, 'min')"
+                      i18n>Value should be greater than 0</span>
+                <span class="invalid-feedback"
+                      *ngIf="form.showError('minBlobSize', formDir, 'maximum')"
+                      i18n>Value should be less than the maximum blob size</span>
               </div>
             </div>
 
             <!-- Compression max blob size -->
-            <div class="form-group row"
-                 [ngClass]="{':invalid': form.showError('maxBlobSize', formDir)}">
+            <div class="form-group row">
               <label i18n
                      class="col-form-label col-sm-3"
                      for="maxBlobSize">Maximum blob size</label>
@@ -388,18 +380,17 @@
                        placeholder="e.g., 512KiB"
                        defaultUnit="KiB"
                        cdDimlessBinary>
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="form.showError('maxBlobSize', formDir, 'min')"
                       i18n>Value should be greater than 0</span>
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="form.showError('maxBlobSize', formDir, 'minimum')"
                       i18n>Value should be greater than the minimum blob size</span>
               </div>
             </div>
 
             <!-- Compression ratio -->
-            <div class="form-group row"
-                 [ngClass]="{':invalid': form.showError('ratio', formDir)}">
+            <div class="form-group row">
               <label i18n
                      class="col-form-label col-sm-3"
                      for="ratio">Ratio</label>
@@ -414,7 +405,7 @@
                        class="form-control"
                        i18n-placeholder
                        placeholder="Compression ratio">
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="form.showError('ratio', formDir, 'min') || form.showError('ratio', formDir, 'max')"
                       i18n>Value should be between 0.0 and 1.0</span>
               </div>
@@ -484,13 +475,13 @@
           </cd-rbd-configuration-form>
         </div>
 
-        <div class="form-group :invalid">
+        <div class="form-group">
           <div class="offset-sm-3 col-sm-9"
                *ngIf="form.hasError('rbdPool')">
             <br>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   i18n>It's not possible to create an RBD pool with '/' in the name.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   i18n>Please change the name or remove 'rbd' from the applications list.</span>
           </div>
         </div>
