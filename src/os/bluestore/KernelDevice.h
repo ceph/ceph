@@ -25,6 +25,11 @@
 #include "ceph_aio.h"
 #include "BlockDevice.h"
 
+#ifndef RW_IO_MAX
+#define RW_IO_MAX 0x7FFFF000
+#endif
+
+
 class KernelDevice : public BlockDevice {
   std::vector<int> fd_directs, fd_buffereds;
   bool enable_wrt = true;
