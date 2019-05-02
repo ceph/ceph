@@ -296,6 +296,9 @@ int RGWCtlDef::init(RGWServices& svc)
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc(svc.zone, svc.meta_be_otp));
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
+  bucket.reset(new RGWBucketCtl(svc.zone, svc.bucket,
+                                (RGWBucketMetadataHandler *)meta.bucket.get()),
+                                (RGWBucketInstanceMetadataHandler *)meta.bucket_instance.get());
 
   return 0;
 }
@@ -314,6 +317,7 @@ int RGWCtl::init(RGWServices& svc)
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
 
   user = _ctl.user.get();
+  bucket = _ctl.bucket.get();
 
   r = meta.user->init(meta.mgr);
   if (r < 0) {
