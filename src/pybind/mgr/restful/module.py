@@ -79,16 +79,16 @@ class CommandsRequest(object):
 
         # Gather the results (in parallel)
         results = []
-        for index in range(len(commands)):
+        for index, command in enumerate(commands):
             tag = '%s:%s:%d' % (__name__, self.id, index)
 
             # Store the result
             result = CommandResult(tag)
-            result.command = common.humanify_command(commands[index])
+            result.command = common.humanify_command(command)
             results.append(result)
 
             # Run the command
-            context.instance.send_command(result, 'mon', '', json.dumps(commands[index]), tag)
+            context.instance.send_command(result, 'mon', '', json.dumps(command), tag)
 
         return results
 
