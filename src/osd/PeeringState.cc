@@ -2272,7 +2272,7 @@ void PeeringState::activate(
 	  last_peering_reset /* epoch to create pg at */);
 
 	// send some recent log, so that op dup detection works well.
-	m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
+	m->log.copy_up_to(cct, pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
 	m->info.log_tail = m->log.tail;
 	pi.log_tail = m->log.tail;  // sigh...
 
@@ -2285,7 +2285,7 @@ void PeeringState::activate(
 	  get_osdmap_epoch(), info,
 	  last_peering_reset /* epoch to create pg at */);
 	// send new stuff to append to replicas log
-	m->log.copy_after(pg_log.get_log(), pi.last_update);
+	m->log.copy_after(cct, pg_log.get_log(), pi.last_update);
       }
 
       // share past_intervals if we are creating the pg on the replica
@@ -2581,7 +2581,7 @@ void PeeringState::fulfill_log(
 			     << ", sending full log instead";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
     } else
-      mlog->log.copy_after(pg_log.get_log(), query.since);
+      mlog->log.copy_after(cct, pg_log.get_log(), query.since);
   }
   else if (query.type == pg_query_t::FULLLOG) {
     psdout(10) << " sending info+missing+full log" << dendl;
