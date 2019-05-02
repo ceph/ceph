@@ -323,7 +323,8 @@ public:
     }
   }
 
-  void expect_get_snapshots_legacy(MockRefreshImageCtx &mock_image_ctx, int r) {
+  void expect_get_snapshots_legacy(MockRefreshImageCtx &mock_image_ctx,
+                                   bool include_timestamp, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                                exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_name"), _, _, _));
     if (r < 0) {
@@ -333,9 +334,11 @@ public:
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_size"), _, _, _))
                     .WillOnce(DoDefault());
-      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                  exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_timestamp"), _, _, _))
-                    .WillOnce(DoDefault());
+      if (include_timestamp) {
+        EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                    exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_snapshot_timestamp"), _, _, _))
+                      .WillOnce(DoDefault());
+      }
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("get_parent"), _, _, _))
                     .WillOnce(DoDefault());
@@ -613,7 +616,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessLegacySnapshotV2) {
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_get_snapshots(mock_image_ctx, true, -EOPNOTSUPP);
-  expect_get_snapshots_legacy(mock_image_ctx, 0);
+  expect_get_snapshots_legacy(mock_image_ctx, true, 0);
   expect_refresh_parent_is_required(mock_refresh_parent_request, false);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
@@ -626,6 +629,43 @@ TEST_F(TestMockImageRefreshRequest, SuccessLegacySnapshotV2) {
 
   ASSERT_EQ(0, ctx.wait());
 }
+
+TEST_F(TestMockImageRefreshRequest, SuccessLegacySnapshotNoTimestampV2) {
+  REQUIRE_FORMAT_V2();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, snap_create(*ictx, "snap"));
+
+  MockRefreshImageCtx mock_image_ctx(*ictx);
+  MockRefreshParentRequest mock_refresh_parent_request;
+  MockExclusiveLock mock_exclusive_lock;
+  expect_op_work_queue(mock_image_ctx);
+  expect_test_features(mock_image_ctx);
+
+  InSequence seq;
+  expect_get_mutable_metadata(mock_image_ctx, ictx->features, 0);
+  expect_get_parent(mock_image_ctx, -EOPNOTSUPP);
+  expect_get_parent_legacy(mock_image_ctx, 0);
+  expect_get_metadata(mock_image_ctx, 0);
+  expect_apply_metadata(mock_image_ctx, 0);
+  expect_get_group(mock_image_ctx, 0);
+  expect_get_snapshots(mock_image_ctx, true, -EOPNOTSUPP);
+  expect_get_snapshots_legacy(mock_image_ctx, true, -EOPNOTSUPP);
+  expect_get_snapshots_legacy(mock_image_ctx, false, 0);
+  expect_refresh_parent_is_required(mock_refresh_parent_request, false);
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);
+  }
+  expect_add_snap(mock_image_ctx, "snap", ictx->snap_ids.begin()->second);
+
+  C_SaferCond ctx;
+  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, false, false, &ctx);
+  req->send();
+
+  ASSERT_EQ(0, ctx.wait());
+}
+
 
 TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   REQUIRE_FORMAT_V2();
