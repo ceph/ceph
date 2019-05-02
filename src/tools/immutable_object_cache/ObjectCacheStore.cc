@@ -100,8 +100,7 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
                    << " snapshot: " << snap_id << dendl;
 
   int ret = 0;
-  std::string cache_file_name = std::move(get_cache_file_name(pool_nspace,
-                                          pool_id, snap_id, object_name));
+  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
   librados::IoCtx ioctx;
   {
     Mutex::Locker _locker(m_ioctx_map_lock);
@@ -147,8 +146,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     ret = 0;
   }
 
-  std::string cache_file_path = std::move(
-    get_cache_file_path(cache_file_name, true));
+  std::string cache_file_path = get_cache_file_path(cache_file_name, true);
 
   if (cache_file_path == "") {
     lderr(m_cct) << "fail to write cache file" << dendl;
@@ -186,8 +184,7 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
                    << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  std::string cache_file_name = std::move(get_cache_file_name(pool_nspace,
-                                            pool_id, snap_id, object_name));
+  std::string cache_file_name = get_cache_file_name(pool_nspace, pool_id, snap_id, object_name);
 
   cache_status_t ret = m_policy->lookup_object(cache_file_name);
 
@@ -245,7 +242,7 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
     return 0;
   }
 
-  std::string cache_file_path = std::move(get_cache_file_path(cache_file));
+  std::string cache_file_path = get_cache_file_path(cache_file);
 
   ldout(m_cct, 20) << "evict cache: " << cache_file_path << dendl;
 
