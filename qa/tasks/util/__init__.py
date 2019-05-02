@@ -258,3 +258,12 @@ def sudo_append_to_file(remote, path, data):
         ],
         stdin=data,
     )
+
+def get_rpm_pkg_version(remote, pkg):
+    """Gather RPM package version"""
+    version = None
+    try:
+        version = remote.sh('rpm --queryformat="%{{VERSION}}" -q {}'.format(pkg))
+    except CommandFailedError:
+        logger.warning("Package {} is not installed".format(pkg))
+    return version

@@ -13,6 +13,7 @@ from teuthology import misc
 from util import (
     copy_directory_recursively,
     get_remote_for_role,
+    get_rpm_pkg_version,
     introspect_roles,
     remote_exec,
     remote_run_script_as_root,
@@ -934,6 +935,15 @@ class Orch(DeepSea):
             cmd += ' 2> /dev/null'
         self.master_remote.run(args=cmd)
 
+    def __check_ceph_test_rpm_version(self):
+        """Checks rpm version for ceph and ceph-test; logs warning if differs"""
+        ceph_test_ver = get_rpm_pkg_version(self.master_remote, "ceph-test")
+        ceph_ver = get_rpm_pkg_version(self.master_remote, "ceph")
+        if ceph_test_ver != ceph_ver:
+            log.warning(
+                "ceph-test rpm version: {} differs from ceph version: {}"
+                .format(ceph_test_ver, ceph_ver))
+
     def __check_salt_api_service(self):
         base_cmd = 'sudo systemctl status --full --lines={} {}.service'
         try:
@@ -1147,6 +1157,7 @@ class Orch(DeepSea):
         stage = 2
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
+        self.__check_ceph_test_rpm_version()
         self._pillar_items()
         self.__dump_drive_groups_yml()
 
