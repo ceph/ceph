@@ -8,8 +8,7 @@
           novalidate>
       <div class="modal-body">
         <!-- Priority -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': osdRecvSpeedForm.showError('priority', formDir)}">
+        <div class="form-group row">
           <label class="col-form-label col-sm-6"
                  for="priority">
             <ng-container i18n>Priority</ng-container>
@@ -25,7 +24,7 @@
                 {{ priority.text }}
               </option>
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="osdRecvSpeedForm.showError('priority', formDir, 'required')"
                   i18n>This field is required.</span>
           </div>
@@ -50,9 +49,7 @@
 
         <!-- Priority values -->
         <div class="form-group row"
-             *ngFor="let attr of priorityAttrs | keyvalue"
-             [ngClass]="{':invalid': osdRecvSpeedForm.getValue('customizePriority') &&
-             osdRecvSpeedForm.showError(attr.key, formDir)}">
+             *ngFor="let attr of priorityAttrs | keyvalue">
           <label class="col-form-label col-sm-6"
                  [for]="attr.key">{{ attr.value.text }}
             <cd-helper *ngIf="attr.value.desc">{{ attr.value.desc }}</cd-helper>
@@ -65,19 +62,19 @@
                    [id]="attr.key"
                    [formControlName]="attr.key"
                    [readonly]="!osdRecvSpeedForm.getValue('customizePriority')">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
                   osdRecvSpeedForm.showError(attr.key, formDir, 'required')"
                   i18n>This field is required!</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
                   osdRecvSpeedForm.showError(attr.key, formDir, 'pattern')"
                   i18n>{{ attr.value.patternHelpText }}</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
                   osdRecvSpeedForm.showError(attr.key, formDir, 'max')"
                   i18n>The entered value is too high! It must not be greater than {{ attr.value.maxValue }}.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
                   osdRecvSpeedForm.showError(attr.key, formDir, 'min')"
                   i18n>The entered value is too low! It must not be lower than {{ attr.value.minValue }}.</span>

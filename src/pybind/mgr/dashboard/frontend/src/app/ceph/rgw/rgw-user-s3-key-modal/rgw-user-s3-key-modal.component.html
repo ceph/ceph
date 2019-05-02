@@ -15,8 +15,7 @@
   <div class="modal-body">
 
     <!-- Username -->
-    <div class="form-group row"
-         [ngClass]="{':invalid': formGroup.showError('user', frm)}">
+    <div class="form-group row">
       <label class="col-form-label col-sm-3"
              for="user">
         <ng-container i18n>Username</ng-container>
@@ -42,7 +41,7 @@
           <option *ngFor="let userCandidate of userCandidates"
                   [value]="userCandidate">{{ userCandidate }}</option>
         </select>
-        <span class="form-text text-muted"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('user', frm, 'required')"
               i18n>This field is required.</span>
       </div>
@@ -66,7 +65,6 @@
 
     <!-- Access key -->
     <div class="form-group row"
-         [ngClass]="{':invalid': formGroup.showError('access_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="col-form-label col-sm-3"
              for="access_key">
@@ -93,7 +91,7 @@
             </button>
           </span>
         </div>
-        <span class="form-text text-muted"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('access_key', frm, 'required')"
               i18n>This field is required.</span>
       </div>
@@ -101,7 +99,6 @@
 
     <!-- Secret key -->
     <div class="form-group row"
-         [ngClass]="{':invalid': formGroup.showError('secret_key', frm)}"
          *ngIf="!formGroup.getValue('generate_key')">
       <label class="col-form-label col-sm-3"
              for="secret_key">
@@ -128,7 +125,7 @@
             </button>
           </span>
         </div>
-        <span class="form-text text-muted"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('secret_key', frm, 'required')"
               i18n>This field is required.</span>
       </div>

@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { TreeModule } from 'ng2-tree';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
@@ -66,7 +67,8 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
     MgrModulesModule,
     TypeaheadModule.forRoot(),
     TimepickerModule.forRoot(),
-    BsDatepickerModule.forRoot()
+    BsDatepickerModule.forRoot(),
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     HostsComponent,

@@ -10,7 +10,6 @@
       <div class="card-body">
         <!-- cluster_id -->
         <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('cluster_id', formDir)}"
              *ngIf="!isDefaultCluster">
           <label class="col-sm-3 col-form-label"
                  for="cluster_id">
@@ -35,15 +34,14 @@
               <option *ngFor="let cluster of allClusters"
                       [value]="cluster">{{ cluster }}</option>
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('cluster_id', formDir, 'required')"
                   i18n>Required field</span>
           </div>
         </div>
 
         <!-- daemons -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('daemons', formDir)}">
+        <div class="form-group row">
           <label class="col-sm-3 col-form-label"
                  for="daemons">
             <ng-container i18n>Daemons</ng-container>
@@ -84,8 +82,7 @@
         <!-- FSAL -->
         <div formGroupName="fsal">
           <!-- Name -->
-          <div class="form-group row"
-               [ngClass]="{':invalid': nfsForm.showError('name', formDir)}">
+          <div class="form-group row">
             <label class="col-sm-3 col-form-label"
                    for="name">
               <ng-container i18n>Storage Backend</ng-container>
@@ -109,7 +106,7 @@
                 <option *ngFor="let fsal of allFsals"
                         [value]="fsal.value">{{ fsal.descr }}</option>
               </select>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="nfsForm.showError('name', formDir, 'required')"
                     i18n>Required field</span>
             </div>
@@ -117,7 +114,6 @@
 
           <!-- RGW user -->
           <div class="form-group row"
-               [ngClass]="{':invalid': nfsForm.showError('rgw_user_id', formDir)}"
                *ngIf="nfsForm.getValue('name') === 'RGW'">
             <label class="col-sm-3 col-form-label"
                    for="rgw_user_id">
@@ -142,7 +138,7 @@
                 <option *ngFor="let rgwUserId of allRgwUsers"
                         [value]="rgwUserId">{{ rgwUserId }}</option>
               </select>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="nfsForm.showError('rgw_user_id', formDir, 'required')"
                     i18n>Required field</span>
             </div>
@@ -150,7 +146,6 @@
 
           <!-- CephFS user_id -->
           <div class="form-group row"
-               [ngClass]="{':invalid': nfsForm.showError('user_id', formDir)}"
                *ngIf="nfsForm.getValue('name') === 'CEPH'">
             <label class="col-sm-3 col-form-label"
                    for="user_id">
@@ -174,7 +169,7 @@
                 <option *ngFor="let client of allCephxClients"
                         [value]="client">{{ client }}</option>
               </select>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="nfsForm.showError('user_id', formDir, 'required')"
                     i18n>Required field</span>
             </div>
@@ -182,7 +177,6 @@
 
           <!-- CephFS fs_name -->
           <div class="form-group row"
-               [ngClass]="{':invalid': nfsForm.showError('fs_name', formDir)}"
                *ngIf="nfsForm.getValue('name') === 'CEPH'">
             <label class="col-sm-3 col-form-label"
                    for="fs_name">
@@ -207,7 +201,7 @@
                 <option *ngFor="let filesystem of allFsNames"
                         [value]="filesystem.name">{{ filesystem.name }}</option>
               </select>
-              <span class="form-text text-muted"
+              <span class="invalid-feedback"
                     *ngIf="nfsForm.showError('fs_name', formDir, 'required')"
                     i18n>Required field</span>
             </div>
@@ -216,7 +210,6 @@
 
         <!-- Secutiry Label -->
         <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('security_label', formDir)}"
              *ngIf="nfsForm.getValue('name') === 'CEPH'">
           <label class="col-sm-3 col-form-label"
                  for="security_label">
@@ -246,7 +239,7 @@
                    id="sec_label_xattr"
                    formControlName="sec_label_xattr">
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('sec_label_xattr', formDir, 'required')"
                   i18n>Required field</span>
           </div>
@@ -254,7 +247,6 @@
 
         <!-- Path -->
         <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('path', formDir)}"
              *ngIf="nfsForm.getValue('name') === 'CEPH'">
           <label class="col-sm-3 col-form-label"
                  for="path">
@@ -270,11 +262,11 @@
                    [typeahead]="pathDataSource"
                    (typeaheadOnSelect)="pathChangeHandler()"
                    (blur)="pathChangeHandler()">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'required')"
                   i18n>Required field</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'pattern')"
                   i18n>Path need to start with a '/' and can be followed by a word</span>
             <span class="form-text text-muted"
@@ -285,7 +277,6 @@
 
         <!-- Bucket -->
         <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('path', formDir)}"
              *ngIf="nfsForm.getValue('name') === 'RGW'">
           <label class="col-sm-3 col-form-label"
                  for="path">
@@ -302,11 +293,11 @@
                    (typeaheadOnSelect)="bucketChangeHandler()"
                    (blur)="bucketChangeHandler()">
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'required')"
                   i18n>Required field</span>
 
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('path', formDir, 'pattern')"
                   i18n>Path can only be a single '/' or a word</span>
 
@@ -317,8 +308,7 @@
         </div>
 
         <!-- NFS Protocol -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('protocolNfsv3', formDir) || nfsForm.showError('protocolNfsv4', formDir)}">
+        <div class="form-group row">
           <label class="col-sm-3 col-form-label"
                  for="protocols">
             <ng-container i18n>NFS Protocol</ng-container>
@@ -345,7 +335,7 @@
                      class="custom-control-label"
                      for="protocolNfsv4">NFSv4</label>
             </div>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('protocolNfsv3', formDir, 'required') ||
                   nfsForm.showError('protocolNfsv4', formDir, 'required')"
                   i18n>Required field</span>
@@ -375,7 +365,6 @@
 
         <!-- Pseudo -->
         <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('pseudo', formDir)}"
              *ngIf="nfsForm.getValue('protocolNfsv4')">
           <label class="col-sm-3 col-form-label"
                  for="pseudo">
@@ -393,18 +382,17 @@
                    name="pseudo"
                    id="pseudo"
                    formControlName="pseudo">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'required')"
                   i18n>Required field</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                   i18n>Pseudo needs to start with a '/' and can't contain any of the following: >, <, |, &, ( or ).</span>
           </div>
         </div>
 
         <!-- Access Type -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('access_type', formDir)}">
+        <div class="form-group row">
           <label class="col-sm-3 col-form-label"
                  for="access_type">
             <ng-container i18n>Access Type</ng-container>
@@ -431,15 +419,14 @@
                   *ngIf="nfsForm.getValue('access_type')">
               {{ getAccessTypeHelp(nfsForm.getValue('access_type')) }}
             </span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('access_type', formDir, 'required')"
                   i18n>Required field</span>
           </div>
         </div>
 
         <!-- Squash -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('squash', formDir)}">
+        <div class="form-group row">
           <label class="col-sm-3 col-form-label"
                  for="squash">
             <ng-container i18n>Squash</ng-container>
@@ -463,15 +450,14 @@
                       [value]="squash">{{ squash }}</option>
 
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('squash', formDir,'required')"
                   i18n>Required field</span>
           </div>
         </div>
 
         <!-- Transport Protocol -->
-        <div class="form-group row"
-             [ngClass]="{':invalid': nfsForm.showError('transportUDP', formDir) || nfsForm.showError('transportTCP', formDir)}">
+        <div class="form-group row">
           <label class="col-sm-3 col-form-label"
                  for="transports">
             <ng-container i18n>Transport Protocol</ng-container>
@@ -498,7 +484,7 @@
                      class="custom-control-label"
                      i18n>TCP</label>
             </div>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('transportUDP', formDir, 'required') ||
                   nfsForm.showError('transportTCP', formDir, 'required')"
                   i18n>Required field</span>
