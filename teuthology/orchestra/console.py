@@ -10,8 +10,7 @@ import teuthology.lock.query
 import teuthology.lock.util
 from teuthology.config import config
 from teuthology.contextutil import safe_while
-
-from ..exceptions import ConsoleError
+from teuthology.exceptions import ConsoleError
 
 import remote
 

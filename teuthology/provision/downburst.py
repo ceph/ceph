@@ -5,9 +5,9 @@ import subprocess
 import tempfile
 import yaml
 
-from ..config import config
-from ..contextutil import safe_while
-from ..misc import decanonicalize_hostname
+from teuthology.config import config
+from teuthology.contextutil import safe_while
+from teuthology.misc import decanonicalize_hostname
 from teuthology.lock import query
 
 log = logging.getLogger(__name__)

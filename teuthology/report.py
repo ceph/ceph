@@ -8,8 +8,8 @@ import socket
 from datetime import datetime
 
 import teuthology
-from .config import config
-from .job_status import get_status, set_status
+from teuthology.config import config
+from teuthology.job_status import get_status, set_status
 
 report_exceptions = (requests.exceptions.RequestException, socket.error)
 

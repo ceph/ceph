@@ -9,8 +9,8 @@ from StringIO import StringIO
 
 import teuthology.orchestra
 
-from ..config import config
-from ..contextutil import safe_while
+from teuthology.config import config
+from teuthology.contextutil import safe_while
 from teuthology.exceptions import MaxWhileTries
 from teuthology import misc
 

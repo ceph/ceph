@@ -8,7 +8,7 @@ from teuthology.orchestra.cluster import Cluster
 from teuthology.orchestra.remote import Remote
 from teuthology.task.console_log import ConsoleLog
 
-from . import TestTask
+from teuthology.test.task import TestTask
 
 
 class TestConsoleLog(TestTask):

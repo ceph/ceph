@@ -2,9 +2,9 @@ import argparse
 from datetime import datetime
 
 from mock import Mock, patch
-from ..orchestra import cluster
-from .. import misc
-from ..config import config
+from teuthology.orchestra import cluster
+from teuthology.config import config
+from teuthology import misc
 import subprocess
 
 import pytest

@@ -3,7 +3,7 @@ import pytest
 
 from mock import patch, Mock
 
-from .. import cluster, remote
+from teuthology.orchestra import cluster, remote
 
 
 class TestCluster(object):

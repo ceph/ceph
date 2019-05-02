@@ -11,16 +11,16 @@ from email.mime.text import MIMEText
 
 import teuthology.lock.query
 import teuthology.lock.util
-from .. import repo_utils
+from teuthology import repo_utils
 
-from ..config import config
-from ..exceptions import BranchNotFoundError, ScheduleFailError
-from ..misc import deep_merge
-from ..repo_utils import fetch_qa_suite, fetch_teuthology
-from ..orchestra.opsys import OS
-from ..packaging import get_builder_project
-from ..repo_utils import build_git_url
-from ..task.install import get_flavor
+from teuthology.config import config
+from teuthology.exceptions import BranchNotFoundError, ScheduleFailError
+from teuthology.misc import deep_merge
+from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
+from teuthology.orchestra.opsys import OS
+from teuthology.packaging import get_builder_project
+from teuthology.repo_utils import build_git_url
+from teuthology.task.install import get_flavor
 
 log = logging.getLogger(__name__)
 

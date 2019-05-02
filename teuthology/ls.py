@@ -3,7 +3,7 @@ import yaml
 import errno
 import re
 
-from .job_status import get_status
+from teuthology.job_status import get_status
 
 
 def main(args):

@@ -3,8 +3,7 @@ import os
 
 from teuthology.orchestra.cluster import Cluster
 from teuthology.exit import exiter
-
-from . import Task
+from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 

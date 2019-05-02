@@ -1,5 +1,5 @@
-from ..schedule import build_config
-from ..misc import get_user
+from teuthology.schedule import build_config
+from teuthology.misc import get_user
 
 
 class TestSchedule(object):

@@ -2,7 +2,7 @@ import logging
 import os
 import random
 
-from . import matrix
+from teuthology.suite import matrix
 
 log = logging.getLogger(__name__)
 

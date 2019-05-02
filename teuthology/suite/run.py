@@ -9,16 +9,16 @@ import yaml
 from datetime import datetime
 from tempfile import NamedTemporaryFile
 
-from ..config import config, JobConfig
-from ..exceptions import (
+from teuthology.config import config, JobConfig
+from teuthology.exceptions import (
     BranchNotFoundError, CommitNotFoundError, VersionNotFoundError
 )
-from ..misc import deep_merge, get_results_url
-from ..orchestra.opsys import OS
+from teuthology.misc import deep_merge, get_results_url
+from teuthology.orchestra.opsys import OS
 
-from . import util
-from .build_matrix import combine_path, build_matrix
-from .placeholder import substitute_placeholders, dict_templ
+from teuthology.suite import util
+from teuthology.suite.build_matrix import combine_path, build_matrix
+from teuthology.suite.placeholder import substitute_placeholders, dict_templ
 
 log = logging.getLogger(__name__)
 

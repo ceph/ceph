@@ -4,7 +4,7 @@ Locking tests
 import logging
 import os
 
-from ..orchestra import run
+from teuthology.orchestra import run
 from teuthology import misc as teuthology
 import time
 import gevent

@@ -6,7 +6,7 @@ import gevent
 import random
 import time
 
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

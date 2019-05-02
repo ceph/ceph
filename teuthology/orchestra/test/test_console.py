@@ -2,7 +2,7 @@ from mock import patch
 
 from teuthology.config import config as teuth_config
 
-from .. import console
+from teuthology.orchestra import console
 
 
 class TestConsole(object):

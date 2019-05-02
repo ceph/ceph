@@ -14,7 +14,7 @@ from teuthology.orchestra import run
 
 from teuthology import misc
 
-from . import Task
+from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 

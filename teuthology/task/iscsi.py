@@ -10,7 +10,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 

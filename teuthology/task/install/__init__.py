@@ -12,11 +12,11 @@ from teuthology.orchestra import run
 from teuthology.task import ansible
 
 from distutils.version import LooseVersion
-from .util import (
+from teuthology.task.install.util import (
     _get_builder_project, get_flavor, ship_utilities,
 )
 
-from . import rpm, deb, redhat
+from teuthology.task.install import rpm, deb, redhat
 
 log = logging.getLogger(__name__)
 

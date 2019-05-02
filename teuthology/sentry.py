@@ -1,6 +1,6 @@
 import logging
 from raven import Client
-from .config import config
+from teuthology.config import config
 
 log = logging.getLogger(__name__)
 

@@ -6,7 +6,7 @@ import socket
 from mock import MagicMock, patch
 from pytest import raises
 
-from .. import run
+from teuthology.orchestra import run
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
 

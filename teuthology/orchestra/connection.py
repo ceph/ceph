@@ -6,8 +6,8 @@ import paramiko
 import os
 import logging
 
-from ..config import config
-from ..contextutil import safe_while
+from teuthology.config import config
+from teuthology.contextutil import safe_while
 
 log = logging.getLogger(__name__)
 

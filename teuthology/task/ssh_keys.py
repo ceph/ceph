@@ -11,7 +11,7 @@ from datetime import datetime
 from cStringIO import StringIO
 from teuthology import contextutil
 import teuthology.misc as misc
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 ssh_keys_user = 'ssh-keys-user'

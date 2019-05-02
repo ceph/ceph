@@ -10,7 +10,7 @@ from textwrap import fill
 import teuthology
 from teuthology.config import config
 from teuthology import misc
-from .report import ResultsReporter
+from teuthology.report import ResultsReporter
 
 log = logging.getLogger(__name__)
 

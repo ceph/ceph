@@ -1,8 +1,8 @@
 import fudge
 
 from teuthology import config
-from .util import assert_raises
-from .. import connection
+from teuthology.orchestra import connection
+from teuthology.orchestra.test.util import assert_raises
 
 
 class TestConnection(object):

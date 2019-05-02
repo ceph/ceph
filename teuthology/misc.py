@@ -26,10 +26,10 @@ from netaddr.strategy.ipv6 import valid_str as _is_ipv6
 from teuthology import safepath
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
                                    ConnectionLostError)
-from .orchestra import run
-from .config import config
-from .contextutil import safe_while
-from .orchestra.opsys import DEFAULT_OS_VERSION
+from teuthology.orchestra import run
+from teuthology.config import config
+from teuthology.contextutil import safe_while
+from teuthology.orchestra.opsys import DEFAULT_OS_VERSION
 
 log = logging.getLogger(__name__)
 

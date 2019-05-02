@@ -19,7 +19,6 @@ from teuthology.config import config as teuth_config
 from teuthology.exceptions import VersionNotFoundError
 from teuthology.job_status import get_status, set_status
 from teuthology.orchestra import cluster, remote, run
-from .redhat import setup_cdn_repo, setup_base_repo, setup_additional_repo  # noqa
 
 log = logging.getLogger(__name__)
 

@@ -9,12 +9,12 @@ import tempfile
 
 from subprocess import CalledProcessError
 
-from .. import misc
+from teuthology import misc
 
-from ..openstack import OpenStack, OpenStackInstance
-from ..config import config
-from ..contextutil import safe_while
-from ..exceptions import QuotaExceededError
+from teuthology.openstack import OpenStack, OpenStackInstance
+from teuthology.config import config
+from teuthology.contextutil import safe_while
+from teuthology.exceptions import QuotaExceededError
 
 
 log = logging.getLogger(__name__)

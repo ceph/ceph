@@ -2,9 +2,9 @@ from mock import patch, Mock, MagicMock
 
 from cStringIO import StringIO
 
-from .. import remote
-from .. import opsys
-from ..run import RemoteProcess
+from teuthology.orchestra import remote
+from teuthology.orchestra import opsys
+from teuthology.orchestra.run import RemoteProcess
 
 
 class TestRemote(object):

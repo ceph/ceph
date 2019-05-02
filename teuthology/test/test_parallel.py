@@ -1,4 +1,4 @@
-from ..parallel import parallel
+from teuthology.parallel import parallel
 
 
 def identity(item, input_set=None, remove=False):

@@ -2,7 +2,7 @@ import logging
 
 from teuthology import misc
 
-from . import ops, query
+from teuthology.lock import ops, query
 
 log = logging.getLogger(__name__)
 

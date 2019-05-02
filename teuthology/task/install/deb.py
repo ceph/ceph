@@ -5,7 +5,7 @@ from cStringIO import StringIO
 
 from teuthology.orchestra import run
 
-from .util import _get_builder_project, _get_local_dir
+from teuthology.task.install.util import _get_builder_project, _get_local_dir
 
 
 log = logging.getLogger(__name__)

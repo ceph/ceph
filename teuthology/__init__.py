@@ -24,7 +24,7 @@ from gevent.hub import Hub
 # Don't write pyc files
 sys.dont_write_bytecode = True
 
-from .orchestra import monkey
+from teuthology.orchestra import monkey
 monkey.patch_all()
 
 import logging

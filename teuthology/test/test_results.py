@@ -1,7 +1,6 @@
 import textwrap
-from ..config import config
-from .. import results
-
+from teuthology.config import config
+from teuthology import results
 from teuthology import report
 
 from mock import patch, DEFAULT

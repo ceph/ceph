@@ -3,8 +3,8 @@ Support for paramiko remote objects.
 """
 import teuthology.lock.query
 import teuthology.lock.util
-from . import run
-from .opsys import OS
+from teuthology.orchestra import run
+from teuthology.orchestra.opsys import OS
 import connection
 from teuthology import misc
 from teuthology.misc import host_shortname

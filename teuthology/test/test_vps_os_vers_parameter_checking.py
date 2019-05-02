@@ -1,7 +1,7 @@
 from mock import patch, Mock
 
 import teuthology.lock.util
-from .. import provision
+from teuthology import provision
 
 
 class TestVpsOsVersionParamCheck(object):

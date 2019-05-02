@@ -14,7 +14,7 @@ from teuthology.exceptions import CommandFailedError, AnsibleFailedError
 from teuthology.job_status import set_status
 from teuthology.repo_utils import fetch_repo
 
-from . import Task
+from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 

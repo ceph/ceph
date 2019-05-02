@@ -1,4 +1,4 @@
-from .. import job_status
+from teuthology import job_status
 
 
 class TestJobStatus(object):

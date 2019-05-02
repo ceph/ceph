@@ -4,8 +4,8 @@ import logging
 import time
 import itertools
 
-from .config import config
-from .exceptions import MaxWhileTries
+from teuthology.config import config
+from teuthology.exceptions import MaxWhileTries
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def nested(*managers):
         # FIXME this needs to be more generic
         if config.ctx and config.ctx.config.get('interactive-on-error'):
             config.ctx.config['interactive-on-error'] = False
-            from .task import interactive
+            from teuthology.task import interactive
             log.warning('Saw failure, going into interactive mode...')
             interactive.task(ctx=config.ctx, config=None)
     finally:

@@ -1,5 +1,5 @@
 from textwrap import dedent
-from ..opsys import OS
+from teuthology.orchestra.opsys import OS
 import pytest
 
 
