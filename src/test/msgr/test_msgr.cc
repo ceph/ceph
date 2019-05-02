@@ -2213,7 +2213,7 @@ TEST_P(MessengerTest, MarkdownTest) {
   delete server_msgr2;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(

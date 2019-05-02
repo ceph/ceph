@@ -1066,7 +1066,7 @@ TEST_P(NetworkWorkerTest, StressTest) {
 }
 
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   NetworkStack,
   NetworkWorkerTest,
   ::testing::Values(

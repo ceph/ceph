@@ -332,7 +332,7 @@ TEST(EventCenterTest, DispatchTest) {
   worker2.join();
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   AsyncMessenger,
   EventDriverTest,
   ::testing::Values(

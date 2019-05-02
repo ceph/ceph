@@ -6188,7 +6188,7 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
 }
 #endif
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTest,
   ::testing::Values(
@@ -6200,7 +6200,7 @@ INSTANTIATE_TEST_CASE_P(
     "kstore"));
 
 // Note: instantiate all stores to preserve store numbering order only
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTestSpecificAUSize,
   ::testing::Values(

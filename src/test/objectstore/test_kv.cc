@@ -467,7 +467,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
   fini();
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
   ::testing::Values("leveldb", "rocksdb", "memdb"));
