@@ -3659,7 +3659,7 @@ public:
    * @param other pg_log_t to copy from
    * @param from copy entries after this version
    */
-  void copy_after(const pg_log_t &other, eversion_t from);
+  void copy_after(CephContext* cct, const pg_log_t &other, eversion_t from);
 
   /**
    * copy up to N entries
@@ -3667,7 +3667,7 @@ public:
    * @param other source log
    * @param max max number of entries to copy
    */
-  void copy_up_to(const pg_log_t &other, int max);
+  void copy_up_to(CephContext* cct, const pg_log_t &other, int max);
 
   ostream& print(ostream& out) const;
 
