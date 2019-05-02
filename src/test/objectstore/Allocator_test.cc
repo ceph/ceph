@@ -328,7 +328,7 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   EXPECT_EQ(1u, tmp.size());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));

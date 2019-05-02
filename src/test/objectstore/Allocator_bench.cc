@@ -329,7 +329,7 @@ TEST_P(AllocTest, test_alloc_bench_10_300)
   doOverwriteTest(capacity, prefill, overwrite);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));
