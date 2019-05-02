@@ -23,17 +23,6 @@
 
 class RGWSI_Meta;
 
-// define as static when RGWBucket implementation completes
-extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
-
-extern int rgw_bucket_store_entrypoint_info(RGWSI_Meta *meta_svc, const string& bucket_name, RGWBucketEntryPoint& be, bool exclusive,
-                                            map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                            real_time mtime);
-extern int rgw_bucket_instance_store_info(RGWSI_Meta *meta_svc, string& entry, RGWBucketInfo& bucket_info, bool exclusive,
-                                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
-                                          real_time mtime);
-extern int rgw_bucket_instance_remove_entry(RGWSI_Meta *meta_svc, const string& entry, RGWObjVersionTracker *objv_tracker);
-
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                        rgw_bucket* bucket, int *shard_id);
@@ -83,8 +72,8 @@ public:
     return ep;
   }
 
-  RGWBucketEntryPoint& get_attrs() {
-    return ep;
+  map<string, bufferlist>& get_attrs() {
+    return attrs;
   }
 };
 
@@ -574,6 +563,188 @@ public:
   }
 
   bool going_down();
+};
+
+class RGWBucketCtl
+{
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Bucket *bucket{nullptr};
+  } svc;
+
+  RGWBucketMetadataHandler *bm_handler;
+  RGWBucketInstanceMetadataHandler *bmi_handler;
+
+  RGWSI_MetaBackend_Handler *bucket_be_handler; /* bucket backend handler */
+  RGWSI_MetaBackend_Handler *bi_be_handler; /* bucket instance backend handler */
+  
+public:
+  RGWBucketCtl(RGWSI_Zone *zone_svc,
+               RGWSI_Bucket *bucket_svc,
+               RGWBucketMetadataHandler *_bm_handler,
+               RGWBucketInstanceMetadataHandler *_bmi_handler);
+
+  struct Bucket {
+    struct GetParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+      real_time *mtime{nullptr};
+      map<string, bufferlist> *attrs{nullptr};
+      rgw_cache_entry_info *cache_info{nullptr};
+      boost::optional<obj_version> refresh_version;
+
+      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      GetParams& set_mtime(ceph::real_time *_mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
+      GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+        cache_info = _cache_info;
+        return *this;
+      }
+
+      GetParams& set_refresh_version(const obj_version& _refresh_version) {
+        refresh_version = _refresh_version;
+        return *this;
+      }
+    };
+
+    struct PutParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+      ceph::real_time mtime;
+      bool exclusive{false};
+      map<string, bufferlist> *attrs{nullptr};
+
+      PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      PutParams& set_mtime(const ceph::real_time& _mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      PutParams& set_exclusive(bool _exclusive) {
+        exclusive = _exclusive;
+        return *this;
+      }
+
+      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+    };
+
+    struct RemoveParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+  };
+
+  struct BucketInstance {
+    struct GetParams {
+      real_time *mtime{nullptr};
+      map<string, bufferlist> *attrs{nullptr};
+      rgw_cache_entry_info *cache_info{nullptr};
+      boost::optional<obj_version> refresh_version;
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      GetParams& set_mtime(ceph::real_time *_mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+        attrs = _attrs;
+        return *this;
+      }
+
+      GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+        cache_info = _cache_info;
+        return *this;
+      }
+
+      GetParams& set_refresh_version(const obj_version& _refresh_version) {
+        refresh_version = _refresh_version;
+        return *this;
+      }
+
+      GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+  };
+
+  struct PutParams {
+    ceph::real_time mtime;
+    bool exclusive{false};
+    map<string, bufferlist> *attrs{nullptr};
+    RGWObjVersionTracker *objv_tracker{nullptr};
+
+    PutParams& set_mtime(const ceph::real_time& _mtime) {
+      mtime = _mtime;
+      return *this;
+    }
+
+    PutParams& set_exclusive(bool _exclusive) {
+      exclusive = _exclusive;
+      return *this;
+    }
+
+    PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      attrs = _attrs;
+      return *this;
+    }
+
+    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+
+    struct RemoveParams {
+      RGWObjVersionTracker *objv_tracker{nullptr};
+
+      RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+        objv_tracker = _objv_tracker;
+        return *this;
+      }
+    };
+  };
+
+  /* bucket entrypoint */
+  int read_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                  RGWBucketEntryPoint *info,
+                                  RGWSI_Bucket::Bucket::GetParams& params);
+  int store_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                   RGWBucketEntryPoint& info,
+                                   RGWSI_Bucket::Bucket::PutParams& params);
+  int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                    RGWSI_Bucket::Bucket::RemoveParams& params);
+
+  /* bucket instance */
+  int read_bucket_instance_info(const rgw_bucket& bucket,
+                                  RGWBucketInfo *info,
+                                  RGWSI_Bucket::BucketInstance::GetParams& params);
+  int store_bucket_instance_info(const rgw_bucket& bucket,
+                                   RGWBucketInfo& info,
+                                   RGWSI_Bucket::BucketInstance::PutParams& params);
+  int remove_bucket_instance_info(const rgw_bucket& bucket,
+                                    RGWSI_Bucket::BucketInstance::RemoveParams& params);
 };
 
 
