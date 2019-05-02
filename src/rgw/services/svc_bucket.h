@@ -55,7 +55,8 @@ class RGWSI_Bucket : public RGWServiceInstance
   int do_read_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
                                    const string& key,
                                    RGWBucketInfo *info,
-                                   real_time *pmtime, map<string, bufferlist> *pattrs,
+                                   real_time *pmtime,
+                                   map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
                                    boost::optional<obj_version> refresh_version);
 public:
@@ -82,16 +83,16 @@ public:
 
 
   int read_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
-                                  const rgw_bucket& bucket,
+                                  const string& key,
                                   RGWBucketEntryPoint *entry_point,
                                   RGWObjVersionTracker *objv_tracker,
                                   real_time *pmtime,
                                   map<string, bufferlist> *pattrs,
-                                  rgw_cache_entry_info *cache_info,
-                                  boost::optional<obj_version> refresh_version);
+                                  rgw_cache_entry_info *cache_info = nullptr,
+                                  boost::optional<obj_version> refresh_version = boost::none);
 
   int store_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
-                                   const rgw_bucket& bucket,
+                                   const string& key,
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
@@ -99,15 +100,16 @@ public:
                                    RGWObjVersionTracker *objv_tracker);
 
   int remove_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
-                                    const rgw_bucket& bucket,
+                                    const string& key,
                                     RGWObjVersionTracker *objv_tracker);
 
   int read_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
                                 const string& key,
                                 RGWBucketInfo *info,
-                                real_time *pmtime, map<string, bufferlist> *pattrs,
-                                rgw_cache_entry_info *cache_info,
-                                boost::optional<obj_version> refresh_version);
+                                real_time *pmtime,
+                                map<string, bufferlist> *pattrs,
+                                rgw_cache_entry_info *cache_info = nullptr,
+                                boost::optional<obj_version> refresh_version = boost::none);
 
   int read_bucket_info(RGWSI_MetaBackend::Context *ctx,
                        const rgw_bucket& bucket,
@@ -117,13 +119,14 @@ public:
                        boost::optional<obj_version> refresh_version);
 
   int store_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                 const string& key,
                                  RGWBucketInfo& info,
                                  bool exclusive,
                                  real_time mtime,
                                  map<string, bufferlist> *pattrs);
 
   int remove_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
-                                  const rgw_bucket& bucket,
+                                  const string& key,
                                   RGWObjVersionTracker *objv_tracker);
 };
 

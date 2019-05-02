@@ -135,6 +135,7 @@ struct RGWServices
 class RGWMetadataManager;
 class RGWMetadataHandler;
 class RGWUserCtl;
+class RGWBucketCtl;
 
 struct RGWCtlDef {
   struct _meta {
@@ -149,6 +150,7 @@ struct RGWCtlDef {
   } meta;
 
   std::unique_ptr<RGWUserCtl> user;
+  std::unique_ptr<RGWBucketCtl> user;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -169,6 +171,7 @@ struct RGWCtl {
   } meta;
 
   RGWUserCtl *user{nullptr};
+  RGWBucketCtl *user{nullptr};
 
   int init(RGWServices& svc);
 };

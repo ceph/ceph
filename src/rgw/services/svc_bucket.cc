@@ -153,21 +153,21 @@ int RGWSI_Bucket::do_start()
   return 0;
 }
 
-int RGWSI_Bucket::read_bucket_entrypoint_info( RGWSI_MetaBackend::Context *ctx,
-                                               const rgw_bucket& bucket,
-                                               RGWBucketEntryPoint *entry_point,
-                                               RGWObjVersionTracker *objv_tracker,
-                                               real_time *pmtime,
-                                               map<string, bufferlist> *pattrs,
-                                               rgw_cache_entry_info *cache_info,
-                                               boost::optional<obj_version> refresh_version)
+int RGWSI_Bucket::read_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
+                                              const string& key,
+                                              RGWBucketEntryPoint *entry_point,
+                                              RGWObjVersionTracker *objv_tracker,
+                                              real_time *pmtime,
+                                              map<string, bufferlist> *pattrs,
+                                              rgw_cache_entry_info *cache_info,
+                                              boost::optional<obj_version> refresh_version)
 {
   bufferlist bl;
 
   auto params = RGWSI_MBSObj_GetParams(&bl, pattrs, pmtime).set_cache_info(cache_info)
                                                            .set_refresh_version(refresh_version);
                                                     
-  int ret = svc.meta_be->get_entry(ctx, get_entrypoint_meta_key(bucket), params, objv_tracker);
+  int ret = svc.meta_be->get_entry(ctx, key, params, objv_tracker);
   if (ret < 0) {
     return ret;
   }
@@ -183,7 +183,7 @@ int RGWSI_Bucket::read_bucket_entrypoint_info( RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
-                                               const rgw_bucket& bucket,
+                                               const string& key,
                                                RGWBucketEntryPoint& info,
                                                bool exclusive,
                                                real_time mtime,
@@ -195,7 +195,7 @@ int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  int ret = svc.meta_be->put_entry(ctx, get_entrypoint_meta_key(bucket), params, objv_tracker);
+  int ret = svc.meta_be->put_entry(ctx, key, params, objv_tracker);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -216,12 +216,11 @@ int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_Bucket::remove_bucket_entrypoint_info(RGWSI_MetaBackend::Context *ctx,
-                                                const rgw_bucket& bucket,
+                                                const string& key,
                                                 RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MBSObj_RemoveParams params;
-  return svc.meta_be->remove_entry(ctx, RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                   params, objv_tracker);
+  return svc.meta_be->remove_entry(ctx, key, params, objv_tracker);
 }
 
 int RGWSI_Bucket::read_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
@@ -331,7 +330,7 @@ int RGWSI_Bucket::read_bucket_info(RGWSI_MetaBackend::Context *ctx,
   real_time ep_mtime;
   RGWObjVersionTracker ot;
   rgw_cache_entry_info entry_cache_info;
-  int ret = read_bucket_entrypoint_info(ctx, bucket,
+  int ret = read_bucket_entrypoint_info(ctx, bucket_entry,
                                         &entry_point, &ot, &ep_mtime, pattrs,
                                         &entry_cache_info, refresh_version);
   if (ret < 0) {
@@ -395,6 +394,7 @@ int RGWSI_Bucket::read_bucket_info(RGWSI_MetaBackend::Context *ctx,
 
 
 int RGWSI_Bucket::store_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
+                                             const string& key,
                                              RGWBucketInfo& info,
                                              bool exclusive,
                                              real_time mtime,
@@ -405,7 +405,7 @@ int RGWSI_Bucket::store_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  int ret = svc.meta_be->put_entry(ctx, get_bi_meta_key(info.bucket), params, &info.objv_tracker);
+  int ret = svc.meta_be->put_entry(ctx, key, params, &info.objv_tracker);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -426,11 +426,10 @@ int RGWSI_Bucket::store_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_Bucket::remove_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
-                                              const rgw_bucket& bucket,
+                                              const string& key,
                                               RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MBSObj_RemoveParams params;
-  return svc.meta_be->remove_entry(ctx, RGWSI_Bucket::get_bi_meta_key(bucket),
-                                   params, objv_tracker);
+  return svc.meta_be->remove_entry(ctx, key, params, objv_tracker);
 }
 
