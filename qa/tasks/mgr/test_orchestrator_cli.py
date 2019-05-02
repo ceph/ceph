@@ -108,8 +108,17 @@ class TestOrchestratorCli(MgrTestCase):
             self.assertNotIn(dev_id, _ls_lights(t))
             self._cmd("device", t + "-light-on", dev_id)
             self.assertIn(dev_id, _ls_lights(t))
+
+            health = {
+                'ident': 'DEVICE_IDENT_ON',
+                'fault': 'DEVICE_FAULT_ON',
+            }[t]
+            self.wait_for_health(health, 30)
+
             self._cmd("device", t + "-light-off", dev_id)
             self.assertNotIn(dev_id, _ls_lights(t))
+
+        self.wait_for_health_clear(30)
 
     def test_mds_add(self):
         self._orch_cmd("mds", "add", "service_name")
