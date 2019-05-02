@@ -1446,6 +1446,16 @@ Options
    reply to outfile.  Only specific monitor commands (e.g. osd getmap)
    return a payload.
 
+.. option:: --setuser user
+
+   will apply the appropriate user ownership to the file specified by
+   the option '-o'.
+
+.. option:: --setgroup group
+
+   will apply the appropriate group ownership to the file specified by
+   the option '-o'.
+
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use ceph.conf configuration file instead of the default
