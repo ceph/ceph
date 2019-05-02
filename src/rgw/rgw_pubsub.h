@@ -628,6 +628,7 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
     return ret;
   }
 
+  obj_ctx.invalidate(obj);
   return 0;
 }
 

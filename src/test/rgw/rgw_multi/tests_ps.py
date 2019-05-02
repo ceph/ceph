@@ -1443,8 +1443,7 @@ def test_ps_s3_multiple_topics_notification():
     result, _ = s3_notification_conf.get_config()
     print('first try')
     print(result)
-    # FIXME: this is currently failing
-    #assert_equal(len(result['TopicConfigurations']), 2)
+    assert_equal(len(result['TopicConfigurations']), 2)
 
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
