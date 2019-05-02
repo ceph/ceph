@@ -13,6 +13,7 @@
 #include "common/escape.h"
 
 #include "include/compat.h"
+#include <boost/lexical_cast.hpp>
 
 CLS_VER(1,0)
 CLS_NAME(rgw)
@@ -3943,7 +3944,6 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_clear_bucket_resharding;
   cls_method_handle_t h_rgw_guard_bucket_resharding;
   cls_method_handle_t h_rgw_get_bucket_resharding;
-
 
   cls_register(RGW_CLASS, &h_class);
 
