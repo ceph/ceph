@@ -12,8 +12,7 @@
            i18n>Changing these parameters from their default values is usually not necessary.</p>
 
         <div class="form-group row"
-             *ngFor="let setting of settingsForm.controls | keyvalue"
-             [ngClass]="{':invalid': settingsForm.showError(setting.key, formDir)}">
+             *ngFor="let setting of settingsForm.controls | keyvalue">
           <div class="col-sm-12">
             <label class="col-form-label"
                    for="{{ setting.key }}">{{ setting.key }}</label>

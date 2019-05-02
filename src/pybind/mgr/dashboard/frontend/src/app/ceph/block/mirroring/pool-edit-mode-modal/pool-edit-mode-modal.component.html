@@ -15,8 +15,7 @@
           <kbd>Update</kbd>.</ng-container>
         </p>
 
-        <div class="form-group"
-             [ngClass]="{':invalid': editModeForm.showError('mirrorMode', formDir)}">
+        <div class="form-group">
           <label class="col-form-label"
                  for="mirrorMode">
             <span i18n>Mode</span>
@@ -28,7 +27,7 @@
             <option *ngFor="let mirrorMode of mirrorModes"
                     [value]="mirrorMode.id">{{ mirrorMode.name }}</option>
           </select>
-          <span class="form-text text-muted"
+          <span class="invalid-feedback"
                 *ngIf="editModeForm.showError('mirrorMode', formDir, 'cannotDisable')"
                 i18n>Peer clusters must be removed prior to disabling mirror.</span>
         </div>

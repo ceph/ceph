@@ -16,10 +16,36 @@ $font-family-sans-serif: 'Helvetica Neue', Helvetica, Arial, 'Noto Sans', sans-s
   'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
 $badge-font-size: 1rem;
+$form-feedback-font-size: 100%;
 
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
+
+/* Reset checkbox success color */
+.was-validated .custom-control-input:valid,
+.custom-control-input.is-valid {
+  ~ .custom-control-label {
+    color: initial;
+  }
+
+  &:checked ~ .custom-control-label::before {
+    border-color: $custom-control-indicator-checked-border-color;
+    background-color: $component-active-bg;
+  }
+
+  ~ .custom-control-label::before {
+    border-color: $custom-control-indicator-border-color;
+  }
+
+  &:focus ~ .custom-control-label::before {
+    box-shadow: $custom-control-indicator-focus-box-shadow;
+  }
+
+  &:focus:not(:checked) ~ .custom-control-label::before {
+    border-color: $custom-control-indicator-focus-border-color;
+  }
+}
 
 /* Basics */
 html {
@@ -368,4 +394,8 @@ pre {
   @extend .bg-light;
   @extend .p-2;
   // @extend my-2;
+}
+
+bfv-messages {
+  display: none;
 }

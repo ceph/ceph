@@ -14,8 +14,7 @@
         <div class="question">
           <p i18n>Are you sure that you want to
             {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
-          <div class="form-group"
-               [ngClass]="{':invalid': deletionForm.showError('confirmation', formDir)}">
+          <div class="form-group">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
                      class="custom-control-input"

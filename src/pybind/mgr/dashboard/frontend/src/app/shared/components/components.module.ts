@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -44,7 +45,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     PipesModule,
     ModalModule.forRoot(),
     DirectivesModule,
-    BsDropdownModule
+    BsDropdownModule,
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     ViewCacheComponent,

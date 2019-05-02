@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -28,7 +29,8 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     ReactiveFormsModule,
     BsDropdownModule,
     TooltipModule.forRoot(),
-    BlockModule
+    BlockModule,
+    NgBootstrapFormValidationModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [

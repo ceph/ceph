@@ -14,7 +14,6 @@
            i18n>Edit Manager module</div>
       <div class="card-body">
         <div class="form-group row"
-             [ngClass]="{':invalid': mgrModuleForm.showError(moduleOption.value.name, frm)}"
              *ngFor="let moduleOption of moduleOptions | keyvalue">
 
           <!-- Field label -->
@@ -57,10 +56,10 @@
                 {{ value }}
               </option>
             </select>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'invalidUuid')"
                   i18n>The entered value is not a valid UUID, e.g.: 67dcac9f-2c03-4d6c-b7bd-1210b3a259a8</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'pattern')"
                   i18n>The entered value needs to be a valid IP address.</span>
           </div>
@@ -74,16 +73,16 @@
                    formControlName="{{ moduleOption.value.name }}"
                    min="{{ moduleOption.value.min }}"
                    max="{{ moduleOption.value.max }}">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'required')"
                   i18n>This field is required.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'max')"
                   i18n>The entered value is too high! It must be lower or equal to {{ moduleOption.value.max }}.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'min')"
                   i18n>The entered value is too low! It must be greater or equal to {{ moduleOption.value.min }}.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'pattern')"
                   i18n>The entered value needs to be a number.</span>
           </div>
@@ -95,10 +94,10 @@
                    class="form-control"
                    type="number"
                    formControlName="{{ moduleOption.value.name }}">
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'required')"
                   i18n>This field is required.</span>
-            <span class="form-text text-muted"
+            <span class="invalid-feedback"
                   *ngIf="mgrModuleForm.showError(moduleOption.value.name, frm, 'pattern')"
                   i18n>The entered value needs to be a number or decimal.</span>
           </div>

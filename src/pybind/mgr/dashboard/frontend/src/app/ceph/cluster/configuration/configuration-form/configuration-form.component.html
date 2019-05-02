@@ -112,7 +112,6 @@
             </div>
 
             <div class="form-group row"
-                 [ngClass]="{':invalid': configForm.showError(section, formDir)}"
                  *ngIf="type !== 'bool'">
               <label class="col-form-label col-sm-3"
                      [for]="section">{{ section }}
@@ -124,18 +123,18 @@
                        [placeholder]="humanReadableType"
                        [formControlName]="section"
                        [step]="getStep(type, this.configForm.getValue(section))">
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="configForm.showError(section, formDir, 'pattern')">
                   {{ patternHelpText }}
                 </span>
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="configForm.showError(section, formDir, 'invalidUuid')">
                   {{ patternHelpText }}
                 </span>
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="configForm.showError(section, formDir, 'max')"
                       i18n>The entered value is too high! It must not be greater than {{ maxValue }}.</span>
-                <span class="form-text text-muted"
+                <span class="invalid-feedback"
                       *ngIf="configForm.showError(section, formDir, 'min')"
                       i18n>The entered value is too low! It must not be lower than {{ minValue }}.</span>
               </div>

@@ -7,6 +7,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUIModule } from 'ng-block-ui';
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -50,7 +51,8 @@ registerLocaleData(LocaleHelper.getLocaleData(), LocaleHelper.getLocale());
       config: {
         tokenGetter: jwtTokenGetter
       }
-    })
+    }),
+    NgBootstrapFormValidationModule.forRoot()
   ],
   exports: [SharedModule],
   providers: [

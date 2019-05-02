@@ -15,8 +15,7 @@
   <div class="modal-body">
 
     <!-- Type -->
-    <div class="form-group row"
-         [ngClass]="{':invalid': formGroup.showError('type', frm)}">
+    <div class="form-group row">
       <label class="col-form-label col-sm-3"
              for="type">
         <ng-container i18n>Type</ng-container>
@@ -42,15 +41,14 @@
           <option *ngFor="let type of types"
                   [value]="type">{{ type }}</option>
         </select>
-        <span class="form-text text-muted"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('type', frm, 'required')"
               i18n>This field is required.</span>
       </div>
     </div>
 
     <!-- Permission -->
-    <div class="form-group row"
-         [ngClass]="{':invalid': formGroup.showError('perm', frm)}">
+    <div class="form-group row">
       <label class="col-form-label col-sm-3"
              for="perm">
         <ng-container i18n>Permission</ng-container>
@@ -67,7 +65,7 @@
             {{ perm }}
           </option>
         </select>
-        <span class="form-text text-muted"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('perm', frm, 'required')"
               i18n>This field is required.</span>
       </div>
