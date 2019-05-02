@@ -6034,7 +6034,7 @@ next:
     }
 
     map<string, bufferlist> attrs;
-    ret = obj->put(bl, attrs, dpp());
+    ret = obj->put(bl, attrs, dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
     }
@@ -6083,7 +6083,7 @@ next:
       }
     }
     if (need_rewrite) {
-      ret = store->rewrite_obj(bucket_info, obj, dpp());
+      ret = store->rewrite_obj(bucket_info, obj, dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6200,7 +6200,7 @@ next:
           if (!need_rewrite) {
             formatter->dump_string("status", "Skipped");
           } else {
-            r = store->rewrite_obj(bucket_info, obj, dpp());
+            r = store->rewrite_obj(bucket_info, obj, dpp(), null_yield);
             if (r == 0) {
               formatter->dump_string("status", "Success");
             } else {

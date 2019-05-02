@@ -715,7 +715,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
           }
         } // for all shadow objs
 
-        ret = store->delete_obj_aio(head_obj, info, astate, handles, keep_index_consistent);
+        ret = store->delete_obj_aio(head_obj, info, astate, handles, keep_index_consistent, null_yield);
         if (ret < 0) {
           lderr(store->ctx()) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;

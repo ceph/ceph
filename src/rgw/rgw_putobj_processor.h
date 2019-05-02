@@ -40,7 +40,8 @@ class ObjectProcessor : public DataProcessor {
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled) = 0;
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y) = 0;
 };
 
 // an object processor with special handling for the first chunk of the head.
@@ -189,7 +190,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled) override;
+               rgw_zone_set *zones_trace, bool *canceled,
+               optional_yield y) override;
 
 };
 
@@ -235,7 +237,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                ceph::real_time delete_at,
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled) override;
+               rgw_zone_set *zones_trace, bool *canceled,
+               optional_yield y) override;
 
 };
 
@@ -268,7 +271,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                  ceph::real_time *mtime, ceph::real_time set_mtime,
                  map<string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const string *user_data,
-                 rgw_zone_set *zones_trace, bool *canceled) override;
+                 rgw_zone_set *zones_trace, bool *canceled,
+                 optional_yield y) override;
   };
 
 } // namespace putobj

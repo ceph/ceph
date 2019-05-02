@@ -607,7 +607,7 @@ static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
   del_op.params.obj_owner = obj_owner;
   del_op.params.unmod_since = meta.mtime;
 
-  return del_op.delete_obj();
+  return del_op.delete_obj(null_yield);
 }
 
 class LCOpAction {
@@ -877,7 +877,7 @@ public:
     }
 
     int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
-                                     target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp);
+                                     target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
       return r;

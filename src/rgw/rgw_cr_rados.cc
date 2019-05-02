@@ -727,7 +727,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.high_precision_time = true;
   del_op.params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }

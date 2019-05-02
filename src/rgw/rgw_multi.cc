@@ -291,7 +291,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct,
   }
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;

@@ -155,7 +155,7 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp); /* might modify attrs */
+    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;
