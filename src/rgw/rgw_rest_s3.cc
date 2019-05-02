@@ -946,7 +946,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
 void RGWListBucket_ObjStore_S3v2::send_response()
 {
 
-
+  RGWListBucket_ObjStore_S3::send_common_response();
   s->formatter->dump_string("ContinuationToken", marker.name);
   ldpp_dout(this, 0) << "ContinuationToken: " << marker.name << dendl;
   if (is_truncated && !next_marker.empty())
