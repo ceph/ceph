@@ -143,3 +143,30 @@ The command to do so is:
 
 As a convenience wrapper, if the ``--bucket`` argument is dropped then this
 command will try and fix lifecycle policies for all the buckets in the cluster.
+
+Object Expirer fixes
+--------------------
+
+Objects subject to Swift object expiration on older clusters may have
+been dropped from the log pool and never deleted after the bucket was
+resharded. This would happen if their expiration time was before the
+cluster was upgraded, but if their expiration was after the upgrade
+the objects would be correctly handled. To manage these expire-stale
+objects, radosgw-admin provides two subcommands.
+
+Listing:
+
+::
+
+   # radosgw-admin objects expire-stale list --bucket {bucketname}
+
+Displays a list of object names and expiration times in JSON format.
+
+Deleting:
+
+::
+
+   # radosgw-admin objects expire-stale rm --bucket {bucketname}
+
+
+Initiates deletion of such objects, displaying a list of object names, expiration times, and deletion status in JSON format.
