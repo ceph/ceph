@@ -7,6 +7,7 @@ from .tests import get_realm, \
     zone_meta_checkpoint, \
     zone_bucket_checkpoint, \
     zone_data_checkpoint, \
+    zonegroup_bucket_checkpoint, \
     check_bucket_eq, \
     gen_bucket_name, \
     get_user, \
@@ -902,12 +903,16 @@ def test_ps_versioned_deletion():
     # TODO: verify we have exactly 2 events
     assert len(parsed_result['events']) >= 2
 
+    # follwing is needed for the cleanup in the case of 3-zones
+    # see: http://tracker.ceph.com/issues/39142
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
     # cleanup
     sub_conf.del_config()
     notification_conf.del_config()
     topic_conf.del_config()
-    for key in bucket.list():
-        key.delete()
     zones[0].delete_bucket(bucket_name)
 
 
