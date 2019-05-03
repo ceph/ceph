@@ -2680,7 +2680,8 @@ public:
     uint64_t size,
     PExtentVector* extents);
 
-  void log_latency_fn(int idx,
+  void log_latency_fn(const char* name,
+		      int idx,
 		      const ceph::timespan& lat,
 		      std::function<string (const ceph::timespan& lat)> fn);
 
