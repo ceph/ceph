@@ -128,7 +128,7 @@ add_executable(unittest_util
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
   )
 add_ceph_unittest(unittest_util)
-target_link_libraries(unittest_util global)
+target_link_libraries(unittest_util global StdFilesystem::filesystem)
 
 # unittest_random
 add_executable(unittest_random

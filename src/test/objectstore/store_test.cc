@@ -48,8 +48,6 @@ typedef boost::mt11213b gen_type;
 const uint64_t DEF_STORE_TEST_BLOCKDEV_SIZE = 10240000000;
 #define dout_context g_ceph_context
 
-#if GTEST_HAS_PARAM_TEST
-
 static bool bl_eq(bufferlist& expected, bufferlist& actual)
 {
   if (expected.contents_equal(actual))
@@ -6188,7 +6186,7 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
 }
 #endif
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTest,
   ::testing::Values(
@@ -6200,7 +6198,7 @@ INSTANTIATE_TEST_CASE_P(
     "kstore"));
 
 // Note: instantiate all stores to preserve store numbering order only
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTestSpecificAUSize,
   ::testing::Values(
@@ -6210,18 +6208,6 @@ INSTANTIATE_TEST_CASE_P(
     "bluestore",
 #endif
     "kstore"));
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
 
 void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
                         unsigned max_objects,

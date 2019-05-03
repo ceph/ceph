@@ -16,11 +16,15 @@
 #include "include/util.h"
 #include "gtest/gtest.h"
 
-#include <sstream>
+#include <experimental/filesystem>
 
 #if defined(__linux__)
 TEST(util, collect_sys_info)
 {
+  if (!std::experimental::filesystem::exists("/etc/os-release")) {
+    GTEST_SKIP() << "skipping as '/etc/os-release' does not exist";
+  }
+
   map<string, string> sys_info;
 
   CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();

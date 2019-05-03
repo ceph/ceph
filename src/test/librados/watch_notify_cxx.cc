@@ -360,5 +360,5 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
 }
 // --
 
-INSTANTIATE_TEST_CASE_P(LibRadosWatchNotifyPPTests, LibRadosWatchNotifyPP,
+INSTANTIATE_TEST_SUITE_P(LibRadosWatchNotifyPPTests, LibRadosWatchNotifyPP,
 			::testing::Values("", "cache"));

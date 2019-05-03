@@ -38,6 +38,7 @@ struct MockWatcher : public Watcher {
 namespace librbd {
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::DoDefault;
 using ::testing::Invoke;
 using ::testing::InSequence;

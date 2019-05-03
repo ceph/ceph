@@ -139,6 +139,7 @@ SyncPointPruneRequest<librbd::MockTestImageCtx>* SyncPointPruneRequest<librbd::M
 } // namespace image_sync
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
