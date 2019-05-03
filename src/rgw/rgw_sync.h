@@ -507,7 +507,7 @@ public:
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
-  int cur_shard;
+  int cur_shard = 0;
   int current_running;
   int max_concurrent;
   int status;
