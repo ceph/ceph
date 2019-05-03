@@ -148,7 +148,7 @@ export class RbdListComponent implements OnInit, OnDestroy {
           images = images.concat(pool.value);
         });
         const viewCacheStatusList = [];
-        _.forEach(viewCacheStatusMap, (value, key) => {
+        _.forEach(viewCacheStatusMap, (value: [], key) => {
           viewCacheStatusList.push({
             status: parseInt(key, 10),
             statusFor: (value.length > 1 ? 'pools ' : 'pool ') +
