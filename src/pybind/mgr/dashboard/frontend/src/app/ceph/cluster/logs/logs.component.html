@@ -42,7 +42,7 @@
   <div class="form-inline">
     <div class="form-group">
       <label i18n>Priority:</label>
-      <select class="form-control"
+      <select class="form-control custom-select"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
         <option *ngFor="let prio of prioritys"
