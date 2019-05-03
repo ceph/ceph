@@ -6,7 +6,7 @@ import hashlib
 import base64
 import xmltodict
 from time import gmtime, strftime
-from multisite import Zone
+from .multisite import Zone
 import boto3
 from botocore.client import Config
 
@@ -72,6 +72,13 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     status = response.status
     http_conn.close()
     return data, status
+
+
+def print_connection_info(conn):
+    """print info of connection"""
+    print("Host: " + conn.host+':'+str(conn.port))
+    print("AWS Secret Key: " + conn.aws_secret_access_key)
+    print("AWS Access Key: " + conn.aws_access_key_id)
 
 
 class PSTopic:
