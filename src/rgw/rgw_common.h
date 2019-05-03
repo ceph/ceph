@@ -2668,4 +2668,16 @@ static inline string rgw_bl_str(ceph::buffer::list& raw)
   return s;
 }
 
+template <typename T>
+int decode_bl(bufferlist& bl, T& t)
+{
+  auto iter = bl.cbegin();
+  try {
+    decode(t, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
 #endif
