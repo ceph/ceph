@@ -30,13 +30,7 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 
 
 ## ********** smoke tests on master branch
-0 5  * * * CEPH_BRANCH=master; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 71 -e $CEPH_QA_EMAIL --distro ubuntu --distro-version 16.04
-0 7  * * * CEPH_BRANCH=master; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 70 -e $CEPH_QA_EMAIL --distro rhel --distro-version 7.5 ~/rhel_only_on_ovh.yaml
-# run one time per week on rhel7.4
-@weekly    CEPH_BRANCH=master; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 70 -e $CEPH_QA_EMAIL --distro rhel --distro-version 7.4 ~/rhel_only_on_ovh.yaml
-2 7  * * * CEPH_BRANCH=master; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 70 -e $CEPH_QA_EMAIL --distro centos --distro-version 7.4
-2 5  * * * CEPH_BRANCH=master; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 70 -e $CEPH_QA_EMAIL
-
+0 5  * * * CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s smoke -k testing -p 71 -e $CEPH_QA_EMAIL
 
 ## master branch runs
 ## suites rados, rbd and multimds use --subset arg and must be call with schedule_subset.sh
@@ -74,7 +68,7 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 #45 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s hadoop -e $CEPH_QA_EMAIL
 #50 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
-05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
+05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 ###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
 57 03 * * 2,5 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
 09 03 * * 6   CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s powercycle -k distro -e $CEPH_QA_EMAIL
