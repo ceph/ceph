@@ -4084,11 +4084,14 @@ void MDCache::rejoin_send_rejoins()
       if (mdr->is_slave())
 	continue;
       // auth pins
-      for (const auto& q : mdr->remote_auth_pins) {
+      for (const auto& q : mdr->object_states) {
+	if (q.second.remote_auth_pinned == MDS_RANK_NONE)
+	  continue;
 	if (!q.first->is_auth()) {
-	  ceph_assert(q.second == q.first->authority().first);
-	  if (rejoins.count(q.second) == 0) continue;
-	  const auto& rejoin = rejoins[q.second];
+	  mds_rank_t target = q.second.remote_auth_pinned;
+	  ceph_assert(target == q.first->authority().first);
+	  if (rejoins.count(target) == 0) continue;
+	  const auto& rejoin = rejoins[target];
 	  
 	  dout(15) << " " << *mdr << " authpin on " << *q.first << dendl;
 	  MDSCacheObjectInfo i;
@@ -12658,7 +12661,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
 
     mds->locker->drop_locks(mdr.get());
     mdr->drop_local_auth_pins();
-    if (!mdr->remote_auth_pins.empty())
+    if (mdr->is_any_remote_auth_pin())
       mds->locker->notify_freeze_waiter(dir);
     return;
   }

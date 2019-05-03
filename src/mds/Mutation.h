@@ -52,14 +52,27 @@ public:
   // flag mutation as slave
   mds_rank_t slave_to_mds = MDS_RANK_NONE;  // this is a slave request if >= 0.
 
-  // -- my pins and locks --
+  // -- my pins and auth_pins --
+  struct ObjectState {
+    bool pinned = false;
+    bool auth_pinned = false;
+    mds_rank_t remote_auth_pinned = MDS_RANK_NONE;
+  };
+  ceph::unordered_map<MDSCacheObject*, ObjectState> object_states;
+  int num_pins = 0;
+  int num_auth_pins = 0;
+  int num_remote_auth_pins = 0;
+
+  const ObjectState* find_object_state(MDSCacheObject *obj) const {
+    auto it = object_states.find(obj);
+    return it != object_states.end() ? &it->second : nullptr;
+  }
+
+  bool is_any_remote_auth_pin() const { return num_remote_auth_pins > 0; }
+
   // cache pins (so things don't expire)
-  set< MDSCacheObject* > pins;
   CInode* stickydiri = nullptr;
 
-  // auth pins
-  map<MDSCacheObject*, mds_rank_t> remote_auth_pins;
-  set<MDSCacheObject*> auth_pins;
   
   // held locks
   struct LockOp {
@@ -175,8 +188,8 @@ public:
       slave_to_mds(slave_to) { }
   ~MutationImpl() override {
     ceph_assert(locking == NULL);
-    ceph_assert(pins.empty());
-    ceph_assert(auth_pins.empty());
+    ceph_assert(num_pins == 0);
+    ceph_assert(num_auth_pins == 0);
   }
 
   bool is_master() const { return slave_to_mds == MDS_RANK_NONE; }
@@ -218,6 +231,9 @@ public:
   void auth_pin(MDSCacheObject *object);
   void auth_unpin(MDSCacheObject *object);
   void drop_local_auth_pins();
+  void set_remote_auth_pinned(MDSCacheObject* object, mds_rank_t from);
+  void _clear_remote_auth_pinned(ObjectState& stat);
+
   void add_projected_inode(CInode *in);
   void pop_and_dirty_projected_inodes();
   void add_projected_fnode(CDir *dir);

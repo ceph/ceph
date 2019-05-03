@@ -371,7 +371,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
       object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 
-      if (!mdr->remote_auth_pins.empty())
+      if (mdr->is_any_remote_auth_pin())
 	notify_freeze_waiter(object);
 
       return false;
@@ -392,10 +392,12 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   // request remote auth_pins
   if (!mustpin_remote.empty()) {
     marker.message = "requesting remote authpins";
-    for (const auto& p : mdr->remote_auth_pins) {
+    for (const auto& p : mdr->object_states) {
+      if (p.second.remote_auth_pinned == MDS_RANK_NONE)
+	continue;
       if (mustpin.count(p.first)) {
-	ceph_assert(p.second == p.first->authority().first);
-	map<mds_rank_t, set<MDSCacheObject*> >::iterator q = mustpin_remote.find(p.second);
+	ceph_assert(p.second.remote_auth_pinned == p.first->authority().first);
+	auto q = mustpin_remote.find(p.second.remote_auth_pinned);
 	if (q != mustpin_remote.end())
 	  q->second.insert(p.first);
       }
