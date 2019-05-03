@@ -46,9 +46,9 @@ int pull_period(RGWRESTConn* conn, const std::string& period_id,
 
   try {
     decode_json_obj(period, &parser);
-  } catch (JSONDecoder::err& e) {
+  } catch (const JSONDecoder::err& e) {
     lderr(conn->get_ctx()) << "failed to decode JSON input: "
-        << e.message << dendl;
+        << e.what() << dendl;
     return -EINVAL;
   }
   return 0;

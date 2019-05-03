@@ -856,9 +856,9 @@ public:
       ExportEntry e;
       try {
 	decode_json_obj(e, &p);
-      } catch (JSONDecoder::err& err) {
+      } catch (const JSONDecoder::err& err) {
 	std::cerr << "rbd: error json decoding import data (entry " << n << "):"
-		  << err.message << std::endl;
+		  << err.what() << std::endl;
 	r = -EINVAL;
 	if (m_no_error) {
 	  r1 = r;

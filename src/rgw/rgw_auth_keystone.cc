@@ -459,8 +459,8 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
       ldpp_dout(dpp, 0) << "Keystone credential not present in return from server" << dendl;
       return make_pair(boost::none, -EINVAL);
     }
-  } catch (JSONDecoder::err& err) {
-    ldpp_dout(dpp, 0) << "Keystone credential parse error: " << err.message << dendl;
+  } catch (const JSONDecoder::err& err) {
+    ldpp_dout(dpp, 0) << "Keystone credential parse error: " << err.what() << dendl;
     return make_pair(boost::none, -EINVAL);
   }
 
