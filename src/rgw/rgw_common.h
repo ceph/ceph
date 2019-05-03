@@ -2477,4 +2477,16 @@ static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
   return string::npos;
 }
 
+template <typename T>
+int decode_bl(bufferlist& bl, T& t)
+{
+  auto iter = bl.begin();
+  try {
+    decode(t, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
 #endif
