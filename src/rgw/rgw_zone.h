@@ -975,9 +975,30 @@ struct RGWPeriodLatestEpochInfo {
 };
 WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
+
+/*
+ * The RGWPeriod object contains the entire configuration of a
+ * RGWRealm, including its RGWZoneGroups and RGWZones. Consistency of
+ * this configuration is maintained across all zones by passing around
+ * the RGWPeriod object in its JSON representation.
+ *
+ * If a new configuration changes which zone is the metadata master
+ * zone (i.e., master zone of the master zonegroup), then a new
+ * RGWPeriod::id (a uuid) is generated, its RGWPeriod::realm_epoch is
+ * incremented, and the RGWRealm object is updated to reflect that new
+ * current_period id and epoch. If the configuration changes BUT which
+ * zone is the metadata master does NOT change, then only the
+ * RGWPeriod::epoch is incremented (and the RGWPeriod::id remains the
+ * same).
+ *
+ * When a new RGWPeriod is created with a new RGWPeriod::id (uuid), it
+ * is linked back to its predecessor RGWPeriod through the
+ * RGWPeriod::predecessor_uuid field, thus creating a "linked
+ * list"-like structure of RGWPeriods back to the cluster's creation.
+ */
 class RGWPeriod
 {
-  std::string id;
+  std::string id; //< a uuid
   epoch_t epoch{0};
   std::string predecessor_uuid;
   std::vector<std::string> sync_status;
