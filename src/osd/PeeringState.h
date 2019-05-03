@@ -94,7 +94,7 @@ public:
     virtual bool try_flush_or_schedule_async() = 0;
     /// Arranges for a commit on t to call on_flushed() once flushed.
     virtual void start_flush_on_transaction(
-      ObjectStore::Transaction *t) = 0;
+      ObjectStore::Transaction &t) = 0;
     /// Notification that all outstanding flushes for interval have completed
     virtual void on_flushed() = 0;
 
@@ -166,7 +166,7 @@ public:
     // =================== Event notification ====================
     virtual void on_pool_change() = 0;
     virtual void on_role_change() = 0;
-    virtual void on_change(ObjectStore::Transaction *t) = 0;
+    virtual void on_change(ObjectStore::Transaction &t) = 0;
     virtual void on_activate(interval_set<snapid_t> to_trim) = 0;
     virtual void on_activate_complete() = 0;
     virtual void on_new_interval() = 0;
@@ -176,9 +176,9 @@ public:
 
     // ====================== PG deletion =======================
     /// Notification of removal complete, t must be populated to complete removal
-    virtual void on_removal(ObjectStore::Transaction *t) = 0;
+    virtual void on_removal(ObjectStore::Transaction &t) = 0;
     /// Perform incremental removal work
-    virtual void do_delete_work(ObjectStore::Transaction *t) = 0;
+    virtual void do_delete_work(ObjectStore::Transaction &t) = 0;
 
     // ======================= PG Merge =========================
     virtual void clear_ready_to_merge() = 0;
@@ -205,7 +205,7 @@ public:
     // ================== Peering log events ====================
     /// Get handler for rolling forward/back log entries
     virtual PGLog::LogEntryHandlerRef get_log_handler(
-      ObjectStore::Transaction *t) = 0;
+      ObjectStore::Transaction &t) = 0;
 
     // ============ On disk representation changes ==============
     virtual void rebuild_missing_set_with_deletes(PGLog &pglog) = 0;
@@ -234,38 +234,23 @@ public:
   };
 
   struct PeeringCtx {
-    utime_t start_time;
-    map<int, map<spg_t, pg_query_t> > *query_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
-    ObjectStore::Transaction *transaction;
-    HBHandle* handle;
-    PeeringCtx(map<int, map<spg_t, pg_query_t> > *query_map,
-		map<int,
-		    vector<pair<pg_notify_t, PastIntervals> > > *info_map,
-		map<int,
-		    vector<pair<pg_notify_t, PastIntervals> > > *notify_list,
-		ObjectStore::Transaction *transaction)
-      : query_map(query_map), info_map(info_map),
-	notify_list(notify_list),
-	transaction(transaction),
-        handle(NULL) {}
+    map<int, map<spg_t, pg_query_t> > query_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
+    ObjectStore::Transaction transaction;
+    HBHandle* handle = nullptr;
 
-    PeeringCtx(BufferedRecoveryMessages &buf, PeeringCtx &rctx)
-      : query_map(&(buf.query_map)),
-	info_map(&(buf.info_map)),
-	notify_list(&(buf.notify_list)),
-	transaction(rctx.transaction),
-        handle(rctx.handle) {}
+    PeeringCtx() = default;
+
+    void reset_transaction() {
+      transaction = ObjectStore::Transaction();
+    }
 
     void accept_buffered_messages(BufferedRecoveryMessages &m) {
-      ceph_assert(query_map);
-      ceph_assert(info_map);
-      ceph_assert(notify_list);
       for (map<int, map<spg_t, pg_query_t> >::iterator i = m.query_map.begin();
 	   i != m.query_map.end();
 	   ++i) {
-	map<spg_t, pg_query_t> &omap = (*query_map)[i->first];
+	map<spg_t, pg_query_t> &omap = query_map[i->first];
 	for (map<spg_t, pg_query_t>::iterator j = i->second.begin();
 	     j != i->second.end();
 	     ++j) {
@@ -277,7 +262,7 @@ public:
 	   i != m.info_map.end();
 	   ++i) {
 	vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	  (*info_map)[i->first];
+	  info_map[i->first];
 	ovec.reserve(ovec.size() + i->second.size());
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
       }
@@ -286,18 +271,48 @@ public:
 	   i != m.notify_list.end();
 	   ++i) {
 	vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	  (*notify_list)[i->first];
+	  notify_list[i->first];
 	ovec.reserve(ovec.size() + i->second.size());
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
       }
     }
+  };
+
+private:
+  /**
+   * Wraps PeeringCtx to hide the difference between buffering messages to
+   * be sent after flush or immediately.
+   */
+  struct PeeringCtxWrapper {
+    utime_t start_time;
+    map<int, map<spg_t, pg_query_t> > &query_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > &info_map;
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > &notify_list;
+    ObjectStore::Transaction &transaction;
+    HBHandle * const handle = nullptr;
+
+    PeeringCtxWrapper(PeeringCtx &wrapped) :
+      query_map(wrapped.query_map),
+      info_map(wrapped.info_map),
+      notify_list(wrapped.notify_list),
+      transaction(wrapped.transaction),
+      handle(wrapped.handle) {}
+
+    PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
+      : query_map(buf.query_map),
+	info_map(buf.info_map),
+	notify_list(buf.notify_list),
+	transaction(wrapped.transaction),
+        handle(wrapped.handle) {}
+
+    PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
     void send_notify(pg_shard_t to,
 		     const pg_notify_t &info, const PastIntervals &pi) {
-      ceph_assert(notify_list);
-      (*notify_list)[to.osd].emplace_back(info, pi);
+      notify_list[to.osd].emplace_back(info, pi);
     }
   };
+public:
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -458,27 +473,27 @@ public:
       event_count(0) {}
 
     /* Accessor functions for state methods */
-    ObjectStore::Transaction* get_cur_transaction() {
+    ObjectStore::Transaction& get_cur_transaction() {
       ceph_assert(state->rctx);
-      ceph_assert(state->rctx->transaction);
       return state->rctx->transaction;
     }
 
     void send_query(pg_shard_t to, const pg_query_t &query);
 
-    map<int, map<spg_t, pg_query_t> > *get_query_map() {
+    map<int, map<spg_t, pg_query_t> > &get_query_map() {
       ceph_assert(state->rctx);
-      ceph_assert(state->rctx->query_map);
       return state->rctx->query_map;
     }
 
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > *get_info_map() {
+    map<int, vector<pair<pg_notify_t, PastIntervals> > > &get_info_map() {
       ceph_assert(state->rctx);
-      ceph_assert(state->rctx->info_map);
       return state->rctx->info_map;
     }
 
-    PeeringCtx *get_recovery_ctx() { return &*(state->rctx); }
+    PeeringCtxWrapper &get_recovery_ctx() {
+      assert(state->rctx);
+      return *(state->rctx);
+    }
 
     void send_notify(pg_shard_t to,
 	       const pg_notify_t &info, const PastIntervals &pi) {
@@ -1204,7 +1219,7 @@ public:
    * the message lists for messages_pending_flush while blocking messages
    * or into orig_ctx otherwise
    */
-  boost::optional<PeeringCtx> rctx;
+  std::optional<PeeringCtxWrapper> rctx;
 
   /**
    * OSDMap state
@@ -1330,7 +1345,7 @@ public:
     const OSDMapRef lastmap,
     const vector<int>& newup, int up_primary,
     const vector<int>& newacting, int acting_primary,
-    ObjectStore::Transaction *t);
+    ObjectStore::Transaction &t);
   void on_new_interval();
   void clear_recovery_state();
   void clear_primary_state();
@@ -1403,7 +1418,7 @@ public:
   bool search_for_missing(
     const pg_info_t &oinfo, const pg_missing_t &omissing,
     pg_shard_t fromosd,
-    PeeringCtx*);
+    PeeringCtxWrapper &rctx);
   void build_might_have_unfound();
   void log_weirdness();
   void activate(
@@ -1411,7 +1426,7 @@ public:
     epoch_t activation_epoch,
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
-    PeeringCtx *ctx);
+    PeeringCtxWrapper &ctx);
 
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
   void merge_log(
@@ -1449,7 +1464,7 @@ public:
     pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(
     pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
-  void fulfill_query(const MQuery& q, PeeringCtx *rctx);
+  void fulfill_query(const MQuery& q, PeeringCtxWrapper &rctx);
 
   void try_mark_clean();
 
@@ -1473,7 +1488,7 @@ public:
 
   /// Process evt
   void handle_event(const boost::statechart::event_base &evt,
-	      PeeringCtx *rctx) {
+		    PeeringCtx *rctx) {
     start_handle(rctx);
     machine.process_event(evt);
     end_handle();
@@ -1481,7 +1496,7 @@ public:
 
   /// Process evt
   void handle_event(PGPeeringEventRef evt,
-	      PeeringCtx *rctx) {
+		    PeeringCtx *rctx) {
     start_handle(rctx);
     machine.process_event(evt->get_event());
     end_handle();
@@ -1495,7 +1510,7 @@ public:
     const pg_history_t& history,
     const PastIntervals& pi,
     bool backfill,
-    ObjectStore::Transaction *t);
+    ObjectStore::Transaction &t);
 
   /// Init pg instance from disk state
   template <typename F>
@@ -1538,7 +1553,7 @@ public:
 
   /// Update new child with stats
   void finish_split_stats(
-    const object_stat_sum_t& stats, ObjectStore::Transaction *t);
+    const object_stat_sum_t& stats, ObjectStore::Transaction &t);
 
   /// Split state for child_pgid into *child
   void split_into(
@@ -1547,7 +1562,7 @@ public:
   /// Merge state from sources
   void merge_from(
     map<spg_t,PeeringState *>& sources,
-    PeeringCtx *rctx,
+    PeeringCtx &rctx,
     unsigned split_bits,
     const pg_merge_meta_t& last_pg_merge_meta);
 
@@ -1771,12 +1786,12 @@ public:
     int up_primary,         ///< [in] new up primary
     vector<int>& newacting, ///< [in] new acting
     int acting_primary,     ///< [in] new acting primary
-    PeeringCtx *rctx        ///< [out] recovery context
+    PeeringCtx &rctx        ///< [out] recovery context
     );
 
   /// Activates most recently updated map
   void activate_map(
-    PeeringCtx *rctx        ///< [out] recovery context
+    PeeringCtx &rctx        ///< [out] recovery context
     );
 
   /// resets last_persisted_osdmap
@@ -2095,7 +2110,7 @@ private:
    * complete_flush is called once for each start_flush call as
    * required by start_flush_on_transaction).
    */
-  void start_flush(ObjectStore::Transaction *t) {
+  void start_flush(ObjectStore::Transaction &t) {
     flushes_in_progress++;
     pl->start_flush_on_transaction(t);
   }

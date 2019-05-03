@@ -1700,7 +1700,7 @@ protected:
     epoch_t advance_to,
     PG *pg,
     ThreadPool::TPHandle &handle,
-    PG::PeeringCtx *rctx);
+    PG::PeeringCtx &rctx);
   void consume_map();
   void activate_map();
 
@@ -1793,7 +1793,7 @@ protected:
     const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
-    PG::PeeringCtx *rctx);
+    PG::PeeringCtx &rctx);
   void _finish_splits(set<PGRef>& pgs);
 
   // == monitor interaction ==

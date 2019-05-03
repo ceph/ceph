@@ -101,8 +101,7 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
 void PeeringState::PeeringMachine::send_query(
   pg_shard_t to, const pg_query_t &query) {
   ceph_assert(state->rctx);
-  ceph_assert(state->rctx->query_map);
-  (*state->rctx->query_map)[to.osd][
+  state->rctx->query_map[to.osd][
     spg_t(context< PeeringMachine >().spgid.pgid, to.shard)] = query;
 }
 
@@ -143,9 +142,9 @@ void PeeringState::start_handle(PeeringCtx *new_ctx) {
   orig_ctx = new_ctx;
   if (new_ctx) {
     if (messages_pending_flush) {
-      rctx = PeeringCtx(*messages_pending_flush, *new_ctx);
+      rctx.emplace(*messages_pending_flush, *new_ctx);
     } else {
-      rctx = *new_ctx;
+      rctx.emplace(*new_ctx);
     }
     rctx->start_time = ceph_clock_now();
   }
@@ -156,7 +155,7 @@ void PeeringState::begin_block_outgoing() {
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
   messages_pending_flush = BufferedRecoveryMessages();
-  rctx = PeeringCtx(*messages_pending_flush, *orig_ctx);
+  rctx.emplace(*messages_pending_flush, *orig_ctx);
 }
 
 void PeeringState::clear_blocked_outgoing() {
@@ -170,8 +169,8 @@ void PeeringState::end_block_outgoing() {
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
 
-  rctx = PeeringCtx(*orig_ctx);
-  rctx->accept_buffered_messages(*messages_pending_flush);
+  orig_ctx->accept_buffered_messages(*messages_pending_flush);
+  rctx.emplace(*orig_ctx);
   messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
 }
 
@@ -182,7 +181,7 @@ void PeeringState::end_handle() {
   }
 
   machine.event_count++;
-  rctx = boost::optional<PeeringCtx>();
+  rctx = std::nullopt;
   orig_ctx = NULL;
 }
 
@@ -389,7 +388,7 @@ void PeeringState::advance_map(
   OSDMapRef osdmap, OSDMapRef lastmap,
   vector<int>& newup, int up_primary,
   vector<int>& newacting, int acting_primary,
-  PeeringCtx *rctx)
+  PeeringCtx &rctx)
 {
   ceph_assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   ceph_assert(lastmap == osdmap_ref);
@@ -404,18 +403,18 @@ void PeeringState::advance_map(
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
-  handle_event(evt, rctx);
+  handle_event(evt, &rctx);
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
   }
   last_require_osd_release = osdmap->require_osd_release;
 }
 
-void PeeringState::activate_map(PeeringCtx *rctx)
+void PeeringState::activate_map(PeeringCtx &rctx)
 {
   psdout(10) << __func__ << dendl;
   ActMap evt;
-  handle_event(evt, rctx);
+  handle_event(evt, &rctx);
   if (osdmap_ref->get_epoch() - last_persisted_osdmap >
     cct->_conf->osd_pg_epoch_persisted_max_stale) {
     psdout(20) << __func__ << ": Dirtying info: last_persisted is "
@@ -427,7 +426,7 @@ void PeeringState::activate_map(PeeringCtx *rctx)
 	      << last_persisted_osdmap
 	      << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
-  write_if_dirty(*rctx->transaction);
+  write_if_dirty(rctx.transaction);
 
   if (get_osdmap()->check_new_blacklist_entries()) {
     pl->check_blacklisted_watchers();
@@ -521,7 +520,7 @@ void PeeringState::start_peering_interval(
   const OSDMapRef lastmap,
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction &t)
 {
   const OSDMapRef osdmap = get_osdmap();
 
@@ -1960,11 +1959,11 @@ void PeeringState::log_weirdness()
 bool PeeringState::search_for_missing(
   const pg_info_t &oinfo, const pg_missing_t &omissing,
   pg_shard_t from,
-  PeeringCtx *ctx)
+  PeeringCtxWrapper &ctx)
 {
   uint64_t num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing, ctx->handle);
+    from, oinfo, omissing, ctx.handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     pl->publish_stats_to_osd();
   // avoid doing this if the peer is empty.  This is abit of paranoia
@@ -1975,7 +1974,7 @@ bool PeeringState::search_for_missing(
       oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
-    (*(ctx->info_map))[from.osd].emplace_back(
+    ctx.info_map[from.osd].emplace_back(
       pg_notify_t(
 	from.shard, pg_whoami.shard,
 	get_osdmap_epoch(),
@@ -2082,7 +2081,7 @@ void PeeringState::activate(
   map<int,
   vector<
   pair<pg_notify_t, PastIntervals> > > *activator_map,
-  PeeringCtx *ctx)
+  PeeringCtxWrapper &ctx)
 {
   ceph_assert(!is_peered());
 
@@ -2180,7 +2179,6 @@ void PeeringState::activate(
       info.purged_snaps.swap(purged);
     }
 
-    ceph_assert(ctx);
     // start up replicas
 
     ceph_assert(!acting_recovery_backfill.empty());
@@ -2362,10 +2360,10 @@ void PeeringState::activate(
       // and covers vast majority of the use cases, like one OSD/host is down for
       // a while for hardware repairing
       if (complete_shards.size() + 1 == acting_recovery_backfill.size()) {
-        missing_loc.add_batch_sources_info(complete_shards, ctx->handle);
+        missing_loc.add_batch_sources_info(complete_shards, ctx.handle);
       } else {
         missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(),
-				    ctx->handle);
+				    ctx.handle);
         for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
 	     i != acting_recovery_backfill.end();
 	     ++i) {
@@ -2377,7 +2375,7 @@ void PeeringState::activate(
 	    *i,
 	    peer_info[*i],
 	    peer_missing[*i],
-            ctx->handle);
+            ctx.handle);
         }
       }
       for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
@@ -2410,7 +2408,7 @@ void PeeringState::activate(
     pl->on_activate(std::move(to_trim));
   }
   if (acting.size() >= pool.info.min_size) {
-    PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+    PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
     pg_log.roll_forward(rollbacker.get());
   }
 }
@@ -2448,7 +2446,7 @@ void PeeringState::merge_log(
   ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
   pg_shard_t from)
 {
-  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.merge_log(
     oinfo, olog, from, info, rollbacker.get(), dirty_info, dirty_big_info);
 }
@@ -2456,7 +2454,7 @@ void PeeringState::merge_log(
 void PeeringState::rewind_divergent_log(
   ObjectStore::Transaction& t, eversion_t newhead)
 {
-  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   pg_log.rewind_divergent_log(
     newhead, info, rollbacker.get(), dirty_info, dirty_big_info);
 }
@@ -2594,13 +2592,13 @@ void PeeringState::fulfill_log(
   pl->send_cluster_message(from.osd, mlog, get_osdmap_epoch(), true);
 }
 
-void PeeringState::fulfill_query(const MQuery& query, PeeringCtx *rctx)
+void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 {
   if (query.query.type == pg_query_t::INFO) {
     pair<pg_shard_t, pg_info_t> notify_info;
     update_history(query.query.history);
     fulfill_info(query.from, query.query, notify_info);
-    rctx->send_notify(
+    rctx.send_notify(
       notify_info.first,
       pg_notify_t(
 	notify_info.first.shard, pg_whoami.shard,
@@ -2740,7 +2738,7 @@ void PeeringState::split_into(
 
 void PeeringState::merge_from(
   map<spg_t,PeeringState *>& sources,
-  PeeringCtx *rctx,
+  PeeringCtx &rctx,
   unsigned split_bits,
   const pg_merge_meta_t& last_pg_merge_meta)
 {
@@ -2766,7 +2764,7 @@ void PeeringState::merge_from(
     }
   }
 
-  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(rctx->transaction)};
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(rctx.transaction)};
   pg_log.roll_forward(handler.get());
 
   info.last_complete = info.last_update;  // to fake out trim()
@@ -2805,7 +2803,7 @@ void PeeringState::merge_from(
 
     // prepare log
     PGLog::LogEntryHandlerRef handler{
-      source->pl->get_log_handler(rctx->transaction)};
+      source->pl->get_log_handler(rctx.transaction)};
     source->pg_log.roll_forward(handler.get());
     source->info.last_complete = source->info.last_update;  // to fake out trim()
     source->pg_log.reset_recovery_pointers();
@@ -2903,10 +2901,10 @@ void PeeringState::start_split_stats(
 }
 
 void PeeringState::finish_split_stats(
-  const object_stat_sum_t& stats, ObjectStore::Transaction *t)
+  const object_stat_sum_t& stats, ObjectStore::Transaction &t)
 {
   info.stats.stats.sum = stats;
-  write_if_dirty(*t);
+  write_if_dirty(t);
 }
 
 void PeeringState::update_blocked_by()
@@ -3332,7 +3330,7 @@ void PeeringState::init(
   const pg_history_t& history,
   const PastIntervals& pi,
   bool backfill,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction &t)
 {
   psdout(10) << "init role " << role << " up "
 	     << newup << " acting " << newacting
@@ -3367,7 +3365,7 @@ void PeeringState::init(
 
   dirty_info = true;
   dirty_big_info = true;
-  write_if_dirty(*t);
+  write_if_dirty(t);
 }
 
 void PeeringState::dump_peering_state(Formatter *f)
@@ -3444,7 +3442,7 @@ bool PeeringState::append_log_entries_update_missing(
   ceph_assert(!entries.empty());
   ceph_assert(entries.begin()->version > info.last_update);
 
-  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(&t)};
+  PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   bool invalidate_stats =
     pg_log.append_new_log_entries(
       info.last_backfill,
@@ -3570,7 +3568,7 @@ void PeeringState::append_log(
   }
   psdout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
-  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(&t)};
+  PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
   if (!transaction_applied) {
      /* We must be a backfill or async recovery peer, so it's ok if we apply
       * out-of-turn since we won't be considered when
@@ -3629,7 +3627,7 @@ void PeeringState::recover_got(
      * write in question must be fully committed, so it's not valid
      * to roll it back anyway (and we'll be rolled forward shortly
      * anyway) */
-    PGLog::LogEntryHandlerRef handler{pl->get_log_handler(&t)};
+    PGLog::LogEntryHandlerRef handler{pl->get_log_handler(t)};
     pg_log.roll_forward_to(v, handler.get());
   }
 
@@ -5227,7 +5225,7 @@ PeeringState::Clean::Clean(my_context ctx)
 
   ps->try_mark_clean();
 
-  context< PeeringMachine >().get_cur_transaction()->register_on_commit(
+  context< PeeringMachine >().get_cur_transaction().register_on_commit(
     pl->on_clean());
 }
 
@@ -5280,10 +5278,10 @@ PeeringState::Active::Active(my_context ctx)
   ceph_assert(ps->is_primary());
   psdout(10) << "In Active, about to call activate" << dendl;
   ps->start_flush(context< PeeringMachine >().get_cur_transaction());
-  ps->activate(*context< PeeringMachine >().get_cur_transaction(),
+  ps->activate(context< PeeringMachine >().get_cur_transaction(),
 	       ps->get_osdmap_epoch(),
-	       *context< PeeringMachine >().get_query_map(),
-	       context< PeeringMachine >().get_info_map(),
+	       context< PeeringMachine >().get_query_map(),
+	       &context< PeeringMachine >().get_info_map(),
 	       context< PeeringMachine >().get_recovery_ctx());
 
   // everyone has to commit/ack before we are truly active
@@ -5370,7 +5368,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
 
   if (ps->have_unfound()) {
     // object may have become unfound
-    ps->discover_all_missing(*context< PeeringMachine >().get_query_map());
+    ps->discover_all_missing(context< PeeringMachine >().get_query_map());
   }
 
   uint64_t unfound = ps->missing_loc.num_unfound();
@@ -5409,7 +5407,7 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     ps->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
-      ps->discover_all_missing(*context< PeeringMachine >().get_query_map());
+      ps->discover_all_missing(context< PeeringMachine >().get_query_map());
     }
   }
   return discard_event();
@@ -5649,9 +5647,12 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   DECLARE_LOCALS
   psdout(10) << "In ReplicaActive, about to call activate" << dendl;
   map<int, map<spg_t, pg_query_t> > query_map;
-  ps->activate(*context< PeeringMachine >().get_cur_transaction(),
-	       actevt.activation_epoch,
-	       query_map, NULL, NULL);
+  ps->activate(
+    context< PeeringMachine >().get_cur_transaction(),
+    actevt.activation_epoch,
+    query_map,
+    NULL,
+    context< PeeringMachine >().get_recovery_ctx());
   psdout(10) << "Activate Finished" << dendl;
   return discard_event();
 }
@@ -5690,7 +5691,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
 boost::statechart::result PeeringState::ReplicaActive::react(const MInfoRec& infoevt)
 {
   DECLARE_LOCALS
-  ps->proc_primary_info(*context<PeeringMachine>().get_cur_transaction(),
+  ps->proc_primary_info(context<PeeringMachine>().get_cur_transaction(),
 			infoevt.info);
   return discard_event();
 }
@@ -5699,8 +5700,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
 {
   DECLARE_LOCALS
   psdout(10) << "received log from " << logevt.from << dendl;
-  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
-  ps->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
+  ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
+  ps->merge_log(t, logevt.msg->info, logevt.msg->log, logevt.from);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
 
   return discard_event();
@@ -5786,7 +5787,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   MOSDPGLog *msg = logevt.msg.get();
   psdout(10) << "got info+log from osd." << logevt.from << " " << msg->info << " " << msg->log << dendl;
 
-  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
+  ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     ps->info = msg->info;
@@ -5799,7 +5800,7 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
 
     ps->pg_log.reset_backfill();
   } else {
-    ps->merge_log(*t, msg->info, msg->log, logevt.from);
+    ps->merge_log(t, msg->info, msg->log, logevt.from);
   }
 
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
@@ -5815,8 +5816,8 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
 
   if (ps->info.last_update > infoevt.info.last_update) {
     // rewind divergent log entries
-    ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
-    ps->rewind_divergent_log(*t, infoevt.info.last_update);
+    ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
+    ps->rewind_divergent_log(t, infoevt.info.last_update);
     ps->info.stats = infoevt.info.stats;
     ps->info.hit_set = infoevt.info.hit_set;
   }
@@ -5929,7 +5930,7 @@ PeeringState::Deleting::Deleting(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS
   ps->deleting = true;
-  ObjectStore::Transaction* t = context<PeeringMachine>().get_cur_transaction();
+  ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
 
   // clear log
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
@@ -6210,7 +6211,7 @@ boost::statechart::result PeeringState::GetLog::react(const GotLog&)
   psdout(10) << "leaving GetLog" << dendl;
   if (msg) {
     psdout(10) << "processing master log" << dendl;
-    ps->proc_master_log(*context<PeeringMachine>().get_cur_transaction(),
+    ps->proc_master_log(context<PeeringMachine>().get_cur_transaction(),
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
