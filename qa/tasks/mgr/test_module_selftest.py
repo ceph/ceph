@@ -264,3 +264,16 @@ class TestModuleSelftest(MgrTestCase):
             "mgr", "module", "disable", "selftest")
 
         self.wait_for_health_clear(timeout=30)
+
+    def test_module_remote(self):
+        """
+        Use the selftest module to exercise inter-module communication
+        """
+        self._load_module("selftest")
+        # The "self-test remote" operation just happens to call into
+        # influx.
+        self._load_module("influx")
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "remote")
+

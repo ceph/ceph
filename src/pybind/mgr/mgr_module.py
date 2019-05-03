@@ -827,3 +827,19 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
 
         return True, ""
+
+    def remote(self, module_name, method_name, *args, **kwargs):
+        """
+        Invoke a method on another module.  All arguments, and the return
+        value from the other module must be serializable.
+
+        :param module_name: Name of other module.  If module isn't loaded,
+                            an ImportError exception is raised.
+        :param method_name: Method name.  If it does not exist, a NameError
+                            exception is raised.
+        :param args: Argument tuple
+        :param kwargs: Keyword argument dict
+        :return:
+        """
+        return self._ceph_dispatch_remote(module_name, method_name,
+                                          args, kwargs)
