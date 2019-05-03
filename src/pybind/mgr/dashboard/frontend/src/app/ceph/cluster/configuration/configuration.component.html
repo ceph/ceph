@@ -12,7 +12,7 @@
     <div class="form-group filter"
          *ngFor="let filter of filters">
       <label>{{ filter.label }}: </label>
-      <select class="form-control"
+      <select class="form-control custom-select"
               [(ngModel)]="filter.value"
               (ngModelChange)="updateFilter()">
         <option *ngFor="let opt of filter.options">{{ opt }}</option>

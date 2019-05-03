@@ -20,7 +20,7 @@
 <select *ngIf="!isDropdown"
         (change)="changeLanguage($event.target.value)"
         [(ngModel)]="selectedLanguage"
-        class="form-control">
+        class="form-control custom-select">
   <option *ngFor="let lang of supportedLanguages | keyvalue"
           [value]="lang.key">{{ lang.value }}</option>
 </select>
