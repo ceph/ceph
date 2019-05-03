@@ -1547,15 +1547,15 @@ public:
     int split_bits,
     int seed,
     const pg_pool_t *pool,
-    ObjectStore::Transaction *t) override {
+    ObjectStore::Transaction &t) override {
     coll_t target = coll_t(child);
-    PG::_create(*t, child, split_bits);
-    t->split_collection(
+    PG::_create(t, child, split_bits);
+    t.split_collection(
       coll,
       split_bits,
       seed,
       target);
-    PG::_init(*t, child, pool);
+    PG::_init(t, child, pool);
   }
 private:
 
@@ -1888,10 +1888,10 @@ public:
   void plpg_on_role_change() override;
   void plpg_on_pool_change() override;
   void clear_async_reads();
-  void on_change(ObjectStore::Transaction *t) override;
+  void on_change(ObjectStore::Transaction &t) override;
   void on_activate_complete() override;
   void on_flushed() override;
-  void on_removal(ObjectStore::Transaction *t) override;
+  void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override {

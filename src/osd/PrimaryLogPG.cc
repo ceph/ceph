@@ -11792,13 +11792,13 @@ void PrimaryLogPG::on_flushed()
   }
 }
 
-void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
+void PrimaryLogPG::on_removal(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
   on_shutdown();
 
-  t->register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
+  t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
 }
 
 void PrimaryLogPG::clear_async_reads()
@@ -11928,7 +11928,7 @@ void PrimaryLogPG::on_activate_complete()
   agent_setup();
 }
 
-void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
+void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
@@ -12019,8 +12019,8 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   // registered watches.
   context_registry_on_change();
 
-  pgbackend->on_change_cleanup(t);
-  scrubber.cleanup_store(t);
+  pgbackend->on_change_cleanup(&t);
+  scrubber.cleanup_store(&t);
   pgbackend->on_change();
 
   // clear snap_trimmer state
