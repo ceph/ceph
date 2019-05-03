@@ -2968,11 +2968,13 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
   
   // return list of my auth_pins (if any)
-  for (const auto &p : mdr->auth_pins) {
+  for (const auto &p : mdr->object_states) {
+    if (!p.second.auth_pinned)
+      continue;
     MDSCacheObjectInfo info;
-    p->set_object_info(info);
+    p.first->set_object_info(info);
     reply->get_authpins().push_back(info);
-    if (p == (MDSCacheObject*)auth_pin_freeze)
+    if (p.first == (MDSCacheObject*)auth_pin_freeze)
       auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
   }
 
@@ -2999,8 +3001,7 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
     MDSCacheObject *object = mdcache->get_object(oi);
     ceph_assert(object);  // we pinned it
     dout(10) << " remote has pinned " << *object << dendl;
-    if (!mdr->is_auth_pinned(object))
-      mdr->remote_auth_pins[object] = from;
+    mdr->set_remote_auth_pinned(object, from);
     if (oi == ack->get_authpin_freeze())
       mdr->set_remote_frozen_auth_pin(static_cast<CInode *>(object));
     pinned.insert(object);
@@ -3009,22 +3010,21 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
   // removed frozen auth pin ?
   if (mdr->more()->is_remote_frozen_authpin &&
       ack->get_authpin_freeze() == MDSCacheObjectInfo()) {
-    auto p = mdr->remote_auth_pins.find(mdr->more()->rename_inode);
-    ceph_assert(p != mdr->remote_auth_pins.end());
-    if (p->second == from) {
+    auto stat_p = mdr->find_object_state(mdr->more()->rename_inode);
+    ceph_assert(stat_p);
+    if (stat_p->remote_auth_pinned == from) {
       mdr->more()->is_remote_frozen_authpin = false;
     }
   }
 
   // removed auth pins?
-  auto p = mdr->remote_auth_pins.begin();
-  while (p != mdr->remote_auth_pins.end()) {
-    MDSCacheObject* object = p->first;
-    if (p->second == from && pinned.count(object) == 0) {
+  for (auto& p : mdr->object_states) {
+    if (p.second.remote_auth_pinned == MDS_RANK_NONE)
+      continue;
+    MDSCacheObject* object = p.first;
+    if (p.second.remote_auth_pinned == from && pinned.count(object) == 0) {
       dout(10) << " remote has unpinned " << *object << dendl;
-      mdr->remote_auth_pins.erase(p++);
-    } else {
-      ++p;
+      mdr->_clear_remote_auth_pinned(p.second);
     }
   }
 
@@ -3487,7 +3487,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
        */
       mds->locker->drop_locks(mdr.get(), NULL);
       mdr->drop_local_auth_pins();
-      if (!mdr->remote_auth_pins.empty())
+      if (mdr->is_any_remote_auth_pin())
 	mds->locker->notify_freeze_waiter(ref);
       return 0;
     }
