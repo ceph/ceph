@@ -193,7 +193,7 @@ void ResizeRequest<I>::send_flush_cache() {
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   auto ctx = create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
-  auto aio_comp = io::AioCompletion::create(
+  auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec<I>::create_flush_request(
     image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
