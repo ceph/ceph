@@ -31,6 +31,8 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
 
+#include <boost/lockfree/queue.hpp>
+
 class CephContext;
 class ContextWQ;
 class Finisher;
@@ -118,7 +120,6 @@ namespace librbd {
     RWLock timestamp_lock; // protects (create/access/modify)_timestamp
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
-    Mutex completed_reqs_lock; // protects completed_reqs
 
     unsigned extra_read_flags;
 
@@ -167,12 +168,13 @@ namespace librbd {
     io::ImageRequestWQ<ImageCtx> *io_work_queue;
     io::ObjectDispatcher<ImageCtx> *io_object_dispatcher = nullptr;
 
-    xlist<io::AioCompletion*> completed_reqs;
-    EventSocket event_socket;
-
     ContextWQ *op_work_queue;
 
+    boost::lockfree::queue<io::AioCompletion*> completed_reqs;
+    EventSocket event_socket;
+
     bool ignore_migrating = false;
+    bool disable_zero_copy = false;
 
     /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;
@@ -291,9 +293,6 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
 
-    void flush_async_operations();
-    void flush_async_operations(Context *on_finish);
-
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
 
@@ -303,8 +302,6 @@ namespace librbd {
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);
     Journal<ImageCtx> *create_journal();
-
-    void clear_pending_completions();
 
     void set_image_name(const std::string &name);
 

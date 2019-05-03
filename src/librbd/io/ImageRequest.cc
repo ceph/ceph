@@ -223,14 +223,13 @@ template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(m_aio_comp->is_initialized(get_aio_type()));
-  ceph_assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
+  ceph_assert(m_aio_comp->is_started());
 
   CephContext *cct = image_ctx.cct;
   AioCompletion *aio_comp = this->m_aio_comp;
   ldout(cct, 20) << get_request_type() << ": ictx=" << &image_ctx << ", "
                  << "completion=" << aio_comp << dendl;
 
-  aio_comp->get();
   int r = clip_request();
   if (r < 0) {
     m_aio_comp->fail(r);
@@ -398,8 +397,6 @@ void ImageReadRequest<I>::send_request() {
     }
   }
 
-  aio_comp->put();
-
   image_ctx.perfcounter->inc(l_librbd_rd);
   image_ctx.perfcounter->inc(l_librbd_rd_bytes, buffer_ofs);
 }
@@ -477,7 +474,6 @@ void AbstractImageWriteRequest<I>::send_request() {
   }
 
   update_stats(clip_len);
-  aio_comp->put();
 }
 
 template <typename I>
@@ -708,9 +704,7 @@ void ImageFlushRequest<I>::send_request() {
     });
 
   // ensure all in-flight IOs are settled if non-user flush request
-  image_ctx.flush_async_operations(ctx);
-  aio_comp->start_op(true);
-  aio_comp->put();
+  aio_comp->async_op.flush(ctx);
 
   // might be flushing during image shutdown
   if (image_ctx.perfcounter != nullptr) {

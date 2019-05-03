@@ -117,7 +117,6 @@ void ImageDispatchSpec<I>::send() {
 
 template <typename I>
 void ImageDispatchSpec<I>::fail(int r) {
-  m_aio_comp->get();
   m_aio_comp->fail(r);
 }
 
