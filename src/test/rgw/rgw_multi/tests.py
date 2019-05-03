@@ -691,22 +691,19 @@ def test_versioned_object_incremental_sync():
             k = new_key(zone_conn, bucket, obj)
 
             k.set_contents_from_string('version1')
-            v = get_latest_object_version(k)
-            log.debug('version1 id=%s', v.version_id)
+            log.debug('version1 id=%s', k.version_id)
             # don't delete version1 - this tests that the initial version
             # doesn't get squashed into later versions
 
             # create and delete the following object versions to test that
             # the operations don't race with each other during sync
             k.set_contents_from_string('version2')
-            v = get_latest_object_version(k)
-            log.debug('version2 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version2 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
             k.set_contents_from_string('version3')
-            v = get_latest_object_version(k)
-            log.debug('version3 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version3 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
@@ -722,6 +719,52 @@ def test_versioned_object_incremental_sync():
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+def test_delete_marker_full_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    # enable versioning
+    for _, bucket in zone_bucket:
+        bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone, bucket in zone_bucket:
+        # upload an initial object
+        key1 = new_key(zone, bucket, 'obj')
+        key1.set_contents_from_string('')
+
+        # create a delete marker
+        key2 = new_key(zone, bucket, 'obj')
+        key2.delete()
+
+    # wait for full sync
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
+def test_suspended_delete_marker_full_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    # enable/suspend versioning
+    for _, bucket in zone_bucket:
+        bucket.configure_versioning(True)
+        bucket.configure_versioning(False)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone, bucket in zone_bucket:
+        # upload an initial object
+        key1 = new_key(zone, bucket, 'obj')
+        key1.set_contents_from_string('')
+
+        # create a delete marker
+        key2 = new_key(zone, bucket, 'obj')
+        key2.delete()
+
+    # wait for full sync
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
