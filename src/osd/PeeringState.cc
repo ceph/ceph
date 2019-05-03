@@ -161,7 +161,7 @@ void PeeringState::begin_block_outgoing() {
 void PeeringState::clear_blocked_outgoing() {
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
-  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
+  messages_pending_flush = std::optional<BufferedRecoveryMessages>();
 }
 
 void PeeringState::end_block_outgoing() {
@@ -171,7 +171,7 @@ void PeeringState::end_block_outgoing() {
 
   orig_ctx->accept_buffered_messages(*messages_pending_flush);
   rctx.emplace(*orig_ctx);
-  messages_pending_flush = boost::optional<BufferedRecoveryMessages>();
+  messages_pending_flush = std::optional<BufferedRecoveryMessages>();
 }
 
 void PeeringState::end_handle() {
@@ -3436,8 +3436,8 @@ void PeeringState::update_stats(
 
 bool PeeringState::append_log_entries_update_missing(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-  ObjectStore::Transaction &t, boost::optional<eversion_t> trim_to,
-  boost::optional<eversion_t> roll_forward_to)
+  ObjectStore::Transaction &t, std::optional<eversion_t> trim_to,
+  std::optional<eversion_t> roll_forward_to)
 {
   ceph_assert(!entries.empty());
   ceph_assert(entries.begin()->version > info.last_update);
@@ -3478,8 +3478,8 @@ bool PeeringState::append_log_entries_update_missing(
 void PeeringState::merge_new_log_entries(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t,
-  boost::optional<eversion_t> trim_to,
-  boost::optional<eversion_t> roll_forward_to)
+  std::optional<eversion_t> trim_to,
+  std::optional<eversion_t> roll_forward_to)
 {
   psdout(10) << __func__ << " " << entries << dendl;
   ceph_assert(is_primary());
