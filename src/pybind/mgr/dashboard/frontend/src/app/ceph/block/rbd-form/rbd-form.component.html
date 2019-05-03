@@ -69,7 +69,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="pool"
                     name="pool"
-                    class="form-control"
+                    class="form-control custom-select"
                     formControlName="pool"
                     *ngIf="mode !== 'editing' && poolPermission.read">
               <option *ngIf="pools === null"
@@ -129,7 +129,7 @@
                    *ngIf="mode === 'editing' || !poolPermission.read">
             <select id="dataPool"
                     name="dataPool"
-                    class="form-control"
+                    class="form-control custom-select"
                     formControlName="dataPool"
                     (change)="onDataPoolChange($event.target.value)"
                     *ngIf="mode !== 'editing' && poolPermission.read">
@@ -228,7 +228,7 @@
               <div class="col-sm-9">
                 <select id="obj_size"
                         name="obj_size"
-                        class="form-control"
+                        class="form-control custom-select"
                         formControlName="obj_size">
                   <option *ngFor="let objectSize of objectSizes"
                           [value]="objectSize">{{ objectSize }}</option>
@@ -248,7 +248,7 @@
               <div class="col-sm-9">
                 <select id="stripingUnit"
                         name="stripingUnit"
-                        class="form-control"
+                        class="form-control custom-select"
                         formControlName="stripingUnit">
                   <option i18n
                           [ngValue]="null">-- Select stripe unit --</option>

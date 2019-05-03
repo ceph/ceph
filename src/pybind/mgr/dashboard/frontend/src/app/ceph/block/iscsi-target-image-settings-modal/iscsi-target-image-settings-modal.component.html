@@ -16,7 +16,7 @@
                  i18n>Backstore</label>
           <select id="backstore"
                   name="backstore"
-                  class="form-control"
+                  class="form-control custom-select"
                   [(ngModel)]="model.backstore"
                   [disabled]="backstores.length == 1">
             <option *ngFor="let bs of backstores"

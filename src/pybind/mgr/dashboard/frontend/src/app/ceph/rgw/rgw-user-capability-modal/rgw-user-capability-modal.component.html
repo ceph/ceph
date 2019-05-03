@@ -31,7 +31,7 @@
                [readonly]="true"
                formControlName="type">
         <select id="type"
-                class="form-control"
+                class="form-control custom-select"
                 formControlName="type"
                 *ngIf="!editing"
                 autofocus>
@@ -56,7 +56,7 @@
       </label>
       <div class="col-sm-9">
         <select id="perm"
-                class="form-control"
+                class="form-control custom-select"
                 formControlName="perm">
           <option i18n
                   [ngValue]="null">-- Select a permission --</option>
