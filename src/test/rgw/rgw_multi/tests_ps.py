@@ -7,6 +7,7 @@ from .tests import get_realm, \
     zone_meta_checkpoint, \
     zone_bucket_checkpoint, \
     zone_data_checkpoint, \
+    zonegroup_bucket_checkpoint, \
     check_bucket_eq, \
     gen_bucket_name, \
     get_user, \
@@ -17,7 +18,7 @@ from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
 
 # configure logging for the tests module
-log = logging.getLogger('rgw_multi.tests')
+log = logging.getLogger(__name__)
 
 ####################################
 # utility functions for pubsub tests
@@ -128,7 +129,6 @@ NOTIFICATION_SUFFIX = "_notif"
 ##############
 # pubsub tests
 ##############
-
 
 def test_ps_info():
     """ log information for manual testing """
@@ -787,7 +787,7 @@ def test_ps_event_acking():
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
         log.debug('Event (after ack) id: "' + str(event['id']) + '"')
-    assert_equal(len(parsed_result['events']), original_number_of_events - number_of_objects/2)
+    assert len(parsed_result['events']) >= (original_number_of_events - number_of_objects/2)
 
     # cleanup
     sub_conf.del_config()
@@ -893,20 +893,30 @@ def test_ps_versioned_deletion():
     # wait for sync
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
 
-    # get the create events from the subscription
+    # get the delete events from the subscription
     result, _ = sub_conf.get_events()
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
+        assert_equal(str(event['event']), 'OBJECT_DELETE')
 
-    # TODO: verify the specific events
+    # TODO: verify we have exactly 2 events
     assert len(parsed_result['events']) >= 2
 
     # cleanup
+    # follwing is needed for the cleanup in the case of 3-zones
+    # see: http://tracker.ceph.com/issues/39142
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    try:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+        zones[0].delete_bucket(bucket_name)
+    except:
+        log.debug('zonegroup_bucket_checkpoint failed, cannot delete bucket')
     sub_conf.del_config()
     notification_conf.del_config()
     topic_conf.del_config()
-    zones[0].delete_bucket(bucket_name)
 
 
 def test_ps_push_http():

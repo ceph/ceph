@@ -10,9 +10,10 @@ from teuthology.exceptions import ConfigError
 from teuthology.task import Task
 from teuthology import misc
 
-from rgw_multi import multisite, tests
+from rgw_multi import multisite, tests, tests_ps
 
 log = logging.getLogger(__name__)
+
 
 class RGWMultisiteTests(Task):
     """
@@ -66,6 +67,10 @@ class RGWMultisiteTests(Task):
         result = nose.run(defaultTest=tests.__name__, argv=argv, config=conf)
         if not result:
             raise RuntimeError('rgw multisite test failures')
+        result = nose.run(defaultTest=tests_ps.__name__, argv=argv, config=conf)
+        if not result:
+            raise RuntimeError('rgw multisite pubsub test failures')
+
 
 def get_log_stream():
     """ return a log stream for nose output """
@@ -87,5 +92,6 @@ def get_log_stream():
             pass
 
     return LogStream()
+
 
 task = RGWMultisiteTests
