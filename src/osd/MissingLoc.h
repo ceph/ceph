@@ -290,7 +290,7 @@ class MissingLoc {
     const map<pg_shard_t, pg_missing_t> &pmissing,
     const map<pg_shard_t, pg_info_t> &pinfo) {
     recovered(hoid);
-    boost::optional<pg_missing_item> item;
+    std::optional<pg_missing_item> item;
     auto miter = missing.get_items().find(hoid);
     if (miter != missing.get_items().end()) {
       item = miter->second;

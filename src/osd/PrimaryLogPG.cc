@@ -2343,7 +2343,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	}
       }
       if (all_dirty) {
-	start_flush(OpRequestRef(), obc, true, NULL, boost::none);
+	start_flush(OpRequestRef(), obc, true, NULL, std::nullopt);
       }
       return cache_result_t::NOOP;
     }
@@ -2405,7 +2405,7 @@ void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 }
 
 int PrimaryLogPG::start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
-				       boost::optional<std::function<void()>> &&on_flush)
+				       std::optional<std::function<void()>> &&on_flush)
 {
   auto p = obc->obs.oi.manifest.chunk_map.begin();
   FlushOpRef manifest_fop(std::make_shared<FlushOp>());
@@ -2599,7 +2599,7 @@ void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
   submit_log_entries(
     entries,
     std::move(lock_manager),
-    boost::optional<std::function<void(void)> >(
+    std::optional<std::function<void(void)> >(
       OnComplete(this, op, orig_reply, r)),
     op,
     r);
@@ -4893,13 +4893,13 @@ struct FillInVerifyExtent : public Context {
   ceph_le64 *r;
   int32_t *rval;
   bufferlist *outdatap;
-  boost::optional<uint32_t> maybe_crc;
+  std::optional<uint32_t> maybe_crc;
   uint64_t size;
   OSDService *osd;
   hobject_t soid;
   __le32 flags;
   FillInVerifyExtent(ceph_le64 *r, int32_t *rv, bufferlist *blp,
-		     boost::optional<uint32_t> mc, uint64_t size,
+		     std::optional<uint32_t> mc, uint64_t size,
 		     OSDService *osd, hobject_t soid, __le32 flags) :
     r(r), rval(rv), outdatap(blp), maybe_crc(mc),
     size(size), osd(osd), soid(soid), flags(flags) {}
@@ -5015,7 +5015,7 @@ struct C_ChecksumRead : public Context {
 
   C_ChecksumRead(PrimaryLogPG *primary_log_pg, OSDOp &osd_op,
 		 Checksummer::CSumType csum_type, bufferlist &&init_value_bl,
-		 boost::optional<uint32_t> maybe_crc, uint64_t size,
+		 std::optional<uint32_t> maybe_crc, uint64_t size,
 		 OSDService *osd, hobject_t soid, __le32 flags)
     : primary_log_pg(primary_log_pg), osd_op(osd_op),
       csum_type(csum_type), init_value_bl(std::move(init_value_bl)),
@@ -5109,7 +5109,7 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
   if (pool.info.is_erasure() && op.checksum.length > 0) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
-    boost::optional<uint32_t> maybe_crc;
+    std::optional<uint32_t> maybe_crc;
     if (oi.is_data_digest() && op.checksum.offset == 0 &&
         op.checksum.length >= oi.size) {
       maybe_crc = oi.data_digest;
@@ -5227,7 +5227,7 @@ struct C_ExtentCmpRead : public Context {
   Context *fill_extent_ctx;
 
   C_ExtentCmpRead(PrimaryLogPG *primary_log_pg, OSDOp &osd_op,
-		  boost::optional<uint32_t> maybe_crc, uint64_t size,
+		  std::optional<uint32_t> maybe_crc, uint64_t size,
 		  OSDService *osd, hobject_t soid, __le32 flags)
     : primary_log_pg(primary_log_pg), osd_op(osd_op),
       fill_extent_ctx(new FillInVerifyExtent(&read_length, &osd_op.rval,
@@ -5281,7 +5281,7 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
   } else if (pool.info.is_erasure()) {
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.
-    boost::optional<uint32_t> maybe_crc;
+    std::optional<uint32_t> maybe_crc;
     if (oi.is_data_digest() && op.checksum.offset == 0 &&
         op.checksum.length >= oi.size) {
       maybe_crc = oi.data_digest;
@@ -5374,7 +5374,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
   } else if (pool.info.is_erasure()) {
     // The initialisation below is required to silence a false positive
     // -Wmaybe-uninitialized warning
-    boost::optional<uint32_t> maybe_crc = boost::make_optional(false, uint32_t());
+    std::optional<uint32_t> maybe_crc;
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.  FillInVerifyExtent will
     // will check the oi.size again.
@@ -5869,7 +5869,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	if (oi.is_dirty()) {
-	  result = start_flush(ctx->op, ctx->obc, false, NULL, boost::none);
+	  result = start_flush(ctx->op, ctx->obc, false, NULL, std::nullopt);
 	  if (result == -EINPROGRESS)
 	    result = -EAGAIN;
 	} else {
@@ -5902,7 +5902,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	hobject_t missing;
 	if (oi.is_dirty()) {
-	  result = start_flush(ctx->op, ctx->obc, true, &missing, boost::none);
+	  result = start_flush(ctx->op, ctx->obc, true, &missing, std::nullopt);
 	  if (result == -EINPROGRESS)
 	    result = -EAGAIN;
 	} else {
@@ -8208,7 +8208,7 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
        p != ctx->notify_acks.end();
        ++p) {
     if (p->watch_cookie)
-      dout(10) << "notify_ack " << make_pair(p->watch_cookie.get(), p->notify_id) << dendl;
+      dout(10) << "notify_ack " << make_pair(*(p->watch_cookie), p->notify_id) << dendl;
     else
       dout(10) << "notify_ack " << make_pair("NULL", p->notify_id) << dendl;
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
@@ -8217,7 +8217,7 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 	 ++i) {
       if (i->first.second != entity) continue;
       if (p->watch_cookie &&
-	  p->watch_cookie.get() != i->first.first) continue;
+	  *(p->watch_cookie) != i->first.first) continue;
       dout(10) << "acking notify on watch " << i->first << dendl;
       i->second->notify_ack(p->notify_id, p->reply_bl);
     }
@@ -9748,7 +9748,7 @@ struct C_Flush : public Context {
 int PrimaryLogPG::start_flush(
   OpRequestRef op, ObjectContextRef obc,
   bool blocking, hobject_t *pmissing,
-  boost::optional<std::function<void()>> &&on_flush)
+  std::optional<std::function<void()>> &&on_flush)
 {
   const object_info_t& oi = obc->obs.oi;
   const hobject_t& soid = oi.soid;
@@ -9982,7 +9982,7 @@ void PrimaryLogPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
     }
     if (fop->on_flush) {
       (*(fop->on_flush))();
-      fop->on_flush = boost::none;
+      fop->on_flush = std::nullopt;
     }
     flush_ops.erase(oid);
     return;
@@ -10019,7 +10019,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
     }
     if (fop->on_flush) {
       (*(fop->on_flush))();
-      fop->on_flush = boost::none;
+      fop->on_flush = std::nullopt;
     }
     flush_ops.erase(oid);
     if (fop->blocking)
@@ -10052,7 +10052,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
     osd->logger->inc(l_osd_tier_clean);
     if (fop->on_flush) {
       (*(fop->on_flush))();
-      fop->on_flush = boost::none;
+      fop->on_flush = std::nullopt;
     }
     flush_ops.erase(oid);
     return 0;
@@ -10096,7 +10096,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
 
   if (fop->on_flush) {
     ctx->register_on_finish(*(fop->on_flush));
-    fop->on_flush = boost::none;
+    fop->on_flush = std::nullopt;
   }
 
   ctx->at_version = get_next_version();
@@ -10192,7 +10192,7 @@ void PrimaryLogPG::cancel_flush(FlushOpRef fop, bool requeue,
   }
   if (fop->on_flush) {
     (*(fop->on_flush))();
-    fop->on_flush = boost::none;
+    fop->on_flush = std::nullopt;
   }
   flush_ops.erase(fop->obc->obs.oi.soid);
 }
@@ -10390,7 +10390,7 @@ boost::intrusive_ptr<PrimaryLogPG::RepGather> PrimaryLogPG::new_repop(
   int r,
   ObcLockManager &&manager,
   OpRequestRef &&op,
-  boost::optional<std::function<void(void)> > &&on_complete)
+  std::optional<std::function<void(void)> > &&on_complete)
 {
   RepGather *repop = new RepGather(
     std::move(manager),
@@ -10453,7 +10453,7 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
 void PrimaryLogPG::submit_log_entries(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObcLockManager &&manager,
-  boost::optional<std::function<void(void)> > &&_on_complete,
+  std::optional<std::function<void(void)> > &&_on_complete,
   OpRequestRef op,
   int r)
 {
@@ -10467,7 +10467,7 @@ void PrimaryLogPG::submit_log_entries(
   }
 
   boost::intrusive_ptr<RepGather> repop;
-  boost::optional<std::function<void(void)> > on_complete;
+  std::optional<std::function<void(void)> > on_complete;
   if (get_osdmap()->require_osd_release >= ceph_release_t::jewel) {
     repop = new_repop(
       version,
@@ -11486,13 +11486,14 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     op->get_req());
   ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  boost::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
   if (m->pg_trim_to != eversion_t())
     op_trim_to = m->pg_trim_to;
   if (m->pg_roll_forward_to != eversion_t())
     op_roll_forward_to = m->pg_roll_forward_to;
 
-  dout(20) << __func__ << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
+  dout(20) << __func__
+	   << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
 
   recovery_state.append_log_entries_update_missing(
     m->entries, t, op_trim_to, op_roll_forward_to);
@@ -11675,7 +11676,7 @@ void PrimaryLogPG::mark_all_unfound_lost(
   submit_log_entries(
     log_entries,
     std::move(manager),
-    boost::optional<std::function<void(void)> >(
+    std::optional<std::function<void(void)> >(
       [this, oids, con, num_unfound, tid]() {
 	if (recovery_state.perform_deletes_during_peering()) {
 	  for (auto oid : oids) {
@@ -14403,13 +14404,13 @@ bool PrimaryLogPG::_range_available_for_scrub(
   return true;
 }
 
-static bool doing_clones(const boost::optional<SnapSet> &snapset,
+static bool doing_clones(const std::optional<SnapSet> &snapset,
 			 const vector<snapid_t>::reverse_iterator &curclone) {
-    return snapset && curclone != snapset.get().clones.rend();
+    return snapset && curclone != snapset->clones.rend();
 }
 
 void PrimaryLogPG::log_missing(unsigned missing,
-			const boost::optional<hobject_t> &head,
+			const std::optional<hobject_t> &head,
 			LogChannelRef clog,
 			const spg_t &pgid,
 			const char *func,
@@ -14418,21 +14419,21 @@ void PrimaryLogPG::log_missing(unsigned missing,
 {
   ceph_assert(head);
   if (allow_incomplete_clones) {
-    dout(20) << func << " " << mode << " " << pgid << " " << head.get()
-               << " skipped " << missing << " clone(s) in cache tier" << dendl;
+    dout(20) << func << " " << mode << " " << pgid << " " << *head
+	     << " skipped " << missing << " clone(s) in cache tier" << dendl;
   } else {
-    clog->info() << mode << " " << pgid << " " << head.get()
-		       << " : " << missing << " missing clone(s)";
+    clog->info() << mode << " " << pgid << " " << *head
+		 << " : " << missing << " missing clone(s)";
   }
 }
 
-unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
-  const boost::optional<SnapSet> &snapset,
+unsigned PrimaryLogPG::process_clones_to(const std::optional<hobject_t> &head,
+  const std::optional<SnapSet> &snapset,
   LogChannelRef clog,
   const spg_t &pgid,
   const char *mode,
   bool allow_incomplete_clones,
-  boost::optional<snapid_t> target,
+  std::optional<snapid_t> target,
   vector<snapid_t>::reverse_iterator *curclone,
   inconsistent_snapset_wrapper &e)
 {
@@ -14441,14 +14442,14 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
   unsigned missing = 0;
 
   // NOTE: clones are in descending order, thus **curclone > target test here
-  hobject_t next_clone(head.get());
+  hobject_t next_clone(*head);
   while(doing_clones(snapset, *curclone) && (!target || **curclone > *target)) {
     ++missing;
     // it is okay to be missing one or more clones in a cache tier.
     // skip higher-numbered clones in the list.
     if (!allow_incomplete_clones) {
       next_clone.snap = **curclone;
-      clog->error() << mode << " " << pgid << " " << head.get()
+      clog->error() << mode << " " << pgid << " " << *head
 			 << " : expected clone " << next_clone << " " << missing
                          << " missing";
       ++scrubber.shallow_errors;
@@ -14488,19 +14489,19 @@ unsigned PrimaryLogPG::process_clones_to(const boost::optional<hobject_t> &head,
 void PrimaryLogPG::scrub_snapshot_metadata(
   ScrubMap &scrubmap,
   const map<hobject_t,
-            pair<boost::optional<uint32_t>,
-                 boost::optional<uint32_t>>> &missing_digest)
+            pair<std::optional<uint32_t>,
+                 std::optional<uint32_t>>> &missing_digest)
 {
   dout(10) << __func__ << dendl;
 
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
-  boost::optional<snapid_t> all_clones;   // Unspecified snapid_t or boost::none
+  std::optional<snapid_t> all_clones;   // Unspecified snapid_t or std::nullopt
 
   // traverse in reverse order.
-  boost::optional<hobject_t> head;
-  boost::optional<SnapSet> snapset; // If initialized so will head (above)
+  std::optional<hobject_t> head;
+  std::optional<SnapSet> snapset; // If initialized so will head (above)
   vector<snapid_t>::reverse_iterator curclone; // Defined only if snapset initialized
   unsigned missing = 0;
   inconsistent_snapset_wrapper soid_error, head_error;
@@ -14512,7 +14513,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     ceph_assert(!soid.is_snapdir());
     soid_error = inconsistent_snapset_wrapper{soid};
     object_stat_sum_t stat;
-    boost::optional<object_info_t> oi;
+    std::optional<object_info_t> oi;
 
     stat.num_objects++;
 
@@ -14526,7 +14527,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
     // basic checks.
     if (p->second.attrs.count(OI_ATTR) == 0) {
-      oi = boost::none;
+      oi = std::nullopt;
       osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " : no '" << OI_ATTR << "' attr";
       ++scrubber.shallow_errors;
@@ -14536,9 +14537,9 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       bv.push_back(p->second.attrs[OI_ATTR]);
       try {
 	oi = object_info_t(); // Initialize optional<> before decode into it
-	oi.get().decode(bv);
+	oi->decode(bv);
       } catch (buffer::error& e) {
-	oi = boost::none;
+	oi = std::nullopt;
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " : can't decode '" << OI_ATTR << "' attr " << e.what();
 	++scrubber.shallow_errors;
@@ -14559,7 +14560,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	++scrubber.shallow_errors;
       }
 
-      dout(20) << mode << "  " << soid << " " << oi.get() << dendl;
+      dout(20) << mode << "  " << soid << " " << *oi << dendl;
 
       // A clone num_bytes will be added later when we have snapset
       if (!soid.is_snap()) {
@@ -14582,12 +14583,12 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
     // Check for any problems while processing clones
     if (doing_clones(snapset, curclone)) {
-      boost::optional<snapid_t> target;
+      std::optional<snapid_t> target;
       // Expecting an object with snap for current head
       if (soid.has_snapset() || soid.get_head() != head->get_head()) {
 
 	dout(10) << __func__ << " " << mode << " " << info.pgid << " new object "
-		 << soid << " while processing " << head.get() << dendl;
+		 << soid << " while processing " << *head << dendl;
 
         target = all_clones;
       } else {
@@ -14655,7 +14656,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 			  << " : no '" << SS_ATTR << "' attr";
         ++scrubber.shallow_errors;
-	snapset = boost::none;
+	snapset = std::nullopt;
 	head_error.set_snapset_missing();
       } else {
 	bufferlist bl;
@@ -14663,10 +14664,10 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	auto blp = bl.cbegin();
         try {
 	  snapset = SnapSet(); // Initialize optional<> before decoding into it
-	  decode(snapset.get(), blp);
+	  decode(*snapset, blp);
           head_error.ss_bl.push_back(p->second.attrs[SS_ATTR]);
         } catch (buffer::error& e) {
-	  snapset = boost::none;
+	  snapset = std::nullopt;
           osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " : can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
@@ -14679,7 +14680,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	curclone = snapset->clones.rbegin();
 
 	if (!snapset->clones.empty()) {
-	  dout(20) << "  snapset " << snapset.get() << dendl;
+	  dout(20) << "  snapset " << *snapset << dendl;
 	  if (snapset->seq == 0) {
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " : snaps.seq not set";
@@ -14757,7 +14758,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
   if (doing_clones(snapset, curclone)) {
     dout(10) << __func__ << " " << mode << " " << info.pgid
-	     << " No more objects while processing " << head.get() << dendl;
+	     << " No more objects while processing " << *head << dendl;
 
     missing += process_clones_to(head, snapset, osd->clog, info.pgid, mode,
 		      pool.info.allow_incomplete_clones(), all_clones, &curclone,

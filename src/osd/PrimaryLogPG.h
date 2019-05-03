@@ -244,7 +244,7 @@ public:
     int rval;                   ///< copy-from result
     bool blocking;              ///< whether we are blocking updates
     bool removal;               ///< we are removing the backend object
-    boost::optional<std::function<void()>> on_flush; ///< callback, may be null
+    std::optional<std::function<void()>> on_flush; ///< callback, may be null
     // for chunked object
     map<uint64_t, int> io_results; 
     map<uint64_t, ceph_tid_t> io_tids; 
@@ -444,7 +444,7 @@ public:
 
   void log_operation(
     const vector<pg_log_entry_t> &logv,
-    const boost::optional<pg_hit_set_history_t> &hset_history,
+    const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     bool transaction_applied,
@@ -577,7 +577,7 @@ public:
     list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
     list<notify_info_t> notifies;
     struct NotifyAck {
-      boost::optional<uint64_t> watch_cookie;
+      std::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
       bufferlist reply_bl;
       explicit NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
@@ -602,7 +602,7 @@ public:
 
     PGTransactionUPtr op_t;
     vector<pg_log_entry_t> log;
-    boost::optional<pg_hit_set_history_t> updated_hset_history;
+    std::optional<pg_hit_set_history_t> updated_hset_history;
 
     interval_set<uint64_t> modified_ranges;
     ObjectContextRef obc;
@@ -610,7 +610,7 @@ public:
     ObjectContextRef head_obc;     // if we also update snapset (see trim_object)
 
     // FIXME: we may want to kill this msgr hint off at some point!
-    boost::optional<int> data_off = boost::none;
+    std::optional<int> data_off = std::nullopt;
 
     MOSDOpReply *reply;
 
@@ -777,7 +777,7 @@ public:
     RepGather(
       ObcLockManager &&manager,
       OpRequestRef &&o,
-      boost::optional<std::function<void(void)> > &&on_complete,
+      std::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
       eversion_t lc,
       int r) :
@@ -919,7 +919,7 @@ protected:
     int r,
     ObcLockManager &&manager,
     OpRequestRef &&op,
-    boost::optional<std::function<void(void)> > &&on_complete);
+    std::optional<std::function<void(void)> > &&on_complete);
   void remove_repop(RepGather *repop);
 
   OpContextUPtr simple_opc_create(ObjectContextRef obc);
@@ -934,7 +934,7 @@ protected:
   void submit_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObcLockManager &&manager,
-    boost::optional<std::function<void(void)> > &&on_complete,
+    std::optional<std::function<void(void)> > &&on_complete,
     OpRequestRef op = OpRequestRef(),
     int r = 0);
   struct LogUpdateCtx {
@@ -1359,7 +1359,7 @@ protected:
   int start_flush(
     OpRequestRef op, ObjectContextRef obc,
     bool blocking, hobject_t *pmissing,
-    boost::optional<std::function<void()>> &&on_flush);
+    std::optional<std::function<void()>> &&on_flush);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
   void cancel_flush(FlushOpRef fop, bool requeue, vector<ceph_tid_t> *tids);
@@ -1376,8 +1376,8 @@ protected:
   void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t,
-                   pair<boost::optional<uint32_t>,
-                        boost::optional<uint32_t>>> &missing_digest) override;
+                   pair<std::optional<uint32_t>,
+                        std::optional<uint32_t>>> &missing_digest) override;
   void _scrub_clear_state() override;
   void _scrub_finish() override;
   object_stat_collection_t scrub_cstat;
@@ -1445,7 +1445,7 @@ protected:
   int do_manifest_flush(OpRequestRef op, ObjectContextRef obc, FlushOpRef manifest_fop,
 			uint64_t start_offset, bool block);
   int start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
-			   boost::optional<std::function<void()>> &&on_flush);
+			   std::optional<std::function<void()>> &&on_flush);
   void finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r, ObjectContextRef obc, 
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
@@ -1522,19 +1522,19 @@ private:
     return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
   }
   void log_missing(unsigned missing,
-			const boost::optional<hobject_t> &head,
+			const std::optional<hobject_t> &head,
 			LogChannelRef clog,
 			const spg_t &pgid,
 			const char *func,
 			const char *mode,
 			bool allow_incomplete_clones);
-  unsigned process_clones_to(const boost::optional<hobject_t> &head,
-    const boost::optional<SnapSet> &snapset,
+  unsigned process_clones_to(const std::optional<hobject_t> &head,
+    const std::optional<SnapSet> &snapset,
     LogChannelRef clog,
     const spg_t &pgid,
     const char *mode,
     bool allow_incomplete_clones,
-    boost::optional<snapid_t> target,
+    std::optional<snapid_t> target,
     vector<snapid_t>::reverse_iterator *curclone,
     inconsistent_snapset_wrapper &snap_error);
 
