@@ -7,5 +7,7 @@ overrides:
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo=
         rgw crypt require ssl: false
         rgw sync log trim interval: 0
+        rgw md log max shards: 4
+        rgw data log num shards: 4
   rgw:
     compression type: random
