@@ -97,6 +97,15 @@ def meta_sync_status(zone):
 def mdlog_autotrim(zone):
     zone.cluster.admin(['mdlog', 'autotrim'])
 
+def datalog_list(zone, period = None):
+    cmd = ['datalog', 'list']
+    (datalog_json, _) = zone.cluster.admin(cmd, read_only=True)
+    datalog_json = datalog_json.decode('utf-8')
+    return json.loads(datalog_json)
+
+def datalog_autotrim(zone):
+    zone.cluster.admin(['datalog', 'autotrim'])
+
 def bilog_list(zone, bucket, args = None):
     cmd = ['bilog', 'list', '--bucket', bucket] + (args or [])
     bilog, _ = zone.cluster.admin(cmd, read_only=True)
@@ -281,7 +290,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
 def data_source_log_status(source_zone):
     source_cluster = source_zone.cluster
     cmd = ['datalog', 'status'] + source_zone.zone_args()
-    datalog_status_json, retcode = source_cluster.rgw_admin(cmd, read_only=True)
+    datalog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
     datalog_status = json.loads(datalog_status_json.decode('utf-8'))
 
     markers = {i: s['marker'] for i, s in enumerate(datalog_status)}
@@ -346,7 +355,7 @@ def compare_bucket_status(target_zone, source_zone, bucket_name, log_status, syn
 
     return True
 
-def zone_data_checkpoint(target_zone, source_zone_conn):
+def zone_data_checkpoint(target_zone, source_zone):
     if target_zone == source_zone:
         return
 
@@ -368,6 +377,13 @@ def zone_data_checkpoint(target_zone, source_zone_conn):
     assert False, 'failed data checkpoint for target_zone=%s source_zone=%s' % \
                   (target_zone.name, source_zone.name)
 
+def zonegroup_data_checkpoint(zonegroup_conns):
+    for source_conn in zonegroup_conns.rw_zones:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+            log.debug('data checkpoint: source=%s target=%s', source_conn.zone.name, target_conn.zone.name)
+            zone_data_checkpoint(target_conn.zone, source_conn.zone)
 
 def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
     if target_zone == source_zone:
@@ -840,6 +856,25 @@ def test_multi_period_incremental_sync():
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
 
+def test_datalog_autotrim():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    # upload an object to each zone to generate a datalog entry
+    for zone, bucket in zone_bucket:
+        k = new_key(zone, bucket.name, 'key')
+        k.set_contents_from_string('body')
+
+    # wait for data sync to catch up
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+    # trim each datalog
+    for zone, _ in zone_bucket:
+        datalog_autotrim(zone.zone)
+        datalog = datalog_list(zone.zone)
+        assert len(datalog) == 0
+
 def test_multi_zone_redirect():
     zonegroup = realm.master_zonegroup()
     if len(zonegroup.rw_zones) < 2:
@@ -976,6 +1011,8 @@ def test_bucket_sync_disable():
     for zone in zonegroup.zones:
         check_buckets_sync_status_obj_not_exist(zone, buckets)
 
+    zonegroup_data_checkpoint(zonegroup_conns)
+
 def test_bucket_sync_enable_right_after_disable():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1005,6 +1042,8 @@ def test_bucket_sync_enable_right_after_disable():
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+    zonegroup_data_checkpoint(zonegroup_conns)
 
 def test_bucket_sync_disable_enable():
     zonegroup = realm.master_zonegroup()
@@ -1041,6 +1080,8 @@ def test_bucket_sync_disable_enable():
 
     for bucket_name in buckets:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name)
+
+    zonegroup_data_checkpoint(zonegroup_conns)
 
 def test_multipart_object_sync():
     zonegroup = realm.master_zonegroup()

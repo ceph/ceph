@@ -467,6 +467,7 @@ enum {
   OPT_DATA_SYNC_RUN,
   OPT_DATALOG_LIST,
   OPT_DATALOG_STATUS,
+  OPT_DATALOG_AUTOTRIM,
   OPT_DATALOG_TRIM,
   OPT_OPSTATE_LIST,
   OPT_OPSTATE_SET,
@@ -914,6 +915,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "datalog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_DATALOG_LIST;
+    if (strcmp(cmd, "autotrim") == 0)
+      return OPT_DATALOG_AUTOTRIM;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
     if (strcmp(cmd, "status") == 0)
@@ -7422,6 +7425,24 @@ next:
 
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_DATALOG_AUTOTRIM) {
+    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+    RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+    int ret = http.start();
+    if (ret < 0) {
+      cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+
+    auto num_shards = g_conf->rgw_data_log_num_shards;
+    std::vector<std::string> markers(num_shards);
+    ret = crs.run(create_admin_data_log_trim_cr(store, &http, num_shards, markers));
+    if (ret < 0) {
+      cerr << "automated datalog trim failed with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_DATALOG_TRIM) {

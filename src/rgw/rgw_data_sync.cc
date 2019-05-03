@@ -3240,7 +3240,9 @@ int RGWRunBucketSyncCoroutine::operate()
         yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
         if (retcode == -ENOENT) {
           tn->log(0, "bucket sync disabled");
-          lease_cr->abort(); // deleted lease object, abort instead of unlock
+          lease_cr->abort(); // deleted lease object, abort/wakeup instead of unlock
+          lease_cr->wakeup();
+          lease_cr.reset();
           drain_all();
           return set_cr_done();
         }
@@ -3600,6 +3602,14 @@ int DataLogTrimCR::operate()
     return set_cr_done();
   }
   return 0;
+}
+
+RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards,
+                                            std::vector<std::string>& markers)
+{
+  return new DataLogTrimCR(store, http, num_shards, markers);
 }
 
 class DataLogTrimPollCR : public RGWCoroutine {

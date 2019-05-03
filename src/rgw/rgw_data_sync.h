@@ -83,7 +83,7 @@ struct rgw_data_sync_info {
       state = StateInit;
     }
     JSONDecoder::decode_json("num_shards", num_shards, obj);
-    JSONDecoder::decode_json("instance_id", num_shards, obj);
+    JSONDecoder::decode_json("instance_id", instance_id, obj);
   }
   static void generate_test_instances(std::list<rgw_data_sync_info*>& o);
 
@@ -576,5 +576,11 @@ public:
 extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
                                              RGWHTTPManager *http,
                                              int num_shards, utime_t interval);
+
+// factory function for datalog trim via radosgw-admin
+RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards,
+                                            std::vector<std::string>& markers);
 
 #endif
