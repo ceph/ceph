@@ -3,9 +3,8 @@ Clock synchronizer
 """
 import logging
 import contextlib
-import os
 
-from ..orchestra import run
+from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
 
@@ -32,32 +31,25 @@ def task(ctx, config):
 
     log.info('Syncing clocks and checking initial clock skew...')
     for rem in ctx.cluster.remotes.iterkeys():
-        ntpconf = rem.get_file('/etc/ntp.conf')
-        servers = [
-            l.strip().split()[1] for l in open(ntpconf, 'r').readlines()
-            if l.startswith('server')
-        ]
-        os.remove(ntpconf)
-        # CentOS calls it ntpd, Xenial/Trusty are ntp.  Thanks guys.
-        args = [
-            'sudo', 'service', 'ntp', 'stop',
-            run.Raw('||'),
-            'sudo', 'service', 'ntpd', 'stop',
-            run.Raw(';'),
-            'sudo',
-            'ntpdate',
-        ]
-        args.extend(servers)
-        args.extend([
-            run.Raw(';'),
-            'sudo', 'service', 'ntp', 'start',
-            run.Raw('||'),
-            'sudo', 'service', 'ntpd', 'start',
-            run.Raw(';'),
-            'PATH=/usr/bin:/usr/sbin',
-            'ntpq', '-p',
-        ])
-        rem.run(args=args)
+        rem.run(
+            args = [
+                'sudo', 'systemctl', 'stop', 'ntp.service', run.Raw('||'),
+                'sudo', 'systemctl', 'stop', 'ntpd.service', run.Raw('||'),
+                'sudo', 'systemctl', 'stop', 'chronyd.service',
+                run.Raw(';'),
+                'sudo', 'ntpd', '-gq', run.Raw('||'),
+                'sudo', 'chronyc', 'makestep',
+                run.Raw(';'),
+                'sudo', 'systemctl', 'start', 'ntp.service', run.Raw('||'),
+                'sudo', 'systemctl', 'start', 'ntpd.service', run.Raw('||'),
+                'sudo', 'systemctl', 'start', 'chronyd.service',
+                run.Raw(';'),
+                'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
+                'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
+                run.Raw('||'),
+                'true'
+            ],
+        )
 
     try:
         yield
@@ -67,8 +59,10 @@ def task(ctx, config):
         for rem in ctx.cluster.remotes.iterkeys():
             rem.run(
                 args=[
-                    'PATH=/usr/bin:/usr/sbin',
-                    'ntpq', '-p',
+                    'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
+                    'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
+                    run.Raw('||'),
+                    'true'
                     ],
                 )
 
@@ -85,8 +79,10 @@ def check(ctx, config):
     for rem in ctx.cluster.remotes.iterkeys():
         rem.run(
             args=[
-                'PATH=/usr/bin:/usr/sbin',
-                'ntpq', '-p',
+                'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
+                'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
+                run.Raw('||'),
+                'true'
                 ],
             )
 
@@ -98,7 +94,9 @@ def check(ctx, config):
         for rem in ctx.cluster.remotes.iterkeys():
             rem.run(
                 args=[
-                    'PATH=/usr/bin:/usr/sbin',
-                    'ntpq', '-p',
+                    'PATH=/usr/bin:/usr/sbin', 'ntpq', '-p', run.Raw('||'),
+                    'PATH=/usr/bin:/usr/sbin', 'chronyc', 'sources',
+                    run.Raw('||'),
+                    'true'
                     ],
                 )
