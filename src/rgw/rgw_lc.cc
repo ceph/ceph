@@ -1651,7 +1651,7 @@ std::string s3_expiration_header(
     char exp_buf[100];
     time_t exp = ceph::real_clock::to_time_t(*expiration_date);
     if (std::strftime(exp_buf, sizeof(exp_buf),
-		      "%c", std::gmtime(&exp))) {
+		      "%a, %d %b %Y %T %Z", std::gmtime(&exp))) {
       hdr = fmt::format("expiry-date=\"{0}\", rule-id=\"{1}\"", exp_buf,
 			*rule_id);
     } else {
