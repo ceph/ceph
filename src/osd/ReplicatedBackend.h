@@ -360,7 +360,7 @@ public:
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
-    boost::optional<pg_hit_set_history_t> &hset_history,
+    std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
@@ -378,7 +378,7 @@ private:
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const bufferlist &log_entries,
-    boost::optional<pg_hit_set_history_t> &hset_history,
+    std::optional<pg_hit_set_history_t> &hset_history,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
     const pg_info_t &pinfo);
@@ -392,7 +392,7 @@ private:
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const vector<pg_log_entry_t> &log_entries,
-    boost::optional<pg_hit_set_history_t> &hset_history,
+    std::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
   void op_commit(InProgressOpRef& op);

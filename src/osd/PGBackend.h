@@ -171,17 +171,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
-     virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
+     virtual const pg_missing_const_i * maybe_get_shard_missing(
        pg_shard_t peer) const {
        if (peer == primary_shard()) {
-	 return get_local_missing();
+	 return &get_local_missing();
        } else {
 	 map<pg_shard_t, pg_missing_t>::const_iterator i =
 	   get_shard_missing().find(peer);
 	 if (i == get_shard_missing().end()) {
-	   return boost::optional<const pg_missing_const_i &>();
+	   return nullptr;
 	 } else {
-	   return i->second;
+	   return &(i->second);
 	 }
        }
      }
@@ -232,7 +232,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
-       const boost::optional<pg_hit_set_history_t> &hset_history,
+       const std::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
@@ -449,7 +449,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const eversion_t &roll_forward_to,  ///< [in] trim rollback info to here
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
-     boost::optional<pg_hit_set_history_t> &hset_history,
+     std::optional<pg_hit_set_history_t> &hset_history,
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
@@ -489,7 +489,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    /// Reapply old attributes
    void rollback_setattrs(
      const hobject_t &hoid,
-     map<string, boost::optional<bufferlist> > &old_attrs,
+     map<string, std::optional<bufferlist> > &old_attrs,
      ObjectStore::Transaction *t);
 
    /// Truncate object to rollback append
@@ -595,8 +595,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      map<hobject_t, set<pg_shard_t>> &missing,
      map<hobject_t, set<pg_shard_t>> &inconsistent,
      map<hobject_t, list<pg_shard_t>> &authoritative,
-     map<hobject_t, pair<boost::optional<uint32_t>,
-                         boost::optional<uint32_t>>> &missing_digest,
+     map<hobject_t, pair<std::optional<uint32_t>,
+                         std::optional<uint32_t>>> &missing_digest,
      int &shallow_errors, int &deep_errors,
      Scrub::Store *store,
      const spg_t& pgid,

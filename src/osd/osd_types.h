@@ -979,7 +979,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
-boost::optional<uint64_t> pg_string_state(const std::string& state);
+std::optional<uint64_t> pg_string_state(const std::string& state);
 
 
 /*
@@ -3586,7 +3586,7 @@ public:
   class Visitor {
   public:
     virtual void append(uint64_t old_offset) {}
-    virtual void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &attrs) {}
+    virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -3655,7 +3655,7 @@ public:
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
-  void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &old_attrs) {
+  void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);

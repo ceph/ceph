@@ -58,6 +58,7 @@ extern "C" {
 #include <boost/container/flat_map.hpp>
 #include <map>
 #include <vector>
+#include <optional>
 #include <iostream>
 #include <iomanip>
 
@@ -106,6 +107,8 @@ template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v);
 template<typename... Ts>
 inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t);
+template<typename T>
+inline std::ostream& operator<<(std::ostream& out, const std::optional<T> &t);
 template<class A, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
@@ -181,6 +184,16 @@ inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t) {
       out << ",";
   };
   ceph::for_each(t, f);
+  return out;
+}
+
+// Mimics boost::optional
+template<typename T>
+inline std::ostream& operator<<(std::ostream& out, const std::optional<T> &t) {
+  if (!t)
+    out << "--" ;
+  else
+    out << ' ' << *t ;
   return out;
 }
 

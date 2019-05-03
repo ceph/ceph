@@ -10416,7 +10416,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
 	       << ", dropping " << qi << dendl;
       // share map with client?
-      if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
+      if (std::optional<OpRequestRef> _op = qi.maybe_get_op()) {
 	osd->service.maybe_share_map((*_op)->get_req()->get_connection().get(),
 				     sdata->shard_osdmap,
 				     (*_op)->sent_epoch);
@@ -10457,7 +10457,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid;
-    if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
+    if (std::optional<OpRequestRef> _op = qi.maybe_get_op()) {
       reqid = (*_op)->get_reqid();
     }
 #endif
@@ -10479,7 +10479,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid;
-    if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
+    if (std::optional<OpRequestRef> _op = qi.maybe_get_op()) {
       reqid = (*_op)->get_reqid();
     }
 #endif

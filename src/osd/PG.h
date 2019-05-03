@@ -1327,8 +1327,8 @@ protected:
   virtual void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t,
-                   pair<boost::optional<uint32_t>,
-                        boost::optional<uint32_t>>> &missing_digest) { }
+                   pair<std::optional<uint32_t>,
+                        std::optional<uint32_t>>> &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
   void clear_scrub_reserved();
