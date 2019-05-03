@@ -24,23 +24,28 @@ def _remove(ctx, config, remote, rpm):
     remote_os = remote.os
     dist_release = remote_os.name
     rpm = _package_overrides(rpm, remote_os)
-    log.info("Removing packages: {pkglist} on rpm system.".format(
-        pkglist=", ".join(rpm)))
-    repos = config.get('repos')
 
-    if dist_release in ['opensuse', 'sle']:
-        remote.run(args='''
-            for d in {rpms} ; do
-                sudo zypper -n --no-gpg-checks remove --capability $d || true
-            done'''.format(rpms=' '.join(rpm)))
-        remote.run(args='sudo zypper clean -a')
+    install_ceph_packages = config.get('install_ceph_packages')
+    if install_ceph_packages:
+        log.info("Removing packages: {pkglist} on rpm system.".format(
+            pkglist=", ".join(rpm)))
+        if dist_release in ['opensuse', 'sle']:
+            remote.run(args='''
+                for d in {rpms} ; do
+                    sudo zypper -n --no-gpg-checks remove --capability $d || true
+                done'''.format(rpms=' '.join(rpm)))
+            remote.run(args='sudo zypper clean -a')
+        else:
+            remote.run(args='''
+                for d in {rpms} ; do
+                    sudo yum -y remove $d || true
+                done'''.format(rpms=' '.join(rpm)))
+            remote.run(args='sudo yum clean all')
     else:
-        remote.run(args='''
-            for d in {rpms} ; do
-                sudo yum -y remove $d || true
-            done'''.format(rpms=' '.join(rpm)))
-        remote.run(args='sudo yum clean all')
+        log.info("install task did not install any packages, "
+                 "so not removing any, either")
 
+    repos = config.get('repos')
     if repos:
         if dist_release in ['opensuse', 'sle']:
             _zypper_removerepo(remote, repos)
@@ -52,7 +57,9 @@ def _remove(ctx, config, remote, rpm):
         builder.remove_repo()
 
     if dist_release in ['opensuse', 'sle']:
-        remote.run(args='sudo zypper clean -a')
+        #remote.run(args='sudo zypper clean -a')
+        log.info("Not cleaning zypper cache: this might fail, and is not needed "
+                 "because the test machine will be destroyed or reimaged anyway")
     else:
         remote.run(args='sudo yum clean expire-cache')
 
@@ -168,11 +175,13 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
             rpm += system_pkglist
     remote_os = remote.os
     rpm = _package_overrides(rpm, remote_os)
-    log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
-        pkglist=", ".join(rpm), arch=remote.arch))
 
     dist_release = remote_os.name
+    log.debug("_update_package_list_and_install: config is {}".format(config))
     repos = config.get('repos')
+    install_ceph_packages = config.get('install_ceph_packages')
+    repos_only = config.get('repos_only')
+
     if repos:
         log.debug("Adding repos: %s" % repos)
         if dist_release in ['opensuse', 'sle']:
@@ -185,6 +194,30 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         log.info('Pulling from %s', builder.base_url)
         log.info('Package version is %s', builder.version)
         builder.install_repo()
+
+    if repos_only:
+        log.info("repos_only was specified: not installing any packages")
+        return None
+
+    if not install_ceph_packages:
+        log.info("install_ceph_packages set to False: not installing Ceph packages")
+        # Although "librados2" is an indirect dependency of ceph-test, we
+        # install it separately because, otherwise, ceph-test cannot be
+        # installed (even with --force) when there are several conflicting
+        # repos from different vendors.
+        rpm = ["librados2", "ceph-test"]
+
+    # rpm does not force installation of a particular version of the project
+    # packages, so we can put extra_system_packages together with the rest
+    system_pkglist = config.get('extra_system_packages', [])
+    if system_pkglist:
+        if isinstance(system_pkglist, dict):
+            rpm += system_pkglist.get('rpm')
+        else:
+            rpm += system_pkglist
+
+    log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
+        pkglist=", ".join(rpm), arch=remote.arch))
 
     if dist_release not in ['opensuse', 'sle']:
         project = builder.project
@@ -202,7 +235,8 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
 
     if dist_release in ['opensuse', 'sle']:
         remove_cmd = 'sudo zypper -n remove --capability'
-        install_cmd = 'sudo zypper -n --no-gpg-checks install --capability --no-recommends'
+        # NOTE: --capability contradicts --force
+        install_cmd = 'sudo zypper -n --no-gpg-checks install --force --no-recommends'
     else:
         remove_cmd = 'sudo yum -y remove'
         install_cmd = 'sudo yum -y install'
@@ -210,25 +244,30 @@ def _update_package_list_and_install(ctx, remote, rpm, config):
         pkg_version = '.'.join([builder.version, builder.dist_release])
         rpm = _downgrade_packages(ctx, remote, rpm, pkg_version, config)
 
-    for cpack in rpm:
-        if ldir:
-            remote.run(args='''
-              if test -e {pkg} ; then
-                {remove_cmd} {pkg} ;
-                {install_cmd} {pkg} ;
-              else
-                {install_cmd} {cpack} ;
-              fi
-            '''.format(remove_cmd=remove_cmd,
-                       install_cmd=install_cmd,
-                       pkg=os.path.join(ldir, cpack),
-                       cpack=cpack))
-        else:
-            remote.run(args='''
-              {install_cmd} {cpack}
-            '''.format(install_cmd=install_cmd,
-                       cpack=cpack))
-
+    if system_pkglist:
+        remote.run(
+            args='{install_cmd} {rpms}'
+                 .format(install_cmd=install_cmd, rpms=' '.join(rpm))
+            )
+    else:
+        for cpack in rpm:
+            if ldir:
+                remote.run(args='''
+                  if test -e {pkg} ; then
+                    {remove_cmd} {pkg} ;
+                    {install_cmd} {pkg} ;
+                  else
+                    {install_cmd} {cpack} ;
+                  fi
+                '''.format(remove_cmd=remove_cmd,
+                           install_cmd=install_cmd,
+                           pkg=os.path.join(ldir, cpack),
+                           cpack=cpack))
+            else:
+                remote.run(
+                    args='{install_cmd} {cpack}'
+                         .format(install_cmd=install_cmd, cpack=cpack)
+                    )
 
 def _yum_fix_repo_priority(remote, project, uri):
     """
