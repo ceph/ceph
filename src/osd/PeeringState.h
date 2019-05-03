@@ -1212,7 +1212,7 @@ public:
   PeeringCtx *orig_ctx;
 
   /// populated if we are buffering messages pending a flush
-  boost::optional<BufferedRecoveryMessages> messages_pending_flush;
+  std::optional<BufferedRecoveryMessages> messages_pending_flush;
 
   /**
    * populated between start_handle() and end_handle(), points into
@@ -1619,8 +1619,8 @@ public:
   bool append_log_entries_update_missing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> trim_to,
+    std::optional<eversion_t> roll_forward_to);
 
   /**
    * Updates local log to reflect new write from primary.
@@ -1639,8 +1639,8 @@ public:
   void merge_new_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
-    boost::optional<eversion_t> trim_to,
-    boost::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> trim_to,
+    std::optional<eversion_t> roll_forward_to);
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
