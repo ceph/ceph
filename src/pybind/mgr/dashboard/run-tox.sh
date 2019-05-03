@@ -43,7 +43,7 @@ fi
 # use bash string manipulation to strip off any trailing comma
 ENV_LIST=${ENV_LIST%,}
 
-tox -c "${TOX_PATH}" -e "${ENV_LIST}"
+tox -c "${TOX_PATH}" -e "${ENV_LIST}" "$@"
 TOX_STATUS="$?"
 test "$TOX_STATUS" -ne "0" && dump_envvars
 exit $TOX_STATUS
