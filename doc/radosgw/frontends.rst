@@ -7,7 +7,8 @@ HTTP Frontends
 .. contents::
 
 The Ceph Object Gateway supports two embedded HTTP frontend libraries
-that can be configured with ``rgw_frontends``.
+that can be configured with ``rgw_frontends``. See `Config Reference`_
+for details about the syntax.
 
 Beast
 =====
@@ -146,10 +147,7 @@ Options
 The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set: ::
  
  [client.rgw.gateway-node1]
- rgw_frontends = civetweb 
- request_timeout_ms = 30000 
- error_log_file = /var/log/radosgw/civetweb.error.log 
- access_log_file = /var/log/radosgw/civetweb.access.log
+ rgw_frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
 
 A complete list of supported options can be found in the `Civetweb User Manual`_.
 
@@ -170,3 +168,4 @@ Some frontend options are generic and supported by all frontends:
 
 
 .. _Civetweb User Manual: https://civetweb.github.io/civetweb/UserManual.html
+.. _Config Reference: ../config-ref
