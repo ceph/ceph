@@ -150,7 +150,7 @@ struct RGWCtlDef {
   } meta;
 
   std::unique_ptr<RGWUserCtl> user;
-  std::unique_ptr<RGWBucketCtl> user;
+  std::unique_ptr<RGWBucketCtl> bucket;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -171,7 +171,7 @@ struct RGWCtl {
   } meta;
 
   RGWUserCtl *user{nullptr};
-  RGWBucketCtl *user{nullptr};
+  RGWBucketCtl *bucket{nullptr};
 
   int init(RGWServices& svc);
 };
