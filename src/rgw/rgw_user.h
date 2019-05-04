@@ -18,6 +18,8 @@
 #include "rgw_formats.h"
 #include "rgw_metadata.h"
 
+#include "common/optional_ref_default.h"
+
 #define RGW_USER_ANON_ID "anonymous"
 
 #define SECRET_KEY_LEN 40
@@ -817,17 +819,11 @@ public:
              RGWUserMetadataHandler *_umhandler);
 
   struct GetParams {
-    RGWUserInfo *info{nullptr};
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time *mtime{nullptr};
     rgw_cache_entry_info *cache_info{nullptr};
     map<string, bufferlist> *attrs{nullptr};
     optional_yield y{null_yield};
-
-    GetParams& set_info(RGWUserInfo *_info) {
-      info = _info;
-      return *this;
-    }
 
     GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
@@ -908,13 +904,13 @@ public:
     }
   };
 
-  int get_info_by_uid(const rgw_user& uid, GetParams& params);
-  int get_info_by_email(const string& email, GetParams& params);
-  int get_info_by_swift(const string& swift_name, GetParams& params);
-  int get_info_by_access_key(const string& access_key, GetParams& params);
+  int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_email(const string& email, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_swift(const string& swift_name, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_access_key(const string& access_key, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
 
-  int store_info(const RGWUserInfo& info, PutParams& params);
-  int remove_info(const RGWUserInfo& info, RemoveParams& params);
+  int store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params);
+  int remove_info(const RGWUserInfo& info, ceph::optional_ref_default<RemoveParams> params);
 };
 
 class RGWUserMetaHandlerAllocator {
