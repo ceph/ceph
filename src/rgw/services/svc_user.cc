@@ -109,7 +109,7 @@ class PutOperation
   const RGWUserInfo& info;
   RGWUserInfo *old_info;
   RGWObjVersionTracker *objv_tracker;
-  real_time& mtime;
+  const real_time& mtime;
   bool exclusive;
   map<string, bufferlist> *pattrs;
   RGWObjVersionTracker ot;
@@ -127,7 +127,7 @@ public:
                const RGWUserInfo& info,
                RGWUserInfo *old_info,
                RGWObjVersionTracker *objv_tracker,
-               real_time& mtime,
+               const real_time& mtime,
                bool exclusive,
                map<string, bufferlist> *pattrs) :
       svc(svc), info(info), old_info(old_info),
@@ -294,7 +294,7 @@ int RGWSI_User::store_user_info(RGWSI_MetaBackend::Context *ctx,
                                 const RGWUserInfo& info,
                                 RGWUserInfo *old_info,
                                 RGWObjVersionTracker *objv_tracker,
-                                real_time& mtime,
+                                const real_time& mtime,
                                 bool exclusive,
                                 map<string, bufferlist> *attrs)
 {

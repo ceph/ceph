@@ -113,7 +113,7 @@ public:
                       const RGWUserInfo& info,
                       RGWUserInfo *old_info,
                       RGWObjVersionTracker *objv_tracker,
-                      real_time& mtime,
+                      const real_time& mtime,
                       bool exclusive,
                       map<string, bufferlist> *attrs);
 
