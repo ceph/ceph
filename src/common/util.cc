@@ -329,7 +329,7 @@ void dump_services(Formatter* f, const map<string, list<string> >& services, con
 
 // If non-printable characters found then convert bufferlist to
 // base64 encoded string indicating whether it did.
-string cleanbin(bufferlist &bl, bool &base64)
+string cleanbin(bufferlist &bl, bool &base64, bool show)
 {
   bufferlist::iterator it;
   for (it = bl.begin(); it != bl.end(); ++it) {
@@ -345,6 +345,8 @@ string cleanbin(bufferlist &bl, bool &base64)
   bufferlist b64;
   bl.encode_base64(b64);
   string encoded(b64.c_str(), b64.length());
+  if (show)
+    encoded = "Base64:" + encoded;
   base64 = true;
   return encoded;
 }
@@ -356,9 +358,7 @@ string cleanbin(string &str)
   bool base64;
   bufferlist bl;
   bl.append(str);
-  string result = cleanbin(bl, base64);
-  if (base64)
-    result = "Base64:" + result;
+  string result = cleanbin(bl, base64, true);
   return result;
 }
 
