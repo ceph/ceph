@@ -21,6 +21,7 @@
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
 #include "include/random.h"
+#include "include/util.h"
 #include "OSD.h"
 
 #define dout_context cct
@@ -659,8 +660,8 @@ int ReplicatedBackend::be_deep_scrub(
       return 0;
     }
     if (r == 0 && hdrbl.length()) {
-      dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
-	       << dendl;
+      bool encoded = false;
+      dout(25) << "CRC header " << cleanbin(hdrbl, encoded, true) << dendl;
       pos.omap_hash << hdrbl;
     }
   }

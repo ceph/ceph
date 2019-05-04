@@ -90,7 +90,7 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type);
 
-string cleanbin(bufferlist &bl, bool &b64);
+string cleanbin(bufferlist &bl, bool &b64, bool show = false);
 string cleanbin(string &str);
 
 namespace ceph::util {
