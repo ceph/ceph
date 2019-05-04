@@ -76,6 +76,14 @@ public:
   static string get_entrypoint_meta_key(const rgw_bucket& bucket);
   static string get_bi_meta_key(const rgw_bucket& bucket);
 
+  RGWSI_MetaBackend_Handler *get_ep_be_handler() {
+    return ep_be_handler;
+  }
+
+  RGWSI_MetaBackend_Handler *get_bi_be_handler() {
+    return bi_be_handler;
+  }
+
   void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc,
