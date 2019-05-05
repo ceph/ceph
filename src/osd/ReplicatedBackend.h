@@ -337,8 +337,8 @@ private:
       ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
       : RefCountedObject(nullptr, 0),
-      tid(tid), on_commit(on_commit),
-	op(op), v(v) {}
+        tid(tid), on_commit(on_commit),
+        op(op), v(v) {}
     bool done() const {
       return waiting_for_commit.empty();
     }
