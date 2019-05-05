@@ -58,16 +58,18 @@ namespace PriorityCache
     return val;
   }
 
-  Manager::Manager(CephContext *c, 
+  Manager::Manager(CephContext *c,
                    uint64_t min,
                    uint64_t max,
-                   uint64_t target) : 
+                   uint64_t target,
+                   bool reserve_extra) :
       cct(c),
       caches{},
       min_mem(min),
       max_mem(max),
       target_mem(target),
-      tuned_mem(min)
+      tuned_mem(min),
+      reserve_extra(reserve_extra)
   {
     PerfCountersBuilder b(cct, "prioritycache", 
                           MallocStats::M_FIRST, MallocStats::M_LAST);
@@ -261,7 +263,9 @@ namespace PriorityCache
     int64_t mem_avail = tuned_mem;
     // Each cache is going to get a little extra from get_chunk, so shrink the
     // available memory here to compensate.
-    mem_avail -= get_chunk(1, tuned_mem) * caches.size();
+    if (reserve_extra) {
+      mem_avail -= get_chunk(1, tuned_mem) * caches.size();
+    }
 
     if (mem_avail < 0) {
       // There's so little memory available that just assigning a chunk per

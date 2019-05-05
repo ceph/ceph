@@ -3551,7 +3551,7 @@ void *BlueStore::MempoolThread::entry()
   binned_kv_cache = store->db->get_priority_cache();
   if (store->cache_autotune && binned_kv_cache != nullptr) {
     pcm = std::make_shared<PriorityCache::Manager>(
-        store->cct, min, max, target);
+        store->cct, min, max, target, true);
     pcm->insert("kv", binned_kv_cache);
     pcm->insert("meta", meta_cache);
     pcm->insert("data", data_cache);
