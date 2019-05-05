@@ -23,6 +23,7 @@ class ObjectCleanRegion is introduced to do what we want.
 clean_offsets is a variable of interval_set<uint64_t>
 and is used to indicate the unmodified content in an object.
 clean_omap is a variable of bool indicating whether object_map is modified.
+new_object means that osd does not exist for an object
 max_num_intervals is an upbound of the number of intervals in clean_offsets
 so that the memory cost of clean_offsets is always bounded.
 
