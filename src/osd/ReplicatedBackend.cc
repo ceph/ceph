@@ -1650,7 +1650,7 @@ void ReplicatedBackend::submit_push_data(
 
     dout(20) << __func__ <<" recovering object " << recovery_info.soid
              << " copy_subset: " << recovery_info.copy_subset
-             << " intervals_inlcuded: " << intervals_included
+             << " intervals_included: " << intervals_included
              << " data_zeros: " << data_zeros << dendl;
 
     for (auto p = data_zeros.begin(); p != data_zeros.end(); ++p)
