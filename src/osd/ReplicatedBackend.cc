@@ -1143,7 +1143,7 @@ void ReplicatedBackend::calc_head_subsets(
   if (size)
     data_subset.insert(0, size);
 
-  if (HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS)) {
+  if (HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS)) {
     const auto it = missing.get_items().find(head);
     assert(it != missing.get_items().end());
     data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
@@ -1382,7 +1382,7 @@ void ReplicatedBackend::prepare_pull(
     // pulling head or unversioned object.
     // always pull the whole thing.
     recovery_info.copy_subset.insert(0, (uint64_t)-1);
-    if (HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS))
+    if (HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS))
       recovery_info.copy_subset.intersection_of(missing_iter->second.clean_regions.get_dirty_regions());
     recovery_info.size = ((uint64_t)-1);
     recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
@@ -1397,7 +1397,7 @@ void ReplicatedBackend::prepare_pull(
   op.recovery_info.version = v;
   op.recovery_progress.data_complete = false;
   op.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() 
-                                && HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS);
+                                && HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS);
   op.recovery_progress.data_recovered_to = 0;
   op.recovery_progress.first = true;
 
@@ -1525,7 +1525,7 @@ int ReplicatedBackend::prep_push(
   pi.recovery_info.version = version;
   pi.recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
   pi.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() &&
-    HAVE_FEATURE(parent->min_peer_features(), SERVER_NAUTILUS);
+    HAVE_FEATURE(parent->min_peer_features(), SERVER_OCTOPUS);
   pi.lock_manager = std::move(lock_manager);
 
   ObjectRecoveryProgress new_progress;

@@ -4221,15 +4221,15 @@ struct pg_missing_item {
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
     // encoding a zeroed eversion_t to differentiate between OSD_RECOVERY_DELETES、
-    // SERVER_NAUTILUS and legacy unversioned encoding - a need value of 0'0 is not
+    // SERVER_OCTOPUS and legacy unversioned encoding - a need value of 0'0 is not
     // possible. This can be replaced with the legacy encoding
 
     bool have_recovery_deletes = HAVE_FEATURE(features, OSD_RECOVERY_DELETES);
-    bool have_server_nautilus = HAVE_FEATURE(features, SERVER_NAUTILUS);
+    bool have_server_octopus = HAVE_FEATURE(features, SERVER_OCTOPUS);
 
     if (have_recovery_deletes)
       encode(eversion_t(), bl);
-    if (have_server_nautilus)
+    if (have_server_octopus)
       encode(eversion_t(-1, -1), bl);
 
     encode(need, bl);
@@ -4237,7 +4237,7 @@ struct pg_missing_item {
       
     if (have_recovery_deletes)
       encode(static_cast<uint8_t>(flags), bl);
-    if (have_server_nautilus)
+    if (have_server_octopus)
       encode(clean_regions, bl);
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
