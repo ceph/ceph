@@ -64,7 +64,8 @@ authentication:
   more specific Organizational Unit (OU).
 - ``rgw_ldap_dnattr``: The attribute being used in the constructed search
   filter to match a username. Depending on your Directory Information Tree
-  (DIT) this would probably be ``uid`` or ``cn``.
+  (DIT) this would probably be ``uid`` or ``cn``. The generated filter string
+  will be, e.g., ``cn=some_username``.
 - ``rgw_ldap_searchfilter``: If not specified, the Ceph Object Gateway
   automatically constructs the search filter with the ``rgw_ldap_dnattr``
   setting. Use this parameter to narrow the list of allowed users in very
@@ -102,14 +103,14 @@ password.
 Specifying a complete filter
 ----------------------------
 
-A complete filter must contain a ``USERNAME`` token which will be substituted
+A complete filter must contain a ``@USERNAME@`` token which will be substituted
 with the user name during the authentication attempt. The ``rgw_ldap_dnattr``
 parameter is not used anymore in this case. For example, to limit valid users
 to a specific group, use the following filter:
 
 ::
 
-  "(&(uid=USERNAME)(memberOf=cn=ceph-users,ou=groups,dc=mycompany,dc=com))"
+  "(&(uid=@USERNAME@)(memberOf=cn=ceph-users,ou=groups,dc=mycompany,dc=com))"
 
 .. note:: Using the ``memberOf`` attribute in LDAP searches requires server side
           support from you specific LDAP server implementation.
