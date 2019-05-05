@@ -4451,10 +4451,10 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-	      rmissing.erase((missing_it->second).need.version);
+        rmissing.erase((missing_it->second).need.version);
         // .have = nil
-	missing_it->second = item(e.version, eversion_t(), e.is_delete());
-	missing_it->second.clean_regions.mark_fully_dirty();
+        missing_it->second = item(e.version, eversion_t(), e.is_delete());
+        missing_it->second.clean_regions.mark_fully_dirty();
       } else {
          // create new element in missing map
          // .have = nil
