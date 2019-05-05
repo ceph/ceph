@@ -205,16 +205,6 @@ is up to date. See `OS Recommendations`_ for notes on ``glibc`` and
 ``syncfs(2)`` to ensure that your hardware performs as expected when running
 multiple OSDs per host.
 
-Hosts with high numbers of OSDs (e.g., > 20) may spawn a lot of threads, 
-especially during recovery and rebalancing. Many Linux kernels default to 
-a relatively small maximum number of threads (e.g., 32k). If you encounter
-problems starting up OSDs on hosts with a high number of OSDs, consider
-setting ``kernel.pid_max`` to a higher number of threads. The theoretical
-maximum is 4,194,303 threads. For example, you could add the following to
-the ``/etc/sysctl.conf`` file:: 
-
-	kernel.pid_max = 4194303
-
 
 Networks
 ========
