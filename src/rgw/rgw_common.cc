@@ -121,6 +121,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
+    { ERR_NO_SUCH_TAG_SET, {400, "NoSuchTagSetError"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
