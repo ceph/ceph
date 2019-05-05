@@ -232,7 +232,7 @@ def init(parse_args):
     admin_user = multisite.User('zone.user')
 
     user_creds = gen_credentials()
-    user = multisite.User('tester')
+    user = multisite.User('tester', tenant=args.tenant)
 
     realm = multisite.Realm('r')
     if bootstrap:
@@ -346,16 +346,12 @@ def init(parse_args):
                     # create test user
                     arg = ['--display-name', '"Test User"']
                     arg += user_creds.credential_args()
-                    if args.tenant:
-                        arg += ['--tenant', args.tenant]
                     user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
                     admin_creds = admin_user.credentials[0]
                     arg = []
-                    if args.tenant:
-                        arg += ['--tenant', args.tenant]
                     user.info(zone, arg)
                     user_creds = user.credentials[0]
 
