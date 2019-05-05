@@ -4367,7 +4367,7 @@ void ObjectCleanRegions::dump(Formatter *f) const
   f->open_object_section("object_clean_regions");
   f->dump_stream("clean_offsets") << clean_offsets;
   f->dump_bool("clean_omap", clean_omap);
-  f->dump_bool("object_new", new_object);
+  f->dump_bool("new_object", new_object);
   f->close_section();
 }
 
