@@ -285,12 +285,17 @@ struct MDRequestImpl : public MutationImpl {
   // indicator for vxattr osdmap update
   bool waited_for_osdmap;
 
+  boost::intrusive_ptr<MDRequestImpl> parent_mdr;
+
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
     int slave_error = 0;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
+    set<CDir*> queried_for_rstat_propagation;
+    map<mds_rank_t, set<CDir*>> mds_queried_dirs_map;
+    CDir* queried_dir; //this references to the CDir that's queried the purpose of rstat propagation
 
     // for rename/link/unlink
     set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
@@ -411,6 +416,10 @@ struct MDRequestImpl : public MutationImpl {
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
+  virtual void on_nref_zero() {
+    parent_mdr.reset();
+  }
+
 private:
   mutable ceph::spinlock msg_lock;
 };

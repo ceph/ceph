@@ -52,6 +52,8 @@ public:
   static constexpr int OP_ABORT =  20;  // used for recovery only
   //static constexpr int OP_COMMIT = 21;  // used for recovery only
 
+  static constexpr int OP_PROPAGATERSTATS = 21;
+  static constexpr int OP_PROPAGATERSTATSACK = -21;
 
   static const char *get_opname(int o) {
     switch (o) { 
@@ -85,6 +87,8 @@ public:
 
     case OP_ABORT: return "abort";
       //case OP_COMMIT: return "commit";
+    case OP_PROPAGATERSTATS: return "propagate_rstats";
+    case OP_PROPAGATERSTATSACK: return "propagate_rstats_ack";
 
     default: ceph_abort(); return 0;
     }

@@ -9328,7 +9328,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       upgrade_inode_snaprealm_work(mdr);
       break;
     case CEPH_MDS_OP_PROPAGATE_RSTAT:
-      mds->locker->propagate_rstat(mdr);
+      propagate_rstats(mdr);
       break;
     default:
       ceph_abort();
@@ -12301,6 +12301,7 @@ C_MDS_RetryRequests_AfterLockNudge::C_MDS_RetryRequests_AfterLockNudge(MDCache* 
 
 void C_MDS_RetryRequests_AfterLockNudge::finish(int r)
 {
+  dout(20) << __func__ << " " << *lock << " of " << *static_cast<CInode*>(lock->get_parent()) << dendl;
   mdr->retry++;
   cache->dispatch_request(mdr);
 }
@@ -12907,5 +12908,72 @@ void MDCache::propagate_rstats(CInode* to, MDSContext* fin) {
   mdr->internal_op_finish = fin;
   mdr->in[0] = to;
   mdr->rstat_propagate_time = ceph_clock_now();
+  propagate_rstats(mdr);
+}
+
+void MDCache::propagate_rstats(MDRequestRef& mdr) {
+  assert(mdr->internal_op > -1);
+  if (propagate_subtree_rstats(mdr))
+    return;
+
   mds->locker->propagate_rstat(mdr);
+  return;
+}
+
+bool MDCache::propagate_subtree_rstats(MDRequestRef& mdr) {
+  assert(mdr->internal_op > -1);
+  CInode* cur = mdr->in[0];
+  vector<CDir*> pdirs;
+  cur->get_dirfrags(pdirs);
+  set<CDir*> dirs;
+  for (auto dir : pdirs) {
+    if (dir->is_subtree_root()) {
+      dirs.insert(dir);
+      continue;
+    }
+    set<CDir*> ds;
+    get_wouldbe_subtree_bounds(dir, ds);
+    dirs.insert(ds.begin(), ds.end());
+  }
+  list<CDir*> drls(dirs.begin(), dirs.end());
+
+  bool went_wait = false;
+  for (auto dir : drls) {
+    dout(20) << __func__ << " subtree root: " << *dir << dendl;
+
+    if (dir->is_auth()) {
+      dout(20) << "dir " << *dir << "is auth, skipping" << dendl;
+      dirs.clear();
+      get_wouldbe_subtree_bounds(dir, dirs);
+      list<CDir*> tmpls(dirs.begin(), dirs.end());
+      drls.splice(drls.end(), tmpls, tmpls.begin(), tmpls.end());
+      continue;
+    }
+
+    if (mdr->more()->queried_for_rstat_propagation.count(dir)) {
+      dout(20) << "dir " << *dir << "has been queried, skipping" << dendl;
+      continue;
+    }
+    
+    if (!dir->get_inode()->is_auth()) {
+      dout(20) << " I'm not auth for " << *dir->get_inode() << ", skipping" << dendl;
+      continue;
+    }
+    
+    dout(20) << __func__ << " found replica for: " << *dir << ", quering" << dendl;
+    MDRequestRef internal_mdr = request_start_internal(CEPH_MDS_OP_PROPAGATE_RSTAT);
+    internal_mdr->parent_mdr = mdr;
+    auto req = make_message<MMDSSlaveRequest>(internal_mdr->reqid, internal_mdr->attempt,
+        MMDSSlaveRequest::OP_PROPAGATERSTATS);
+    dir->get_inode()->make_path(req->srcdnpath);
+    req->op_stamp = mdr->get_op_stamp();
+    mds->send_message_mds(req, dir->get_dir_auth().first);
+    internal_mdr->more()->queried_dir = dir;
+    mdr->more()->waiting_on_slave.insert(dir->get_dir_auth().first);
+    mdr->more()->queried_for_rstat_propagation.insert(dir);
+    mdr->more()->mds_queried_dirs_map[dir->get_dir_auth().first].insert(dir);
+    internal_mdr->more()->waiting_on_slave.insert(dir->get_dir_auth().first);
+    went_wait = true;
+  }
+  return went_wait;
 }

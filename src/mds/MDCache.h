@@ -480,9 +480,13 @@ public:
 
   void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
   void propagate_rstats(CInode* to, MDSContext* fin);
+
+  friend class C_MDS_PropagateRstatInternal;
   // -- recovery --
 protected:
   set<mds_rank_t> recovery_set;
+  void propagate_rstats(MDRequestRef& mdr);
+  bool propagate_subtree_rstats(MDRequestRef& mdr);
 
 public:
   void set_recovery_set(set<mds_rank_t>& s);

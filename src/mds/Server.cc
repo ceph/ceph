@@ -110,6 +110,19 @@ public:
   }
 };
 
+class C_MDS_SlaveRstatsPropagate_finish : public ServerContext {
+  MDRequestRef mdr;
+  MDSRank* mds;
+  CInode* to;
+public:
+  C_MDS_SlaveRstatsPropagate_finish(MDSRank* m, Server *s, MDRequestRef& r, CInode* ino) : mds(m), ServerContext(s), mdr(r), to(ino) {}
+  void finish(int r) override {
+    auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_PROPAGATERSTATSACK);
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+    mds->mdcache->request_finish(mdr);
+  }
+};
+
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
@@ -2597,10 +2610,53 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
     handle_slave_rename_notify_ack(mdr, m);
     break;
 
+  case MMDSSlaveRequest::OP_PROPAGATERSTATSACK:
+    {
+      mdr->more()->waiting_on_slave.erase(from);
+      MDRequestRef parent_mdr = mdr->parent_mdr;
+      CDir* dir = mdr->more()->queried_dir;
+      parent_mdr->more()->mds_queried_dirs_map[from].erase(dir);
+      if (!parent_mdr->more()->mds_queried_dirs_map[from].size()) {
+        parent_mdr->more()->mds_queried_dirs_map.erase(from);
+        parent_mdr->more()->waiting_on_slave.erase(from);
+      }
+      if (mdr->more()->waiting_on_slave.empty()) {
+        mdcache->request_finish(mdr);
+      }
+      if (parent_mdr->more()->waiting_on_slave.empty()) {
+        parent_mdr->retry++;
+        mdcache->dispatch_request(parent_mdr);
+      }
+    }
+    break;
+
   default:
     ceph_abort();
   }
 }
+
+class C_MDS_TryFindInode : public ServerContext {
+  MDRequestRef mdr;
+public:
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  void finish(int r) override {
+    if (r == -ESTALE) // :( find_ino_peers failed
+      server->respond_to_request(mdr, r);
+    else
+      server->dispatch_client_request(mdr);
+  }
+};
+
+class CF_MDS_MDRContextFactory : public MDSContextFactory {
+public:
+  CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr) : cache(cache), mdr(mdr) {}
+  MDSContext *build() {
+    return new C_MDS_RetryRequest(cache, mdr);
+  }
+private:
+  MDCache *cache;
+  MDRequestRef mdr;
+};
 
 void Server::dispatch_slave_request(MDRequestRef& mdr)
 {
@@ -2722,6 +2778,30 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
       mdr->more()->inode_import = mdr->slave_request->inode_export;
     // finish off request.
     mdcache->request_finish(mdr);
+    break;
+  
+  case MMDSSlaveRequest::OP_PROPAGATERSTATS:
+    {
+      vector<CDentry*> dns;
+      CInode* cur = NULL;
+      CF_MDS_MDRContextFactory cf(mdcache, mdr);
+      int r = mdcache->path_traverse(mdr, cf, mdr->slave_request->srcdnpath, &dns, &cur, MDS_TRAVERSE_FORWARD);
+      if (r > 0)
+        return;
+      if (r < 0) {
+        if (r == -ESTALE) {
+          dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+          mdcache->find_ino_peers(mdr->slave_request->srcdnpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
+          return;
+        }
+        auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_PROPAGATERSTATSACK);
+        derr << "Failed to find the target directory, reply to auth as successfull" << dendl;
+        mds->send_message_mds(reply, mdr->slave_to_mds);
+        return;
+      }
+      C_MDS_SlaveRstatsPropagate_finish* fin = new C_MDS_SlaveRstatsPropagate_finish(this->mds, this, mdr, cur);
+      mdcache->propagate_rstats(cur, fin);
+    }
     break;
 
   default: 
@@ -3204,29 +3284,6 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
     mds->sessionmap.mark_dirty(session);
   }
 }
-
-class C_MDS_TryFindInode : public ServerContext {
-  MDRequestRef mdr;
-public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  void finish(int r) override {
-    if (r == -ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
-      server->dispatch_client_request(mdr);
-  }
-};
-
-class CF_MDS_MDRContextFactory : public MDSContextFactory {
-public:
-  CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr) : cache(cache), mdr(mdr) {}
-  MDSContext *build() {
-    return new C_MDS_RetryRequest(cache, mdr);
-  }
-private:
-  MDCache *cache;
-  MDRequestRef mdr;
-};
 
 CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath)
 {
