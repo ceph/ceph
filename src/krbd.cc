@@ -193,11 +193,16 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
   for (;;) {
     struct pollfd fds[1];
     struct udev_device *dev;
+    int r;
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, POLL_TIMEOUT) < 0)
+    r = poll(fds, 1, POLL_TIMEOUT);
+    if (r < 0)
       return -errno;
+
+    if (r == 0)
+      return -ETIMEDOUT;
 
     dev = udev_monitor_receive_device(mon);
     if (!dev)
@@ -489,11 +494,16 @@ static int wait_for_udev_remove(struct udev_monitor *mon, dev_t devno)
   for (;;) {
     struct pollfd fds[1];
     struct udev_device *dev;
+    int r;
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
-    if (poll(fds, 1, POLL_TIMEOUT) < 0)
+    r = poll(fds, 1, POLL_TIMEOUT);
+    if (r < 0)
       return -errno;
+
+    if (r == 0)
+      return -ETIMEDOUT;
 
     dev = udev_monitor_receive_device(mon);
     if (!dev)
