@@ -97,10 +97,6 @@
               <span class="help-block"
                     *ngIf="form.showError('pgNum', formDir, '34')"
                     i18n>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</span>
-              <span class="help-block"
-                    *ngIf="form.showError('pgNum', formDir, 'noDecrease')"
-                    i18n>You can only increase the number of PGs of an existing pool.
-                Currently your pool has {{ data.pool.pg_num }} PGs.</span>
               <span class="help-block">
                 <a i18n
                    target="_blank"
