@@ -472,7 +472,7 @@ run() {
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
         else
-            prunb ./ceph-run "$@" -f
+            prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
         fi
     fi
 }
