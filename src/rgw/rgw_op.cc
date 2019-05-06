@@ -3255,12 +3255,11 @@ void RGWCreateBucket::execute()
     s->bucket = info.bucket;
   }
 
-  op_ret = rgw_link_bucket(store, s->user->user_id, s->bucket,
-			   info.creation_time, false);
+  op_ret = store->ctl.bucket->link_bucket(s->user->user_id, s->bucket,
+                                          info.creation_time, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = rgw_unlink_bucket(store, s->user->user_id, s->bucket.tenant,
-			       s->bucket.name);
+    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, s->bucket);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3422,14 +3421,14 @@ void RGWDeleteBucket::execute()
 
   if (op_ret == -ECANCELED) {
     // lost a race, either with mdlog sync or another delete bucket operation.
-    // in either case, we've already called rgw_unlink_bucket()
+    // in either case, we've already called ctl.bucket->unlink_bucket()
     op_ret = 0;
     return;
   }
 
   if (op_ret == 0) {
-    op_ret = rgw_unlink_bucket(store, s->bucket_info.owner, s->bucket.tenant,
-			       s->bucket.name, false);
+    op_ret = store->ctl.bucket->unlink_bucket(s->bucket_info.owner,
+                                              s->bucket, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -6509,8 +6508,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
     ret = store->delete_bucket(binfo, ot, s->yield);
     if (0 == ret) {
-      ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.tenant,
-                              binfo.bucket.name, false);
+      ret = store->ctl.bucket->unlink_bucket(binfo.owner, binfo.bucket, false);
       if (ret < 0) {
         ldpp_dout(s, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
       }
@@ -6881,12 +6879,11 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
     bucket = out_info.bucket;
   }
 
-  op_ret = rgw_link_bucket(store, s->user->user_id, bucket,
-                           out_info.creation_time, false);
+  op_ret = store->ctl.bucket->link_bucket(s->user->user_id, bucket,
+                                          out_info.creation_time, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = rgw_unlink_bucket(store, s->user->user_id,
-                               bucket.tenant, bucket.name);
+    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, bucket);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
     }

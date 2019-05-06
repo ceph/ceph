@@ -211,14 +211,6 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_link_bucket(RGWRados* store,
-                           const rgw_user& user_id,
-                           rgw_bucket& bucket,
-                           ceph::real_time creation_time,
-                           bool update_entrypoint = true);
-extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
-                             const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
-
 extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
@@ -592,6 +584,15 @@ class RGWBucketCtl
   RGWSI_MetaBackend_Handler *bucket_be_handler; /* bucket backend handler */
   RGWSI_MetaBackend_Handler *bi_be_handler; /* bucket instance backend handler */
   
+  int do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,
+                     const rgw_bucket& bucket,
+                     ceph::real_time creation_time,
+                     bool update_entrypoint);
+
+  int do_unlink_bucket(RGWSI_MetaBackend_Handler::Op *op,
+                       const rgw_user& user_id,
+                       const rgw_bucket& bucket,
+                       bool update_entrypoint);
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
@@ -760,6 +761,16 @@ public:
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params);
+
+  /* user/bucket */
+  int link_bucket(const rgw_user& user_id,
+                  const rgw_bucket& bucket,
+                  ceph::real_time creation_time,
+                  bool update_entrypoint = true);
+
+  int unlink_bucket(const rgw_user& user_id,
+                    const rgw_bucket& bucket,
+                    bool update_entrypoint = true);
 };
 
 
