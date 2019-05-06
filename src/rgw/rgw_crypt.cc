@@ -17,11 +17,7 @@
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 
-#ifdef USE_OPENSSL
-# include <openssl/evp.h>
-#else
-# error "No supported crypto implementation found."
-#endif // USE_OPENSSL
+#include <openssl/evp.h>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -50,7 +46,6 @@ CryptoAccelRef get_crypto_accel(CephContext *cct)
 }
 
 
-#ifdef USE_OPENSSL
 template <std::size_t KeySizeV, std::size_t IvSizeV>
 static inline
 bool evp_sym_transform(CephContext* const cct,
@@ -113,9 +108,6 @@ bool evp_sym_transform(CephContext* const cct,
   ceph_assert(finally_written == 0);
   return (written + finally_written) == static_cast<int>(size);
 }
-#else // USE_OPENSSL
-# error "No supported crypto implementation found."
-#endif
 
 
 /**
@@ -169,8 +161,6 @@ public:
     return CHUNK_SIZE;
   }
 
-#ifdef USE_OPENSSL
-
   bool cbc_transform(unsigned char* out,
                      const unsigned char* in,
                      const size_t size,
@@ -181,10 +171,6 @@ public:
     return evp_sym_transform<AES_256_KEYSIZE, AES_256_IVSIZE>(
       cct, EVP_aes_256_cbc(), out, in, size, iv, key, encrypt);
   }
-
-#else
-# error "No supported crypto implementation found."
-#endif // USE_OPENSSL
 
   bool cbc_transform(unsigned char* out,
                      const unsigned char* in,
@@ -362,7 +348,6 @@ const uint8_t AES_256_CBC::IV[AES_256_CBC::AES_256_IVSIZE] =
     { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
 
 
-#ifdef USE_OPENSSL
 bool AES_256_ECB_encrypt(CephContext* cct,
                          const uint8_t* key,
                          size_t key_size,
@@ -379,10 +364,6 @@ bool AES_256_ECB_encrypt(CephContext* cct,
     return false;
   }
 }
-
-#else
-# error "No supported crypto implementation found."
-#endif // USE_OPENSSL
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,

@@ -14,13 +14,11 @@
 #include <array>
 #include <sstream>
 #include <limits>
-
 #include <fcntl.h>
 
+#include <openssl/aes.h>
+
 #include "Crypto.h"
-#ifdef USE_OPENSSL
-# include <openssl/aes.h>
-#endif
 
 #include "include/ceph_assert.h"
 #include "common/Clock.h"
@@ -202,7 +200,6 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_OPENSSL
 // when we say AES, we mean AES-128
 static constexpr const std::size_t AES_KEY_LEN{16};
 static constexpr const std::size_t AES_BLOCK_LEN{16};
@@ -377,11 +374,6 @@ public:
     return in.length - pad_len;
   }
 };
-
-#else
-# error "No supported crypto implementation found."
-#endif
-
 
 
 // ------------------------------------------------------------
