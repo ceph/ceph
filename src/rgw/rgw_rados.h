@@ -2003,6 +2003,8 @@ public:
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
+  int set_bucket_tags(rgw_bucket& bucket, bufferlist tags_bl);
+
   /** Delete an object.*/
   int delete_obj(RGWObjectCtx& obj_ctx,
                          const RGWBucketInfo& bucket_owner,
