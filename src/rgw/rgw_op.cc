@@ -1143,6 +1143,30 @@ void RGWDeleteObjTags::execute()
   op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
 }
 
+int RGWGetBucketTags::verify_permission()
+{
+
+  //TODO(LC)
+  return 0;
+}
+
+void RGWGetBucketTags::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketTags::execute() 
+{
+  auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
+  if (iter != s->bucket_attrs.end()) {
+    has_tags = true;
+    tags_bl.append(iter->second);
+  } else {
+    op_ret = -ERR_NO_SUCH_TAG_SET;
+  }
+  send_response_data(tags_bl);
+}
+
 int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;

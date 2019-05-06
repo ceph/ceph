@@ -576,6 +576,11 @@ protected:
   bool is_obj_update_op() override {
     return is_acl_op() || is_cors_op();
   }
+
+  bool is_tagging_op() {
+    return s->info.args.exists("tagging");
+  }
+ 
   bool is_request_payment_op() {
     return s->info.args.exists("requestPayment");
   }
