@@ -15,7 +15,6 @@
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
 
-#ifdef USE_OPENSSL
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/hmac.h>
@@ -28,7 +27,6 @@ extern "C" {
   const EVP_MD *EVP_sha256(void);
   const EVP_MD *EVP_sha512(void);
 }
-#endif /*USE_OPENSSL*/
 
 namespace ceph {
   namespace crypto {
@@ -38,7 +36,6 @@ namespace ceph {
   }
 }
 
-#ifdef USE_OPENSSL
 namespace ceph {
   namespace crypto {
     class DigestException : public std::runtime_error
@@ -198,10 +195,6 @@ namespace ceph {
     using ceph::crypto::ssl::HMACSHA1;
   }
 }
-#else
-// cppcheck-suppress preprocessorErrorDirective
-# error "No supported crypto implementation found."
-#endif /*USE_OPENSSL*/
 
 namespace ceph::crypto {
 template<class Digest>

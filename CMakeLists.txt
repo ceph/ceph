@@ -407,7 +407,6 @@ set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
 CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
 find_package(OpenSSL REQUIRED)
-set(USE_OPENSSL 1)
 set(CRYPTO_LIBS OpenSSL::Crypto)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
@@ -462,50 +461,40 @@ if(WITH_RADOSGW)
     message(WARNING "unable to run curl-config; rgw cannot make ssl requests to external systems reliably")
   endif()
 
-  if (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
-    find_package(OpenSSL REQUIRED)
-  else()
-    find_package(OpenSSL)
+  if (NOT NO_CURL_SSL_LINK)
+    message(STATUS "libcurl is linked with openssl: explicitly setting locks")
+    set(WITH_CURL_OPENSSL ON)
+  endif() # CURL_SSL_LINK
+  execute_process(
+    COMMAND
+      "sh" "-c"
+      "objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+    OUTPUT_VARIABLE LIBSSL_SONAME
+    ERROR_VARIABLE OBJDUMP_ERRORS
+    RESULT_VARIABLE OBJDUMP_RESULTS
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (OBJDUMP_RESULTS)
+    message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
   endif()
-
-  if (OPENSSL_FOUND)
-    if (NOT NO_CURL_SSL_LINK)
-      message(STATUS "libcurl is linked with openssl: explicitly setting locks")
-      set(WITH_CURL_OPENSSL ON)
-    endif() # CURL_SSL_LINK
-    execute_process(
-      COMMAND
-	"sh" "-c"
-	"objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
-      OUTPUT_VARIABLE LIBSSL_SONAME
-      ERROR_VARIABLE OBJDUMP_ERRORS
-      RESULT_VARIABLE OBJDUMP_RESULTS
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (OBJDUMP_RESULTS)
-      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
-    endif()
-    if (NOT OBJDUMP_ERRORS STREQUAL "")
-      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
-    endif()
-    execute_process(
-      COMMAND
-	"sh" "-c"
-	"objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
-      OUTPUT_VARIABLE LIBCRYPTO_SONAME
-      ERROR_VARIABLE OBJDUMP_ERRORS
-      RESULT_VARIABLE OBJDUMP_RESULTS
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (OBJDUMP_RESULTS)
-      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
-    endif()
-    if (NOT OBJDUMP_ERRORS STREQUAL "")
-      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
-    endif()
-    message(STATUS "ssl soname: ${LIBSSL_SONAME}")
-    message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
-  else()
-    message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
-  endif()  # OPENSSL_FOUND
+  if (NOT OBJDUMP_ERRORS STREQUAL "")
+    message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+  endif()
+  execute_process(
+    COMMAND
+      "sh" "-c"
+      "objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+    OUTPUT_VARIABLE LIBCRYPTO_SONAME
+    ERROR_VARIABLE OBJDUMP_ERRORS
+    RESULT_VARIABLE OBJDUMP_RESULTS
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (OBJDUMP_RESULTS)
+    message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+  endif()
+  if (NOT OBJDUMP_ERRORS STREQUAL "")
+    message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+  endif()
+  message(STATUS "ssl soname: ${LIBSSL_SONAME}")
+  message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
 
 #option for CephFS

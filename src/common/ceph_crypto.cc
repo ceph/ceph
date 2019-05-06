@@ -16,18 +16,17 @@
 #include "common/config.h"
 #include "ceph_crypto.h"
 
-#ifdef USE_OPENSSL
 #include <openssl/evp.h>
 
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
-#   include <openssl/conf.h>
-#   include <openssl/engine.h>
-#   include <openssl/err.h>
-# endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#  include <openssl/conf.h>
+#  include <openssl/engine.h>
+#  include <openssl/err.h>
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 
 namespace ceph::crypto::ssl {
 
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 static std::atomic_uint32_t crypto_refs;
 
 // XXX: vector instead?
@@ -68,7 +67,7 @@ ssl_get_thread_id(void)
   memcpy(&ret, &t, sizeof(pthread_t));
   return ret;
 }
-# endif /* not OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* not OPENSSL_VERSION_NUMBER < 0x10100000L */
 
 static void init() {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
@@ -117,11 +116,11 @@ static void init() {
     CRYPTO_THREADID_current(&tmp);
     init_records.tids.emplace_back(std::move(tmp));
   }
-# endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 }
 
 static void shutdown() {
-# if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
   if (--crypto_refs != 0) {
     return;
   }
@@ -161,30 +160,19 @@ static void shutdown() {
   }
   delete[] ssl_mutexes;
   ssl_mutexes = nullptr;
-# endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
+#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 }
 
 } // namespace ceph::crypto::openssl
-#else
-# error "No supported crypto implementation found."
-#endif /*USE_OPENSSL*/
 
 
 void ceph::crypto::init() {
-#ifdef USE_OPENSSL
   ceph::crypto::ssl::init();
-#endif
 }
 
-void ceph::crypto::shutdown(const bool shared) {
-  static_cast<void>(shared);
-
-#ifdef USE_OPENSSL
+void ceph::crypto::shutdown([[maybe_unused]] const bool shared) {
   ceph::crypto::ssl::shutdown();
-#endif
 }
-
-#ifdef USE_OPENSSL
 
 ceph::crypto::ssl::OpenSSLDigest::OpenSSLDigest(const EVP_MD * _type)
   : mpContext(EVP_MD_CTX_create())
@@ -210,6 +198,3 @@ void ceph::crypto::ssl::OpenSSLDigest::Final(unsigned char *digest) {
   unsigned int s;
   EVP_DigestFinal_ex(mpContext, digest, &s);
 }
-#else
-# error "No supported crypto implementation found."
-#endif /*USE_OPENSSL*/
