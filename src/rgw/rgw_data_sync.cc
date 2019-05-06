@@ -656,10 +656,6 @@ int RGWRemoteDataLog::read_source_log_shards_info(map<int, RGWDataChangesLogInfo
 
 int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers, map<int, rgw_datalog_shard_data> *result)
 {
-  if (store->is_meta_master()) {
-    return 0;
-  }
-
   return run(new RGWListRemoteDataLogCR(&sync_env, shard_markers, 1, result));
 }
 
