@@ -58,7 +58,6 @@ public:
 
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
 {
-  bufferlist tags_bl;
 public:
   RGWGetObjTags_ObjStore_S3() {}
   ~RGWGetObjTags_ObjStore_S3() {}
