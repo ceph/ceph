@@ -3274,7 +3274,7 @@ public:
   virtual int delete_system_obj(rgw_raw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */
-  int delete_obj_index(const rgw_obj& obj);
+  int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime);
 
   /**
    * Get an attribute for a system object.
