@@ -88,7 +88,7 @@ function init_first_zone {
   realm=$2
   zg=$3
   zone=$4
-  endpoints=$5
+  endpoints=$url:$5
 
   access_key=$6
   secret=$7
@@ -112,7 +112,7 @@ function init_zone_in_existing_zg {
   zg=$3
   zone=$4
   master_zg_zone1_port=$5
-  endpoints=$6
+  endpoints=$url:$6
 
   access_key=$7
   secret=$8
@@ -131,7 +131,7 @@ function init_first_zone_in_slave_zg {
   zg=$3
   zone=$4
   master_zg_zone1_port=$5
-  endpoints=$6
+  endpoints=$url:$6
 
   access_key=$7
   secret=$8
