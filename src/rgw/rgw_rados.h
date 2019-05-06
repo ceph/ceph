@@ -2015,7 +2015,7 @@ public:
   int delete_raw_obj(const rgw_raw_obj& obj);
 
   /** Remove an object from the bucket index */
-  int delete_obj_index(const rgw_obj& obj);
+  int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime);
 
   /**
    * Set an attr on an object.
