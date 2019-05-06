@@ -67,7 +67,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_autoscale_bias\": \"" +
+	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
@@ -78,7 +78,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
       int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_num_min\": \"" +
+	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
      if (r < 0) {
