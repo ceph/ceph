@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "common/ceph_json.h"
+#include "common/Clock.h"
 
 #include <sstream>
 
@@ -56,3 +57,25 @@ TEST(formatter, bug_37706) {
    ASSERT_EQ(pgs.back(), "1.0");
 }
 
+TEST(formatter, utime)
+{
+  JSONFormatter formatter;
+
+  utime_t input = ceph_clock_now();
+  input.gmtime_nsec(formatter.dump_stream("timestamp"));
+
+  bufferlist bl;
+  formatter.flush(bl);
+
+  JSONParser parser;
+  EXPECT_TRUE(parser.parse(bl.c_str(), bl.length()));
+
+  cout << input << " -> '" << std::string(bl.c_str(), bl.length())
+       << std::endl;
+
+  utime_t output;
+  decode_json_obj(output, &parser);
+  cout << " -> " << output << std::endl;
+  EXPECT_EQ(input.sec(), output.sec());
+  EXPECT_EQ(input.nsec(), output.nsec());
+}
