@@ -139,7 +139,7 @@ class Module(MgrModule):
 
         if option == 'discovery_interval' and value < 10:
             raise RuntimeError(
-                "discovery_interval should not be more frequent"
+                "discovery_interval should not be more frequent "
                 "than once in 10 regular data collection"
             )
 
