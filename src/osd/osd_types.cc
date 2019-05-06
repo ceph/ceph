@@ -6420,3 +6420,75 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
     }
   }
 }
+
+int prepare_info_keymap(
+  CephContext* cct,
+  map<string,bufferlist> *km,
+  epoch_t epoch,
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  bool dirty_big_info,
+  bool dirty_epoch,
+  bool try_fast_info,
+  PerfCounters *logger,
+  DoutPrefixProvider *dpp)
+{
+  if (dirty_epoch) {
+    encode(epoch, (*km)[string(epoch_key)]);
+  }
+
+  if (logger)
+    logger->inc(l_osd_pg_info);
+
+  // try to do info efficiently?
+  if (!dirty_big_info && try_fast_info &&
+      info.last_update > last_written_info.last_update) {
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    bool did = fast.try_apply_to(&last_written_info);
+    ceph_assert(did);  // we verified last_update increased above
+    if (info == last_written_info) {
+      encode(fast, (*km)[string(fastinfo_key)]);
+      if (logger)
+	logger->inc(l_osd_pg_fastinfo);
+      return 0;
+    }
+    if (dpp) {
+      ldpp_dout(dpp, 30) << __func__ << " fastinfo failed, info:\n";
+      {
+	JSONFormatter jf(true);
+	jf.dump_object("info", info);
+	jf.flush(*_dout);
+      }
+      {
+	*_dout << "\nlast_written_info:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("last_written_info", last_written_info);
+	jf.flush(*_dout);
+      }
+      *_dout << dendl;
+    }
+  }
+
+  last_written_info = info;
+
+  // info.  store purged_snaps separately.
+  interval_set<snapid_t> purged_snaps;
+  purged_snaps.swap(info.purged_snaps);
+  encode(info, (*km)[string(info_key)]);
+  purged_snaps.swap(info.purged_snaps);
+
+  if (dirty_big_info) {
+    // potentially big stuff
+    bufferlist& bigbl = (*km)[string(biginfo_key)];
+    encode(past_intervals, bigbl);
+    encode(info.purged_snaps, bigbl);
+    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    if (logger)
+      logger->inc(l_osd_pg_biginfo);
+  }
+
+  return 0;
+}
+

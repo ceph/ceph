@@ -47,6 +47,7 @@
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
+#include "osd_perf_counters.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -5924,6 +5925,27 @@ struct pool_pg_num_history_t {
   }
 };
 WRITE_CLASS_ENCODER(pool_pg_num_history_t)
+
+// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
+// easily skip them
+static const string_view infover_key = "_infover"sv;
+static const string_view info_key = "_info"sv;
+static const string_view biginfo_key = "_biginfo"sv;
+static const string_view epoch_key = "_epoch"sv;
+static const string_view fastinfo_key = "_fastinfo"sv;
+
+int prepare_info_keymap(
+  CephContext* cct,
+  map<string,bufferlist> *km,
+  epoch_t epoch,
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  bool dirty_big_info,
+  bool dirty_epoch,
+  bool try_fast_info,
+  PerfCounters *logger = nullptr,
+  DoutPrefixProvider *dpp = nullptr);
 
 // omap specific stats
 struct omap_stat_t {
