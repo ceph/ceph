@@ -1421,18 +1421,6 @@ public:
     bool need_write_epoch,
     ObjectStore::Transaction &t) override;
 
-  static int _prepare_write_info(
-    CephContext* cct,
-    map<string,bufferlist> *km,
-    epoch_t epoch,
-    pg_info_t &info,
-    pg_info_t &last_written_info,
-    PastIntervals &past_intervals,
-    bool dirty_big_info,
-    bool dirty_epoch,
-    bool try_fast_info,
-    PerfCounters *logger = nullptr);
-
   void write_if_dirty(PeeringCtx &rctx) {
     write_if_dirty(rctx.transaction);
   }

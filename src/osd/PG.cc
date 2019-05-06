@@ -76,14 +76,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
-// easily skip them
-const string infover_key("_infover");
-const string info_key("_info");
-const string biginfo_key("_biginfo");
-const string epoch_key("_epoch");
-const string fastinfo_key("_fastinfo");
-
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -893,7 +885,7 @@ void PG::upgrade(ObjectStore *store)
   if (info_struct_v < latest_struct_v) {
     map<string,bufferlist> v;
     __u8 ver = latest_struct_v;
-    encode(ver, v[infover_key]);
+    encode(ver, v[string(infover_key)]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
@@ -916,73 +908,6 @@ void PG::upgrade(ObjectStore *store)
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
-
-int PG::_prepare_write_info(CephContext* cct,
-			    map<string,bufferlist> *km,
-			    epoch_t epoch,
-			    pg_info_t &info,
-			    pg_info_t &last_written_info,
-			    PastIntervals &past_intervals,
-			    bool dirty_big_info,
-			    bool dirty_epoch,
-			    bool try_fast_info,
-			    PerfCounters *logger)
-{
-  if (dirty_epoch) {
-    encode(epoch, (*km)[epoch_key]);
-  }
-
-  if (logger)
-    logger->inc(l_osd_pg_info);
-
-  // try to do info efficiently?
-  if (!dirty_big_info && try_fast_info &&
-      info.last_update > last_written_info.last_update) {
-    pg_fast_info_t fast;
-    fast.populate_from(info);
-    bool did = fast.try_apply_to(&last_written_info);
-    ceph_assert(did);  // we verified last_update increased above
-    if (info == last_written_info) {
-      encode(fast, (*km)[fastinfo_key]);
-      if (logger)
-	logger->inc(l_osd_pg_fastinfo);
-      return 0;
-    }
-    generic_dout(30) << __func__ << " fastinfo failed, info:\n";
-    {
-      JSONFormatter jf(true);
-      jf.dump_object("info", info);
-      jf.flush(*_dout);
-    }
-    {
-      *_dout << "\nlast_written_info:\n";
-      JSONFormatter jf(true);
-      jf.dump_object("last_written_info", last_written_info);
-      jf.flush(*_dout);
-    }
-    *_dout << dendl;
-  }
-
-  last_written_info = info;
-
-  // info.  store purged_snaps separately.
-  interval_set<snapid_t> purged_snaps;
-  purged_snaps.swap(info.purged_snaps);
-  encode(info, (*km)[info_key]);
-  purged_snaps.swap(info.purged_snaps);
-
-  if (dirty_big_info) {
-    // potentially big stuff
-    bufferlist& bigbl = (*km)[biginfo_key];
-    encode(past_intervals, bigbl);
-    encode(info.purged_snaps, bigbl);
-    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
-    if (logger)
-      logger->inc(l_osd_pg_biginfo);
-  }
-
-  return 0;
-}
 
 void PG::_create(ObjectStore::Transaction& t, spg_t pgid, int bits)
 {
@@ -1009,7 +934,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> values;
   __u8 struct_v = latest_struct_v;
-  encode(struct_v, values[infover_key]);
+  encode(struct_v, values[string(infover_key)]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
@@ -1027,7 +952,7 @@ void PG::prepare_write(
   unstable_stats.clear();
   map<string,bufferlist> km;
   if (dirty_big_info || dirty_info) {
-    int ret = _prepare_write_info(
+    int ret = prepare_info_keymap(
       cct,
       &km,
       get_osdmap_epoch(),
@@ -1037,7 +962,8 @@ void PG::prepare_write(
       dirty_big_info,
       need_write_epoch,
       cct->_conf->osd_fast_info,
-      osd->logger);
+      osd->logger,
+      this);
     ceph_assert(ret == 0);
   }
   pglog.write_log_and_missing(
@@ -1083,8 +1009,8 @@ int PG::peek_map_epoch(ObjectStore *store,
 
   // try for v8
   set<string> keys;
-  keys.insert(infover_key);
-  keys.insert(epoch_key);
+  keys.insert(string(infover_key));
+  keys.insert(string(epoch_key));
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -1093,13 +1019,13 @@ int PG::peek_map_epoch(ObjectStore *store,
     ceph_assert(values.size() == 2);
 
     // sanity check version
-    auto bp = values[infover_key].cbegin();
+    auto bp = values[string(infover_key)].cbegin();
     __u8 struct_v = 0;
     decode(struct_v, bp);
     ceph_assert(struct_v >= 8);
 
     // get epoch
-    bp = values[epoch_key].begin();
+    bp = values[string(epoch_key)].begin();
     decode(cur_epoch, bp);
   } else {
     // probably bug 10617; see OSD::load_pgs()
@@ -1143,10 +1069,10 @@ int PG::read_info(
   __u8 &struct_v)
 {
   set<string> keys;
-  keys.insert(infover_key);
-  keys.insert(info_key);
-  keys.insert(biginfo_key);
-  keys.insert(fastinfo_key);
+  keys.insert(string(infover_key));
+  keys.insert(string(info_key));
+  keys.insert(string(biginfo_key));
+  keys.insert(string(fastinfo_key));
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
@@ -1156,18 +1082,18 @@ int PG::read_info(
   ceph_assert(values.size() == 3 ||
 	 values.size() == 4);
 
-  auto p = values[infover_key].cbegin();
+  auto p = values[string(infover_key)].cbegin();
   decode(struct_v, p);
   ceph_assert(struct_v >= 10);
 
-  p = values[info_key].begin();
+  p = values[string(info_key)].begin();
   decode(info, p);
 
-  p = values[biginfo_key].begin();
+  p = values[string(biginfo_key)].begin();
   decode(past_intervals, p);
   decode(info.purged_snaps, p);
 
-  p = values[fastinfo_key].begin();
+  p = values[string(fastinfo_key)].begin();
   if (!p.end()) {
     pg_fast_info_t fast;
     decode(fast, p);
@@ -1211,6 +1137,7 @@ void PG::read_state(ObjectStore *store)
 
       if (oss.tellp())
 	osd->clog->error() << oss.str();
+      return 0;
     });
 
   if (info_struct_v < latest_struct_v) {
