@@ -749,7 +749,7 @@ void CephContext::put() {
 void CephContext::init_crypto()
 {
   if (_crypto_inited++ == 0) {
-    ceph::crypto::init(this);
+    ceph::crypto::init();
   }
 }
 

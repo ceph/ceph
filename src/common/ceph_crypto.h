@@ -33,7 +33,7 @@ extern "C" {
 namespace ceph {
   namespace crypto {
     void assert_init();
-    void init(class CephContext* cct);
+    void init();
     void shutdown(bool shared=true);
   }
 }
