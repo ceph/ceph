@@ -163,10 +163,12 @@ private:
     for (auto& s_it: sharding_schema) {
       for (size_t i = 0; i < s_it.second; i++) {
         std::string name = s_it.first + "-" + to_string(i);
-        r = db->column_family_create(name, "");
-        if (r != 0) {
-          derr << "Unable to create column family: '" << name << "' " << dendl;
-          ceph_abort();
+        if (db->column_family_handle(name) == ColumnFamilyHandle()) {
+          r = db->column_family_create(name, "");
+          if (r != 0) {
+            derr << "Unable to create column family: '" << name << "' " << dendl;
+            ceph_abort();
+          }
         }
       }
     }
