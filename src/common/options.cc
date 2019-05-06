@@ -4610,8 +4610,8 @@ std::vector<Option> get_global_options() {
     .set_description("Enable use of rocksdb column families for bluestore metadata"),
 
     Option("bluestore_rocksdb_cfs", Option::TYPE_STR, Option::LEVEL_DEV)
-    .set_default("M= P= L=")
-    .set_description("List of whitespace-separate key/value pairs where key is CF name and value is CF options"),
+    .set_default("O7= M5= L= P= b= C=")
+    .set_description("List of whitespace-separate key/value pairs where key is CF name and value is CF options. When CF name is followed with a number, eg. M5, then multiple CFs are created M-0, M-1, ... M-4. No number after CF name means only single CF is created eg. L-0. Prefixes not listed remain part of 'default' column family."),
 
     Option("bluestore_fsck_on_mount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
