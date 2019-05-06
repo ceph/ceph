@@ -3,3 +3,10 @@
 
 * The `cache drop` admin socket command has been removed. The `ceph tell mds.X
   cache drop` remains.
+
+* RGW: radosgw-admin introduces two subcommands that allow the
+  managing of expire-stale objects that might be left behind after a
+  bucket reshard in earlier versions of RGW. One subcommand lists such
+  objects and the other deletes them. Read the troubleshooting section
+  of the dynamic resharding docs for details.
+
