@@ -4220,59 +4220,43 @@ struct pg_missing_item {
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
-    // encoding a zeroed eversion_t to differentiate between OSD_RECOVERY_DELETES、
-    // SERVER_OCTOPUS and legacy unversioned encoding - a need value of 0'0 is not
-    // possible. This can be replaced with the legacy encoding
-
-    bool have_recovery_deletes = HAVE_FEATURE(features, OSD_RECOVERY_DELETES);
-    bool have_server_octopus = HAVE_FEATURE(features, SERVER_OCTOPUS);
-
-    if (have_recovery_deletes)
+    if (HAVE_FEATURE(features, SERVER_OCTOPUS)) {
+      // encoding a zeroed eversion_t to differentiate between OSD_RECOVERY_DELETES、
+      // SERVER_OCTOPUS and legacy unversioned encoding - a need value of 0'0 is not
+      // possible. This can be replaced with the legacy encoding
       encode(eversion_t(), bl);
-    if (have_server_octopus)
       encode(eversion_t(-1, -1), bl);
-
-    encode(need, bl);
-    encode(have, bl);
-      
-    if (have_recovery_deletes)
+      encode(need, bl);
+      encode(have, bl);   
       encode(static_cast<uint8_t>(flags), bl);
-    if (have_server_octopus)
       encode(clean_regions, bl);
+    } else {
+      encode(eversion_t(), bl);
+      encode(need, bl);
+      encode(have, bl);
+      encode(static_cast<uint8_t>(flags), bl);
+    }
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
-    eversion_t e;
+    eversion_t e, l;
     decode(e, bl);
-
-    if(e == eversion_t()) {
-        eversion_t l;
-        decode(l, bl);
-        if(l == eversion_t(-1, -1)) {
-            // support all
-          decode(need, bl);
-          decode(have, bl);
-          uint8_t f;
-          decode(f, bl);
-          flags = static_cast<missing_flags_t>(f);
-          decode(clean_regions, bl);
-         } else {
-          // support OSD_RECOVERY_DELETES
-          need = l;
-          decode(have, bl);
-          uint8_t f;
-          decode(f, bl);
-          flags = static_cast<missing_flags_t>(f); 
-        }
-    } else if (e == eversion_t(-1, -1)) {
-      // support NAUTILUS
+    decode(l, bl);
+    if(l == eversion_t(-1, -1)) {
+      // support all
       decode(need, bl);
       decode(have, bl);
+      uint8_t f;
+      decode(f, bl);
+      flags = static_cast<missing_flags_t>(f);
       decode(clean_regions, bl);
-    } else {
-      // legacy encoding
-      need = e;
+     } else {
+      // support OSD_RECOVERY_DELETES
+      need = l;
       decode(have, bl);
+      uint8_t f;
+      decode(f, bl);
+      flags = static_cast<missing_flags_t>(f); 
     }
   }
 
@@ -4627,10 +4611,12 @@ public:
   }
   static void generate_test_instances(std::list<pg_missing_set*>& o) {
     o.push_back(new pg_missing_set);
+    o.back()->may_include_deletes = true;
     o.push_back(new pg_missing_set);
     o.back()->add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
       eversion_t(5, 6), eversion_t(5, 1), false);
+    o.back()->may_include_deletes = true;
     o.push_back(new pg_missing_set);
     o.back()->add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
