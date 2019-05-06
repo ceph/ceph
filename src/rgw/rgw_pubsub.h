@@ -621,7 +621,7 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
   bufferlist bl;
   encode(info, bl);
 
-  int ret = rgw_put_system_obj(store, obj_ctx, obj.pool, obj.oid,
+  int ret = rgw_put_system_obj(store, obj.pool, obj.oid,
                            bl, false, objv_tracker,
                            real_time());
   if (ret < 0) {
