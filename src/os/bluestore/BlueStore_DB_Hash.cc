@@ -289,9 +289,19 @@ private:
     KeyLess(const rocksdb::Comparator* comparator) : comparator(comparator) { };
     bool operator()(KeyValueDB::Iterator a, KeyValueDB::Iterator b) const
     {
-      if (!a->valid())
-        return false;
-      return compare(comparator, a->key(), b->key()) < 0;
+      if (a->valid()) {
+        if (b->valid()) {
+          return compare(comparator, a->key(), b->key()) < 0;
+        } else {
+          return true;
+        }
+      } else {
+        if (b->valid()) {
+          return false;
+        } else {
+          return (void*)a.get() < (void*)b.get();
+        }
+      }
     }
   };
 
