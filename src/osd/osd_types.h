@@ -3772,7 +3772,7 @@ public:
     clean_offsets.insert(offset, len);
   }
   bool operator==(const ObjectCleanRegions &orc) const {
-    return clean_offsets == orc.clean_offsets && clean_omap == orc.clean_omap && max_num_intervals == orc.max_num_intervals;
+    return clean_offsets == orc.clean_offsets && clean_omap == orc.clean_omap && max_num_intervals == orc.max_num_intervals && new_object == orc.new_object;
   }
 
   void merge(const ObjectCleanRegions &other);
@@ -4459,7 +4459,6 @@ public:
          // create new element in missing map
          // .have = nil
         missing[e.soid] = item(e.version, eversion_t(), e.is_delete());
-        missing[e.soid].clean_regions = e.clean_regions;
         missing[e.soid].clean_regions.mark_fully_dirty();
       }
     } else if (is_missing_divergent_item) {
