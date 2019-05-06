@@ -23,8 +23,14 @@ namespace ceph {
     void unlock() {}
   };
 
+  struct dummy_shared_mutex : dummy_mutex {
+    void lock_shared() {}
+    void unlock_shared() {}
+  };
+
   using mutex = dummy_mutex;
   using recursive_mutex = dummy_mutex;
+  using shared_mutex = dummy_shared_mutex;
   // in seastar, we should use a difference interface for enforcing the
   // semantics of condition_variable
 
