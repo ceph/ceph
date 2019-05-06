@@ -5745,49 +5745,64 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     env = NULL;
     return -EIO;
   }
-  //wrap DB with sharded features
-  std::map<std::string, size_t> shards{
-    {PREFIX_SUPER, 1},
-    {PREFIX_STAT, 1},
-    {PREFIX_COLL, 1},
-    {PREFIX_OBJ, 7},
-    {PREFIX_OMAP, 11},
-    {PREFIX_PGMETA_OMAP, 1},
-    {PREFIX_DEFERRED, 1},
-    {PREFIX_ALLOC, 1},
-    {PREFIX_ALLOC_BITMAP, 9},
-    {PREFIX_SHARED_BLOB, 5}
-  };
-
-  db = make_BlueStore_DB_Hash(db, shards);
-
-  FreelistManager::setup_merge_operators(db);
-  db->set_merge_operator(PREFIX_STAT, merge_op);
-  db->set_cache_size(cache_kv_ratio * cache_size);
 
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
 
-    map<string,string> cf_map;
-    cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
-                                 get_str_map,
-                                 &cf_map,
-                                 " \t");
-    for (auto& i : cf_map) {
-      dout(10) << "column family " << i.first << ": " << i.second << dendl;
-      cfs.push_back(KeyValueDB::ColumnFamily(i.first, i.second));
+    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+      /* enable sharding of rocksdb */
+      map<string,string> cf_map;
+      cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
+                                  get_str_map,
+                                  &cf_map,
+                                  " \t");
+      std::map<std::string, size_t> shards {
+        {PREFIX_SUPER, 0},
+        {PREFIX_STAT, 0},
+        {PREFIX_COLL, 0},
+        {PREFIX_OBJ, 0},
+        {PREFIX_OMAP, 0},
+        {PREFIX_PGMETA_OMAP, 0},
+        {PREFIX_DEFERRED, 0},
+        {PREFIX_ALLOC, 0},
+        {PREFIX_ALLOC_BITMAP, 0},
+        {PREFIX_SHARED_BLOB, 0}
+      };
+
+      for (auto& i : cf_map) {
+        std::string prefix = i.first.substr(0, 1);
+        std::string prefix_count_str = i.first.substr(1);
+        int prefix_count = 1;
+        if (prefix_count_str.size() > 0) {
+          prefix_count = std::stoi(prefix_count_str);
+        }
+        auto sh = shards.find(prefix);
+        if (sh == shards.end()) {
+          derr << __func__ << " db prefix '" << prefix << "' illegal " << dendl;
+          return -EINVAL;
+        }
+        sh->second = prefix_count;
+        dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
+
+        for(int k = 0; k < prefix_count; k++) {
+          std::string cf_name = prefix + "-" + to_string(k);
+          dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
+          cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
+        }
+      }
+
+      db = make_BlueStore_DB_Hash(db, shards);
     }
   }
+  FreelistManager::setup_merge_operators(db);
+  db->set_merge_operator(PREFIX_STAT, merge_op);
+  db->set_cache_size(cache_kv_ratio * cache_size);
 
   db->init(options);
   if (to_repair_db)
     return 0;
   if (create) {
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      r = db->create_and_open(err, cfs);
-    } else {
-      r = db->create_and_open(err);
-    }
+    r = db->create_and_open(err, cfs);
   } else {
     // we pass in cf list here, but it is only used if the db already has
     // column families created.
