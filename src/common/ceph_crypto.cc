@@ -12,7 +12,10 @@
  *
  */
 
+#include <vector>
+
 #include "common/ceph_context.h"
+#include "common/ceph_mutex.h"
 #include "common/config.h"
 #include "ceph_crypto.h"
 
@@ -29,9 +32,9 @@ namespace ceph::crypto::ssl {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static std::atomic_uint32_t crypto_refs;
 
-// XXX: vector instead?
-static pthread_mutex_t* ssl_mutexes;
-static size_t ssl_num_locks;
+static std::vector<ceph::shared_mutex> ssl_mutexes {
+  static_cast<size_t>(std::max(CRYPTO_num_locks(), 0))
+};
 
 static struct {
   // we could use e.g. unordered_set instead at the price of providing
@@ -42,16 +45,28 @@ static struct {
 } init_records;
 
 static void
-ssl_locking_callback(int mode, int mutex_num, const char *file, int line)
+ssl_locking_callback(
+  const int mode,
+  const int mutex_num,
+  [[maybe_unused]] const char *file,
+  [[maybe_unused]] const int line)
 {
-  static_cast<void>(line);
-  static_cast<void>(file);
+  if (mutex_num < 0 || static_cast<size_t>(mutex_num) >= ssl_mutexes.size()) {
+    ceph_assert_always("openssl passed wrong mutex index" == nullptr);
+  }
 
-  if (mode & 1) {
-    /* 1 is CRYPTO_LOCK */
-    [[maybe_unused]] auto r = pthread_mutex_lock(&ssl_mutexes[mutex_num]);
-  } else {
-    [[maybe_unused]] auto r = pthread_mutex_unlock(&ssl_mutexes[mutex_num]);
+  if (mode & CRYPTO_READ) {
+    if (mode & CRYPTO_LOCK) {
+      ssl_mutexes[mutex_num].lock_shared();
+    } else if (mode & CRYPTO_UNLOCK) {
+      ssl_mutexes[mutex_num].unlock_shared();
+    }
+  } else if (mode & CRYPTO_WRITE) {
+    if (mode & CRYPTO_LOCK) {
+      ssl_mutexes[mutex_num].lock();
+    } else if (mode & CRYPTO_UNLOCK) {
+      ssl_mutexes[mutex_num].unlock();
+    }
   }
 }
 
@@ -76,23 +91,6 @@ static void init() {
     // https://wiki.openssl.org/index.php/Library_Initialization#libcrypto_Initialization
     OpenSSL_add_all_algorithms();
     ERR_load_crypto_strings();
-
-    ssl_num_locks = std::max(CRYPTO_num_locks(), 0);
-    if (ssl_num_locks > 0) {
-      try {
-        ssl_mutexes = new pthread_mutex_t[ssl_num_locks];
-      } catch (...) {
-        ceph_assert_always("can't allocate memory for OpenSSL init" == nullptr);
-      }
-    }
-
-    pthread_mutexattr_t pthread_mutex_attr;
-    pthread_mutexattr_init(&pthread_mutex_attr);
-    pthread_mutexattr_settype(&pthread_mutex_attr, PTHREAD_MUTEX_RECURSIVE);
-
-    for (size_t i = 0; i < ssl_num_locks; i++) {
-      pthread_mutex_init(&ssl_mutexes[i], &pthread_mutex_attr);
-    }
 
     // initialize locking callbacks, needed for thread safety.
     // http://www.openssl.org/support/faq.html#PROG1
@@ -155,11 +153,8 @@ static void shutdown() {
   EVP_cleanup();
   CRYPTO_cleanup_all_ex_data();
 
-  for (size_t i = 0; i < ssl_num_locks; i++) {
-    pthread_mutex_destroy(&ssl_mutexes[i]);
-  }
-  delete[] ssl_mutexes;
-  ssl_mutexes = nullptr;
+  // NOTE: don't clear ssl_mutexes as we should be ready for init-deinit-init
+  // sequence.
 #endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
 }
 
