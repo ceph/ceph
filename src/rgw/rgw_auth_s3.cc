@@ -308,7 +308,6 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
   return 0;
 }
 
-namespace {
 static bool get_next_token(const boost::string_view& s,
                            size_t& pos,
                            const char* const delims,
@@ -357,7 +356,6 @@ get_str_vec(const boost::string_view& str)
   const char delims[] = ";,= \t";
   return get_str_vec<ExpectedStrNum>(str, delims);
 }
-};
 
 static inline int parse_v4_auth_header(const req_info& info,               /* in */
                                        boost::string_view& credential,     /* out */
@@ -473,45 +471,6 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   return 0;
 }
 
-static inline bool char_needs_aws4_escaping(const char c)
-{
-  if ((c >= 'a' && c <= 'z') ||
-      (c >= 'A' && c <= 'Z') ||
-      (c >= '0' && c <= '9')) {
-    return false;
-  }
-
-  switch (c) {
-    case '-':
-    case '_':
-    case '.':
-    case '~':
-      return false;
-  }
-  return true;
-}
-
-static inline std::string aws4_uri_encode(const std::string& src)
-{
-  std::string result;
-
-  for (const std::string::value_type c : src) {
-    if (char_needs_aws4_escaping(c)) {
-      rgw_uri_escape_char(c, result);
-    } else {
-      result.push_back(c);
-    }
-  }
-
-  return result;
-}
-
-static inline std::string aws4_uri_recode(const boost::string_view& src)
-{
-  std::string decoded = url_decode(src);
-  return aws4_uri_encode(decoded);
-}
-
 std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 {
   const std::string *params = &info.request_params;
@@ -546,14 +505,10 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
       continue;
     }
 
-    if (key == "X-Amz-Credential") {
-      /* FIXME(rzarzynski): I can't find any comment in the previously linked
-       * Amazon's docs saying that X-Amz-Credential should be handled in this
-       * way. */
-      canonical_qs_map[key.to_string()] = val.to_string();
-    } else {
-      canonical_qs_map[aws4_uri_recode(key)] = aws4_uri_recode(val);
-    }
+    // while awsv4 specs ask for all slashes to be encoded, s3 itself is relaxed
+    // in its implementation allowing non-url-encoded slashes to be present in
+    // presigned urls for instance
+    canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
