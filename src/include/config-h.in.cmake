@@ -124,9 +124,6 @@
 /* Define if have curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
 
-/* Define if using OpenSSL. */
-#cmakedefine USE_OPENSSL
-
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
