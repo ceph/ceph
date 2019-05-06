@@ -523,7 +523,9 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     }
   }
 
-  if (r == -EREMOTEIO) {
+  if (on_start_interrupted()) {
+    return;
+  } else if (r == -EREMOTEIO) {
     m_local_image_tag_owner = "";
     dout(5) << "remote image is non-primary" << dendl;
     on_start_fail(-EREMOTEIO, "remote image is non-primary");
@@ -534,8 +536,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     return;
   } else if (r < 0) {
     on_start_fail(r, "error bootstrapping replay");
-    return;
-  } else if (on_start_interrupted()) {
     return;
   } else if (m_resync_requested) {
     on_start_fail(0, "resync requested");
@@ -573,11 +573,11 @@ template <typename I>
 void ImageReplayer<I>::handle_init_remote_journaler(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (on_start_interrupted()) {
+    return;
+  } else if (r < 0) {
     derr << "failed to initialize remote journal: " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error initializing remote journal");
-    return;
-  } else if (on_start_interrupted()) {
     return;
   }
 
