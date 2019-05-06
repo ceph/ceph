@@ -22,6 +22,26 @@ class TestActivate(object):
         stdout, stderr = capsys.readouterr()
         assert 'Activate OSDs by mounting devices previously configured' in stdout
 
+    def test_activate_all(self, is_root, monkeypatch):
+        '''
+        make sure Activate calls activate for each file returned by glob
+        '''
+        mocked_glob = []
+        def mock_glob(glob):
+            path = os.path.dirname(glob)
+            mocked_glob.extend(['{}/{}.json'.format(path, file_) for file_ in
+                                ['1', '2', '3']])
+            return mocked_glob
+        activate_files = []
+        def mock_activate(self, args):
+            activate_files.append(args.json_config)
+        monkeypatch.setattr('glob.glob', mock_glob)
+        monkeypatch.setattr(activate.Activate, 'activate', mock_activate)
+        activate.Activate(['--all']).main()
+        assert activate_files == mocked_glob
+
+
+
 
 class TestEnableSystemdUnits(object):
 
