@@ -108,8 +108,6 @@
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
 
-/// max intervals for clean_offsets in ObjectCleanRegions
-#define OSD_CLEAN_OFFSETS_MAX_INTERVALS 10
 static std::map<int, int> max_prio_map = {
 	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
 	{OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
@@ -3748,10 +3746,10 @@ WRITE_CLASS_ENCODER(ObjectModDesc)
 
 class ObjectCleanRegions {
 private:
-  interval_set<uint64_t> clean_offsets;
-  bool clean_omap;
   bool new_object;
-  int32_t max_num_intervals;
+  bool clean_omap;
+  interval_set<uint64_t> clean_offsets;
+  static std::atomic<int32_t> max_num_intervals;
 
   /**
    * trim the number of intervals if clean_offsets.num_intervals()
@@ -3763,18 +3761,17 @@ private:
   void trim();
   friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
 public:
-  ObjectCleanRegions(int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS) : new_object(false), max_num_intervals(max) {
+  ObjectCleanRegions() : new_object(false), clean_omap(true) {
     clean_offsets.insert(0, (uint64_t)-1);
-    clean_omap = true;
   }
-  ObjectCleanRegions(uint64_t offset, uint64_t len, bool co, int32_t max = OSD_CLEAN_OFFSETS_MAX_INTERVALS)
-    : clean_omap(co), new_object(false), max_num_intervals(max) {
+  ObjectCleanRegions(uint64_t offset, uint64_t len, bool co)
+    : new_object(false), clean_omap(co) {
     clean_offsets.insert(offset, len);
   }
   bool operator==(const ObjectCleanRegions &orc) const {
-    return clean_offsets == orc.clean_offsets && clean_omap == orc.clean_omap && max_num_intervals == orc.max_num_intervals && new_object == orc.new_object;
+    return new_object == orc.new_object && clean_omap == orc.clean_omap && clean_offsets == orc.clean_offsets;
   }
-
+  static void set_max_num_intervals(int32_t num);
   void merge(const ObjectCleanRegions &other);
   void mark_data_region_dirty(uint64_t offset, uint64_t len);
   void mark_omap_dirty();
@@ -3787,7 +3784,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-    static void generate_test_instances(list<ObjectCleanRegions*>& o);
+  static void generate_test_instances(list<ObjectCleanRegions*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
 ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);

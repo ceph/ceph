@@ -23,7 +23,6 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
-
 #include <sstream>
 
 TEST(hobject, prefixes0)
@@ -931,7 +930,7 @@ TEST(ObjectCleanRegions, mark_omap_dirty)
 
 TEST(ObjectCleanRegions, merge)
 {
-  ObjectCleanRegions cr1(2), cr2(4);
+  ObjectCleanRegions cr1, cr2;
   interval_set<uint64_t> cr1_expect;
   interval_set<uint64_t> cr2_expect;
   ASSERT_EQ(cr1_expect, cr1.get_dirty_regions());

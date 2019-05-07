@@ -35,7 +35,6 @@ extern "C" {
 }
 
 #include "common/Formatter.h"
-
 #include "OSDMap.h"
 #include "osd_types.h"
 
@@ -4273,6 +4272,13 @@ void ObjectModDesc::decode(ceph::buffer::list::const_iterator &_bl)
   bl.rebuild();
   bl.reassign_to_mempool(mempool::mempool_osd_pglog);
   DECODE_FINISH(_bl);
+}
+
+std::atomic<int32_t> ObjectCleanRegions::max_num_intervals = {10};
+
+void ObjectCleanRegions::set_max_num_intervals(int32_t num)
+{
+  max_num_intervals = num;
 }
 
 void ObjectCleanRegions::trim()
