@@ -3806,8 +3806,12 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
   OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   int64_t num = 0;
   for (auto& oid : olist) {
-    if (oid.is_pgmeta()) {
+    if (oid == pgmeta_oid) {
       continue;
+    }
+    if (oid.is_pgmeta()) {
+      osd->clog->warn() << info.pgid << " found stray pgmeta-like " << oid
+			<< " during PG removal";
     }
     int r = snap_mapper.remove_oid(oid.hobj, &_t);
     if (r != 0 && r != -ENOENT) {
