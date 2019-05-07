@@ -2259,9 +2259,12 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
 
-  template <int LogLevelV = 30> void _dump_onode(const OnodeRef& o);
-  template <int LogLevelV = 30> void _dump_extent_map(ExtentMap& em);
-  template <int LogLevelV = 30> void _dump_transaction(Transaction *t);
+  template <int LogLevelV>
+  friend void _dump_onode(CephContext *cct, const Onode& o);
+  template <int LogLevelV>
+  friend void _dump_extent_map(CephContext *cct, const ExtentMap& em);
+  template <int LogLevelV>
+  friend void _dump_transaction(CephContext *cct, Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    list<Context*> *on_commits);
