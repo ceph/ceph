@@ -12,6 +12,7 @@
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -88,6 +89,7 @@ private:
   bool m_copyup_required = true;
   bool m_copyup_is_zero = true;
 
+  std::map<uint64_t, uint64_t> m_copyup_extent_map;
   ceph::bufferlist m_copyup_data;
 
   AsyncOperation m_async_op;
