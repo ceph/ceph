@@ -22,6 +22,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
+#include "common/url_escape.h"
 
 #include "global/global_init.h"
 
@@ -292,7 +293,8 @@ struct lookup_slow_ghobject : public action_on_object_t {
     ghobject_t,
     ceph::signedspan,
     ceph::signedspan,
-    ceph::signedspan> > _objects;
+    ceph::signedspan,
+    string> > _objects;
   const string _name;
   double threshold;
 
@@ -302,13 +304,14 @@ struct lookup_slow_ghobject : public action_on_object_t {
     _name(name), threshold(_threshold) { }
 
   void call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
+    ObjectMap::ObjectMapIterator iter;
     auto start1 = mono_clock::now();
     ceph::signedspan first_seek_time = start1 - start1;
     ceph::signedspan last_seek_time = first_seek_time;
     ceph::signedspan total_time = first_seek_time;
     {
       auto ch = store->open_collection(coll);
-      ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, ghobj);
+      iter = store->get_omap_iterator(ch, ghobj);
       if (!iter) {
 	cerr << "omap_get_iterator: " << cpp_strerror(ENOENT)
 	     << " obj:" << ghobj
@@ -333,7 +336,9 @@ struct lookup_slow_ghobject : public action_on_object_t {
 
     total_time = mono_clock::now() - start1;
     if ( total_time >= make_timespan(threshold)) {
-      _objects.emplace_back(coll, ghobj, first_seek_time, last_seek_time, total_time);
+      _objects.emplace_back(coll, ghobj,
+	first_seek_time, last_seek_time, total_time,
+	url_escape(iter->tail_key()));
       cerr << ">>>>>  found obj " << ghobj
 	   << " first_seek_time "
 	   << std::chrono::duration_cast<std::chrono::seconds>(first_seek_time).count()
@@ -341,6 +346,7 @@ struct lookup_slow_ghobject : public action_on_object_t {
 	   << std::chrono::duration_cast<std::chrono::seconds>(last_seek_time).count()
 	   << " total_time "
 	   << std::chrono::duration_cast<std::chrono::seconds>(total_time).count()
+	   << " tail key: " << url_escape(iter->tail_key())
 	   << std::endl;
     }
     return;
@@ -362,7 +368,8 @@ struct lookup_slow_ghobject : public action_on_object_t {
       ceph::signedspan first_seek_time;
       ceph::signedspan last_seek_time;
       ceph::signedspan total_time;
-      std::tie(coll, ghobj, first_seek_time, last_seek_time, total_time) = *i;
+      string tail_key;
+      std::tie(coll, ghobj, first_seek_time, last_seek_time, total_time, tail_key) = *i;
 
       spg_t pgid;
       bool is_pg = coll.is_pg(&pgid);
@@ -379,6 +386,7 @@ struct lookup_slow_ghobject : public action_on_object_t {
 	  (last_seek_time).count());
       f->dump_int("total_time",
 	std::chrono::duration_cast<std::chrono::seconds>(total_time).count());
+      f->dump_string("tail_key", tail_key);
       f->close_section();
 
       f->close_section();
