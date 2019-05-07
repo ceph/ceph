@@ -7485,6 +7485,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "specified invalid mode " << val;
       return -EINVAL;
     }
+    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+      ss << "must set require_osd_release to nautilus or later before setting pg_autoscale_mode";
+      return -EINVAL;
+    }
     p.pg_autoscale_mode = n;
   } else if (var == "crush_rule") {
     int id = osdmap.crush->get_rule_id(val);
