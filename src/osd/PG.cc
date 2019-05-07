@@ -767,7 +767,7 @@ void PG::send_cluster_message(
     return;
 
   if (share_map_update) {
-    osd->share_map_peer(target, con.get(), get_osdmap());
+    osd->maybe_share_map(con.get(), get_osdmap());
   }
   osd->send_message_osd_cluster(m, con.get());
 }
