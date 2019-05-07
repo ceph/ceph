@@ -409,9 +409,7 @@ public:
   }
 
   string ImageCtx::get_object_name(uint64_t num) const {
-    char buf[object_prefix.length() + 32];
-    snprintf(buf, sizeof(buf), format_string, num);
-    return string(buf);
+    return util::data_object_name(this, num);
   }
 
   uint64_t ImageCtx::get_stripe_unit() const
