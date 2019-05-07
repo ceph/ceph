@@ -718,6 +718,8 @@ int RGWListBucket_ObjStore_S3v2::get_params()
 int ret = get_common_params();
 if (ret < 0)
 return ret;
+s->info.args.get_bool("fetch-owner", &fetchOwner, false);
+if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
 startAfter = s->info.args.get("start-after");
 marker = s->info.args.get("ContinuationToken");
 if(marker.empty()) marker = startAfter;
