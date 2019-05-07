@@ -4,6 +4,9 @@
 #pragma once
 
 #include <seastar/core/condition-variable.hh>
+// pull seastar::timer<...>::timer definitions. FIX SEASTAR or reactor.hh
+// is obligatory and should be included everywhere?
+#include <seastar/core/reactor.hh>
 
 #include "common/ThrottleInterface.h"
 
