@@ -726,7 +726,7 @@ return 0;
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 {
-  //s->formatter->open_object_section_in_ns("ListVersionsResult", XMLNS_AWS_S3);
+  
   if (!s->bucket_tenant.empty())
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   s->formatter->dump_string("Name", s->bucket_name);
@@ -747,19 +747,7 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
               : "false"));
 
-
-
-  if (op_ret >= 0) {
-    if (objs_container) {
-      s->formatter->open_array_section("Entries");
-    }
-
- 
-    if (objs_container) {
-      s->formatter->close_section();
-    }
-
-    if (!common_prefixes.empty()) {
+  if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin();
      pref_iter != common_prefixes.end(); ++pref_iter) {
@@ -769,8 +757,7 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
       }
     }
   }
-  }
-
+  
 
 
 void RGWListBucket_ObjStore_S3::send_versioned_response()
@@ -792,6 +779,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
+
+  if (op_ret >= 0) {
+    if (objs_container) {
+      s->formatter->open_array_section("Entries");
+    }
  
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
@@ -838,9 +830,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       }
       s->formatter->close_section();
     }
-    
+
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
 }
 
 
@@ -945,12 +938,18 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
     s->formatter->dump_string("NextKeyContinuationToken", next_marker.name);
     s->formatter->dump_string("NextVersionIdContinuationToken", next_marker.instance);
   }
+
   bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
 
+  if (op_ret >= 0) {
+    if (objs_container) {
+      s->formatter->open_array_section("Entries");
+    }
+ 
     vector<rgw_bucket_dir_entry>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       const char *section_name = (iter->is_delete_marker() ? "DeleteContinuationToken"
@@ -1011,6 +1010,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
   
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
 }
 
 void RGWListBucket_ObjStore_S3v2::send_response()
