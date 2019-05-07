@@ -85,7 +85,7 @@ public:
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
-  void invalidate(rgw_raw_obj& obj) {
+  void invalidate(const rgw_raw_obj& obj) {
     RWLock::WLocker wl(lock);
     auto iter = objs_state.find(obj);
     if (iter == objs_state.end()) {

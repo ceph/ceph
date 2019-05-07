@@ -247,18 +247,22 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
 
   int ret = ps->get_topic(topic_name, &user_topic_info);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topic info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
     return ret;
   }
+  ldout(store->ctx(), 20) << "successfully read topic '" << topic_name << "' info" << dendl;
 
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_bucket_topics bucket_topics;
 
   ret = read_topics(&bucket_topics, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+  if (ret < 0) {
+    ldout(store->ctx(), 1) << "ERROR: failed to read topics from bucket '" << 
+      bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
+  ldout(store->ctx(), 20) << "successfully read " << bucket_topics.topics.size() << " topics from bucket '" << 
+    bucket.name << "'" << dendl;
 
   auto& topic_filter = bucket_topics.topics[topic_name];
   topic_filter.topic = user_topic_info.topic;
@@ -266,9 +270,11 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
 
   ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
+    
+  ldout(store->ctx(), 20) << "successfully wrote " << bucket_topics.topics.size() << " topics to bucket '" << bucket.name << "'" << dendl;
 
   return 0;
 }
@@ -288,7 +294,7 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
   rgw_pubsub_bucket_topics bucket_topics;
 
   ret = read_topics(&bucket_topics, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
     return ret;
   }

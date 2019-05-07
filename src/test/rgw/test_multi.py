@@ -70,6 +70,8 @@ class Cluster(multisite.Cluster):
             env = os.environ.copy()
             env['CEPH_NUM_MDS'] = '0'
             cmd += ['-n']
+            # cmd += ['-o']
+            # cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 
