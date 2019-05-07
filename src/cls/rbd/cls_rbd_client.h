@@ -597,6 +597,7 @@ void assert_snapc_seq(librados::ObjectWriteOperation *op,
                       uint64_t snapc_seq,
                       cls::rbd::AssertSnapcSeqState state);
 
+void copyup(librados::ObjectWriteOperation *op, bufferlist data);
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
            bufferlist data);
 

@@ -833,10 +833,16 @@ int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
   return get_all_features_finish(&it, all_features);
 }
 
+void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
+  op->exec("rbd", "copyup", data);
+}
+
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
            bufferlist data) {
-  bufferlist out;
-  return ioctx->exec(oid, "rbd", "copyup", data, out);
+  librados::ObjectWriteOperation op;
+  copyup(&op, data);
+
+  return ioctx->operate(oid, &op);
 }
 
 void sparse_copyup(librados::ObjectWriteOperation *op,
