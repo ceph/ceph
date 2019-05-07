@@ -907,7 +907,7 @@ class Module(MgrModule):
 
         # allow a small regression if we are phasing out osd weights
         fudge = 0
-        if next_ow != orig_osd_weight:
+        if best_ow != orig_osd_weight:
             fudge = .001
 
         if best_pe.score < pe.score + fudge:
