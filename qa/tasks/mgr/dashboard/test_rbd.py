@@ -144,13 +144,14 @@ class RbdTest(DashboardTestCase):
         img = cls._get('/api/block/image/{}/{}'.format(pool, name))
 
         cls._task_post("/api/block/image/{}/{}/move_trash".format(pool, name),
-                        {'delay': delay})
+                       {'delay': delay})
 
         return img['id']
 
     @classmethod
     def remove_trash(cls, pool, image_id, image_name, force=False):
-        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format('rbd', image_id, image_name, force))
+        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format(
+            'rbd', image_id, image_name, force))
 
     @classmethod
     def get_trash(cls, pool, image_id):
@@ -687,9 +688,8 @@ class RbdTest(DashboardTestCase):
 
     def test_default_features(self):
         default_features = self._get('/api/block/image/default_features')
-        self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
-                                             'fast-diff', 'layering',
-                                             'object-map'])
+        self.assertEqual(default_features, [
+            'deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
 
     def test_image_with_special_name(self):
         rbd_name = 'test/rbd'
@@ -737,7 +737,8 @@ class RbdTest(DashboardTestCase):
     def test_restore_trash(self):
         id = self.create_image_in_trash('rbd', 'test_rbd')
 
-        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id), {'new_image_name': 'test_rbd'})
+        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id),
+                        {'new_image_name': 'test_rbd'})
 
         self._get('/api/block/image/rbd/test_rbd')
         self.assertStatus(200)
