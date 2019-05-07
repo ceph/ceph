@@ -503,9 +503,9 @@ class IscsiClientMock(object):
                 "rbd": 0,
                 "user:rbd": 4,
             },
-            "supported_rbd_features": {
-                "rbd": 135,
-                "user:rbd": 61,
+            "unsupported_rbd_features": {
+                "rbd": 88,
+                "user:rbd": 0,
             },
             "disk_default_controls": {
                 "user:rbd": {
