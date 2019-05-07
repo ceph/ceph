@@ -2679,19 +2679,13 @@ struct PGLogTrimTest :
 {
   CephContext *cct = g_ceph_context;
 
-  void SetUp(unsigned min_entries, unsigned max_entries, unsigned dup_track) {
+  void SetUp(unsigned dup_track) {
     constexpr size_t size = 10;
 
-    char min_entries_s[size];
-    char max_entries_s[size];
     char dup_track_s[size];
 
-    snprintf(min_entries_s, size, "%u", min_entries);
-    snprintf(max_entries_s, size, "%u", max_entries);
     snprintf(dup_track_s, size, "%u", dup_track);
 
-    cct->_conf->set_val_or_die("osd_min_pg_log_entries", min_entries_s);
-    cct->_conf->set_val_or_die("osd_max_pg_log_entries", max_entries_s);
     cct->_conf->set_val_or_die("osd_pg_log_dups_tracked", dup_track_s);
   }
 }; // struct PGLogTrimTest
@@ -2699,17 +2693,15 @@ struct PGLogTrimTest :
 
 TEST_F(PGLogTrimTest, TestMakingCephContext)
 {
-  SetUp(1, 2, 5);
+  SetUp(5);
 
-  EXPECT_EQ(1u, cct->_conf->osd_min_pg_log_entries);
-  EXPECT_EQ(2u, cct->_conf->osd_max_pg_log_entries);
   EXPECT_EQ(5u, cct->_conf->osd_pg_log_dups_tracked);
 }
 
 
 TEST_F(PGLogTrimTest, TestPartialTrim)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(24, 0);
   log.skip_can_rollback_to_to_head();
@@ -2734,7 +2726,7 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
   EXPECT_EQ(2u, log.dups.size());
   EXPECT_EQ(0u, trimmed_dups.size());
 
-  SetUp(1, 2, 15);
+  SetUp(15);
 
   std::set<eversion_t> trimmed2;
   std::set<std::string> trimmed_dups2;
@@ -2751,7 +2743,7 @@ TEST_F(PGLogTrimTest, TestPartialTrim)
 
 
 TEST_F(PGLogTrimTest, TestTrimNoTrimmed) {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
@@ -2776,7 +2768,7 @@ TEST_F(PGLogTrimTest, TestTrimNoTrimmed) {
 
 TEST_F(PGLogTrimTest, TestTrimNoDups)
 {
-  SetUp(1, 2, 10);
+  SetUp(10);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
@@ -2804,7 +2796,7 @@ TEST_F(PGLogTrimTest, TestTrimNoDups)
 
 TEST_F(PGLogTrimTest, TestNoTrim)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(24, 0);
   log.skip_can_rollback_to_to_head();
@@ -2832,7 +2824,7 @@ TEST_F(PGLogTrimTest, TestNoTrim)
 
 TEST_F(PGLogTrimTest, TestTrimAll)
 {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   EXPECT_EQ(0u, log.dup_index.size()); // Sanity check
   log.head = mk_evt(24, 0);
@@ -2862,7 +2854,7 @@ TEST_F(PGLogTrimTest, TestTrimAll)
 
 
 TEST_F(PGLogTrimTest, TestGetRequest) {
-  SetUp(1, 2, 20);
+  SetUp(20);
   PGLog::IndexedLog log;
   log.head = mk_evt(20, 0);
   log.skip_can_rollback_to_to_head();
