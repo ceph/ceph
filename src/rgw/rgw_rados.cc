@@ -5144,6 +5144,28 @@ int RGWRados::set_bucket_tags(rgw_bucket& bucket, bufferlist tags_bl)
   return 0;
 }
 
+int RGWRados::delete_bucket_tags(rgw_bucket& bucket)
+{
+  RGWBucketInfo info;
+  map<string, bufferlist> attrs;
+  auto obj_ctx = svc.sysobj->init_obj_ctx();
+  int r;
+  if (bucket.bucket_id.empty()) {
+    r = get_bucket_info(obj_ctx, bucket.tenant, bucket.name, info, NULL, &attrs);
+  } else {
+    r = get_bucket_instance_info(obj_ctx, bucket, info, nullptr, &attrs);
+  }
+
+  attrs.erase(RGW_ATTR_TAGS);
+
+  r = put_bucket_instance_info(info, false, real_time(), &attrs);
+  if (r < 0) {
+    ldout(cct, 0) << "NOTICE: delete_bucket_tags on bucket=" << bucket.name << " returned err=" << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RGWRados::Object::complete_atomic_modification()
 {
   if (!state->has_manifest || state->keep_tail)
