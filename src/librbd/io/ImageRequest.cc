@@ -97,10 +97,9 @@ void readahead(I *ictx, const Extents& image_extents) {
                                                object_extent.offset,
                                                object_extent.length);
         auto req = io::ObjectDispatchSpec::create_read(
-          ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-          object_extent.objectno, object_extent.offset, object_extent.length,
-          snap_id, 0, {}, &req_comp->read_data, &req_comp->extent_map,
-          req_comp);
+          ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+          object_extent.offset, object_extent.length, snap_id, 0, {},
+          &req_comp->read_data, &req_comp->extent_map, req_comp);
         req->send();
       }
     }
@@ -390,9 +389,9 @@ void ImageReadRequest<I>::send_request() {
         aio_comp, extent.offset, extent.length,
         std::move(extent.buffer_extents));
       auto req = ObjectDispatchSpec::create_read(
-        &image_ctx, OBJECT_DISPATCH_LAYER_NONE, extent.oid.name,
-        extent.objectno, extent.offset, extent.length, snap_id, m_op_flags,
-        this->m_trace, &req_comp->bl, &req_comp->extent_map, req_comp);
+        &image_ctx, OBJECT_DISPATCH_LAYER_NONE, extent.objectno, extent.offset,
+        extent.length, snap_id, m_op_flags, this->m_trace, &req_comp->bl,
+        &req_comp->extent_map, req_comp);
       req->send();
     }
   }
@@ -549,9 +548,9 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
   bufferlist bl;
   assemble_extent(object_extent, &bl);
   auto req = ObjectDispatchSpec::create_write(
-    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-    object_extent.objectno, object_extent.offset, std::move(bl), snapc,
-    m_op_flags, journal_tid, this->m_trace, on_finish);
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+    object_extent.offset, std::move(bl), snapc, m_op_flags, journal_tid,
+    this->m_trace, on_finish);
   return req;
 }
 
@@ -602,8 +601,8 @@ ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     uint64_t journal_tid, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
   auto req = ObjectDispatchSpec::create_discard(
-    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-    object_extent.objectno, object_extent.offset, object_extent.length, snapc,
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+    object_extent.offset, object_extent.length, snapc,
     OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid, this->m_trace,
     on_finish);
   return req;
@@ -769,16 +768,16 @@ ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
     Extents buffer_extents{object_extent.buffer_extents};
 
     req = ObjectDispatchSpec::create_write_same(
-      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-      object_extent.objectno, object_extent.offset, object_extent.length,
-      std::move(buffer_extents), std::move(bl), snapc, m_op_flags, journal_tid,
+      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+      object_extent.offset, object_extent.length, std::move(buffer_extents),
+      std::move(bl), snapc, m_op_flags, journal_tid,
       this->m_trace, on_finish);
     return req;
   }
   req = ObjectDispatchSpec::create_write(
-    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-    object_extent.objectno, object_extent.offset, std::move(bl), snapc,
-    m_op_flags, journal_tid, this->m_trace, on_finish);
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+    object_extent.offset, std::move(bl), snapc, m_op_flags, journal_tid,
+    this->m_trace, on_finish);
   return req;
 }
 
@@ -843,10 +842,9 @@ ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
   bufferlist bl;
   assemble_extent(object_extent, &bl);
   auto req = ObjectDispatchSpec::create_compare_and_write(
-    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
-    object_extent.objectno, object_extent.offset, std::move(m_cmp_bl),
-    std::move(bl), snapc, m_mismatch_offset, m_op_flags, journal_tid,
-    this->m_trace, on_finish);
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.objectno,
+    object_extent.offset, std::move(m_cmp_bl), std::move(bl), snapc,
+    m_mismatch_offset, m_op_flags, journal_tid, this->m_trace, on_finish);
   return req;
 }
 

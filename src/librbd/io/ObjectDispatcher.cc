@@ -107,7 +107,7 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 
   bool operator()(ObjectDispatchSpec::ReadRequest& read) const {
     return object_dispatch->read(
-      read.oid, read.object_no, read.object_off, read.object_len, read.snap_id,
+      read.object_no, read.object_off, read.object_len, read.snap_id,
       object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
       read.read_data, read.extent_map,
       &object_dispatch_spec->object_dispatch_flags,
@@ -118,8 +118,8 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 
   bool operator()(ObjectDispatchSpec::DiscardRequest& discard) const {
     return object_dispatch->discard(
-      discard.oid, discard.object_no, discard.object_off, discard.object_len,
-      discard.snapc, discard.discard_flags, object_dispatch_spec->parent_trace,
+      discard.object_no, discard.object_off, discard.object_len, discard.snapc,
+      discard.discard_flags, object_dispatch_spec->parent_trace,
       &object_dispatch_spec->object_dispatch_flags, &discard.journal_tid,
       &object_dispatch_spec->dispatch_result,
       &object_dispatch_spec->dispatcher_ctx.on_finish,
@@ -128,9 +128,8 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 
   bool operator()(ObjectDispatchSpec::WriteRequest& write) const {
     return object_dispatch->write(
-      write.oid, write.object_no, write.object_off, std::move(write.data),
-      write.snapc, object_dispatch_spec->op_flags,
-      object_dispatch_spec->parent_trace,
+      write.object_no, write.object_off, std::move(write.data), write.snapc,
+      object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
       &object_dispatch_spec->object_dispatch_flags, &write.journal_tid,
       &object_dispatch_spec->dispatch_result,
       &object_dispatch_spec->dispatcher_ctx.on_finish,
@@ -139,10 +138,10 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
 
   bool operator()(ObjectDispatchSpec::WriteSameRequest& write_same) const {
     return object_dispatch->write_same(
-      write_same.oid, write_same.object_no, write_same.object_off,
-      write_same.object_len, std::move(write_same.buffer_extents),
-      std::move(write_same.data), write_same.snapc,
-      object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
+      write_same.object_no, write_same.object_off, write_same.object_len,
+      std::move(write_same.buffer_extents), std::move(write_same.data),
+      write_same.snapc, object_dispatch_spec->op_flags,
+      object_dispatch_spec->parent_trace,
       &object_dispatch_spec->object_dispatch_flags, &write_same.journal_tid,
       &object_dispatch_spec->dispatch_result,
       &object_dispatch_spec->dispatcher_ctx.on_finish,
@@ -152,11 +151,10 @@ struct ObjectDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
   bool operator()(
       ObjectDispatchSpec::CompareAndWriteRequest& compare_and_write) const {
     return object_dispatch->compare_and_write(
-      compare_and_write.oid, compare_and_write.object_no,
-      compare_and_write.object_off, std::move(compare_and_write.cmp_data),
-      std::move(compare_and_write.data), compare_and_write.snapc,
-      object_dispatch_spec->op_flags, object_dispatch_spec->parent_trace,
-      compare_and_write.mismatch_offset,
+      compare_and_write.object_no, compare_and_write.object_off,
+      std::move(compare_and_write.cmp_data), std::move(compare_and_write.data),
+      compare_and_write.snapc, object_dispatch_spec->op_flags,
+      object_dispatch_spec->parent_trace, compare_and_write.mismatch_offset,
       &object_dispatch_spec->object_dispatch_flags,
       &compare_and_write.journal_tid,
       &object_dispatch_spec->dispatch_result,

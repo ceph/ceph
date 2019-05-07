@@ -34,28 +34,24 @@ template <typename ImageCtxT = ImageCtx>
 class ObjectRequest {
 public:
   static ObjectRequest* create_write(
-      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
-      uint64_t object_off, ceph::bufferlist&& data, const ::SnapContext &snapc,
-      int op_flags, const ZTracer::Trace &parent_trace, Context *completion);
-  static ObjectRequest* create_discard(
-      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
-      uint64_t object_off, uint64_t object_len, const ::SnapContext &snapc,
-      int discard_flags, const ZTracer::Trace &parent_trace,
-      Context *completion);
-  static ObjectRequest* create_write_same(
-      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
-      uint64_t object_off, uint64_t object_len, ceph::bufferlist&& data,
-      const ::SnapContext &snapc, int op_flags,
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, Context *completion);
+  static ObjectRequest* create_discard(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+      const ZTracer::Trace &parent_trace, Context *completion);
+  static ObjectRequest* create_write_same(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      uint64_t object_len, ceph::bufferlist&& data, const ::SnapContext &snapc,
+      int op_flags, const ZTracer::Trace &parent_trace, Context *completion);
   static ObjectRequest* create_compare_and_write(
-      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
-      uint64_t object_off, ceph::bufferlist&& cmp_data,
-      ceph::bufferlist&& write_data, const ::SnapContext &snapc,
-      uint64_t *mismatch_offset, int op_flags,
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
+      const ::SnapContext &snapc, uint64_t *mismatch_offset, int op_flags,
       const ZTracer::Trace &parent_trace, Context *completion);
 
-  ObjectRequest(ImageCtxT *ictx, const std::string &oid,
-                uint64_t objectno, uint64_t off, uint64_t len,
+  ObjectRequest(ImageCtxT *ictx, uint64_t objectno, uint64_t off, uint64_t len,
                 librados::snap_t snap_id, const char *trace_name,
                 const ZTracer::Trace &parent_trace, Context *completion);
   virtual ~ObjectRequest() {
@@ -77,7 +73,6 @@ protected:
   bool compute_parent_extents(Extents *parent_extents, bool read_request);
 
   ImageCtxT *m_ictx;
-  std::string m_oid;
   uint64_t m_object_no, m_object_off, m_object_len;
   librados::snap_t m_snap_id;
   Context *m_completion;
@@ -95,24 +90,21 @@ class ObjectReadRequest : public ObjectRequest<ImageCtxT> {
 public:
   typedef std::map<uint64_t, uint64_t> ExtentMap;
 
-  static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
-                                   uint64_t objectno, uint64_t offset,
-                                   uint64_t len, librados::snap_t snap_id,
-                                   int op_flags,
-                                   const ZTracer::Trace &parent_trace,
-                                   ceph::bufferlist* read_data,
-                                   ExtentMap* extent_map, Context *completion) {
-    return new ObjectReadRequest(ictx, oid, objectno, offset, len,
+  static ObjectReadRequest* create(
+      ImageCtxT *ictx, uint64_t objectno, uint64_t offset, uint64_t len,
+      librados::snap_t snap_id, int op_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      ExtentMap* extent_map, Context *completion) {
+    return new ObjectReadRequest(ictx, objectno, offset, len,
                                  snap_id, op_flags, parent_trace, read_data,
                                  extent_map, completion);
   }
 
-  ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
-                    uint64_t objectno, uint64_t offset, uint64_t len,
-                    librados::snap_t snap_id, int op_flags,
-                    const ZTracer::Trace &parent_trace,
-                    ceph::bufferlist* read_data, ExtentMap* extent_map,
-                    Context *completion);
+  ObjectReadRequest(
+      ImageCtxT *ictx, uint64_t objectno, uint64_t offset, uint64_t len,
+      librados::snap_t snap_id, int op_flags,
+      const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
+      ExtentMap* extent_map, Context *completion);
 
   void send() override;
 
@@ -159,12 +151,10 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class AbstractObjectWriteRequest : public ObjectRequest<ImageCtxT> {
 public:
-  AbstractObjectWriteRequest(ImageCtxT *ictx, const std::string &oid,
-                             uint64_t object_no, uint64_t object_off,
-                             uint64_t len, const ::SnapContext &snapc,
-			     const char *trace_name,
-			     const ZTracer::Trace &parent_trace,
-                             Context *completion);
+  AbstractObjectWriteRequest(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off, uint64_t len,
+      const ::SnapContext &snapc, const char *trace_name,
+      const ZTracer::Trace &parent_trace, Context *completion);
 
   virtual bool is_empty_write_op() const {
     return false;
@@ -264,12 +254,11 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectWriteRequest(ImageCtxT *ictx, const std::string &oid,
-                     uint64_t object_no, uint64_t object_off,
-                     ceph::bufferlist&& data, const ::SnapContext &snapc,
-                     int op_flags, const ZTracer::Trace &parent_trace,
-                     Context *completion)
-    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+  ObjectWriteRequest(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      const ZTracer::Trace &parent_trace, Context *completion)
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             data.length(), snapc, "write",
                                             parent_trace, completion),
       m_write_data(std::move(data)), m_op_flags(op_flags) {
@@ -294,12 +283,11 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectDiscardRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectDiscardRequest(ImageCtxT *ictx, const std::string &oid,
-                       uint64_t object_no, uint64_t object_off,
-                       uint64_t object_len, const ::SnapContext &snapc,
-                       int discard_flags, const ZTracer::Trace &parent_trace,
-                       Context *completion)
-    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+  ObjectDiscardRequest(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+      const ZTracer::Trace &parent_trace, Context *completion)
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             object_len, snapc, "discard",
                                             parent_trace, completion),
       m_discard_flags(discard_flags) {
@@ -397,13 +385,11 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectWriteSameRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectWriteSameRequest(ImageCtxT *ictx, const std::string &oid,
-			 uint64_t object_no, uint64_t object_off,
-			 uint64_t object_len, ceph::bufferlist&& data,
-                         const ::SnapContext &snapc, int op_flags,
-			 const ZTracer::Trace &parent_trace,
-			 Context *completion)
-    : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+  ObjectWriteSameRequest(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      uint64_t object_len, ceph::bufferlist&& data, const ::SnapContext &snapc,
+      int op_flags, const ZTracer::Trace &parent_trace, Context *completion)
+    : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                             object_len, snapc, "writesame",
                                             parent_trace, completion),
       m_write_data(std::move(data)), m_op_flags(op_flags) {
@@ -424,15 +410,12 @@ private:
 template <typename ImageCtxT = ImageCtx>
 class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
-  ObjectCompareAndWriteRequest(ImageCtxT *ictx, const std::string &oid,
-                               uint64_t object_no, uint64_t object_off,
-                               ceph::bufferlist&& cmp_bl,
-                               ceph::bufferlist&& write_bl,
-                               const ::SnapContext &snapc,
-                               uint64_t *mismatch_offset, int op_flags,
-                               const ZTracer::Trace &parent_trace,
-                               Context *completion)
-   : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
+  ObjectCompareAndWriteRequest(
+      ImageCtxT *ictx, uint64_t object_no, uint64_t object_off,
+      ceph::bufferlist&& cmp_bl, ceph::bufferlist&& write_bl,
+      const ::SnapContext &snapc, uint64_t *mismatch_offset, int op_flags,
+      const ZTracer::Trace &parent_trace, Context *completion)
+   : AbstractObjectWriteRequest<ImageCtxT>(ictx, object_no, object_off,
                                            cmp_bl.length(), snapc,
                                            "compare_and_write", parent_trace,
                                            completion),
