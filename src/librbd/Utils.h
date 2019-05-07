@@ -6,11 +6,13 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rbd_types.h"
+#include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "common/zipkin_trace.h"
 
 #include <atomic>
 #include <type_traits>
+#include <stdio.h>
 
 namespace librbd {
 
@@ -106,6 +108,19 @@ const std::string id_obj_name(const std::string &name);
 const std::string header_name(const std::string &image_id);
 const std::string old_header_name(const std::string &image_name);
 std::string unique_lock_name(const std::string &name, void *address);
+
+template <typename I>
+std::string data_object_name(I* image_ctx, uint64_t object_no) {
+  char buf[RBD_MAX_OBJ_NAME_SIZE];
+  size_t length = snprintf(buf, RBD_MAX_OBJ_NAME_SIZE,
+                           image_ctx->format_string, object_no);
+  ceph_assert(length < RBD_MAX_OBJ_NAME_SIZE);
+
+  std::string oid;
+  oid.reserve(RBD_MAX_OBJ_NAME_SIZE);
+  oid.append(buf, length);
+  return oid;
+}
 
 librados::AioCompletion *create_rados_callback(Context *on_finish);
 
