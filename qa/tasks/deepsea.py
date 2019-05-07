@@ -937,10 +937,10 @@ class Orch(DeepSea):
 
     def __check_ceph_test_rpm_version(self):
         """Checks rpm version for ceph and ceph-test; logs warning if differs"""
-        ceph_test_ver = get_rpm_pkg_version(self.master_remote, "ceph-test")
-        ceph_ver = get_rpm_pkg_version(self.master_remote, "ceph")
+        ceph_test_ver = get_rpm_pkg_version(self.master_remote, "ceph-test", self.log)
+        ceph_ver = get_rpm_pkg_version(self.master_remote, "ceph", self.log)
         if ceph_test_ver != ceph_ver:
-            log.warning(
+            self.log.warning(
                 "ceph-test rpm version: {} differs from ceph version: {}"
                 .format(ceph_test_ver, ceph_ver))
 
@@ -1274,18 +1274,12 @@ class Policy(DeepSea):
             ConfigError(self.err_prefix + "unknown drive group ->{}<-"
                         .format(self.drive_group))
 
-    def __roll_out_drive_group(self, fpath="/home/ubuntu/drive_group"):
-        # FIXME: this is entirely untested and probably doesn't work
+    def __roll_out_drive_group(self, fpath="/srv/salt/ceph/configuration/files/drive_groups.yml"):
         misc.sudo_write_file(
             self.master_remote,
             fpath,
             yaml.dump(self.drive_group),
             perms="0644",
-            )
-        self.scripts.run(
-            self.master_remote,
-            'drive_group.sh',
-            args=[proposals_dir, fpath]
             )
 
     def _build_base(self):

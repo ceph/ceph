@@ -259,7 +259,8 @@ def sudo_append_to_file(remote, path, data):
         stdin=data,
     )
 
-def get_rpm_pkg_version(remote, pkg):
+
+def get_rpm_pkg_version(remote, pkg, logger):
     """Gather RPM package version"""
     version = None
     try:

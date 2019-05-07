@@ -188,8 +188,8 @@ class Salt(Task):
             rem.run(args=[
                 'sudo',
                 'sed', '--in-place', '--regexp-extended',
-                '-e', 's/^\s*#\s*log_level:.*$/log_level: debug/g',
-                '-e', '/^\s*#.*$/d', '-e', '/^\s*$/d',
+                '-e', 's/^\s*#\s*log_level:.*$/log_level: debug/g',  # noqa: W605
+                '-e', '/^\s*#.*$/d', '-e', '/^\s*$/d',               # noqa: W605
                 '/etc/salt/master',
                 '/etc/salt/minion',
             ])
