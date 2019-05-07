@@ -484,7 +484,12 @@ wconf() {
 }
 
 get_pci_selector() {
-    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1
+    which_pci=$1
+    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1 | sed -n $which_pci'p'
+}
+
+get_pci_selector_num() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f 1 | wc -l
 }
 
 prepare_conf() {
@@ -575,8 +580,12 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_pci_selector)" == "" ]; then
-                    echo "Not find the specified NVME device, please check."
+                if [ "$(get_pci_selector_num)" -eq 0 ]; then
+                    echo "Not find the specified NVME device, please check." >&2
+                    exit
+                fi
+                if [ $(get_pci_selector_num) -lt $CEPH_NUM_OSD ]; then
+                    echo "OSD number ($CEPH_NUM_OSD) is greater than NVME SSD number ($(get_pci_selector_num)), please check." >&2
                     exit
                 fi
                 BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
@@ -585,8 +594,7 @@ EOF
         bluestore_block_wal_path = \"\"
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
-        bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_pci_selector)"
+        bluestore_spdk_mem = 2048"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 1073741824
@@ -754,10 +762,15 @@ start_osd() {
     for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
 	if [ "$new" -eq 1 ]; then
-		    wconf <<EOF
+            wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
 EOF
+            if [ "$spdk_enabled" -eq 1 ]; then
+                wconf <<EOF
+        bluestore_block_path = spdk:$(get_pci_selector $((osd+1)))
+EOF
+            fi
 
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
