@@ -2610,6 +2610,7 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtx *rctx)
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
+    send_notify = false;
   }
 }
 
