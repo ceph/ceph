@@ -1,6 +1,7 @@
 import logging
 import signal
 import time
+import random
 
 from gevent import sleep
 from gevent.greenlet import Greenlet
@@ -21,13 +22,13 @@ class DaemonWatchdog(Greenlet):
         is allowed to be failed before the watchdog will bark.
     """
 
-    def __init__(self, ctx, manager, config, thrashers):
+    def __init__(self, ctx, config, thrashers):
         Greenlet.__init__(self)
         self.ctx = ctx
         self.config = config
         self.e = None
         self.logger = log.getChild('daemon_watchdog')
-        self.manager = manager
+        self.cluster = config.get('cluster', 'ceph')
         self.name = 'watchdog'
         self.stopping = Event()
         self.thrashers = thrashers
@@ -56,8 +57,12 @@ class DaemonWatchdog(Greenlet):
             except:
                 self.logger.exception("ignoring exception:")
         daemons = []
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.manager.cluster)))
-        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.manager.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)))
+        daemons.extend(filter(lambda daemon: daemon.running() and not daemon.proc.finished, self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)))
+
         for daemon in daemons:
             try:
                 daemon.signal(signal.SIGTERM)
@@ -72,17 +77,19 @@ class DaemonWatchdog(Greenlet):
             bark = False
             now = time.time()
 
-            mons = self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.manager.cluster)
-            mdss = self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.manager.cluster)
-
-            #for daemon in mons:
-            #    self.log("mon daemon {role}.{id}: running={r}".format(role=daemon.role, id=daemon.id_, r=daemon.running() and not daemon.proc.finished))
-            #for daemon in mdss:
-            #    self.log("mds daemon {role}.{id}: running={r}".format(role=daemon.role, id=daemon.id_, r=daemon.running() and not daemon.proc.finished))
+            osds = self.ctx.daemons.iter_daemons_of_role('osd', cluster=self.cluster)
+            mons = self.ctx.daemons.iter_daemons_of_role('mon', cluster=self.cluster)
+            mdss = self.ctx.daemons.iter_daemons_of_role('mds', cluster=self.cluster)
+            rgws = self.ctx.daemons.iter_daemons_of_role('rgw', cluster=self.cluster)
+            mgrs = self.ctx.daemons.iter_daemons_of_role('mgr', cluster=self.cluster)
 
             daemon_failures = []
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, osds))
             daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mons))
             daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mdss))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, rgws))
+            daemon_failures.extend(filter(lambda daemon: daemon.running() and daemon.proc.finished, mgrs))
+
             for daemon in daemon_failures:
                 name = daemon.role + '.' + daemon.id_
                 dt = daemon_failure_time.setdefault(name, (daemon, now))
