@@ -1167,6 +1167,36 @@ void RGWGetBucketTags::execute()
   send_response_data(tags_bl);
 }
 
+int RGWPutBucketTags::verify_permission() {
+  // TODO(LC)
+  return 0;
+}
+
+void RGWPutBucketTags::execute() {
+
+  op_ret = get_params();
+  if (op_ret < 0) 
+    return;
+
+  op_ret = store->set_bucket_tags(s->bucket, tags_bl);
+}
+
+void RGWDeleteBucketTags::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWDeleteBucketTags::verify_permission()
+{
+  //TODO(LC)
+  return 0;
+}
+
+void RGWDeleteBucketTags::execute()
+{
+  op_ret = store->delete_bucket_tags(s->bucket);
+}
+
 int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;

@@ -2004,6 +2004,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   int set_bucket_tags(rgw_bucket& bucket, bufferlist tags_bl);
+  int delete_bucket_tags(rgw_bucket& bucket);
 
   /** Delete an object.*/
   int delete_obj(RGWObjectCtx& obj_ctx,
