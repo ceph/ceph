@@ -29,7 +29,9 @@ source ${MGR_ANSIBLE_VIRTUALENV}/bin/activate
 if [ "$WITH_PYTHON2" = "ON" ]; then
   ENV_LIST+="py27,"
 fi
-if [ "$WITH_PYTHON3" = "3" ]; then
+# WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
+# prevailing on the system - e.g. "3", "36"
+if [[ "$WITH_PYTHON3" =~ (^3|^ON) ]]; then
   ENV_LIST+="py3,"
 fi
 # use bash string manipulation to strip off any trailing comma

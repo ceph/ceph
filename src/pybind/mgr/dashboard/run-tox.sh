@@ -33,7 +33,9 @@ if [ "$WITH_PYTHON2" = "ON" ]; then
     ENV_LIST+="py27-cov,py27-lint,"
   fi
 fi
-if [ "$WITH_PYTHON3" = "3" ]; then
+# WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
+# prevailing on the system - e.g. "3", "36"
+if [[ "$WITH_PYTHON3" =~ (^3|^ON) ]]; then
   if [[ -n "$@" ]]; then
     ENV_LIST+="py3-run,"
   else
