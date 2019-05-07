@@ -37,9 +37,9 @@ describe('IscsiTargetFormComponent', () => {
       'backstore:1': 0,
       'backstore:2': 0
     },
-    supported_rbd_features: {
-      'backstore:1': 61,
-      'backstore:2': 61
+    unsupported_rbd_features: {
+      'backstore:1': 0,
+      'backstore:2': 0
     },
     backstores: ['backstore:1', 'backstore:2'],
     default_backstore: 'backstore:1'
