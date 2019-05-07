@@ -28,7 +28,8 @@ public:
 
   int assert_exists(const std::string &oid) override;
 
-  int create(const std::string& oid, bool exclusive) override;
+  int create(const std::string& oid, bool exclusive,
+             const SnapContext &snapc) override;
   int list_snaps(const std::string& o, snap_set_t *out_snaps) override;
   int omap_get_vals(const std::string& oid,
                     const std::string& start_after,

@@ -278,7 +278,7 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   uint64_t size = 0;
   int r = stat(oid, &size, NULL);
   if (r == -ENOENT) {
-    r = create(oid, false);
+    r = create(oid, false, m_snapc);
   }
   if (r < 0) {
     return r;

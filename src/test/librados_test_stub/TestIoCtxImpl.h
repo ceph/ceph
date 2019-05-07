@@ -99,7 +99,8 @@ public:
                      const SnapContext &snapc) = 0;
   virtual int assert_exists(const std::string &oid) = 0;
 
-  virtual int create(const std::string& oid, bool exclusive) = 0;
+  virtual int create(const std::string& oid, bool exclusive,
+                     const SnapContext &snapc) = 0;
   virtual int exec(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
