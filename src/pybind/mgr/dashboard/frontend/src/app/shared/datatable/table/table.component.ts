@@ -495,18 +495,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       .replace('+', ' ')
       .split(':');
     const columnsClone = [...columns];
-    const dataClone = [...data];
-    const filterColumns = (columnName: string) =>
-      columnsClone.filter((c) => c.name.toLowerCase().indexOf(columnName) !== -1);
     if (searchTerms.length === 2) {
-      columns = filterColumns(searchTerms[0]);
+      columns = columnsClone.filter((c) => c.name.toLowerCase().indexOf(searchTerms[0]) !== -1);
     }
-    const searchTerm: string = _.last(searchTerms);
-    data = this.basicDataSearch(searchTerm, data, columns);
+    data = this.basicDataSearch(_.last(searchTerms), data, columns);
     // Checks if user searches for column but he is still typing
-    if (data.length === 0 && searchTerms.length === 1 && filterColumns(searchTerm).length > 0) {
-      data = dataClone;
-    }
     return this.subSearch(data, currentSearch, columnsClone);
   }
 
