@@ -30,9 +30,36 @@ It's important that we always grab the local reservation before the remote
 reservation in order to prevent a circular dependency.
 
 We want to minimize the risk of data loss by prioritizing the order in
-which PGs are recovered. The highest priority is log based recovery
-(OSD_RECOVERY_PRIORITY_MAX) since this must always complete before
-backfill can start.  The next priority is backfill of degraded PGs and
-is a function of the degradation. A backfill for a PG missing two
-replicas will have a priority higher than a backfill for a PG missing
-one replica.  The lowest priority is backfill of non-degraded PGs.
+which PGs are recovered.  A user can override the default order by using
+force-recovery or force-backfill. A force-recovery at priority 255 will start
+before a force-backfill at priority 254.
+
+If a recovery is needed because a PG is below min_size a base priority of 220
+is used. The number of OSDs below min_size of the pool is added, as well as a
+value relative to the pool's recovery_priority.  The total priority is limited
+to 253. Under ordinary circumstances a recovery is prioritized at 180 plus a
+value relative to the pool's recovery_priority.  The total priority is limited
+to 219.
+
+If a backfill is needed because the number of acting OSDs is less that min_size,
+a priority of 220 is used.  The number of OSDs below min_size of the pool is
+added as well as a value relative to the pool's recovery_priority.  The total
+priority is limited to 253.  If a backfill is needed because a PG is undersized,
+a priority of 140 is used.  The number of OSDs below the size of the pool is
+added as well as a value relative to the pool's recovery_priority.  The total
+priority is limited to 179.  If a backfill is needed because a PG is degraded,
+a priority of 140 is used.  A value relative to the pool's recovery_priority is
+added.  The total priority is limited to 179.  Under ordinary circumstances a
+backfill is priority of 100 is used.  A value relative to the pool's
+recovery_priority is added.  The total priority is limited to 139.
+
+
+Description             Base priority   Maximum priority
+-----------             -------------   ----------------
+Backfill                100             139
+Degraded Backfill       140             179
+Recovery                180             219
+Inactive Recovery       220             253
+Inactive Backfill       220             253
+force-backfill          254
+force-recovery          255
