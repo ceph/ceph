@@ -87,6 +87,13 @@ describe('TableComponent', () => {
       expect(component.userConfig.limit).toBe(1);
     });
 
+    it('should prevent propagation of mouseenter event', (done) => {
+      fixture.detectChanges();
+      const mouseEvent = new MouseEvent('mouseenter');
+      mouseEvent.stopPropagation = () => done();
+      fixture.debugElement.nativeElement.dispatchEvent(mouseEvent);
+    });
+
     it('should force an identifier', () => {
       clearLocalStorage();
       component.identifier = 'x';
