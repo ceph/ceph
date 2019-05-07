@@ -394,13 +394,13 @@ void RGWOp_BILog_List::execute() {
   if (!bucket_instance.empty()) {
     http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
     http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
     }
   }
@@ -420,7 +420,7 @@ void RGWOp_BILog_List::execute() {
                                           marker, max_entries - count, 
                                           entries, &truncated);
     if (ret < 0) {
-      dout(5) << "ERROR: list_bi_log_entries()" << dendl;
+      ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
     }
 
@@ -471,7 +471,7 @@ void RGWOp_BILog_Info::execute() {
   RGWBucketInfo bucket_info;
 
   if (bucket_name.empty() && bucket_instance.empty()) {
-    dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
+    ldpp_dout(s, 5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -485,13 +485,13 @@ void RGWOp_BILog_Info::execute() {
   if (!bucket_instance.empty()) {
     http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
     http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
     }
   }
@@ -533,7 +533,7 @@ void RGWOp_BILog_Delete::execute() {
   http_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
       end_marker.empty()) {
-    dout(5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
+    ldpp_dout(s, 5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -547,19 +547,19 @@ void RGWOp_BILog_Delete::execute() {
   if (!bucket_instance.empty()) {
     http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
     http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, s->yield, NULL);
     if (http_ret < 0) {
-      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      ldpp_dout(s, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
     }
   }
   http_ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
   if (http_ret < 0) {
-    dout(5) << "ERROR: trim_bi_log_entries() " << dendl;
+    ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
   return;
 }
@@ -894,7 +894,7 @@ void RGWOp_BILog_Status::execute()
   const auto source_zone = s->info.args.get("source-zone");
   const auto key = s->info.args.get("bucket");
   if (key.empty()) {
-    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -903,7 +903,7 @@ void RGWOp_BILog_Status::execute()
   int shard_id{-1}; // unused
   http_ret = rgw_bucket_parse_bucket_key(s->cct, key, &bucket, &shard_id);
   if (http_ret < 0) {
-    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    ldpp_dout(s, 4) << "no 'bucket' provided" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -913,7 +913,7 @@ void RGWOp_BILog_Status::execute()
   RGWBucketInfo info;
   http_ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr, s->yield);
   if (http_ret < 0) {
-    ldout(s->cct, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+    ldpp_dout(s, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
     return;
   }
   http_ret = rgw_bucket_sync_status(this, store, source_zone, info, &status);
