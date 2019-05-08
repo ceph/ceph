@@ -964,6 +964,7 @@ void PG::remove_down_peer_info(const OSDMapRef osdmap)
       peer_missing.erase(p->first);
       peer_log_requested.erase(p->first);
       peer_missing_requested.erase(p->first);
+      peer_purged.erase(p->first); // so we can re-purge if necessary
       peer_info.erase(p++);
       removed = true;
     } else

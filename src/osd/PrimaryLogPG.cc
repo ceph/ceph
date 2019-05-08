@@ -12280,15 +12280,14 @@ bool PrimaryLogPG::start_recovery_ops(
 
   const auto &missing = pg_log.get_missing();
 
-  unsigned int num_missing = missing.num_missing();
   uint64_t num_unfound = get_num_unfound();
 
-  if (num_missing == 0) {
+  if (!missing.have_missing()) {
     info.last_complete = info.last_update;
   }
 
-  if (num_missing == num_unfound) {
-    // All of the missing objects we have are unfound.
+  if (!missing.have_missing() || // Primary does not have missing
+      all_missing_unfound()) { // or all of the missing objects are unfound.
     // Recover the replicas.
     started = recover_replicas(max, handle, &recovery_started);
   }
