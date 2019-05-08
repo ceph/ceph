@@ -3543,8 +3543,8 @@
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">397</context>
         </context-group>
-      </trans-unit><trans-unit id="54be22af9625a595ee5d70917ee1fb116be7c4be" datatype="html">
-        <source>Value should be greater than the maximum blob size</source>
+      </trans-unit><trans-unit id="8db98ab14b4e207ec763dfdefbc2dae367aab1cc" datatype="html">
+        <source>Value should be less than the maximum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">375</context>
