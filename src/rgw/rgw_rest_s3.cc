@@ -542,7 +542,13 @@ int RGWPutBucketTags_ObjStore_S3::get_params()
   obj_tags.encode(tags_bl);
   ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
 
-   return 0;
+  // forward bucket cors requests to meta master zone
+  if (!store->svc.zone->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data.append(data.c_str(), data.length());
+  }
+
+  return 0;
 }
 
 void RGWPutBucketTags_ObjStore_S3::send_response()

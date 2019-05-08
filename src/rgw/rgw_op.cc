@@ -1171,12 +1171,7 @@ void RGWGetBucketTags::execute()
 }
 
 int RGWPutBucketTags::verify_permission() {
-
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketTagging)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
 void RGWPutBucketTags::execute() {
@@ -1185,7 +1180,19 @@ void RGWPutBucketTags::execute() {
   if (op_ret < 0) 
     return;
 
-  op_ret = store->set_bucket_tags(s->bucket, tags_bl);
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+    map<string, bufferlist> attrs = s->bucket_attrs;
+    attrs[RGW_ATTR_TAGS] = tags_bl;
+    return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  });
+
 }
 
 void RGWDeleteBucketTags::pre_exec()
@@ -1195,16 +1202,31 @@ void RGWDeleteBucketTags::pre_exec()
 
 int RGWDeleteBucketTags::verify_permission()
 {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketTagging)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
 void RGWDeleteBucketTags::execute()
 {
-  op_ret = store->delete_bucket_tags(s->bucket);
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+    map<string, bufferlist> attrs = s->bucket_attrs;
+    attrs.erase(RGW_ATTR_TAGS);
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
+			 << s->bucket.name
+			 << " returned err= " << op_ret << dendl;
+    }
+    return op_ret;
+  });
 }
 
 int RGWOp::do_aws4_auth_completion()
