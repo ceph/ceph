@@ -178,7 +178,8 @@ class RGWMetadataHandler;
 
 class RGWBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc,
+                                   RGWBucketCtl *bucket_ctl);
 };
 
 class RGWBucketInstanceMetaHandlerAllocator {
@@ -584,15 +585,6 @@ class RGWBucketCtl
   RGWSI_MetaBackend_Handler *bucket_be_handler; /* bucket backend handler */
   RGWSI_MetaBackend_Handler *bi_be_handler; /* bucket instance backend handler */
   
-  int do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,
-                     const rgw_bucket& bucket,
-                     ceph::real_time creation_time,
-                     bool update_entrypoint);
-
-  int do_unlink_bucket(RGWSI_MetaBackend_Handler::Op *op,
-                       const rgw_user& user_id,
-                       const rgw_bucket& bucket,
-                       bool update_entrypoint);
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
@@ -762,6 +754,10 @@ public:
                                   RGWBucketInfo& info,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params);
 
+  int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
+                                map<string, bufferlist>& attrs,
+                                RGWObjVersionTracker *objv_tracker);
+
   /* user/bucket */
   int link_bucket(const rgw_user& user_id,
                   const rgw_bucket& bucket,
@@ -771,6 +767,26 @@ public:
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
                     bool update_entrypoint = true);
+
+private:
+  int convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
+                              const rgw_bucket& bucket);
+
+  int do_store_bucket_instance_info(RGWSI_MetaBackend_Handler::Op *op,
+                                    const rgw_bucket& bucket,
+                                    RGWBucketInfo& info,
+                                    ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
+
+  int do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,
+                     const rgw_user& user,
+                     const rgw_bucket& bucket,
+                     ceph::real_time creation_time,
+                     bool update_entrypoint);
+
+  int do_unlink_bucket(RGWSI_MetaBackend_Handler::Op *op,
+                       const rgw_user& user_id,
+                       const rgw_bucket& bucket,
+                       bool update_entrypoint);
 };
 
 
