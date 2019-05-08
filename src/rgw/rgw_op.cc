@@ -2388,7 +2388,11 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
+  if (!s->bucket_exists) {
+    return -ERR_NO_SUCH_BUCKET;
+  } else {
+    return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
+  }
 }
 
 void RGWGetBucketVersioning::pre_exec()
