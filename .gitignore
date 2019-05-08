@@ -69,3 +69,4 @@ GTAGS
 # dashboard
 /src/pybind/mgr/dashboard/frontend/src/environments/environment.ts
 /src/pybind/mgr/dashboard/frontend/src/environments/environment.prod.ts
+/src/pybind/mgr/dashboard/frontend/src/locale/messages.xlf
