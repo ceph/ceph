@@ -377,6 +377,8 @@ def run(
     label=None,
     timeout=None,
     cwd=None,
+    # omit_sudo is used by vstart_runner.py
+    omit_sudo=False
 ):
     """
     Run a command remotely.  If any of 'args' contains shell metacharacters
