@@ -719,7 +719,6 @@ int ret = get_common_params();
 if (ret < 0)
 return ret;
 s->info.args.get_bool("fetch-owner", &fetchOwner, false);
-if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
 startAfter = s->info.args.get("start-after");
 marker = s->info.args.get("ContinuationToken");
 if(marker.empty()) marker = startAfter;
@@ -989,7 +988,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
   auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
   s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
-      dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
+      if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
       s->formatter->close_section();
     }
 
@@ -1044,7 +1043,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   }
   s->formatter->dump_int("KeyCount",objs.size());
   s->formatter->dump_string("StartAfter", startAfter);
-
+  if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 
