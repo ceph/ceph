@@ -30,7 +30,7 @@ public:
   }
 
   int get_min_compatible_osd(int8_t* require_osd_release) override {
-    *require_osd_release = CEPH_RELEASE_NAUTILUS;
+    *require_osd_release = CEPH_RELEASE_OCTOPUS;
     return 0;
   }
 
