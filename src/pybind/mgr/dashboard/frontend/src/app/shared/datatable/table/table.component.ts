@@ -404,9 +404,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.data) {
       return; // Wait for data
     }
-    this.rows = [...this.data];
     if (this.search.length > 0) {
       this.updateFilter();
+    } else {
+      this.rows = [...this.data];
     }
     this.reset();
     this.updateSelected();
