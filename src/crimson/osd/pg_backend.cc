@@ -4,6 +4,8 @@
 #include <fmt/ostream.h>
 #include <seastar/core/print.hh>
 
+#include "messages/MOSDOp.h"
+
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
@@ -44,25 +46,26 @@ PGBackend::PGBackend(shard_id_t shard,
     store{store}
 {}
 
-seastar::future<PGBackend::cached_oi_t>
-PGBackend::get_object(const hobject_t& oid)
+seastar::future<PGBackend::cached_os_t>
+PGBackend::get_object_state(const hobject_t& oid)
 {
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
     logger().trace("find_object: {}@HEAD", oid);
-    return _load_oi(oid);
+    return _load_os(oid);
   } else {
     // we want a snap
     return _load_ss(oid).then([oid,this](cached_ss_t ss) {
       // head?
       if (oid.snap > ss->seq) {
-        return _load_oi(oid.get_head());
+        return _load_os(oid.get_head());
       } else {
         // which clone would it be?
         auto clone = std::upper_bound(begin(ss->clones), end(ss->clones),
                                       oid.snap);
         if (clone == end(ss->clones)) {
-          throw object_not_found{};
+          return seastar::make_exception_future<PGBackend::cached_os_t>(
+            object_not_found{});
         }
         // clone
         auto soid = oid;
@@ -72,39 +75,51 @@ PGBackend::get_object(const hobject_t& oid)
           assert(clone_snap != end(ss->clone_snaps));
           if (clone_snap->second.empty()) {
             logger().trace("find_object: {}@[] -- DNE", soid);
-            throw object_not_found{};
+            return seastar::make_exception_future<PGBackend::cached_os_t>(
+              object_not_found{});
           }
           auto first = clone_snap->second.back();
           auto last = clone_snap->second.front();
           if (first > soid.snap) {
             logger().trace("find_object: {}@[{},{}] -- DNE",
                            soid, first, last);
-            throw object_not_found{};
+            return seastar::make_exception_future<PGBackend::cached_os_t>(
+              object_not_found{});
           }
           logger().trace("find_object: {}@[{},{}] -- HIT",
                          soid, first, last);
-          return _load_oi(soid);
+          return _load_os(soid);
         });
       }
     });
   }
 }
 
-seastar::future<PGBackend::cached_oi_t>
-PGBackend::_load_oi(const hobject_t& oid)
+seastar::future<PGBackend::cached_os_t>
+PGBackend::_load_os(const hobject_t& oid)
 {
-  if (auto found = oi_cache.find(oid); found) {
-    return seastar::make_ready_future<cached_oi_t>(std::move(found));
+  if (auto found = os_cache.find(oid); found) {
+    return seastar::make_ready_future<cached_os_t>(std::move(found));
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         OI_ATTR).then([oid, this](auto bp) {
-    auto oi = std::make_unique<object_info_t>();
-    bufferlist bl;
-    bl.push_back(std::move(bp));
-    oi->decode(bl);
-    return seastar::make_ready_future<cached_oi_t>(
-      oi_cache.insert(oid, std::move(oi)));
+                         OI_ATTR).then_wrapped([oid, this](auto fut) {
+    if (fut.failed()) {
+      auto ep = std::move(fut).get_exception();
+      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+        std::rethrow_exception(ep);
+      }
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{oid}, false)));
+    } else {
+      // decode existing OI_ATTR's value
+      ceph::bufferlist bl;
+      bl.push_back(std::move(fut).get0());
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
+    }
   });
 }
 
@@ -116,13 +131,62 @@ PGBackend::_load_ss(const hobject_t& oid)
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         SS_ATTR).then([oid, this](auto bp) {
-    bufferlist bl;
-    bl.push_back(std::move(bp));
-    auto snapset = std::make_unique<SnapSet>(bl);
+                         SS_ATTR).then_wrapped([oid, this](auto fut) {
+    std::unique_ptr<SnapSet> snapset;
+    if (fut.failed()) {
+      auto ep = std::move(fut).get_exception();
+      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+        std::rethrow_exception(ep);
+      } else {
+        snapset = std::make_unique<SnapSet>();
+      }
+    } else {
+      // decode existing SS_ATTR's value
+      ceph::bufferlist bl;
+      bl.push_back(std::move(fut).get0());
+      snapset = std::make_unique<SnapSet>(bl);
+    }
     return seastar::make_ready_future<cached_ss_t>(
       ss_cache.insert(oid, std::move(snapset)));
   });
+}
+
+seastar::future<>
+PGBackend::store_object_state(
+  //const hobject_t& oid,
+  const cached_os_t os,
+  const MOSDOp& m,
+  ceph::os::Transaction& txn)
+{
+  if (os->exists) {
+#if 0
+    os.oi.version = ctx->at_version;
+    os.oi.prior_version = ctx->obs->oi.version;
+#endif
+
+    os->oi.last_reqid = m.get_reqid();
+    os->oi.mtime = m.get_mtime();
+    os->oi.local_mtime = ceph_clock_now();
+
+    // object_info_t
+    {
+      ceph::bufferlist osv;
+      encode(os->oi, osv, 0);
+      // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      txn.setattr(coll->cid, ghobject_t{os->oi.soid}, OI_ATTR, std::move(osv));
+    }
+  } else {
+    // reset cached ObjectState without enforcing eviction
+    os->oi = object_info_t(os->oi.soid);
+  }
+  return seastar::now();
+}
+
+seastar::future<>
+PGBackend::evict_object_state(const hobject_t& oid)
+{
+  os_cache.erase(oid);
+  return seastar::now();
 }
 
 seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
@@ -165,4 +229,51 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
       }
       return seastar::make_ready_future<bufferlist>(std::move(bl));
     });
+}
+
+bool PGBackend::maybe_create_new_object(
+  ObjectState& os,
+  ceph::os::Transaction& txn)
+{
+  if (!os.exists) {
+    ceph_assert(!os.oi.is_whiteout());
+    os.exists = true;
+    os.oi.new_object();
+
+    txn.touch(coll->cid, ghobject_t{os.oi.soid});
+    // TODO: delta_stats.num_objects++
+    return false;
+  } else if (os.oi.is_whiteout()) {
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    // TODO: delta_stats.num_whiteouts--
+  }
+  return true;
+}
+
+seastar::future<> PGBackend::writefull(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  const ceph_osd_op& op = osd_op.op;
+  if (op.extent.length != osd_op.indata.length()) {
+    throw ::invalid_argument();
+  }
+
+  const bool existing = maybe_create_new_object(os, txn);
+  if (existing && op.extent.length < os.oi.size) {
+    txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.length);
+  }
+  if (op.extent.length) {
+    txn.write(coll->cid, ghobject_t{os.oi.soid}, 0, op.extent.length,
+              osd_op.indata, op.flags);
+    os.oi.size = op.extent.length;
+  }
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::submit_transaction(ceph::os::Transaction&& txn)
+{
+  logger().trace("submit_transaction: num_ops={}", txn.get_num_ops());
+  return store->do_transaction(coll, std::move(txn));
 }
