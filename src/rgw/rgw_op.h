@@ -436,6 +436,7 @@ public:
 class RGWPutBucketTags : public RGWOp {
 protected:
   bufferlist tags_bl;
+  bufferlist in_data;
 public:
   int verify_permission() override;
   void execute() override;
