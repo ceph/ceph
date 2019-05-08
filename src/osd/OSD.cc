@@ -2504,12 +2504,17 @@ will start to track new ops received afterwards.";
     store->flush_cache(&ss);
   } else if (admin_command == "dump_pgstate_history") {
     f->open_object_section("pgstate_history");
+    f->open_array_section("pgs");
     vector<PGRef> pgs;
     _get_pgs(&pgs);
     for (auto& pg : pgs) {
+      f->open_object_section("pg");
       f->dump_stream("pg") << pg->pg_id;
+      f->dump_string("currently", pg->get_current_state());
       pg->dump_pgstate_history(f);
+      f->close_section();
     }
+    f->close_section();
     f->close_section();
   } else if (admin_command == "compact") {
     dout(1) << "triggering manual compaction" << dendl;

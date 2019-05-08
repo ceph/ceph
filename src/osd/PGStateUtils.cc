@@ -38,13 +38,17 @@ void PGStateHistory::exit(const char* state) {
 void PGStateHistory::dump(Formatter* f) const {
   f->open_array_section("history");
   for (auto pi = buffer.begin(); pi != buffer.end(); ++pi) {
-    f->open_object_section("states");
+    f->open_object_section("epochs");
     f->dump_stream("epoch") << (*pi)->this_epoch;
+    f->open_array_section("states");
     for (auto she : (*pi)->state_history) {
+      f->open_object_section("state");
       f->dump_string("state", std::get<2>(she));
       f->dump_stream("enter") << std::get<0>(she);
       f->dump_stream("exit") << std::get<1>(she);
+      f->close_section();
     }
+    f->close_section();
     f->close_section();
   }
   f->close_section();
