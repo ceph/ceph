@@ -881,7 +881,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
-          <context context-type="linenumber">135</context>
+          <context context-type="linenumber">136</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
@@ -945,7 +945,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
-          <context context-type="linenumber">133</context>
+          <context context-type="linenumber">134</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
@@ -2423,8 +2423,8 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
           <context context-type="linenumber">4</context>
         </context-group>
-      </trans-unit><trans-unit id="8f4c079a38df7c3b64a4dfe8daa4d02aeffefbfa" datatype="html">
-        <source>Set discovery authentication</source>
+      </trans-unit><trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
+        <source>Discovery authentication</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
           <context context-type="linenumber">39</context>
