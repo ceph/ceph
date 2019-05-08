@@ -141,14 +141,19 @@ private:
                                    Ref<MOSDMap> m);
   seastar::future<> handle_osd_op(ceph::net::Connection* conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
-				  Ref<MOSDPGLog> m);
   seastar::future<> handle_pg_notify(ceph::net::Connection* conn,
 				     Ref<MOSDPGNotify> m);
   seastar::future<> handle_pg_info(ceph::net::Connection* conn,
 				   Ref<MOSDPGInfo> m);
+  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
+				  Ref<MOSDPGLog> m);
   seastar::future<> handle_pg_query(ceph::net::Connection* conn,
 				    Ref<MOSDPGQuery> m);
+  seastar::future<> handle_fast_pg_create(ceph::net::Connection* conn,
+					  Ref<MOSDPGCreate2> m);
+
+  seastar::future<> handle_pg_create_info(cached_map_t osdmap,
+                                          std::unique_ptr<class PGCreateInfo> info);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,

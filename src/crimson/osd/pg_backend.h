@@ -36,6 +36,11 @@ public:
     const pg_pool_t& pool,
     seastar::lw_shared_ptr<ceph::os::CyanStore> store,
     const ec_profile_t& ec_profile);
+  static std::unique_ptr<PGBackend> create(
+    const spg_t pgid,
+    const pg_pool_t& pool,
+    seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+    const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
@@ -49,6 +54,7 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  seastar::future<> submit_transaction(ceph::os::Transaction&& txn);
   seastar::future<> mutate_object(
     cached_os_t&& os,
     ceph::os::Transaction&& txn,

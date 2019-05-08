@@ -43,6 +43,26 @@ std::unique_ptr<PGBackend> PGBackend::load(
   }
 }
 
+std::unique_ptr<PGBackend> PGBackend::create(
+  const spg_t pgid,
+  const pg_pool_t& pool,
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+  const ec_profile_t& ec_profile)
+{
+  auto coll = store->create_new_collection(coll_t{pgid});
+  switch (pool.type) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
+  case pg_pool_t::TYPE_ERASURE:
+    return std::make_unique<ECBackend>(pgid.shard, coll, store,
+                                       std::move(ec_profile),
+                                       pool.stripe_width);
+  default:
+    throw runtime_error(seastar::format("unsupported pool type '{}'",
+                                        pool.type));
+  }
+}
+
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
                      seastar::lw_shared_ptr<ceph::os::CyanStore> store)
@@ -157,6 +177,12 @@ PGBackend::_load_ss(const hobject_t& oid)
 }
 
 seastar::future<>
+PGBackend::submit_transaction(ceph::os::Transaction&& txn)
+{
+  return store->do_transaction(coll, std::move(txn));
+}
+
+seastar::future<>
 PGBackend::mutate_object(
   cached_os_t&& os,
   ceph::os::Transaction&& txn,
@@ -184,7 +210,7 @@ PGBackend::mutate_object(
     // reset cached ObjectState without enforcing eviction
     os->oi = object_info_t(os->oi.soid);
   }
-  return store->do_transaction(coll, std::move(txn));
+  return submit_transaction(std::move(txn));
 }
 
 seastar::future<>

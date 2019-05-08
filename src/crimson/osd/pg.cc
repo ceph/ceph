@@ -49,7 +49,7 @@ using recovery::Initialize;
 PG::PG(spg_t pgid,
        pg_shard_t pg_shard,
        pg_pool_t&& pool,
-       std::string&& name,
+       std::string name,
        std::unique_ptr<PGBackend> backend,
        cached_map_t osdmap,
        ceph::net::Messenger& msgr)
@@ -65,31 +65,36 @@ PG::PG(spg_t pgid,
   // TODO
 }
 
+void PG::initialize(PastIntervals&& past_intervals_)
+{
+  past_intervals = std::move(past_intervals_);
+  // initialize current mapping
+  {
+    vector<int> new_up, new_acting;
+    int new_up_primary, new_acting_primary;
+    osdmap->pg_to_up_acting_osds(pgid.pgid,
+                                 &new_up, &new_up_primary,
+                                 &new_acting, &new_acting_primary);
+    update_primary_state(new_up, new_up_primary,
+                         new_acting, new_acting_primary);
+  }
+  info.stats.up = up;
+  info.stats.up_primary = up_primary.osd;
+  info.stats.acting = acting;
+  info.stats.acting_primary = primary.osd;
+  info.stats.mapping_epoch = info.history.same_interval_since;
+  recovery_state.handle_event(Initialize{});
+}
+
 seastar::future<> PG::read_state(ceph::os::CyanStore* store)
 {
   return PGMeta{store, pgid}.load().then(
     [this](pg_info_t pg_info_, PastIntervals past_intervals_) {
       info = std::move(pg_info_);
       last_written_info = info;
-      past_intervals = std::move(past_intervals_);
-      // initialize current mapping
-      {
-        vector<int> new_up, new_acting;
-        int new_up_primary, new_acting_primary;
-        osdmap->pg_to_up_acting_osds(pgid.pgid,
-                                     &new_up, &new_up_primary,
-                                     &new_acting, &new_acting_primary);
-        update_primary_state(new_up, new_up_primary,
-                             new_acting, new_acting_primary);
-      }
-      info.stats.up = up;
-      info.stats.up_primary = up_primary.osd;
-      info.stats.acting = acting;
-      info.stats.acting_primary = primary.osd;
-      info.stats.mapping_epoch = info.history.same_interval_since;
-      recovery_state.handle_event(Initialize{});
       // note: we don't activate here because we know the OSD will advance maps
       // during boot.
+      initialize(std::move(past_intervals_));
       return seastar::now();
     });
 }

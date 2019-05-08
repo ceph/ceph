@@ -16,6 +16,7 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MPGStats.h"
 
 #include "crimson/mon/MonClient.h"
@@ -378,6 +379,12 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
     return handle_pg_query(conn, boost::static_pointer_cast<MOSDPGQuery>(m));
   case MSG_OSD_PG_LOG:
     return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
+  case MSG_OSD_PG_CREATE:
+    logger().info("MSG_OSD_PG_CREATE is not supported");
+    return seastar::now();
+  case MSG_OSD_PG_CREATE2:
+    return handle_fast_pg_create(
+      conn, boost::static_pointer_cast<MOSDPGCreate2>(m));
   default:
     return seastar::now();
   }
@@ -821,6 +828,100 @@ seastar::future<> OSD::handle_pg_log(ceph::net::Connection* conn,
                                               true,
                                               create_info);
   return do_peering_event(m->get_spg(), std::move(evt));
+}
+
+seastar::future<> OSD::handle_fast_pg_create(ceph::net::Connection* conn,
+                                             Ref<MOSDPGCreate2> m)
+{
+  if (!m->get_source().is_mon()) {
+    logger().warn("got pg create request from non-mon. ignoring");
+    return seastar::now();
+  }
+  return seastar::parallel_for_each(m->pgs,
+    [m,this](pair<spg_t,pair<epoch_t,utime_t>> p) {
+      auto& [pgid, pg_create] = p;
+
+      const auto q = m->pg_extra.find(pgid);
+      if (q == std::end(m->pg_extra)) {
+        // pre-octopus ... no pg history.  this can be removed in Q release.
+        // XXX: peering machinery bypassed. Handling create_info directly.
+        auto& [created_epoch, created_stamp] = pg_create;
+        pg_history_t fallback_pg_history{created_epoch, created_stamp};
+        return handle_pg_create_info(osdmap, std::make_unique<PGCreateInfo>(
+	  pgid, created_epoch, fallback_pg_history, PastIntervals{}, true));
+      }
+
+      const auto& [pg_history, past_intervals] = q->second;
+      if (!past_intervals.empty() &&
+	  m->epoch < past_intervals.get_bounds().second) {
+        logger().error("got pg_create on {} epoch {} and unmatched "
+                       "past_intervals {} (history {})",
+                       pgid, m->epoch, past_intervals, pg_history);
+      } if (const auto found = pgs.find(pgid); found != pgs.end()) {
+        logger().info("pg {} already exists. Ignoring creation request", pgid);
+      } else if (osdmap->is_up_acting_osd_shard(pgid, whoami)) {
+        logger().info("pg {} does not exist. Creating", pgid);
+        // XXX: peering machinery bypassed. Handling create_info directly.
+        return handle_pg_create_info(osdmap, std::make_unique<PGCreateInfo>(
+	  pgid, osdmap->get_epoch(), pg_history, past_intervals, true));
+      }
+      return seastar::now();
+  }).then([m, this] {
+    // TODO: pending_creates_from_mon
+    last_pg_create_epoch = m->epoch;
+  });
+}
+
+seastar::future<> OSD::handle_pg_create_info(cached_map_t osdmap,
+                                             std::unique_ptr<PGCreateInfo> info)
+{
+  if (info->by_mon) {
+    const auto* pool = osdmap->get_pg_pool(info->pgid.pgid.pool());
+    if (!pool) {
+      logger().info("{} ignoring {}, pool dne", __func__, info->pgid);
+      return seastar::now();
+    }
+    if (osdmap->require_osd_release >= ceph_release_t::nautilus &&
+	!pool->has_flag(pg_pool_t::FLAG_CREATING)) {
+      // this ensures we do not process old creating messages after the
+      // pool's initial pgs have been created (and pg are subsequently
+      // allowed to split or merge).
+      logger().debug("{} dropping {} create, pool does not have CREATING flag",
+                     __func__, info->pgid);
+      return seastar::now();
+    }
+  }
+
+  using ec_profile_t = map<string,string>;
+  return get_map(info->epoch).then(
+    [osdmap,info=std::move(info),this](auto&& create_map) {
+      if (!create_map->have_pg_pool(info->pgid.pool())) {
+        // pool was deleted; grab final pg_pool_t off disk.
+        return seastar::now();
+      }
+
+      pg_pool_t pi = *create_map->get_pg_pool(info->pgid.pool());
+
+      const coll_t coll{info->pgid};
+      ceph::os::Transaction txn{};
+      txn.create_collection(coll, info->pgid.get_split_bits(pi.get_pg_num()));
+
+      auto ec_profile = !pi.is_erasure() ? ec_profile_t{} :
+        create_map->get_erasure_code_profile(pi.erasure_code_profile);
+      auto backend = PGBackend::create(info->pgid, pi, store, ec_profile);
+      Ref<PG> pg{new PG{info->pgid,
+                        pg_shard_t{whoami, info->pgid.shard},
+                        std::move(pi),
+                        create_map->get_pool_name(info->pgid.pool()),
+                        std::move(backend),
+                        osdmap,
+                        cluster_msgr}};
+      pg->initialize(std::move(info->past_intervals));
+      pg->handle_activate_map();
+      pgs.emplace(info->pgid, pg);
+
+      return pg->backend->submit_transaction(std::move(txn));
+  });
 }
 
 void OSD::check_osdmap_features()

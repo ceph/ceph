@@ -45,7 +45,7 @@ public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
      pg_pool_t&& pool,
-     std::string&& name,
+     std::string name,
      std::unique_ptr<PGBackend> backend,
      cached_map_t osdmap,
      ceph::net::Messenger& msgr);
@@ -87,6 +87,7 @@ public:
 	      const vector<int>& acting,
 	      const map<pg_shard_t, pg_info_t>& all_info) const;
   std::pair<choose_acting_t, pg_shard_t> choose_acting();
+  void initialize(PastIntervals&& past_intervals_);
   seastar::future<> read_state(ceph::os::CyanStore* store);
 
   // peering/recovery
@@ -165,7 +166,9 @@ private:
 
   seastar::future<> wait_for_active();
   std::optional<seastar::shared_promise<>> active_promise;
+public:
   std::unique_ptr<PGBackend> backend;
+private:
 
   cached_map_t osdmap;
   ceph::net::Messenger& msgr;
