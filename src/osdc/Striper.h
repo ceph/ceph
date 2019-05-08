@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "osd/osd_types.h"
+#include "osdc/StriperTypes.h"
 
 class CephContext;
 
@@ -24,6 +25,11 @@ class CephContext;
 
   class Striper {
   public:
+    static void file_to_extents(
+        CephContext *cct, const file_layout_t *layout, uint64_t offset,
+        uint64_t len, uint64_t trunc_size, uint64_t buffer_offset,
+        striper::LightweightObjectExtents* object_extents);
+
     /*
      * std::map (ino, layout, offset, len) to a (list of) ObjectExtents (byte
      * ranges in objects on (primary) osds)
@@ -53,10 +59,6 @@ class CephContext;
 
       file_to_extents(cct, buf, layout, offset, len, trunc_size, extents);
     }
-
-    static void assimilate_extents(
-      std::map<object_t, std::vector<ObjectExtent> >& object_extents,
-      std::vector<ObjectExtent>& extents);
 
     /**
      * reverse std::map an object extent to file extents
