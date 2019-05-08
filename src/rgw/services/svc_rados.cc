@@ -261,14 +261,18 @@ int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *fil
     return -EINVAL;
   }
 
-  int r = pool.rados_svc->open_pool_ctx(pool.pool, ctx.ioctx);
+  if (!pool) {
+    return -EINVAL;
+  }
+
+  int r = pool->rados_svc->open_pool_ctx(pool->pool, ctx.ioctx);
   if (r < 0) {
     return r;
   }
 
   librados::ObjectCursor oc;
   if (!oc.from_str(marker)) {
-    ldout(pool.rados_svc->cct, 10) << "failed to parse cursor: " << marker << dendl;
+    ldout(pool->rados_svc->cct, 10) << "failed to parse cursor: " << marker << dendl;
     return -EINVAL;
   }
 
@@ -280,17 +284,17 @@ int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *fil
 }
 
 int RGWSI_RADOS::Pool::List::get_next(int max,
-                                      std::list<string> *oids,
+                                      std::vector<string> *oids,
                                       bool *is_truncated)
 {
   if (!ctx.initialized) {
     return -EINVAL;
   }
   vector<rgw_bucket_dir_entry> objs;
-  int r = pool.rados_svc->pool_iterate(ctx.ioctx, ctx.iter, max, objs, ctx.filter, is_truncated);
+  int r = pool->rados_svc->pool_iterate(ctx.ioctx, ctx.iter, max, objs, ctx.filter, is_truncated);
   if (r < 0) {
     if(r != -ENOENT) {
-      ldout(pool.rados_svc->cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+      ldout(pool->rados_svc->cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
     }
     return r;
   }
