@@ -1,5 +1,4 @@
 
-from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
@@ -21,7 +20,7 @@ class TestMisc(CephFSTestCase):
         """
 
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client")
+            self.skipTest("Require FUSE client")
 
         # Enable debug. Client will requests CEPH_CAP_XATTR_SHARED
         # on lookup/open
