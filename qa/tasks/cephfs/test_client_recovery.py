@@ -14,8 +14,6 @@ from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.packaging import get_package_version
-from unittest import SkipTest
-
 
 log = logging.getLogger(__name__)
 
@@ -488,7 +486,7 @@ class TestClientRecovery(CephFSTestCase):
 
     def test_stale_renew(self):
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to handle signal STOP/CONT")
+            self.skipTest("Require FUSE client to handle signal STOP/CONT")
 
         session_timeout = self.fs.get_var("session_timeout")
 
@@ -525,7 +523,7 @@ class TestClientRecovery(CephFSTestCase):
         Check that abort_conn() skips closing mds sessions.
         """
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Testing libcephfs function")
+            self.skipTest("Testing libcephfs function")
 
         session_timeout = self.fs.get_var("session_timeout")
 

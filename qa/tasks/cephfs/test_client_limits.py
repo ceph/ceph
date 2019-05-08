@@ -6,7 +6,6 @@ exceed the limits of how many caps/inodes they should hold.
 
 import logging
 from textwrap import dedent
-from unittest import SkipTest
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
@@ -116,7 +115,7 @@ class TestClientLimits(CephFSTestCase):
 
         # The debug hook to inject the failure only exists in the fuse client
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to inject client release failure")
+            self.skipTest("Require FUSE client to inject client release failure")
 
         self.set_conf('client.{0}'.format(self.mount_a.client_id), 'client inject release failure', 'true')
         self.mount_a.teardown()
@@ -158,7 +157,7 @@ class TestClientLimits(CephFSTestCase):
 
         # The debug hook to inject the failure only exists in the fuse client
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to inject client release failure")
+            self.skipTest("Require FUSE client to inject client release failure")
 
         self.set_conf('client', 'client inject fixed oldest tid', 'true')
         self.mount_a.teardown()
@@ -183,7 +182,7 @@ class TestClientLimits(CephFSTestCase):
 
         # The debug hook to inject the failure only exists in the fuse client
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to inject client release failure")
+            self.skipTest("Require FUSE client to inject client release failure")
 
         if mount_subdir:
             # fuse assigns a fix inode number (1) to root inode. But in mounting into

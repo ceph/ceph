@@ -5,7 +5,6 @@ from textwrap import dedent
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra.run import CommandFailedError, Raw
-from unittest import SkipTest
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +43,7 @@ class TestSnapshots(CephFSTestCase):
         check snaptable transcation
         """
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to forcibly kill mount")
+            self.skipTest("Require FUSE client to forcibly kill mount")
 
         self.fs.set_allow_new_snaps(True);
         self.fs.set_max_mds(2)
