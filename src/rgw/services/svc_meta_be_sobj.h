@@ -128,6 +128,10 @@ public:
                    RGWSI_MetaBackend::RemoveParams& params,
                    RGWObjVersionTracker *objv_tracker) override;
 
+  int list_init(const string& marker, void **phandle) override;
+  int list_next(void *handle, int max, std:::list<std::string>& keys, bool *truncated) override;
+  void list_complete(void *handle) override;
+
   int call(std::function<int(RGWSI_MetaBackend::Context *)> f) override;
 };
 
