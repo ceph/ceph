@@ -5947,9 +5947,19 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
+
   SetVal(g_conf, "bluestore_max_blob_size", "65536");
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  SetVal(g_conf, "bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   int r;
   coll_t cid;
@@ -6120,9 +6130,19 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
+
   SetVal(g_conf, "bluestore_max_blob_size", "65536");
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  SetVal(g_conf, "bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   int r;
   coll_t cid;
@@ -6301,9 +6321,18 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
   SetVal(g_conf, "bluestore_max_blob_size", "65536");
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  SetVal(g_conf, "bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   int r;
   coll_t cid;
@@ -6667,6 +6696,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   SetVal(g_conf, "bluestore_compression_max_blob_size", "524288");
   SetVal(g_conf, "bluestore_compression_min_blob_size", "262144");
+  SetVal(g_conf, "bluestore_max_blob_size", "524288");
   SetVal(g_conf, "bluestore_compression_mode", "force");
   g_conf->apply_changes(NULL);
 
