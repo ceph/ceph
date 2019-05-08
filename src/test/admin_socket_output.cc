@@ -74,16 +74,20 @@ void AdminSocketOutput::postpone(const std::string &target,
 
 bool AdminSocketOutput::init_sockets() {
   std::cout << "Initialising sockets" << std::endl;
-  for (const auto &x : fs::directory_iterator(socketdir)) {
+  std::string socket_regex = R"(\..*\.asok)";
+  for (const auto &x : fs::recursive_directory_iterator(socketdir)) {
     std::cout << x.path() << std::endl;
     if (x.path().extension() == ".asok") {
-      for (auto &target : targets) {
-        if (std::regex_search(x.path().filename().string(),
-            std::regex(prefix + target + R"(\..*\.asok)"))) {
-          std::cout << "Found " << target << " socket " << x.path()
+      for (auto target = targets.cbegin(); target != targets.cend();) {
+        std::regex reg(prefix + *target + socket_regex);
+        if (std::regex_search(x.path().filename().string(), reg)) {
+          std::cout << "Found " << *target << " socket " << x.path()
                     << std::endl;
-          sockets.insert(std::make_pair(target, x.path().string()));
-          targets.erase(target);
+          sockets.insert(std::make_pair(*target, x.path().string()));
+          target = targets.erase(target);
+        }
+        else {
+          ++target;
         }
       }
       if (targets.empty()) {

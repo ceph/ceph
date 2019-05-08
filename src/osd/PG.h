@@ -193,6 +193,10 @@ public:
     return ceph_subsys_osd;
   }
 
+  const char* const get_current_state() const {
+    return recovery_state.get_current_state();
+  }
+
   const OSDMapRef& get_osdmap() const {
     ceph_assert(is_locked());
     return recovery_state.get_osdmap();
