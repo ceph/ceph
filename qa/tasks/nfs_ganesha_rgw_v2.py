@@ -40,6 +40,7 @@ def task(ctx, config):
     script_name = tests_mapper.get(config['test-name'], None) + ".py"
     nfs_version = config['nfs-version']
     mount_dir = config['mount-dir']
+    branch = config.get("branch", "master")
 
     log.info('got test_name: %s' % test_name)
     log.info('got nfs version: %s' % nfs_version)
@@ -101,7 +102,7 @@ def task(ctx, config):
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
                      'https://github.com/red-hat-storage/ceph-qe-scripts.git'])
 
-    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesha-rgw-v2'])
+    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', '%s' % branch])
 
     rgw[0].run(args=['virtualenv', 'venv'])
 
