@@ -534,7 +534,7 @@ int RGWPutBucketTags_ObjStore_S3::get_params()
     return -ERR_MALFORMED_XML;
   }
 
-  RGWObjTags obj_tags;
+  RGWObjTags obj_tags(50); // A tag set can contain as many as 50 tags, or it can be empty.
   r = tagging.rebuild(obj_tags);
   if (r < 0)
     return r;
