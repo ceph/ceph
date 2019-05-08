@@ -133,6 +133,10 @@ public:
                            RGWSI_MetaBackend::RemoveParams& params,
                            RGWObjVersionTracker *objv_tracker) = 0;
 
+  virtual int list_init(const string& marker, void **phandle) = 0;
+  virtual int list_next(void *handle, int max, std:::list<std::string>& keys, bool *truncated) = 0;
+  virtual void list_complete(void *handle) = 0;
+
   virtual int call(std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
 
   /* higher level */
