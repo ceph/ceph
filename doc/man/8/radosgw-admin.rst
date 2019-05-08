@@ -72,7 +72,10 @@ which are as follows:
   Remove access key.
 
 :command:`bucket list`
-  List all buckets.
+  List buckets, or, if bucket specified with --bucket=<bucket>,
+  list its objects. If bucket specified adding --allow-unordered
+  removes ordering requirement, possibly generating results more
+  quickly in buckets with large number of objects.
 
 :command:`bucket link`
   Link bucket to specified user.
