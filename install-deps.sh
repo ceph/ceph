@@ -165,6 +165,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost-random1.67-dev \
 	ceph-libboost-regex1.67-dev \
 	ceph-libboost-system1.67-dev \
+	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
 }
