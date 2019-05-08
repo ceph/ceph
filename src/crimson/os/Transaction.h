@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#pragma once
+
 #include <map>
 
 #include "include/int_types.h"
@@ -865,7 +867,7 @@ public:
   /// Set an xattr of an object
   void setattr(const coll_t& cid, const ghobject_t& oid,
 	       const char* name,
-	       bufferlist& val) {
+	       bufferlist&& val) {
     string n(name);
     setattr(cid, oid, n, val);
   }
