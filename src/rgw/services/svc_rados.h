@@ -118,7 +118,7 @@ public:
     int lookup();
 
     struct List {
-      Pool& pool;
+      Pool *pool{nullptr};
 
       struct Ctx {
         bool initialized{false};
@@ -127,16 +127,17 @@ public:
         RGWAccessListFilter *filter{nullptr};
       } ctx;
 
-      List(Pool& _pool) : pool(_pool) {}
+      List() {}
+      List(Pool *_pool) : pool(_pool) {}
 
       int init(const string& marker, RGWAccessListFilter *filter = nullptr);
       int get_next(int max,
-                   std::list<string> *oids,
+                   std::vector<string> *oids,
                    bool *is_truncated);
     };
 
     List op() {
-      return List(*this);
+      return List(this);
     }
 
     friend List;
