@@ -51,23 +51,23 @@ void *Finisher::finisher_thread_entry()
       // To reduce lock contention, we swap out the queue to process.
       // This way other threads can submit new contexts to complete
       // while we are working.
-      vector<pair<Context*,int>> ls;
-      ls.swap(finisher_queue);
+      in_progress_queue.swap(finisher_queue);
       finisher_running = true;
       ul.unlock();
-      ldout(cct, 10) << "finisher_thread doing " << ls << dendl;
+      ldout(cct, 10) << "finisher_thread doing " << in_progress_queue << dendl;
 
       if (logger) {
 	start = ceph_clock_now();
-	count = ls.size();
+	count = in_progress_queue.size();
       }
 
       // Now actually process the contexts.
-      for (auto p : ls) {
+      for (auto p : in_progress_queue) {
 	p.first->complete(p.second);
       }
-      ldout(cct, 10) << "finisher_thread done with " << ls << dendl;
-      ls.clear();
+      ldout(cct, 10) << "finisher_thread done with " << in_progress_queue
+                     << dendl;
+      in_progress_queue.clear();
       if (logger) {
 	logger->dec(l_finisher_queue_len, count);
 	logger->tinc(l_finisher_complete_lat, ceph_clock_now() - start);

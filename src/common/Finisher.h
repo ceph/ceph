@@ -47,6 +47,7 @@ class Finisher {
 
   /// Queue for contexts for which complete(0) will be called.
   std::vector<std::pair<Context*,int>> finisher_queue;
+  std::vector<std::pair<Context*,int>> in_progress_queue;
 
   std::string thread_name;
 
@@ -66,10 +67,11 @@ class Finisher {
   /// Add a context to complete, optionally specifying a parameter for the complete function.
   void queue(Context *c, int r = 0) {
     std::unique_lock ul(finisher_lock);
-    if (finisher_queue.empty()) {
-      finisher_cond.notify_all();
-    }
+    bool was_empty = finisher_queue.empty();
     finisher_queue.push_back(std::make_pair(c, r));
+    if (was_empty) {
+      finisher_cond.notify_one();
+    }
     if (logger)
       logger->inc(l_finisher_queue_len);
   }
