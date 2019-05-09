@@ -45,7 +45,7 @@ struct PGPool {
       name(name),
       info(info) {
     snapc = info.get_snap_context();
-    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+    if (map->require_osd_release < ceph_release_t::mimic) {
       info.build_removed_snaps(cached_removed_snaps);
     }
   }
@@ -1267,7 +1267,7 @@ public:
   uint64_t upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
 
   /// most recently consumed osdmap's require_osd_version
-  unsigned last_require_osd_release = 0;
+  ceph_release_t last_require_osd_release = ceph_release_t::unknown;
 
   vector<int> want_acting; ///< non-empty while peering needs a new acting set
 
@@ -1955,7 +1955,7 @@ public:
     return backfill_reserving;
   }
 
-  unsigned get_last_require_osd_release() const {
+  ceph_release_t get_last_require_osd_release() const {
     return last_require_osd_release;
   }
 

@@ -2982,7 +2982,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   if (split_or_merge &&
-      (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS ||
+      (osdmap->require_osd_release >= ceph_release_t::luminous ||
        HAVE_FEATURE(osdmap->get_xinfo(acting_primary).features,
 		    RESEND_ON_SPLIT))) {
     return RECALC_OP_TARGET_NEED_RESEND;

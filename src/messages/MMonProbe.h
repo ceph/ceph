@@ -17,6 +17,7 @@
 #define CEPH_MMONPROBE_H
 
 #include "include/ceph_features.h"
+#include "common/ceph_releases.h"
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
@@ -55,11 +56,11 @@ public:
   version_t paxos_last_version = 0;
   bool has_ever_joined = 0;
   uint64_t required_features = 0;
-  uint8_t mon_release = 0;
+  ceph_release_t mon_release{ceph_release_t::unknown};
 
   MMonProbe()
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION} {}
-  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, uint8_t mr)
+  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, ceph_release_t mr)
     : Message{MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION},
       fsid(f),
       op(o),
@@ -68,7 +69,7 @@ public:
       paxos_last_version(0),
       has_ever_joined(hej),
       required_features(0),
-      mon_release(mr) {}
+      mon_release{mr} {}
 private:
   ~MMonProbe() override {}
 
@@ -88,8 +89,8 @@ public:
       out << " new";
     if (required_features)
       out << " required_features " << required_features;
-    if (mon_release)
-      out << " mon_release " << (int)mon_release;
+    if (mon_release != ceph_release_t::unknown)
+      out << " mon_release " << mon_release;
     out << ")";
   }
   
@@ -133,7 +134,7 @@ public:
     if (header.version >= 7)
       decode(mon_release, p);
     else
-      mon_release = 0;
+      mon_release = ceph_release_t::unknown;
   }
 private:
   template<class T, typename... Args>

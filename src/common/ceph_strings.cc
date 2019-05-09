@@ -1,6 +1,7 @@
 /*
  * Ceph string constants
  */
+#include "ceph_strings.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
 
@@ -110,59 +111,6 @@ const char *ceph_release_name(int r)
 			return "unspecified";
 		return "unknown";
 	}
-}
-
-int ceph_release_from_name(const char *s)
-{
-	if (!s) {
-		return -1;
-	}
-	if (strcmp(s, "octopus") == 0) {
-		return CEPH_RELEASE_OCTOPUS;
-	}
-	if (strcmp(s, "nautilus") == 0) {
-		return CEPH_RELEASE_NAUTILUS;
-	}
-	if (strcmp(s, "mimic") == 0) {
-		return CEPH_RELEASE_MIMIC;
-	}
-	if (strcmp(s, "luminous") == 0) {
-		return CEPH_RELEASE_LUMINOUS;
-	}
-	if (strcmp(s, "kraken") == 0) {
-		return CEPH_RELEASE_KRAKEN;
-	}
-	if (strcmp(s, "jewel") == 0) {
-		return CEPH_RELEASE_JEWEL;
-	}
-	if (strcmp(s, "infernalis") == 0) {
-		return CEPH_RELEASE_INFERNALIS;
-	}
-	if (strcmp(s, "hammer") == 0) {
-		return CEPH_RELEASE_HAMMER;
-	}
-	if (strcmp(s, "giant") == 0) {
-		return CEPH_RELEASE_GIANT;
-	}
-	if (strcmp(s, "firefly") == 0) {
-		return CEPH_RELEASE_FIREFLY;
-	}
-	if (strcmp(s, "emperor") == 0) {
-		return CEPH_RELEASE_EMPEROR;
-	}
-	if (strcmp(s, "dumpling") == 0) {
-		return CEPH_RELEASE_DUMPLING;
-	}
-	if (strcmp(s, "cuttlefish") == 0) {
-		return CEPH_RELEASE_CUTTLEFISH;
-	}
-	if (strcmp(s, "bobtail") == 0) {
-		return CEPH_RELEASE_BOBTAIL;
-	}
-	if (strcmp(s, "argonaut") == 0) {
-		return CEPH_RELEASE_ARGONAUT;
-	}
-	return -1;
 }
 
 uint64_t ceph_release_features(int r)

@@ -13,12 +13,12 @@
  */
 
 #include "common/entity_name.h"
+#include "common/ceph_strings.h"
 
 #include <sstream>
 
 using std::string;
 
-extern const char *ceph_entity_type_name(int type);
 
 const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_TYPE = {{
   { CEPH_ENTITY_TYPE_AUTH, "auth" },
