@@ -8240,6 +8240,10 @@ std::vector<Option> get_mds_client_options() {
     Option("debug_allow_any_pool_priority", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Allow any pool priority to be set to test conversion to new range"),
+
+    Option("crimson_debug_pg_always_active", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("remove me once crimson peering works"),
   });
 }
 
