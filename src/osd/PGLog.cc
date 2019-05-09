@@ -543,12 +543,12 @@ bool PGLog::merge_log_dups(const pg_log_t& olog) {
   }
 
   // remove any dup entries that overlap with pglog
-  if (!log.dups.empty() && log.dups.back().version >= log.tail) {
-    dout(10) << "merge_log removed dups overlapping log entries [" <<
+  if (!log.dups.empty() && log.dups.back().version > log.tail) {
+    dout(10) << "merge_log removed dups overlapping log entries (" <<
       log.tail << "," << log.dups.back().version << "]" << dendl;
     changed = true;
 
-    while (!log.dups.empty() && log.dups.back().version >= log.tail) {
+    while (!log.dups.empty() && log.dups.back().version > log.tail) {
       log.unindex(log.dups.back());
       mark_dirty_from_dups(log.dups.back().version);
       log.dups.pop_back();
