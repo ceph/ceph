@@ -175,6 +175,13 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
 
   do {
     m_features &= image_ctx.features;
+
+    // interlock object-map and fast-diff together
+    if (((m_features & RBD_FEATURE_OBJECT_MAP) != 0) ||
+        ((m_features & RBD_FEATURE_FAST_DIFF) != 0)) {
+      m_features |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF);
+    }
+
     m_new_features = image_ctx.features & ~m_features;
     m_features_mask = m_features;
 
@@ -188,6 +195,7 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
         break;
       }
       m_features_mask |= (RBD_FEATURE_OBJECT_MAP |
+                          RBD_FEATURE_FAST_DIFF |
                           RBD_FEATURE_JOURNALING);
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
