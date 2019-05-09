@@ -9,6 +9,7 @@
       <div class="panel-body">
         <div class="col-sm-6 col-lg-6">
           <tree [tree]="tree"
+                [settings]="{rootIsVisible: false}"
                 (nodeSelected)="onNodeSelected($event)">
             <ng-template let-node>
               <span class="label"
