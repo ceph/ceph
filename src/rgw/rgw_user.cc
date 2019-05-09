@@ -2472,11 +2472,6 @@ public:
              optional_yield y,
              RGWMDLogSyncType type) override;
 
-  struct list_keys_info {
-    RGWRados *store;
-    RGWListRawObjsCtx ctx;
-  };
-
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y) {
     RGWUserInfo info;
@@ -2496,63 +2491,50 @@ public:
 
   int list_keys_init(const string& marker, void **phandle) override
   {
-    auto info = std::make_unique<list_keys_info>();
+    std::unique_ptr<RGWSI_MetaBackend_Handler::Op> op(be_handler->alloc_op());
 
-    info->store = store;
-
-    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().user_uid_pool, marker,
-                                           &info->ctx);
+    int ret = op->list_init(marker);
     if (ret < 0) {
       return ret;
     }
 
-    *phandle = (void *)info.release();
+    *phandle = (void *)op.release();
 
     return 0;
   }
 
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
+    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
 
-    string no_filter;
-
-    keys.clear();
-
-    RGWRados *store = info->store;
-
-    list<string> unfiltered_keys;
-
-    int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
-                                           unfiltered_keys, truncated);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;		        
-    if (ret == -ENOENT) {
-      if (truncated)
-        *truncated = false;
-      return 0;
+    int ret = op->list_next(max, &keys, truncated);
+    if (ret < 0 && ret != -ENOENT) {
+      return ret;
     }
-
-    // now filter out the buckets entries
-    list<string>::iterator iter;
-    for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
-      string& k = *iter;
-
-      if (k.find(".buckets") == string::npos) {
-        keys.push_back(k);
+    if (ret == -ENOENT) {
+      if (truncated) {
+        *truncated = false;
       }
+      return 0;
     }
 
     return 0;
   }
 
   void list_keys_complete(void *handle) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
-    delete info;
+    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
+    delete op;
   }
 
   string get_marker(void *handle) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
-    return info->store->list_raw_objs_get_cursor(info->ctx);
+    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
+    string marker;
+    int r = op->list_get_marker(&marker);
+    if (r < 0) {
+      lderr(svc.user->ctx(), 0) << "ERROR: " << __func__ << "(): list_get_marker() returned: r=" << r << dendl;
+      /* not much else to do */
+    }
+
+    return marker;
   }
 };
 

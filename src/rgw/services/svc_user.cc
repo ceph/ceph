@@ -16,12 +16,34 @@
 
 class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_User::Svc& svc;
+
+  const string prefix;
 public:
   RGWSI_User_Module(RGWSI_User::Svc& _svc) : svc(_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    *oid = key;
-    *pool = svc.zone->get_zone_params().user_uid_pool;
+    if (pool) {
+      *pool = svc.zone->get_zone_params().user_uid_pool;
+    }
+    if (oid) {
+      *oid = key;
+    }
+  }
+
+  const string& get_oid_prefix() override {
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) override {
+    return true;
+  }
+
+  string key_to_oid(const string& key) override {
+    return key;
+  }
+
+  string oid_to_key(const string& oid) override {
+    return oid;
   }
 };
 

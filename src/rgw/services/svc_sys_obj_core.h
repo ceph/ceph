@@ -112,6 +112,9 @@ protected:
                                      vector<string> *oids,
                                      bool *is_truncated);
 
+  virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                           string *marker);
+
   /* wrappers */
   int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
                                 const rgw_raw_obj& obj, RGWSysObjState **state,

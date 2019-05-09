@@ -84,6 +84,8 @@ public:
     virtual void init(RGWSI_MetaBackend_Handler *h) = 0;
   };
 
+  virtual Context *alloc_ctx() = 0;
+
   struct PutParams {
     ceph::real_time mtime;
 
@@ -136,9 +138,12 @@ public:
                            RGWObjVersionTracker *objv_tracker,
                            optional_yield y) = 0;
 
-  virtual int list_init(const string& marker, void **phandle) = 0;
-  virtual int list_next(void *handle, int max, std:::list<std::string>& keys, bool *truncated) = 0;
-  virtual void list_complete(void *handle) = 0;
+  virtual int list_init(RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
+  virtual int list_next(RGWSI_MetaBackend::Context *ctx,
+                        int max, list<string>& keys,
+                        bool *truncated)  = 0;
+  virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
+                              string *marker) = 0;
 
   virtual int call(std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
 
@@ -202,11 +207,29 @@ public:
                RGWMDLogSyncType sync_mode) {
       return be->remove(be_ctx, key, params, objv_tracker, sync_mode);
     }
+
+    int list_init(const string& marker) {
+      return be->list_init(be_ctx, marker);
+    }
+    int list_next(int max, list<string>& keys,
+                  bool *truncated) {
+      return be->list_next(max, keys, truncated);
+    }
+    int list_get_marker(string *marker) {
+      return be->list_get_marker(marker);
+    }
+  };
+
+  class Op_ManagedCtx : public Op {
+    std::unique_ptr<RGWSI_MetaBackend::Context> pctx;
+  public:
+    Op_ManagedCtx(RGWSI_MetaBackend *_be);
   };
 
   RGWSI_MetaBackend_Handler(RGWSI_MetaBackend *_be) : be(_be) {}
   virtual ~RGWSI_MetaBackend_Handler() {}
 
   virtual int call(std::function<int(Op *)> f);
+  virtual Op *alloc_op();
 };
 

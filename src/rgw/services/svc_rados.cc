@@ -311,3 +311,13 @@ int RGWSI_RADOS::Handle::watch_flush()
   librados::Rados *rad = rados_svc->get_rados_handle();
   return rad->watch_flush();
 }
+
+int RGWSI_RADOS::Pool::List::get_marker(string *marker)
+{
+  if (!ctx.initialized) {
+    return -EINVAL;
+  }
+
+  *marker = ctx.iter.get_cursor().to_str();
+  return 0;
+}

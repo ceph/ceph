@@ -134,6 +134,8 @@ public:
       int get_next(int max,
                    std::vector<string> *oids,
                    bool *is_truncated);
+
+      int get_marker(string *marker);
     };
 
     List op() {
