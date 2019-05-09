@@ -1357,7 +1357,11 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
                          RGWLifecycleConfiguration *config)
 {
   map<string, bufferlist> attrs = bucket_attrs;
-  config->encode(attrs[RGW_ATTR_LC]);
+  bufferlist lc_bl;
+  config->encode(lc_bl);
+
+  attrs[RGW_ATTR_LC] = std::move(lc_bl);
+
   int ret = rgw_bucket_set_attrs(store, bucket_info, attrs, &bucket_info.objv_tracker);
   if (ret < 0)
     return ret;
