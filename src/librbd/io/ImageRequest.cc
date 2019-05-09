@@ -472,17 +472,15 @@ void AbstractImageWriteRequest<I>::send_object_requests(
   CephContext *cct = image_ctx.cct;
 
   AioCompletion *aio_comp = this->m_aio_comp;
+  bool single_extent = (object_extents.size() == 1);
   for (auto& oe : object_extents) {
     ldout(cct, 20) << data_object_name(&image_ctx, oe.object_no) << " "
                    << oe.offset << "~" << oe.length << " from "
                    << oe.buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    auto request = create_object_request(oe, snapc, journal_tid, req_comp);
-
-    // if journaling, stash the request for later; otherwise send
-    if (request != NULL) {
-      request->send();
-    }
+    auto request = create_object_request(oe, snapc, journal_tid, single_extent,
+                                         req_comp);
+    request->send();
   }
 }
 
@@ -531,11 +529,17 @@ void ImageWriteRequest<I>::send_image_cache_request() {
 template <typename I>
 ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-    uint64_t journal_tid, Context *on_finish) {
+    uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
-  assemble_extent(object_extent, &bl);
+  if (single_extent && object_extent.buffer_extents.size() == 1) {
+    // optimization for single object/buffer extent writes
+    bl = std::move(m_bl);
+  } else {
+    assemble_extent(object_extent, &bl);
+  }
+
   auto req = ObjectDispatchSpec::create_write(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, std::move(bl), snapc, m_op_flags, journal_tid,
@@ -587,7 +591,7 @@ void ImageDiscardRequest<I>::send_image_cache_request() {
 template <typename I>
 ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-    uint64_t journal_tid, Context *on_finish) {
+    uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
@@ -747,7 +751,7 @@ void ImageWriteSameRequest<I>::send_image_cache_request() {
 template <typename I>
 ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-    uint64_t journal_tid, Context *on_finish) {
+    uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
@@ -821,9 +825,8 @@ void ImageCompareAndWriteRequest<I>::send_image_cache_request() {
 
 template <typename I>
 ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
-    const LightweightObjectExtent &object_extent,
-    const ::SnapContext &snapc,
-    uint64_t journal_tid, Context *on_finish) {
+    const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+    uint64_t journal_tid, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
   // NOTE: safe to move m_cmp_bl since we only support this op against
