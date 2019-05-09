@@ -2548,14 +2548,14 @@ TEST_F(PGLogMergeDupsTest, AmEmptyOverlap) {
   bool changed = merge_log_dups(olog);
 
   EXPECT_TRUE(changed);
-  EXPECT_EQ(3u, log.dups.size());
+  EXPECT_EQ(4u, log.dups.size());
 
-  if (3 == log.dups.size()) {
+  if (4 == log.dups.size()) {
     EXPECT_EQ(10u, log.dups.front().version.epoch);
     EXPECT_EQ(11u, log.dups.front().version.version);
 
-    EXPECT_EQ(11u, log.dups.back().version.epoch);
-    EXPECT_EQ(1u, log.dups.back().version.version);
+    EXPECT_EQ(12u, log.dups.back().version.epoch);
+    EXPECT_EQ(3u, log.dups.back().version.version);
   }
 
   check_order();
@@ -2601,14 +2601,14 @@ TEST_F(PGLogMergeDupsTest, Later) {
   bool changed = merge_log_dups(olog);
 
   EXPECT_TRUE(changed);
-  EXPECT_EQ(6u, log.dups.size());
+  EXPECT_EQ(7u, log.dups.size());
 
-  if (6 == log.dups.size()) {
+  if (7 == log.dups.size()) {
     EXPECT_EQ(10u, log.dups.front().version.epoch);
     EXPECT_EQ(11u, log.dups.front().version.version);
 
-    EXPECT_EQ(15u, log.dups.back().version.epoch);
-    EXPECT_EQ(11u, log.dups.back().version.version);
+    EXPECT_EQ(16u, log.dups.back().version.epoch);
+    EXPECT_EQ(14u, log.dups.back().version.version);
   }
 
   check_order();
