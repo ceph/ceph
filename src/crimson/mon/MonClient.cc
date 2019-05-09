@@ -439,6 +439,12 @@ seastar::future<> Client::start() {
     return monmap.build_initial(ceph::common::local_conf(), false);
   }).then([this] {
     return authenticate();
+  }).then([this] {
+    auto interval =
+      std::chrono::duration_cast<seastar::lowres_clock::duration>(
+        std::chrono::duration<double>(
+          local_conf().get_val<double>("mon_client_ping_interval")));
+    timer.arm_periodic(interval);
   });
 }
 
@@ -460,8 +466,13 @@ seastar::future<> Client::load_keyring()
 void Client::tick()
 {
   seastar::with_gate(tick_gate, [this] {
-    return seastar::when_all_succeed(active_con->renew_tickets(),
-                                     active_con->renew_rotating_keyring());
+    if (active_con) {
+      return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
+                                       active_con->renew_tickets(),
+                                       active_con->renew_rotating_keyring());
+    } else {
+      return seastar::now();
+    }
   });
 }
 
@@ -862,6 +873,7 @@ seastar::future<> Client::authenticate()
 seastar::future<> Client::stop()
 {
   return tick_gate.close().then([this] {
+    timer.cancel();
     if (active_con) {
       return active_con->close();
     } else {
