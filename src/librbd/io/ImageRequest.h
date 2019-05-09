@@ -148,7 +148,7 @@ protected:
                             const ::SnapContext &snapc, uint64_t journal_tid);
   virtual ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) = 0;
+      uint64_t journal_tid, bool single_extent, Context *on_finish) = 0;
 
   virtual uint64_t append_journal_event(bool synchronous) = 0;
   virtual void update_stats(size_t length) = 0;
@@ -188,7 +188,7 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -224,7 +224,7 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -295,7 +295,7 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -327,7 +327,7 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
