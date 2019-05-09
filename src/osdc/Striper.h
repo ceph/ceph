@@ -85,6 +85,10 @@ class CephContext;
       void add_partial_result(
 	CephContext *cct, ceph::buffer::list& bl,
 	const std::vector<std::pair<uint64_t,uint64_t> >& buffer_extents);
+      void add_partial_result(
+	  CephContext *cct, ceph::buffer::list&& bl,
+	  const striper::LightweightBufferExtents& buffer_extents);
+
       /**
        * add sparse read into results
        *
@@ -98,8 +102,13 @@ class CephContext;
 	CephContext *cct, ceph::buffer::list& bl,
 	const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
 	const std::vector<std::pair<uint64_t,uint64_t> >& buffer_extents);
+      void add_partial_sparse_result(
+	  CephContext *cct, ceph::buffer::list& bl,
+	  const std::map<uint64_t, uint64_t>& bl_map, uint64_t bl_off,
+	  const striper::LightweightBufferExtents& buffer_extents);
 
-      void assemble_result(CephContext *cct, ceph::buffer::list& bl, bool zero_tail);
+      void assemble_result(CephContext *cct, ceph::buffer::list& bl,
+                           bool zero_tail);
 
       /**
        * @buffer copy read data into buffer
@@ -110,6 +119,13 @@ class CephContext;
       void assemble_result(CephContext *cct,
                            std::map<uint64_t, uint64_t> *extent_map,
                            ceph::buffer::list *bl);
+
+    private:
+      void add_partial_sparse_result(
+          CephContext *cct, bufferlist& bl,
+          std::map<uint64_t, uint64_t>::const_iterator* it,
+          const std::map<uint64_t, uint64_t>::const_iterator& end_it,
+          uint64_t* bl_off, uint64_t tofs, uint64_t tlen);
     };
 
   };
