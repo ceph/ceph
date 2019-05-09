@@ -890,23 +890,84 @@ void CrushWrapper::get_children_of_type(int id,
   }
 }
 
-int CrushWrapper::get_rule_failure_domain(int rule_id)
+int CrushWrapper::verify_upmap(CephContext *cct,
+                               int rule_id,
+                               int pool_size,
+                               const vector<int>& up)
 {
-  crush_rule *rule = get_rule(rule_id);
-  if (IS_ERR(rule)) {
+  auto rule = get_rule(rule_id);
+  if (IS_ERR(rule) || !rule) {
+    lderr(cct) << __func__ << " rule " << rule_id << " does not exist"
+               << dendl;
     return -ENOENT;
   }
-  int type = 0; // default to osd-level
-  for (unsigned s = 0; s < rule->len; ++s) {
-    if ((rule->steps[s].op == CRUSH_RULE_CHOOSE_FIRSTN ||
-         rule->steps[s].op == CRUSH_RULE_CHOOSE_INDEP ||
-         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
-         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
-         rule->steps[s].arg2 > type) {
-      type = rule->steps[s].arg2;
+  for (unsigned step = 0; step < rule->len; ++step) {
+    auto curstep = &rule->steps[step];
+    ldout(cct, 10) << __func__ << " step " << step << dendl;
+    switch (curstep->op) {
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+      {
+        int type = curstep->arg2;
+        if (type == 0) // osd
+          break;
+        map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
+        for (auto osd : up) {
+          auto parent = get_parent_of_type(osd, type, rule_id);
+          if (parent < 0) {
+            osds_by_parent[parent].insert(osd);
+          } else {
+            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
+                          << ", skipping for now"
+                          << dendl;
+          }
+        }
+        for (auto i : osds_by_parent) {
+          if (i.second.size() > 1) {
+            lderr(cct) << __func__ << " multiple osds " << i.second
+                       << " come from same failure domain " << i.first
+                       << dendl;
+            return -EINVAL;
+          }
+        }
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+      {
+        int numrep = curstep->arg1;
+        int type = curstep->arg2;
+        if (type == 0) // osd
+          break;
+        if (numrep <= 0)
+          numrep += pool_size;
+        set<int> parents_of_type;
+        for (auto osd : up) {
+          auto parent = get_parent_of_type(osd, type, rule_id);
+          if (parent < 0) {
+            parents_of_type.insert(parent);
+          } else {
+            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
+                          << ", skipping for now"
+                          << dendl;
+          }
+        }
+        if ((int)parents_of_type.size() > numrep) {
+          lderr(cct) << __func__ << " number of buckets "
+                     << parents_of_type.size() << " exceeds desired " << numrep
+                     << dendl;
+          return -EINVAL;
+        }
+      }
+      break;
+
+    default:
+      // ignore
+      break;
     }
   }
-  return type;
+  return 0;
 }
 
 int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
