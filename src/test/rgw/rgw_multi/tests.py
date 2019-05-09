@@ -1224,3 +1224,13 @@ def test_bucket_index_log_trim():
     # verify cold bucket has empty bilog
     cold_bilog = bilog_list(zone.zone, cold_bucket.name)
     assert(len(cold_bilog) == 0)
+
+def test_bucket_creation_time():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    zone_buckets = [zone.get_connection().get_all_buckets() for zone in zonegroup_conns.rw_zones]
+    for z1, z2 in combinations(zone_buckets, 2):
+        for a, b in zip(z1, z2):
+            eq(a.name, b.name)
+            eq(a.creation_date, b.creation_date)
