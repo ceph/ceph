@@ -120,6 +120,11 @@ int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_tru
   return source.core_svc->pool_list_objects_next(ctx, max, oids, is_truncated);
 }
 
+int RGWSI_SysObj::Pool::Op::get_marker(string *marker)
+{
+  return source.core_svc->pool_list_objects_get_marker(ctx, marker);
+}
+
 int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;

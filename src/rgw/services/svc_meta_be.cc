@@ -183,3 +183,13 @@ int RGWSI_MetaBackend_Handler::call(std::function<int(Op *)> f)
   });
 }
 
+RGWSI_MetaBackend_Handler::Op *RGWSI_MetaBackend_Handler::alloc_op()
+{
+  return new Op_ManagedCtx(be);
+}
+
+RGWSI_MetaBackend_Handler::Op_ManagedCtx::Op_ManagedCtx(RGWSI_MetaBackend *_be) : Op(_be, _be->alloc_ctx())
+{
+  pctx.reset(ctx());
+}
+

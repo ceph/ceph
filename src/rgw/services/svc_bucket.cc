@@ -18,66 +18,116 @@
 
 class RGWSI_Bucket_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Bucket::Svc& svc;
+
+  const string prefix;
 public:
   RGWSI_Bucket_Module(RGWSI_Bucket::Svc& _svc) : svc(_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    *oid = key;
-    *pool = svc.zone->get_zone_params().domain_root;
+    if (pool) {
+      *pool = svc.zone->get_zone_params().domain_root;
+    }
+    if (oid) {
+      *oid = key;
+    }
+  }
+
+  const string& get_oid_prefix() override {
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) override {
+    return (!oid.empty() && oid[0] != '.');
+  }
+
+  string key_to_oid(const string& key) override {
+    return key;
+  }
+
+  string oid_to_key(const string& oid) override {
+    /* should have been called after is_valid_oid(),
+     * so no need to check for validity */
+    return oid;
   }
 };
 
 class RGWSI_BucketInstance_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Bucket::Svc& svc;
-public:
-  RGWSI_BucketInstance_Module(RGWSI_Bucket::Svc& _svc) : svc(_svc) {}
 
-#warning get_hash_key?
-#if 0
-  /*
-   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
-   * point, so that the log entries end up at the same log shard, so that we process them
-   * in order
-   */
-  void get_hash_key(const string& section, const string& key, string& hash_key) override {
-    string k;
-    int pos = key.find(':');
-    if (pos < 0)
-      k = key;
-    else
-      k = key.substr(0, pos);
-    hash_key = "bucket:" + k;
-  }
-#endif
+  const string prefix;
+public:
+  RGWSI_BucketInstance_Module(RGWSI_Bucket::Svc& _svc) : svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    *oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
-    *pool = svc.zone->get_zone_params().domain_root;
+    if (pool) {
+      *pool = svc.zone->get_zone_params().domain_root;
+    }
+    if (oid) {
+      *oid = key_to_oid(key);
+    }
+  }
+
+  const string& get_oid_prefix() override {
+    return prefix;
+  }
+
+  bool is_valid_oid(const string& oid) override {
+    return (oid.compare(0, prefix.size(), RGW_BUCKET_INSTANCE_MD_PREFIX) == 0);
   }
 
 // 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
 // with the existing instance[:shard] format. once we parse the shard, the / is
 // replaced with a : to match the [tenant:]instance format
-  void key_to_oid(string& key) override {
+  string key_to_oid(const string& key) override {
+    string oid = prefix + key;
+
     // replace tenant/ with tenant:
-    auto c = key.find('/');
+    auto c = oid.find('/', prefix.size());
     if (c != string::npos) {
-      key[c] = ':';
+      oid[c] = ':';
     }
+
+    return oid;
   }
 
   // convert bucket instance oids back to the tenant/ format for metadata keys.
   // it's safe to parse 'tenant:' only for oids, because they won't contain the
   // optional :shard at the end
-  void oid_to_key(string& oid) override {
+  string oid_to_key(const string& oid) override {
+    /* this should have been called after oid was checked for validity */
+
+    if (oid.size() < prefix.size()) { /* just sanity check */
+      return string();
+    }
+
+    string key = oid.substr(prefix.size());
+
     // find first : (could be tenant:bucket or bucket:instance)
-    auto c = oid.find(':');
+    auto c = key.find(':');
     if (c != string::npos) {
       // if we find another :, the first one was for tenant
-      if (oid.find(':', c + 1) != string::npos) {
-        oid[c] = '/';
+      if (key.find(':', c + 1) != string::npos) {
+        key[c] = '/';
       }
     }
+
+    return key;
+  }
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
+   * point, so that the log entries end up at the same log shard, so that we process them
+   * in order
+   */
+  string get_hash_key(const string& section, const string& key) override {
+    string k = "bucket:";
+    int pos = key.find(':');
+    if (pos < 0)
+      k.append(key);
+    else
+      k.append(key.substr(0, pos));
+
+    return k;
   }
 };
 
