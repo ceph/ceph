@@ -2608,7 +2608,7 @@ void AsyncConnection::tick(uint64_t id)
     if (connect_timeout_us <=
         (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>
           (now - last_connect_started).count()) {
-      ldout(async_msgr->cct, 0) << __func__ << " see no progress in more than "
+      ldout(async_msgr->cct, 1) << __func__ << " see no progress in more than "
                                 << connect_timeout_us
                                 << " us during connecting, fault."
                                 << dendl;
