@@ -30,8 +30,8 @@ class Event(object):
     def _refresh(self):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
-                                                                self._progress))
-        _module.update_progress_event(self.id, self._message, self._progress)
+                                                                self.progress))
+        _module.update_progress_event(self.id, self._message, self.progress)
 
     @property
     def message(self):
@@ -46,7 +46,7 @@ class Event(object):
         raise NotImplementedError()
 
     def summary(self):
-        return "{0} {1}".format(self.progress, self._message)
+        return "{0} {1}".format(self.progress, self.message)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -477,14 +477,16 @@ class Module(MgrModule):
         self._shutdown.set()
         self.clear_all_progress_events()
 
-    def update(self, ev_id, ev_msg, ev_progress):
+    def update(self, ev_id, ev_msg, ev_progress, refs=None):
         """
         For calling from other mgr modules
         """
+        if refs is None:
+            refs = []
         try:
             ev = self._events[ev_id]
         except KeyError:
-            ev = RemoteEvent(ev_id, ev_msg, [])
+            ev = RemoteEvent(ev_id, ev_msg, refs)
             self._events[ev_id] = ev
             self.log.info("update: starting ev {0} ({1})".format(
                 ev_id, ev_msg))

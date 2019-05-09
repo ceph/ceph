@@ -54,6 +54,7 @@ class SSHReadCompletionReady(SSHReadCompletion):
 
 class SSHWriteCompletion(orchestrator.WriteCompletion):
     def __init__(self, result):
+        super(SSHWriteCompletion, self).__init__()
         if isinstance(result, multiprocessing.pool.AsyncResult):
             self._result = [result]
         else:
@@ -83,6 +84,7 @@ class SSHWriteCompletion(orchestrator.WriteCompletion):
 
 class SSHWriteCompletionReady(SSHWriteCompletion):
     def __init__(self, result):
+        orchestrator.WriteCompletion.__init__(self)
         self._result = result
 
     @property
