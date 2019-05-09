@@ -1378,10 +1378,10 @@ int BlueFS::_read_random(
   logger->inc(l_bluefs_read_random_count, 1);
   logger->inc(l_bluefs_read_random_bytes, len);
 
-
+  std::shared_lock s_lock(h->lock);
   while (len > 0) {
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
-
+      s_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
       uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
@@ -1398,6 +1398,9 @@ int BlueFS::_read_random(
 
       logger->inc(l_bluefs_read_random_disk_count, 1);
       logger->inc(l_bluefs_read_random_disk_bytes, l);
+      if (len > 0) {
+	s_lock.lock();
+      }
     } else {
       auto left = buf->get_buf_remaining(off);
       int r = std::min(len, left);
@@ -1468,9 +1471,12 @@ int BlueFS::_read(
     outbl->clear();
 
   int ret = 0;
+  std::shared_lock s_lock(h->lock);
   while (len > 0) {
     size_t left;
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
+      s_lock.unlock();
+      std::unique_lock u_lock(h->lock);
       buf->bl.clear();
       buf->bl_off = off & super.block_mask();
       uint64_t x_off = 0;
@@ -1490,6 +1496,8 @@ int BlueFS::_read(
       int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
 				  cct->_conf->bluefs_buffered_io);
       ceph_assert(r == 0);
+      u_lock.unlock();
+      s_lock.lock();
     }
     left = buf->get_buf_remaining(off);
     dout(20) << __func__ << " left 0x" << std::hex << left
