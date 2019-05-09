@@ -960,6 +960,9 @@ seastar::future<> PG::share_pg_info()
 seastar::future<> PG::wait_for_active()
 {
   logger().debug("wait_for_active: {}", pg_state_string(info.stats.state));
+  if (local_conf()->crimson_debug_pg_always_active) {
+    return seastar::now();
+  }
   if (test_state(PG_STATE_ACTIVE)) {
     return seastar::now();
   } else {
