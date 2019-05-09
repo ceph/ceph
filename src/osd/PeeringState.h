@@ -341,6 +341,7 @@ public:
     epoch_t activation_epoch;
     explicit ActivateCommitted(epoch_t e, epoch_t ae)
       : boost::statechart::event< ActivateCommitted >(),
+	epoch(e),
 	activation_epoch(ae) {}
     void print(std::ostream *out) const {
       *out << "ActivateCommitted from " << activation_epoch
