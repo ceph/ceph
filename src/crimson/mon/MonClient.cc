@@ -111,7 +111,7 @@ private:
   ceph::net::ConnectionRef conn;
   std::unique_ptr<AuthClientHandler> auth;
   std::unique_ptr<RotatingKeyRing> rotating_keyring;
-  uint64_t global_id;
+  uint64_t global_id = 0;
   clock_t::time_point last_rotating_renew_sent;
 };
 
@@ -207,7 +207,7 @@ Connection::setup_session(epoch_t epoch,
                           const EntityName& name)
 {
   auto m = make_message<MAuth>();
-  m->protocol = 0;
+  m->protocol = CEPH_AUTH_UNKNOWN;
   m->monmap_epoch = epoch;
   __u8 struct_v = 1;
   encode(struct_v, m->auth_payload);
@@ -269,14 +269,8 @@ Connection::authenticate_v1(epoch_t epoch,
     return reply.get_future();
   }).then([name, want_keys, this](Ref<MAuthReply> m) {
     reply = {};
-    if (m->global_id != global_id) {
-      // it's a new session
-      global_id = m->global_id;
-      auth->set_global_id(global_id);
-      auth->reset();
-    }
-    auth = create_auth(m->protocol, m->global_id, name, want_keys);
     global_id = m->global_id;
+    auth = create_auth(m->protocol, m->global_id, name, want_keys);
     switch (auto p = m->result_bl.cbegin();
             auth->handle_response(m->result, p,
 				  nullptr, nullptr)) {
@@ -911,19 +905,20 @@ seastar::future<> Client::reopen_session(int rank)
       if (!is_hunting()) {
         return seastar::now();
       }
-      auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
-                                [peer](auto& mc) {
-                                  return mc.is_my_peer(peer);
-                                });
-      ceph_assert_always(found != pending_conns.end());
-      active_con.reset(new Connection{std::move(*found)});
       logger().info("found mon.{}", monmap.get_name(peer));
-      return seastar::parallel_for_each(pending_conns, [] (auto& conn) {
-        return conn.close();
+      return seastar::parallel_for_each(pending_conns, [peer, this] (auto& conn) {
+        if (conn.is_my_peer(peer)) {
+          active_con.reset(new Connection{std::move(conn)});
+          return seastar::now();
+        } else {
+          return conn.close();
+        }
       });
     });
   }).then([this] {
     pending_conns.clear();
+    ceph_assert_always(active_con);
+    return active_con->renew_rotating_keyring();
   });
 }
 
