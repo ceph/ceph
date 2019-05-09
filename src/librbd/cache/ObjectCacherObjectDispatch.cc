@@ -10,6 +10,7 @@
 #include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
+#include "librbd/io/Types.h"
 #include "librbd/io/Utils.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
@@ -296,7 +297,7 @@ bool ObjectCacherObjectDispatch<I>::write(
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    io::Extents&& buffer_extents, ceph::bufferlist&& data,
+    io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
     const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, io::DispatchResult* dispatch_result,
@@ -306,8 +307,7 @@ bool ObjectCacherObjectDispatch<I>::write_same(
                  << object_len << dendl;
 
   // ObjectCacher doesn't support write-same so convert to regular write
-  ObjectExtent extent(data_object_name(m_image_ctx, object_no), object_no,
-                      object_off, object_len, 0);
+  io::LightweightObjectExtent extent(object_no, object_off, object_len, 0);
   extent.buffer_extents = std::move(buffer_extents);
 
   bufferlist ws_data;

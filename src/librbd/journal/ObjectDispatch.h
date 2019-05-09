@@ -63,7 +63,7 @@ public:
 
   bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      io::Extents&& buffer_extents, ceph::bufferlist&& data,
+      io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,

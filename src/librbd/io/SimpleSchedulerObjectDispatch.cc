@@ -158,8 +158,8 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests
           }
         });
 
-    auto req = io::ObjectDispatchSpec::create_write(
-        image_ctx, io::OBJECT_DISPATCH_LAYER_SCHEDULER,
+    auto req = ObjectDispatchSpec::create_write(
+        image_ctx, OBJECT_DISPATCH_LAYER_SCHEDULER,
         m_object_no, offset, std::move(merged_requests.data), m_snapc,
         m_op_flags, 0, {}, ctx);
 
@@ -213,8 +213,8 @@ template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::read(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
-    ceph::bufferlist* read_data, io::ExtentMap* extent_map,
-    int* object_dispatch_flags, io::DispatchResult* dispatch_result,
+    ceph::bufferlist* read_data, ExtentMap* extent_map,
+    int* object_dispatch_flags, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
@@ -233,7 +233,7 @@ bool SimpleSchedulerObjectDispatch<I>::discard(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
     const ::SnapContext &snapc, int discard_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
-    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
@@ -251,7 +251,7 @@ bool SimpleSchedulerObjectDispatch<I>::write(
     uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
     const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
-    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
@@ -260,7 +260,7 @@ bool SimpleSchedulerObjectDispatch<I>::write(
   Mutex::Locker locker(m_lock);
   if (try_delay_write(object_no, object_off, std::move(data), snapc, op_flags,
                       *object_dispatch_flags, on_dispatched)) {
-    *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
+    *dispatch_result = DISPATCH_RESULT_COMPLETE;
     return true;
   }
 
@@ -273,10 +273,10 @@ bool SimpleSchedulerObjectDispatch<I>::write(
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::write_same(
     uint64_t object_no, uint64_t object_off, uint64_t object_len,
-    io::Extents&& buffer_extents, ceph::bufferlist&& data,
+    LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
     const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
-    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
@@ -295,7 +295,7 @@ bool SimpleSchedulerObjectDispatch<I>::compare_and_write(
     ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
-    io::DispatchResult* dispatch_result, Context** on_finish,
+    DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
@@ -310,8 +310,8 @@ bool SimpleSchedulerObjectDispatch<I>::compare_and_write(
 
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::flush(
-    io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    FlushSource flush_source, const ZTracer::Trace &parent_trace,
+    uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;

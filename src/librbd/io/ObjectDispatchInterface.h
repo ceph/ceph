@@ -50,7 +50,7 @@ struct ObjectDispatchInterface {
 
   virtual bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      Extents&& buffer_extents, ceph::bufferlist&& data,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
