@@ -1,8 +1,55 @@
 #!/bin/bash -e
 #
-# ceph-backport.sh
+# ceph-backport.sh - Ceph backporting script
 #
-# Ceph backporting script
+# Credits: This script is based on work done by Loic Dachary
+#
+# With proper setup, this script takes care of opening the backport PR,
+# updating the corresponding backport tracker issue, and cross-linking the
+# backport PR with the tracker issue.
+#
+# However, before you start, some setup is required. Please be patient and
+# read carefully, all the way through to the end of this comment block, without
+# skimming or skipping :-)
+#
+# Instructions for setup
+# ----------------------
+#
+# It is strongly suggested to copy the latest version of the script (from
+# the "master" branch) into your PATH. In particular, do not use any version
+# of the script from a stable (named) branch such as "nautilus", as these
+# versions are not maintained. Only the version in master is maintained.
+#
+# You will need to find the right values for the following:
+#
+# redmine_key     # "My account" -> "API access key" -> "Show"
+# redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
+                  # is in the URL, i.e. http://tracker.ceph.com/users/[redmine_user_id]
+# github_token    # https://github.com/settings/tokens -> Generate new token ->
+                  # ensure it has "Full control of private repositories" scope
+# github_user     # Your github username
+#
+# Once you have the actual values for the above variables, create a file
+# $HOME/bin/backport_common.sh with the following contents
+# 
+# redmine_key=[your_redmine_key]
+# redmine_user_id=[your_redmine_user_id]
+# github_token=[your_github_personal_access_token]
+# github_user=[your_github_username]
+#
+# You can also optionally add the remote repo's name in this file, like
+#
+# github_repo=[your_github_repo_name]
+#
+# If you don't add it, it will default to "origin".
+#
+# Obviously, since this file contains secrets, you should protect it from
+# exposure using all available means (restricted file privileges, encrypted
+# filesystem, etc.). Without correct values for these four variables, this
+# script will not work!
+#
+# Instructions for use
+# --------------------
 #
 # Assumes you have forked ceph/ceph.git, cloned your fork, and are running the
 # script in the local clone!
@@ -17,37 +64,11 @@
 # git cherry-pick -x ...
 # ceph-backport.sh 19206 jewel
 #
-# The script takes care of opening the backport PR, updating the tracker issue,
-# and cross-linking the backport PR with the tracker issue.
+# See http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
+# for more info on cherry-picking.
 #
-# However, before you start you will need to find the right values for
-# the following:
-#
-# redmine_key     # "My account" -> "API access key" -> "Show"
-# redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
-                  # is in the URL, i.e. http://tracker.ceph.com/users/[redmine_user_id]
-# github_token    # https://github.com/settings/tokens -> Generate new token ->
-                  # ensure it has "Full control of private repositories" scope
-# github_user     # Your github username
-#
-# Once you have the actual values for these three variables, create a file
-# $HOME/bin/backport_common.sh with the following contents
-# 
-# redmine_key=[your_redmine_key]
-# redmine_user_id=[your_redmine_user_id]
-# github_token=[your_github_personal_access_token]
-# github_user=[your_github_username]
-#
-# you can also optionally add the remote repo's name in this file, like
-#
-# github_repo=[your_github_repo_name]
-#
-# If you don't add it, it will default to "origin".
-#
-# Obviously, since this file contains secrets, you should protect it from
-# exposure using all available means (restricted file privileges, encrypted
-# filesystem, etc.). Without correct values for these four variables, this
-# script will not work!
+# Happy backporting!
+# Nathan
 #
 source $HOME/bin/backport_common.sh
 
