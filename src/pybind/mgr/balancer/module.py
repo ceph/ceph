@@ -1050,8 +1050,12 @@ class Module(MgrModule):
                         if actual[osd] > 0:
                             calc_weight = target[osd] / actual[osd] * weight * ow
                         else:
-                            # not enough to go on here... keep orig weight
-                            calc_weight = weight / orig_osd_weight[osd]
+                            # for newly created osds, reset calc_weight at target value
+                            # this way weight-set will end up absorbing *step* of its
+                            # target (final) value at the very beginning and slowly catch up later.
+                            # note that if this turns out causing too many misplaced
+                            # pgs, then we'll reduce step and retry
+                            calc_weight = target[osd]
                         new_weight = weight * (1.0 - step) + calc_weight * step
                         self.log.debug('Reweight osd.%d %f -> %f', osd, weight,
                                        new_weight)
