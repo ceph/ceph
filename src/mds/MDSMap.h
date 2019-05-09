@@ -25,14 +25,15 @@
 #include <errno.h>
 
 #include "include/types.h"
-#include "common/Clock.h"
+#include "include/ceph_features.h"
 #include "include/health.h"
+#include "include/CompatSet.h"
 
+#include "common/Clock.h"
+#include "common/Formatter.h"
+#include "common/ceph_releases.h"
 #include "common/config.h"
 
-#include "include/CompatSet.h"
-#include "include/ceph_features.h"
-#include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
 class CephContext;
@@ -172,7 +173,7 @@ protected:
   __u32 session_autoclose = 300;
   uint64_t max_file_size = 1ULL<<40; /* 1TB */
 
-  int8_t min_compat_client = -1;
+  ceph_release_t min_compat_client{ceph_release_t::unknown};
 
   std::vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool = -1;            // where CAS objects go
@@ -235,8 +236,8 @@ public:
   uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
 
-  uint8_t get_min_compat_client() const { return min_compat_client; }
-  void set_min_compat_client(uint8_t version) { min_compat_client = version; }
+  ceph_release_t get_min_compat_client() const { return min_compat_client; }
+  void set_min_compat_client(ceph_release_t version) { min_compat_client = version; }
   
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }

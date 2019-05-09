@@ -23,6 +23,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_releases.cc
   ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/common_init.cc
   ${PROJECT_SOURCE_DIR}/src/common/compat.cc

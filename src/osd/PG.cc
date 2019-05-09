@@ -19,6 +19,7 @@
 // #include "common/ceph_context.h"
 
 #include "common/errno.h"
+#include "common/ceph_releases.h"
 #include "common/config.h"
 #include "OSD.h"
 #include "OpRequest.h"
@@ -1697,7 +1698,7 @@ void PG::on_active_exit()
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
-  if (osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
+  if (osdmap->require_osd_release >= ceph_release_t::mimic) {
     const auto& new_removed_snaps = osdmap->get_new_removed_snaps();
     auto i = new_removed_snaps.find(get_pgid().pool());
     if (i != new_removed_snaps.end()) {
@@ -1707,7 +1708,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 	  decltype(snap_trimq) added, overlap;
 	  added.insert(j.first, j.second);
 	  overlap.intersection_of(snap_trimq, added);
-	  if (recovery_state.get_last_require_osd_release() < CEPH_RELEASE_MIMIC) {
+	  if (recovery_state.get_last_require_osd_release() < ceph_release_t::mimic) {
 	    derr << __func__ << " removed_snaps already contains "
 		 << overlap << ", but this is the first mimic+ osdmap,"
 		 << " so it's expected" << dendl;
@@ -1721,7 +1722,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 	  snap_trimq.insert(j.first, j.second);
 	}
       }
-      if (recovery_state.get_last_require_osd_release() < CEPH_RELEASE_MIMIC) {
+      if (recovery_state.get_last_require_osd_release() < ceph_release_t::mimic) {
 	// at upgrade, we report *all* previously removed snaps as removed in
 	// the first mimic epoch.  remove the ones we previously divined were
 	// removed (and subsequently purged) from the trimq.

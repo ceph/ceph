@@ -1471,6 +1471,6 @@ int cls_register_cxx_filter(cls_handle_t hclass,
   return cls->create_filter(hclass, filter_name, fn);
 }
 
-int8_t cls_get_required_osd_release(cls_handle_t hclass) {
-  return CEPH_FEATURE_SERVER_NAUTILUS;
+ceph_release_t cls_get_required_osd_release(cls_handle_t hclass) {
+  return ceph_release_t::nautilus;
 }

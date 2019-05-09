@@ -194,7 +194,7 @@ int main(int argc, const char **argv)
   bool show_features = false;
   bool generate = false;
   bool filter = false;
-  int min_mon_release = -1;
+  ceph_release_t min_mon_release{0};
   map<string,entity_addr_t> add;
   map<string,entity_addrvec_t> addv;
   list<string> rm;
@@ -222,7 +222,7 @@ int main(int argc, const char **argv)
       filter = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--set-min-mon-release",
 				     (char*)NULL)) {
-      min_mon_release = atoi(val.c_str());
+      min_mon_release = ceph_release_from_name(val);
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
       i = args.erase(i);
@@ -359,7 +359,7 @@ int main(int argc, const char **argv)
       return r;
   }
 
-  if (min_mon_release >= 0) {
+  if (min_mon_release != ceph_release_t::unknown) {
     monmap.min_mon_release = min_mon_release;
     cout << "setting min_mon_release = " << min_mon_release << std::endl;
     modified = true;

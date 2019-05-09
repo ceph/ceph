@@ -883,7 +883,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       string r;
       decode(r, bl);
       if (r.length()) {
-	new_require_min_compat_client = ceph_release_from_name(r.c_str());
+	new_require_min_compat_client = ceph_release_from_name(r);
       }
     }
     if (struct_v >= 6) {
@@ -892,14 +892,14 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     } else {
       if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_LUMINOUS)) {
 	// only for compat with post-kraken pre-luminous test clusters
-	new_require_osd_release = CEPH_RELEASE_LUMINOUS;
+	new_require_osd_release = ceph_release_t::luminous;
 	new_flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
       } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_KRAKEN)) {
-	new_require_osd_release = CEPH_RELEASE_KRAKEN;
+	new_require_osd_release = ceph_release_t::kraken;
       } else if (new_flags >= 0 && (new_flags & CEPH_OSDMAP_REQUIRE_JEWEL)) {
-	new_require_osd_release = CEPH_RELEASE_JEWEL;
+	new_require_osd_release = ceph_release_t::jewel;
       } else {
-	new_require_osd_release = -1;
+	new_require_osd_release = ceph_release_t::unknown;
       }
     }
     if (struct_v >= 8) {
@@ -951,8 +951,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->dump_float("new_full_ratio", new_full_ratio);
   f->dump_float("new_nearfull_ratio", new_nearfull_ratio);
   f->dump_float("new_backfillfull_ratio", new_backfillfull_ratio);
-  f->dump_int("new_require_min_compat_client", new_require_min_compat_client);
-  f->dump_int("new_require_osd_release", new_require_osd_release);
+  f->dump_int("new_require_min_compat_client", ceph::to_integer<int>(new_require_min_compat_client));
+  f->dump_int("new_require_osd_release", ceph::to_integer<int>(new_require_osd_release));
 
   if (fullmap.length()) {
     f->open_object_section("full_map");
@@ -1247,7 +1247,7 @@ bool OSDMap::is_blacklisted(const entity_addr_t& orig) const
   // all blacklist entries are type ANY for nautilus+
   // FIXME: avoid this copy!
   entity_addr_t a = orig;
-  if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
+  if (require_osd_release < ceph_release_t::nautilus) {
     a.set_type(entity_addr_t::TYPE_LEGACY);
   } else {
     a.set_type(entity_addr_t::TYPE_ANY);
@@ -1545,24 +1545,24 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     const uint64_t jewel_features = CEPH_FEATURE_SERVER_JEWEL;
-    if (require_osd_release >= CEPH_RELEASE_JEWEL) {
+    if (require_osd_release >= ceph_release_t::jewel) {
       features |= jewel_features;
     }
     mask |= jewel_features;
 
     const uint64_t kraken_features = CEPH_FEATUREMASK_SERVER_KRAKEN
       | CEPH_FEATURE_MSG_ADDR2;
-    if (require_osd_release >= CEPH_RELEASE_KRAKEN) {
+    if (require_osd_release >= ceph_release_t::kraken) {
       features |= kraken_features;
     }
     mask |= kraken_features;
   }
 
-  if (require_min_compat_client >= CEPH_RELEASE_NAUTILUS) {
+  if (require_min_compat_client >= ceph_release_t::nautilus) {
     // if min_compat_client is >= nautilus, require v2 cephx signatures
     // from everyone
     features |= CEPH_FEATUREMASK_CEPHX_V2;
-  } else if (require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+  } else if (require_osd_release >= ceph_release_t::nautilus &&
 	     entity_type == CEPH_ENTITY_TYPE_OSD) {
     // if osds are >= nautilus, at least require the signatures from them
     features |= CEPH_FEATUREMASK_CEPHX_V2;
@@ -1574,36 +1574,36 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   return features;
 }
 
-uint8_t OSDMap::get_min_compat_client() const
+ceph_release_t OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
       HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {    // v12.0.1-2172-gef1ef28
-    return CEPH_RELEASE_LUMINOUS;  // v12.2.0
+    return ceph_release_t::luminous;  // v12.2.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES5)) {      // v10.0.0-612-g043a737
-    return CEPH_RELEASE_JEWEL;     // v10.2.0
+    return ceph_release_t::jewel;     // v10.2.0
   }
   if (HAVE_FEATURE(f, CRUSH_V4)) {             // v0.91-678-g325fc56
-    return CEPH_RELEASE_HAMMER;    // v0.94.0
+    return ceph_release_t::hammer;    // v0.94.0
   }
   if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
       HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
       HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
-    return CEPH_RELEASE_FIREFLY;   // v0.80.0
+    return ceph_release_t::firefly;   // v0.80.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES2) ||      // v0.54-684-g0cc47ff
       HAVE_FEATURE(f, OSDHASHPSPOOL)) {        // v0.57-398-g8cc2b0f
-    return CEPH_RELEASE_DUMPLING;  // v0.67.0
+    return ceph_release_t::dumpling;  // v0.67.0
   }
   if (HAVE_FEATURE(f, CRUSH_TUNABLES)) {       // v0.48argonaut-206-g6f381af
-    return CEPH_RELEASE_ARGONAUT;  // v0.48argonaut-206-g6f381af
+    return ceph_release_t::argonaut;  // v0.48argonaut-206-g6f381af
   }
-  return CEPH_RELEASE_ARGONAUT;    // v0.48argonaut-206-g6f381af
+  return ceph_release_t::argonaut;    // v0.48argonaut-206-g6f381af
 }
 
-uint8_t OSDMap::get_require_min_compat_client() const
+ceph_release_t OSDMap::get_require_min_compat_client() const
 {
   return require_min_compat_client;
 }
@@ -1934,12 +1934,12 @@ int OSDMap::apply_incremental(const Incremental &inc)
     // require_kraken_osds before the osds can be upgraded to
     // luminous.
     if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
-      if (require_osd_release < CEPH_RELEASE_KRAKEN) {
-	require_osd_release = CEPH_RELEASE_KRAKEN;
+      if (require_osd_release < ceph_release_t::kraken) {
+	require_osd_release = ceph_release_t::kraken;
       }
     } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
-      if (require_osd_release < CEPH_RELEASE_JEWEL) {
-	require_osd_release = CEPH_RELEASE_JEWEL;
+      if (require_osd_release < ceph_release_t::jewel) {
+	require_osd_release = ceph_release_t::jewel;
       }
     }
   }
@@ -2149,20 +2149,20 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_full_ratio >= 0) {
     full_ratio = inc.new_full_ratio;
   }
-  if (inc.new_require_min_compat_client > 0) {
+  if (inc.new_require_min_compat_client > ceph_release_t::unknown) {
     require_min_compat_client = inc.new_require_min_compat_client;
   }
-  if (inc.new_require_osd_release >= 0) {
+  if (inc.new_require_osd_release >= ceph_release_t::unknown) {
     require_osd_release = inc.new_require_osd_release;
-    if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    if (require_osd_release >= ceph_release_t::luminous) {
       flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
       flags |= CEPH_OSDMAP_RECOVERY_DELETES;
     }
   }
 
-  if (inc.new_require_osd_release >= 0) {
+  if (inc.new_require_osd_release >= ceph_release_t::unknown) {
     require_osd_release = inc.new_require_osd_release;
-    if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    if (require_osd_release >= ceph_release_t::nautilus) {
       flags |= CEPH_OSDMAP_PGLOG_HARDLIMIT;
     }
   }
@@ -2172,7 +2172,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     auto blp = bl.cbegin();
     crush.reset(new CrushWrapper);
     crush->decode(blp);
-    if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    if (require_osd_release >= ceph_release_t::luminous) {
       // only increment if this is a luminous-encoded osdmap, lest
       // the mon's crush_version diverge from what the osds or others
       // are decoding and applying on their end.  if we won't encode
@@ -2572,24 +2572,24 @@ bool OSDMap::primary_changed(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
-  if (require_osd_release < CEPH_RELEASE_OCTOPUS) {
+  if (require_osd_release < ceph_release_t::octopus) {
     f &= ~CEPH_FEATURE_SERVER_OCTOPUS;
   }
-  if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
+  if (require_osd_release < ceph_release_t::nautilus) {
     f &= ~CEPH_FEATURE_SERVER_NAUTILUS;
   }
-  if (require_osd_release < CEPH_RELEASE_MIMIC) {
+  if (require_osd_release < ceph_release_t::mimic) {
     f &= ~CEPH_FEATURE_SERVER_MIMIC;
   }
-  if (require_osd_release < CEPH_RELEASE_LUMINOUS) {
+  if (require_osd_release < ceph_release_t::luminous) {
     f &= ~(CEPH_FEATURE_SERVER_LUMINOUS |
 	   CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
   }
-  if (require_osd_release < CEPH_RELEASE_KRAKEN) {
+  if (require_osd_release < ceph_release_t::kraken) {
     f &= ~(CEPH_FEATURE_SERVER_KRAKEN |
 	   CEPH_FEATURE_MSG_ADDR2);
   }
-  if (require_osd_release < CEPH_RELEASE_JEWEL) {
+  if (require_osd_release < ceph_release_t::jewel) {
     f &= ~(CEPH_FEATURE_SERVER_JEWEL |
 	   CEPH_FEATURE_NEW_OSDOP_ENCODING |
 	   CEPH_FEATURE_CRUSH_TUNABLES5);
@@ -2765,11 +2765,11 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
 
     if (v < 4) {
       decltype(flags) f = flags;
-      if (require_osd_release >= CEPH_RELEASE_LUMINOUS)
+      if (require_osd_release >= ceph_release_t::luminous)
 	f |= CEPH_OSDMAP_REQUIRE_LUMINOUS | CEPH_OSDMAP_RECOVERY_DELETES;
-      else if (require_osd_release == CEPH_RELEASE_KRAKEN)
+      else if (require_osd_release == ceph_release_t::kraken)
 	f |= CEPH_OSDMAP_REQUIRE_KRAKEN;
-      else if (require_osd_release == CEPH_RELEASE_JEWEL)
+      else if (require_osd_release == ceph_release_t::jewel)
 	f |= CEPH_OSDMAP_REQUIRE_JEWEL;
       encode(f, bl);
     } else {
@@ -3177,25 +3177,25 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     if (struct_v >= 5) {
       decode(require_min_compat_client, bl);
       decode(require_osd_release, bl);
-      if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      if (require_osd_release >= ceph_release_t::nautilus) {
 	flags |= CEPH_OSDMAP_PGLOG_HARDLIMIT;
       }
-      if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+      if (require_osd_release >= ceph_release_t::luminous) {
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
 	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       }
     } else {
       if (flags & CEPH_OSDMAP_REQUIRE_LUMINOUS) {
 	// only for compat with post-kraken pre-luminous test clusters
-	require_osd_release = CEPH_RELEASE_LUMINOUS;
+	require_osd_release = ceph_release_t::luminous;
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
 	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
       } else if (flags & CEPH_OSDMAP_REQUIRE_KRAKEN) {
-	require_osd_release = CEPH_RELEASE_KRAKEN;
+	require_osd_release = ceph_release_t::kraken;
       } else if (flags & CEPH_OSDMAP_REQUIRE_JEWEL) {
-	require_osd_release = CEPH_RELEASE_JEWEL;
+	require_osd_release = ceph_release_t::jewel;
       } else {
-	require_osd_release = 0;
+	require_osd_release = ceph_release_t::unknown;
       }
     }
     if (struct_v >= 6) {
@@ -3292,11 +3292,11 @@ void OSDMap::dump(Formatter *f) const
   f->dump_int("pool_max", get_pool_max());
   f->dump_int("max_osd", get_max_osd());
   f->dump_string("require_min_compat_client",
-		 ceph_release_name(require_min_compat_client));
+		 ceph::to_string(require_min_compat_client));
   f->dump_string("min_compat_client",
-		 ceph_release_name(get_min_compat_client()));
+		 ceph::to_string(get_min_compat_client()));
   f->dump_string("require_osd_release",
-		 ceph_release_name(require_osd_release));
+		 ceph::to_string(require_osd_release));
 
   f->open_array_section("pools");
   for (const auto &pool : pools) {
@@ -3573,14 +3573,14 @@ void OSDMap::print(ostream& out) const
   out << "full_ratio " << full_ratio << "\n";
   out << "backfillfull_ratio " << backfillfull_ratio << "\n";
   out << "nearfull_ratio " << nearfull_ratio << "\n";
-  if (require_min_compat_client > 0) {
+  if (require_min_compat_client != ceph_release_t::unknown) {
     out << "require_min_compat_client "
-	<< ceph_release_name(require_min_compat_client) << "\n";
+	<< require_min_compat_client << "\n";
   }
-  out << "min_compat_client " << ceph_release_name(get_min_compat_client())
+  out << "min_compat_client " << get_min_compat_client()
       << "\n";
-  if (require_osd_release > 0) {
-    out << "require_osd_release " << ceph_release_name(require_osd_release)
+  if (require_osd_release > ceph_release_t::unknown) {
+    out << "require_osd_release " << require_osd_release
 	<< "\n";
   }
   if (get_cluster_snapshot().length())
