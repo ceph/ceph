@@ -694,3 +694,13 @@ int RGWSI_SysObj_Core::pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& _ctx,
   return oids->size();
 }
 
+int RGWSI_SysObj_Core::pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                                    string *marker)
+{
+  if (!_ctx.impl) {
+    return -EINVAL;
+  }
+
+  auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
+  return ctx.op.get_marker(marker);
+}

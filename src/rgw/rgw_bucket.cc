@@ -2360,17 +2360,6 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
-class RGW_MB_Handler_Module_Bucket : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Zone *zone_svc;
-public:
-  RGW_MB_Handler_Module_Bucket(RGWSI_Zone *_zone_svc) : zone_svc(_zone_svc) {}
-
-  void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    *oid = key;
-    *pool = zone_svc->get_zone_params().domain_root;
-  }
-};
-
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:

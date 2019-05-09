@@ -19,6 +19,11 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
   return new RGWSI_MetaBackend_Handler_SObj(this);
 }
 
+RGWSI_MetaBackend_SObj::alloc_ctx()
+{
+  return new ctx(sysobj_svc);
+}
+
 int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
 {
   RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
@@ -94,30 +99,34 @@ int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
                .remove(params.y);
 }
 
-int RGWSI_MetaBackend_SObj::list_init(const string& marker, void **phandle) override {
-    auto info = std::make_unique<list_keys_info>();
+int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
+                                      const string& marker)
+{
+  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
-    int ret = store->list_raw_objects_init(store->svc.zone->get_zone_params().domain_root, marker,
-                                           &info->ctx);
-    if (ret < 0) {
-      return ret;
-    }
-    *phandle = (void *)info.release();
+  rgw_pool pool;
 
-    return 0;
-  }
+  string no_key;
+  ctx->module->get_pool_and_oid(no_key, &ctx->list.pool, nullptr);
 
-int RGWSI_MetaBackend_SObj::list_next(void *handle, int max, list<string>& keys, bool *truncated) override {
-  list_keys_info *info = static_cast<list_keys_info *>(handle);
+  ctx->list.pool = sysobj_svc->get_pool(pool);
+  ctx->list.op = ctx->list.pool->op();
 
-  string no_filter;
+  string prefix = ctx->module->get_prefix();
+  ctx->list.op->init(marker, prefix);
 
-  keys.clear();
+  return 0;
+}
 
-  list<string> unfiltered_keys;
+int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
+                                      int max, list<string>& keys,
+                                      bool *truncated)
+{
+  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
-  int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
-                                         unfiltered_keys, truncated);
+  vector<string> oids;
+
+  int ret = ctx->list.op->get_next(max, &oids, truncated);
   if (ret < 0 && ret != -ENOENT)
     return ret;
   if (ret == -ENOENT) {
@@ -126,29 +135,23 @@ int RGWSI_MetaBackend_SObj::list_next(void *handle, int max, list<string>& keys,
     return 0;
   }
 
-  constexpr int prefix_size = sizeof(RGW_BUCKET_INSTANCE_MD_PREFIX) - 1;
-  // now filter in the relevant entries
-  list<string>::iterator iter;
-  for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
-    string& k = *iter;
+  auto module = ctx->module;
 
-    if (k.compare(0, prefix_size, RGW_BUCKET_INSTANCE_MD_PREFIX) == 0) {
-      auto oid = k.substr(prefix_size);
-      rgw_bucket_instance_oid_to_key(oid);
-      keys.emplace_back(std::move(oid));
+  for (auto& o : oids) {
+    if (!module->is_valid_oid(o)) {
+      continue;
     }
+    keys.emplace_back(module->oid_to_key(o));
   }
 
   return 0;
 }
 
-void RGWSI_MetaBackend_SObj::list_complete(void *handle) override {
-  list_keys_info *info = static_cast<list_keys_info *>(handle);
-  delete info;
-}
+int RGWSI_MetaBackend_SObj::list_get_marker(RGWSI_MetaBackend::Context *_ctx,
+                                            string *marker)
+{
+  RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
-string get_marker(void *handle) override {
-  list_keys_info *info = static_cast<list_keys_info *>(handle);
-  return info->store->list_raw_objs_get_cursor(info->ctx);
+  return ctx->list.op->get_marker(marker);
 }
 

@@ -232,6 +232,7 @@ public:
 
       int init(const std::string& marker, const std::string& prefix);
       int get_next(int max, std::vector<string> *oids, bool *is_truncated);
+      int get_marker(string *marker);
     };
 
     int list_prefixed_objs(const std::string& prefix, std::vector<std::string> *result);

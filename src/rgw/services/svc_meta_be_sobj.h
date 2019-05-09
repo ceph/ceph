@@ -26,13 +26,15 @@
 
 class RGWSI_MBSObj_Handler_Module : public RGWSI_MetaBackend::Module {
 public:
-  virtual void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) = 0;
-  virtual void key_to_oid(string& key) {}
-  virtual void oid_to_key(string& oid) {}
+  virtual void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) = 0;
+  virtual const std::string& get_oid_prefix() = 0;
+  virtual std::string key_to_oid(const std::string& key) = 0;
+  virtual bool is_valid_oid(const std::string& oid) = 0;
+  virtual std::string oid_to_key(const std::string& oid) = 0;
 
   /* key to use for hashing entries for log shard placement */
-  virtual void get_hash_key(const std::string& section, const std::string& key, std::string& hash_key) {
-    hash_key = section + ":" + key;
+  virtual std::string get_hash_key(const std::string& section, const std::string& key) {
+    return section + ":" + key;
   }
 };
 
@@ -91,7 +93,11 @@ public:
     RGWSI_SysObj *sysobj_svc{nullptr};
 
     RGWSI_MBSObj_Handler_Module *module{nullptr};
-    optional<RGWSysObjectCtx> obj_ctx;
+    std::optional<RGWSysObjectCtx> obj_ctx;
+    struct _list {
+      std::optional<RGWSI_SysObj::Pool> pool;
+      std::optional<RGWSI_SysObj::Pool::Op> op;
+    } list;
 
     Context_SObj(RGWSI_SysObj *_sysobj_svc) : sysobj_svc(_sysobj_svc) {}
 
@@ -128,9 +134,12 @@ public:
                    RGWSI_MetaBackend::RemoveParams& params,
                    RGWObjVersionTracker *objv_tracker) override;
 
-  int list_init(const string& marker, void **phandle) override;
-  int list_next(void *handle, int max, std:::list<std::string>& keys, bool *truncated) override;
-  void list_complete(void *handle) override;
+  int list_init(RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
+  int list_next(RGWSI_MetaBackend::Context *_ctx,
+                int max, list<string>& keys,
+                bool *truncated) override;
+  int list_get_marker(RGWSI_MetaBackend::Context *ctx,
+                      string *marker) override;
 
   int call(std::function<int(RGWSI_MetaBackend::Context *)> f) override;
 };
