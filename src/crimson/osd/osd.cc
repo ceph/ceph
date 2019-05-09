@@ -238,7 +238,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
-  } else if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+  } else if (osdmap->require_osd_release < ceph_release_t::luminous) {
     logger().error("osdmap require_osd_release < luminous; please upgrade to luminous");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
@@ -825,7 +825,7 @@ seastar::future<> OSD::handle_pg_log(ceph::net::Connection* conn,
 
 void OSD::check_osdmap_features()
 {
-  if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
+  if (osdmap->require_osd_release < ceph_release_t::nautilus) {
     heartbeat->set_require_authorizer(false);
   } else {
     heartbeat->set_require_authorizer(true);
