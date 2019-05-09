@@ -67,12 +67,13 @@ public:
   }
 
   MOCK_METHOD10(execute_write_same,
-                bool(uint64_t, uint64_t, uint64_t, const Extents&,
+                bool(uint64_t, uint64_t, uint64_t,
+                     const LightweightBufferExtents&,
                      const ceph::bufferlist&, const ::SnapContext &, int*,
                      uint64_t*, DispatchResult*, Context *));
   bool write_same(
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      Extents&& buffer_extents, ceph::bufferlist&& data,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,

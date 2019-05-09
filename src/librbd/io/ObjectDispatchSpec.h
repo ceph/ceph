@@ -94,11 +94,12 @@ public:
 
   struct WriteSameRequest : public WriteRequestBase {
     uint64_t object_len;
-    Extents buffer_extents;
+    LightweightBufferExtents buffer_extents;
     ceph::bufferlist data;
 
     WriteSameRequest(uint64_t object_no, uint64_t object_off,
-                     uint64_t object_len, Extents&& buffer_extents,
+                     uint64_t object_len,
+                     LightweightBufferExtents&& buffer_extents,
                      ceph::bufferlist&& data, const ::SnapContext& snapc,
                      uint64_t journal_tid)
     : WriteRequestBase(object_no, object_off, snapc, journal_tid),
@@ -196,7 +197,7 @@ public:
   static ObjectDispatchSpec* create_write_same(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
       uint64_t object_no, uint64_t object_off, uint64_t object_len,
-      Extents&& buffer_extents, ceph::bufferlist&& data,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags, uint64_t journal_tid,
       const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,

@@ -167,7 +167,7 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, WriteSame) {
   MockSimpleSchedulerObjectDispatch
       mock_simple_scheduler_object_dispatch(&mock_image_ctx);
 
-  io::Extents buffer_extents;
+  io::LightweightBufferExtents buffer_extents;
   ceph::bufferlist data;
   C_SaferCond cond;
   Context *on_finish = &cond;
