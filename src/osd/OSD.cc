@@ -374,6 +374,11 @@ void OSDService::start_shutdown()
     Mutex::Locker l(sleep_lock);
     sleep_timer.shutdown();
   }
+
+  {
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
+  }
 }
 
 void OSDService::shutdown_reserver()
@@ -393,11 +398,6 @@ void OSDService::shutdown()
   for (auto f : objecter_finishers) {
     f->wait_for_empty();
     f->stop();
-  }
-
-  {
-    Mutex::Locker l(recovery_request_lock);
-    recovery_request_timer.shutdown();
   }
 
   osdmap = OSDMapRef();
