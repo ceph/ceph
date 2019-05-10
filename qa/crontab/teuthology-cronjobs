@@ -176,13 +176,14 @@ DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
 
 25 01 * * 2,4  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/nautilus-p2p -k distro -e $CEPH_QA_EMAIL
 
-## !!!! three suites below MUST use --suite-branch hammer, krakel, jewel, luminous (see https://tracker.ceph.com/issues/24021)
-## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5" - test ONLY supported distro
-## to run on ovh use ~/rhel_only_on_ovh.yaml, we will run on smithi nodes
-DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
-47 01 * * 1,3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter $DISTRO_MIMIC
-50 01 * * 1,3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous -k distro -e $CEPH_QA_EMAIL --suite-branch luminous --filter $DISTRO_MIMIC
-
+## !!!! three suites below MUST use --suite-branch jewel, luminous, mimic (see https://tracker.ceph.com/issues/24021)
+## ref: https://github.com/ceph/ceph/pull/27983; https://github.com/ceph/ceph/pull/27934; https://github.com/ceph/ceph/pull/28027
+## --filter "ubuntu_16.04,centos_7.6,rhel_7.6" - test ONLY supported distro BEFORE mimic
+## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.6,rhel_7.6" - test ONLY supported distro AFTER mimic
+##
+47 01 * * 1,3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; DISTRO_NAUTILUS="ubuntu_16.04,centos_7.6,rhel_7.6"; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter $DISTRO_NAUTILUS
+50 01 * * 1,3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; DISTRO_NAUTILUS="ubuntu_16.04,centos_7.6,rhel_7.6"; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous-nautilus -k distro -e $CEPH_QA_EMAIL --suite-branch luminous --filter $DISTRO_NAUTILUS
+50 01 * * 1,3  CEPH_BRANCH=nautilus; MACHINE_NAME=smithi; DISTRO_NAUTILUS="ubuntu_16.04,centos_7.6,ubuntu_18.04,rhel_7.6"; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-mimic -k distro -e $CEPH_QA_EMAIL --suite-branch mimic --filter $DISTRO_NAUTILUS
 
 #********** nautilus branch END
 
