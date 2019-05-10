@@ -1727,6 +1727,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Issue a health warning if there are misplaced objects"),
 
+    Option("mon_warn_on_too_few_osds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mgr")
+    .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
+
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .add_service("mon")
