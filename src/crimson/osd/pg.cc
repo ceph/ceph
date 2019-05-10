@@ -1015,18 +1015,14 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
       // TODO: issue requests in parallel if they don't write,
       // with writes being basically a synchronization barrier
       return seastar::do_for_each(std::begin(m->ops), std::end(m->ops),
-                                  [m,&txn,this,os](OSDOp& osd_op) {
-        return do_osd_op(*os, osd_op, txn);
-      }).then([m,&txn,this,os=std::move(os)] {
-        // XXX: the entire lambda can be scheduled conditionally
-        // XXX: I'm not txn.empty() is what we want here
-        return !txn.empty() ? backend->store_object_state(os, *m, txn)
-                            : seastar::now();
+                                  [m,&txn,this,pos=os.get()](OSDOp& osd_op) {
+        return do_osd_op(*pos, osd_op, txn);
+      }).then([&txn,m,this,os=std::move(os)]() mutable {
+        // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
+        return txn.empty() ? seastar::now()
+                           : backend->mutate_object(std::move(os), std::move(txn), *m);
       });
-    }).then([&] {
-      return txn.empty() ? seastar::now()
-                         : backend->submit_transaction(std::move(txn));
-    }).then([=] {
+    }).then([m,this] {
       auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                              0, false);
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
