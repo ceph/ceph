@@ -423,6 +423,61 @@
             </div>
           </div>
 
+        <!-- Quotas -->
+        <div>
+          <legend i18n>Quotas</legend>
+
+          <!-- Max Bytes -->
+          <div class="form-group"
+               [ngClass]="{'has-error': form.showError('max_bytes', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="max_bytes">
+              <ng-container i18n>Max bytes</ng-container>
+              <cd-helper>
+                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
+                <br>
+                <span i18n>A valid quota should be greater than 0.</span>
+              </cd-helper>
+            </label>
+            <div class="col-sm-9">
+              <input class="form-control"
+                     id="max_bytes"
+                     name="max_bytes"
+                     type="text"
+                     formControlName="max_bytes"
+                     i18n-placeholder
+                     placeholder="e.g., 10GiB"
+                     defaultUnit="GiB"
+                     cdDimlessBinary>
+            </div>
+          </div>
+
+          <!-- Max Objects -->
+          <div class="form-group"
+               [ngClass]="{'has-error': form.showError('max_objects', formDir)}">
+            <label class="control-label col-sm-3"
+                   for="max_objects">
+              <ng-container i18n>Max objects</ng-container>
+              <cd-helper>
+                <span i18n>Leave it blank or specify 0 to disable this quota.</span>
+                <br>
+                <span i18n>A valid quota should be greater than 0.</span>
+              </cd-helper>
+            </label>
+            <div class="col-sm-9">
+              <input class="form-control"
+                     id="max_objects"
+                     min="0"
+                     name="max_objects"
+                     type="number"
+                     formControlName="max_objects">
+              <span class="help-block"
+                    *ngIf="form.showError('max_objects', formDir, 'min')"
+                    i18n>The value should be greater or equal to 0</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Pool configuration -->
         <div [hidden]="form.get('poolType').value !== 'replicated' || data.applications.selected.indexOf('rbd') === -1">
           <cd-rbd-configuration-form [form]="form"
