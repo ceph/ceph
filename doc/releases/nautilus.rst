@@ -13,7 +13,7 @@ Major Changes from Mimic
 
 - *Dashboard*:
 
-  The Ceph Dashboard has gained a lot of new functionality:
+  The :ref:`mgr-dashboard` has gained a lot of new functionality:
 
   * Support for multiple users / roles
   * SSO (SAMLv2) for user authentication
@@ -32,7 +32,7 @@ Major Changes from Mimic
   * Embedded Grafana Dashboards (derived from Ceph Metrics)
   * CRUSH map viewer
   * NFS Ganesha management
-  * iSCSI target management (via ceph-iscsi)
+  * iSCSI target management (via :ref:`ceph-iscsi`)
   * RBD QoS configuration
   * Ceph Manager (ceph-mgr) module management
   * Prometheus alert Management
