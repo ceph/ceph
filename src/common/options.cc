@@ -3549,6 +3549,14 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_min_pg_log_entries")
     .add_see_also("osd_max_pg_log_entries"),
 
+    Option("osd_object_clean_region_max_num_intervals", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("number of intervals in clean_offsets")
+    .set_long_description("partial recovery uses multiple intervals to record the clean part of the object"
+        "when the number of intervals is greater than osd_object_clean_region_max_num_intervals, minimum interval will be trimmed"
+        "(0 will recovery the entire object data interval)")
+    .add_service("osd"),
+
     Option("osd_force_recovery_pg_log_entries_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.3)
     .set_description(""),
