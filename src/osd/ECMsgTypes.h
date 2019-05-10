@@ -33,7 +33,7 @@ struct ECSubWrite {
   vector<pg_log_entry_t> log_entries;
   std::set<hobject_t> temp_added;
   std::set<hobject_t> temp_removed;
-  boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+  std::optional<pg_hit_set_history_t> updated_hit_set_history;
   bool backfill_or_async_recovery = false;
   ECSubWrite() : tid(0) {}
   ECSubWrite(
@@ -47,7 +47,7 @@ struct ECSubWrite {
     eversion_t trim_to,
     eversion_t roll_forward_to,
     vector<pg_log_entry_t> log_entries,
-    boost::optional<pg_hit_set_history_t> updated_hit_set_history,
+    std::optional<pg_hit_set_history_t> updated_hit_set_history,
     const std::set<hobject_t> &temp_added,
     const std::set<hobject_t> &temp_removed,
     bool backfill_or_async_recovery)

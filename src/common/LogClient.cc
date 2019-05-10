@@ -128,23 +128,6 @@ LogClient::LogClient(CephContext *cct, Messenger *m, MonMap *mm,
 {
 }
 
-LogClientTemp::LogClientTemp(clog_type type_, LogChannel &parent_)
-  : type(type_), parent(parent_)
-{
-}
-
-LogClientTemp::LogClientTemp(const LogClientTemp &rhs)
-  : type(rhs.type), parent(rhs.parent)
-{
-  // don't want to-- nor can we-- copy the ostringstream
-}
-
-LogClientTemp::~LogClientTemp()
-{
-  if (ss.peek() != EOF)
-    parent.do_log(type, ss);
-}
-
 void LogChannel::update_config(map<string,string> &log_to_monitors,
 			       map<string,string> &log_to_syslog,
 			       map<string,string> &log_channels,

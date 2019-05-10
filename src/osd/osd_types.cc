@@ -1028,9 +1028,9 @@ std::string pg_state_string(uint64_t state)
   return ret;
 }
 
-boost::optional<uint64_t> pg_string_state(const std::string& state)
+std::optional<uint64_t> pg_string_state(const std::string& state)
 {
-  boost::optional<uint64_t> type;
+  std::optional<uint64_t> type;
   if (state == "active")
     type = PG_STATE_ACTIVE;
   else if (state == "clean")
@@ -1096,7 +1096,7 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
   else if (state == "unknown")
     type = 0;
   else
-    type = boost::none;
+    type = std::nullopt;
   return type;
 }
 
@@ -4121,7 +4121,7 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case SETATTRS: {
-	map<string, boost::optional<ceph::buffer::list> > attrs;
+	map<string, std::optional<ceph::buffer::list> > attrs;
 	decode(attrs, bp);
 	visitor->setattrs(attrs);
 	break;
@@ -4175,7 +4175,7 @@ struct DumpVisitor : public ObjectModDesc::Visitor {
     f->dump_unsigned("old_size", old_size);
     f->close_section();
   }
-  void setattrs(map<string, boost::optional<ceph::buffer::list> > &attrs) override {
+  void setattrs(map<string, std::optional<ceph::buffer::list> > &attrs) override {
     f->open_object_section("op");
     f->dump_string("code", "SETATTRS");
     f->open_array_section("attrs");
@@ -4235,7 +4235,7 @@ void ObjectModDesc::dump(Formatter *f) const
 
 void ObjectModDesc::generate_test_instances(list<ObjectModDesc*>& o)
 {
-  map<string, boost::optional<ceph::buffer::list> > attrs;
+  map<string, std::optional<ceph::buffer::list> > attrs;
   attrs[OI_ATTR];
   attrs[SS_ATTR];
   attrs["asdf"];
@@ -6420,3 +6420,75 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
     }
   }
 }
+
+int prepare_info_keymap(
+  CephContext* cct,
+  map<string,bufferlist> *km,
+  epoch_t epoch,
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  bool dirty_big_info,
+  bool dirty_epoch,
+  bool try_fast_info,
+  PerfCounters *logger,
+  DoutPrefixProvider *dpp)
+{
+  if (dirty_epoch) {
+    encode(epoch, (*km)[string(epoch_key)]);
+  }
+
+  if (logger)
+    logger->inc(l_osd_pg_info);
+
+  // try to do info efficiently?
+  if (!dirty_big_info && try_fast_info &&
+      info.last_update > last_written_info.last_update) {
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    bool did = fast.try_apply_to(&last_written_info);
+    ceph_assert(did);  // we verified last_update increased above
+    if (info == last_written_info) {
+      encode(fast, (*km)[string(fastinfo_key)]);
+      if (logger)
+	logger->inc(l_osd_pg_fastinfo);
+      return 0;
+    }
+    if (dpp) {
+      ldpp_dout(dpp, 30) << __func__ << " fastinfo failed, info:\n";
+      {
+	JSONFormatter jf(true);
+	jf.dump_object("info", info);
+	jf.flush(*_dout);
+      }
+      {
+	*_dout << "\nlast_written_info:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("last_written_info", last_written_info);
+	jf.flush(*_dout);
+      }
+      *_dout << dendl;
+    }
+  }
+
+  last_written_info = info;
+
+  // info.  store purged_snaps separately.
+  interval_set<snapid_t> purged_snaps;
+  purged_snaps.swap(info.purged_snaps);
+  encode(info, (*km)[string(info_key)]);
+  purged_snaps.swap(info.purged_snaps);
+
+  if (dirty_big_info) {
+    // potentially big stuff
+    bufferlist& bigbl = (*km)[string(biginfo_key)];
+    encode(past_intervals, bigbl);
+    encode(info.purged_snaps, bigbl);
+    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
+    if (logger)
+      logger->inc(l_osd_pg_biginfo);
+  }
+
+  return 0;
+}
+

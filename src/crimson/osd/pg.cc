@@ -28,7 +28,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_store.h"
-#include "crimson/os/Transaction.h"
+#include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 

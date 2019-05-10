@@ -36,6 +36,7 @@ struct ThreadPool {
 #include "common/HeartbeatMap.h"
 #include "common/Thread.h"
 #include "include/Context.h"
+#include "common/HBHandle.h"
 
 class CephContext;
 
@@ -53,7 +54,7 @@ class ThreadPool : public md_config_obs_t {
   ceph::condition_variable _wait_cond;
 
 public:
-  class TPHandle {
+  class TPHandle : public HBHandle {
     friend class ThreadPool;
     CephContext *cct;
     ceph::heartbeat_handle_d *hb;
@@ -66,8 +67,8 @@ public:
       time_t grace,
       time_t suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
-    void reset_tp_timeout();
-    void suspend_tp_timeout();
+    void reset_tp_timeout() override final;
+    void suspend_tp_timeout() override final;
   };
 private:
 

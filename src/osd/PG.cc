@@ -76,14 +76,6 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
-// easily skip them
-const string infover_key("_infover");
-const string info_key("_info");
-const string biginfo_key("_biginfo");
-const string epoch_key("_epoch");
-const string fastinfo_key("_fastinfo");
-
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -553,12 +545,12 @@ void PG::start_split_stats(const set<spg_t>& childpgs, vector<object_stat_sum_t>
   recovery_state.start_split_stats(childpgs, out);
 }
 
-void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t)
+void PG::finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction &t)
 {
   recovery_state.finish_split_stats(stats, t);
 }
 
-void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
+void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx &rctx,
 		    unsigned split_bits,
 		    const pg_merge_meta_t& last_pg_merge_meta)
 {
@@ -573,14 +565,14 @@ void PG::merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
   for (auto& i : sources) {
     auto& source = i.second;
     // wipe out source's pgmeta
-    rctx->transaction->remove(source->coll, source->pgmeta_oid);
+    rctx.transaction.remove(source->coll, source->pgmeta_oid);
 
     // merge (and destroy source collection)
-    rctx->transaction->merge_collection(source->coll, coll, split_bits);
+    rctx.transaction.merge_collection(source->coll, coll, split_bits);
   }
 
   // merge_collection does this, but maybe all of our sources were missing.
-  rctx->transaction->collection_set_bits(coll, split_bits);
+  rctx.transaction.collection_set_bits(coll, split_bits);
 
   snap_mapper.update_bits(split_bits);
 }
@@ -857,7 +849,7 @@ void PG::init(
   const pg_history_t& history,
   const PastIntervals& pi,
   bool backfill,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction &t)
 {
   recovery_state.init(
     role, newup, new_up_primary, newacting,
@@ -893,7 +885,7 @@ void PG::upgrade(ObjectStore *store)
   if (info_struct_v < latest_struct_v) {
     map<string,bufferlist> v;
     __u8 ver = latest_struct_v;
-    encode(ver, v[infover_key]);
+    encode(ver, v[string(infover_key)]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
@@ -916,73 +908,6 @@ void PG::upgrade(ObjectStore *store)
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
-
-int PG::_prepare_write_info(CephContext* cct,
-			    map<string,bufferlist> *km,
-			    epoch_t epoch,
-			    pg_info_t &info,
-			    pg_info_t &last_written_info,
-			    PastIntervals &past_intervals,
-			    bool dirty_big_info,
-			    bool dirty_epoch,
-			    bool try_fast_info,
-			    PerfCounters *logger)
-{
-  if (dirty_epoch) {
-    encode(epoch, (*km)[epoch_key]);
-  }
-
-  if (logger)
-    logger->inc(l_osd_pg_info);
-
-  // try to do info efficiently?
-  if (!dirty_big_info && try_fast_info &&
-      info.last_update > last_written_info.last_update) {
-    pg_fast_info_t fast;
-    fast.populate_from(info);
-    bool did = fast.try_apply_to(&last_written_info);
-    ceph_assert(did);  // we verified last_update increased above
-    if (info == last_written_info) {
-      encode(fast, (*km)[fastinfo_key]);
-      if (logger)
-	logger->inc(l_osd_pg_fastinfo);
-      return 0;
-    }
-    generic_dout(30) << __func__ << " fastinfo failed, info:\n";
-    {
-      JSONFormatter jf(true);
-      jf.dump_object("info", info);
-      jf.flush(*_dout);
-    }
-    {
-      *_dout << "\nlast_written_info:\n";
-      JSONFormatter jf(true);
-      jf.dump_object("last_written_info", last_written_info);
-      jf.flush(*_dout);
-    }
-    *_dout << dendl;
-  }
-
-  last_written_info = info;
-
-  // info.  store purged_snaps separately.
-  interval_set<snapid_t> purged_snaps;
-  purged_snaps.swap(info.purged_snaps);
-  encode(info, (*km)[info_key]);
-  purged_snaps.swap(info.purged_snaps);
-
-  if (dirty_big_info) {
-    // potentially big stuff
-    bufferlist& bigbl = (*km)[biginfo_key];
-    encode(past_intervals, bigbl);
-    encode(info.purged_snaps, bigbl);
-    //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
-    if (logger)
-      logger->inc(l_osd_pg_biginfo);
-  }
-
-  return 0;
-}
 
 void PG::_create(ObjectStore::Transaction& t, spg_t pgid, int bits)
 {
@@ -1009,7 +934,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> values;
   __u8 struct_v = latest_struct_v;
-  encode(struct_v, values[infover_key]);
+  encode(struct_v, values[string(infover_key)]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
@@ -1027,7 +952,7 @@ void PG::prepare_write(
   unstable_stats.clear();
   map<string,bufferlist> km;
   if (dirty_big_info || dirty_info) {
-    int ret = _prepare_write_info(
+    int ret = prepare_info_keymap(
       cct,
       &km,
       get_osdmap_epoch(),
@@ -1037,7 +962,8 @@ void PG::prepare_write(
       dirty_big_info,
       need_write_epoch,
       cct->_conf->osd_fast_info,
-      osd->logger);
+      osd->logger,
+      this);
     ceph_assert(ret == 0);
   }
   pglog.write_log_and_missing(
@@ -1083,8 +1009,8 @@ int PG::peek_map_epoch(ObjectStore *store,
 
   // try for v8
   set<string> keys;
-  keys.insert(infover_key);
-  keys.insert(epoch_key);
+  keys.insert(string(infover_key));
+  keys.insert(string(epoch_key));
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
@@ -1093,13 +1019,13 @@ int PG::peek_map_epoch(ObjectStore *store,
     ceph_assert(values.size() == 2);
 
     // sanity check version
-    auto bp = values[infover_key].cbegin();
+    auto bp = values[string(infover_key)].cbegin();
     __u8 struct_v = 0;
     decode(struct_v, bp);
     ceph_assert(struct_v >= 8);
 
     // get epoch
-    bp = values[epoch_key].begin();
+    bp = values[string(epoch_key)].begin();
     decode(cur_epoch, bp);
   } else {
     // probably bug 10617; see OSD::load_pgs()
@@ -1143,10 +1069,10 @@ int PG::read_info(
   __u8 &struct_v)
 {
   set<string> keys;
-  keys.insert(infover_key);
-  keys.insert(info_key);
-  keys.insert(biginfo_key);
-  keys.insert(fastinfo_key);
+  keys.insert(string(infover_key));
+  keys.insert(string(info_key));
+  keys.insert(string(biginfo_key));
+  keys.insert(string(fastinfo_key));
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   auto ch = store->open_collection(coll);
@@ -1156,18 +1082,18 @@ int PG::read_info(
   ceph_assert(values.size() == 3 ||
 	 values.size() == 4);
 
-  auto p = values[infover_key].cbegin();
+  auto p = values[string(infover_key)].cbegin();
   decode(struct_v, p);
   ceph_assert(struct_v >= 10);
 
-  p = values[info_key].begin();
+  p = values[string(info_key)].begin();
   decode(info, p);
 
-  p = values[biginfo_key].begin();
+  p = values[string(biginfo_key)].begin();
   decode(past_intervals, p);
   decode(info.purged_snaps, p);
 
-  p = values[fastinfo_key].begin();
+  p = values[string(fastinfo_key)].begin();
   if (!p.end()) {
     pg_fast_info_t fast;
     decode(fast, p);
@@ -1211,6 +1137,7 @@ void PG::read_state(ObjectStore *store)
 
       if (oss.tellp())
 	osd->clog->error() << oss.str();
+      return 0;
     });
 
   if (info_struct_v < latest_struct_v) {
@@ -1235,13 +1162,12 @@ void PG::read_state(ObjectStore *store)
       recovery_state.set_role(-1);
   }
 
-  PG::PeeringCtx rctx(0, 0, 0, new ObjectStore::Transaction);
-  handle_initialize(&rctx);
+  PG::PeeringCtx rctx;
+  handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.
-  write_if_dirty(*rctx.transaction);
-  store->queue_transaction(ch, std::move(*rctx.transaction));
-  delete rctx.transaction;
+  write_if_dirty(rctx.transaction);
+  store->queue_transaction(ch, std::move(rctx.transaction));
 }
 
 void PG::update_snap_map(
@@ -1625,8 +1551,16 @@ epoch_t PG::oldest_stored_osdmap() {
   return osd->get_superblock().oldest_map;
 }
 
-LogChannel &PG::get_clog() {
-  return *(osd->clog);
+OstreamTemp PG::get_clog_info() {
+  return osd->clog->info();
+}
+
+OstreamTemp PG::get_clog_debug() {
+  return osd->clog->debug();
+}
+
+OstreamTemp PG::get_clog_error() {
+  return osd->clog->error();
 }
 
 void PG::schedule_event_after(
@@ -3046,8 +2980,8 @@ void PG::scrub_compare_maps()
   // construct authoritative scrub map for type specific scrubbing
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
   map<hobject_t,
-      pair<boost::optional<uint32_t>,
-           boost::optional<uint32_t>>> missing_digest;
+      pair<std::optional<uint32_t>,
+           std::optional<uint32_t>>> missing_digest;
 
   map<pg_shard_t, ScrubMap *> maps;
   maps[pg_whoami] = &scrubber.primary_scrubmap;
@@ -3364,13 +3298,13 @@ struct FlushState {
 };
 typedef std::shared_ptr<FlushState> FlushStateRef;
 
-void PG::start_flush_on_transaction(ObjectStore::Transaction *t)
+void PG::start_flush_on_transaction(ObjectStore::Transaction &t)
 {
   // flush in progress ops
   FlushStateRef flush_trigger (std::make_shared<FlushState>(
                                this, get_osdmap_epoch()));
-  t->register_on_applied(new ContainerContext<FlushStateRef>(flush_trigger));
-  t->register_on_commit(new ContainerContext<FlushStateRef>(flush_trigger));
+  t.register_on_applied(new ContainerContext<FlushStateRef>(flush_trigger));
+  t.register_on_commit(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
 bool PG::try_flush_or_schedule_async()
@@ -3609,18 +3543,18 @@ bool PG::can_discard_request(OpRequestRef& op)
   return true;
 }
 
-void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx *rctx)
+void PG::do_peering_event(PGPeeringEventRef evt, PeeringCtx &rctx)
 {
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   ceph_assert(have_same_or_newer_map(evt->get_epoch_sent()));
   if (old_peering_evt(evt)) {
     dout(10) << "discard old " << evt->get_desc() << dendl;
   } else {
-    recovery_state.handle_event(evt, rctx);
+    recovery_state.handle_event(evt, &rctx);
   }
   // write_if_dirty regardless of path above to ensure we capture any work
   // done by OSD::advance_pg().
-  write_if_dirty(*rctx->transaction);
+  write_if_dirty(rctx.transaction);
 }
 
 void PG::queue_peering_event(PGPeeringEventRef evt)
@@ -3639,7 +3573,7 @@ void PG::queue_null(epoch_t msg_epoch,
 					 NullEvt())));
 }
 
-void PG::find_unfound(epoch_t queued, PeeringCtx *rctx)
+void PG::find_unfound(epoch_t queued, PeeringCtx &rctx)
 {
   /*
     * if we couldn't start any recovery ops and things are still
@@ -3647,8 +3581,8 @@ void PG::find_unfound(epoch_t queued, PeeringCtx *rctx)
     * It may be that our initial locations were bad and we errored
     * out while trying to pull.
     */
-  recovery_state.discover_all_missing(*rctx->query_map);
-  if (rctx->query_map->empty()) {
+  recovery_state.discover_all_missing(rctx.query_map);
+  if (rctx.query_map.empty()) {
     string action;
     if (state_test(PG_STATE_BACKFILLING)) {
       auto evt = PGPeeringEventRef(
@@ -3680,7 +3614,7 @@ void PG::handle_advance_map(
   OSDMapRef osdmap, OSDMapRef lastmap,
   vector<int>& newup, int up_primary,
   vector<int>& newacting, int acting_primary,
-  PeeringCtx *rctx)
+  PeeringCtx &rctx)
 {
   dout(10) << __func__ << ": " << osdmap->get_epoch() << dendl;
   osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
@@ -3694,7 +3628,7 @@ void PG::handle_advance_map(
     rctx);
 }
 
-void PG::handle_activate_map(PeeringCtx *rctx)
+void PG::handle_activate_map(PeeringCtx &rctx)
 {
   dout(10) << __func__ << ": " << get_osdmap()->get_epoch()
 	   << dendl;
@@ -3703,11 +3637,11 @@ void PG::handle_activate_map(PeeringCtx *rctx)
   requeue_map_waiters();
 }
 
-void PG::handle_initialize(PeeringCtx *rctx)
+void PG::handle_initialize(PeeringCtx &rctx)
 {
   dout(10) << __func__ << dendl;
   PeeringState::Initialize evt;
-  recovery_state.handle_event(evt, rctx);
+  recovery_state.handle_event(evt, &rctx);
 }
 
 void PG::handle_query_state(Formatter *f)
@@ -3758,7 +3692,7 @@ void PG::C_DeleteMore::complete(int r) {
   delete this;
 }
 
-void PG::do_delete_work(ObjectStore::Transaction *t)
+void PG::do_delete_work(ObjectStore::Transaction &t)
 {
   dout(10) << __func__ << dendl;
 
@@ -3804,7 +3738,7 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
     &next);
   dout(20) << __func__ << " " << olist << dendl;
 
-  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
   int64_t num = 0;
   for (auto& oid : olist) {
     if (oid == pgmeta_oid) {
@@ -3818,13 +3752,13 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
     if (r != 0 && r != -ENOENT) {
       ceph_abort();
     }
-    t->remove(coll, oid);
+    t.remove(coll, oid);
     ++num;
   }
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch());
-    t->register_on_commit(fin);
+    t.register_on_commit(fin);
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
@@ -3835,21 +3769,21 @@ void PG::do_delete_work(ObjectStore::Transaction *t)
     // are the SnapMapper ContainerContexts.
     {
       PGRef pgref(this);
-      PGLog::clear_info_log(info.pgid, t);
-      t->remove_collection(coll);
-      t->register_on_commit(new ContainerContext<PGRef>(pgref));
-      t->register_on_applied(new ContainerContext<PGRef>(pgref));
-      osd->store->queue_transaction(ch, std::move(*t));
+      PGLog::clear_info_log(info.pgid, &t);
+      t.remove_collection(coll);
+      t.register_on_commit(new ContainerContext<PGRef>(pgref));
+      t.register_on_applied(new ContainerContext<PGRef>(pgref));
+      osd->store->queue_transaction(ch, std::move(t));
     }
     ch->flush();
 
     if (!osd->try_finish_pg_delete(this, pool.info.get_pg_num())) {
       dout(1) << __func__ << " raced with merge, reinstantiating" << dendl;
       ch = osd->store->create_new_collection(coll);
-      _create(*t,
+      _create(t,
 	      info.pgid,
 	      info.pgid.get_split_bits(pool.info.get_pg_num()));
-      _init(*t, info.pgid, &pool.info);
+      _init(t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
     } else {
       recovery_state.set_delete_complete();

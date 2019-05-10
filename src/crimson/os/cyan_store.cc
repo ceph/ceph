@@ -7,7 +7,7 @@
 
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "crimson/os/Transaction.h"
+#include "os/Transaction.h"
 
 namespace {
   seastar::logger& logger() {
@@ -34,9 +34,9 @@ seastar::future<> CyanStore::mount()
     throw std::runtime_error("read_file");
   }
 
-  set<coll_t> collections;
+  std::set<coll_t> collections;
   auto p = bl.cbegin();
-  decode(collections, p);
+  ceph::decode(collections, p);
 
   for (auto& coll : collections) {
     string fn = fmt::format("{}/{}", path, coll);
@@ -69,7 +69,7 @@ seastar::future<> CyanStore::umount()
 
   string fn = path + "/collections";
   bufferlist bl;
-  encode(collections, bl);
+  ceph::encode(collections, bl);
   if (int r = bl.write_file(fn.c_str()); r < 0) {
     throw std::runtime_error("write_file");
   }
@@ -95,7 +95,7 @@ seastar::future<> CyanStore::mkfs()
   string fn = path + "/collections";
   bufferlist bl;
   set<coll_t> collections;
-  encode(collections, bl);
+  ceph::encode(collections, bl);
   r = bl.write_file(fn.c_str());
   if (r < 0)
     throw std::runtime_error("write_file");

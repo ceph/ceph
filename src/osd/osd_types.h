@@ -47,6 +47,7 @@
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
+#include "osd_perf_counters.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -979,7 +980,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
-boost::optional<uint64_t> pg_string_state(const std::string& state);
+std::optional<uint64_t> pg_string_state(const std::string& state);
 
 
 /*
@@ -3586,7 +3587,7 @@ public:
   class Visitor {
   public:
     virtual void append(uint64_t old_offset) {}
-    virtual void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &attrs) {}
+    virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -3655,7 +3656,7 @@ public:
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
-  void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &old_attrs) {
+  void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
@@ -5924,6 +5925,27 @@ struct pool_pg_num_history_t {
   }
 };
 WRITE_CLASS_ENCODER(pool_pg_num_history_t)
+
+// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
+// easily skip them
+static const string_view infover_key = "_infover"sv;
+static const string_view info_key = "_info"sv;
+static const string_view biginfo_key = "_biginfo"sv;
+static const string_view epoch_key = "_epoch"sv;
+static const string_view fastinfo_key = "_fastinfo"sv;
+
+int prepare_info_keymap(
+  CephContext* cct,
+  map<string,bufferlist> *km,
+  epoch_t epoch,
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  bool dirty_big_info,
+  bool dirty_epoch,
+  bool try_fast_info,
+  PerfCounters *logger = nullptr,
+  DoutPrefixProvider *dpp = nullptr);
 
 // omap specific stats
 struct omap_stat_t {

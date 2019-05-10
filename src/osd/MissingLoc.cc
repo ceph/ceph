@@ -32,7 +32,7 @@ bool MissingLoc::readable_with_acting(
 
 void MissingLoc::add_batch_sources_info(
   const set<pg_shard_t> &sources,
-  ThreadPool::TPHandle* handle)
+  HBHandle *handle)
 {
   ldout(cct, 10) << __func__ << ": adding sources in batch "
 		     << sources.size() << dendl;
@@ -68,7 +68,7 @@ bool MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
   const pg_missing_t &omissing,
-  ThreadPool::TPHandle* handle)
+  HBHandle *handle)
 {
   bool found_missing = false;
   unsigned loop = 0;

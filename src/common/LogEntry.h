@@ -18,19 +18,11 @@
 #include "include/utime.h"
 #include "msg/msg_types.h"
 #include "common/entity_name.h"
+#include "ostream_temp.h"
 
 namespace ceph {
   class Formatter;
 }
-
-typedef enum {
-  CLOG_DEBUG = 0,
-  CLOG_INFO = 1,
-  CLOG_SEC = 2,
-  CLOG_WARN = 3,
-  CLOG_ERROR = 4,
-  CLOG_UNKNOWN = -1,
-} clog_type;
 
 static const std::string CLOG_CHANNEL_NONE    = "none";
 static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
