@@ -6,8 +6,8 @@ class Strategy(object):
         self.args = args
         self.osds_per_device = args.osds_per_device
         self.devices = devices
-        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
-        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
+        self.hdds = [device for device in devices if device.rotational]
+        self.ssds = [device for device in devices if not device.rotational]
         self.computed = {'osds': [], 'vgs': [], 'filtered_devices': args.filtered_devices}
 
     def validate_compute(self):
