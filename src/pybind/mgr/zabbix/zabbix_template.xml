@@ -1976,6 +1976,7 @@
                     <snmpv3_authpassphrase/>
                     <snmpv3_privprotocol>0</snmpv3_privprotocol>
                     <snmpv3_privpassphrase/>
+                    <delay_flex/>
                     <params/>
                     <ipmi_sensor/>
                     <authtype>0</authtype>
@@ -1996,6 +1997,7 @@
                             <name>[osd.{#OSD}] OSD in</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},in]</key>
                             <delay>0</delay>
@@ -2017,6 +2019,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2028,19 +2031,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[osd.{#OSD}] OSD PGs</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},num_pgs]</key>
                             <delay>0</delay>
@@ -2062,6 +2063,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2073,19 +2075,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[osd.{#OSD}] OSD fill</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},osd_fill]</key>
                             <delay>0</delay>
@@ -2107,6 +2107,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2118,19 +2119,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[osd.{#OSD}] OSD latency apply</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},osd_latency_apply]</key>
                             <delay>0</delay>
@@ -2152,6 +2151,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2163,19 +2163,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[osd.{#OSD}] OSD latency commit</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},osd_latency_commit]</key>
                             <delay>0</delay>
@@ -2197,6 +2195,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2208,19 +2207,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[osd.{#OSD}] OSD up</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[osd.{#OSD},up]</key>
                             <delay>0</delay>
@@ -2242,6 +2239,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2253,69 +2251,47 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                     </item_prototypes>
                     <trigger_prototypes>
                         <trigger_prototype>
                             <expression>{ceph-mgr Zabbix module:ceph.[osd.{#OSD},up].last()}=0</expression>
-                            <recovery_mode>0</recovery_mode>
-                            <recovery_expression/>
                             <name>Ceph OSD osd.{#OSD} is DOWN</name>
-                            <correlation_mode>0</correlation_mode>
-                            <correlation_tag/>
                             <url/>
                             <status>0</status>
                             <priority>2</priority>
                             <description/>
                             <type>0</type>
-                            <manual_close>0</manual_close>
                             <dependencies/>
-                            <tags/>
                         </trigger_prototype>
                         <trigger_prototype>
                             <expression>{ceph-mgr Zabbix module:ceph.[osd.{#OSD},osd_fill].last()}&gt;={ceph-mgr Zabbix module:ceph.osd_full_ratio.last()}</expression>
-                            <recovery_mode>0</recovery_mode>
-                            <recovery_expression/>
                             <name>Ceph OSD osd.{#OSD} is full: {ITEM.VALUE}%</name>
-                            <correlation_mode>0</correlation_mode>
-                            <correlation_tag/>
                             <url/>
                             <status>0</status>
                             <priority>4</priority>
                             <description/>
                             <type>0</type>
-                            <manual_close>0</manual_close>
                             <dependencies/>
-                            <tags/>
                         </trigger_prototype>
                         <trigger_prototype>
                             <expression>{ceph-mgr Zabbix module:ceph.[osd.{#OSD},osd_fill].last()}&gt;={ceph-mgr Zabbix module:ceph.osd_nearfull_ratio.last()}</expression>
-                            <recovery_mode>0</recovery_mode>
-                            <recovery_expression/>
                             <name>Ceph OSD osd.{#OSD} is near full: {ITEM.VALUE}%</name>
-                            <correlation_mode>0</correlation_mode>
-                            <correlation_tag/>
                             <url/>
                             <status>0</status>
                             <priority>2</priority>
                             <description/>
                             <type>0</type>
-                            <manual_close>0</manual_close>
                             <dependencies/>
-                            <tags/>
                         </trigger_prototype>
                     </trigger_prototypes>
                     <graph_prototypes/>
                     <host_prototypes/>
-                    <jmx_endpoint/>
                 </discovery_rule>
                 <discovery_rule>
                     <name>Ceph pool discovery</name>
@@ -2333,6 +2309,7 @@
                     <snmpv3_authpassphrase/>
                     <snmpv3_privprotocol>0</snmpv3_privprotocol>
                     <snmpv3_privpassphrase/>
+                    <delay_flex/>
                     <params/>
                     <ipmi_sensor/>
                     <authtype>0</authtype>
@@ -2353,6 +2330,7 @@
                             <name>[{#POOL}] Pool Used</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[{#POOL},bytes_used]</key>
                             <delay>0</delay>
@@ -2374,6 +2352,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2385,21 +2364,19 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[{#POOL}] Pool RAW Used</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
-                            <key>ceph.[{#POOL},raw_bytes_used]</key>
+                            <key>ceph.[{#POOL},stored_raw]</key>
                             <delay>0</delay>
                             <history>90</history>
                             <trends>365</trends>
@@ -2419,6 +2396,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2430,19 +2408,61 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing/>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
+                        </item_prototype>
+                        <item_prototype>
+                            <name>[{#POOL}] Pool Percent Used</name>
+                            <type>2</type>
+                            <snmp_community/>
+                            <multiplier>0</multiplier>
+                            <snmp_oid/>
+                            <key>ceph.[{#POOL},percent_used]</key>
+                            <delay>0</delay>
+                            <history>90</history>
+                            <trends>365</trends>
+                            <status>0</status>
+                            <value_type>3</value_type>
+                            <allowed_hosts/>
+                            <units>%</units>
+                            <delta>0</delta>
+                            <snmpv3_contextname/>
+                            <snmpv3_securityname/>
+                            <snmpv3_securitylevel>0</snmpv3_securitylevel>
+                            <snmpv3_authprotocol>0</snmpv3_authprotocol>
+                            <snmpv3_authpassphrase/>
+                            <snmpv3_privprotocol>0</snmpv3_privprotocol>
+                            <snmpv3_privpassphrase/>
+                            <formula>1</formula>
+                            <delay_flex/>
+                            <params/>
+                            <ipmi_sensor/>
+                            <data_type>0</data_type>
+                            <authtype>0</authtype>
+                            <username/>
+                            <password/>
+                            <publickey/>
+                            <privatekey/>
+                            <port/>
+                            <description/>
+                            <inventory_link>0</inventory_link>
+                            <applications/>
+                            <valuemap/>
+                            <logtimefmt/>
+                            <application_prototypes>
+                                <application_prototype>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
+                                </application_prototype>
+                            </application_prototypes>
                         </item_prototype>
                         <item_prototype>
                             <name>[{#POOL}] Pool Read bandwidth</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[{#POOL},rd_bytes]</key>
                             <delay>0</delay>
@@ -2464,6 +2484,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2475,24 +2496,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing>
-                                <step>
-                                    <type>10</type>
-                                    <params/>
-                                </step>
-                            </preprocessing>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[{#POOL}] Pool Read operations</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[{#POOL},rd_ops]</key>
                             <delay>0</delay>
@@ -2514,6 +2528,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2525,24 +2540,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing>
-                                <step>
-                                    <type>10</type>
-                                    <params/>
-                                </step>
-                            </preprocessing>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[{#POOL}] Pool Write bandwidth</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[{#POOL},wr_bytes]</key>
                             <delay>0</delay>
@@ -2564,6 +2572,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2575,24 +2584,17 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing>
-                                <step>
-                                    <type>10</type>
-                                    <params/>
-                                </step>
-                            </preprocessing>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                         <item_prototype>
                             <name>[{#POOL}] Pool Write operations</name>
                             <type>2</type>
                             <snmp_community/>
+                            <multiplier>0</multiplier>
                             <snmp_oid/>
                             <key>ceph.[{#POOL},wr_ops]</key>
                             <delay>0</delay>
@@ -2614,6 +2616,7 @@
                             <delay_flex/>
                             <params/>
                             <ipmi_sensor/>
+                            <data_type>0</data_type>
                             <authtype>0</authtype>
                             <username/>
                             <password/>
@@ -2625,25 +2628,16 @@
                             <applications/>
                             <valuemap/>
                             <logtimefmt/>
-                            <preprocessing>
-                                <step>
-                                    <type>10</type>
-                                    <params/>
-                                </step>
-                            </preprocessing>
-                            <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
                                     <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
-                            <master_item_prototype/>
                         </item_prototype>
                     </item_prototypes>
                     <trigger_prototypes/>
                     <graph_prototypes/>
                     <host_prototypes/>
-                    <jmx_endpoint/>
                 </discovery_rule>
             </discovery_rules>
             <macros/>
