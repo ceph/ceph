@@ -20,8 +20,8 @@ class Strategy(object):
 
     @staticmethod
     def split_devices_rotational(devices):
-        data_devs = [device for device in devices if device.sys_api['rotational'] == '1']
-        db_or_journal_devs = [device for device in devices if device.sys_api['rotational'] == '0']
+        data_devs = [device for device in devices if device.rotational]
+        db_or_journal_devs = [device for device in devices if not device.rotational]
         return data_devs, db_or_journal_devs
 
 
