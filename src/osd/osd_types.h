@@ -67,6 +67,10 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
 
 
+/// pool priority range set by user
+#define OSD_POOL_PRIORITY_MAX 10
+#define OSD_POOL_PRIORITY_MIN -OSD_POOL_PRIORITY_MAX
+
 /// min recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MIN 0
 
@@ -81,6 +85,9 @@
 
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
+
+/// base recovery priority for MRecoveryReserve (inactive PG)
+#define OSD_RECOVERY_INACTIVE_PRIORITY_BASE 220
 
 /// max manually/automatically set recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MAX 253
@@ -100,6 +107,13 @@
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
 
+static std::map<int, int> max_prio_map = {
+	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
+	{OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
+	{OSD_RECOVERY_PRIORITY_BASE, OSD_BACKFILL_INACTIVE_PRIORITY_BASE - 1},
+	{OSD_RECOVERY_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX},
+	{OSD_BACKFILL_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX}
+};
 
 typedef hobject_t collection_list_handle_t;
 
@@ -2078,6 +2092,8 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   vector<int32_t> up, acting;
+  vector<pg_shard_t> avail_no_missing;
+  map< std::set<pg_shard_t>, int32_t > object_location_counts;
   epoch_t mapping_epoch;
 
   vector<int32_t> blocked_by;  ///< osds on which the pg is blocked

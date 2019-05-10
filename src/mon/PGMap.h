@@ -52,18 +52,18 @@ public:
   mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
-    int32_t up = 0;
+    int32_t up_not_acting = 0;
     int32_t primary = 0;
     void encode(bufferlist& bl) const {
       using ceph::encode;
       encode(acting, bl);
-      encode(up, bl);
+      encode(up_not_acting, bl);
       encode(primary, bl);
     }
     void decode(bufferlist::const_iterator& p) {
       using ceph::decode;
       decode(acting, p);
-      decode(up, p);
+      decode(up_not_acting, p);
       decode(primary, p);
     }
   };

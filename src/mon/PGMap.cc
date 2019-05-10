@@ -159,7 +159,7 @@ void PGMapDigest::dump(Formatter *f) const
     f->dump_unsigned("osd", p.first);
     f->dump_unsigned("num_primary_pg", p.second.primary);
     f->dump_unsigned("num_acting_pg", p.second.acting);
-    f->dump_unsigned("num_up_pg", p.second.up);
+    f->dump_unsigned("num_up_not_acting_pg", p.second.up_not_acting);
     f->close_section();
   }
   f->close_section();
@@ -1296,8 +1296,11 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
     num_pg_by_osd[*p].acting++;
   }
   for (auto p = s.up.begin(); p != s.up.end(); ++p) {
-    pg_by_osd[*p].insert(pgid);
-    num_pg_by_osd[*p].up++;
+    auto& t = pg_by_osd[*p];
+    if (t.find(pgid) == t.end()) {
+      t.insert(pgid);
+      num_pg_by_osd[*p].up_not_acting++;
+    }
   }
 
   if (s.up_primary >= 0) {
@@ -1357,7 +1360,9 @@ bool PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
       blocked_by_sum.erase(q);
   }
 
+  set<int32_t> actingset;
   for (auto p = s.acting.begin(); p != s.acting.end(); ++p) {
+    actingset.insert(*p);
     auto& oset = pg_by_osd[*p];
     oset.erase(pgid);
     if (oset.empty())
@@ -1371,9 +1376,11 @@ bool PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     oset.erase(pgid);
     if (oset.empty())
       pg_by_osd.erase(*p);
+    if (actingset.count(*p))
+      continue;
     auto it = num_pg_by_osd.find(*p);
-    if (it != num_pg_by_osd.end() && it->second.up > 0)
-      it->second.up--;
+    if (it != num_pg_by_osd.end() && it->second.up_not_acting > 0)
+      it->second.up_not_acting--;
   }
 
   if (s.up_primary >= 0) {

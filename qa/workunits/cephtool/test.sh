@@ -2050,10 +2050,12 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority -5
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: -5'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 0
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
-  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority -1
-  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority 30
+  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority -11
+  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority 11
 
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 

@@ -1432,7 +1432,7 @@ protected:
   bool needs_backfill() const;
 
   /// clip calculated priority to reasonable range
-  inline int clamp_recovery_priority(int priority);
+  int clamp_recovery_priority(int prio, int pool_recovery_prio, int max);
   /// get log recovery reservation priority
   unsigned get_recovery_priority();
   /// get backfill reservation priority

@@ -1548,3 +1548,4 @@ OPTION(fake_statfs_for_testing, OPT_INT) // Set a value for kb and compute kb_us
 OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web tokens
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
+OPTION(debug_allow_any_pool_priority, OPT_BOOL)

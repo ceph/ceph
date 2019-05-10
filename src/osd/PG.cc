@@ -2455,14 +2455,27 @@ bool PG::set_force_backfill(bool b)
   return did;
 }
 
-inline int PG::clamp_recovery_priority(int priority)
+int PG::clamp_recovery_priority(int priority, int pool_recovery_priority, int max)
 {
   static_assert(OSD_RECOVERY_PRIORITY_MIN < OSD_RECOVERY_PRIORITY_MAX, "Invalid priority range");
   static_assert(OSD_RECOVERY_PRIORITY_MIN >= 0, "Priority range must match unsigned type");
 
+  ceph_assert(max <= OSD_RECOVERY_PRIORITY_MAX);
+
+  // User can't set this too high anymore, but might be a legacy value
+  if (pool_recovery_priority > OSD_POOL_PRIORITY_MAX)
+    pool_recovery_priority = OSD_POOL_PRIORITY_MAX;
+  if (pool_recovery_priority < OSD_POOL_PRIORITY_MIN)
+    pool_recovery_priority = OSD_POOL_PRIORITY_MIN;
+  // Shift range from min to max to 0 to max - min
+  pool_recovery_priority += (0 - OSD_POOL_PRIORITY_MIN);
+  ceph_assert(pool_recovery_priority >= 0 && pool_recovery_priority <= (OSD_POOL_PRIORITY_MAX - OSD_POOL_PRIORITY_MIN));
+
+  priority += pool_recovery_priority;
+
   // Clamp to valid range
-  if (priority > OSD_RECOVERY_PRIORITY_MAX) {
-    return OSD_RECOVERY_PRIORITY_MAX;
+  if (priority > max) {
+    return max;
   } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
     return OSD_RECOVERY_PRIORITY_MIN;
   } else {
@@ -2473,15 +2486,25 @@ inline int PG::clamp_recovery_priority(int priority)
 unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
-  int64_t ret = 0;
+  int ret = OSD_RECOVERY_PRIORITY_BASE;
+  int base = ret;
 
   if (state & PG_STATE_FORCED_RECOVERY) {
     ret = OSD_RECOVERY_PRIORITY_FORCED;
   } else {
-    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &ret);
-    ret = clamp_recovery_priority(OSD_RECOVERY_PRIORITY_BASE + ret);
+    // XXX: This priority boost isn't so much about inactive, but about data-at-risk
+    if (is_degraded() && info.stats.avail_no_missing.size() < pool.info.min_size) {
+      base = OSD_RECOVERY_INACTIVE_PRIORITY_BASE;
+      // inactive: no. of replicas < min_size, highest priority since it blocks IO
+      ret = base + (pool.info.min_size - info.stats.avail_no_missing.size());
+    }
+
+    int64_t pool_recovery_priority = 0;
+    pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
   }
-  dout(20) << __func__ << " recovery priority for " << *this << " is " << ret << ", state is " << state << dendl;
+  dout(20) << __func__ << " recovery priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
 }
 
@@ -2489,30 +2512,35 @@ unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
   int ret = OSD_BACKFILL_PRIORITY_BASE;
+  int base = ret;
+
   if (state & PG_STATE_FORCED_BACKFILL) {
     ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
     if (acting.size() < pool.info.min_size) {
+      base = OSD_BACKFILL_INACTIVE_PRIORITY_BASE;
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
-      ret = OSD_BACKFILL_INACTIVE_PRIORITY_BASE + (pool.info.min_size - acting.size());
+      ret = base + (pool.info.min_size - acting.size());
 
     } else if (is_undersized()) {
       // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
       ceph_assert(pool.info.size > actingset.size());
-      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
+      base = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
+      ret = base + (pool.info.size - actingset.size());
 
     } else if (is_degraded()) {
       // degraded: baseline degraded
-      ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
+      base = ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
     }
 
     // Adjust with pool's recovery priority
     int64_t pool_recovery_priority = 0;
     pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
 
-    ret = clamp_recovery_priority(pool_recovery_priority + ret);
+    ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
   }
 
+  dout(20) << __func__ << " backfill priority is " << ret << dendl;
   return static_cast<unsigned>(ret);
 }
 
@@ -3203,6 +3231,8 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
+  info.stats.avail_no_missing.clear();
+  info.stats.object_location_counts.clear();
 
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
@@ -3236,6 +3266,8 @@ void PG::_update_calc_stats()
         acting_source_objects.insert(make_pair(missing, pg_whoami));
       }
       info.stats.stats.sum.num_objects_missing_on_primary = missing;
+      if (missing == 0)
+        info.stats.avail_no_missing.push_back(pg_whoami);
       dout(20) << __func__ << " shard " << pg_whoami
                << " primary objects " << num_objects
                << " missing " << missing
@@ -3269,11 +3301,32 @@ void PG::_update_calc_stats()
 	acting_source_objects.insert(make_pair(missing, peer.first));
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
+      if (missing == 0)
+        info.stats.avail_no_missing.push_back(peer.first);
       dout(20) << __func__ << " shard " << peer.first
                << " objects " << peer_num_objects
                << " missing " << missing
                << dendl;
     }
+
+    // Compute object_location_counts
+    for (auto& ml: missing_loc.get_missing_locs()) {
+      info.stats.object_location_counts[ml.second]++;
+      dout(30) << __func__ << " " << ml.first << " object_location_counts["
+	       << ml.second << "]=" << info.stats.object_location_counts[ml.second]
+	       << dendl;
+    }
+    int64_t not_missing = num_objects - missing_loc.get_missing_locs().size();
+    if (not_missing) {
+	// During recovery we know upset == actingset and is being populated
+	// During backfill we know that all non-missing objects are in the actingset
+        info.stats.object_location_counts[actingset] = not_missing;
+    }
+    dout(30) << __func__ << " object_location_counts["
+	     << upset << "]=" << info.stats.object_location_counts[upset]
+	     << dendl;
+    dout(20) << __func__ << " object_location_counts "
+	     << info.stats.object_location_counts << dendl;
 
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;

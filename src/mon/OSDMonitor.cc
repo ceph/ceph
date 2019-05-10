@@ -646,6 +646,11 @@ void OSDMonitor::on_active()
 
   if (mon->is_leader()) {
     mon->clog->debug() << "osdmap " << osdmap;
+    if (!priority_convert) {
+      // Only do this once at start-up
+      convert_pool_priorities();
+      priority_convert = true;
+    }
   } else {
     list<MonOpRequestRef> ls;
     take_all_failures(ls);
@@ -7645,13 +7650,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "error parsing int value '" << val << "': " << interr;
         return -EINVAL;
       }
-      if (n < 0) {
-        ss << "pool recovery_priority can not be negative";
-        return -EINVAL;
-      } else if (n >= 30) {
-        ss << "pool recovery_priority should be less than 30 due to "
-           << "Ceph internal implementation restrictions";
-        return -EINVAL;
+      if (!g_conf()->debug_allow_any_pool_priority) {
+        if (n > OSD_POOL_PRIORITY_MAX || n < OSD_POOL_PRIORITY_MIN) {
+          ss << "pool recovery_priority must be between " << OSD_POOL_PRIORITY_MIN
+	     << " and " << OSD_POOL_PRIORITY_MAX;
+          return -EINVAL;
+        }
       }
     } else if (var == "pg_autoscale_bias") {
       if (f < 0.0 || f > 1000.0) {
@@ -13215,4 +13219,56 @@ void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 ret, epoch, get_last_committed(), blp);
   mon->send_reply(op, reply);
+}
+
+void OSDMonitor::convert_pool_priorities(void)
+{
+  pool_opts_t::key_t key = pool_opts_t::get_opt_desc("recovery_priority").key;
+  int64_t max_prio = 0;
+  int64_t min_prio = 0;
+  for (const auto &i : osdmap.get_pools()) {
+    const auto &pool = i.second;
+
+    if (pool.opts.is_set(key)) {
+      int64_t prio;
+      pool.opts.get(key, &prio);
+      if (prio > max_prio)
+	max_prio = prio;
+      if (prio < min_prio)
+	min_prio = prio;
+    }
+  }
+  if (max_prio <= OSD_POOL_PRIORITY_MAX && min_prio >= OSD_POOL_PRIORITY_MIN) {
+    dout(20) << __func__ << " nothing to fix" << dendl;
+    return;
+  }
+  // Current pool priorities exceeds new maximum
+  for (const auto &i : osdmap.get_pools()) {
+    const auto pool_id = i.first;
+    pg_pool_t pool = i.second;
+
+    int64_t prio = 0;
+    pool.opts.get(key, &prio);
+    int64_t n;
+
+    if (prio > 0 && max_prio > OSD_POOL_PRIORITY_MAX) { // Likely scenario
+      // Scaled priority range 0 to OSD_POOL_PRIORITY_MAX
+      n = (float)prio / max_prio * OSD_POOL_PRIORITY_MAX;
+    } else if (prio < 0 && min_prio < OSD_POOL_PRIORITY_MIN) {
+      // Scaled  priority range OSD_POOL_PRIORITY_MIN to 0
+      n = (float)prio / min_prio * OSD_POOL_PRIORITY_MIN;
+    } else {
+      continue;
+    }
+    if (n == 0) {
+      pool.opts.unset(key);
+    } else {
+      pool.opts.set(key, static_cast<int64_t>(n));
+    }
+    dout(10) << __func__ << " pool " << pool_id
+	     << " recovery_priority adjusted "
+	     << prio << " to " << n << dendl;
+    pool.last_change = pending_inc.epoch;
+    pending_inc.new_pools[pool_id] = pool;
+  }
 }
