@@ -343,6 +343,7 @@ set(libcommon_files
   osd/osd_op_util.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  osdc/error_code.cc
   librbd/Features.cc
   ${mds_files})
 set_source_files_properties(ceph_ver.c
