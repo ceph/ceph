@@ -3949,11 +3949,16 @@ void PG::append_log(
 
   PGLogEntryHandler handler{this, &t};
   if (!transaction_applied) {
-     /* We must be a backfill peer, so it's ok if we apply
+     /* We must be a backfill or async recovery peer, so it's ok if we apply
       * out-of-turn since we won't be considered when
       * determining a min possible last_update.
+      *
+      * We skip_rollforward() here, which advances the crt, without
+      * doing an actual rollforward. This avoids cleaning up entries
+      * from the backend and we do not end up in a situation, where the
+      * object is deleted before we can _merge_object_divergent_entries().
       */
-    pg_log.roll_forward(&handler);
+    pg_log.skip_rollforward();
   }
 
   for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
@@ -4713,12 +4718,12 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
        i != rollback_obs.end();
        ++i) {
     if (i->generation < trimmed_to.version) {
-      osd->clog->error() << "osd." << osd->whoami
-			<< " pg " << info.pgid
-			<< " found obsolete rollback obj "
-			<< *i << " generation < trimmed_to "
-			<< trimmed_to
-			<< "...repaired";
+      dout(10) << __func__ << "osd." << osd->whoami
+	       << " pg " << info.pgid
+	       << " found obsolete rollback obj "
+	       << *i << " generation < trimmed_to "
+	       << trimmed_to
+	       << "...repaired" << dendl;
       t.remove(coll, *i);
     }
   }
