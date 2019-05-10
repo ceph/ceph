@@ -511,7 +511,9 @@ public:
   pg_shard_t primary_shard() const override {
     return get_primary();
   }
-
+  uint64_t min_peer_features() const override {
+    return recovery_state.get_min_peer_features();
+  }
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override;
   void send_message_osd_cluster(
@@ -571,6 +573,7 @@ public:
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
+    ObjectCleanRegions clean_regions;
 
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag

@@ -2150,6 +2150,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                            cct->_conf->osd_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->osd_op_history_slow_op_size,
                                                     cct->_conf->osd_op_history_slow_op_threshold);
+  ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
 #ifdef WITH_BLKIN
   std::stringstream ss;
   ss << "osd." << whoami;
@@ -9390,6 +9391,7 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_client_message_cap",
     "osd_heartbeat_min_size",
     "osd_heartbeat_interval",
+    "osd_object_clean_region_max_num_intervals",
     NULL
   };
   return KEYS;
@@ -9476,6 +9478,9 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       pol.throttler_bytes->reset_max(newval);
     }
   }
+  if (changed.count("osd_object_clean_region_max_num_intervals")) {
+    ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
+  }
 
   check_config();
 }
@@ -9510,6 +9515,11 @@ void OSD::check_config()
     clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
 		 << " is not > osd_pg_epoch_persisted_max_stale ("
 		 << cct->_conf->osd_pg_epoch_persisted_max_stale << ")";
+  }
+  if (cct->_conf->osd_object_clean_region_max_num_intervals < 0) {
+    clog->warn() << "osd_object_clean_region_max_num_intervals (" 
+                 << cct->_conf->osd_object_clean_region_max_num_intervals
+                << ") is < 0";
   }
 }
 
