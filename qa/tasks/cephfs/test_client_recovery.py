@@ -544,3 +544,39 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assert_session_state(gid, "stale")
+
+    def test_reconnect_after_blacklisted(self):
+        """
+        Check that client uses new entity addr to reconnect after blacklisted
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Kernel client does not support this yet")
+
+        mount_a_client_id = self.mount_a.get_global_id()
+
+        writer = self.mount_a.write_background(loop=True)
+        time.sleep(10);
+
+        # Evict the client
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+        self.assert_session_count(1)
+
+        self.assertTrue(self.mount_a.is_blacklisted())
+
+        # Writer should exit with error
+        try:
+            writer.wait()
+        except CommandFailedError:
+            pass
+        else:
+            raise RuntimeError("Writer exited without error")
+
+        # Ask client to reconnect
+        self.mount_a.admin_socket(['kick_stale_sessions'])
+
+        # Make sure operation does not hang
+        self.mount_a.run_shell(["touch", "testfile"])
+
+        self.mount_a.gather_mount_info();
+        self.assertFalse(self.mount_a.is_blacklisted())
+        self.assert_session_count(2)
