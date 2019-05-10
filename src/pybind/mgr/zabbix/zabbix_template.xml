@@ -755,12 +755,12 @@
                     <logtimefmt/>
                 </item>
                 <item>
-                    <name>Number of Placement Groups in wait_backfill state</name>
+                    <name>Number of Placement Groups in backfill_wait state</name>
                     <type>2</type>
                     <snmp_community/>
                     <multiplier>0</multiplier>
                     <snmp_oid/>
-                    <key>ceph.num_pg_wait_backfill</key>
+                    <key>ceph.num_pg_backfill_wait</key>
                     <delay>0</delay>
                     <history>90</history>
                     <trends>365</trends>
@@ -787,7 +787,7 @@
                     <publickey/>
                     <privatekey/>
                     <port/>
-                    <description>Total number of Placement Groups in wait_backfill state</description>
+                    <description>Total number of Placement Groups in backfill_wait state</description>
                     <inventory_link>0</inventory_link>
                     <applications>
                         <application>
