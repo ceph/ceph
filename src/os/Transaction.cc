@@ -1,10 +1,47 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
-#include "ObjectStore.h"
+#include "os/Transaction.h"
 #include "common/Formatter.h"
 
-void ObjectStore::Transaction::dump(ceph::Formatter *f)
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
+			      bufferlist *out)
+{
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+    decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+void decode_str_set_to_bl(bufferlist::const_iterator& p,
+			  bufferlist *out)
+{
+  auto start = p;
+  __u32 n;
+  decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+namespace ceph::os {
+
+void Transaction::dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
   iterator i = begin();
@@ -470,7 +507,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction*>& o)
+void Transaction::generate_test_instances(list<Transaction*>& o)
 {
   o.push_back(new Transaction);
 
@@ -512,5 +549,12 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);  
 }
 
+ostream& operator<<(ostream& out, const Transaction& tx) {
+
+  return out << "Transaction(" << &tx << ")";
+}
+
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
+
+}

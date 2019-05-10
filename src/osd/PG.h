@@ -346,7 +346,7 @@ public:
     const pg_history_t& history,
     const PastIntervals& pim,
     bool backfill,
-    ObjectStore::Transaction *t);
+    ObjectStore::Transaction &t);
 
   /// read existing pg state off disk
   void read_state(ObjectStore *store);
@@ -375,12 +375,13 @@ public:
     int split_bits,
     int seed,
     const pg_pool_t *pool,
-    ObjectStore::Transaction *t) = 0;
+    ObjectStore::Transaction &t) = 0;
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
-  void merge_from(map<spg_t,PGRef>& sources, PeeringCtx *rctx,
+  void merge_from(map<spg_t,PGRef>& sources, PeeringCtx &rctx,
 		  unsigned split_bits,
 		  const pg_merge_meta_t& last_pg_merge_meta);
-  void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
+  void finish_split_stats(const object_stat_sum_t& stats,
+			  ObjectStore::Transaction &t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
 
@@ -410,7 +411,9 @@ public:
   void clear_primary_state() override;
 
   epoch_t oldest_stored_osdmap() override;
-  LogChannel &get_clog() override;
+  OstreamTemp get_clog_error() override;
+  OstreamTemp get_clog_info() override;
+  OstreamTemp get_clog_debug() override;
 
   void schedule_event_after(
     PGPeeringEventRef event,
@@ -465,11 +468,11 @@ public:
   }
 
   PGLog::LogEntryHandlerRef get_log_handler(
-    ObjectStore::Transaction *t) override {
-    return std::make_unique<PG::PGLogEntryHandler>(this, t);
+    ObjectStore::Transaction &t) override {
+    return std::make_unique<PG::PGLogEntryHandler>(this, &t);
   }
 
-  void do_delete_work(ObjectStore::Transaction *t) override;
+  void do_delete_work(ObjectStore::Transaction &t) override;
 
   void clear_ready_to_merge() override;
   void set_not_ready_to_merge_target(pg_t pgid, pg_t src) override;
@@ -482,16 +485,16 @@ public:
   void rebuild_missing_set_with_deletes(PGLog &pglog) override;
 
   void queue_peering_event(PGPeeringEventRef evt);
-  void do_peering_event(PGPeeringEventRef evt, PeeringCtx *rcx);
+  void do_peering_event(PGPeeringEventRef evt, PeeringCtx &rcx);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
   void queue_flushed(epoch_t started_at);
   void handle_advance_map(
     OSDMapRef osdmap, OSDMapRef lastmap,
     vector<int>& newup, int up_primary,
     vector<int>& newacting, int acting_primary,
-    PeeringCtx *rctx);
-  void handle_activate_map(PeeringCtx *rctx);
-  void handle_initialize(PeeringCtx *rctx);
+    PeeringCtx &rctx);
+  void handle_activate_map(PeeringCtx &rctx);
+  void handle_initialize(PeeringCtx &rxcx);
   void handle_query_state(Formatter *f);
 
   /**
@@ -504,7 +507,7 @@ public:
     uint64_t *ops_begun) = 0;
 
   // more work after the above, but with a PeeringCtx
-  void find_unfound(epoch_t queued, PeeringCtx *rctx);
+  void find_unfound(epoch_t queued, PeeringCtx &rctx);
 
   virtual void get_watchers(std::list<obj_watch_item_t> *ls) = 0;
 
@@ -1324,8 +1327,8 @@ protected:
   virtual void scrub_snapshot_metadata(
     ScrubMap &map,
     const std::map<hobject_t,
-                   pair<boost::optional<uint32_t>,
-                        boost::optional<uint32_t>>> &missing_digest) { }
+                   pair<std::optional<uint32_t>,
+                        std::optional<uint32_t>>> &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
   void clear_scrub_reserved();
@@ -1418,20 +1421,8 @@ public:
     bool need_write_epoch,
     ObjectStore::Transaction &t) override;
 
-  static int _prepare_write_info(
-    CephContext* cct,
-    map<string,bufferlist> *km,
-    epoch_t epoch,
-    pg_info_t &info,
-    pg_info_t &last_written_info,
-    PastIntervals &past_intervals,
-    bool dirty_big_info,
-    bool dirty_epoch,
-    bool try_fast_info,
-    PerfCounters *logger = nullptr);
-
-  void write_if_dirty(PeeringCtx *rctx) {
-    write_if_dirty(*rctx->transaction);
+  void write_if_dirty(PeeringCtx &rctx) {
+    write_if_dirty(rctx.transaction);
   }
 protected:
   void write_if_dirty(ObjectStore::Transaction& t) {
@@ -1474,7 +1465,7 @@ protected:
 
   bool try_flush_or_schedule_async() override;
   void start_flush_on_transaction(
-    ObjectStore::Transaction *t) override;
+    ObjectStore::Transaction &t) override;
 
   void update_history(const pg_history_t& history) {
     recovery_state.update_history(history);

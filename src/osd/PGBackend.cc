@@ -197,7 +197,7 @@ void PGBackend::rollback(
       temp.append(t);
       temp.swap(t);
     }
-    void setattrs(map<string, boost::optional<bufferlist> > &attrs) override {
+    void setattrs(map<string, std::optional<bufferlist> > &attrs) override {
       ObjectStore::Transaction temp;
       pg->rollback_setattrs(hoid, attrs, &temp);
       temp.append(t);
@@ -438,15 +438,15 @@ int PGBackend::objects_get_attrs(
 
 void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
-  map<string, boost::optional<bufferlist> > &old_attrs,
+  map<string, std::optional<bufferlist> > &old_attrs,
   ObjectStore::Transaction *t) {
   map<string, bufferlist> to_set;
   ceph_assert(!hoid.is_temp());
-  for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
+  for (map<string, std::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();
        ++i) {
     if (i->second) {
-      to_set[i->first] = i->second.get();
+      to_set[i->first] = *(i->second);
     } else {
       t->rmattr(
 	coll,
@@ -1010,8 +1010,8 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
   map<hobject_t, list<pg_shard_t>> &authoritative,
-  map<hobject_t, pair<boost::optional<uint32_t>,
-                      boost::optional<uint32_t>>> &missing_digest,
+  map<hobject_t, pair<std::optional<uint32_t>,
+                      std::optional<uint32_t>>> &missing_digest,
   int &shallow_errors, int &deep_errors,
   Scrub::Store *store,
   const spg_t& pgid,
@@ -1147,7 +1147,7 @@ void PGBackend::be_compare_scrubmaps(
     }
 
     if (fix_digest) {
-      boost::optional<uint32_t> data_digest, omap_digest;
+      std::optional<uint32_t> data_digest, omap_digest;
       ceph_assert(auth_object.digest_present);
       data_digest = auth_object.digest;
       if (auth_object.omap_digest_present) {
@@ -1199,7 +1199,7 @@ void PGBackend::be_compare_scrubmaps(
 	utime_t age = now - auth_oi.local_mtime;
 	if (update == FORCE ||
 	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
-          boost::optional<uint32_t> data_digest, omap_digest;
+          std::optional<uint32_t> data_digest, omap_digest;
           if (auth_object.digest_present) {
             data_digest = auth_object.digest;
 	    dout(20) << __func__ << " will update data digest on " << *k << dendl;

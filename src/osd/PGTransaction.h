@@ -16,7 +16,7 @@
 
 #include <map>
 #include <memory>
-#include <boost/optional.hpp>
+#include <optional>
 
 #include "common/hobject.h"
 #include "osd/osd_types.h"
@@ -127,24 +127,24 @@ public:
      * remember the lowest truncate and the final object size
      * (the last truncate).  We also adjust the buffers map
      * to account for truncates overriding previous writes */
-    boost::optional<pair<uint64_t, uint64_t> > truncate = boost::none;
+    std::optional<pair<uint64_t, uint64_t> > truncate = std::nullopt;
 
-    std::map<string, boost::optional<bufferlist> > attr_updates;
+    std::map<string, std::optional<bufferlist> > attr_updates;
 
     enum class OmapUpdateType {Remove, Insert};
     std::vector<std::pair<OmapUpdateType, bufferlist> > omap_updates;
 
-    boost::optional<bufferlist> omap_header;
+    std::optional<bufferlist> omap_header;
 
     /// (old, new) -- only valid with no truncate or buffer updates
-    boost::optional<pair<set<snapid_t>, set<snapid_t> > > updated_snaps;
+    std::optional<pair<set<snapid_t>, set<snapid_t> > > updated_snaps;
 
     struct alloc_hint_t {
       uint64_t expected_object_size;
       uint64_t expected_write_size;
       uint32_t flags;
     };
-    boost::optional<alloc_hint_t> alloc_hint;
+    std::optional<alloc_hint_t> alloc_hint;
 
     struct BufferUpdate {
       struct Write {
@@ -338,7 +338,7 @@ public:
     auto &op = get_object_op_for_modify(hoid);
     op.clear_omap = true;
     op.omap_updates.clear();
-    op.omap_header = boost::none;
+    op.omap_header = std::nullopt;
   }
   void truncate(
     const hobject_t &hoid,         ///< [in] object
@@ -383,7 +383,7 @@ public:
     const string &attrname         ///< [in] attr to remove
     ) {
     auto &op = get_object_op_for_modify(hoid);
-    op.attr_updates[attrname] = boost::none;
+    op.attr_updates[attrname] = std::nullopt;
   }
 
   /// set alloc hint

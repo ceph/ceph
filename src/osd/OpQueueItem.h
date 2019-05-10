@@ -55,8 +55,8 @@ public:
     virtual const spg_t& get_ordering_token() const = 0;
     virtual OrderLocker::Ref get_order_locker(PGRef pg) = 0;
     virtual op_type_t get_op_type() const = 0;
-    virtual boost::optional<OpRequestRef> maybe_get_op() const {
-      return boost::none;
+    virtual std::optional<OpRequestRef> maybe_get_op() const {
+      return std::nullopt;
     }
 
     virtual uint64_t get_reserved_pushes() const {
@@ -124,7 +124,7 @@ public:
   OpQueueable::op_type_t get_op_type() const {
     return qitem->get_op_type();
   }
-  boost::optional<OpRequestRef> maybe_get_op() const {
+  std::optional<OpRequestRef> maybe_get_op() const {
     return qitem->maybe_get_op();
   }
   uint64_t get_reserved_pushes() const {
@@ -208,7 +208,7 @@ public:
   ostream &print(ostream &rhs) const override final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
   }
-  boost::optional<OpRequestRef> maybe_get_op() const override final {
+  std::optional<OpRequestRef> maybe_get_op() const override final {
     return op;
   }
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
