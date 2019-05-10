@@ -221,6 +221,7 @@ int main(int argc, char **argv)
   vector<string> devs_source;
   string dev_target;
   string path;
+  string new_sharding;
   string action;
   string log_file;
   string key, value;
@@ -230,6 +231,7 @@ int main(int argc, char **argv)
   po_options.add_options()
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
+    ("new-sharding", po::value<string>(&new_sharding), "new split for sharding, same logic as bluestore_rocksdb_cf option")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("log-file,l", po::value<string>(&log_file), "log file")
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
@@ -242,7 +244,9 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, bluefs-bdev-new-db, bluefs-bdev-new-wal, bluefs-bdev-migrate, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
+    ("command", po::value<string>(&action),
+        "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, bluefs-bdev-new-db, bluefs-bdev-new-wal, "
+        "bluefs-bdev-migrate, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump, reshard")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -275,7 +279,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck" || action == "repair") {
+  if (action == "fsck" || action == "repair" || action == "reshard") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -354,6 +358,12 @@ int main(int argc, char **argv)
     }
     if (dev_target.empty()) {
       cerr << "must specify target device with --dev-target" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (action == "reshard") {
+    if (new_sharding.size() == 0) {
+      cerr << "must specify new split for prefixes in bluestore with --new-sharding" << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -787,6 +797,18 @@ int main(int argc, char **argv)
       }
       return r;
     }
+  } else if (action == "reshard") {
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r;
+    r = bluestore.reshard(new_sharding);
+    if (r < 0) {
+      cerr << "error from reshard: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
+    return r;
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
