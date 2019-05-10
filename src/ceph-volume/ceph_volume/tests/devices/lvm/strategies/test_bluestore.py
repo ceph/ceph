@@ -8,7 +8,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
@@ -20,7 +20,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
         ]
         computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
@@ -32,7 +32,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=3,
                        block_db_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             bluestore.SingleType.with_auto_devices(args, devices)
@@ -42,7 +42,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=True, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             bluestore.SingleType.with_auto_devices(args, devices)
@@ -54,8 +54,8 @@ class TestMixedType(object):
     def test_filter_all_data_devs(self, fakedevice, factory):
         # in this scenario the user passed a already used device to be used for
         # data and an unused device to be used as db device.
-        db_dev = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
-        data_dev = fakedevice(used_by_ceph=True, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        db_dev = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
+        data_dev = fakedevice(used_by_ceph=True, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         args = factory(filtered_devices=[data_dev], osds_per_device=1,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
@@ -72,8 +72,8 @@ class TestMixedTypeConfiguredSize(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         devices = [ssd, hdd]
 
         osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
@@ -90,8 +90,8 @@ class TestMixedTypeConfiguredSize(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
@@ -105,8 +105,8 @@ class TestMixedTypeConfiguredSize(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60737400000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=60737400000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
@@ -122,8 +122,8 @@ class TestMixedTypeLargeAsPossible(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         devices = [ssd, hdd]
 
         osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
@@ -140,8 +140,8 @@ class TestMixedTypeLargeAsPossible(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60073740000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=60073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=60073740000))
         devices = [ssd, hdd]
 
         osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
@@ -158,8 +158,8 @@ class TestMixedTypeLargeAsPossible(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60737400000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=60737400000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
@@ -175,8 +175,8 @@ class TestMixedTypeWithExplicitDevices(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60073740000))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=60073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=60073740000))
 
         osd = bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]
         assert osd['data']['percentage'] == 50
@@ -192,8 +192,8 @@ class TestMixedTypeWithExplicitDevices(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        block_db_size=None, block_wal_size=None,
                        osd_ids=[])
-        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=1610612736))
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=1610612736))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=60073740000))
 
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]

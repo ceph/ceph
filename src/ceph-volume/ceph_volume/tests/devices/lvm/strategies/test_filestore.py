@@ -10,7 +10,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=12073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=12073740000))
         ]
         computed_osd = filestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 55
@@ -23,7 +23,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -35,7 +35,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=12073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=12073740000))
         ]
         computed_osd = filestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 55
@@ -48,7 +48,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -60,7 +60,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=4,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=16073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -72,7 +72,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=4,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -84,7 +84,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=12073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=True, rotational=True, sys_api=dict(size=12073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -95,7 +95,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -107,7 +107,7 @@ class TestSingleType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType.with_auto_devices(args, devices)
@@ -122,8 +122,8 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000)),
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
@@ -135,8 +135,8 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000)),
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
@@ -148,8 +148,8 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
-            fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=6073740000))
+            fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000)),
+            fakedevice(used_by_ceph=False, is_lvm_member=True, rotational=True, sys_api=dict(size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
@@ -159,9 +159,9 @@ class TestMixedType(object):
         # fast PV, because ssd is an LVM member
         CephPV = lvm.PVolume(vg_name='fast', pv_name='/dev/sda', pv_tags='')
         ssd = fakedevice(
-            used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='0', size=6073740000), pvs_api=[CephPV]
+            used_by_ceph=False, is_lvm_member=True, rotational=False, sys_api=dict(size=6073740000), pvs_api=[CephPV]
         )
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         # when get_api_vgs() gets called, it will return this one VG
         stub_vgs([
             dict(
@@ -184,12 +184,12 @@ class TestMixedType(object):
         CephPV1 = lvm.PVolume(vg_name='fast1', pv_name='/dev/sda', pv_tags='')
         CephPV2 = lvm.PVolume(vg_name='fast2', pv_name='/dev/sdb', pv_tags='')
         ssd1 = fakedevice(
-            used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='0', size=6073740000), pvs_api=[CephPV1]
+            used_by_ceph=False, is_lvm_member=True, rotational=False, sys_api=dict(size=6073740000), pvs_api=[CephPV1]
         )
         ssd2 = fakedevice(
-            used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='0', size=6073740000), pvs_api=[CephPV2]
+            used_by_ceph=False, is_lvm_member=True, rotational=False, sys_api=dict(size=6073740000), pvs_api=[CephPV2]
         )
-        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         # when get_api_vgs() gets called, it will return this one VG
         stub_vgs([
             dict(
@@ -216,8 +216,8 @@ class TestMixedType(object):
         args = factory(filtered_devices=[], osds_per_device=2,
                        journal_size=None, osd_ids=[])
         devices = [
-            fakedevice(is_lvm_member=False, sys_api=dict(rotational='0', size=16073740000)),
-            fakedevice(is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
+            fakedevice(is_lvm_member=False, rotational=False, sys_api=dict(size=16073740000)),
+            fakedevice(is_lvm_member=False, rotational=True, sys_api=dict(size=16073740000))
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
@@ -227,8 +227,8 @@ class TestMixedType(object):
     def test_filter_all_data_devs(self, fakedevice, factory):
         # in this scenario the user passed a already used device to be used for
         # data and an unused device to be used as db device.
-        db_dev = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
-        data_dev = fakedevice(used_by_ceph=True, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
+        db_dev = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
+        data_dev = fakedevice(used_by_ceph=True, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
         args = factory(filtered_devices=[data_dev], osds_per_device=1,
                        journal_size=None, osd_ids=[])
         filestore.MixedType(args, [], [db_dev])
