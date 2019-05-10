@@ -40,6 +40,11 @@ struct bluefs_fnode_t {
   utime_t mtime;
   uint8_t prefer_bdev;
   mempool::bluefs::vector<bluefs_extent_t> extents;
+
+  // precalculated logical offsets for extents vector entries
+  // allows fast lookup for extent index by the offset value via upper_bound()
+  mempool::bluefs::vector<uint64_t> extents_index;
+
   uint64_t allocated;
 
   bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0), allocated(0) {}
@@ -50,8 +55,11 @@ struct bluefs_fnode_t {
 
   void recalc_allocated() {
     allocated = 0;
-    for (auto& p : extents)
+    extents_index.reserve(extents.size());
+    for (auto& p : extents) {
+      extents_index.emplace_back(allocated);
       allocated += p.length;
+    }
   }
 
   DENC_HELPERS
@@ -79,6 +87,7 @@ struct bluefs_fnode_t {
   }
 
   void append_extent(const bluefs_extent_t& ext) {
+    extents_index.emplace_back(allocated);
     extents.push_back(ext);
     allocated += ext.length;
   }
@@ -86,18 +95,20 @@ struct bluefs_fnode_t {
   void pop_front_extent() {
     auto it = extents.begin();
     allocated -= it->length;
+    extents_index.erase(extents_index.begin());
+    for (auto& i: extents_index) {
+      i -= it->length;
+    }
     extents.erase(it);
   }
   
   void swap_extents(bluefs_fnode_t& other) {
     other.extents.swap(extents);
+    other.extents_index.swap(extents_index);
     std::swap(allocated, other.allocated);
   }
-  void swap_extents(mempool::bluefs::vector<bluefs_extent_t>& swap_to, uint64_t& new_allocated) {
-    swap_to.swap(extents);
-    std::swap(allocated, new_allocated);
-  }
   void clear_extents() {
+    extents_index.clear();
     extents.clear();
     allocated = 0;
   }

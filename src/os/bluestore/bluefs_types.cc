@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
 #include "bluefs_types.h"
 #include "common/Formatter.h"
 #include "include/uuid.h"
@@ -86,6 +87,17 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   uint64_t offset, uint64_t *x_off)
 {
   auto p = extents.begin();
+
+  if (extents_index.size() > 4) {
+    auto it = std::upper_bound(extents_index.begin(), extents_index.end(),
+      offset);
+    assert(it != extents_index.begin());
+    --it;
+    assert(offset >= *it);
+    p += it - extents_index.begin();
+    offset -= *it;
+  }
+
   while (p != extents.end()) {
     if ((int64_t) offset >= p->length) {
       offset -= p->length;
