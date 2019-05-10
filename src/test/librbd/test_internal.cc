@@ -659,8 +659,6 @@ TEST_F(TestInternal, SnapshotCopyup)
       C_SaferCond ctx;
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
-
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -748,7 +746,7 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      RWLock::RLocker image_locker(ictx2->image_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -835,7 +833,7 @@ TEST_F(TestInternal, SnapshotCopyupZerosMigration)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::WLocker object_map_locker(ictx2->object_map_lock);
+      RWLock::RLocker image_locker(ictx2->image_lock);
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -894,7 +892,7 @@ TEST_F(TestInternal, ResizeCopyup)
 
   {
     // hide the parent from the snapshot
-    RWLock::WLocker snap_locker(ictx2->snap_lock);
+    RWLock::WLocker image_locker(ictx2->image_lock);
     ictx2->snap_info.begin()->second.parent = librbd::ParentImageInfo();
   }
 
@@ -961,7 +959,7 @@ TEST_F(TestInternal, DiscardCopyup)
 
   {
     // hide the parent from the snapshot
-    RWLock::WLocker snap_locker(ictx2->snap_lock);
+    RWLock::WLocker image_locker(ictx2->image_lock);
     ictx2->snap_info.begin()->second.parent = librbd::ParentImageInfo();
   }
 

@@ -5,6 +5,12 @@ TYPE(real_time_wrapper)
 TYPE(coarse_real_time_wrapper)
 TYPE(timespan_wrapper)
 
+#include "include/utime.h"
+TYPE(utime_t)
+
+#include "include/uuid.h"
+TYPE(uuid_d)
+
 #include "sstring.h"
 TYPE(sstring_wrapper)
 
@@ -98,6 +104,7 @@ TYPE(pg_create_t)
 TYPE(OSDSuperblock)
 TYPE(SnapSet)
 TYPE_FEATUREFUL(watch_info_t)
+TYPE_FEATUREFUL(watch_item_t)
 TYPE(object_manifest_t)
 TYPE_FEATUREFUL(object_info_t)
 TYPE(SnapSet)

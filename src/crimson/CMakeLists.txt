@@ -23,6 +23,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_releases.cc
   ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/common_init.cc
   ${PROJECT_SOURCE_DIR}/src/common/compat.cc
@@ -70,6 +71,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc

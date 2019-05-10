@@ -50,8 +50,6 @@ typedef boost::mt11213b gen_type;
 #define dout_prefix *_dout << " ceph_test_msgr "
 
 
-#if GTEST_HAS_PARAM_TEST
-
 #define CHECK_AND_WAIT_TRUE(expr) do {  \
   int n = 1000;                         \
   while (--n) {                         \
@@ -81,6 +79,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     server_msgr->set_auth_server(&dummy_auth);
     client_msgr->set_auth_client(&dummy_auth);
     client_msgr->set_auth_server(&dummy_auth);
+    server_msgr->set_require_authorizer(false);
   }
   void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
@@ -115,8 +114,6 @@ class FakeDispatcher : public Dispatcher {
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -1509,8 +1506,6 @@ class SyntheticDispatcher : public Dispatcher {
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -2087,8 +2082,6 @@ class MarkdownDispatcher : public Dispatcher {
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -2218,26 +2211,13 @@ TEST_P(MessengerTest, MarkdownTest) {
   delete server_msgr2;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
     "async+posix"
   )
 );
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
-
 
 int main(int argc, char **argv) {
   vector<const char*> args;

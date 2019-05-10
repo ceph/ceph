@@ -194,7 +194,7 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
 
   // is mirroring not enabled for the parent?
   {
-    RWLock::RLocker l(ictx->parent_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     ImageCtx *parent = ictx->parent;
     if (parent) {
       if (relax_same_pool_parent_check &&
@@ -297,7 +297,7 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     };
 
     {
-      RWLock::RLocker l(ictx->snap_lock);
+      RWLock::RLocker l(ictx->image_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
         cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),

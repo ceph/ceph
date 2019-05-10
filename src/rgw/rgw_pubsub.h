@@ -23,7 +23,7 @@ class XMLObj;
       </S3Key>
     </Filter>
     <Id>notification1</Id>
-    <Topic>arn:aws:sns:<region>:<account>:[<endpoint-type>:<endpoint-name>]:<topic></Topic>
+    <Topic>arn:aws:sns:<region>:<account>:<topic></Topic>
     <Event>s3:ObjectCreated:*</Event>
     <Event>s3:ObjectRemoved:*</Event>
   </TopicConfiguration>
@@ -411,17 +411,6 @@ WRITE_CLASS_ENCODER(rgw_pubsub_user_topics)
 
 static std::string pubsub_user_oid_prefix = "pubsub.user.";
 
-// generate a topic ARN string
-// no endpoint (pull mode only): arn:s3:sns:<region>:<account>:<topic>
-// with endpoint               : arn:s3:sns:<region>:<account>:<endpoint-type>:<endpoint>:<topic>
-std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
-    const std::string& topic_name, 
-    const std::string& zonegroup_name,
-    const std::string& user_name);
-
-// extract the name of the topic from the string representation of the topic ARN
-std::string topic_name_from_arn(const std::string& topic_arn);
-
 class RGWUserPubSub
 {
   friend class Bucket;
@@ -468,15 +457,31 @@ public:
     rgw_bucket bucket;
     rgw_raw_obj bucket_meta_obj;
 
+    // read the list of topics associated with a bucket and populate into result
+    // use version tacker to enforce atomicity between read/write
+    // return 0 on success or if no topic was associated with the bucket, error code otherwise
     int read_topics(rgw_pubsub_bucket_topics *result, RGWObjVersionTracker *objv_tracker);
+    // set the list of topics associated with a bucket
+    // use version tacker to enforce atomicity between read/write
+    // return 0 on success, error code otherwise
     int write_topics(const rgw_pubsub_bucket_topics& topics, RGWObjVersionTracker *objv_tracker);
   public:
     Bucket(RGWUserPubSub *_ps, const rgw_bucket& _bucket) : ps(_ps), bucket(_bucket) {
       ps->get_bucket_meta_obj(bucket, &bucket_meta_obj);
     }
 
+    // read the list of topics associated with a bucket and populate into result
+    // return 0 on success or if no topic was associated with the bucket, error code otherwise
     int get_topics(rgw_pubsub_bucket_topics *result);
+    // adds a topic + filter (event list) to a bucket
+    // if the topic already exist on the bucket, the filter event list may be updated
+    // return -ENOENT if the topic does not exists
+    // return 0 on success, error code otherwise
     int create_notification(const string& topic_name, const EventTypeList& events);
+    // remove a topic and filter from bucket
+    // if the topic does not exists on the bucket it is a no-op (considered success)
+    // return -ENOENT if the topic does not exists
+    // return 0 on success, error code otherwise
     int remove_notification(const string& topic_name);
   };
 
@@ -565,10 +570,24 @@ public:
     *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sub_meta_oid(name));
   }
 
+  // get all topics defined for the user and populate them into "result"
+  // return 0 on success or if no topics exist, error code otherwise
   int get_user_topics(rgw_pubsub_user_topics *result);
+  // get a topic by its name and populate it into "result"
+  // return -ENOENT if the topic does not exists 
+  // return 0 on success, error code otherwise
   int get_topic(const string& name, rgw_pubsub_topic_subs *result);
+  // create a topic with a name only
+  // if the topic already exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
   int create_topic(const string& name);
+  // create a topic with push destination information and ARN
+  // if the topic already exists the destination and ARN values may be updated (considered succsess)
+  // return 0 on success, error code otherwise
   int create_topic(const string& name, const rgw_pubsub_sub_dest& dest, const std::string& arn);
+  // remove a topic according to its name
+  // if the topic does not exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
   int remove_topic(const string& name);
 };
 
@@ -609,6 +628,7 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
     return ret;
   }
 
+  obj_ctx.invalidate(obj);
   return 0;
 }
 

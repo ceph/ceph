@@ -5,7 +5,6 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 
-#include "crimson/common/auth_service.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
@@ -73,6 +72,14 @@ const entity_addrvec_t& Heartbeat::get_front_addrs() const
 const entity_addrvec_t& Heartbeat::get_back_addrs() const
 {
   return back_msgr.get_myaddrs();
+}
+
+void Heartbeat::set_require_authorizer(bool require_authorizer)
+{
+  if (front_msgr.get_require_authorizer() != require_authorizer) {
+    front_msgr.set_require_authorizer(require_authorizer);
+    back_msgr.set_require_authorizer(require_authorizer);
+  }
 }
 
 seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
@@ -269,10 +276,10 @@ seastar::future<> Heartbeat::handle_reply(ceph::net::Connection* conn,
   }
   const auto now = clock::now();
   auto& unacked = ping->second.unacknowledged;
-  if (conn == peer.con_back) {
+  if (conn == peer.con_back.get()) {
     peer.last_rx_back = now;
     unacked--;
-  } else if (conn == peer.con_front) {
+  } else if (conn == peer.con_front.get()) {
     peer.last_rx_front = now;
     unacked--;
   }
@@ -296,11 +303,6 @@ seastar::future<> Heartbeat::handle_you_died()
   return seastar::now();
 }
 
-AuthAuthorizer* Heartbeat::ms_get_authorizer(peer_type_t peer) const
-{
-  return monc.get_authorizer(peer);
-}
-
 seastar::future<> Heartbeat::send_heartbeats()
 {
   using peers_item_t = typename peers_map_t::value_type;
@@ -309,14 +311,14 @@ seastar::future<> Heartbeat::send_heartbeats()
       const auto now = clock::now();
       const auto deadline =
         now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
-      auto& [peer, info] = item;
+      auto& info = item.second;
       info.last_tx = now;
       if (clock::is_zero(info.first_tx)) {
         info.first_tx = now;
       }
       const utime_t sent_stamp{now};
-      auto [reply, added] = info.ping_history.emplace(sent_stamp,
-                                                      reply_t{deadline, 0});
+      [[maybe_unused]] auto [reply, added] =
+        info.ping_history.emplace(sent_stamp, reply_t{deadline, 0});
       std::vector<ceph::net::ConnectionRef> conns{info.con_front,
                                                   info.con_back};
       return seastar::parallel_for_each(std::move(conns),

@@ -2,7 +2,6 @@ import time
 import signal
 import json
 import logging
-from unittest import case, SkipTest
 from random import randint
 
 from cephfs_test_case import CephFSTestCase
@@ -242,11 +241,11 @@ class TestFailover(CephFSTestCase):
         """
 
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Requires FUSE client to inject client metadata")
+            self.skipTest("Requires FUSE client to inject client metadata")
 
         require_active = self.fs.get_config("fuse_require_active_mds", service_type="mon").lower() == "true"
         if not require_active:
-            raise case.SkipTest("fuse_require_active_mds is not set")
+            self.skipTest("fuse_require_active_mds is not set")
 
         grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
 

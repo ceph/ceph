@@ -42,7 +42,7 @@ ResizeRequest<I>::~ResizeRequest() {
   I &image_ctx = this->m_image_ctx;
   ResizeRequest *next_req = NULL;
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     ceph_assert(m_xlist_item.remove_myself());
     if (!image_ctx.resize_reqs.empty()) {
       next_req = image_ctx.resize_reqs.front();
@@ -61,7 +61,7 @@ void ResizeRequest<I>::send() {
   ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     if (!m_xlist_item.is_on_list()) {
       image_ctx.resize_reqs.push_back(&m_xlist_item);
       if (image_ctx.resize_reqs.front() != this) {
@@ -193,7 +193,7 @@ void ResizeRequest<I>::send_flush_cache() {
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   auto ctx = create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
-  auto aio_comp = io::AioCompletion::create(
+  auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec<I>::create_flush_request(
     image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
@@ -253,7 +253,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   I &image_ctx = this->m_image_ctx;
 
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     m_shrink_size_visible = true;
   }
   image_ctx.io_work_queue->unblock_writes();
@@ -266,9 +266,9 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   }
 
   image_ctx.owner_lock.get_read();
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if (image_ctx.object_map == nullptr) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
 
     send_post_block_writes();
@@ -285,7 +285,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
       ResizeRequest<I>, &ResizeRequest<I>::handle_grow_object_map>(this));
-  image_ctx.snap_lock.put_read();
+  image_ctx.image_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;
 }
@@ -311,9 +311,9 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   I &image_ctx = this->m_image_ctx;
 
   image_ctx.owner_lock.get_read();
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if (image_ctx.object_map == nullptr || m_new_size > m_original_size) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
 
     update_size_and_overlap();
@@ -332,7 +332,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
       ResizeRequest<I>, &ResizeRequest<I>::handle_shrink_object_map>(this));
-  image_ctx.snap_lock.put_read();
+  image_ctx.image_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;
 }
@@ -433,7 +433,8 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
 template <typename I>
 void ResizeRequest<I>::compute_parent_overlap() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker l2(image_ctx.parent_lock);
+  ceph_assert(image_ctx.image_lock.is_locked());
+
   if (image_ctx.parent == NULL) {
     m_new_parent_overlap = 0;
   } else {
@@ -445,10 +446,9 @@ template <typename I>
 void ResizeRequest<I>::update_size_and_overlap() {
   I &image_ctx = this->m_image_ctx;
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     image_ctx.size = m_new_size;
 
-    RWLock::WLocker parent_locker(image_ctx.parent_lock);
     if (image_ctx.parent != NULL && m_new_size < m_original_size) {
       image_ctx.parent_md.overlap = m_new_parent_overlap;
     }

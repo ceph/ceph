@@ -238,7 +238,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
-  } else if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+  } else if (osdmap->require_osd_release < ceph_release_t::luminous) {
     logger().error("osdmap require_osd_release < luminous; please upgrade to luminous");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
@@ -359,7 +359,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
+seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
 {
   if (state.is_stopping()) {
     return seastar::now();
@@ -520,7 +520,7 @@ seastar::future<> OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-seastar::future<> OSD::handle_osd_map(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_osd_map(ceph::net::Connection* conn,
                                       Ref<MOSDMap> m)
 {
   logger().info("handle_osd_map {}", *m);
@@ -620,6 +620,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
           std::chrono::seconds(TICK_INTERVAL));
       }
     }
+    check_osdmap_features();
     // yay!
     return consume_map(osdmap->get_epoch());
   }).then([m, this] {
@@ -650,7 +651,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   });
 }
 
-seastar::future<> OSD::handle_osd_op(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
                                      Ref<MOSDOp> m)
 {
   return wait_for_map(m->get_map_epoch()).then([=](epoch_t epoch) {
@@ -739,7 +740,7 @@ void OSD::update_heartbeat_peers()
   heartbeat->update_peers(whoami);
 }
 
-seastar::future<> OSD::handle_pg_notify(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_notify(ceph::net::Connection* conn,
                                         Ref<MOSDPGNotify> m)
 {
   // assuming all pgs reside in a single shard
@@ -768,7 +769,7 @@ seastar::future<> OSD::handle_pg_notify(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_info(ceph::net::Connection* conn,
                                       Ref<MOSDPGInfo> m)
 {
   // assuming all pgs reside in a single shard
@@ -788,7 +789,7 @@ seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_query(ceph::net::Connection* conn,
                                        Ref<MOSDPGQuery> m)
 {
   const int from = m->get_source().num();
@@ -804,7 +805,7 @@ seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_log(ceph::net::Connection* conn,
                                        Ref<MOSDPGLog> m)
 {
   const int from = m->get_source().num();
@@ -820,6 +821,15 @@ seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
                                               true,
                                               create_info);
   return do_peering_event(m->get_spg(), std::move(evt));
+}
+
+void OSD::check_osdmap_features()
+{
+  if (osdmap->require_osd_release < ceph_release_t::nautilus) {
+    heartbeat->set_require_authorizer(false);
+  } else {
+    heartbeat->set_require_authorizer(true);
+  }
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)

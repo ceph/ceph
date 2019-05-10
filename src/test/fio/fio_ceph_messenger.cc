@@ -214,7 +214,6 @@ public:
   FioDispatcher(struct ceph_msgr_data *data):
     Dispatcher(g_ceph_context),
     m_data(data) {
-    require_authorizer = false;
   }
   bool ms_can_fast_dispatch_any() const override {
     return true;
@@ -311,6 +310,7 @@ static Messenger *create_messenger(struct ceph_msgr_options *o)
   }
   msgr->set_auth_client(g_dummy_auth);
   msgr->set_auth_server(g_dummy_auth);
+  msgr->set_require_authorizer(false);
   msgr->start();
 
   return msgr;

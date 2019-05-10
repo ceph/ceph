@@ -336,7 +336,7 @@ void RefreshRequest<I>::send_v2_get_mutable_metadata() {
 
   uint64_t snap_id;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     snap_id = m_image_ctx.snap_id;
   }
 
@@ -807,8 +807,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
 
     ParentImageInfo parent_md;
     MigrationInfo migration_info;
@@ -903,7 +902,7 @@ void RefreshRequest<I>::send_v2_open_journal() {
      !m_image_ctx.exclusive_lock->is_lock_owner());
   bool journal_disabled_by_policy;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     journal_disabled_by_policy = (
       !journal_disabled &&
       m_image_ctx.get_journal_policy()->journal_disabled());
@@ -955,7 +954,7 @@ template <typename I>
 void RefreshRequest<I>::send_v2_block_writes() {
   bool disabled_journaling = false;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     disabled_journaling = ((m_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
                            (m_features & RBD_FEATURE_JOURNALING) == 0 &&
                            m_image_ctx.journal != nullptr);
@@ -1234,7 +1233,7 @@ Context *RefreshRequest<I>::send_flush_aio() {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     auto ctx = create_context_callback<
       RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
-    auto aio_comp = io::AioCompletion::create(
+    auto aio_comp = io::AioCompletion::create_and_start(
       ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
     auto req = io::ImageDispatchSpec<I>::create_flush_request(
       m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
@@ -1282,140 +1281,135 @@ void RefreshRequest<I>::apply() {
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
   RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker md_locker(m_image_ctx.md_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
 
-  {
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
+  m_image_ctx.size = m_size;
+  m_image_ctx.lockers = m_lockers;
+  m_image_ctx.lock_tag = m_lock_tag;
+  m_image_ctx.exclusive_locked = m_exclusive_locked;
 
-    m_image_ctx.size = m_size;
-    m_image_ctx.lockers = m_lockers;
-    m_image_ctx.lock_tag = m_lock_tag;
-    m_image_ctx.exclusive_locked = m_exclusive_locked;
+  std::map<uint64_t, uint64_t> migration_reverse_snap_seq;
 
-    std::map<uint64_t, uint64_t> migration_reverse_snap_seq;
+  if (m_image_ctx.old_format) {
+    m_image_ctx.order = m_order;
+    m_image_ctx.features = 0;
+    m_image_ctx.flags = 0;
+    m_image_ctx.op_features = 0;
+    m_image_ctx.operations_disabled = false;
+    m_image_ctx.object_prefix = std::move(m_object_prefix);
+    m_image_ctx.init_layout();
+  } else {
+    // HEAD revision doesn't have a defined overlap so it's only
+    // applicable to snapshots
+    if (!m_head_parent_overlap) {
+      m_parent_md = {};
+    }
 
-    if (m_image_ctx.old_format) {
-      m_image_ctx.order = m_order;
-      m_image_ctx.features = 0;
-      m_image_ctx.flags = 0;
-      m_image_ctx.op_features = 0;
-      m_image_ctx.operations_disabled = false;
-      m_image_ctx.object_prefix = std::move(m_object_prefix);
-      m_image_ctx.init_layout();
-    } else {
-      // HEAD revision doesn't have a defined overlap so it's only
-      // applicable to snapshots
-      if (!m_head_parent_overlap) {
-        m_parent_md = {};
+    m_image_ctx.features = m_features;
+    m_image_ctx.flags = m_flags;
+    m_image_ctx.op_features = m_op_features;
+    m_image_ctx.operations_disabled = (
+      (m_op_features & ~RBD_OPERATION_FEATURES_ALL) != 0ULL);
+    m_image_ctx.group_spec = m_group_spec;
+    if (get_migration_info(&m_image_ctx.parent_md,
+                           &m_image_ctx.migration_info)) {
+      for (auto it : m_image_ctx.migration_info.snap_map) {
+        migration_reverse_snap_seq[it.second.front()] = it.first;
       }
+    } else {
+      m_image_ctx.parent_md = m_parent_md;
+      m_image_ctx.migration_info = {};
+    }
+  }
 
-      m_image_ctx.features = m_features;
-      m_image_ctx.flags = m_flags;
-      m_image_ctx.op_features = m_op_features;
-      m_image_ctx.operations_disabled = (
-        (m_op_features & ~RBD_OPERATION_FEATURES_ALL) != 0ULL);
-      m_image_ctx.group_spec = m_group_spec;
-      if (get_migration_info(&m_image_ctx.parent_md,
-                             &m_image_ctx.migration_info)) {
-        for (auto it : m_image_ctx.migration_info.snap_map) {
-          migration_reverse_snap_seq[it.second.front()] = it.first;
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    std::vector<librados::snap_t>::const_iterator it = std::find(
+      m_image_ctx.snaps.begin(), m_image_ctx.snaps.end(),
+      m_snapc.snaps[i].val);
+    if (it == m_image_ctx.snaps.end()) {
+      m_flush_aio = true;
+      ldout(cct, 20) << "new snapshot id=" << m_snapc.snaps[i].val
+                     << " name=" << m_snap_infos[i].name
+                     << " size=" << m_snap_infos[i].image_size
+                     << dendl;
+    }
+  }
+
+  m_image_ctx.snaps.clear();
+  m_image_ctx.snap_info.clear();
+  m_image_ctx.snap_ids.clear();
+  auto overlap = m_image_ctx.parent_md.overlap;
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    uint64_t flags = m_image_ctx.old_format ? 0 : m_snap_flags[i];
+    uint8_t protection_status = m_image_ctx.old_format ?
+      static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
+      m_snap_protection[i];
+    ParentImageInfo parent;
+    if (!m_image_ctx.old_format) {
+      if (!m_image_ctx.migration_info.empty()) {
+        parent = m_image_ctx.parent_md;
+        auto it = migration_reverse_snap_seq.find(m_snapc.snaps[i].val);
+        if (it != migration_reverse_snap_seq.end()) {
+          parent.spec.snap_id = it->second;
+          parent.overlap = m_snap_infos[i].image_size;
+        } else {
+          overlap = std::min(overlap, m_snap_infos[i].image_size);
+          parent.overlap = overlap;
         }
       } else {
-        m_image_ctx.parent_md = m_parent_md;
-        m_image_ctx.migration_info = {};
+        parent = m_snap_parents[i];
       }
     }
+    m_image_ctx.add_snap(m_snap_infos[i].snapshot_namespace,
+                         m_snap_infos[i].name, m_snapc.snaps[i].val,
+                         m_snap_infos[i].image_size, parent,
+                         protection_status, flags,
+                         m_snap_infos[i].timestamp);
+  }
+  m_image_ctx.parent_md.overlap = std::min(overlap, m_image_ctx.size);
+  m_image_ctx.snapc = m_snapc;
 
-    for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-      std::vector<librados::snap_t>::const_iterator it = std::find(
-        m_image_ctx.snaps.begin(), m_image_ctx.snaps.end(),
-        m_snapc.snaps[i].val);
-      if (it == m_image_ctx.snaps.end()) {
-        m_flush_aio = true;
-        ldout(cct, 20) << "new snapshot id=" << m_snapc.snaps[i].val
-                       << " name=" << m_snap_infos[i].name
-                       << " size=" << m_snap_infos[i].image_size
-                       << dendl;
-      }
+  if (m_image_ctx.snap_id != CEPH_NOSNAP &&
+      m_image_ctx.get_snap_id(m_image_ctx.snap_namespace,
+                              m_image_ctx.snap_name) != m_image_ctx.snap_id) {
+    lderr(cct) << "tried to read from a snapshot that no longer exists: "
+               << m_image_ctx.snap_name << dendl;
+    m_image_ctx.snap_exists = false;
+  }
+
+  if (m_refresh_parent != nullptr) {
+    m_refresh_parent->apply();
+  }
+  m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
+                                                      m_image_ctx.snaps);
+
+  // handle dynamically enabled / disabled features
+  if (m_image_ctx.exclusive_lock != nullptr &&
+      !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK,
+                                 m_image_ctx.image_lock)) {
+    // disabling exclusive lock will automatically handle closing
+    // object map and journaling
+    ceph_assert(m_exclusive_lock == nullptr);
+    m_exclusive_lock = m_image_ctx.exclusive_lock;
+  } else {
+    if (m_exclusive_lock != nullptr) {
+      ceph_assert(m_image_ctx.exclusive_lock == nullptr);
+      std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
     }
-
-    m_image_ctx.snaps.clear();
-    m_image_ctx.snap_info.clear();
-    m_image_ctx.snap_ids.clear();
-    auto overlap = m_image_ctx.parent_md.overlap;
-    for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
-      uint64_t flags = m_image_ctx.old_format ? 0 : m_snap_flags[i];
-      uint8_t protection_status = m_image_ctx.old_format ?
-        static_cast<uint8_t>(RBD_PROTECTION_STATUS_UNPROTECTED) :
-        m_snap_protection[i];
-      ParentImageInfo parent;
-      if (!m_image_ctx.old_format) {
-        if (!m_image_ctx.migration_info.empty()) {
-          parent = m_image_ctx.parent_md;
-          auto it = migration_reverse_snap_seq.find(m_snapc.snaps[i].val);
-          if (it != migration_reverse_snap_seq.end()) {
-            parent.spec.snap_id = it->second;
-            parent.overlap = m_snap_infos[i].image_size;
-          } else {
-            overlap = std::min(overlap, m_snap_infos[i].image_size);
-            parent.overlap = overlap;
-          }
-        } else {
-          parent = m_snap_parents[i];
-        }
+    if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
+                                   m_image_ctx.image_lock)) {
+      if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
+        m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
+                                                    false);
       }
-      m_image_ctx.add_snap(m_snap_infos[i].snapshot_namespace,
-                           m_snap_infos[i].name, m_snapc.snaps[i].val,
-                           m_snap_infos[i].image_size, parent,
-			   protection_status, flags,
-                           m_snap_infos[i].timestamp);
+      std::swap(m_journal, m_image_ctx.journal);
+    } else if (m_journal != nullptr) {
+      std::swap(m_journal, m_image_ctx.journal);
     }
-    m_image_ctx.parent_md.overlap = std::min(overlap, m_image_ctx.size);
-    m_image_ctx.snapc = m_snapc;
-
-    if (m_image_ctx.snap_id != CEPH_NOSNAP &&
-        m_image_ctx.get_snap_id(m_image_ctx.snap_namespace,
-				m_image_ctx.snap_name) != m_image_ctx.snap_id) {
-      lderr(cct) << "tried to read from a snapshot that no longer exists: "
-                 << m_image_ctx.snap_name << dendl;
-      m_image_ctx.snap_exists = false;
-    }
-
-    if (m_refresh_parent != nullptr) {
-      m_refresh_parent->apply();
-    }
-    m_image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(m_image_ctx.snapc.seq,
-                                                        m_image_ctx.snaps);
-
-    // handle dynamically enabled / disabled features
-    if (m_image_ctx.exclusive_lock != nullptr &&
-        !m_image_ctx.test_features(RBD_FEATURE_EXCLUSIVE_LOCK,
-                                   m_image_ctx.snap_lock)) {
-      // disabling exclusive lock will automatically handle closing
-      // object map and journaling
-      ceph_assert(m_exclusive_lock == nullptr);
-      m_exclusive_lock = m_image_ctx.exclusive_lock;
-    } else {
-      if (m_exclusive_lock != nullptr) {
-        ceph_assert(m_image_ctx.exclusive_lock == nullptr);
-        std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
-      }
-      if (!m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
-                                     m_image_ctx.snap_lock)) {
-        if (!m_image_ctx.clone_copy_on_read && m_image_ctx.journal != nullptr) {
-          m_image_ctx.io_work_queue->set_require_lock(io::DIRECTION_READ,
-                                                      false);
-        }
-        std::swap(m_journal, m_image_ctx.journal);
-      } else if (m_journal != nullptr) {
-        std::swap(m_journal, m_image_ctx.journal);
-      }
-      if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
-                                     m_image_ctx.snap_lock) ||
-          m_object_map != nullptr) {
-        std::swap(m_object_map, m_image_ctx.object_map);
-      }
+    if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
+                                   m_image_ctx.image_lock) ||
+        m_object_map != nullptr) {
+      std::swap(m_object_map, m_image_ctx.object_map);
     }
   }
 }

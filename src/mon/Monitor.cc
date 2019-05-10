@@ -1115,18 +1115,14 @@ void Monitor::bootstrap()
     monmap->calc_legacy_ranks();
   }
   dout(10) << "monmap " << *monmap << dendl;
-
-  if (monmap->min_mon_release &&
-      monmap->min_mon_release + 2 < (int)ceph_release()) {
-    derr << "current monmap has min_mon_release "
-	 << (int)monmap->min_mon_release
-	 << " (" << ceph_release_name(monmap->min_mon_release)
-	 << ") which is >2 releases older than me " << ceph_release()
-	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
-	 << dendl;
-    exit(0);
+  {
+    auto from_release = monmap->min_mon_release;
+    ostringstream err;
+    if (!can_upgrade_from(from_release, "min_mon_release", err)) {
+      derr << "current monmap has " << err.str() << " stopping." << dendl;
+      exit(0);
+    }
   }
-
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddrs());
   if (newrank < 0 && rank >= 0) {
@@ -1834,8 +1830,9 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " require release " << m->mon_release << " > "
-	 << ceph_release() << ", or missing features (have " << CEPH_FEATURES_ALL
+    derr << __func__ << " require release " << (int)m->mon_release << " > "
+	 << (int)ceph_release()
+	 << ", or missing features (have " << CEPH_FEATURES_ALL
 	 << ", required " << m->required_features
 	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
 	 << dendl;
@@ -1850,8 +1847,11 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
   uint64_t missing = required_features & ~m->get_connection()->get_features();
-  if (m->mon_release < monmap->min_mon_release || missing) {
-    dout(1) << " peer " << m->get_source_addr() << " release " << m->mon_release
+  if ((m->mon_release != ceph_release_t::unknown &&
+       m->mon_release < monmap->min_mon_release) ||
+      missing) {
+    dout(1) << " peer " << m->get_source_addr()
+	    << " release " << m->mon_release
 	    << " < min_mon_release " << monmap->min_mon_release
 	    << ", or missing features " << missing << dendl;
     MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
@@ -2005,7 +2005,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 
   // did the existing cluster complete upgrade to luminous?
   if (osdmon()->osdmap.get_epoch()) {
-    if (osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    if (osdmon()->osdmap.require_osd_release < ceph_release_t::luminous) {
       derr << __func__ << " existing cluster has not completed upgrade to"
 	   << " luminous; 'ceph osd require_osd_release luminous' before"
 	   << " upgrading" << dendl;
@@ -2136,7 +2136,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-			   int min_mon_release,
+			   ceph_release_t min_mon_release,
 			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
@@ -2224,7 +2224,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
                             uint64_t features,
                             const mon_feature_t& mon_features,
-			    int min_mon_release)
+			    ceph_release_t min_mon_release)
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -6188,9 +6188,11 @@ int Monitor::handle_auth_request(
 	   << " payload " << payload.length()
 	   << dendl;
   if (!payload.length()) {
-    if (!con->is_msgr2()) {
-      // for v1 connections, we tolerate no authorizer, because authentication
-      // happens via MAuth messages.
+    if (!con->is_msgr2() &&
+	con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+      // for v1 connections, we tolerate no authorizer (from
+      // non-monitors), because authentication happens via MAuth
+      // messages.
       return 1;
     }
     return -EACCES;
@@ -6211,7 +6213,7 @@ int Monitor::handle_auth_request(
     bool was_challenge = (bool)auth_meta->authorizer_challenge;
     bool isvalid = ah->verify_authorizer(
       cct,
-      &keyring,
+      keyring,
       payload,
       auth_meta->get_connection_secret_length(),
       reply,

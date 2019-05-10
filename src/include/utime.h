@@ -83,8 +83,8 @@ public:
 
 #if defined(WITH_SEASTAR)
   explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
-    tv.tv_sec = std::time_t(std::chrono::duration_cast<std::chrono::seconds>(
-        t.time_since_epoch()).count());
+    tv.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(
+        t.time_since_epoch()).count();
     tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(
         t.time_since_epoch() % std::chrono::seconds(1)).count();
   }
@@ -172,7 +172,9 @@ public:
     denc(v.tv.tv_nsec, p);
   }
 
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<utime_t*>& o);
+  
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_nsec;

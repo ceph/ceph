@@ -971,8 +971,6 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     }
   }
 
-  message->set_connection(connection);
-
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
@@ -1444,7 +1442,8 @@ CtPtr ProtocolV1::send_connect_message()
   bufferlist auth_bl;
   vector<uint32_t> preferred_modes;
 
-  if (connection->peer_type != CEPH_ENTITY_TYPE_MON) {
+  if (connection->peer_type != CEPH_ENTITY_TYPE_MON ||
+      messenger->get_myname().type() == CEPH_ENTITY_TYPE_MON) {
     if (authorizer_more.length()) {
       ldout(cct,10) << __func__ << " using augmented (challenge) auth payload"
 		    << dendl;
@@ -1575,7 +1574,8 @@ CtPtr ProtocolV1::handle_connect_reply_auth(char *buffer, int r) {
   bufferlist authorizer_reply;
   authorizer_reply.append(buffer, connect_reply.authorizer_len);
 
-  if (connection->peer_type != CEPH_ENTITY_TYPE_MON) {
+  if (connection->peer_type != CEPH_ENTITY_TYPE_MON ||
+      messenger->get_myname().type() == CEPH_ENTITY_TYPE_MON) {
     auto am = auth_meta;
     bool more = (connect_reply.tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER);
     bufferlist auth_retry_bl;

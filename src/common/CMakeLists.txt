@@ -48,6 +48,7 @@ set(common_srcs
   ceph_hash.cc
   ceph_json.cc
   ceph_strings.cc
+  ceph_releases.cc
   ceph_time.cc
   cmdparse.cc
   code_environment.cc

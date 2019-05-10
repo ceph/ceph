@@ -147,13 +147,11 @@ bool ObjectCacherWriteback::may_copy_on_write(const object_t& oid,
                                               uint64_t read_len,
                                               snapid_t snapid)
 {
-  m_ictx->snap_lock.get_read();
+  m_ictx->image_lock.get_read();
   librados::snap_t snap_id = m_ictx->snap_id;
-  m_ictx->parent_lock.get_read();
   uint64_t overlap = 0;
   m_ictx->get_parent_overlap(snap_id, &overlap);
-  m_ictx->parent_lock.put_read();
-  m_ictx->snap_lock.put_read();
+  m_ictx->image_lock.put_read();
 
   uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
 

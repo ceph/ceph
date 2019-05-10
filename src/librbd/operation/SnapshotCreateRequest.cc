@@ -159,8 +159,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  RWLock::RLocker parent_locker(image_ctx.parent_lock);
+  RWLock::RLocker image_locker(image_ctx.image_lock);
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
@@ -208,9 +207,9 @@ template <typename I>
 Context *SnapshotCreateRequest<I>::send_create_object_map() {
   I &image_ctx = this->m_image_ctx;
 
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if (image_ctx.object_map == nullptr || m_skip_object_map) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
 
     update_snap_context();
     image_ctx.io_work_queue->unblock_writes();
@@ -220,14 +219,11 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  {
-    RWLock::RLocker object_map_lock(image_ctx.object_map_lock);
-    image_ctx.object_map->snapshot_add(
-      m_snap_id, create_context_callback<
-        SnapshotCreateRequest<I>,
-        &SnapshotCreateRequest<I>::handle_create_object_map>(this));
-  }
-  image_ctx.snap_lock.put_read();
+  image_ctx.object_map->snapshot_add(
+    m_snap_id, create_context_callback<
+      SnapshotCreateRequest<I>,
+      &SnapshotCreateRequest<I>::handle_create_object_map>(this));
+  image_ctx.image_lock.put_read();
   return nullptr;
 }
 
@@ -281,7 +277,7 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   I &image_ctx = this->m_image_ctx;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  RWLock::WLocker image_locker(image_ctx.image_lock);
   if (image_ctx.old_format) {
     return;
   }

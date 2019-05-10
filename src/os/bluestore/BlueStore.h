@@ -411,6 +411,7 @@ public:
     friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
     friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
 
+    void dump(Formatter* f) const;
     friend ostream& operator<<(ostream& out, const SharedBlob& sb);
 
     void get() {
@@ -516,6 +517,7 @@ public:
     friend void intrusive_ptr_add_ref(Blob *b) { b->get(); }
     friend void intrusive_ptr_release(Blob *b) { b->put(); }
 
+    void dump(Formatter* f) const;
     friend ostream& operator<<(ostream& out, const Blob &b);
 
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
@@ -693,6 +695,8 @@ public:
       }
     }
 
+    void dump(Formatter* f) const;
+
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
@@ -810,6 +814,8 @@ public:
       inline_bl.clear();
       clear_needs_reshard();
     }
+
+    void dump(Formatter* f) const;
 
     bool encode_some(uint32_t offset, uint32_t length, bufferlist& bl,
 		     unsigned *pn);
@@ -1064,6 +1070,8 @@ public:
 	exists(false),
 	extent_map(this) {
     }
+
+    void dump(Formatter* f) const;
 
     void flush();
     void get() {
@@ -2251,9 +2259,12 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
 
-  template <int LogLevelV = 30> void _dump_onode(const OnodeRef& o);
-  template <int LogLevelV = 30> void _dump_extent_map(ExtentMap& em);
-  template <int LogLevelV = 30> void _dump_transaction(Transaction *t);
+  template <int LogLevelV>
+  friend void _dump_onode(CephContext *cct, const Onode& o);
+  template <int LogLevelV>
+  friend void _dump_extent_map(CephContext *cct, const ExtentMap& em);
+  template <int LogLevelV>
+  friend void _dump_transaction(CephContext *cct, Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
 			    list<Context*> *on_commits);
@@ -2523,6 +2534,8 @@ public:
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
 
+  int dump_onode(CollectionHandle &c, const ghobject_t& oid,
+    const string& section_name, Formatter *f) override;
 
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;

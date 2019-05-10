@@ -70,8 +70,8 @@ namespace {
 
 uint64_t get_encode_features(cls_method_context_t hctx) {
   uint64_t features = 0;
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
-  if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (require_osd_release >= ceph_release_t::nautilus) {
     features |= CEPH_FEATURE_SERVER_NAUTILUS;
   }
   return features;
@@ -704,8 +704,8 @@ int detach(cls_method_context_t hctx, bool legacy_api) {
     return r;
   }
 
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
-  if (has_child_snaps && require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (has_child_snaps && require_osd_release >= ceph_release_t::nautilus) {
     // remove overlap from HEAD revision but keep spec for snapshots
     on_disk_parent.head_overlap = std::nullopt;
     r = write_key(hctx, "parent", on_disk_parent, get_encode_features(hctx));
@@ -2566,9 +2566,9 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bool has_parent = (r >= 0 && parent.exists());
   bool is_head_child = (has_parent && parent.head_overlap);
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
   if (has_parent && !is_head_child && !has_child_snaps &&
-      require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      require_osd_release >= ceph_release_t::nautilus) {
     // remove the unused parent image spec
     r = remove_key(hctx, "parent");
     if (r < 0 && r != -ENOENT) {

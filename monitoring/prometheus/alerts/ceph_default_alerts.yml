@@ -1,0 +1,154 @@
+groups:
+  - name: cluster health
+    rules:
+      - alert: health error
+        expr: ceph_health_status == 2
+        for: 5m
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: Ceph in health_error state for more than 5m
+      - alert: health warn
+        expr: ceph_health_status == 1
+        for: 15m
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: Ceph in health_warn for more than 15m.
+  - name: mon
+    rules:
+      - alert: low monitor quorum count
+        expr: sum(ceph_mon_quorum_status) < 3
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: Monitor count in quorum is low.
+  - name: osd
+    rules:
+      - alert: 10% OSDs down
+        expr: sum(ceph_osd_up) / count(ceph_osd_in) <= 0.9
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: More than 10% of OSDs are down.
+      - alert: OSD down
+        expr: count(ceph_osd_up == 0) > 0
+        for: 15m
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: One or more OSDs down for more than 15 minutes.
+      - alert: OSDs near full
+        expr: ((ceph_osd_stat_bytes_used / ceph_osd_stat_bytes) and on(ceph_daemon) ceph_osd_up == 1) > 0.8
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: OSD {{ $labels.ceph_daemon }} is dangerously full, over 80%.
+      # alert on single OSDs flapping
+      - alert: flap osd
+        expr: rate(ceph_osd_up[5m])*60 > 1
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+              OSD {{ $labels.ceph_daemon }} was marked down and back up at least once a
+              minute for 5 minutes.
+      # alert on high deviation from average PG count
+      - alert: high pg count deviation
+        expr: abs(((ceph_osd_numpg > 0) - on (job) group_left avg(ceph_osd_numpg > 0) by (job)) / on (job) group_left avg(ceph_osd_numpg > 0) by (job)) > 0.35
+        for: 5m
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+              OSD {{ $labels.ceph_daemon }} deviates by more than 30% from
+              average PG count.
+      # alert on high commit latency...but how high is too high
+  - name: mds
+    rules:
+    # no mds metrics are exported yet
+  - name: mgr
+    rules:
+    # no mgr metrics are exported yet
+  - name: pgs
+    rules:
+      - alert: pgs inactive
+        expr: ceph_pg_total - ceph_pg_active > 0
+        for: 5m
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: One or more PGs are inactive for more than 5 minutes.
+      - alert: pgs unclean
+        expr: ceph_pg_total - ceph_pg_clean > 0
+        for: 15m
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: One or more PGs are not clean for more than 15 minutes.
+  - name: nodes
+    rules:
+      - alert: root volume full
+        expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.05
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: Root volume (OSD and MON store) is dangerously full (< 5% free).
+      # alert on nic packet errors and drops rates > 1 packet/s
+      - alert: network packets dropped
+        expr: irate(node_network_receive_drop_total{device!="lo"}[5m]) + irate(node_network_transmit_drop_total{device!="lo"}[5m]) > 1
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+            Node {{ $labels.instance }} experiences packet drop > 1
+            packet/s on interface {{ $labels.device }}.
+      - alert: network packet errors
+        expr: irate(node_network_receive_errs_total{device!="lo"}[5m]) + irate(node_network_transmit_errs_total{device!="lo"}[5m]) > 1
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+            Node {{ $labels.instance }} experiences packet errors > 1
+            packet/s on interface {{ $labels.device }}.
+      # predict fs fillup times
+      - alert: storage filling
+        expr: ((node_filesystem_free_bytes) / deriv(node_filesystem_free_bytes[2d]) <= 5) > 0
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+            Mountpoint {{ $labels.mountpoint }} will be full in less than 5 days
+            assuming the average fillup rate of the past 48 hours.
+  - name: pools
+    rules:
+      - alert: pool full
+        expr: ceph_pool_stored / ceph_pool_max_avail * on(pool_id) group_right ceph_pool_metadata > 0.9
+        labels:
+          severity: critical
+          type: ceph_default
+        annotations:
+          description: Pool {{ $labels.name }} at 90% capacity or over.
+      - alert: pool filling up
+        expr: (((ceph_pool_max_avail - ceph_pool_stored) / deriv(ceph_pool_max_avail[2d])) * on(pool_id) group_right ceph_pool_metadata <=5) > 0
+        labels:
+          severity: warning
+          type: ceph_default
+        annotations:
+          description: >
+            Pool {{ $labels.name }} will be full in less than 5 days
+            assuming the average fillup rate of the past 48 hours.

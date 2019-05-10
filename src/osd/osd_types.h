@@ -439,12 +439,12 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
-  bool contains(int bits, const ghobject_t& oid) {
+  bool contains(int bits, const ghobject_t& oid) const {
     return
       (int64_t)m_pool == oid.hobj.get_logical_pool() &&
       oid.match(bits, ps());
   }
-  bool contains(int bits, const hobject_t& oid) {
+  bool contains(int bits, const hobject_t& oid) const {
     return
       (int64_t)m_pool == oid.get_logical_pool() &&
       oid.match(bits, ps());
@@ -3176,7 +3176,7 @@ public:
     const OSDMap *osdmap,      ///< [in] current map
     const OSDMap *lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     );
@@ -3194,7 +3194,7 @@ public:
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     ) {
@@ -3292,7 +3292,7 @@ public:
     std::map<int, epoch_t> blocked_by;  ///< current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool pg_down = false;   ///< some down osds are included in @a cur; the DOWN pg state bit should be set.
-    std::unique_ptr<IsPGRecoverablePredicate> pcontdec;
+    const IsPGRecoverablePredicate* pcontdec = nullptr;
 
     PriorSet() = default;
     PriorSet(PriorSet &&) = default;
@@ -3320,7 +3320,7 @@ public:
       std::set<int> down,
       std::map<int, epoch_t> blocked_by,
       bool pg_down,
-      IsPGRecoverablePredicate *pcontdec)
+      const IsPGRecoverablePredicate *pcontdec)
       : ec_pool(ec_pool), probe(probe), down(down), blocked_by(blocked_by),
 	pg_down(pg_down), pcontdec(pcontdec) {}
 
@@ -3330,7 +3330,7 @@ public:
       const PastIntervals &past_intervals,
       bool ec_pool,
       epoch_t last_epoch_started,
-      IsPGRecoverablePredicate *c,
+      const IsPGRecoverablePredicate *c,
       F f,
       const std::vector<int> &up,
       const std::vector<int> &acting,
@@ -3355,7 +3355,7 @@ PastIntervals::PriorSet::PriorSet(
   const PastIntervals &past_intervals,
   bool ec_pool,
   epoch_t last_epoch_started,
-  IsPGRecoverablePredicate *c,
+  const IsPGRecoverablePredicate *c,
   F f,
   const std::vector<int> &up,
   const std::vector<int> &acting,
@@ -5624,6 +5624,30 @@ struct watch_item_t {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("watcher") << name;
+    f->dump_int("cookie", cookie);
+    f->dump_int("timeout", timeout_seconds);
+    f->open_object_section("addr");
+    addr.dump(f);
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<watch_item_t*>& o) {
+    entity_addr_t ea;
+    ea.set_type(entity_addr_t::TYPE_LEGACY);
+    ea.set_nonce(1000);
+    ea.set_family(AF_INET);
+    ea.set_in4_quad(0, 127);
+    ea.set_in4_quad(1, 0);
+    ea.set_in4_quad(2, 0);
+    ea.set_in4_quad(3, 1);
+    ea.set_port(1024);
+    o.push_back(new watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30, ea));
+    ea.set_nonce(1001);
+    ea.set_in4_quad(3, 2);
+    ea.set_port(1025);
+    o.push_back(new watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(watch_item_t)
 
@@ -5653,12 +5677,7 @@ struct obj_list_watch_response_t {
     f->open_array_section("entries");
     for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("watch");
-      f->dump_stream("watcher") << p->name;
-      f->dump_int("cookie", p->cookie);
-      f->dump_int("timeout", p->timeout_seconds);
-      f->open_object_section("addr");
-      p->addr.dump(f);
-      f->close_section();
+      p->dump(f);
       f->close_section();
     }
     f->close_section();
@@ -5667,19 +5686,12 @@ struct obj_list_watch_response_t {
     entity_addr_t ea;
     o.push_back(new obj_list_watch_response_t);
     o.push_back(new obj_list_watch_response_t);
-    ea.set_type(entity_addr_t::TYPE_LEGACY);
-    ea.set_nonce(1000);
-    ea.set_family(AF_INET);
-    ea.set_in4_quad(0, 127);
-    ea.set_in4_quad(1, 0);
-    ea.set_in4_quad(2, 0);
-    ea.set_in4_quad(3, 1);
-    ea.set_port(1024);
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30, ea));
-    ea.set_nonce(1001);
-    ea.set_in4_quad(3, 2);
-    ea.set_port(1025);
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
+    std::list<watch_item_t*> test_watchers;
+    watch_item_t::generate_test_instances(test_watchers);
+    for (auto &e : test_watchers) {
+      o.back()->entries.push_back(*e);
+      delete e;
+    }
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)

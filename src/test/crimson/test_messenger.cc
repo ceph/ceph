@@ -63,6 +63,7 @@ static seastar::future<> test_echo(unsigned rounds,
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
                 server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+                server.msgr->set_require_authorizer(false);
                 server.msgr->set_auth_client(&server.dummy_auth);
                 server.msgr->set_auth_server(&server.dummy_auth);
               }).then([messenger, addr] {

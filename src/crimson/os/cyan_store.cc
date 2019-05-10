@@ -164,13 +164,14 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                 __func__, c->cid, oid);
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return seastar::make_exception_future<ceph::bufferptr>(
+      EnoentException(fmt::format("object does not exist: {}", oid)));
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
     return seastar::make_ready_future<ceph::bufferptr>(found->second);
   } else {
-    throw std::runtime_error(fmt::format("attr does not exist: {}/{}",
-                                         oid, name));
+    return seastar::make_exception_future<ceph::bufferptr>(
+      EnoentException(fmt::format("attr does not exist: {}/{}", oid, name)));
   }
 }
 
@@ -216,6 +217,13 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     switch (op->op) {
     case Transaction::OP_NOP:
       break;
+    case Transaction::OP_TOUCH:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _touch(cid, oid);
+      }
+      break;
     case Transaction::OP_WRITE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -226,6 +234,26 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
         bufferlist bl;
         i.decode_bl(bl);
         r = _write(cid, oid, off, len, bl, fadvise_flags);
+      }
+      break;
+    case Transaction::OP_TRUNCATE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
+        r = _truncate(cid, oid, off);
+      }
+      break;
+    case Transaction::OP_SETATTR:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        string name = i.decode_string();
+        bufferlist bl;
+        i.decode_bl(bl);
+        map<string, bufferptr> to_set;
+        to_set[name] = bufferptr(bl.c_str(), bl.length());
+        r = _setattrs(cid, oid, to_set);
       }
       break;
     case Transaction::OP_MKCOLL:
@@ -245,9 +273,21 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
   return seastar::now();
 }
 
+int CyanStore::_touch(const coll_t& cid, const ghobject_t& oid)
+{
+  logger().debug("{} cid={} oid={}",
+                __func__, cid, oid);
+  auto c = open_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  c->get_or_create_object(oid);
+  return 0;
+}
+
 int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
-                       uint64_t offset, size_t len, const bufferlist& bl,
-                       uint32_t fadvise_flags)
+                      uint64_t offset, size_t len, const bufferlist& bl,
+                      uint32_t fadvise_flags)
 {
   logger().debug("{} {} {} {} ~ {}",
                 __func__, cid, oid, offset, len);
@@ -264,6 +304,40 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
     used_bytes += (o->get_size() - old_size);
   }
 
+  return 0;
+}
+
+int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size)
+{
+  logger().debug("{} cid={} oid={} size={}",
+                __func__, cid, oid, size);
+  auto c = open_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  ObjectRef o = c->get_object(oid);
+  if (!o)
+    return -ENOENT;
+  const ssize_t old_size = o->get_size();
+  int r = o->truncate(size);
+  used_bytes += (o->get_size() - old_size);
+  return r;
+}
+
+int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
+                         map<string,bufferptr>& aset)
+{
+  logger().debug("{} cid={} oid={}",
+                __func__, cid, oid);
+  auto c = open_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  ObjectRef o = c->get_object(oid);
+  if (!o)
+    return -ENOENT;
+  for (map<string,bufferptr>::const_iterator p = aset.begin(); p != aset.end(); ++p)
+    o->xattr[p->first] = p->second;
   return 0;
 }
 

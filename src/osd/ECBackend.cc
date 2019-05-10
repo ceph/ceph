@@ -220,13 +220,11 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   eversion_t v = recovery_ops[hoid].v;
   recovery_ops.erase(hoid);
 
-  list<pg_shard_t> fl;
+  set<pg_shard_t> fl;
   for (auto&& i : res.errors) {
-    fl.push_back(i.first);
+    fl.insert(i.first);
   }
-  get_parent()->failed_push(fl, hoid);
-  get_parent()->backfill_add_missing(hoid, v);
-  get_parent()->finish_degraded_object(hoid);
+  get_parent()->on_failed_pull(fl, hoid, v);
 }
 
 struct OnRecoveryReadComplete :
@@ -2104,7 +2102,7 @@ bool ECBackend::try_finish_rmw()
   if (op->version > committed_to)
     committed_to = op->version;
 
-  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+  if (get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
     if (op->version > get_parent()->get_log().get_can_rollback_to() &&
 	waiting_reads.empty() &&
 	waiting_commit.empty()) {

@@ -198,16 +198,15 @@ void Elector::victory()
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
   map<int,Metadata> metadata;
-  int min_mon_release = -1;
-  for (map<int, elector_info_t>::iterator p = acked_me.begin();
-       p != acked_me.end();
-       ++p) {
-    quorum.insert(p->first);
-    cluster_features &= p->second.cluster_features;
-    mon_features &= p->second.mon_features;
-    metadata[p->first] = p->second.metadata;
-    if (min_mon_release < 0 || p->second.mon_release < min_mon_release) {
-      min_mon_release = p->second.mon_release;
+  ceph_release_t min_mon_release{ceph_release_t::unknown};
+  for (const auto& [id, info] : acked_me) {
+    quorum.insert(id);
+    cluster_features &= info.cluster_features;
+    mon_features &= info.mon_features;
+    metadata[id] = info.metadata;
+    if (min_mon_release == ceph_release_t::unknown ||
+	info.mon_release < min_mon_release) {
+      min_mon_release = info.mon_release;
     }
   }
 

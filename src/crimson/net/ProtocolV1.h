@@ -26,11 +26,11 @@ class ProtocolV1 final : public Protocol {
 
   void trigger_close() override;
 
-  seastar::future<> write_message(MessageRef msg) override;
-
-  seastar::future<> do_keepalive() override;
-
-  seastar::future<> do_keepalive_ack() override;
+  ceph::bufferlist do_sweep_messages(
+      const std::deque<MessageRef>& msgs,
+      size_t num_msgs,
+      bool require_keepalive,
+      std::optional<utime_t> keepalive_ack) override;
 
  private:
   SocketMessenger &messenger;
@@ -50,7 +50,8 @@ class ProtocolV1 final : public Protocol {
   struct Handshake {
     ceph_msg_connect connect;
     ceph_msg_connect_reply reply;
-    AuthAuthorizer* authorizer = nullptr;
+    ceph::bufferlist auth_payload;  // auth(orizer) payload read off the wire
+    ceph::bufferlist auth_more;     // connect-side auth retry (we added challenge)
     std::chrono::milliseconds backoff;
     uint32_t connect_seq = 0;
     uint32_t peer_global_seq = 0;
@@ -85,6 +86,7 @@ class ProtocolV1 final : public Protocol {
   void reset_session();
   seastar::future<stop_t> handle_connect_reply(ceph::net::msgr_tag_t tag);
   seastar::future<stop_t> repeat_connect();
+  ceph::bufferlist get_auth_payload();
 
   // accepting
   seastar::future<stop_t> send_connect_reply(

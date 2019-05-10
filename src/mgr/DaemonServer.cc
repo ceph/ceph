@@ -1349,6 +1349,33 @@ bool DaemonServer::_handle_command(
 	    safe_to_destroy.insert(osd);
 	    continue;  // clearly safe to destroy
 	  }
+          set<int64_t> pools;
+          osdmap.get_pool_ids_by_osd(g_ceph_context, osd, &pools);
+          if (pools.empty()) {
+            // osd does not belong to any pools yet
+            safe_to_destroy.insert(osd);
+            continue;
+          }
+          if (osdmap.is_down(osd) && osdmap.is_out(osd)) {
+            // if osd is down&out and all relevant pools are active+clean,
+            // then should be safe to destroy
+            bool all_osd_pools_active_clean = true;
+            for (auto &ps: pg_map.pg_stat) {
+              auto& pg = ps.first;
+              auto state = ps.second.state;
+              if (!pools.count(pg.pool()))
+                continue;
+              if ((state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
+                           (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
+                all_osd_pools_active_clean = false;
+                break;
+              }
+            }
+            if (all_osd_pools_active_clean) {
+              safe_to_destroy.insert(osd);
+              continue;
+            }
+          }
 	  auto q = pg_map.num_pg_by_osd.find(osd);
 	  if (q != pg_map.num_pg_by_osd.end()) {
 	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
@@ -2317,7 +2344,7 @@ void DaemonServer::send_report()
 	  jf.dump_object("health_checks", m->health_checks);
 	  jf.flush(*_dout);
 	  *_dout << dendl;
-          if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+          if (osdmap.require_osd_release >= ceph_release_t::luminous) {
               clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
           }
 	});
@@ -2558,24 +2585,28 @@ void DaemonServer::adjust_pgs()
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
 	    int next;
-	    if (aggro) {
+	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
+	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
+	    if (aggro ||
+		// pool is (virtually) empty; just jump to final pgp_num?
+		(p.get_pgp_num_target() > p.get_pgp_num() &&
+		 s.stats.sum.num_objects <= (MAX_NUM_OBJECTS_PER_PG_FOR_LEAP *
+					     p.get_pgp_num_target()))) {
 	      next = target;
 	    } else {
 	      double room =
 		std::min<double>(max_misplaced - misplaced_ratio,
-				 misplaced_ratio / 2.0);
+				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
-	      int delta = target - p.get_pgp_num();
-	      next = p.get_pgp_num();
-	      if (delta < 0) {
-		next += std::max<int>(-estmax, delta);
-	      } else {
-		next += std::min<int>(estmax, delta);
-	      }
+	      next = std::clamp(target,
+				p.get_pgp_num() - estmax,
+				p.get_pgp_num() + estmax);
 	      dout(20) << " room " << room << " estmax " << estmax
-		       << " delta " << delta << " next " << next << dendl;
-	      if (p.get_pgp_num_target() == p.get_pg_num_target()) {
+		       << " delta " << (target-p.get_pgp_num())
+		       << " next " << next << dendl;
+	      if (p.get_pgp_num_target() == p.get_pg_num_target() &&
+		  p.get_pgp_num_target() < p.get_pg_num()) {
 		// since pgp_num is tracking pg_num, ceph is handling
 		// pgp_num.  so, be responsible: don't let pgp_num get
 		// too far out ahead of merges (if we are merging).

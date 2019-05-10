@@ -102,7 +102,7 @@ class PoolTest(DashboardTestCase):
         prop = 'pg_num'
         pgp_prop = 'pg_placement_num'
         health = lambda: self._get('/api/health/minimal')['health']['status'] == 'HEALTH_OK'
-        t = 0;
+        t = 0
         while (int(value) != pool[pgp_prop] or not health()) and t < 180:
             time.sleep(2)
             t += 2
@@ -113,7 +113,8 @@ class PoolTest(DashboardTestCase):
     @classmethod
     def tearDownClass(cls):
         super(PoolTest, cls).tearDownClass()
-        for name in ['dashboard_pool1', 'dashboard_pool2', 'dashboard_pool3', 'dashboard_pool_update1']:
+        for name in ['dashboard_pool1', 'dashboard_pool2', 'dashboard_pool3',
+                     'dashboard_pool_update1']:
             cls._ceph_cmd(['osd', 'pool', 'delete', name, name, '--yes-i-really-really-mean-it'])
         cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecprofile'])
 
@@ -235,7 +236,10 @@ class PoolTest(DashboardTestCase):
             # they can't recover from the resulting warning state.
             # Feel free to test it locally.
             # {
-            #     'pg_num': '8',
+            #     'pg_num': '2', # Decrease PGs
+            # },
+            # {
+            #     'pg_num': '8', # Increase PGs
             # },
             {
                 'application_metadata': ['rgw'],
@@ -260,7 +264,6 @@ class PoolTest(DashboardTestCase):
                 update = {
                     'compression_mode': None,
                     'compression_algorithm': None,
-                    'compression_mode': None,
                     'compression_max_blob_size': None,
                     'compression_required_ratio': None,
                 }

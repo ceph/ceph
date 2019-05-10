@@ -24,8 +24,7 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::io::ImageRequest: " << this \
-                           << " " << __func__ << ": "
+#define dout_prefix *_dout << "librbd::io::ImageRequest: " << __func__ << ": "
 
 namespace librbd {
 namespace io {
@@ -33,6 +32,83 @@ namespace io {
 using librbd::util::get_image_ctx;
 
 namespace {
+
+template <typename I>
+struct C_RBD_Readahead : public Context {
+  I *ictx;
+  object_t oid;
+  uint64_t offset;
+  uint64_t length;
+
+  bufferlist read_data;
+  io::ExtentMap extent_map;
+
+  C_RBD_Readahead(I *ictx, object_t oid, uint64_t offset, uint64_t length)
+    : ictx(ictx), oid(oid), offset(offset), length(length) {
+    ictx->readahead.inc_pending();
+  }
+
+  void finish(int r) override {
+    ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": "
+                         << offset << "~" << length << dendl;
+    ictx->readahead.dec_pending();
+  }
+};
+
+template <typename I>
+void readahead(I *ictx, const Extents& image_extents) {
+  uint64_t total_bytes = 0;
+  for (auto& image_extent : image_extents) {
+    total_bytes += image_extent.second;
+  }
+
+  ictx->image_lock.get_read();
+  auto total_bytes_read = ictx->total_bytes_read.fetch_add(total_bytes);
+  bool abort = (
+    ictx->readahead_disable_after_bytes != 0 &&
+    total_bytes_read > ictx->readahead_disable_after_bytes);
+  if (abort) {
+    ictx->image_lock.put_read();
+    return;
+  }
+
+  uint64_t image_size = ictx->get_image_size(ictx->snap_id);
+  auto snap_id = ictx->snap_id;
+  ictx->image_lock.put_read();
+
+  auto readahead_extent = ictx->readahead.update(image_extents, image_size);
+  uint64_t readahead_offset = readahead_extent.first;
+  uint64_t readahead_length = readahead_extent.second;
+
+  if (readahead_length > 0) {
+    ldout(ictx->cct, 20) << "(readahead logical) " << readahead_offset << "~"
+                         << readahead_length << dendl;
+    std::map<object_t, std::vector<ObjectExtent> > readahead_object_extents;
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+                             readahead_offset, readahead_length, 0,
+                             readahead_object_extents);
+    for (auto& readahead_object_extent : readahead_object_extents) {
+      for (auto& object_extent : readahead_object_extent.second) {
+        ldout(ictx->cct, 20) << "(readahead) oid " << object_extent.oid << " "
+                             << object_extent.offset << "~"
+                             << object_extent.length << dendl;
+
+        auto req_comp = new C_RBD_Readahead<I>(ictx, object_extent.oid,
+                                               object_extent.offset,
+                                               object_extent.length);
+        auto req = io::ObjectDispatchSpec::create_read(
+          ictx, io::OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+          object_extent.objectno, object_extent.offset, object_extent.length,
+          snap_id, 0, {}, &req_comp->read_data, &req_comp->extent_map,
+          req_comp);
+        req->send();
+      }
+    }
+
+    ictx->perfcounter->inc(l_librbd_readahead);
+    ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
+  }
+}
 
 template <typename I>
 struct C_UpdateTimestamp : public Context {
@@ -75,6 +151,10 @@ bool should_update_timestamp(const utime_t& now, const utime_t& timestamp,
 }
 
 } // anonymous namespace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "librbd::io::ImageRequest: " << this \
+                           << " " << __func__ << ": "
 
 template <typename I>
 void ImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
@@ -143,14 +223,13 @@ template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(m_aio_comp->is_initialized(get_aio_type()));
-  ceph_assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
+  ceph_assert(m_aio_comp->is_started());
 
   CephContext *cct = image_ctx.cct;
   AioCompletion *aio_comp = this->m_aio_comp;
   ldout(cct, 20) << get_request_type() << ": ictx=" << &image_ctx << ", "
                  << "completion=" << aio_comp << dendl;
 
-  aio_comp->get();
   int r = clip_request();
   if (r < 0) {
     m_aio_comp->fail(r);
@@ -167,7 +246,7 @@ void ImageRequest<I>::send() {
 
 template <typename I>
 int ImageRequest<I>::clip_request() {
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
   for (auto &image_extent : m_image_extents) {
     auto clip_len = image_extent.second;
     int r = clip_io(get_image_ctx(&m_image_ctx), image_extent.first, &clip_len);
@@ -277,7 +356,7 @@ void ImageReadRequest<I>::send_request() {
   {
     // prevent image size from changing between computing clip and recording
     // pending async operation
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     snap_id = image_ctx.snap_id;
 
     // map image extents to object extents
@@ -318,8 +397,6 @@ void ImageReadRequest<I>::send_request() {
     }
   }
 
-  aio_comp->put();
-
   image_ctx.perfcounter->inc(l_librbd_rd);
   image_ctx.perfcounter->inc(l_librbd_rd_bytes, buffer_ofs);
 }
@@ -344,8 +421,6 @@ void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  RWLock::RLocker md_locker(image_ctx.md_lock);
-
   bool journaling = false;
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -355,7 +430,7 @@ void AbstractImageWriteRequest<I>::send_request() {
   {
     // prevent image size from changing between computing clip and recording
     // pending async operation
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.snap_id != CEPH_NOSNAP || image_ctx.read_only) {
       aio_comp->fail(-EROFS);
       return;
@@ -399,7 +474,6 @@ void AbstractImageWriteRequest<I>::send_request() {
   }
 
   update_stats(clip_len);
-  aio_comp->put();
 }
 
 template <typename I>
@@ -600,7 +674,7 @@ void ImageFlushRequest<I>::send_request() {
 
   bool journaling = false;
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     journaling = (m_flush_source == FLUSH_SOURCE_USER &&
                   image_ctx.journal != nullptr &&
                   image_ctx.journal->is_journal_appending());
@@ -630,9 +704,7 @@ void ImageFlushRequest<I>::send_request() {
     });
 
   // ensure all in-flight IOs are settled if non-user flush request
-  image_ctx.flush_async_operations(ctx);
-  aio_comp->start_op(true);
-  aio_comp->put();
+  aio_comp->async_op.flush(ctx);
 
   // might be flushing during image shutdown
   if (image_ctx.perfcounter != nullptr) {

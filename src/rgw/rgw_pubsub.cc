@@ -160,40 +160,6 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-std::string dest_to_topic_arn(const rgw_pubsub_sub_dest& dest, 
-    const std::string& topic_name, 
-    const std::string& zonegroup_name,
-    const std::string& user_name) {
-  rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name, user_name, "");
-  rgw::ARNResource arn_resource;
-  const auto endpoint_type = RGWPubSubEndpoint::get_schema(dest.push_endpoint);
-  if (endpoint_type.empty()) {
-    arn_resource.resource = topic_name;
-  } else {
-    // add endpoint info as resource
-    arn_resource.resource_type = endpoint_type;
-    arn_resource.resource = dest.push_endpoint;
-    arn_resource.qualifier = topic_name;
-  }
-  arn.resource = arn_resource.to_string();
-  return arn.to_string();
-}
-
-std::string topic_name_from_arn(const std::string& topic_arn) {
-  const auto arn = rgw::ARN::parse(topic_arn);
-  if (!arn || arn->resource.empty()) {
-    return "";
-  }
-  const auto arn_resource = rgw::ARNResource::parse(arn->resource);
-  if (!arn_resource) {
-    return "";
-  }
-  if (arn_resource->resource_type.empty()) {
-    return arn_resource->resource;
-  }
-  return arn_resource->qualifier;
-}
-
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   int ret = rgw_delete_system_obj(store, obj.pool, obj.oid, objv_tracker);
@@ -281,18 +247,22 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
 
   int ret = ps->get_topic(topic_name, &user_topic_info);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topic info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
     return ret;
   }
+  ldout(store->ctx(), 20) << "successfully read topic '" << topic_name << "' info" << dendl;
 
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_bucket_topics bucket_topics;
 
   ret = read_topics(&bucket_topics, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
+  if (ret < 0) {
+    ldout(store->ctx(), 1) << "ERROR: failed to read topics from bucket '" << 
+      bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
+  ldout(store->ctx(), 20) << "successfully read " << bucket_topics.topics.size() << " topics from bucket '" << 
+    bucket.name << "'" << dendl;
 
   auto& topic_filter = bucket_topics.topics[topic_name];
   topic_filter.topic = user_topic_info.topic;
@@ -300,9 +270,11 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
 
   ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 1) << "ERROR: failed to write topics to bucket '" << bucket.name << "': ret=" << ret << dendl;
     return ret;
   }
+    
+  ldout(store->ctx(), 20) << "successfully wrote " << bucket_topics.topics.size() << " topics to bucket '" << bucket.name << "'" << dendl;
 
   return 0;
 }
@@ -322,7 +294,7 @@ int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
   rgw_pubsub_bucket_topics bucket_topics;
 
   ret = read_topics(&bucket_topics, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to read bucket topics info: ret=" << ret << dendl;
     return ret;
   }

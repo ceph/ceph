@@ -165,6 +165,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost-random1.67-dev \
 	ceph-libboost-regex1.67-dev \
 	ceph-libboost-system1.67-dev \
+	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
 }
@@ -278,10 +279,10 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 7 xenial
-                install_boost_on_ubuntu xenial
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
-                install_boost_on_ubuntu bionic
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc

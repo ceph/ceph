@@ -6,7 +6,7 @@ import hashlib
 import base64
 import xmltodict
 from time import gmtime, strftime
-from multisite import Zone
+from .multisite import Zone
 import boto3
 from botocore.client import Config
 
@@ -72,6 +72,13 @@ def make_request(conn, method, resource, parameters=None, sign_parameters=False,
     status = response.status
     http_conn.close()
     return data, status
+
+
+def print_connection_info(conn):
+    """print info of connection"""
+    print("Host: " + conn.host+':'+str(conn.port))
+    print("AWS Secret Key: " + conn.aws_secret_access_key)
+    print("AWS Access Key: " + conn.aws_access_key_id)
 
 
 class PSTopic:
@@ -154,14 +161,12 @@ class PSNotificationS3:
     GET /<bucket>?notification[=<notification>]
     DELETE /<bucket>?notification[=<notification>]
     """
-    def __init__(self, conn, bucket_name, notification, topic_arn, events=None):
+    def __init__(self, conn, bucket_name, topic_conf_list):
         self.conn = conn
         assert bucket_name.strip()
         self.bucket_name = bucket_name
         self.resource = '/'+bucket_name
-        self.notification = notification
-        self.topic_arn = topic_arn
-        self.events = events
+        self.topic_conf_list = topic_conf_list
         self.client = boto3.client('s3',
                                    endpoint_url='http://'+conn.host+':'+str(conn.port),
                                    aws_access_key_id=conn.aws_access_key_id,
@@ -173,14 +178,14 @@ class PSNotificationS3:
         return make_request(self.conn, method, self.resource,
                             parameters=parameters, sign_parameters=True)
 
-    def get_config(self, all_notifications=True):
+    def get_config(self, notification=None):
         """get notification info"""
         parameters = None
-        if all_notifications:
+        if notification is None:
             response = self.client.get_bucket_notification_configuration(Bucket=self.bucket_name)
             status = response['ResponseMetadata']['HTTPStatusCode']
             return response, status
-        parameters = {'notification': self.notification}
+        parameters = {'notification': notification}
         response, status = self.send_request('GET', parameters=parameters)
         dict_response = xmltodict.parse(response)
         return dict_response, status
@@ -189,24 +194,14 @@ class PSNotificationS3:
         """set notification"""
         response = self.client.put_bucket_notification_configuration(Bucket=self.bucket_name,
                                                                      NotificationConfiguration={
-                                                                         'TopicConfigurations': [
-                                                                             {
-                                                                                 'Id': self.notification,
-                                                                                 'TopicArn': self.topic_arn,
-                                                                                 'Events': self.events,
-                                                                             }
-                                                                         ]
+                                                                         'TopicConfigurations': self.topic_conf_list
                                                                      })
         status = response['ResponseMetadata']['HTTPStatusCode']
         return response, status
 
-    def del_config(self, all_notifications=True):
+    def del_config(self, notification=None):
         """delete notification"""
-        parameters = None
-        if all_notifications:
-            parameters = {'notification': None}
-        else:
-            parameters = {'notification': self.notification}
+        parameters = {'notification': notification}
 
         return self.send_request('DELETE', parameters)
 

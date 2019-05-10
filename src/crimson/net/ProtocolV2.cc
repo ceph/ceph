@@ -5,8 +5,11 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
+#if __has_include(<fmt/chrono.h>)
+#include <fmt/chrono.h>
+#else
 #include <fmt/time.h>
-
+#endif
 #include "include/msgr.h"
 #include "include/random.h"
 
@@ -789,6 +792,13 @@ void ProtocolV2::execute_connecting()
             dispatch_reset();
             abort_in_close();
           }
+          if (messenger.get_myaddrs().empty() ||
+              messenger.get_myaddrs().front().is_blank_ip()) {
+            logger().debug("peer {} says I am {}", conn.target_addr, _peer_addr);
+            return messenger.learned_addr(_peer_addr);
+          } else {
+            return seastar::now();
+          }
         }).then([this] {
           return client_auth();
         }).then([this] {
@@ -1332,46 +1342,54 @@ seastar::future<> ProtocolV2::send_reconnect_ok()
 
 // READY state
 
-seastar::future<> ProtocolV2::write_message(MessageRef msg)
+ceph::bufferlist ProtocolV2::do_sweep_messages(
+    const std::deque<MessageRef>& msgs,
+    size_t num_msgs,
+    bool require_keepalive,
+    std::optional<utime_t> _keepalive_ack)
 {
-  // TODO: move to common code
-  // set priority
-  msg->get_header().src = messenger.get_myname();
+  ceph::bufferlist bl;
 
-  msg->encode(conn.features, 0);
+  if (unlikely(require_keepalive)) {
+    auto keepalive_frame = KeepAliveFrame::Encode();
+    bl.append(keepalive_frame.get_buffer(session_stream_handlers));
+  }
 
-  msg->set_seq(++conn.out_seq);
-  uint64_t ack_seq = conn.in_seq;
-  // ack_left = 0;
+  if (unlikely(_keepalive_ack.has_value())) {
+    auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
+    bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
+  }
 
-  ceph_msg_header &header = msg->get_header();
-  ceph_msg_footer &footer = msg->get_footer();
+  std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
+    // TODO: move to common code
+    // set priority
+    msg->get_header().src = messenger.get_myname();
 
-  ceph_msg_header2 header2{header.seq,        header.tid,
-                           header.type,       header.priority,
-                           header.version,
-                           0,                 header.data_off,
-                           ack_seq,
-                           footer.flags,      header.compat_version,
-                           header.reserved};
+    msg->encode(conn.features, 0);
 
-  auto message = MessageFrame::Encode(header2,
-      msg->get_payload(), msg->get_middle(), msg->get_data());
-  logger().debug("{} write msg type={} off={} seq={}",
-                 conn, header2.type, header2.data_off, header2.seq);
-  return write_frame(message, false);
-}
+    msg->set_seq(++conn.out_seq);
+    uint64_t ack_seq = conn.in_seq;
+    // ack_left = 0;
 
-seastar::future<> ProtocolV2::do_keepalive()
-{
-  auto keepalive_frame = KeepAliveFrame::Encode();
-  return write_frame(keepalive_frame, false);
-}
+    ceph_msg_header &header = msg->get_header();
+    ceph_msg_footer &footer = msg->get_footer();
 
-seastar::future<> ProtocolV2::do_keepalive_ack()
-{
-  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(last_keepalive_ack_to_send);
-  return write_frame(keepalive_ack_frame, false);
+    ceph_msg_header2 header2{header.seq,        header.tid,
+                             header.type,       header.priority,
+                             header.version,
+                             0,                 header.data_off,
+                             ack_seq,
+                             footer.flags,      header.compat_version,
+                             header.reserved};
+
+    auto message = MessageFrame::Encode(header2,
+        msg->get_payload(), msg->get_middle(), msg->get_data());
+    logger().debug("{} write msg type={} off={} seq={}",
+                   conn, header2.type, header2.data_off, header2.seq);
+    bl.append(message.get_buffer(session_stream_handlers));
+  });
+
+  return bl;
 }
 
 void ProtocolV2::handle_message_ack(seq_num_t seq) {
@@ -1522,11 +1540,8 @@ void ProtocolV2::execute_ready()
             return read_frame_payload().then([this] {
               // handle_keepalive2() logic
               auto keepalive_frame = KeepAliveFrame::Decode(rx_segments_data.back());
-              last_keepalive_ack_to_send = keepalive_frame.timestamp();
-              logger().debug("{} got KEEPALIVE2 {}",
-                             conn, last_keepalive_ack_to_send);
+              notify_keepalive_ack(keepalive_frame.timestamp());
               conn.set_last_keepalive(seastar::lowres_system_clock::now());
-              notify_keepalive_ack();
             });
           case Tag::KEEPALIVE2_ACK:
             return read_frame_payload().then([this] {

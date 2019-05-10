@@ -25,11 +25,11 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_close() override;
 
-  seastar::future<> write_message(MessageRef msg) override;
-
-  seastar::future<> do_keepalive() override;
-
-  seastar::future<> do_keepalive_ack() override;
+  ceph::bufferlist do_sweep_messages(
+      const std::deque<MessageRef>& msgs,
+      size_t num_msgs,
+      bool require_keepalive,
+      std::optional<utime_t> keepalive_ack) override;
 
  private:
   SocketMessenger &messenger;
@@ -71,8 +71,6 @@ class ProtocolV2 final : public Protocol {
   uint64_t global_seq = 0;
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
-
-  utime_t last_keepalive_ack_to_send;
 
  // TODO: Frame related implementations, probably to a separate class.
  private:

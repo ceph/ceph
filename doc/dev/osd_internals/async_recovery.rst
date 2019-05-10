@@ -29,15 +29,17 @@ need to be met for asynchronous recovery:
 
 * try to keep min_size replicas available
 * use the approximate magnitude of the difference in length of
-  logs as the cost of recovery
-* use the parameter osd_async_recovery_min_pg_log_entries to determine
+  logs combined with historical missing objects as the cost of recovery
+* use the parameter osd_async_recovery_min_cost to determine
   when asynchronous recovery is appropriate
 
 With the existing peering process, when we choose the acting set we
 have not fetched the pg log from each peer, we have only the bounds of
 it and other metadata from their pg_info_t. It would be more expensive
 to fetch and examine every log at this point, so we only consider an
-approximate check for log length for now.
+approximate check for log length for now. In Nautilus, we improved
+the accounting of missing objects, so post nautilus, this information
+is also used to determine the cost of recovery.
 
 While async recovery is occurring, writes on members of the acting set
 may proceed, but we need to send their log entries to the async

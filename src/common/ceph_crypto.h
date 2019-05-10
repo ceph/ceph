@@ -3,6 +3,7 @@
 #define CEPH_CRYPTO_H
 
 #include "acconfig.h"
+#include <stdexcept>
 
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
@@ -46,7 +47,16 @@ namespace ceph {
 #ifdef USE_NSS
 namespace ceph {
   namespace crypto {
+
+    class DigestException : public std::runtime_error
+    {
+    public:
+      DigestException(const char* what_arg) : runtime_error(what_arg)
+	{}
+    };
+
     namespace nss {
+
       class NSSDigest {
       private:
         PK11Context *ctx;
@@ -55,7 +65,9 @@ namespace ceph {
         NSSDigest (SECOidTag _type, size_t _digest_size)
 	  : digest_size(_digest_size) {
 	  ctx = PK11_CreateDigestContext(_type);
-	  ceph_assert_always(ctx);
+	  if (! ctx) {
+	    throw DigestException("PK11_CreateDigestContext() failed");
+	  }
 	  Restart();
         }
         ~NSSDigest () {
@@ -64,21 +76,27 @@ namespace ceph {
 	void Restart() {
 	  SECStatus s;
 	  s = PK11_DigestBegin(ctx);
-	  ceph_assert_always(s == SECSuccess);
+	  if (s != SECSuccess) {
+	    throw DigestException("PK11_DigestBegin() failed");
+	  }
 	}
 	void Update (const unsigned char *input, size_t length) {
 	  if (length) {
 	    SECStatus s;
 	    s = PK11_DigestOp(ctx, input, length);
-	    ceph_assert_always(s == SECSuccess);
+	    if (s != SECSuccess) {
+	      throw DigestException("PK11_DigestOp() failed");
+	    }
 	  }
 	}
 	void Final (unsigned char *digest) {
 	  SECStatus s;
 	  unsigned int dummy;
 	  s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	  ceph_assert_always(s == SECSuccess);
-	  ceph_assert_always(dummy == digest_size);
+	  if (! (s == SECSuccess) &&
+	      (dummy == digest_size)) {
+	    throw DigestException("PK11_DigestFinal() failed");
+	  }
 	  Restart();
 	}
       };
@@ -151,39 +169,51 @@ namespace ceph {
       HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length) {
         digest_size = digestsize;
 	slot = PK11_GetBestSlot(cktype, NULL);
-	ceph_assert_always(slot);
+	if (! slot) {
+	  throw DigestException("PK11_GetBestSlot() failed");
+	}
 	SECItem keyItem;
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
 	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
 				   CKA_SIGN,  &keyItem, NULL);
-	ceph_assert_always(symkey);
+	if (! symkey) {
+	  throw DigestException("PK11_ImportSymKey() failed");
+	}
 	SECItem param;
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
 	ctx = PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param);
-	ceph_assert_always(ctx);
+	if (! ctx) {
+	  throw DigestException("PK11_CreateContextBySymKey() failed");
+	}
 	Restart();
       }
       ~HMAC ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx);
-	ceph_assert_always(s == SECSuccess);
+	if (s != SECSuccess) {
+	  throw DigestException("PK11_DigestBegin() failed");
+	}
       }
       void Update (const unsigned char *input, size_t length) {
 	SECStatus s;
 	s = PK11_DigestOp(ctx, input, length);
-	ceph_assert_always(s == SECSuccess);
+	if (s != SECSuccess) {
+	  throw DigestException("PK11_DigestOp() failed");
+	}
       }
       void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
 	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	ceph_assert_always(s == SECSuccess);
-	ceph_assert_always(dummy == digest_size);
+	if (! (s == SECSuccess) &&
+	    (dummy == digest_size)) {
+	  throw DigestException("PK11_DigestFinal() failed");
+	}
 	Restart();
       }
     };
@@ -214,7 +244,9 @@ namespace ceph::crypto::ssl {
       : mpType(type) {
       ::memset(&mContext, 0, sizeof(mContext));
       const auto r = HMAC_Init_ex(&mContext, key, length, mpType, nullptr);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	  throw DigestException("HMAC_Init_ex() failed");
+      }
     }
     ~HMAC () {
       HMAC_CTX_cleanup(&mContext);
@@ -222,18 +254,24 @@ namespace ceph::crypto::ssl {
 
     void Restart () {
       const auto r = HMAC_Init_ex(&mContext, nullptr, 0, mpType, nullptr);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
     }
     void Update (const unsigned char *input, size_t length) {
       if (length) {
         const auto r = HMAC_Update(&mContext, input, length);
-        ceph_assert_always(r == 1);
+	if (r != 1) {
+	  throw DigestException("HMAC_Update() failed");
+	}
       }
     }
     void Final (unsigned char *digest) {
       unsigned int s;
       const auto r = HMAC_Final(&mContext, digest, &s);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	throw DigestException("HMAC_Final() failed");
+      }
     }
   };
 # else
@@ -245,7 +283,9 @@ namespace ceph::crypto::ssl {
     HMAC (const EVP_MD *type, const unsigned char *key, size_t length)
       : mpContext(HMAC_CTX_new()) {
       const auto r = HMAC_Init_ex(mpContext, key, length, type, nullptr);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
     }
     ~HMAC () {
       HMAC_CTX_free(mpContext);
@@ -254,18 +294,24 @@ namespace ceph::crypto::ssl {
     void Restart () {
       const EVP_MD * const type = HMAC_CTX_get_md(mpContext);
       const auto r = HMAC_Init_ex(mpContext, nullptr, 0, type, nullptr);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	throw DigestException("HMAC_Init_ex() failed");
+      }
     }
     void Update (const unsigned char *input, size_t length) {
       if (length) {
         const auto r = HMAC_Update(mpContext, input, length);
-        ceph_assert_always(r == 1);
+	if (r != 1) {
+	  throw DigestException("HMAC_Update() failed");
+	}
       }
     }
     void Final (unsigned char *digest) {
       unsigned int s;
       const auto r = HMAC_Final(mpContext, digest, &s);
-      ceph_assert_always(r == 1);
+      if (r != 1) {
+	throw DigestException("HMAC_Final() failed");
+      }
     }
   };
 # endif // OPENSSL_VERSION_NUMBER < 0x10100000L

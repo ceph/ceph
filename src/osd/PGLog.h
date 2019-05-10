@@ -59,6 +59,7 @@ struct PGLog : DoutPrefixProvider {
       version_t v) = 0;
     virtual ~LogEntryHandler() {}
   };
+  using LogEntryHandlerRef = unique_ptr<LogEntryHandler>;
 
 public:
   /**
@@ -587,9 +588,12 @@ protected:
       dirty_from_dups = from;
   }
 public:
+  bool needs_write() const {
+    return !touched_log || is_dirty();
+  }
+
   bool is_dirty() const {
-    return !touched_log ||
-      (dirty_to != eversion_t()) ||
+    return (dirty_to != eversion_t()) ||
       (dirty_from != eversion_t::max()) ||
       (writeout_from != eversion_t::max()) ||
       !(trimmed.empty()) ||
@@ -600,6 +604,7 @@ public:
       (write_from_dups != eversion_t::max()) ||
       rebuilt_missing_with_deletes;
   }
+
   void mark_log_for_rewrite() {
     mark_dirty_to(eversion_t::max());
     mark_dirty_from(eversion_t());
