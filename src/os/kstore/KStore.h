@@ -388,7 +388,7 @@ private:
     kv_stop = false;
   }
 
-  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl);
+  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl, bool cache_stripes = true);
   void _do_write_stripe(TransContext *txc, OnodeRef o,
 			uint64_t offset, bufferlist& bl);
   void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
@@ -473,7 +473,8 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0);
+    uint32_t op_flags = 0,
+    bool cache_stripes = true);
 
   using ObjectStore::fiemap;
   int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
