@@ -53,16 +53,60 @@ public:
 class RGWMetadataManager;
 
 class RGWMetadataHandler {
+  friend class RGWMetadataManager;
+
+protected:
+  CephContext *cct;
+
+public:
+  RGWMetadataHandler(CephContext *_cct) : cct(_cct) {}
+  virtual ~RGWMetadataHandler() {}
+  virtual string get_type() = 0;
+
+  virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
+
+  virtual int get(string& entry, RGWMetadataObject **obj) = 0;
+  virtual int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+
+  virtual int list_keys_init(const string& marker, void **phandle) = 0;
+  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
+  virtual void list_keys_complete(void *handle) = 0;
+
+  virtual string get_marker(void *handle) = 0;
+
+  virtual int init(RGWMetadataManager *manager);
+};
+
+class RGWMetadataHandler_GenericMetaBE : public RGWMetadataHandler {
   friend class RGWSI_MetaBackend;
   friend class RGWMetadataManager;
   friend class Put;
 
-protected:
-  RGWSI_MetaBackend_Handler *meta_be;
 public:
+  class Put;
+
+protected:
+  RGWSI_MetaBackend_Handler *be_handler;
+
+  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
+                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+  virtual int do_put_operate(Put *put_op);
+  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+
+public:
+  RGWMetadataHandler_GenericMetaBE(CephContext *_cct,
+                                   RGWSI_MetaBackend_Handler *_be_handler) : RGWMetadataHandler(_cct),
+                                                                             be_handler(_be_handler) {}
+
+  RGWSI_MetaBackend_Handler *get_be_handler() {
+    return be_handler;
+  }
+
   class Put {
   protected:
-    RGWMetadataHandler *handler;
+    RGWMetadataHandler_GenericMetaBE *handler;
     RGWSI_MetaBackend_Handler::Op *op;
     string& entry;
     RGWMetadataObject *obj;
@@ -73,7 +117,7 @@ public:
       return handler->do_get(op, entry, obj);
     }
   public:
-    Put(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handler::Op *_op,
+    Put(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *_op,
         string& _entry, RGWMetadataObject *_obj,
         RGWObjVersionTracker& _objv_tracker, RGWMDLogSyncType _type);
 
@@ -93,34 +137,15 @@ public:
     }
   };
 
-protected:
-  virtual int init_handler() {
-    return 0;
-  }
+  int get(string& entry, RGWMetadataObject **obj) override;
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) override;
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker) override;
 
-  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
-                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
-  virtual int do_put_operate(Put *put_op);
-  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  int list_keys_init(const std::string& marker, void **phandle) override;
+  int list_keys_next(void *handle, int max, std::list<string>& keys, bool *truncated) override;
+  void list_keys_complete(void *handle) override;
 
-public:
-  virtual ~RGWMetadataHandler() {}
-  virtual string get_type() = 0;
-
-  virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
-
-  int get(string& entry, RGWMetadataObject **obj);
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type);
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker);
-
-  virtual int list_keys_init(const string& marker, void **phandle) = 0;
-  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
-  virtual void list_keys_complete(void *handle) = 0;
-
-  virtual string get_marker(void *handle) = 0;
-
-  virtual int init(RGWMetadataManager *manager);
+  std::string get_marker(void *handle) override;
 
   /**
    * Compare an incoming versus on-disk tag/version+mtime combo against
@@ -189,15 +214,15 @@ public:
 
   void get_sections(list<string>& sections);
 
-  int get_log_shard_id(const string& section, const string& key, int *shard_id);
+  int get_log_shard_id(const string& hash_key, int *shard_id);
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 };
 
-class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler::Put
+class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler_GenericMetaBE::Put
 {
 public:
-  RGWMetadataHandlerPut_SObj(RGWMetadataHandler *handler, RGWSI_MetaBackend_Handler::Op *op,
+  RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                              string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                              RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, type) {}
   ~RGWMetadataHandlerPut_SObj() {}

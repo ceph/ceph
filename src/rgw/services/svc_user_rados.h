@@ -22,6 +22,7 @@
 #include "svc_meta_be.h"
 #include "svc_user_rados.h"
 
+class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
@@ -65,10 +66,15 @@ class RGWSI_User_RADOS : public RGWSI_User
   int remove_email_index(RGWSI_MetaBackend::Context *ctx, const string& email);
   int remove_swift_name_index(RGWSI_MetaBackend::Context *ctx, const string& swift_name);
 
+  int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
+  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry);
+  int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
+
   int do_start() override;
 public:
   struct Svc {
     RGWSI_User_RADOS *user{nullptr};
+    RGWSI_RADOS *rados{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
@@ -80,14 +86,11 @@ public:
   RGWSI_User_RADOS(CephContext *cct);
   ~RGWSI_User_RADOS();
 
-  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+  void init(RGWSI_RADOS *_rados_svc,
+            RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
-
-  RGWSI_MetaBackend_Handler *get_be_handler() {
-    return be_handler;
-  }
 
   int read_user_info(RGWSI_MetaBackend::Context *ctx,
                      const rgw_user& user,
@@ -124,10 +127,21 @@ public:
                                   RGWObjVersionTracker* objv_tracker,
                                   real_time *pmtime) override;
 
+  /* user buckets directory */
+
   int add_bucket(RGWSI_MetaBackend::Context *ctx,
                  const rgw_user& user,
                  const rgw_bucket& bucket,
-                 ceph::real_time creation_time);
-
+                 ceph::real_time creation_time) override;
+  int remove_bucket(RGWSI_MetaBackend::Context *ctx,
+                    const rgw_user& user,
+                    const rgw_bucket& _bucket) override;
+  int list_buckets(RGWSI_MetaBackend::Context *ctx,
+                   const rgw_user& user,
+                   const string& marker,
+                   const string& end_marker,
+                   uint64_t max,
+                   RGWUserBuckets *buckets,
+                   bool *is_truncated) override;
 };
 

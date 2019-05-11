@@ -119,6 +119,8 @@ public:
   }
 
   RGWSI_MetaBackend_Handler *alloc_be_handler() override;
+  RGWSI_MetaBackend::Context *alloc_ctx() override;
+
 
   RGWSI_MetaBackend::GetParams *alloc_default_get_params(ceph::real_time *pmtime) override;
 
@@ -137,7 +139,7 @@ public:
 
   int list_init(RGWSI_MetaBackend::Context *_ctx, const string& marker) override;
   int list_next(RGWSI_MetaBackend::Context *_ctx,
-                int max, list<string>& keys,
+                int max, list<string> *keys,
                 bool *truncated) override;
   int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                       string *marker) override;

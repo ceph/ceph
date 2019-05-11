@@ -136,5 +136,8 @@ public:
   int remove_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
                                   const string& key,
                                   RGWObjVersionTracker *objv_tracker);
+
+  int read_buckets_stats(RGWSI_MetaBackend::Context *ctx,
+                         map<string, RGWBucketEnt>& m);
 };
 

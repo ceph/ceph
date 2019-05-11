@@ -26,6 +26,7 @@
 class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
+class RGWUserCtl;
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
@@ -90,7 +91,7 @@ class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
   RGWBucketCompleteInfo info;
 public:
   RGWBucketInstanceMetadataObject() {}
-  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, real_time m) : info(i) {
+  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, const obj_version& v, real_time m) : info(i) {
     objv = v;
     mtime = m;
   }
@@ -184,17 +185,18 @@ public:
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc);
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc,
+                                   RGWBucketCtl *bucket_ctl);
 };
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc();
+  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc);
 };
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
@@ -563,10 +565,16 @@ public:
 
 class RGWBucketCtl
 {
+  CephContext *cct;
+
   struct Svc {
     RGWSI_Zone *zone{nullptr};
     RGWSI_Bucket *bucket{nullptr};
   } svc;
+
+  struct Ctl {
+    RGWUserCtl *user{nullptr};
+  } ctl;
 
   RGWBucketMetadataHandler *bm_handler;
   RGWBucketInstanceMetadataHandler *bmi_handler;
@@ -579,6 +587,10 @@ public:
                RGWSI_Bucket *bucket_svc,
                RGWBucketMetadataHandler *_bm_handler,
                RGWBucketInstanceMetadataHandler *_bmi_handler);
+
+  void init(RGWUserCtl *user_ctl) {
+    ctl.user = user_ctl;
+  }
 
   struct Bucket {
     struct GetParams {
@@ -756,6 +768,8 @@ public:
   int unlink_bucket(const rgw_user& user_id,
                     const rgw_bucket& bucket,
                     bool update_entrypoint = true);
+
+  int read_buckets_stats(map<string, RGWBucketEnt>& m);
 
 private:
   int convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,

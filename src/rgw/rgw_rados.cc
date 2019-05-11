@@ -9168,14 +9168,6 @@ int RGWRados::cls_user_complete_stats_sync(rgw_raw_obj& obj)
   return 0;
 }
 
-int RGWRados::cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry)
-{
-  list<cls_user_bucket_entry> l;
-  l.push_back(entry);
-
-  return cls_user_update_buckets(obj, l, true);
-}
-
 int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket)
 {
   rgw_rados_ref ref;

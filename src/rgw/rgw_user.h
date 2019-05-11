@@ -30,6 +30,8 @@
 
 class RGWRados;
 class RGWUserCtl;
+class RGWBucketCtl;
+class RGWUserBuckets;
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -809,6 +811,10 @@ class RGWUserCtl
     RGWSI_User *user{nullptr};
   } svc;
 
+  struct Ctl {
+    RGWBucketCtl *bucket{nullptr};
+  } ctl;
+
   RGWUserMetadataHandler *umhandler;
   RGWSI_MetaBackend_Handler *be_handler;
   
@@ -816,6 +822,10 @@ public:
   RGWUserCtl(RGWSI_Zone *zone_svc,
              RGWSI_User *user_svc,
              RGWUserMetadataHandler *_umhandler);
+
+  void init(RGWBucketCtl *bucket_ctl) {
+    ctl.bucket = bucket_ctl;
+  }
 
   struct GetParams {
     RGWObjVersionTracker *objv_tracker{nullptr};
@@ -893,6 +903,20 @@ public:
 
   int store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params);
   int remove_info(const RGWUserInfo& info, ceph::optional_ref_default<RemoveParams> params);
+
+  int add_bucket(const rgw_user& user,
+                 const rgw_bucket& bucket,
+                 ceph::real_time creation_time);
+  int remove_bucket(const rgw_user& user,
+                    const rgw_bucket& bucket);
+  int list_buckets(const rgw_user& user,
+                   const string& marker,
+                   const string& end_marker,
+                   uint64_t max,
+                   bool need_stats,
+                   RGWUserBuckets *buckets,
+                   bool *is_truncated,
+                   uint64_t default_max);
 };
 
 class RGWUserMetaHandlerAllocator {

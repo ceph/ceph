@@ -19,7 +19,7 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
   return new RGWSI_MetaBackend_Handler_SObj(this);
 }
 
-RGWSI_MetaBackend_SObj::alloc_ctx()
+RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
 {
   return new ctx(sysobj_svc);
 }
@@ -106,10 +106,10 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
   rgw_pool pool;
 
   string no_key;
-  ctx->module->get_pool_and_oid(no_key, &ctx->list.pool, nullptr);
+  ctx->module->get_pool_and_oid(no_key, &pool, nullptr);
 
   ctx->list.pool = sysobj_svc->get_pool(pool);
-  ctx->list.op = ctx->list.pool->op();
+  ctx->list.op.emplace(ctx->list.pool->op());
 
   string prefix = ctx->module->get_prefix();
   ctx->list.op->init(marker, prefix);
@@ -118,12 +118,14 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
 }
 
 int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
-                                      int max, list<string>& keys,
+                                      int max, list<string> *keys,
                                       bool *truncated)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
   vector<string> oids;
+
+  keys->clear();
 
   int ret = ctx->list.op->get_next(max, &oids, truncated);
   if (ret < 0 && ret != -ENOENT)
@@ -140,7 +142,7 @@ int RGWSI_MetaBackend_SObj::list_next(RGWSI_MetaBackend::Context *_ctx,
     if (!module->is_valid_oid(o)) {
       continue;
     }
-    keys.emplace_back(module->oid_to_key(o));
+    keys->emplace_back(module->oid_to_key(o));
   }
 
   return 0;

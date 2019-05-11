@@ -10,8 +10,12 @@
 #include "svc_sync_modules.h"
 
 #include "rgw/rgw_user.h"
+#include "rgw/rgw_bucket.h"
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_zone.h"
+#include "rgw/rgw_rados.h"
+
+#include "cls/user/cls_user_client.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -56,12 +60,14 @@ RGWSI_User_RADOS::RGWSI_User_RADOS(CephContext *cct): RGWSI_User(cct) {
 RGWSI_User_RADOS::~RGWSI_User_RADOS() {
 }
 
-void RGWSI_User_RADOS::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-                        RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
-                        RGWSI_MetaBackend *_meta_be_svc,
-                        RGWSI_SyncModules *_sync_modules_svc)
+void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
+                            RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+                            RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+                            RGWSI_MetaBackend *_meta_be_svc,
+                            RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.user = this;
+  svc.rados = _rados_svc;
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
@@ -564,3 +570,131 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                   info, objv_tracker, pmtime);
 }
 
+int RGWSI_User_RADOS::cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add)
+{
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls_user_set_buckets(op, entries, add);
+  r = rados_obj.operate(&op, null_yield);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWSI_User_RADOS::cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry)
+{
+  list<cls_user_bucket_entry> l;
+  l.push_back(entry);
+
+  return cls_user_update_buckets(obj, l, true);
+}
+
+int RGWSI_User_RADOS::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket)
+{
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  ::cls_user_remove_bucket(op, bucket);
+  r = rados_obj.operate(&op, null_yield);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWSI_User_RADOS::add_bucket(RGWSI_MetaBackend::Context *ctx,
+                                 const rgw_user& user,
+                                 const rgw_bucket& bucket,
+                                 ceph::real_time creation_time)
+{
+  int ret;
+
+  cls_user_bucket_entry new_bucket;
+
+  bucket.convert(&new_bucket.bucket);
+  new_bucket.size = 0;
+  if (real_clock::is_zero(creation_time))
+    new_bucket.creation_time = real_clock::now();
+  else
+    new_bucket.creation_time = creation_time;
+
+  rgw_raw_obj obj = get_buckets_obj(user);
+  ret = cls_user_add_bucket(obj, new_bucket);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: error adding bucket to user: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+
+int RGWSI_User_RADOS::remove_bucket(RGWSI_MetaBackend::Context *ctx,
+                                    const rgw_user& user,
+                                    const rgw_bucket& _bucket)
+{
+  cls_user_bucket bucket;
+  bucket.name = _bucket.name;
+  rgw_raw_obj obj = get_buckets_obj(user);
+  int ret = cls_user_remove_bucket(obj, bucket);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: error removing bucket from user: ret=" << ret << dendl;
+  }
+
+  return 0;
+}
+
+int RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
+                                 const rgw_user& user,
+                                 const string& marker,
+                                 const string& end_marker,
+                                 uint64_t max,
+                                 RGWUserBuckets *buckets,
+                                 bool *is_truncated)
+{
+  int ret;
+
+  buckets->clear();
+  
+  rgw_raw_obj obj = get_buckets_obj(user);
+
+  bool truncated = false;
+  string m = marker;
+
+  uint64_t total = 0;
+
+  do {
+    std::list<cls_user_bucket_entry> entries;
+    ret = cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
+    if (ret == -ENOENT) {
+      ret = 0;
+    }
+
+    if (ret < 0) {
+      return ret;
+    }
+
+    for (auto& entry : entries) {
+      buckets->add(RGWBucketEnt(user, std::move(entry)));
+      total++;
+    }
+
+  } while (truncated && total < max);
+
+  if (is_truncated) {
+    *is_truncated = truncated;
+  }
+
+  return 0;
+}
