@@ -140,7 +140,7 @@ public:
 
   virtual int list_init(RGWSI_MetaBackend::Context *ctx, const string& marker) = 0;
   virtual int list_next(RGWSI_MetaBackend::Context *ctx,
-                        int max, list<string>& keys,
+                        int max, list<string> *keys,
                         bool *truncated)  = 0;
   virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                               string *marker) = 0;
@@ -211,12 +211,12 @@ public:
     int list_init(const string& marker) {
       return be->list_init(be_ctx, marker);
     }
-    int list_next(int max, list<string>& keys,
+    int list_next(int max, list<string> *keys,
                   bool *truncated) {
-      return be->list_next(max, keys, truncated);
+      return be->list_next(be_ctx, max, keys, truncated);
     }
     int list_get_marker(string *marker) {
-      return be->list_get_marker(marker);
+      return be->list_get_marker(be_ctx, marker);
     }
   };
 

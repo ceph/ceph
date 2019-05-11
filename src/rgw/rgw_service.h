@@ -62,6 +62,7 @@ class RGWSI_SysObj;
 class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 class RGWSI_User;
+class RGWSI_User_RADOS;
 
 struct RGWServices_Def
 {
@@ -84,7 +85,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj> sysobj;
   std::unique_ptr<RGWSI_SysObj_Core> sysobj_core;
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
-  std::unique_ptr<RGWSI_User> user;
+  std::unique_ptr<RGWSI_User_RADOS> user_rados;
 
   RGWServices_Def();
   ~RGWServices_Def();
