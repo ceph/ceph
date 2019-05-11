@@ -20,7 +20,7 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_sys_obj_core.h"
-#include "services/svc_user.h"
+#include "services/svc_user_rados.h"
 
 #include "common/errno.h"
 
@@ -57,7 +57,7 @@ int RGWServices_Def::init(CephContext *cct,
   sync_modules = std::make_unique<RGWSI_SyncModules>(cct);
   sysobj = std::make_unique<RGWSI_SysObj>(cct);
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
-  user = std::make_unique<RGWSI_User>(cct);
+  user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
@@ -85,8 +85,8 @@ int RGWServices_Def::init(CephContext *cct,
   } else {
     sysobj->init(rados.get(), sysobj_core.get());
   }
-  user->init(zone.get(), sysobj.get(), sysobj_cache.get(),
-             meta.get(), meta_be_sobj.get(), sync_modules.get());
+  user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
+                   meta.get(), meta_be_sobj.get(), sync_modules.get());
 
   can_shutdown = true;
 
@@ -186,9 +186,9 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = user->start();
+  r = user_rados->start();
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start user service (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start user_rados service (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -248,7 +248,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   sysobj = _svc.sysobj.get();
   cache = _svc.sysobj_cache.get();
   core = _svc.sysobj_core.get();
-  user = _svc.user.get();
+  user = _svc.user_rados.get();
 
   return 0;
 }
@@ -299,6 +299,9 @@ int RGWCtlDef::init(RGWServices& svc)
   bucket.reset(new RGWBucketCtl(svc.zone, svc.bucket,
                                 (RGWBucketMetadataHandler *)meta.bucket.get()),
                                 (RGWBucketInstanceMetadataHandler *)meta.bucket_instance.get());
+
+  user->init(bucket.get());
+  bucket->init(user.get());
 
   return 0;
 }

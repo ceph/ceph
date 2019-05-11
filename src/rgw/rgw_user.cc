@@ -2416,20 +2416,15 @@ int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-class RGWUserMetadataHandler : public RGWMetadataHandler {
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
+class RGWUserMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
 public:
   struct Svc {
     RGWSI_User *user{nullptr};
   } svc;
 
-  RGWUserMetadataHandler(RGWSI_User *user_svc) {
+  RGWUserMetadataHandler(RGWSI_User *user_svc)  : RGWMetadataHandler_GenericMetaBE(user_svc->ctx(),
+                                                                                   user_svc->get_be_handler()) {
     svc.user = user_svc;
-    be_handler = svc.user->get_be_handler();
-  }
-
-  RGWSI_MetaBackend_Handler *get_be_handler() {
-    return be_handler;
   }
 
   string get_type() override { return "user"; }
@@ -2487,54 +2482,6 @@ public:
 
     return svc.user->remove_user_info(op->ctx(), info, &objv_tracker,
                                       y);
-  }
-
-  int list_keys_init(const string& marker, void **phandle) override
-  {
-    std::unique_ptr<RGWSI_MetaBackend_Handler::Op> op(be_handler->alloc_op());
-
-    int ret = op->list_init(marker);
-    if (ret < 0) {
-      return ret;
-    }
-
-    *phandle = (void *)op.release();
-
-    return 0;
-  }
-
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override {
-    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
-
-    int ret = op->list_next(max, &keys, truncated);
-    if (ret < 0 && ret != -ENOENT) {
-      return ret;
-    }
-    if (ret == -ENOENT) {
-      if (truncated) {
-        *truncated = false;
-      }
-      return 0;
-    }
-
-    return 0;
-  }
-
-  void list_keys_complete(void *handle) override {
-    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
-    delete op;
-  }
-
-  string get_marker(void *handle) override {
-    auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
-    string marker;
-    int r = op->list_get_marker(&marker);
-    if (r < 0) {
-      lderr(svc.user->ctx(), 0) << "ERROR: " << __func__ << "(): list_get_marker() returned: r=" << r << dendl;
-      /* not much else to do */
-    }
-
-    return marker;
   }
 };
 
@@ -2702,6 +2649,56 @@ int RGWUserCtl::remove_info(const RGWUserInfo& info, ceph::optional_ref_default<
     return svc.user->remove_user_info(op->ctx(), info,
                                       params->objv_tracker,
                                       params->y);
+  });
+}
+
+int RGWUserCtl::add_bucket(const rgw_user& user,
+                           const rgw_bucket& bucket,
+                           ceph::real_time creation_time)
+
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time);
+  });
+}
+
+int RGWUserCtl::remove_bucket(const rgw_user& user,
+                              const rgw_bucket& bucket)
+
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->remove_bucket(op->ctx(), user, bucket);
+  });
+}
+
+int RGWUserCtl::list_buckets(const rgw_user& user,
+                             const string& marker,
+                             const string& end_marker,
+                             uint64_t max,
+                             bool need_stats,
+                             RGWUserBuckets *buckets,
+                             bool *is_truncated,
+                             uint64_t default_max)
+{
+  if (!max) {
+    max = default_max;
+  }
+
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
+                                     max, buckets, is_truncated);
+    if (ret < 0) {
+      return ret;
+    }
+    if (need_stats) {
+      map<string, RGWBucketEnt>& m = buckets->get_buckets();
+      ret = ctl.bucket->read_buckets_stats(m);
+      if (ret < 0 && ret != -ENOENT) {
+        ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
+        return ret;
+      }
+    }
+    return 0;
   });
 }
 

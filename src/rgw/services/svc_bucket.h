@@ -143,5 +143,8 @@ public:
                                   const string& key,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y);
+
+  int read_buckets_stats(RGWSI_MetaBackend::Context *ctx,
+                         map<string, RGWBucketEnt>& m);
 };
 
