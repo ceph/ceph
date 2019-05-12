@@ -94,7 +94,7 @@ For example, the output at different Dynamic Resharding stages is shown below:
 
   [
     {
-        "reshard_status": "CLS_RGW_RESHARD_NONE",
+        "reshard_status": "not-resharding",
         "new_bucket_instance_id": "",
         "num_shards": -1
     }
@@ -105,12 +105,12 @@ For example, the output at different Dynamic Resharding stages is shown below:
 
   [
     {
-        "reshard_status": "CLS_RGW_RESHARD_IN_PROGRESS",
+        "reshard_status": "in-progress",
         "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
         "num_shards": 2
     },
     {
-        "reshard_status": "CLS_RGW_RESHARD_IN_PROGRESS",
+        "reshard_status": "in-progress",
         "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
         "num_shards": 2
     }
@@ -121,12 +121,12 @@ For example, the output at different Dynamic Resharding stages is shown below:
 
   [
     {
-        "reshard_status": "CLS_RGW_RESHARD_NONE",
+        "reshard_status": "not-resharding",
         "new_bucket_instance_id": "",
         "num_shards": -1
     },
     {
-        "reshard_status": "CLS_RGW_RESHARD_NONE",
+        "reshard_status": "not-resharding",
         "new_bucket_instance_id": "",
         "num_shards": -1
     }
