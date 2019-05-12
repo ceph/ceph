@@ -610,22 +610,22 @@ struct rgw_bucket_category_stats {
 WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 
 enum cls_rgw_reshard_status {
-  CLS_RGW_RESHARD_NONE        = 0,
-  CLS_RGW_RESHARD_IN_PROGRESS = 1,
-  CLS_RGW_RESHARD_DONE        = 2,
+  CLS_RGW_RESHARD_NOT_RESHARDING  = 0,
+  CLS_RGW_RESHARD_IN_PROGRESS     = 1,
+  CLS_RGW_RESHARD_DONE            = 2,
 };
 
 static inline std::string to_string(const enum cls_rgw_reshard_status status)
 {
   switch (status) {
-  case CLS_RGW_RESHARD_NONE:
-    return "CLS_RGW_RESHARD_NONE";
+  case CLS_RGW_RESHARD_NOT_RESHARDING:
+    return "not-resharding";
     break;
   case CLS_RGW_RESHARD_IN_PROGRESS:
-    return "CLS_RGW_RESHARD_IN_PROGRESS";
+    return "in-progress";
     break;
   case CLS_RGW_RESHARD_DONE:
-    return "CLS_RGW_RESHARD_DONE";
+    return "done";
     break;
   default:
     break;
@@ -634,7 +634,7 @@ static inline std::string to_string(const enum cls_rgw_reshard_status status)
 }
 
 struct cls_rgw_bucket_instance_entry {
-  cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};
+  cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NOT_RESHARDING};
   string new_bucket_instance_id;
   int32_t num_shards{-1};
 
@@ -660,7 +660,7 @@ struct cls_rgw_bucket_instance_entry {
   static void generate_test_instances(list<cls_rgw_bucket_instance_entry*>& o);
 
   void clear() {
-    reshard_status = CLS_RGW_RESHARD_NONE;
+    reshard_status = CLS_RGW_RESHARD_NOT_RESHARDING;
     new_bucket_instance_id.clear();
   }
 
@@ -671,7 +671,7 @@ struct cls_rgw_bucket_instance_entry {
   }
 
   bool resharding() const {
-    return reshard_status != CLS_RGW_RESHARD_NONE;
+    return reshard_status != CLS_RGW_RESHARD_NOT_RESHARDING;
   }
   bool resharding_in_progress() const {
     return reshard_status == CLS_RGW_RESHARD_IN_PROGRESS;
