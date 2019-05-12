@@ -190,7 +190,7 @@ private:
   } io_type;
 
   struct sigaction action;
-  long long free_data_cache_size;
+  long long free_data_cache_size = 0;
   long long outstanding_write_size;
   L2CacheThreadPool *tp;
   struct ChunkDataInfo *head;

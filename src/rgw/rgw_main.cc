@@ -327,7 +327,7 @@ int radosgw_Main(int argc, const char **argv)
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
-  bool rgw_datacache_enabled =  g_conf()->rgw_datacache_local_enabled | g_conf()->rgw_datacache_distributed_enabled;
+  bool rgw_datacache_enabled = g_conf()->rgw_datacache_local_enabled || g_conf()->rgw_datacache_distributed_enabled;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf()->rgw_enable_gc_threads, g_conf()->rgw_enable_lc_threads, g_conf()->rgw_enable_quota_threads,
       g_conf()->rgw_run_sync_thread, g_conf()->rgw_dynamic_resharding, g_conf()->rgw_cache_enabled, rgw_datacache_enabled);

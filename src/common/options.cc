@@ -6763,10 +6763,10 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_datacache_persistent_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/tmp")
-    .set_description(""),
+    .set_default("/tmp/")
+    .set_description("NOTE: path must include trailing slash"),
 
-    Option("rgw_datacache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_datacache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1048576)
     .set_description("Datacache size in bytes"),
 
