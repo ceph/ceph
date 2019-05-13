@@ -51,10 +51,14 @@ class IscsiUi(BaseController):
             status['available'] = True
         except RequestException as e:
             if e.content:
-                content = json.loads(e.content)
-                content_message = content.get('message')
+                try:
+                    content = json.loads(e.content)
+                    content_message = content.get('message')
+                except ValueError:
+                    content_message = e.content
                 if content_message:
                     status['message'] = content_message
+
         return status
 
     @Endpoint()
