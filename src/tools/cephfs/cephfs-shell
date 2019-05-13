@@ -566,7 +566,7 @@ exists.')
         else:
             for src_dir, dirs, files in os.walk(root_src_dir):
                 dst_dir = src_dir.replace(root_src_dir, root_dst_dir, 1)
-                dst_dir = re.sub('\/+', '/', cephfs.getcwd().decode('utf-8') + dst_dir)
+                dst_dir = re.sub(r'\/+', '/', cephfs.getcwd().decode('utf-8') + dst_dir)
                 if args.force and dst_dir != '/' and not is_dir_exists(dst_dir[:-1]) and len(locate_file(dst_dir)) == 0:
                     try:
                         cephfs.mkdirs(to_bytes(dst_dir), 0o777)
@@ -587,7 +587,7 @@ exists.')
 
                 for file_ in files:
                     src_file = os.path.join(src_dir, file_)
-                    dst_file = re.sub('\/+', '/', '/' + dst_dir + '/' + file_)
+                    dst_file = re.sub(r'\/+', '/', '/' + dst_dir + '/' + file_)
                     if (not args.force) and is_file_exists(dst_file):
                         return
                     copy_from_local(src_file, os.path.join(
