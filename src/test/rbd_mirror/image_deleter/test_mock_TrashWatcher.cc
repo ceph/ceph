@@ -151,7 +151,7 @@ public:
   }
 
   void expect_create_trash(librados::IoCtx &io_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(io_ctx), create(RBD_TRASH, false))
+    EXPECT_CALL(get_mock_io_ctx(io_ctx), create(RBD_TRASH, false, _))
       .WillOnce(Return(r));
   }
 

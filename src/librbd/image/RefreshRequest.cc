@@ -1320,6 +1320,13 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.parent_md = m_parent_md;
       m_image_ctx.migration_info = {};
     }
+
+    librados::Rados rados(m_image_ctx.md_ctx);
+    int8_t require_osd_release;
+    int r = rados.get_min_compatible_osd(&require_osd_release);
+    if (r == 0 && require_osd_release >= CEPH_RELEASE_OCTOPUS) {
+      m_image_ctx.enable_sparse_copyup = true;
+    }
   }
 
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {

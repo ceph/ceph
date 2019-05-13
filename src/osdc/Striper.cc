@@ -402,3 +402,18 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer,
   ceph_assert(curr == 0);
 }
 
+void Striper::StripedReadResult::assemble_result(
+    CephContext *cct, std::map<uint64_t, uint64_t> *extent_map,
+    bufferlist *bl)
+{
+  ldout(cct, 10) << "assemble_result(" << this << ")" << dendl;
+  for (auto& p : partial) {
+    uint64_t off = p.first;
+    uint64_t len = p.second.first.length();
+    if (len > 0) {
+      (*extent_map)[off] = len;
+      bl->claim_append(p.second.first);
+    }
+  }
+  partial.clear();
+}
