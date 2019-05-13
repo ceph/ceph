@@ -72,7 +72,12 @@ public:
   }
 
 private:
+#ifndef WITH_SEASTAR
   mutable std::atomic<uint64_t> nref;
+#else
+  // crimson is single threaded at the moment
+  mutable uint64_t nref;
+#endif
   CephContext *cct;
 };
 
