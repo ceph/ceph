@@ -33,9 +33,6 @@ public:
 					   ceph::os::CyanStore* store,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
-  seastar::future<> store_object_state(const cached_os_t os,
-				       const MOSDOp& m,
-				       ceph::os::Transaction& txn);
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
   seastar::future<bufferlist> read(const object_info_t& oi,
@@ -48,7 +45,10 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  seastar::future<> submit_transaction(ceph::os::Transaction&& txn);
+  seastar::future<> mutate_object(
+    cached_os_t&& os,
+    ceph::os::Transaction&& txn,
+    const MOSDOp& m);
 
 protected:
   const shard_id_t shard;
