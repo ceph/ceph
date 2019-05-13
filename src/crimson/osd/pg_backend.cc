@@ -275,6 +275,20 @@ seastar::future<> PGBackend::writefull(
   return seastar::now();
 }
 
+seastar::future<> PGBackend::remove(ObjectState& os,
+                                    ceph::os::Transaction& txn)
+{
+  // todo: snapset
+  txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+  os.oi.size = 0;
+  os.oi.new_object();
+  // todo: update watchers
+  if (os.oi.is_whiteout()) {
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+  }
+  return seastar::now();
+}
+
 seastar::future<std::vector<hobject_t>, hobject_t>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit)
 {
