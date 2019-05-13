@@ -19,10 +19,10 @@ namespace {
   }
 }
 
-std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
-                                             const pg_pool_t& pool,
-                                             ceph::os::CyanStore* store,
-                                             const ec_profile_t& ec_profile)
+std::unique_ptr<PGBackend> PGBackend::load(const spg_t pgid,
+                                           const pg_pool_t& pool,
+                                           ceph::os::CyanStore* store,
+                                           const ec_profile_t& ec_profile)
 {
   auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
