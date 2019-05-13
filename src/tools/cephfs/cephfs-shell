@@ -726,7 +726,6 @@ exists.')
             if not args.all:
                 items = [i for i in items if not i.d_name.startswith(b'.')]
 
-            flag = 0
             if args.S:
                 items = sorted(items, key=lambda item: cephfs.stat(
                     to_bytes(dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
