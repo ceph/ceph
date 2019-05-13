@@ -172,9 +172,15 @@ void CopyupRequest<I>::read_from_parent() {
                  << "completion=" << comp << ", "
                  << "extents=" << m_image_extents
                  << dendl;
-  ImageRequest<I>::aio_read(m_image_ctx->parent, comp,
-                            std::move(m_image_extents),
-                            ReadResult{&m_copyup_data}, 0, m_trace);
+  if (m_image_ctx->enable_sparse_copyup) {
+    ImageRequest<I>::aio_read(
+      m_image_ctx->parent, comp, std::move(m_image_extents),
+      ReadResult{&m_copyup_extent_map, &m_copyup_data}, 0, m_trace);
+  } else {
+    ImageRequest<I>::aio_read(
+      m_image_ctx->parent, comp, std::move(m_image_extents),
+      ReadResult{&m_copyup_data}, 0, m_trace);
+  }
 }
 
 template <typename I>
@@ -383,12 +389,17 @@ void CopyupRequest<I>::copyup() {
   bool deep_copyup = !snapc.snaps.empty() && !m_copyup_is_zero;
   if (m_copyup_is_zero) {
     m_copyup_data.clear();
+    m_copyup_extent_map.clear();
   }
 
   int r;
   librados::ObjectWriteOperation copyup_op;
   if (copy_on_read || deep_copyup) {
-    copyup_op.exec("rbd", "copyup", m_copyup_data);
+    if (m_image_ctx->enable_sparse_copyup) {
+      cls_client::sparse_copyup(&copyup_op, m_copyup_extent_map, m_copyup_data);
+    } else {
+      cls_client::copyup(&copyup_op, m_copyup_data);
+    }
     ObjectRequest<I>::add_write_hint(*m_image_ctx, &copyup_op);
     ++m_pending_copyups;
   }
@@ -396,7 +407,12 @@ void CopyupRequest<I>::copyup() {
   librados::ObjectWriteOperation write_op;
   if (!copy_on_read) {
     if (!deep_copyup) {
-      write_op.exec("rbd", "copyup", m_copyup_data);
+      if (m_image_ctx->enable_sparse_copyup) {
+        cls_client::sparse_copyup(&write_op, m_copyup_extent_map,
+                                  m_copyup_data);
+      } else {
+        cls_client::copyup(&write_op, m_copyup_data);
+      }
       ObjectRequest<I>::add_write_hint(*m_image_ctx, &write_op);
     }
 

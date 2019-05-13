@@ -99,7 +99,8 @@ int TestMemIoCtxImpl::assert_exists(const std::string &oid) {
   return 0;
 }
 
-int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive) {
+int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive,
+                             const SnapContext &snapc) {
   if (get_snap_read() != CEPH_NOSNAP) {
     return -EROFS;
   } else if (m_client->is_blacklisted()) {
@@ -107,7 +108,7 @@ int TestMemIoCtxImpl::create(const std::string& oid, bool exclusive) {
   }
 
   RWLock::WLocker l(m_pool->file_lock);
-  get_file(oid, true, get_snap_context());
+  get_file(oid, true, snapc);
   return 0;
 }
 

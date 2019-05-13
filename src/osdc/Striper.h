@@ -104,6 +104,10 @@ class CephContext;
        * @len the length of buffer
        */
       void assemble_result(CephContext *cct, char *buffer, size_t len);
+
+      void assemble_result(CephContext *cct,
+                           std::map<uint64_t, uint64_t> *extent_map,
+                           ceph::buffer::list *bl);
     };
 
   };

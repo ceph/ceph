@@ -576,9 +576,14 @@ TEST_F(TestInternal, SnapshotCopyup)
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
+  bool sparse_read_supported = is_sparse_read_supported(
+      ictx->data_ctx, ictx->get_object_name(10));
+
   bufferlist bl;
   bl.append(std::string(256, '1'));
   ASSERT_EQ(256, ictx->io_work_queue->write(0, bl.length(), bufferlist{bl}, 0));
+  ASSERT_EQ(256, ictx->io_work_queue->write(1024, bl.length(), bufferlist{bl},
+                                            0));
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0,
@@ -609,10 +614,11 @@ TEST_F(TestInternal, SnapshotCopyup)
   librados::snap_set_t snap_set;
   ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
 
+  uint64_t copyup_end = ictx2->enable_sparse_copyup ? 1024 + 256 : 1 << order;
   std::vector< std::pair<uint64_t,uint64_t> > expected_overlap =
     boost::assign::list_of(
       std::make_pair(0, 256))(
-      std::make_pair(512, 2096640));
+      std::make_pair(512, copyup_end - 512));
   ASSERT_EQ(2U, snap_set.clones.size());
   ASSERT_NE(CEPH_NOSNAP, snap_set.clones[0].cloneid);
   ASSERT_EQ(2U, snap_set.clones[0].snaps.size());
@@ -638,6 +644,12 @@ TEST_F(TestInternal, SnapshotCopyup)
     ASSERT_TRUE(bl.contents_equal(read_bl));
 
     ASSERT_EQ(256,
+              ictx2->io_work_queue->read(1024, 256,
+                                         librbd::io::ReadResult{read_result},
+                                         0));
+    ASSERT_TRUE(bl.contents_equal(read_bl));
+
+    ASSERT_EQ(256,
               ictx2->io_work_queue->read(256, 256,
                                          librbd::io::ReadResult{read_result},
                                          0));
@@ -645,6 +657,51 @@ TEST_F(TestInternal, SnapshotCopyup)
       ASSERT_TRUE(bl.contents_equal(read_bl));
     } else {
       ASSERT_TRUE(read_bl.is_zero());
+    }
+
+    // verify sparseness was preserved
+    {
+      librados::IoCtx io_ctx;
+      io_ctx.dup(m_ioctx);
+      librados::Rados rados(io_ctx);
+      EXPECT_EQ(0, rados.conf_set("rbd_cache", "false"));
+      EXPECT_EQ(0, rados.conf_set("rbd_sparse_read_threshold_bytes", "256"));
+      auto ictx3 = new librbd::ImageCtx(clone_name, "", snap_name, io_ctx,
+                                        true);
+      ASSERT_EQ(0, ictx3->state->open(0));
+      BOOST_SCOPE_EXIT(ictx3) {
+        ictx3->state->close();
+      } BOOST_SCOPE_EXIT_END;
+      std::map<uint64_t, uint64_t> expected_m;
+      bufferlist expected_bl;
+      if (ictx3->enable_sparse_copyup && sparse_read_supported) {
+        if (snap_name == NULL) {
+          expected_m = {{0, 512}, {1024, 256}};
+          expected_bl.append(std::string(256 * 3, '1'));
+        } else {
+          expected_m = {{0, 256}, {1024, 256}};
+          expected_bl.append(std::string(256 * 2, '1'));
+        }
+      } else {
+        expected_m = {{0, 1024 + 256}};
+        if (snap_name == NULL) {
+          expected_bl.append(std::string(256 * 2, '1'));
+          expected_bl.append(std::string(256 * 2, '\0'));
+          expected_bl.append(std::string(256 * 1, '1'));
+        } else {
+          expected_bl.append(std::string(256 * 1, '1'));
+          expected_bl.append(std::string(256 * 3, '\0'));
+          expected_bl.append(std::string(256 * 1, '1'));
+        }
+      }
+      std::map<uint64_t, uint64_t> read_m;
+      librbd::io::ReadResult sparse_read_result{&read_m, &read_bl};
+      EXPECT_EQ(1024 + 256,
+                ictx3->io_work_queue->read(0, 1024 + 256,
+                                           librbd::io::ReadResult{sparse_read_result},
+                                           0));
+      EXPECT_EQ(expected_m, read_m);
+      EXPECT_TRUE(expected_bl.contents_equal(read_bl));
     }
 
     // verify the object map was properly updated

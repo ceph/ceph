@@ -597,8 +597,16 @@ void assert_snapc_seq(librados::ObjectWriteOperation *op,
                       uint64_t snapc_seq,
                       cls::rbd::AssertSnapcSeqState state);
 
+void copyup(librados::ObjectWriteOperation *op, bufferlist data);
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
            bufferlist data);
+
+void sparse_copyup(librados::ObjectWriteOperation *op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   bufferlist data);
+int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
+                  const std::map<uint64_t, uint64_t> &extent_map,
+                  bufferlist data);
 
 void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
               bool remove_empty);
