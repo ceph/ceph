@@ -49,6 +49,9 @@ public:
     cached_os_t&& os,
     ceph::os::Transaction&& txn,
     const MOSDOp& m);
+  seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
+    const hobject_t& start,
+    uint64_t limit);
 
 protected:
   const shard_id_t shard;

@@ -78,6 +78,11 @@ public:
     CollectionRef c,
     const ghobject_t& oid,
     std::vector<std::string>&& keys);
+  seastar::future<std::vector<ghobject_t>, ghobject_t> list_objects(
+    CollectionRef c,
+    const ghobject_t& start,
+    const ghobject_t& end,
+    uint64_t limit);
   CollectionRef create_new_collection(const coll_t& cid);
   CollectionRef open_collection(const coll_t& cid);
   std::vector<coll_t> list_collections();
