@@ -200,14 +200,14 @@ Major Changes from Mimic
 - *RADOS*:
 
   * The number of placement groups (PGs) per pool can now be decreased
-    at any time, and the cluster can `automatically tune the PG count <pg-autoscaler>`_
+    at any time, and the cluster can :ref:`automatically tune the PG count <pg-autoscaler>`
     based on cluster utilization or administrator hints.
   * The new :ref:`v2 wire protocol <msgr2>` brings support for encryption on the wire.
-  * Physical `storage devices <devices>`_ consumed by OSD and Monitor daemons are
+  * Physical :ref:`storage devices <devices>` consumed by OSD and Monitor daemons are
     now tracked by the cluster along with health metrics (i.e.,
     SMART), and the cluster can apply a pre-trained prediction model
-    or a cloud-based prediction service to `warn about expected
-    HDD or SSD failures <diskprediction>`_.
+    or a cloud-based prediction service to :ref:`warn about expected
+    HDD or SSD failures <diskprediction>`.
   * The NUMA node for OSD daemons can easily be monitored via the
     ``ceph osd numa-status`` command, and configured via the
     ``osd_numa_node`` config option.
