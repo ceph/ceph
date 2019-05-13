@@ -469,7 +469,6 @@ class CephFSShell(Cmd):
 
             setattr(namespace, self.dest, str(oct(o_mode)))
 
-
     mkdir_parser = argparse.ArgumentParser(
         description='Create the directory(ies), if they do not already exist.')
     mkdir_parser.add_argument('dirs', type=str,
@@ -505,7 +504,6 @@ exists.')
                     self.poutput("directory missing in the path; "
                                  "you may want to pass the -p argument")
                     return
-
 
     def complete_put(self, text, line, begidx, endidx):
         """
