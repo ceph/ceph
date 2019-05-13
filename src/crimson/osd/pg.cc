@@ -1006,6 +1006,8 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
         osd_op.outdata = std::move(bl);
 	return seastar::now();
     });
+  case CEPH_OSD_OP_DELETE:
+    return backend->remove(os, txn);
   default:
     throw std::runtime_error(
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));

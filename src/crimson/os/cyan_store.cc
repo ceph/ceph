@@ -242,6 +242,12 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     switch (op->op) {
     case Transaction::OP_NOP:
       break;
+    case Transaction::OP_REMOVE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _remove(cid, oid);
+      }
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -296,6 +302,23 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     }
   }
   return seastar::now();
+}
+
+int CyanStore::_remove(const coll_t& cid, const ghobject_t& oid)
+{
+  logger().debug("{} cid={} oid={}",
+                __func__, cid, oid);
+  auto c = open_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  auto i = c->object_hash.find(oid);
+  if (i == c->object_hash.end())
+    return -ENOENT;
+  used_bytes -= i->second->get_size();
+  c->object_hash.erase(i);
+  c->object_map.erase(oid);
+  return 0;
 }
 
 int CyanStore::_touch(const coll_t& cid, const ghobject_t& oid)

@@ -96,6 +96,7 @@ public:
   uuid_d get_fsid() const;
 
 private:
+  int _remove(const coll_t& cid, const ghobject_t& oid);
   int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid,
 	     uint64_t offset, size_t len, const bufferlist& bl,
