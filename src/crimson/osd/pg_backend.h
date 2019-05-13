@@ -75,5 +75,11 @@ private:
 					    size_t offset,
 					    size_t length,
 					    uint32_t flags) = 0;
+  static std::unique_ptr<PGBackend> _create_backend(
+    CollectionRef coll,
+    const shard_id_t& shard,
+    const pg_pool_t& pool,
+    seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+    const ec_profile_t& ec_profile);
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
 };

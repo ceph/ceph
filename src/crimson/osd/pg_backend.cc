@@ -19,13 +19,13 @@ namespace {
   }
 }
 
-std::unique_ptr<PGBackend> PGBackend::load(
-  const spg_t pgid,
+std::unique_ptr<PGBackend> PGBackend::_create_backend(
+  CollectionRef coll,
+  const shard_id_t& shard,
   const pg_pool_t& pool,
   seastar::lw_shared_ptr<ceph::os::CyanStore> store,
   const ec_profile_t& ec_profile)
 {
-  auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(shard,
@@ -43,6 +43,17 @@ std::unique_ptr<PGBackend> PGBackend::load(
   }
 }
 
+std::unique_ptr<PGBackend> PGBackend::load(
+  const spg_t pgid,
+  const pg_pool_t& pool,
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+  const ec_profile_t& ec_profile)
+{
+  auto coll = store->open_collection(coll_t{pgid});
+  return _create_backend(
+    std::move(coll), pgid.shard, pool, std::move(store), ec_profile);
+}
+
 std::unique_ptr<PGBackend> PGBackend::create(
   const spg_t pgid,
   const pg_pool_t& pool,
@@ -50,17 +61,8 @@ std::unique_ptr<PGBackend> PGBackend::create(
   const ec_profile_t& ec_profile)
 {
   auto coll = store->create_new_collection(coll_t{pgid});
-  switch (pool.type) {
-  case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
-  case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>(pgid.shard, coll, store,
-                                       std::move(ec_profile),
-                                       pool.stripe_width);
-  default:
-    throw runtime_error(seastar::format("unsupported pool type '{}'",
-                                        pool.type));
-  }
+  return _create_backend(
+    std::move(coll), pgid.shard, pool, std::move(store), ec_profile);
 }
 
 PGBackend::PGBackend(shard_id_t shard,
