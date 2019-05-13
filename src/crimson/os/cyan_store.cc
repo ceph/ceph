@@ -104,6 +104,31 @@ seastar::future<> CyanStore::mkfs()
   return seastar::now();
 }
 
+seastar::future<std::vector<ghobject_t>, ghobject_t>
+CyanStore::list_objects(CollectionRef c,
+                        const ghobject_t& start,
+                        const ghobject_t& end,
+                        uint64_t limit)
+{
+  logger().debug("{} {} {} {} {}",
+                 __func__, c->cid, start, end, limit);
+  std::vector<ghobject_t> objects;
+  objects.reserve(limit);
+  ghobject_t next = ghobject_t::get_max();
+  for (const auto& [oid, obj] :
+         boost::make_iterator_range(c->object_map.lower_bound(start),
+                                    c->object_map.end())) {
+    std::ignore = obj;
+    if (oid >= end || objects.size() >= limit) {
+      next = oid;
+      break;
+    }
+    objects.push_back(oid);
+  }
+  return seastar::make_ready_future<std::vector<ghobject_t>, ghobject_t>(
+    std::move(objects), next);
+}
+
 CyanStore::CollectionRef CyanStore::create_new_collection(const coll_t& cid)
 {
   auto c = new Collection{cid};

@@ -134,6 +134,9 @@ private:
     ObjectState& os,
     OSDOp& op,
     ceph::os::Transaction& txn);
+  seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
+					     const std::string& nspace,
+					     uint64_t limit);
 
 private:
   const spg_t pgid;

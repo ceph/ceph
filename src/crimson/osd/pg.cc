@@ -42,6 +42,7 @@ namespace {
   }
 }
 
+using ceph::common::local_conf;
 using recovery::AdvMap;
 using recovery::ActMap;
 using recovery::Initialize;
@@ -999,10 +1000,60 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
     return backend->writefull(os, osd_op, txn);
   case CEPH_OSD_OP_SETALLOCHINT:
     return seastar::now();
+  case CEPH_OSD_OP_PGNLS:
+    return do_pgnls(osd_op.indata, os.oi.soid.get_namespace(), op.pgls.count)
+      .then([&osd_op](bufferlist bl) {
+        osd_op.outdata = std::move(bl);
+	return seastar::now();
+    });
   default:
     throw std::runtime_error(
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
+}
+
+seastar::future<bufferlist> PG::do_pgnls(bufferlist& indata,
+                                         const std::string& nspace,
+                                         uint64_t limit)
+{
+  hobject_t lower_bound;
+  try {
+    ceph::decode(lower_bound, indata);
+  } catch (const buffer::error& e) {
+    throw std::invalid_argument("unable to decode PGNLS handle");
+  }
+  const auto pg_start = pgid.pgid.get_hobj_start();
+  const auto pg_end = pgid.pgid.get_hobj_end(pool.get_pg_num());
+  if (!(lower_bound.is_min() ||
+        lower_bound.is_max() ||
+        (lower_bound >= pg_start && lower_bound < pg_end))) {
+    // this should only happen with a buggy client.
+    throw std::invalid_argument("outside of PG bounds");
+  }
+  return backend->list_objects(lower_bound, limit).then(
+    [lower_bound, pg_end, nspace](auto objects, auto next) {
+      auto in_my_namespace = [&nspace](const hobject_t& o) {
+        if (o.get_namespace() == local_conf()->osd_hit_set_namespace) {
+          return false;
+        } else if (nspace == librados::all_nspaces) {
+          return true;
+        } else {
+          return o.get_namespace() == nspace;
+        }
+      };
+      pg_nls_response_t response;
+      boost::copy(objects |
+        boost::adaptors::filtered(in_my_namespace) |
+        boost::adaptors::transformed([](const hobject_t& o) {
+          return librados::ListObjectImpl{o.get_namespace(),
+                                          o.oid.name,
+                                          o.get_key()}; }),
+        std::back_inserter(response.entries));
+      response.handle = next.is_max() ? pg_end : next;
+      bufferlist bl;
+      encode(response, bl);
+      return seastar::make_ready_future<bufferlist>(std::move(bl));
+  });
 }
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
