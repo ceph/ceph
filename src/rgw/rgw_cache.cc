@@ -226,10 +226,11 @@ bool ObjectCache::remove(const string& name)
   return true;
 }
 
+// This function is always called under a lock by either get or put.
 void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
 			    std::list<string>::iterator& lru_iter)
 {
-  while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
+  while (lru_size > lru_max_size) {
     auto iter = lru.begin();
     if ((*iter).compare(name) == 0) {
       /*
@@ -311,7 +312,9 @@ void ObjectCache::do_invalidate_all()
 
   lru_size = 0;
   lru_counter = 0;
-  lru_window = 0;
+  // Setting the lru_window to 0 here seems to have been a bug. There
+  // was no way to set it to nonzero again when then cache was
+  // re-enabled in the case of a notify failure.
 
   for (auto& cache : chained_cache) {
     cache->invalidate_all();
@@ -338,8 +341,69 @@ void ObjectCache::unchain_cache(RGWChainedCache *cache) {
 
 ObjectCache::~ObjectCache()
 {
+  // Here we unregister ourselves from dynamic configuration events.
+  cct->_conf.remove_observer(this);
   for (auto cache : chained_cache) {
     cache->unregistered();
   }
 }
 
+// In this function, we return a null-terminated array of the keys
+// about which we want to be informed.
+const char** ObjectCache::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "rgw_cache_lru_size",
+    "rgw_cache_expiry_interval",
+    nullptr
+  };
+  return keys;
+}
+
+// The md_conf_obs_t interface is unfortunate in a number of
+// ways. Among them is using the rather allocacious means of a std:set
+// full of std::string to indicate what items have changed...and not
+// passing in the value that they changed to so you have to do ANOTHER
+// lookup. Fortunately, configuration updates are relatively rare affairs.
+void ObjectCache::handle_conf_change(const ConfigProxy& conf,
+				   const std::set<std::string>& changed)
+{
+  if (changed.find("rgw_cache_lru_size") != changed.end()) {
+    // Thing one we have to decide is: Someone may be using the
+    // variables whose values we're about to update. What are we going
+    // to do about this? In other contexts I might use std::atomic
+    // wrappers around the variables and the load and store methods
+    // with release/consume memory ordering. I might do that if the
+    // class had no other synchronization, for example.
+
+    // In this case, the class already has a read/write lock under
+    // which everything is accessed, so we'll use that.
+    RWLock::WLocker l(lock);
+
+    // THING TWO: what should we do when we update? We want to
+    // maintain a consistent state. One possibility would be to call
+    // do_invalidate_all(), but in this case I don't believe that's
+    // necessary. For one thing touch_lru() was fetching
+    // rgw_cache_lru_size every time it was called, so it would have
+    // been exposed to potential changing values.
+
+    // Similarly, lru_window is used to keep from having to take too
+    // many write locks on reads while also making sure frequently
+    // used things bubble upward. If we change it, the LRU will show
+    // the old promotion behavior but the new parameter will take
+    // hold. So we should be safe just setting the values.
+    lru_max_size = cct->_conf.get_val<int64_t>("rgw_cache_lru_size");
+    lru_window = lru_max_size / 2;
+  }
+  // Note an if here not an else if. We can be called once for
+  // multiple changes.
+  if (changed.find("rgw_cache_expiry_interval") != changed.end()) {
+    // We need a lock as discussed above!
+    RWLock::WLocker l(lock);
+    // Similarly! The expiry variable is queried on lookup. Changes at
+    // runtime will simply cause future lookups to have different
+    // behavior.
+    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>(
+				    "rgw_cache_expiry_interval"));
+  }
+}

@@ -154,13 +154,21 @@ struct ObjectCacheEntry {
   ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
 };
 
-class ObjectCache {
+// Anything that wishes to respond to runtime changes in configuration
+// must inherit from md_config_obs_t.
+
+class ObjectCache : md_config_obs_t {
   CephContext *cct;
   std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
+  // Add this option to replace having to fetch it from md_config_t
+  // every time. This way we can stop using the legacy interface and
+  // not get a performance penalty on every use, since we're changing
+  // this class's relationship with configuration anyway.
+  unsigned long lru_max_size;
   unsigned long lru_size = 0;
   unsigned long lru_counter = 0;
-  unsigned long lru_window = 0;
+  unsigned long lru_window;
   RWLock lock{"ObjectCache"};
 
   vector<RGWChainedCache *> chained_cache;
@@ -178,9 +186,14 @@ class ObjectCache {
 public:
   ObjectCache(CephContext* cct)
     : cct(cct),
-      lru_window(cct->_conf.get_val<int64_t>("rgw_cache_lru_size") / 2),
+      lru_max_size(cct->_conf.get_val<int64_t>("rgw_cache_lru_size") / 2),
+      lru_window(lru_max_size / 2),
       expiry(std::chrono::seconds(cct->_conf.get_val<uint64_t>(
-				    "rgw_cache_expiry_interval"))) {}
+				    "rgw_cache_expiry_interval"))) {
+    // Here we register ourselves to handle dynamic configuration
+    // events. We must UN-register ourselves in the destructor.
+    cct->_conf.add_observer(this);
+  }
   ~ObjectCache();
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   std::optional<ObjectCacheInfo> get(const std::string& name) {
@@ -212,6 +225,11 @@ public:
   void chain_cache(RGWChainedCache *cache);
   void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
+  // Here are the two methods we must implement to be a configuration
+  // observer.
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>& changed) override;
 };
 
 #endif
