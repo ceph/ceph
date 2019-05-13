@@ -107,7 +107,7 @@ def list_items(dir_name=''):
     else:
         try:
             d = cephfs.opendir(dir_name)
-        except:
+        except libcephfs.Error:
             dir_name = dir_name.decode('utf-8')
             return []
     dent = cephfs.readdir(d)
@@ -206,7 +206,7 @@ def is_dir_exists(dir_name, dir_=''):
     path_to_stat = os.path.join(dir_, dir_name)
     try:
         return ((cephfs.stat(path_to_stat).st_mode & 0o0040000) != 0)
-    except:
+    except libcephfs.Error:
         return False
 
 
@@ -218,7 +218,7 @@ def is_file_exists(file_name, dir_=''):
     try:
         # if its not a directory, then its a file
         return ((cephfs.stat(os.path.join(dir_, file_name)).st_mode & 0o0040000) == 0)
-    except:
+    except libcephfs.Error:
         return False
 
 
@@ -497,7 +497,7 @@ exists.')
             else:
                 try:
                     cephfs.mkdir(path, permission)
-                except:
+                except libcephfs.Error:
                     self.poutput("directory missing in the path; "
                                  "you may want to pass the -p argument")
                     return
@@ -815,7 +815,7 @@ sub-directories, files')
             if not is_pattern and dir_path != os.path.normpath(path):
                 try:
                     cephfs.rmdir(to_bytes(dir_path))
-                except:
+                except libcephfs.Error:
                     self.poutput('error: no such directory "%s"' % dir_path)
 
     def complete_rm(self, text, line, begidx, endidx):
@@ -840,7 +840,7 @@ sub-directories, files')
             else:
                 try:
                     cephfs.unlink(to_bytes(file_path))
-                except:
+                except libcephfs.Error:
                     self.poutput('%s: no such file' % file_path)
 
     def complete_mv(self, text, line, begidx, endidx):
@@ -861,7 +861,7 @@ sub-directories, files')
         """
         try:
             cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
-        except:
+        except libcephfs.Error:
             self.poutput("error: need a file name to move to")
 
     def complete_cd(self, text, line, begidx, endidx):
@@ -890,7 +890,7 @@ sub-directories, files')
         else:
             try:
                 cephfs.chdir(to_bytes(args.dir_name))
-            except:
+            except libcephfs.Error:
                 self.poutput("%s: no such directory" % args.dir_name)
         self.working_dir = cephfs.getcwd().decode('utf-8')
         self.set_prompt()
@@ -919,7 +919,7 @@ sub-directories, files')
         mode = int(args.mode, base=8)
         try:
             cephfs.chmod(args.file_name, mode)
-        except:
+        except libcephfs.Error:
             self.poutput('%s: no such file or directory' % args.file_name)
 
     def complete_cat(self, text, line, begidx, endidx):
