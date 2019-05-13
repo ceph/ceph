@@ -368,7 +368,7 @@ void ProtocolV1::write_event() {
         ack_left -= left;
         left = ack_left;
         r = connection->_try_send(left);
-      } else if (is_queued()) {
+      } else if (connection->is_queued()) { // data lefted in last write_event
         r = connection->_try_send();
       }
     }
