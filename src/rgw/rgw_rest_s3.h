@@ -125,6 +125,9 @@ public:
 class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
   bool fetchOwner;
 public:
+  RGWListBucket_ObjStore_S3v2() :  fetchOwner(false) {
+  }
+  ~RGWListBucket_ObjStore_S3v2() override {}
   
   int get_params() override;
   void send_response() override;

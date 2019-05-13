@@ -662,6 +662,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
 }
 
 
+
 int RGWListBucket_ObjStore_S3::get_common_params()
 
 {
@@ -715,15 +716,13 @@ return 0;
 
 int RGWListBucket_ObjStore_S3v2::get_params()
 {
-ldpp_dout(this, 0) << "Fetchowner1 is :"<<fetchOwner<<dendl;
 int ret = get_common_params();
 if (ret < 0)
 return ret;
-s->info.args.get_bool("FetchOwner", &fetchOwner, true);
+s->info.args.get_bool("fetchOwner", &fetchOwner, true);
 startAfter = s->info.args.get("start-after");
 marker = s->info.args.get("ContinuationToken");
 if(marker.empty()) marker = startAfter;
-ldpp_dout(this, 0) << "Fetchowner2 is :"<<fetchOwner<<dendl;
 return 0;
 }
 
@@ -852,44 +851,7 @@ void RGWListBucket_ObjStore_S3::send_common_response()
 
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
               : "false"));
-/*
-  bool encode_key = false;
-  if (strcasecmp(encoding_type.c_str(), "url") == 0) {
-    s->formatter->dump_string("EncodingType", "url");
-    encode_key = true;
-  }
-  */
-  /*
 
-  if (op_ret >= 0) {
-    vector<rgw_bucket_dir_entry>::iterator iter;
-    for (iter = objs.begin(); iter != objs.end(); ++iter) {
-      rgw_obj_key key(iter->key);
-      s->formatter->open_array_section("Contents");
-      if (encode_key) {
-  string key_name;
-  url_encode(key.name, key_name);
-  s->formatter->dump_string("Key", key_name);
-      } else {
-  s->formatter->dump_string("Key", key.name);
-      }
-      dump_time(s, "LastModified", &iter->meta.mtime);
-      s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
-      s->formatter->dump_int("Size", iter->meta.accounted_size);
-      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
-      s->formatter->dump_string("StorageClass", storage_class.c_str());
-      //dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
-      if (s->system_request) {
-        s->formatter->dump_string("RgwxTag", iter->tag);
-      }
-      if (iter->meta.appendable) {
-        s->formatter->dump_string("Type", "Appendable");
-      } else {
-        s->formatter->dump_string("Type", "Normal");
-      }
-      s->formatter->close_section();
-    }
-    */
     if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin();
@@ -901,9 +863,6 @@ void RGWListBucket_ObjStore_S3::send_common_response()
     }
   }
   
-
-
-
 
 
 void RGWListBucket_ObjStore_S3::send_response()
@@ -1121,7 +1080,6 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 
   }
-
 
 
  
