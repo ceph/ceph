@@ -570,10 +570,8 @@ class IscsiTarget(RESTController):
     def _config_to_target(target_iqn, config):
         target_config = config['targets'][target_iqn]
         portals = []
-        for host in target_config['portals'].keys():
-            ips = IscsiClient.instance(gateway_name=host).get_ip_addresses()['data']
-            portal_ips = [ip for ip in ips if ip in target_config['ip_list']]
-            for portal_ip in portal_ips:
+        for host, portal_config in target_config['portals'].items():
+            for portal_ip in portal_config['portal_ip_addresses']:
                 portal = {
                     'host': host,
                     'ip': portal_ip

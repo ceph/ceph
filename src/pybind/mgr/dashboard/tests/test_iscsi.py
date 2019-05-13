@@ -475,7 +475,7 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 5
+            "version": 9
         }
 
     @classmethod
@@ -550,7 +550,7 @@ class IscsiClientMock(object):
             target_config['ip_list'] = []
         target_config['ip_list'] += ip_address
         target_config['portals'][gateway_name] = {
-            "portal_ip_address": ip_address[0]
+            "portal_ip_addresses": ip_address
         }
 
     def create_disk(self, pool, image, backstore):
