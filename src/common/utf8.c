@@ -61,37 +61,44 @@ static int high_bits_set(int c)
  */
 int encode_utf8(unsigned long u, unsigned char *buf)
 {
-	static const unsigned long max_val[MAX_UTF8_SZ] = {
-		0x0000007ful, 0x000007fful, 0x0000fffful,
-		0x001ffffful, 0x03fffffful, 0x7ffffffful
-	};
-	static const int MAX_VAL_SZ = sizeof(max_val)/sizeof(max_val[0]);
-
-	int i;
-	for (i = 0; i < MAX_VAL_SZ; ++i) {
-		if (u <= max_val[i])
-			break;
-	}
-	if (i == MAX_VAL_SZ) {
-		// This code point is too big to encode.
+	/* Unroll loop for common code points  */
+	if (u <= 0x0000007F) {
+		buf[0] = u;
+		return 1;
+	} else if (u <= 0x000007FF) {
+		buf[0] = 0xC0 | (u >> 6);
+		buf[1] = 0x80 | (u & 0x3F);
+		return 2;
+	} else if (u <= 0x0000FFFF) {
+		buf[0] = 0xE0 | (u >> 12);
+		buf[1] = 0x80 | ((u >> 6) & 0x3F);
+		buf[2] = 0x80 | (u & 0x3F);
+		return 3;
+	} else if (u <= 0x001FFFFF) {
+		buf[0] = 0xF0 | (u >> 18);
+		buf[1] = 0x80 | ((u >> 12) & 0x3F);
+		buf[2] = 0x80 | ((u >> 6) & 0x3F);
+		buf[3] = 0x80 | (u & 0x3F);
+		return 4;
+	} else {
+		/* Rare/illegal code points */
+		if (u <= 0x03FFFFFF) {
+			for (int i = 4; i >= 1; --i) {
+				buf[i] = 0x80 | (u & 0x3F);
+				u >>= 6;
+			}
+			buf[0] = 0xF8 | u;
+			return 5;
+		} else if (u <= 0x7FFFFFFF) {
+			for (int i = 5; i >= 1; --i) {
+				buf[i] = 0x80 | (u & 0x3F);
+				u >>= 6;
+			}
+			buf[0] = 0xFC | u;
+			return 6;
+		}
 		return -1;
 	}
-
-	if (i == 0) {
-		buf[0] = u;
-	}
-	else {
-		signed int j;
-		for (j = i; j > 0; --j) {
-			buf[j] = 0x80 | (u & 0x3f);
-			u >>= 6;
-		}
-
-		unsigned char mask = ~(0xFF >> (i + 1));
-		buf[0] = mask | u;
-	}
-
-	return i + 1;
 }
 
 /*
