@@ -254,8 +254,8 @@ class NFSGaneshaService(RESTController):
                     'status': status_dict[cluster_id][daemon_id]['status'],
                     'desc': status_dict[cluster_id][daemon_id]['desc']
                 }
-                for daemon_id in status_dict[cluster_id]
                 for cluster_id in status_dict
+                for daemon_id in status_dict[cluster_id]
             ]
 
         result = []
