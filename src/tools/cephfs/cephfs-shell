@@ -739,7 +739,7 @@ exists.')
                     print_long(cephfs.getcwd().decode(
                         'utf-8') + dir_name + '/' + path, is_dir, True)
                 elif args.long:
-                    print_long(cephfs.getcwd().decode( 'utf-8') +
+                    print_long(cephfs.getcwd().decode('utf-8') +
                                dir_name +
                                '/' +
                                path,
