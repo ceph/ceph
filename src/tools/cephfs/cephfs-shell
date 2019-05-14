@@ -1141,6 +1141,38 @@ sub-directories, files')
         else:
             super().do_help(line)
 
+    def complete_stat(self, text, line, begidx, endidx):
+        """
+        auto complete of file name.
+        """
+        return self.complete_filenames(text, line, begidx, endidx)
+
+    stat_parser = argparse.ArgumentParser(
+                  description='Display file or file system status')
+    stat_parser.add_argument('name', type=str, help='Name of the file', nargs='+')
+
+    @with_argparser(stat_parser)
+    def do_stat(self, args):
+        """
+        Display file or file system status
+        """
+        for files in args.name:
+            try:
+                stat = cephfs.stat(files)
+                atime = stat.st_atime.isoformat(' ')
+                mtime = stat.st_mtime.isoformat(' ')
+                ctime = stat.st_mtime.isoformat(' ')
+
+                self.poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n\
+Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: {:o}/{}\tUid: {:d}\tGid: {:d}\n\
+Access: {}\nModify: {}\nChange: {}".format(files, stat.st_size, stat.st_blocks,
+                             stat.st_blksize, stat.st_dev, stat.st_ino,
+                             stat.st_nlink, stat.st_mode,
+                             mode_notation(stat.st_mode), stat.st_uid,
+                             stat.st_gid, atime, mtime, ctime))
+            except libcephfs.Error:
+                self.poutput("{}: no such file or directory".format(files))
+
 
 if __name__ == '__main__':
     config_file = ''
