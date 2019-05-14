@@ -1123,6 +1123,78 @@ sub-directories, files')
                 self.poutput('{:10s} {}'.format(humansize(int(cephfs.getxattr(to_bytes(
                     dir_), 'ceph.dir.rbytes').decode('utf-8'))), '.' + dir_))
 
+    quota_parser = argparse.ArgumentParser(
+        description='Quota management for a Directory')
+    quota_parser.add_argument('op', choices=['get', 'set'],
+                              help='Quota operation type.')
+    quota_parser.add_argument('dir', type=str, help='Name of the directory.')
+    quota_parser.add_argument('--max_bytes', type=int, default=-1, nargs='?',
+                              help='Max cumulative size of the data under '
+                                   'this directory.')
+    quota_parser.add_argument('--max_files', type=int, default=-1, nargs='?',
+                              help='Total number of files under this '
+                                   'directory tree.')
+
+    @with_argparser(quota_parser)
+    def do_quota(self, args):
+        """
+        Quota management.
+        """
+        if not is_dir_exists(args.dir):
+            self.poutput("error: no such directory '%s'" % args.dir)
+            return
+
+        if args.op == 'set':
+            if (args.max_bytes == -1) and (args.max_files == -1):
+                self.poutput('please specify either --max_bytes or '
+                             '--max_files or both')
+                return
+
+            if args.max_bytes >= 0:
+                max_bytes = to_bytes(str(args.max_bytes))
+                try:
+                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                                    max_bytes, len(max_bytes),
+                                    os.XATTR_CREATE)
+                    self.poutput('max_bytes set to %d' % args.max_bytes)
+                except:
+                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                                    max_bytes, len(max_bytes),
+                                    os.XATTR_REPLACE)
+                    self.poutput('max_bytes reset to %d' % args.max_bytes)
+
+            if args.max_files >= 0:
+                max_files = to_bytes(str(args.max_files))
+                try:
+                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                                    max_files, len(max_files),
+                                    os.XATTR_CREATE)
+                    self.poutput('max_files set to %d' % args.max_files)
+                except:
+                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                                    max_files, len(max_files),
+                                    os.XATTR_REPLACE)
+                    self.poutput('max_files reset to %d' % args.max_files)
+        elif args.op == 'get':
+            max_bytes = '0'
+            max_files = '0'
+            try:
+                max_bytes = cephfs.getxattr(to_bytes(args.dir),
+                                            'ceph.quota.max_bytes')
+                self.poutput('max_bytes: %s' % max_bytes)
+            except:
+                self.poutput('max_bytes is not set')
+                pass
+
+            try:
+                max_files = cephfs.getxattr(to_bytes(args.dir),
+                                            'ceph.quota.max_files')
+                self.poutput('max_files: %s' % max_files)
+            except:
+                self.poutput('max_files is not set')
+                pass
+
+
     def do_help(self, line):
         """
         Get details about a command.
