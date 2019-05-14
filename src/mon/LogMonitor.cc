@@ -143,26 +143,28 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 		<< " host:" << channels.log_to_graylog_host << dendl;
       }
 
-      string log_file = channels.get_log_file(channel);
-      dout(20) << __func__ << " logging for channel '" << channel
-               << "' to file '" << log_file << "'" << dendl;
+      if (g_conf()->mon_cluster_log_to_file) {
+	string log_file = channels.get_log_file(channel);
+	dout(20) << __func__ << " logging for channel '" << channel
+		 << "' to file '" << log_file << "'" << dendl;
 
-      if (!log_file.empty()) {
-        string log_file_level = channels.get_log_file_level(channel);
-        if (log_file_level.empty()) {
-          dout(1) << __func__ << " warning: log file level not defined for"
-                  << " channel '" << channel << "' yet a log file is --"
-                  << " will assume lowest level possible" << dendl;
-        }
+	if (!log_file.empty()) {
+	  string log_file_level = channels.get_log_file_level(channel);
+	  if (log_file_level.empty()) {
+	    dout(1) << __func__ << " warning: log file level not defined for"
+		    << " channel '" << channel << "' yet a log file is --"
+		    << " will assume lowest level possible" << dendl;
+	  }
 
-	int min = string_to_syslog_level(log_file_level);
-	int l = clog_type_to_syslog_level(le.prio);
-	if (l <= min) {
-	  stringstream ss;
-	  ss << le << "\n";
-          // init entry if DNE
-          bufferlist &blog = channel_blog[channel];
-          blog.append(ss.str());
+	  int min = string_to_syslog_level(log_file_level);
+	  int l = clog_type_to_syslog_level(le.prio);
+	  if (l <= min) {
+	    stringstream ss;
+	    ss << le << "\n";
+	    // init entry if DNE
+	    bufferlist &blog = channel_blog[channel];
+	    blog.append(ss.str());
+	  }
 	}
       }
 
@@ -715,70 +717,78 @@ void LogMonitor::update_log_channels()
 
   channels.clear();
 
-  int r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog,
-                                  oss, &channels.log_to_syslog,
-                                  CLOG_CONFIG_DEFAULT_KEY);
+  int r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_syslog"),
+    oss, &channels.log_to_syslog,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog'" << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog_level,
-                              oss, &channels.syslog_level,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_syslog_level"),
+    oss, &channels.syslog_level,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_level'"
          << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_syslog_facility,
-                              oss, &channels.syslog_facility,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_syslog_facility"),
+    oss, &channels.syslog_facility,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_syslog_facility'"
          << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_file, oss,
-                              &channels.log_file,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_file"), oss,
+    &channels.log_file,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_file'" << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_file_level, oss,
-                              &channels.log_file_level,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_file_level"), oss,
+    &channels.log_file_level,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_file_level'"
          << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog, oss,
-                              &channels.log_to_graylog,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_graylog"), oss,
+    &channels.log_to_graylog,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_graylog'"
          << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog_host, oss,
-                              &channels.log_to_graylog_host,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_graylog_host"), oss,
+    &channels.log_to_graylog_host,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_host'"
          << dendl;
     return;
   }
 
-  r = get_conf_str_map_helper(g_conf()->mon_cluster_log_to_graylog_port, oss,
-                              &channels.log_to_graylog_port,
-                              CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    g_conf().get_val<string>("mon_cluster_log_to_graylog_port"), oss,
+    &channels.log_to_graylog_port,
+    CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     derr << __func__ << " error parsing 'mon_cluster_log_to_graylog_port'"
          << dendl;

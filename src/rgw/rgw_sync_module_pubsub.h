@@ -23,6 +23,7 @@ class RGWPSSyncModuleInstance : public RGWSyncModuleInstance {
   JSONFormattable effective_conf;
 public:
   RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
+  ~RGWPSSyncModuleInstance();
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   bool supports_user_writes() override {

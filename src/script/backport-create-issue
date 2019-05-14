@@ -189,7 +189,7 @@ def update_relations(r, issue, dry_run):
             logging.error(url(issue) + " requires backport to " +
                 "unknown release " + release)
             break
-        subject = release + ": " + issue['subject']
+        subject = (release + ": " + issue['subject'])[:255]
         if dry_run:
             logging.info(url(issue) + " add backport to " + release)
             continue

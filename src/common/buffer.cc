@@ -1747,7 +1747,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     return -err;
   }
 
-  if (off > st.st_size) {
+  if (off > (uint64_t)st.st_size) {
     std::ostringstream oss;
     oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
     *error = oss.str();
@@ -1759,7 +1759,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     len = st.st_size - off;
   }
   ssize_t ret = lseek64(fd, off, SEEK_SET);
-  if (ret != off) {
+  if (ret != (ssize_t)off) {
     return -errno;
   }
 
@@ -1771,7 +1771,7 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
     *error = oss.str();
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return ret;
-  } else if (ret != len) {
+  } else if (ret != (ssize_t)len) {
     // Premature EOF.
     // Perhaps the file changed between stat() and read()?
     std::ostringstream oss;
@@ -2082,26 +2082,38 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   out.fill('0');
 
   unsigned per = 16;
-  bool was_zeros = false, did_star = false;
+  char last_row_char = '\0';
+  bool was_same = false, did_star = false;
   for (unsigned o=0; o<length(); o += per) {
+    if (o == 0) {
+      last_row_char = (*this)[o];
+    }
+
     if (o + per < length()) {
-      bool row_is_zeros = true;
+      bool row_is_same = true;
       for (unsigned i=0; i<per && o+i<length(); i++) {
-	if ((*this)[o+i]) {
-	  row_is_zeros = false;
+        char current_char = (*this)[o+i];
+        if (current_char != last_row_char) {
+          if (i == 0) {
+            last_row_char = current_char;
+            was_same = false;
+            did_star = false;
+          } else {
+	    row_is_same = false;
+          }
 	}
       }
-      if (row_is_zeros) {
-	if (was_zeros) {
+      if (row_is_same) {
+	if (was_same) {
 	  if (!did_star) {
 	    out << "\n*";
 	    did_star = true;
 	  }
 	  continue;
 	}
-	was_zeros = true;
+	was_same = true;
       } else {
-	was_zeros = false;
+	was_same = false;
 	did_star = false;
       }
     }

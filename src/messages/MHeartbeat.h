@@ -20,9 +20,7 @@
 #include "msg/Message.h"
 #include "common/DecayCounter.h"
 
-class MHeartbeat : public MessageInstance<MHeartbeat> {
-public:
-  friend factory;
+class MHeartbeat : public Message {
 private:
   mds_load_t load;
   __s32        beat = 0;
@@ -36,12 +34,12 @@ private:
   map<mds_rank_t, float>& get_import_map() { return import_map; }
 
 protected:
-  MHeartbeat() : MessageInstance(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
+  MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)
-    : MessageInstance(MSG_MDS_HEARTBEAT),
-      load(load) {
-    this->beat = beat;
-  }
+    : Message(MSG_MDS_HEARTBEAT),
+      load(load),
+      beat(beat)
+  {}
   ~MHeartbeat() override {}
 
 public:
@@ -59,7 +57,9 @@ public:
     decode(beat, p);
     decode(import_map, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

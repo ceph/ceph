@@ -77,7 +77,7 @@ struct CompatSet {
       remove(f.id);
     }
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       using ceph::encode;
       /* See below, mask always has the lowest bit set in memory, but
        * unset in the encoding */
@@ -85,7 +85,7 @@ struct CompatSet {
       encode(names, bl);
     }
 
-    void decode(bufferlist::const_iterator& bl) {
+    void decode(ceph::buffer::list::const_iterator& bl) {
       using ceph::decode;
       decode(mask, bl);
       decode(names, bl);
@@ -111,7 +111,7 @@ struct CompatSet {
       }
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       for (auto p = names.cbegin(); p != names.cend(); ++p) {
 	char s[18];
 	snprintf(s, sizeof(s), "feature_%llu", (unsigned long long)p->first);
@@ -222,19 +222,19 @@ struct CompatSet {
     return true;
   }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     compat.encode(bl);
     ro_compat.encode(bl);
     incompat.encode(bl);
   }
-  
-  void decode(bufferlist::const_iterator& bl) {
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
     compat.decode(bl);
     ro_compat.decode(bl);
     incompat.decode(bl);
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->open_object_section("compat");
     compat.dump(f);
     f->close_section();

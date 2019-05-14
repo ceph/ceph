@@ -185,6 +185,29 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
   return init.result.get();
 }
 
+/// Calls IoCtx::aio_notify() and arranges for the AioCompletion to call a
+/// given handler with signature (boost::system::error_code, bufferlist).
+template <typename ExecutionContext, typename CompletionToken>
+auto async_notify(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
+                  bufferlist& bl, uint64_t timeout_ms, CompletionToken &&token)
+{
+  using Op = detail::AsyncOp<bufferlist>;
+  using Signature = typename Op::Signature;
+  boost::asio::async_completion<CompletionToken, Signature> init(token);
+  auto p = Op::create(ctx.get_executor(), init.completion_handler);
+  auto& op = p->user_data;
+
+  int ret = io.aio_notify(oid, op.aio_completion.get(),
+                          bl, timeout_ms, &op.result);
+  if (ret < 0) {
+    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    ceph::async::post(std::move(p), ec, bufferlist{});
+  } else {
+    p.release(); // release ownership until completion
+  }
+  return init.result.get();
+}
+
 } // namespace librados
 
 #endif // LIBRADOS_ASIO_H

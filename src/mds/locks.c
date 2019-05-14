@@ -1,8 +1,3 @@
-// there must be a better way?
-typedef char bool;
-#define false 0
-#define true  1
-
 #include "include/int_types.h"
 
 #include <string.h>

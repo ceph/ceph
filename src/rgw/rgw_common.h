@@ -139,6 +139,7 @@ using ceph::crypto::MD5;
 #define RGW_REST_S3             0x4
 #define RGW_REST_WEBSITE     0x8
 #define RGW_REST_STS            0x10
+#define RGW_REST_IAM            0x20
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
@@ -234,6 +235,7 @@ using ceph::crypto::MD5;
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
+#define ERR_LIMIT_EXCEEDED       2302
 
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
@@ -695,7 +697,7 @@ struct rgw_placement_rule {
 
   void encode(bufferlist& bl) const {
     /* no ENCODE_START/END due to backward compatibility */
-    std::string s = to_str_explicit();
+    std::string s = to_str();
     ceph::encode(s, bl);
   }
 
@@ -720,12 +722,11 @@ struct rgw_placement_rule {
     size_t pos = s.find("/");
     if (pos == std::string::npos) {
       name = s;
+      storage_class.clear();
       return;
     }
     name = s.substr(0, pos);
-    if (pos < s.size() - 1) {
-      storage_class = s.substr(pos + 1);
-    }
+    storage_class = s.substr(pos + 1);
   }
 
   bool standard_storage_class() const {
@@ -2451,12 +2452,12 @@ rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policie
                           const rgw::IAM::Environment& env,
                           boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
-                          const rgw::IAM::ARN& arn);
+                          const rgw::ARN& arn);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const vector<rgw::IAM::Policy>& user_policies,
-                            const rgw::IAM::ARN& res,
+                            const rgw::ARN& res,
                             const uint64_t op);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct req_state * const s,
@@ -2464,7 +2465,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       const int perm);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
-                            const rgw::IAM::ARN& res,
+                            const rgw::ARN& res,
                             const uint64_t op);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct req_state * const s,
@@ -2666,6 +2667,18 @@ static inline string rgw_bl_str(ceph::buffer::list& raw)
     s.resize(len);
   }
   return s;
+}
+
+template <typename T>
+int decode_bl(bufferlist& bl, T& t)
+{
+  auto iter = bl.cbegin();
+  try {
+    decode(t, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
 }
 
 #endif

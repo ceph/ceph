@@ -10,6 +10,7 @@ import { forkJoin, Subscription } from 'rxjs';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import {
@@ -62,6 +63,8 @@ export class PoolFormComponent implements OnInit {
     sourceType: RbdConfigurationSourceField;
   }>();
   currentConfigurationValues: { [configKey: string]: any } = {};
+  action: string;
+  resource: string;
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,
@@ -74,9 +77,12 @@ export class PoolFormComponent implements OnInit {
     private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
-    this.editing = this.router.url.startsWith('/pool/edit');
+    this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.resource = this.i18n('pool');
     this.authenticate();
     this.createForm();
   }
@@ -109,7 +115,7 @@ export class PoolFormComponent implements OnInit {
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [Validators.pattern(/^[\.A-Za-z0-9_/-]+$/), Validators.required]
+          validators: [Validators.pattern(/^[.A-Za-z0-9_/-]+$/), Validators.required]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
@@ -224,6 +230,7 @@ export class PoolFormComponent implements OnInit {
         this.form.silentSet(controlName, value);
       }
     });
+    this.data.pgs = this.form.getValue('pgNum');
     this.data.applications.selected = pool.application_metadata;
   }
 
@@ -396,11 +403,6 @@ export class PoolFormComponent implements OnInit {
 
   private setComplexValidators() {
     if (this.editing) {
-      this.form
-        .get('pgNum')
-        .setValidators(
-          CdValidators.custom('noDecrease', (pgs) => this.data.pool && pgs < this.data.pool.pg_num)
-        );
       this.form
         .get('name')
         .setValidators([
@@ -649,10 +651,10 @@ export class PoolFormComponent implements OnInit {
   private triggerApiTask(pool) {
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('pool/' + (this.editing ? 'edit' : 'create'), {
+        task: new FinishedTask('pool/' + (this.editing ? URLVerbs.EDIT : URLVerbs.CREATE), {
           pool_name: pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool
         }),
-        call: this.poolService[this.editing ? 'update' : 'create'](pool)
+        call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
       .subscribe(
         undefined,

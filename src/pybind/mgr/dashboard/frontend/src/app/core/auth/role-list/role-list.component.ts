@@ -7,6 +7,7 @@ import { forkJoin } from 'rxjs';
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -16,11 +17,15 @@ import { Permission } from '../../../shared/models/permissions';
 import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
+
+const BASE_URL = 'user-management/roles';
 
 @Component({
   selector: 'cd-role-list',
   templateUrl: './role-list.component.html',
-  styleUrls: ['./role-list.component.scss']
+  styleUrls: ['./role-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RoleListComponent implements OnInit {
   permission: Permission;
@@ -39,29 +44,31 @@ export class RoleListComponent implements OnInit {
     private authStorageService: AuthStorageService,
     private modalService: BsModalService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    private urlBuilder: URLBuilderService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
-      routerLink: () => '/user-management/roles/add',
-      name: this.i18n('Add')
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       routerLink: () =>
-        this.selection.first() && `/user-management/roles/edit/${this.selection.first().name}`,
-      name: this.i18n('Edit')
+        this.selection.first() && this.urlBuilder.getEdit(this.selection.first().name),
+      name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       click: () => this.deleteRoleModal(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }

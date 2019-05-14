@@ -13,6 +13,7 @@ import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { IopsPipe } from './iops.pipe';
+import { IscsiBackstorePipe } from './iscsi-backstore.pipe';
 import { ListPipe } from './list.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
@@ -33,6 +34,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     CephShortVersionPipe,
     CephReleaseNamePipe,
     RelativeDatePipe,
+    IscsiBackstorePipe,
     ListPipe,
     LogPriorityPipe,
     FilterPipe,
@@ -55,6 +57,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     CephShortVersionPipe,
     CephReleaseNamePipe,
     RelativeDatePipe,
+    IscsiBackstorePipe,
     ListPipe,
     LogPriorityPipe,
     FilterPipe,
@@ -77,6 +80,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     DimlessBinaryPerSecondPipe,
     DimlessPipe,
     RelativeDatePipe,
+    IscsiBackstorePipe,
     ListPipe,
     LogPriorityPipe,
     CdDatePipe,

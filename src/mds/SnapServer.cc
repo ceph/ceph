@@ -159,7 +159,7 @@ void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
   assert (0 == "tid not found");
 }
 
-void SnapServer::_commit(version_t tid, MMDSTableRequest::const_ref req)
+void SnapServer::_commit(version_t tid, cref_t<MMDSTableRequest> req)
 {
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
@@ -266,14 +266,14 @@ bool SnapServer::_notify_prep(version_t tid)
   ceph_assert(version == tid);
 
   for (auto &p : active_clients) {
-    auto m = MMDSTableRequest::create(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+    auto m = make_message<MMDSTableRequest>(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
     m->bl = bl;
     mds->send_message_mds(m, p);
   }
   return true;
 }
 
-void SnapServer::handle_query(const MMDSTableRequest::const_ref &req)
+void SnapServer::handle_query(const cref_t<MMDSTableRequest> &req)
 {
   using ceph::encode;
   using ceph::decode;
@@ -281,7 +281,7 @@ void SnapServer::handle_query(const MMDSTableRequest::const_ref &req)
   auto p = req->bl.cbegin();
   decode(op, p);
 
-  auto reply = MMDSTableRequest::create(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+  auto reply = make_message<MMDSTableRequest>(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
 
   switch (op) {
     case 'F': // full
@@ -353,7 +353,7 @@ void SnapServer::check_osd_map(bool force)
 
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
-    auto m = MRemoveSnaps::create(all_purge);
+    auto m = make_message<MRemoveSnaps>(all_purge);
     mon_client->send_mon_message(m.detach());
   }
 

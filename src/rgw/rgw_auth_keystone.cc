@@ -95,7 +95,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
 
   validate.set_url(url);
 
-  int ret = validate.process();
+  int ret = validate.process(null_yield);
   if (ret < 0) {
     throw ret;
   }
@@ -352,7 +352,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_
   validate.set_send_length(os.str().length());
 
   /* send request */
-  ret = validate.process();
+  ret = validate.process(null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
                   << token_body_bl.c_str() << dendl;
@@ -428,7 +428,7 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
   secret.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
 
   /* send request */
-  ret = secret.process();
+  ret = secret.process(null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: secret fetching error: "
                   << token_body_bl.c_str() << dendl;

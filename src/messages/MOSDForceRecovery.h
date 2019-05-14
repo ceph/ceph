@@ -31,10 +31,8 @@ static const int OFR_BACKFILL = 2;
 // cancel priority boost, requeue if necessary
 static const int OFR_CANCEL = 4;
 
-class MOSDForceRecovery : public MessageInstance<MOSDForceRecovery> {
+class MOSDForceRecovery : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
 
@@ -42,12 +40,12 @@ public:
   vector<spg_t> forced_pgs;
   uint8_t options = 0;
 
-  MOSDForceRecovery() : MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDForceRecovery() : Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
-    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), options(opts) {}
   MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
-    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
   ~MOSDForceRecovery() {}
@@ -107,6 +105,9 @@ public:
     decode(forced_pgs, p);
     decode(options, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif /* CEPH_MOSDFORCERECOVERY_H_ */

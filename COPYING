@@ -154,3 +154,6 @@ Files: src/ceph-volume/plugin/zfs/*
 Copyright: 2018, Willem Jan Withagen
 License: BSD 3-clause
 
+Files: src/include/function2.hpp
+Copyright: 2015-2018, Denis Blank
+License: Boost Software License, Version 1.0

@@ -24,7 +24,7 @@
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
-#include "crimson/os/Transaction.h"
+#include "os/Transaction.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
@@ -36,12 +36,6 @@
 namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
-  }
-
-  template<typename Message, typename... Args>
-  Ref<Message> make_message(Args&&... args)
-  {
-    return {new Message{std::forward<Args>(args)...}, false};
   }
   static constexpr int TICK_INTERVAL = 1;
 }
@@ -59,15 +53,19 @@ OSD::OSD(int id, uint32_t nonce,
     beacon_timer{[this] { send_beacon(); }},
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
-    monc{new ceph::mon::Client{public_msgr}},
+    monc{new ceph::mon::Client{public_msgr, *this}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    heartbeat{new Heartbeat{whoami, nonce, *this, *monc,
-                            hb_front_msgr, hb_back_msgr}},
+    heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
     store{std::make_unique<ceph::os::CyanStore>(
       local_conf().get_val<std::string>("osd_data"))}
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
+  for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
+                    std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
+    msgr.get().set_auth_server(monc.get());
+    msgr.get().set_auth_client(monc.get());
+  }
 }
 
 OSD::~OSD() = default;
@@ -134,10 +132,7 @@ namespace {
     if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
-    // TODO: v2: ::pick_addresses() returns v2 addresses, but crimson-msgr does
-    // not support v2 yet. remove following set_type() once v2 support is ready.
     for (auto addr : addrs.v) {
-      addr.set_type(addr.TYPE_LEGACY);
       logger().info("picked address {}", addr);
     }
     return addrs;
@@ -186,14 +181,6 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr)}) {
-      if (local_conf()->ms_crc_data) {
-        msgr.get().set_crc_data();
-      }
-      if (local_conf()->ms_crc_header) {
-        msgr.get().set_crc_header();
-      }
-    }
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
     dispatchers.push_front(mgrc.get());
@@ -251,7 +238,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
-  } else if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+  } else if (osdmap->require_osd_release < ceph_release_t::luminous) {
     logger().error("osdmap require_osd_release < luminous; please upgrade to luminous");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
@@ -372,7 +359,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   });
 }
 
-seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
+seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
 {
   if (state.is_stopping()) {
     return seastar::now();
@@ -416,6 +403,13 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
 {
   logger().warn("ms_handle_remote_reset");
   return seastar::now();
+}
+
+void OSD::handle_authentication(const EntityName& name,
+                                 uint64_t global_id,
+                                 const AuthCapsInfo& caps)
+{
+  // todo
 }
 
 MessageRef OSD::get_stats()
@@ -526,7 +520,7 @@ seastar::future<> OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-seastar::future<> OSD::handle_osd_map(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_osd_map(ceph::net::Connection* conn,
                                       Ref<MOSDMap> m)
 {
   logger().info("handle_osd_map {}", *m);
@@ -626,6 +620,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
           std::chrono::seconds(TICK_INTERVAL));
       }
     }
+    check_osdmap_features();
     // yay!
     return consume_map(osdmap->get_epoch());
   }).then([m, this] {
@@ -656,7 +651,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   });
 }
 
-seastar::future<> OSD::handle_osd_op(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
                                      Ref<MOSDOp> m)
 {
   return wait_for_map(m->get_map_epoch()).then([=](epoch_t epoch) {
@@ -737,7 +732,7 @@ void OSD::update_heartbeat_peers()
                                  &up, nullptr,
                                  &acting, nullptr);
     for (auto osd : boost::join(up, acting)) {
-      if (osd != CRUSH_ITEM_NONE) {
+      if (osd != CRUSH_ITEM_NONE && osd != whoami) {
         heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
@@ -745,7 +740,7 @@ void OSD::update_heartbeat_peers()
   heartbeat->update_peers(whoami);
 }
 
-seastar::future<> OSD::handle_pg_notify(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_notify(ceph::net::Connection* conn,
                                         Ref<MOSDPGNotify> m)
 {
   // assuming all pgs reside in a single shard
@@ -774,7 +769,7 @@ seastar::future<> OSD::handle_pg_notify(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_info(ceph::net::Connection* conn,
                                       Ref<MOSDPGInfo> m)
 {
   // assuming all pgs reside in a single shard
@@ -794,7 +789,7 @@ seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_query(ceph::net::Connection* conn,
                                        Ref<MOSDPGQuery> m)
 {
   const int from = m->get_source().num();
@@ -810,7 +805,7 @@ seastar::future<> OSD::handle_pg_query(ceph::net::ConnectionRef conn,
   });
 }
 
-seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
+seastar::future<> OSD::handle_pg_log(ceph::net::Connection* conn,
                                        Ref<MOSDPGLog> m)
 {
   const int from = m->get_source().num();
@@ -826,6 +821,15 @@ seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
                                               true,
                                               create_info);
   return do_peering_event(m->get_spg(), std::move(evt));
+}
+
+void OSD::check_osdmap_features()
+{
+  if (osdmap->require_osd_release < ceph_release_t::nautilus) {
+    heartbeat->set_require_authorizer(false);
+  } else {
+    heartbeat->set_require_authorizer(true);
+  }
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)

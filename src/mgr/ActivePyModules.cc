@@ -46,9 +46,11 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
+    cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
     server(server), py_module_registry(pmr), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
+  cmd_finisher.start();
 }
 
 ActivePyModules::~ActivePyModules() = default;
@@ -434,6 +436,9 @@ void ActivePyModules::shutdown()
     lock.Lock();
   }
 
+  cmd_finisher.wait_for_empty();
+  cmd_finisher.stop();
+
   modules.clear();
 }
 
@@ -593,10 +598,7 @@ void ActivePyModules::set_store(const std::string &module_name,
   
   Command set_cmd;
   {
-    PyThreadState *tstate = PyEval_SaveThread();
     std::lock_guard l(lock);
-    PyEval_RestoreThread(tstate);
-
     if (val) {
       store_cache[global_key] = *val;
     } else {
@@ -912,6 +914,7 @@ int ActivePyModules::handle_command(
   auto mod_iter = modules.find(module_name);
   if (mod_iter == modules.end()) {
     *ss << "Module '" << module_name << "' is not available";
+    lock.Unlock();
     return -ENOENT;
   }
 

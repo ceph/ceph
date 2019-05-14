@@ -12,6 +12,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "common/perf_counters.h"
+#include "auth/DummyAuth.h"
 #include "ring_buffer.h"
 
 #include <fio.h>
@@ -93,6 +94,7 @@ static std::string ptr_to_str(void *ptr)
  * global context refcounter, sigh.
  */
 static std::atomic<int> ctx_ref(1);
+static DummyAuthClientServer *g_dummy_auth;
 
 static void create_or_get_ceph_context(struct ceph_msgr_options *o)
 {
@@ -116,6 +118,8 @@ static void create_or_get_ceph_context(struct ceph_msgr_options *o)
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf.apply_changes(NULL);
+  g_dummy_auth = new DummyAuthClientServer(g_ceph_context);
+  g_dummy_auth->auth_registry.refresh_config();
 }
 
 static void put_ceph_context(void)
@@ -131,6 +135,7 @@ static void put_ceph_context(void)
     ostr << ">>>>>>>>>>>>>  PERFCOUNTERS END  <<<<<<<<<<<<" << std::endl;
 
     delete f;
+    delete g_dummy_auth;
     dout(0) <<  ostr.str() << dendl;
   }
 
@@ -209,7 +214,6 @@ public:
   FioDispatcher(struct ceph_msgr_data *data):
     Dispatcher(g_ceph_context),
     m_data(data) {
-    require_authorizer = false;
   }
   bool ms_can_fast_dispatch_any() const override {
     return true;
@@ -304,6 +308,9 @@ static Messenger *create_messenger(struct ceph_msgr_options *o)
   } else {
     msgr->set_default_policy(Messenger::Policy::lossless_client(0));
   }
+  msgr->set_auth_client(g_dummy_auth);
+  msgr->set_auth_server(g_dummy_auth);
+  msgr->set_require_authorizer(false);
   msgr->start();
 
   return msgr;

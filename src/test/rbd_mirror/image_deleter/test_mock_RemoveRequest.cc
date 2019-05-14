@@ -100,6 +100,7 @@ namespace mirror {
 namespace image_deleter {
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::Invoke;
 using ::testing::InSequence;
 using ::testing::Return;

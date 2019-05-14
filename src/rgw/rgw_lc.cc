@@ -522,10 +522,11 @@ struct lc_op_ctx {
 
   rgw_obj obj;
   RGWObjectCtx rctx;
+  const DoutPrefixProvider *dpp;
 
-  lc_op_ctx(op_env& _env, rgw_bucket_dir_entry& _o) : cct(_env.store->ctx()), env(_env), o(_o),
+  lc_op_ctx(op_env& _env, rgw_bucket_dir_entry& _o, const DoutPrefixProvider *_dpp) : cct(_env.store->ctx()), env(_env), o(_o),
                  store(env.store), bucket_info(env.bucket_info), op(env.op), ol(env.ol),
-                 obj(env.bucket_info.bucket, o.key), rctx(env.store) {}
+                 obj(env.bucket_info.bucket, o.key), rctx(env.store), dpp(_dpp) {}
 };
 
 static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
@@ -606,7 +607,7 @@ public:
   LCOpRule(op_env& _env) : env(_env) {}
 
   void build();
-  int process(rgw_bucket_dir_entry& o);
+  int process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp);
 };
 
 static int check_tags(lc_op_ctx& oc, bool *skip)
@@ -821,12 +822,12 @@ public:
     target_placement.storage_class = transition.storage_class;
 
     int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
-                                     target_placement, o.meta.mtime, o.versioned_epoch);
+                                     target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
+      ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
       return r;
     }
-    ldout(oc.cct, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
+    ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
     return 0;
   }
 };
@@ -885,9 +886,9 @@ void LCOpRule::build()
   }
 }
 
-int LCOpRule::process(rgw_bucket_dir_entry& o)
+int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
 {
-  lc_op_ctx ctx(env, o);
+  lc_op_ctx ctx(env, o, dpp);
 
   unique_ptr<LCOpAction> *selected = nullptr;
   real_time exp;
@@ -924,16 +925,16 @@ int LCOpRule::process(rgw_bucket_dir_entry& o)
     }
 
     if (!cont) {
-      ldout(env.store->ctx(), 20) << __func__ << "(): key=" << o.key << ": no rule match, skipping" << dendl;
+      ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": no rule match, skipping" << dendl;
       return 0;
     }
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldout(ctx.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
     }
-    ldout(ctx.cct, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
+    ldpp_dout(dpp, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
   }
 
   return 0;
@@ -1017,7 +1018,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     rgw_bucket_dir_entry o;
     for (; ol.get_obj(&o); ol.next()) {
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
-      int ret = orule.process(o);
+      int ret = orule.process(o, this);
       if (ret < 0) {
         ldpp_dout(this, 20) << "ERROR: orule.process() returned ret=" << ret << dendl;
       }

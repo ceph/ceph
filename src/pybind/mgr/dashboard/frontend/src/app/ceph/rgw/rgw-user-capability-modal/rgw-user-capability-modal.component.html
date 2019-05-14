@@ -1,6 +1,6 @@
 <div class="modal-header">
-  <h4 class="modal-title pull-left"
-      i18n>Capability</h4>
+  <h4 i18n="form title|Example: Create Pool@@formTitle"
+      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
   <button type="button"
           class="close pull-right"
           aria-label="Close"
@@ -75,13 +75,10 @@
 
   </div>
   <div class="modal-footer">
-    <cd-submit-button (submitAction)="onSubmit()"
-                      [form]="formGroup">
-      <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
-    </cd-submit-button>
-    <button class="btn btn-sm btn-default"
-            type="button"
-            (click)="bsModalRef.hide()"
-            i18n>Close</button>
+    <cd-submit-button
+      (submitAction)="onSubmit()"
+      i18n="form action button|Example: Create Pool@@formActionButton"
+      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
   </div>
 </form>

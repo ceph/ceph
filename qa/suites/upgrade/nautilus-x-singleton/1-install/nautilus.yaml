@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - \(MON_DOWN\)
+      - \(MGR_DOWN\)
+      - slow request
+meta:
+- desc: install ceph/nautilus latest
+tasks:
+- install:
+    branch: nautilus
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr-ssh
+    extra_packages: ['librados2']
+- print: "**** done install nautilus"
+- ceph:
+- print: "**** done ceph"

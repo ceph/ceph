@@ -111,6 +111,28 @@ class CephFSMount(object):
                 return True
         return False
 
+    def create_file(self, filename='testfile', dirname=None, user=None,
+                    check_status=True):
+        assert(self.is_mounted())
+
+        if not os.path.isabs(filename):
+            if dirname:
+                if os.path.isabs(dirname):
+                    path = os.path.join(dirname, filename)
+                else:
+                    path = os.path.join(self.mountpoint, dirname, filename)
+            else:
+                path = os.path.join(self.mountpoint, filename)
+        else:
+            path = filename
+
+        if user:
+            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c', 'touch ' + path]
+        else:
+            args = 'touch ' + path
+
+        return self.client_remote.run(args=args, check_status=check_status)
+
     def create_files(self):
         assert(self.is_mounted())
 
@@ -119,6 +141,11 @@ class CephFSMount(object):
             self.client_remote.run(args=[
                 'sudo', 'touch', os.path.join(self.mountpoint, suffix)
             ])
+
+    def test_create_file(self, filename='testfile', dirname=None, user=None,
+                         check_status=True):
+        return self.create_file(filename=filename, dirname=dirname, user=user,
+                                check_status=False)
 
     def check_files(self):
         assert(self.is_mounted())
@@ -155,10 +182,13 @@ class CephFSMount(object):
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, wait=True):
+    def run_shell(self, args, wait=True, stdin=None, check_status=True,
+                  omit_sudo=True):
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
         return self.client_remote.run(args=args, stdout=StringIO(),
-                                      stderr=StringIO(), wait=wait)
+                                      stderr=StringIO(), wait=wait,
+                                      stdin=stdin, check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def open_no_data(self, basename):
         """

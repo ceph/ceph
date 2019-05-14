@@ -13,6 +13,23 @@
 
 #define dout_subsys ceph_subsys_crush
 
+using std::cout;
+using std::list;
+using std::map;
+using std::make_pair;
+using std::ostream;
+using std::ostringstream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+using ceph::decode;
+using ceph::decode_nohead;
+using ceph::encode;
+using ceph::Formatter;
+
 bool CrushWrapper::has_legacy_rule_ids() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
@@ -1787,7 +1804,7 @@ int32_t CrushWrapper::_alloc_class_id() const {
     return class_id;
   }
   // wrapped, pick a random start and do exhaustive search
-  uint32_t upperlimit = numeric_limits<int32_t>::max();
+  uint32_t upperlimit = std::numeric_limits<int32_t>::max();
   upperlimit++;
   class_id = rand() % upperlimit;
   const auto start = class_id;
@@ -3060,7 +3077,7 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
   __u32 magic;
   decode(magic, blp);
   if (magic != CRUSH_MAGIC)
-    throw buffer::malformed_input("bad magic number");
+    throw ceph::buffer::malformed_input("bad magic number");
 
   decode(crush->max_buckets, blp);
   decode(crush->max_rules, blp);
@@ -3212,7 +3229,7 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::const_it
     {
       char str[128];
       snprintf(str, sizeof(str), "unsupported bucket algorithm: %d", alg);
-      throw buffer::malformed_input(str);
+      throw ceph::buffer::malformed_input(str);
     }
   }
   crush_bucket *bucket = reinterpret_cast<crush_bucket*>(calloc(1, size));

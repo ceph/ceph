@@ -9,6 +9,7 @@
 #include "common/async/yield_context.h"
 
 #include "include/types.h"
+#include "include/stringify.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -19,6 +20,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 #include "rgw_zone.h"
+#include "osd/osd_types.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone_utils.h"
@@ -29,6 +31,69 @@
 #define READ_CHUNK_LEN (512 * 1024)
 
 static std::map<std::string, std::string>* ext_mime_map;
+
+int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+                   librados::IoCtx& ioctx, bool create,
+		   bool mostly_omap)
+{
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  if (r == -ENOENT && create) {
+    r = rados->pool_create(pool.name.c_str());
+    if (r == -ERANGE) {
+      dout(0)
+        << __func__
+        << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
+        << " (this can be due to a pool or placement group misconfiguration, e.g."
+        << " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
+        << dendl;
+    }
+    if (r < 0 && r != -EEXIST) {
+      return r;
+    }
+
+    r = rados->ioctx_create(pool.name.c_str(), ioctx);
+    if (r < 0) {
+      return r;
+    }
+
+    r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+    if (r < 0 && r != -EOPNOTSUPP) {
+      return r;
+    }
+
+    if (mostly_omap) {
+      // set pg_autoscale_bias
+      bufferlist inbl;
+      float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
+      int r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
+	stringify(bias) + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+		 << pool.name << dendl;
+      }
+      // set pg_num_min
+      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
+      r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
+	stringify(min) + "\"}",
+	inbl, NULL, NULL);
+     if (r < 0) {
+       dout(10) << __func__ << " warning: failed to set pg_num_min on "
+		<< pool.name << dendl;
+      }
+    }
+  } else if (r < 0) {
+    return r;
+  }
+  if (!pool.ns.empty()) {
+    ioctx.set_namespace(pool.ns);
+  }
+  return 0;
+}
 
 int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
@@ -47,7 +112,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
 
   if (ret == -ENOENT) {
     ret = rgwstore->create_pool(pool);
@@ -57,7 +122,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data);
+                  .write(data, null_yield);
     }
   }
 
@@ -84,13 +149,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_p
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat();
+                 .stat(null_yield);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl);
+             .read(&bl, null_yield);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -123,7 +188,7 @@ int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string
   rgw_raw_obj obj(pool, oid);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove();
+               .remove(null_yield);
 }
 
 thread_local bool is_asio_thread = false;
@@ -169,6 +234,29 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   }
 #endif
   return ioctx.operate(oid, op);
+}
+
+int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto reply = librados::async_notify(context, ioctx, oid,
+                                        bl, timeout_ms, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(reply);
+    }
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
+#endif
+  return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
 
 void parse_mime_map_line(const char *start, const char *end)
@@ -330,7 +418,8 @@ int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
 }
 
 int RGWDataAccess::Object::put(bufferlist& data,
-			       map<string, bufferlist>& attrs)
+			       map<string, bufferlist>& attrs,
+                               const DoutPrefixProvider *dpp)
 {
   RGWRados *store = sd->store;
   CephContext *cct = store->ctx();
@@ -340,8 +429,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   RGWBucketInfo& bucket_info = bucket->bucket_info;
 
-  using namespace rgw::putobj;
-  rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   RGWObjectCtx obj_ctx(store);
   rgw_obj obj(bucket_info.bucket, key);
@@ -350,16 +438,14 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   string req_id = store->svc.zone_utils->unique_id(store->get_new_req_id());
 
-  AtomicObjectProcessor processor(&aio, store, bucket_info,
-                                  nullptr,
-                                  owner.get_id(),
-                                  obj_ctx, obj, olh_epoch, req_id);
+  using namespace rgw::putobj;
+  AtomicObjectProcessor processor(&aio, store, bucket_info, nullptr,
+                                  owner.get_id(), obj_ctx, obj, olh_epoch,
+                                  req_id, dpp, null_yield);
 
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
-
-  using namespace rgw::putobj;
 
   DataProcessor *filter = &processor;
 

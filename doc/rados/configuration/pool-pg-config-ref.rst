@@ -96,8 +96,8 @@ Ceph configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the average object number
               of a certain pool is greater than ``mon pg warn max object skew`` times
-              the average object number of the whole pool. (a non-positive number
-              disables this)
+              the average object number of the whole pool. (zero or a non-positive
+              number disables this). Note that this option applies to the managers.
 :Type: Float
 :Default: ``10``
 

@@ -220,6 +220,7 @@ public:
   set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
+  bool priority_convert = false;
 
   map<int,double> osd_weight;
 
@@ -701,6 +702,7 @@ public:
       pending_inc.new_flags &= ~flag;
     }
   }
+  void convert_pool_priorities(void);
 };
 
 #endif

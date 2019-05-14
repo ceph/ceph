@@ -22,14 +22,9 @@ export class PrometheusNotificationService {
   }
 
   refresh() {
-    const last = this.getLastNotification();
     this.prometheusService
-      .getNotificationSince(last)
+      .getNotifications(_.last(this.notifications))
       .subscribe((notifications) => this.handleNotifications(notifications));
-  }
-
-  private getLastNotification() {
-    return _.last(this.notifications) || {};
   }
 
   private handleNotifications(notifications: PrometheusNotification[]) {

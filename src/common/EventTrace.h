@@ -49,15 +49,15 @@
 class EventTrace {
 private:
   CephContext *ctx;
-  string file;
-  string func;
+  std::string file;
+  std::string func;
   int line;
   utime_t last_ts;
 
   static bool tpinit;
 
   static void init_tp(CephContext *_ctx);
-  static void set_message_attrs(const Message *m, string& oid, string& context, bool incl_oid);
+  static void set_message_attrs(const Message *m, std::string& oid, std::string& context, bool incl_oid);
 
 public:
 

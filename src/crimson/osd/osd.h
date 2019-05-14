@@ -10,6 +10,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
+#include "crimson/common/auth_handler.h"
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
@@ -46,6 +47,7 @@ template<typename T> using Ref = boost::intrusive_ptr<T>;
 
 class OSD : public ceph::net::Dispatcher,
 	    private OSDMapService,
+	    private ceph::common::AuthHandler,
 	    private ceph::mgr::WithStats {
   seastar::gate gate;
   const int whoami;
@@ -84,12 +86,18 @@ class OSD : public ceph::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m) override;
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) override;
   seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
+
   // mgr::WithStats methods
   MessageRef get_stats() override;
+
+  // AuthHandler methods
+  void handle_authentication(const EntityName& name,
+			     uint64_t global_id,
+			     const AuthCapsInfo& caps) final;
 
 public:
   OSD(int id, uint32_t nonce,
@@ -129,23 +137,23 @@ private:
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
-  seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_osd_map(ceph::net::Connection* conn,
                                    Ref<MOSDMap> m);
-  seastar::future<> handle_osd_op(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_osd_op(ceph::net::Connection* conn,
 				  Ref<MOSDOp> m);
-  seastar::future<> handle_pg_log(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
 				  Ref<MOSDPGLog> m);
-  seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_notify(ceph::net::Connection* conn,
 				     Ref<MOSDPGNotify> m);
-  seastar::future<> handle_pg_info(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_info(ceph::net::Connection* conn,
 				   Ref<MOSDPGInfo> m);
-  seastar::future<> handle_pg_query(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_pg_query(ceph::net::Connection* conn,
 				    Ref<MOSDPGQuery> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
-
+  void check_osdmap_features();
   // order the promises in descending order of the waited osdmap epoch,
   // so we can access all the waiters expecting a map whose epoch is less
   // than a given epoch

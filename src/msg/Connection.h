@@ -57,7 +57,7 @@ public:
   bool failed; // true if we are a lossy connection that has failed.
 
   int rx_buffers_version;
-  map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
+  std::map<ceph_tid_t,std::pair<ceph::buffer::list, int>> rx_buffers;
 
   // authentication state
   // FIXME make these private after ms_handle_authorizer is removed
@@ -109,6 +109,10 @@ public:
    * @return true if ready to send, or false otherwise
    */
   virtual bool is_connected() = 0;
+
+  virtual bool is_msgr2() const {
+    return false;
+  }
 
   Messenger *get_messenger() {
     return msgr;
@@ -215,7 +219,7 @@ public:
     return CEPH_CON_MODE_CRC;
   }
 
-  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
+  void post_rx_buffer(ceph_tid_t tid, ceph::buffer::list& bl) {
 #if 0
     Mutex::Locker l(lock);
     ++rx_buffers_version;

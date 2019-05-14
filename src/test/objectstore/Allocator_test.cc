@@ -18,8 +18,6 @@
 #include <boost/random/uniform_int.hpp>
 typedef boost::mt11213b gen_type;
 
-#if GTEST_HAS_PARAM_TEST
-
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
 public:
@@ -225,6 +223,16 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
   EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
 }
 
+TEST_P(AllocTest, test_alloc_39334)
+{
+  uint64_t block = 0x4000;
+  uint64_t size = 0x5d00000000;
+
+  init_alloc(size, block);
+  alloc->init_add_free(0x4000, 0x5cffffc000);
+  EXPECT_EQ(size - block, alloc->get_free());
+}
+
 TEST_P(AllocTest, test_alloc_fragmentation)
 {
   uint64_t capacity = 4 * 1024 * 1024;
@@ -318,12 +326,7 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   EXPECT_EQ(1u, tmp.size());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));
-
-#else
-
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-#endif

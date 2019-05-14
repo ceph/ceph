@@ -31,8 +31,6 @@
 #include "msg/async/Stack.h"
 
 
-#if GTEST_HAS_PARAM_TEST
-
 class NoopConfigObserver : public md_config_obs_t {
   std::list<std::string> options;
   const char **ptrs = 0;
@@ -1066,7 +1064,7 @@ TEST_P(NetworkWorkerTest, StressTest) {
 }
 
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   NetworkStack,
   NetworkWorkerTest,
   ::testing::Values(
@@ -1076,19 +1074,6 @@ INSTANTIATE_TEST_CASE_P(
     "posix"
   )
 );
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
-
 
 /*
  * Local Variables:

@@ -53,6 +53,7 @@ describe('ModuleStatusGuardService', () => {
     httpClient = TestBed.get(HttpClient);
     router = TestBed.get(Router);
     route = new ActivatedRouteSnapshot();
+    route.url = [];
     route.data = {
       moduleStatusGuardConfig: {
         apiPath: 'bar',

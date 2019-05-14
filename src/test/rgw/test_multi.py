@@ -70,6 +70,8 @@ class Cluster(multisite.Cluster):
             env = os.environ.copy()
             env['CEPH_NUM_MDS'] = '0'
             cmd += ['-n']
+            # cmd += ['-o']
+            # cmd += ['rgw_cache_enabled=false']
         bash(cmd, env=env)
         self.needs_reset = False
 
@@ -232,7 +234,7 @@ def init(parse_args):
     admin_user = multisite.User('zone.user')
 
     user_creds = gen_credentials()
-    user = multisite.User('tester')
+    user = multisite.User('tester', tenant=args.tenant)
 
     realm = multisite.Realm('r')
     if bootstrap:
@@ -346,14 +348,13 @@ def init(parse_args):
                     # create test user
                     arg = ['--display-name', '"Test User"']
                     arg += user_creds.credential_args()
-                    if args.tenant:
-                        cmd += ['--tenant', args.tenant]
                     user.create(zone, arg)
                 else:
                     # read users and update keys
                     admin_user.info(zone)
                     admin_creds = admin_user.credentials[0]
-                    user.info(zone)
+                    arg = []
+                    user.info(zone, arg)
                     user_creds = user.credentials[0]
 
     if not bootstrap:
@@ -361,7 +362,8 @@ def init(parse_args):
 
     config = Config(checkpoint_retries=args.checkpoint_retries,
                     checkpoint_delay=args.checkpoint_delay,
-                    reconfigure_delay=args.reconfigure_delay)
+                    reconfigure_delay=args.reconfigure_delay,
+                    tenant=args.tenant)
     init_multi(realm, user, config)
 
 def setup_module():

@@ -14,6 +14,18 @@ Options :
     -b, --batch FILE      Process a batch file.
     -t, --test FILE       Test against transcript(s) in FILE
 
+
+.. note::
+
+    Latest version of the cmd2 module is required for running cephfs-shell.
+    If CephFS is installed through source, execute cephfs-shell in the build
+    directory. It can also be executed as following using virtualenv:
+
+.. code:: bash
+
+    [build]$ virtualenv -p python3 venv && source venv/bin/activate && pip3 install cmd2
+    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/cephfs-shell
+
 Commands
 ========
 
@@ -253,6 +265,10 @@ shortcuts
 ---------
 
 Lists shortcuts (aliases) available
+
+Usage :
+
+    shortcuts
 
 history
 -------

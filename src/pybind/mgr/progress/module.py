@@ -30,8 +30,8 @@ class Event(object):
     def _refresh(self):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
-                                                                self._progress))
-        _module.update_progress_event(self.id, self._message, self._progress)
+                                                                self.progress))
+        _module.update_progress_event(self.id, self._message, self.progress)
 
     @property
     def message(self):
@@ -46,7 +46,7 @@ class Event(object):
         raise NotImplementedError()
 
     def summary(self):
-        return "{0} {1}".format(self.progress, self._message)
+        return "{0} {1}".format(self.progress, self.message)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -122,12 +122,12 @@ class PgRecoveryEvent(Event):
     Always call update() immediately after construction.
     """
 
-    def __init__(self, message, refs, which_pgs, evactuate_osds):
+    def __init__(self, message, refs, which_pgs, evacuate_osds):
         super(PgRecoveryEvent, self).__init__(message, refs)
 
         self._pgs = which_pgs
 
-        self._evacuate_osds = evactuate_osds
+        self._evacuate_osds = evacuate_osds
 
         self._original_pg_count = len(self._pgs)
 
@@ -149,10 +149,17 @@ class PgRecoveryEvent(Event):
 
         if self._original_bytes_recovered is None:
             self._original_bytes_recovered = {}
+            missing_pgs = []
             for pg in self._pgs:
                 pg_str = str(pg)
-                self._original_bytes_recovered[pg] = \
-                    pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                if pg_str in pg_to_state:
+                    self._original_bytes_recovered[pg] = \
+                        pg_to_state[pg_str]['stat_sum']['num_bytes_recovered']
+                else:
+                    missing_pgs.append(pg)
+            if pg_dump.get('pg_ready', False):
+                for pg in missing_pgs:
+                    self._pgs.remove(pg)
 
         complete_accumulate = 0.0
 
@@ -351,7 +358,7 @@ class Module(MgrModule):
             "Rebalancing after osd.{0} marked out".format(osd_id),
             refs=[("osd", osd_id)],
             which_pgs=affected_pgs,
-            evactuate_osds=[osd_id]
+            evacuate_osds=[osd_id]
         )
         ev.pg_update(self.get("pg_dump"), self.log)
         self._events[ev.id] = ev
@@ -470,14 +477,16 @@ class Module(MgrModule):
         self._shutdown.set()
         self.clear_all_progress_events()
 
-    def update(self, ev_id, ev_msg, ev_progress):
+    def update(self, ev_id, ev_msg, ev_progress, refs=None):
         """
         For calling from other mgr modules
         """
+        if refs is None:
+            refs = []
         try:
             ev = self._events[ev_id]
         except KeyError:
-            ev = RemoteEvent(ev_id, ev_msg, [])
+            ev = RemoteEvent(ev_id, ev_msg, refs)
             self._events[ev_id] = ev
             self.log.info("update: starting ev {0} ({1})".format(
                 ev_id, ev_msg))

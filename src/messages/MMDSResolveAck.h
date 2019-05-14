@@ -20,15 +20,13 @@
 #include "include/types.h"
 
 
-class MMDSResolveAck : public MessageInstance<MMDSResolveAck> {
+class MMDSResolveAck : public Message {
 public:
-  friend factory;
-
   map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : MessageInstance(MSG_MDS_RESOLVEACK) {}
+  MMDSResolveAck() : Message{MSG_MDS_RESOLVEACK} {}
   ~MMDSResolveAck() override {}
 
 public:
@@ -58,6 +56,9 @@ public:
     decode(commit, p);
     decode(abort, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

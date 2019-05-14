@@ -65,6 +65,7 @@ public:
 	      int = 0)
     : CephContext{}
   {}
+  CephContext(CephContext&&) = default;
   ~CephContext();
 
   uint32_t get_module_type() const;
@@ -201,7 +202,7 @@ public:
   bool check_experimental_feature_enabled(const std::string& feature,
 					  std::ostream *message);
 
-  PluginRegistry *get_plugin_registry() {
+  ceph::PluginRegistry *get_plugin_registry() {
     return _plugin_registry;
   }
 
@@ -313,7 +314,7 @@ private:
   ceph::spinlock _feature_lock;
   std::set<std::string> _experimental_features;
 
-  PluginRegistry *_plugin_registry;
+  ceph::PluginRegistry* _plugin_registry;
 
   md_config_obs_t *_lockdep_obs;
 

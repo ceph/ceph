@@ -421,6 +421,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
   return compat;
 }
 
@@ -1114,18 +1115,14 @@ void Monitor::bootstrap()
     monmap->calc_legacy_ranks();
   }
   dout(10) << "monmap " << *monmap << dendl;
-
-  if (monmap->min_mon_release &&
-      monmap->min_mon_release + 2 < (int)ceph_release()) {
-    derr << "current monmap has min_mon_release "
-	 << (int)monmap->min_mon_release
-	 << " (" << ceph_release_name(monmap->min_mon_release)
-	 << ") which is >2 releases older than me " << ceph_release()
-	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
-	 << dendl;
-    exit(0);
+  {
+    auto from_release = monmap->min_mon_release;
+    ostringstream err;
+    if (!can_upgrade_from(from_release, "min_mon_release", err)) {
+      derr << "current monmap has " << err.str() << " stopping." << dendl;
+      exit(0);
+    }
   }
-
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddrs());
   if (newrank < 0 && rank >= 0) {
@@ -1833,8 +1830,9 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " require release " << m->mon_release << " > "
-	 << ceph_release() << ", or missing features (have " << CEPH_FEATURES_ALL
+    derr << __func__ << " require release " << (int)m->mon_release << " > "
+	 << (int)ceph_release()
+	 << ", or missing features (have " << CEPH_FEATURES_ALL
 	 << ", required " << m->required_features
 	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
 	 << dendl;
@@ -1849,8 +1847,11 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
   uint64_t missing = required_features & ~m->get_connection()->get_features();
-  if (m->mon_release < monmap->min_mon_release || missing) {
-    dout(1) << " peer " << m->get_source_addr() << " release " << m->mon_release
+  if ((m->mon_release != ceph_release_t::unknown &&
+       m->mon_release < monmap->min_mon_release) ||
+      missing) {
+    dout(1) << " peer " << m->get_source_addr()
+	    << " release " << m->mon_release
 	    << " < min_mon_release " << monmap->min_mon_release
 	    << ", or missing features " << missing << dendl;
     MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
@@ -2004,7 +2005,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 
   // did the existing cluster complete upgrade to luminous?
   if (osdmon()->osdmap.get_epoch()) {
-    if (osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    if (osdmon()->osdmap.require_osd_release < ceph_release_t::luminous) {
       derr << __func__ << " existing cluster has not completed upgrade to"
 	   << " luminous; 'ceph osd require_osd_release luminous' before"
 	   << " upgrading" << dendl;
@@ -2047,7 +2048,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       return;
     }
 
-    unsigned need = monmap->size() / 2 + 1;
+    unsigned need = monmap->min_quorum_size();
     dout(10) << " outside_quorum now " << outside_quorum << ", need " << need << dendl;
     if (outside_quorum.size() >= need) {
       if (outside_quorum.count(name)) {
@@ -2135,7 +2136,7 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
-			   int min_mon_release,
+			   ceph_release_t min_mon_release,
 			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
@@ -2223,7 +2224,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
                             uint64_t features,
                             const mon_feature_t& mon_features,
-			    int min_mon_release)
+			    ceph_release_t min_mon_release)
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -2275,7 +2276,6 @@ void Monitor::collect_metadata(Metadata *m)
   // infer storage device
   string devname = store->get_devname();
   set<string> devnames;
-  derr << " devname " << devname << dendl;
   get_raw_devices(devname, &devnames);
   (*m)["devices"] = stringify(devnames);
   string devids;
@@ -2393,6 +2393,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_NAUTILUS));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_OCTOPUS)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_OCTOPUS));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_OCTOPUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2418,6 +2425,9 @@ void Monitor::calc_quorum_requirements()
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS)) {
     required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS |
       CEPH_FEATUREMASK_CEPHX_V2;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OCTOPUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_OCTOPUS;
   }
 
   // monmap
@@ -3368,7 +3378,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon sync force" &&
       prefix != "mon metadata" &&
       prefix != "mon versions" &&
-      prefix != "mon count-metadata") {
+      prefix != "mon count-metadata" &&
+      prefix != "mon ok-to-stop" &&
+      prefix != "mon ok-to-add-offline" &&
+      prefix != "mon ok-to-rm") {
     monmon()->dispatch(op);
     return;
   }
@@ -3698,6 +3711,59 @@ void Monitor::handle_command(MonOpRequestRef op)
     rdata.append(ds);
     rs = "";
     r = 0;
+  } else if (prefix == "mon ok-to-stop") {
+    vector<string> ids;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+      r = -EINVAL;
+      goto out;
+    }
+    set<string> wouldbe;
+    for (auto rank : quorum) {
+      wouldbe.insert(monmap->get_name(rank));
+    }
+    for (auto& n : ids) {
+      if (monmap->contains(n)) {
+	wouldbe.erase(n);
+      }
+    }
+    if (wouldbe.size() < monmap->min_quorum_size()) {
+      r = -EBUSY;
+      rs = "not enough monitors would be available (" + stringify(wouldbe) +
+	") after stopping mons " + stringify(ids);
+      goto out;
+    }
+    r = 0;
+    rs = "quorum should be preserved (" + stringify(wouldbe) +
+      ") after stopping " + stringify(ids);
+  } else if (prefix == "mon ok-to-add-offline") {
+    if (quorum.size() < monmap->min_quorum_size(monmap->size() + 1)) {
+      rs = "adding a monitor may break quorum (until that monitor starts)";
+      r = -EBUSY;
+      goto out;
+    }
+    rs = "adding another mon that is not yet online will not break quorum";
+    r = 0;
+  } else if (prefix == "mon ok-to-rm") {
+    string id;
+    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      r = -EINVAL;
+      rs = "must specify a monitor id";
+      goto out;
+    }
+    if (!monmap->contains(id)) {
+      r = 0;
+      rs = "mon." + id + " does not exist";
+      goto out;
+    }
+    int rank = monmap->get_rank(id);
+    if (quorum.count(rank) &&
+	quorum.size() - 1 < monmap->min_quorum_size(monmap->size() - 1)) {
+      r = -EBUSY;
+      rs = "removing mon." + id + " would break quorum";
+      goto out;
+    }
+    r = 0;
+    rs = "safe to remove mon." + id;
   } else if (prefix == "mon_status") {
     get_mon_status(f.get(), ds);
     if (f)
@@ -5955,7 +6021,7 @@ int Monitor::get_auth_request(
     return -EACCES;
   }
   AuthAuthorizer *auth;
-  if (!ms_get_authorizer(con->get_peer_type(), &auth)) {
+  if (!get_authorizer(con->get_peer_type(), &auth)) {
     return -EACCES;
   }
   auth_meta->authorizer.reset(auth);
@@ -6016,9 +6082,9 @@ int Monitor::handle_auth_bad_method(
   return -EACCES;
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
+bool Monitor::get_authorizer(int service_id, AuthAuthorizer **authorizer)
 {
-  dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
+  dout(10) << "get_authorizer for " << ceph_entity_type_name(service_id)
 	   << dendl;
 
   if (is_shutdown())
@@ -6087,7 +6153,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
 
   CephXTicketBlob blob;
   if (!cephx_build_service_ticket_blob(cct, info, blob)) {
-    dout(0) << "ms_get_authorizer failed to build service ticket" << dendl;
+    dout(0) << "get_authorizer failed to build service ticket" << dendl;
     return false;
   }
   bufferlist ticket_data;
@@ -6102,11 +6168,6 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
   *authorizer = handler.build_authorizer(0);
   
   return true;
-}
-
-KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
-{
-  return &keyring;
 }
 
 int Monitor::handle_auth_request(
@@ -6126,6 +6187,16 @@ int Monitor::handle_auth_request(
 	   << " method " << auth_method
 	   << " payload " << payload.length()
 	   << dendl;
+  if (!payload.length()) {
+    if (!con->is_msgr2() &&
+	con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+      // for v1 connections, we tolerate no authorizer (from
+      // non-monitors), because authentication happens via MAuth
+      // messages.
+      return 1;
+    }
+    return -EACCES;
+  }
   if (!more) {
     auth_meta->auth_mode = payload[0];
   }
@@ -6142,7 +6213,7 @@ int Monitor::handle_auth_request(
     bool was_challenge = (bool)auth_meta->authorizer_challenge;
     bool isvalid = ah->verify_authorizer(
       cct,
-      &keyring,
+      keyring,
       payload,
       auth_meta->get_connection_secret_length(),
       reply,

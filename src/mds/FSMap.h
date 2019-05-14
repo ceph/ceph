@@ -66,14 +66,26 @@ public:
    */
   bool has_standby_replay(mds_gid_t who) const
   {
+    return get_standby_replay(who) != MDS_GID_NONE;
+  }
+  mds_gid_t get_standby_replay(mds_gid_t who) const
+  {
     for (const auto &i : mds_map.mds_info) {
       const auto &info = i.second;
       if (info.state == MDSMap::STATE_STANDBY_REPLAY
           && info.rank == mds_map.mds_info.at(who).rank) {
-        return true;
+        return info.global_id;
       }
     }
-
+    return MDS_GID_NONE;
+  }
+  bool is_standby_replay(mds_gid_t who) const
+  {
+    auto p = mds_map.mds_info.find(who);
+    if (p != mds_map.mds_info.end() &&
+	p->second.state == MDSMap::STATE_STANDBY_REPLAY) {
+      return true;
+    }
     return false;
   }
 
@@ -171,6 +183,19 @@ public:
   fs_cluster_id_t get_legacy_client_fscid() const
   {
     return legacy_client_fscid;
+  }
+
+  size_t get_num_standby() const {
+    return standby_daemons.size();
+  }
+
+  bool is_any_degraded() const {
+    for (auto& i : filesystems) {
+      if (i.second->mds_map.is_degraded()) {
+	return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -368,6 +393,16 @@ public:
     } else {
       return filesystems.at(fscid)->mds_map.mds_info.at(gid);
     }
+  }
+
+  bool is_standby_replay(mds_gid_t who) const
+  {
+    return filesystems.at(mds_roles.at(who))->is_standby_replay(who);
+  }
+
+  mds_gid_t get_standby_replay(mds_gid_t who) const
+  {
+    return filesystems.at(mds_roles.at(who))->get_standby_replay(who);
   }
 
   /**

@@ -47,7 +47,7 @@ public:
 
   static const int decoding_tables_lru_length = 2516;
 
-  typedef std::pair<std::list<std::string>::iterator, bufferptr> lru_entry_t;
+  typedef std::pair<std::list<std::string>::iterator, ceph::buffer::ptr> lru_entry_t;
   typedef std::map< int, unsigned char** > codec_table_t;
   typedef std::map< int, codec_table_t > codec_tables_t;
   typedef std::map< int, codec_tables_t > codec_technique_tables_t;

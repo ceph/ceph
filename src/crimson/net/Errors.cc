@@ -41,6 +41,8 @@ const std::error_category& net_category()
           return "connection refused";
         case error::connection_reset:
           return "connection reset";
+        case error::corrupted_message:
+          return "corrupted message";
         default:
           return "unknown";
       }

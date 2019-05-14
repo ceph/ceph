@@ -213,6 +213,7 @@ The orchestrator is not responsible for configuring the services. Please look in
 documentation for details.
 
 The ``name`` parameter is an identifier of the group of instances:
+
 * a CephFS filesystem for a group of MDS daemons,
 * a zone name for a group of RGWs
 
@@ -248,7 +249,7 @@ This is an overview of the current implementation status of the orchestrators.
  host ls                             ⚪         ⚪       ⚪         ✔️
  host rm                             ⚪         ⚪       ⚪         ✔️
  mgr update                          ⚪         ⚪       ⚪         ✔️
- mon update                          ⚪         ⚪       ⚪         ✔️
+ mon update                          ⚪         ✔️       ⚪         ✔️
  osd create                          ✔️         ✔️       ⚪         ✔️
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔️         ⚪       ⚪         ⚪

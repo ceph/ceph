@@ -10,20 +10,19 @@
  * PGCreate2 - instruct an OSD to create some pgs
  */
 
-class MOSDPGCreate2 : public MessageInstance<MOSDPGCreate2> {
+class MOSDPGCreate2 : public Message {
 public:
-  friend factory;
-
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
   epoch_t epoch = 0;
   map<spg_t,pair<epoch_t,utime_t>> pgs;
+  map<spg_t,pair<pg_history_t,PastIntervals>> pg_extra;
 
   MOSDPGCreate2()
-    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message{MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDPGCreate2(epoch_t e)
-    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION),
+    : Message{MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION},
       epoch(e) { }
 private:
   ~MOSDPGCreate2() override {}
@@ -40,11 +39,18 @@ public:
     using ceph::encode;
     encode(epoch, payload);
     encode(pgs, payload);
+    encode(pg_extra, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);
     decode(pgs, p);
+    if (header.version >= 2) {
+      decode(pg_extra, p);
+    }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

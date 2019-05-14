@@ -232,6 +232,8 @@ static int wait_for_udev_add(struct udev_monitor *mon, const krbd_spec& spec,
                              string *pname)
 {
   struct udev_device *bus_dev = nullptr;
+  std::vector<struct udev_device*> block_dev_vec;
+  int r;
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
@@ -241,16 +243,16 @@ static int wait_for_udev_add(struct udev_monitor *mon, const krbd_spec& spec,
   for (;;) {
     struct pollfd fds[1];
     struct udev_device *dev;
-    int r;
 
     fds[0].fd = udev_monitor_get_fd(mon);
     fds[0].events = POLLIN;
     r = poll(fds, 1, POLL_TIMEOUT);
-    if (r < 0)
-      return -errno;
-
-    if (r == 0)
-      return -ETIMEDOUT;
+    if (r > 0) {
+      r = 0;
+    } else {
+      r = (r == 0) ? -ETIMEDOUT : -errno;
+      break;
+    }
 
     dev = udev_monitor_receive_device(mon);
     if (!dev)
@@ -259,42 +261,55 @@ static int wait_for_udev_add(struct udev_monitor *mon, const krbd_spec& spec,
     if (strcmp(udev_device_get_action(dev), "add") != 0)
       goto next;
 
-    if (!bus_dev) {
-      if (strcmp(udev_device_get_subsystem(dev), "rbd") == 0) {
+    if (strcmp(udev_device_get_subsystem(dev), "rbd") == 0) {
+      if (!bus_dev) {
         auto cur_spec = spec_from_dev(dev);
         if (cur_spec && *cur_spec == spec) {
           bus_dev = dev;
-          continue;
+          goto check;
         }
       }
-    } else {
-      if (strcmp(udev_device_get_subsystem(dev), "block") == 0) {
-        const char *major = udev_device_get_sysattr_value(bus_dev, "major");
-        const char *minor = udev_device_get_sysattr_value(bus_dev, "minor");
-        const char *this_major = udev_device_get_property_value(dev, "MAJOR");
-        const char *this_minor = udev_device_get_property_value(dev, "MINOR");
+    } else if (strcmp(udev_device_get_subsystem(dev), "block") == 0) {
+      block_dev_vec.push_back(dev);
+      goto check;
+    }
 
-        ceph_assert(!minor ^ have_minor_attr());
+next:
+    udev_device_unref(dev);
+    continue;
+
+check:
+    if (bus_dev && !block_dev_vec.empty()) {
+      const char *major = udev_device_get_sysattr_value(bus_dev, "major");
+      const char *minor = udev_device_get_sysattr_value(bus_dev, "minor");
+      ceph_assert(!minor ^ have_minor_attr());
+
+      for (auto p : block_dev_vec) {
+        const char *this_major = udev_device_get_property_value(p, "MAJOR");
+        const char *this_minor = udev_device_get_property_value(p, "MINOR");
 
         if (strcmp(this_major, major) == 0 &&
             (!minor || strcmp(this_minor, minor) == 0)) {
           string name = get_kernel_rbd_name(udev_device_get_sysname(bus_dev));
 
-          ceph_assert(strcmp(udev_device_get_devnode(dev), name.c_str()) == 0);
+          ceph_assert(strcmp(udev_device_get_devnode(p), name.c_str()) == 0);
           *pname = name;
-
-          udev_device_unref(dev);
-          udev_device_unref(bus_dev);
-          break;
+          goto done;
         }
       }
     }
-
-  next:
-    udev_device_unref(dev);
   }
 
-  return 0;
+done:
+  if (bus_dev) {
+    udev_device_unref(bus_dev);
+  }
+  
+  for (auto p : block_dev_vec) {
+    udev_device_unref(p);
+  }
+
+  return r;
 }
 
 static int do_map(struct udev *udev, const krbd_spec& spec, const string& buf,

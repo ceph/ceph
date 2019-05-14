@@ -64,7 +64,7 @@ void ClusterState::load_digest(MMgrDigest *m)
   mon_status_json = std::move(m->mon_status_json);
 }
 
-void ClusterState::ingest_pgstats(MPGStats *stats)
+void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
 {
   std::lock_guard l(lock);
 

@@ -27,7 +27,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
-    CEPH_ARGS+="--osd-objectstore=filestore "
+
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -44,9 +44,10 @@ function run() {
 function setup_osds() {
     local count=$1
     shift
+    local type=$1
 
     for id in $(seq 0 $(expr $count - 1)) ; do
-        run_osd $dir $id || return 1
+        run_osd${type} $dir $id || return 1
     done
     wait_for_clean || return 1
 }
@@ -118,13 +119,31 @@ function rados_get_data() {
 
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
     test "$COUNT" = "1" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "1" || return 1
 
+    local object_osds=($(get_osds $poolname $objname))
+    local primary=${object_osds[0]}
+    local bad_peer=${object_osds[1]}
     inject_$inject rep data $poolname $objname $dir 0 || return 1
     inject_$inject rep data $poolname $objname $dir 1 || return 1
+    # Force primary to pull from the bad peer, so we can repair it too!
+    set_config osd $primary osd_debug_feed_pullee $bad_peer || return 1
+    rados_get $dir $poolname $objname || return 1
+
+    # Wait until automatic repair of bad peer is done
+    wait_for_clean || return 1
+
+    inject_$inject rep data $poolname $objname $dir 0 || return 1
+    inject_$inject rep data $poolname $objname $dir 2 || return 1
     rados_get $dir $poolname $objname || return 1
 
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
-    test "$COUNT" = "2" || return 1
+    test "$COUNT" = "3" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "4" || return 1
 
     inject_$inject rep data $poolname $objname $dir 0 || return 1
     inject_$inject rep data $poolname $objname $dir 1 || return 1
@@ -133,7 +152,10 @@ function rados_get_data() {
 
     # After hang another repair couldn't happen, so count stays the same
     COUNT=$(ceph pg $pgid query | jq '.info.stats.stat_sum.num_objects_repaired')
-    test "$COUNT" = "2" || return 1
+    test "$COUNT" = "3" || return 1
+    flush_pg_stats
+    COUNT=$(ceph pg dump --format=json-pretty | jq ".pg_map.osd_stats_sum.num_shards_repaired")
+    test "$COUNT" = "4" || return 1
 }
 
 function TEST_rados_get_with_eio() {
@@ -310,7 +332,7 @@ function TEST_rep_read_unfound() {
     local dir=$1
     local objname=myobject
 
-    setup_osds 3 || return 1
+    setup_osds 3 _filestore || return 1
 
     ceph osd pool delete foo foo --yes-i-really-really-mean-it || return 1
     local poolname=test-pool

@@ -38,7 +38,8 @@ static const std::string EXPIRED_BEFORE("expired-before");
 static const std::string THRESHOLD("threshold");
 
 static bool is_not_trash_user(const librbd::trash_image_info_t &trash_info) {
-  return trash_info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+  return trash_info.source != RBD_TRASH_IMAGE_SOURCE_USER &&
+    trash_info.source != RBD_TRASH_IMAGE_SOURCE_USER_PARENT;
 }
 
 void get_move_arguments(po::options_description *positional,
@@ -268,6 +269,9 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
         break;
       case RBD_TRASH_IMAGE_SOURCE_REMOVING:
         del_source = "REMOVING";
+        break;
+      case RBD_TRASH_IMAGE_SOURCE_USER_PARENT:
+        del_source = "USER_PARENT";
         break;
     }
 

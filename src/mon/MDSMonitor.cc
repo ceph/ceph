@@ -379,7 +379,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       MDSMap null_map;
       null_map.epoch = fsmap.epoch;
       null_map.compat = fsmap.compat;
-      auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+      auto m = make_message<MMDSMap>(mon->monmap->fsid, null_map);
       mon->send_reply(op, m.detach());
       return true;
     } else {
@@ -455,7 +455,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   ceph_assert(effective_epoch > 0);
   _note_beacon(m);
   {
-    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+    auto beacon = make_message<MMDSBeacon>(mon->monmap->fsid,
         m->get_global_id(), m->get_name(), effective_epoch,
         state, seq, CEPH_FEATURES_SUPPORTED_DEFAULT);
     mon->send_reply(op, beacon.detach());
@@ -645,7 +645,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           MDSMap null_map;
           null_map.epoch = fsmap.epoch;
           null_map.compat = fsmap.compat;
-          auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+          auto m = make_message<MMDSMap>(mon->monmap->fsid, null_map);
           mon->send_reply(op, m.detach());
         } else {
           dispatch(op);        // try again
@@ -720,7 +720,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       last_beacon.erase(gid);
 
       // Respond to MDS, so that it knows it can continue to shut down
-      auto beacon = MMDSBeacon::create(
+      auto beacon = make_message<MMDSBeacon>(
 			mon->monmap->fsid, m->get_global_id(),
 			m->get_name(), pending.get_epoch(), state, seq,
 			CEPH_FEATURES_SUPPORTED_DEFAULT);
@@ -738,7 +738,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       request_proposal(mon->osdmon());
 
       // Respond to MDS, so that it knows it can continue to shut down
-      auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+      auto beacon = make_message<MMDSBeacon>(mon->monmap->fsid,
           m->get_global_id(), m->get_name(), pending.get_epoch(), state, seq,
           CEPH_FEATURES_SUPPORTED_DEFAULT);
       mon->send_reply(op, beacon.detach());
@@ -828,10 +828,10 @@ void MDSMonitor::_updated(MonOpRequestRef op)
     MDSMap null_map;
     null_map.epoch = fsmap.epoch;
     null_map.compat = fsmap.compat;
-    auto m = MMDSMap::create(mon->monmap->fsid, null_map);
+    auto m = make_message<MMDSMap>(mon->monmap->fsid, null_map);
     mon->send_reply(op, m.detach());
   } else {
-    auto beacon = MMDSBeacon::create(mon->monmap->fsid,
+    auto beacon = make_message<MMDSBeacon>(mon->monmap->fsid,
         m->get_global_id(), m->get_name(), fsmap.get_epoch(),
         m->get_state(), m->get_seq(), CEPH_FEATURES_SUPPORTED_DEFAULT);
     mon->send_reply(op, beacon.detach());
@@ -897,6 +897,57 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ds << fsmap;
     }
     r = 0;
+  } else if (prefix == "mds ok-to-stop") {
+    vector<string> ids;
+    if (!cmd_getval(g_ceph_context, cmdmap, "ids", ids)) {
+      r = -EINVAL;
+      ss << "must specify mds id";
+      goto out;
+    }
+    if (fsmap.is_any_degraded()) {
+      ss << "one or more filesystems is currently degraded";
+      r = -EBUSY;
+      goto out;
+    }
+    set<mds_gid_t> stopping;
+    for (auto& id : ids) {
+      ostringstream ess;
+      mds_gid_t gid = gid_from_arg(fsmap, id, ess);
+      if (gid == MDS_GID_NONE) {
+	// the mds doesn't exist, but no file systems are unhappy, so losing it
+	// can't have any effect.
+	continue;
+      }
+      stopping.insert(gid);
+    }
+    set<mds_gid_t> active;
+    set<mds_gid_t> standby;
+    for (auto gid : stopping) {
+      if (fsmap.gid_has_rank(gid)) {
+	// ignore standby-replay daemons (at this level)
+	if (!fsmap.is_standby_replay(gid)) {
+	  auto standby = fsmap.get_standby_replay(gid);
+	  if (standby == MDS_GID_NONE ||
+	      stopping.count(standby)) {
+	    // no standby-replay, or we're also stopping the standby-replay
+	    // for this mds
+	    active.insert(gid);
+	  }
+	}
+      } else {
+	// net loss of a standby
+	standby.insert(gid);
+      }
+    }
+    if (fsmap.get_num_standby() - standby.size() < active.size()) {
+      r = -EBUSY;
+      ss << "insufficent standby MDS daemons to stop active gids "
+	 << stringify(active)
+	 << " and/or standby gids " << stringify(standby);;
+      goto out;
+    }
+    r = 0;
+    ss << "should be safe to stop " << ids;
   } else if (prefix == "fs dump") {
     int64_t epocharg;
     epoch_t epoch;
@@ -1596,7 +1647,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     if (sub->next > mds_map->epoch) {
       return;
     }
-    auto msg = MMDSMap::create(mon->monmap->fsid, *mds_map);
+    auto msg = make_message<MMDSMap>(mon->monmap->fsid, *mds_map);
 
     sub->session->con->send_message(msg.detach());
     if (sub->onetime) {

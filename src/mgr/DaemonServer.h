@@ -137,19 +137,18 @@ public:
 	       LogChannelRef auditcl);
   ~DaemonServer() override;
 
-  bool ms_dispatch(Message *m) override;
+  bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
   int ms_handle_authentication(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
-  KeyStore *ms_get_auth1_authorizer_keystore() override;
 
-  bool handle_open(MMgrOpen *m);
-  bool handle_close(MMgrClose *m);
-  bool handle_report(MMgrReport *m);
-  bool handle_command(MCommand *m);
-  bool _handle_command(MCommand *m, std::shared_ptr<CommandContext>& cmdctx);
+  bool handle_open(const ceph::ref_t<MMgrOpen>& m);
+  bool handle_close(const ceph::ref_t<MMgrClose>& m);
+  bool handle_report(const ceph::ref_t<MMgrReport>& m);
+  bool handle_command(const ceph::ref_t<MCommand>& m);
+  bool _handle_command(const ceph::ref_t<MCommand>& m,
+		       std::shared_ptr<CommandContext>& cmdctx);
   void send_report();
   void got_service_map();
   void got_mgr_map();

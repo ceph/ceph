@@ -7,7 +7,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
-#include "librbd/LibrbdWriteback.h"
+#include "librbd/cache/ObjectCacherWriteback.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
@@ -74,8 +74,9 @@ struct ObjectCacherObjectDispatch<I>::C_InvalidateCache : public Context {
 
 template <typename I>
 ObjectCacherObjectDispatch<I>::ObjectCacherObjectDispatch(
-    I* image_ctx)
-  : m_image_ctx(image_ctx),
+    I* image_ctx, size_t max_dirty, bool writethrough_until_flush)
+  : m_image_ctx(image_ctx), m_max_dirty(max_dirty),
+    m_writethrough_until_flush(writethrough_until_flush),
     m_cache_lock(util::unique_lock_name(
       "librbd::cache::ObjectCacherObjectDispatch::cache_lock", this)) {
 }
@@ -95,10 +96,10 @@ void ObjectCacherObjectDispatch<I>::init() {
 
   m_cache_lock.Lock();
   ldout(cct, 5) << "enabling caching..." << dendl;
-  m_writeback_handler = new LibrbdWriteback(m_image_ctx, m_cache_lock);
+  m_writeback_handler = new ObjectCacherWriteback(m_image_ctx, m_cache_lock);
 
-  uint64_t init_max_dirty = m_image_ctx->cache_max_dirty;
-  if (m_image_ctx->cache_writethrough_until_flush) {
+  auto init_max_dirty = m_max_dirty;
+  if (m_writethrough_until_flush) {
     init_max_dirty = 0;
   }
 
@@ -143,6 +144,9 @@ void ObjectCacherObjectDispatch<I>::init() {
   m_cache_lock.Unlock();
 
   // add ourself to the IO object dispatcher chain
+  if (m_max_dirty > 0) {
+    m_image_ctx->disable_zero_copy = true;
+  }
   m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
 }
 
@@ -189,9 +193,9 @@ bool ObjectCacherObjectDispatch<I>::read(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   auto rd = m_object_cacher->prepare_read(snap_id, read_data, op_flags);
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ObjectExtent extent(oid, object_no, object_off, object_len, 0);
   extent.oloc.pool = m_image_ctx->data_ctx.get_id();
@@ -266,10 +270,10 @@ bool ObjectCacherObjectDispatch<I>::write(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  m_image_ctx->snap_lock.get_read();
+  m_image_ctx->image_lock.get_read();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
     snapc, data, ceph::real_time::min(), op_flags, *journal_tid);
-  m_image_ctx->snap_lock.put_read();
+  m_image_ctx->image_lock.put_read();
 
   ObjectExtent extent(oid, 0, object_off, data.length(), 0);
   extent.oloc.pool = m_image_ctx->data_ctx.get_id();
@@ -346,8 +350,8 @@ bool ObjectCacherObjectDispatch<I>::compare_and_write(
 template <typename I>
 bool ObjectCacherObjectDispatch<I>::flush(
     io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-    io::DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
+    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -356,12 +360,12 @@ bool ObjectCacherObjectDispatch<I>::flush(
                                                       on_dispatched);
 
   m_cache_lock.Lock();
-  if (flush_source == io::FLUSH_SOURCE_USER && !m_user_flushed &&
-      m_image_ctx->cache_writethrough_until_flush &&
-      m_image_ctx->cache_max_dirty > 0) {
+  if (flush_source == io::FLUSH_SOURCE_USER && !m_user_flushed) {
     m_user_flushed = true;
-    m_object_cacher->set_max_dirty(m_image_ctx->cache_max_dirty);
-    ldout(cct, 5) << "saw first user flush, enabling writeback" << dendl;
+    if (m_writethrough_until_flush && m_max_dirty > 0) {
+      m_object_cacher->set_max_dirty(m_max_dirty);
+      ldout(cct, 5) << "saw first user flush, enabling writeback" << dendl;
+    }
   }
 
   *dispatch_result = io::DISPATCH_RESULT_CONTINUE;

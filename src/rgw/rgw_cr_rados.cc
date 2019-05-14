@@ -104,7 +104,7 @@ int RGWAsyncGetSystemObj::_send_request()
                .set_objv_tracker(&objv_tracker)
                .set_attrs(pattrs)
 	       .set_raw_attrs(raw_attrs)
-               .read(&bl);
+               .read(&bl, null_yield);
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
@@ -141,7 +141,7 @@ int RGWAsyncPutSystemObj::_send_request()
   return sysobj.wop()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(exclusive)
-               .write_data(bl);
+               .write_data(bl, null_yield);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
@@ -164,7 +164,7 @@ int RGWAsyncPutSystemObjAttrs::_send_request()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(false)
                .set_attrs(attrs)
-               .write_attrs();
+               .write_attrs(null_yield);
 }
 
 RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
@@ -613,6 +613,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
+                       dpp,
                        &zones_trace,
                        &bytes_transferred);
 

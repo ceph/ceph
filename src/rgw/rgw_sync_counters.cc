@@ -13,12 +13,12 @@ PerfCountersRef build(CephContext *cct, const std::string& name)
   // share these counters with ceph-mgr
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
-  b.add_u64_avg(l_fetch, "fetch bytes", "Number of object bytes replicated");
-  b.add_u64_counter(l_fetch_not_modified, "fetch not modified", "Number of objects already replicated");
-  b.add_u64_counter(l_fetch_err, "fetch errors", "Number of object replication errors");
+  b.add_u64_avg(l_fetch, "fetch_bytes", "Number of object bytes replicated");
+  b.add_u64_counter(l_fetch_not_modified, "fetch_not_modified", "Number of objects already replicated");
+  b.add_u64_counter(l_fetch_err, "fetch_errors", "Number of object replication errors");
 
-  b.add_time_avg(l_poll, "poll latency", "Average latency of replication log requests");
-  b.add_u64_counter(l_poll_err, "poll errors", "Number of replication log request errors");
+  b.add_time_avg(l_poll, "poll_latency", "Average latency of replication log requests");
+  b.add_u64_counter(l_poll_err, "poll_errors", "Number of replication log request errors");
 
   auto logger = PerfCountersRef{ b.create_perf_counters(), cct };
   cct->get_perfcounters_collection()->add(logger.get());

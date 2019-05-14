@@ -2,11 +2,13 @@
 from __future__ import absolute_import
 
 import re
+import ipaddress
 from distutils.util import strtobool
+import six
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path, is_valid_ip_address
+from ..tools import build_url, dict_contains_path
 from .. import mgr, logger
 
 
@@ -125,9 +127,11 @@ def _parse_addr(value):
         #   Group 1: [
         #   Group 2: 2001:db8:85a3::8a2e:370:7334
         addr = match.group(3) if match.group(3) else match.group(2)
-        if not is_valid_ip_address(addr):
+        try:
+            ipaddress.ip_address(six.u(addr))
+            return addr
+        except ValueError:
             raise LookupError('Invalid RGW address \'{}\' found'.format(addr))
-        return addr
     raise LookupError('Failed to determine RGW address')
 
 
@@ -273,7 +277,7 @@ class RgwClient(RestClient):
                  secret_key,
                  host=None,
                  port=None,
-                 admin_path='admin',
+                 admin_path=None,
                  ssl=False):
 
         if not host and not RgwClient._host:

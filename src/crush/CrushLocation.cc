@@ -67,13 +67,13 @@ int CrushLocation::update_from_hook()
     return ret;
   }
 
-  bufferlist bl;
+  ceph::buffer::list bl;
   ret = bl.read_fd(hook.get_stdout(), 100 * 1024);
   if (ret < 0) {
     lderr(cct) << "error: failed read stdout from "
 	       << cct->_conf->crush_location_hook
 	       << ": " << cpp_strerror(-ret) << dendl;
-    bufferlist err;
+    ceph::buffer::list err;
     err.read_fd(hook.get_stderr(), 100 * 1024);
     lderr(cct) << "stderr:\n";
     err.hexdump(*_dout);
@@ -117,8 +117,8 @@ int CrushLocation::init_on_startup()
   }
   std::lock_guard<std::mutex> l(lock);
   loc.clear();
-  loc.insert(make_pair<std::string,std::string>("host", hostname));
-  loc.insert(make_pair<std::string,std::string>("root", "default"));
+  loc.insert(std::make_pair<std::string,std::string>("host", hostname));
+  loc.insert(std::make_pair<std::string,std::string>("root", "default"));
   lgeneric_dout(cct, 10) << "crush_location is (default) " << loc << dendl;
   return 0;
 }

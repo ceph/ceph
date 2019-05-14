@@ -5,6 +5,7 @@ import sys
 import inspect
 import json
 import functools
+import ipaddress
 
 import collections
 from datetime import datetime, timedelta
@@ -12,7 +13,7 @@ from distutils.util import strtobool
 import fnmatch
 import time
 import threading
-import socket
+import six
 from six.moves import urllib
 import cherrypy
 
@@ -646,110 +647,6 @@ class Task(object):
             self.lock.release()
 
 
-def is_valid_ip_address(addr):
-    """
-    Validate the given IPv4 or IPv6 address.
-
-    >>> is_valid_ip_address('2001:0db8::1234')
-    True
-
-    >>> is_valid_ip_address('192.168.121.1')
-    True
-
-    >>> is_valid_ip_address('1:::1')
-    False
-
-    >>> is_valid_ip_address('8.1.0')
-    False
-
-    >>> is_valid_ip_address('260.1.0.1')
-    False
-
-    :param addr:
-    :type addr: str
-    :return: Returns ``True`` if the IP address is valid,
-        otherwise ``False``.
-    :rtype: bool
-    """
-    return is_valid_ipv4_address(addr) or is_valid_ipv6_address(addr)
-
-
-def is_valid_ipv4_address(addr):
-    """
-    Validate the given IPv4 address.
-
-    >>> is_valid_ipv4_address('0.0.0.0')
-    True
-
-    >>> is_valid_ipv4_address('192.168.121.1')
-    True
-
-    >>> is_valid_ipv4_address('a.b.c.d')
-    False
-
-    >>> is_valid_ipv4_address('172.1.0.a')
-    False
-
-    >>> is_valid_ipv4_address('2001:0db8::1234')
-    False
-
-    >>> is_valid_ipv4_address(None)
-    False
-
-    >>> is_valid_ipv4_address(123456)
-    False
-
-    :param addr:
-    :type addr: str
-    :return: Returns ``True`` if the IPv4 address is valid,
-        otherwise ``False``.
-    :rtype: bool
-    """
-    try:
-        socket.inet_pton(socket.AF_INET, addr)
-        return True
-    except (socket.error, TypeError):
-        return False
-
-
-def is_valid_ipv6_address(addr):
-    """
-    Validate the given IPv6 address.
-
-    >>> is_valid_ipv6_address('2001:0db8::1234')
-    True
-
-    >>> is_valid_ipv6_address('fe80::bc6c:66b0:5af8:f44')
-    True
-
-    >>> is_valid_ipv6_address('192.168.121.1')
-    False
-
-    >>> is_valid_ipv6_address('a:x::1')
-    False
-
-    >>> is_valid_ipv6_address('1200:0000:AB00:1234:O000:2552:7777:1313')
-    False
-
-    >>> is_valid_ipv6_address(None)
-    False
-
-    >>> is_valid_ipv6_address(123456)
-    False
-
-    :param addr:
-    :type addr: str
-    :return: Returns ``True`` if the IPv6 address is valid,
-        otherwise ``False``.
-    :rtype: bool
-    """
-    try:
-        socket.inet_pton(socket.AF_INET6, addr)
-        return True
-    except (socket.error, TypeError):
-        return False
-
-
 def build_url(host, scheme=None, port=None):
     """
     Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
@@ -772,7 +669,11 @@ def build_url(host, scheme=None, port=None):
     :type port: int
     :rtype: str
     """
-    netloc = host if not is_valid_ipv6_address(host) else '[{}]'.format(host)
+    try:
+        ipaddress.IPv6Address(six.u(host))
+        netloc = '[{}]'.format(host)
+    except ValueError:
+        netloc = host
     if port:
         netloc += ':{}'.format(port)
     pr = urllib.parse.ParseResult(

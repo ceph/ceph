@@ -92,7 +92,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto c = aio->submit(stripe_obj, &op, cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
   return process_completed(c, &written);
 }
 
@@ -105,7 +105,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto c = aio->submit(stripe_obj, &op, cost, id);
+  auto c = aio->get(stripe_obj, Aio::librados_op(std::move(op), y), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -142,22 +142,22 @@ RadosWriter::~RadosWriter()
    */
   for (const auto& obj : written) {
     if (raw_head && obj == *raw_head) {
-      ldout(store->ctx(), 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
+      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
       need_to_remove_head = true;
       continue;
     }
 
     int r = store->delete_raw_obj(obj);
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
   }
 
   if (need_to_remove_head) {
-    ldout(store->ctx(), 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
+    ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
     int r = store->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
     if (r < 0 && r != -ENOENT) {
-      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
   }
 }
@@ -188,6 +188,7 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
   *pstripe_size = manifest_gen.cur_stripe_max_size();
   return 0;
 }
+
 
 
 int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
@@ -367,7 +368,7 @@ int MultipartObjectProcessor::prepare_head()
 
   int r = store->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
   store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
@@ -466,7 +467,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
   if (r < 0) {
-    ldout(store->ctx(), 1) << "cannot get compression info" << dendl;
+    ldpp_dout(dpp, 1) << "cannot get compression info" << dendl;
     return r;
   }
 
@@ -485,7 +486,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   r = sysobj.omap()
       .set_must_exist(true)
-      .set(p, bl);
+      .set(p, bl, null_yield);
   if (r < 0) {
     return r;
   }
@@ -521,7 +522,7 @@ int AppendObjectProcessor::prepare()
   *cur_accounted_size = astate->accounted_size;
   if (!astate->exists) {
     if (position != 0) {
-      ldout(store->ctx(), 5) << "ERROR: Append position should be zero" << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: Append position should be zero" << dendl;
       return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
     } else {
       cur_part_num = 1;
@@ -538,17 +539,17 @@ int AppendObjectProcessor::prepare()
     // check whether the object appendable
     map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
     if (iter == astate->attrset.end()) {
-      ldout(store->ctx(), 5) << "ERROR: The object is not appendable" << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: The object is not appendable" << dendl;
       return -ERR_OBJECT_NOT_APPENDABLE;
     }
     if (position != *cur_accounted_size) {
-      ldout(store->ctx(), 5) << "ERROR: Append position should be equal to the obj size" << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: Append position should be equal to the obj size" << dendl;
       return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
     }
     try {
       decode(cur_part_num, iter->second);
     } catch (buffer::error& err) {
-      ldout(store->ctx(), 5) << "ERROR: failed to decode part num" << dendl;
+      ldpp_dout(dpp, 5) << "ERROR: failed to decode part num" << dendl;
       return -EIO;
     }
     cur_part_num++;

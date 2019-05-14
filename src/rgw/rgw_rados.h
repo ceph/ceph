@@ -25,7 +25,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
-#include "rgw_sync_log_trim.h"
+#include "rgw_trim_bilog.h"
 #include "rgw_service.h"
 
 #include "services/svc_rados.h"
@@ -118,8 +118,6 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, s
     locator.clear();
   }
 }
-
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, librados::IoCtx& ioctx, bool create = false);
 
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
@@ -1189,7 +1187,8 @@ class RGWRados : public AdminSocketHook
   int open_objexp_pool_ctx();
   int open_reshard_pool_ctx();
 
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
+  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx,
+		    bool mostly_omap);
   int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
   int open_bucket_index(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx, string& bucket_oid);
   int open_bucket_index_base(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx,
@@ -1577,7 +1576,7 @@ public:
       int prepare();
       static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
-      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
       int get_attr(const char *name, bufferlist& dest);
     };
 
@@ -1666,7 +1665,7 @@ public:
         RGWObjManifest manifest;
         bool has_manifest;
         uint64_t size;
-	struct timespec mtime;
+	struct timespec mtime {};
         map<string, bufferlist> attrs;
 
         Result() : has_manifest(false), size(0) {}
@@ -1849,13 +1848,15 @@ public:
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const rgw_user& user,               /* in */
                             RGWBucketInfo& bucket_info,         /* in */
-                            rgw_obj& obj);                      /* in */
+                            rgw_obj& obj,                       /* in */
+                            const DoutPrefixProvider *dpp);     /* in/out */                
   int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                                RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
-                               bool& restored);                 /* out */
+                               bool& restored,                 /* out */
+                               const DoutPrefixProvider *dpp);     /* in/out */                
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
@@ -1869,7 +1870,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -1916,6 +1917,7 @@ public:
                        string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
+                       const DoutPrefixProvider *dpp,
                        rgw_zone_set *zones_trace= nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**
@@ -1958,7 +1960,8 @@ public:
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
-               void *progress_data);
+               void *progress_data,
+               const DoutPrefixProvider *dpp);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
@@ -1970,14 +1973,16 @@ public:
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
-               string *petag);
+               string *petag,
+               const DoutPrefixProvider *dpp);
   
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
                      rgw_obj& obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
-                     uint64_t olh_epoch);
+                     uint64_t olh_epoch,
+                     const DoutPrefixProvider *dpp);
 
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
@@ -2010,7 +2015,7 @@ public:
   int delete_raw_obj(const rgw_raw_obj& obj);
 
   /** Remove an object from the bucket index */
-  int delete_obj_index(const rgw_obj& obj);
+  int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime);
 
   /**
    * Set an attr on an object.
@@ -2179,8 +2184,8 @@ public:
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
 
-  // Returns true on successful refresh. Returns false if there was an
-  // error or the version stored on the OSD is the same as that
+  // Returns 0 on successful refresh. Returns error code if there was
+  // an error or the version stored on the OSD is the same as that
   // presented in the BucketInfo structure.
   //
   int try_refresh_bucket_info(RGWBucketInfo& info,

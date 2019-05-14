@@ -70,8 +70,8 @@ class Module(MgrModule):
         {
             'name': 'interval',
             'type': 'int',
-            'default': 72,
-            'min': 24
+            'default': 24,
+            'min': 8
         }
     ]
 
@@ -171,7 +171,7 @@ class Module(MgrModule):
         return metadata
 
     def gather_crashinfo(self):
-        crashdict = dict()
+        crashlist = list()
         errno, crashids, err = self.remote('crash', 'do_ls', '', '')
         if errno:
             return ''
@@ -180,13 +180,16 @@ class Module(MgrModule):
             errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
             if errno:
                 continue
-            crashdict[crashid] = json.loads(crashinfo)
-        return crashdict
+            c = json.loads(crashinfo)
+            del c['utsname_hostname']
+            crashlist.append(c)
+        return crashlist
 
     def compile_report(self):
         report = {
             'leaderboard': False,
-            'report_version': 1
+            'report_version': 1,
+            'report_timestamp': datetime.utcnow().isoformat()
         }
 
         if self.leaderboard:

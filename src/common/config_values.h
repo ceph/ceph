@@ -17,7 +17,7 @@
 // debug logging settings, and some other "unnamed" settings, like entity name of
 // the daemon.
 class ConfigValues {
-  using values_t = std::map<std::string_view, map<int32_t,Option::value_t>>;
+  using values_t = std::map<std::string_view, std::map<int32_t,Option::value_t>>;
   values_t values;
   // for populating md_config_impl::legacy_values in ctor
   friend struct md_config_t;
@@ -25,9 +25,10 @@ class ConfigValues {
 public:
   EntityName name;
   /// cluster name
-  string cluster;
+  std::string cluster;
   ceph::logging::SubsystemMap subsys;
   bool no_mon_config = false;
+  bool log_early = false;
   // Set of configuration options that have changed since the last
   // apply_changes
   using changed_set_t = std::set<std::string>;

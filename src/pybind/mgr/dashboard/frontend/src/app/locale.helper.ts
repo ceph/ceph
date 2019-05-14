@@ -4,6 +4,7 @@ import locale_en from '@angular/common/locales/en';
 import locale_es from '@angular/common/locales/es';
 import locale_fr from '@angular/common/locales/fr';
 import locale_id from '@angular/common/locales/id';
+import locale_pl from '@angular/common/locales/pl';
 import locale_pt_PT from '@angular/common/locales/pt-PT';
 import locale_zh_Hans from '@angular/common/locales/zh-Hans';
 import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
@@ -26,6 +27,8 @@ export class LocaleHelper {
       return 'fr-FR';
     } else if (lang.includes('id')) {
       return 'id-ID';
+    } else if (lang.includes('pl')) {
+      return 'pl-PL';
     } else if (lang.includes('pt')) {
       return 'pt-PT';
     } else if (lang.includes('zh')) {
@@ -63,6 +66,9 @@ export class LocaleHelper {
         break;
       case 'pt-PT':
         localeData = locale_pt_PT;
+        break;
+      case 'pl-PL':
+        localeData = locale_pl;
         break;
       case 'zh-CN':
         localeData = locale_zh_Hans;

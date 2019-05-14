@@ -109,7 +109,7 @@ public:
   int generateAssumedRoleUser( CephContext* cct,
                                 RGWRados *store,
                                 const string& roleId,
-                                const rgw::IAM::ARN& roleArn,
+                                const rgw::ARN& roleArn,
                                 const string& roleSessionName);
   const string& getARN() const { return arn; }
   const string& getAssumeRoleId() const { return assumeRoleId; }

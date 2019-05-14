@@ -13,6 +13,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/SocketMessenger.h"
+#include "global/pidfile.h"
 
 #include "osd.h"
 
@@ -96,16 +97,31 @@ int main(int argc, char* argv[])
       auto& config = app.configuration();
       return seastar::async([&] {
         sharded_conf().start(init_params.name, cluster_name).get();
+        seastar::engine().at_exit([] {
+          return sharded_conf().stop();
+        });
         sharded_perf_coll().start().get();
+        seastar::engine().at_exit([] {
+          return sharded_perf_coll().stop();
+        });
         local_conf().parse_config_files(conf_file_list).get();
         local_conf().parse_argv(ceph_args).get();
+        pidfile_write(local_conf()->pid_file);
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = static_cast<uint32_t>(getpid());
-        const auto shard = seastar::engine().cpu_id();
-        cluster_msgr.start(entity_name_t::OSD(whoami), "cluster"s, nonce, shard).get();
-        client_msgr.start(entity_name_t::OSD(whoami), "client"s, nonce, shard).get();
-        hb_front_msgr.start(entity_name_t::OSD(whoami), "hb_front"s, nonce, shard).get();
-        hb_back_msgr.start(entity_name_t::OSD(whoami), "hb_back"s, nonce, shard).get();
+        for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
+                                  make_pair(std::ref(client_msgr), "client"s),
+                                  make_pair(std::ref(hb_front_msgr), "hb_front"s),
+                                  make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
+          const auto shard = seastar::engine().cpu_id();
+          msgr.start(entity_name_t::OSD(whoami), name, nonce, shard).get();
+          if (local_conf()->ms_crc_data) {
+            msgr.local().set_crc_data();
+          }
+          if (local_conf()->ms_crc_header) {
+            msgr.local().set_crc_header();
+          }
+        }
         osd.start_single(whoami, nonce,
           reference_wrapper<ceph::net::Messenger>(cluster_msgr.local()),
           reference_wrapper<ceph::net::Messenger>(client_msgr.local()),
@@ -120,13 +136,6 @@ int main(int argc, char* argv[])
                                            hb_front_msgr.stop(),
                                            hb_back_msgr.stop());
         });
-        seastar::engine().at_exit([] {
-          return sharded_perf_coll().stop();
-        });
-        seastar::engine().at_exit([] {
-          return sharded_conf().stop();
-        });
-
         if (config.count("mkfs")) {
           osd.invoke_on(0, &OSD::mkfs,
                         local_conf().get_val<uuid_d>("fsid"))

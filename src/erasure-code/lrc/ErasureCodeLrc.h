@@ -44,19 +44,19 @@
 #define ERROR_LRC_K_MODULO		-(MAX_ERRNO + 20)
 #define ERROR_LRC_M_MODULO		-(MAX_ERRNO + 21)
 
-class ErasureCodeLrc final : public ErasureCode {
+class ErasureCodeLrc final : public ceph::ErasureCode {
 public:
   static const std::string DEFAULT_KML;
 
   struct Layer {
     explicit Layer(const std::string &_chunks_map) : chunks_map(_chunks_map) { }
-    ErasureCodeInterfaceRef erasure_code;
+    ceph::ErasureCodeInterfaceRef erasure_code;
     std::vector<int> data;
     std::vector<int> coding;
     std::vector<int> chunks;
     std::set<int> chunks_as_set;
     std::string chunks_map;
-    ErasureCodeProfile profile;
+    ceph::ErasureCodeProfile profile;
   };
   std::vector<Layer> layers;
   std::string directory;
@@ -106,25 +106,25 @@ public:
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
   int encode_chunks(const std::set<int> &want_to_encode,
-			    std::map<int, bufferlist> *encoded) override;
+		    std::map<int, ceph::buffer::list> *encoded) override;
 
   int decode_chunks(const std::set<int> &want_to_read,
-			    const std::map<int, bufferlist> &chunks,
-			    std::map<int, bufferlist> *decoded) override;
+		    const std::map<int, ceph::buffer::list> &chunks,
+		    std::map<int, ceph::buffer::list> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
-  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
+  virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_kml(ErasureCodeProfile &profile, std::ostream *ss);
+  int parse_kml(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 
-  int parse_rule(ErasureCodeProfile &profile, std::ostream *ss);
+  int parse_rule(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 
   int parse_rule_step(const std::string &description_string,
 		      json_spirit::mArray description,
 		      std::ostream *ss);
 
-  int layers_description(const ErasureCodeProfile &profile,
+  int layers_description(const ceph::ErasureCodeProfile &profile,
 			 json_spirit::mArray *description,
 			 std::ostream *ss) const;
   int layers_parse(const std::string &description_string,

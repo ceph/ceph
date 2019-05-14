@@ -13,8 +13,8 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title"
-            i18n>{editing, select, 1 {Edit} other {Add}} bucket</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
       <div class="panel-body">
 
@@ -96,15 +96,11 @@
       </div>
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button type="button"
-                            (submitAction)="submit()"
-                            [form]="bucketForm">
-            <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
-          </cd-submit-button>
-          <button i18n
-                  type="button"
-                  class="btn btn-sm btn-default"
-                  routerLink="/rgw/bucket">Back</button>
+          <cd-submit-button
+            (submitAction)="submit()" [form]="bucketForm"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

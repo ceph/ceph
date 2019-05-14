@@ -105,10 +105,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void wait_for_omap_osds();
 
  private:
-  bool ms_dispatch2(const Message::ref &m) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
+  bool ms_dispatch2(const ref_t<Message> &m) override;
   int ms_handle_authentication(Connection *con) override;
-  KeyStore *ms_get_auth1_authorizer_keystore() override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
@@ -144,21 +142,21 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void tick();
   
 protected:
-  bool handle_core_message(const Message::const_ref &m);
+  bool handle_core_message(const cref_t<Message> &m);
   
   // special message types
   friend class C_MDS_Send_Command_Reply;
-  static void send_command_reply(const MCommand::const_ref &m, MDSRank* mds_rank, int r,
+  static void send_command_reply(const cref_t<MCommand> &m, MDSRank* mds_rank, int r,
 				 bufferlist outbl, std::string_view outs);
   int _handle_command(
       const cmdmap_t &cmdmap,
-      const MCommand::const_ref &m,
+      const cref_t<MCommand> &m,
       bufferlist *outbl,
       std::string *outs,
       Context **run_later,
       bool *need_reply);
-  void handle_command(const MCommand::const_ref &m);
-  void handle_mds_map(const MMDSMap::const_ref &m);
+  void handle_command(const cref_t<MCommand> &m);
+  void handle_mds_map(const cref_t<MMDSMap> &m);
   void _handle_mds_map(const MDSMap &oldmap);
 
 private:

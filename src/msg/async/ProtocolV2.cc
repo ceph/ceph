@@ -418,6 +418,7 @@ void ProtocolV2::send_message(Message *m) {
   } else {
     ldout(cct, 5) << __func__ << " enqueueing message m=" << m
                   << " type=" << m->get_type() << " " << *m << dendl;
+    m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
     out_queue[m->get_priority()].emplace_back(
       out_queue_entry_t{is_prepared, m});
@@ -562,6 +563,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   static const int max_pending = 128;
   int i = 0;
   Message *pending[max_pending];
+  auto now = ceph::mono_clock::now();
   connection->write_lock.lock();
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
     Message *m = sent.front();
@@ -572,6 +574,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
                    << dendl;
   }
   connection->write_lock.unlock();
+  connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
   for (int k = 0; k < i; k++) {
     pending[k]->put();
   }
@@ -607,6 +610,12 @@ void ProtocolV2::write_event() {
       // send_message or requeue messages may not encode message
       if (!out_entry.is_prepared) {
         prepare_send_message(connection->get_features(), out_entry.m);
+      }
+
+      if (out_entry.m->queue_start != ceph::mono_time()) {
+        connection->logger->tinc(l_msgr_send_messages_queue_lat,
+				 ceph::mono_clock::now() -
+				 out_entry.m->queue_start);
       }
 
       r = write_message(out_entry.m, more);
@@ -918,6 +927,12 @@ CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
                 << " peer_type=" << (int)hello.entity_type()
                 << " peer_addr_for_me=" << hello.peer_addr() << dendl;
 
+  sockaddr_storage ss;
+  socklen_t len = sizeof(ss);
+  getsockname(connection->cs.fd(), (sockaddr *)&ss, &len);
+  ldout(cct, 5) << __func__ << " getsockname says I am " << (sockaddr *)&ss
+		<< " when talking to " << connection->target_addr << dendl;
+
   if (connection->get_peer_type() == -1) {
     connection->set_peer_type(hello.entity_type());
 
@@ -941,6 +956,45 @@ CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
       return nullptr;
     }
   }
+
+  if (messenger->get_myaddrs().empty() ||
+      messenger->get_myaddrs().front().is_blank_ip()) {
+    entity_addr_t a;
+    if (cct->_conf->ms_learn_addr_from_peer) {
+      ldout(cct, 1) << __func__ << " peer " << connection->target_addr
+		    << " says I am " << hello.peer_addr() << " (socket says "
+		    << (sockaddr*)&ss << ")" << dendl;
+      a = hello.peer_addr();
+    } else {
+      ldout(cct, 1) << __func__ << " socket to  " << connection->target_addr
+		    << " says I am " << (sockaddr*)&ss
+		    << " (peer says " << hello.peer_addr() << ")" << dendl;
+      a.set_sockaddr((sockaddr *)&ss);
+    }
+    a.set_type(entity_addr_t::TYPE_MSGR2); // anything but NONE; learned_addr ignores this
+    a.set_port(0);
+    connection->lock.unlock();
+    messenger->learned_addr(a);
+    if (cct->_conf->ms_inject_internal_delays &&
+        cct->_conf->ms_inject_socket_failures) {
+      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+        ldout(cct, 10) << __func__ << " sleep for "
+                       << cct->_conf->ms_inject_internal_delays << dendl;
+        utime_t t;
+        t.set_from_double(cct->_conf->ms_inject_internal_delays);
+        t.sleep();
+      }
+    }
+    connection->lock.lock();
+    if (state != HELLO_CONNECTING) {
+      ldout(cct, 1) << __func__
+                    << " state changed while learned_addr, mark_down or "
+                    << " replacing must be happened just now" << dendl;
+      return nullptr;
+    }
+  }
+
+
 
   CtPtr callback;
   callback = bannerExchangeCallback;
@@ -1394,8 +1448,6 @@ CtPtr ProtocolV2::handle_message() {
     }
   }
 
-  message->set_connection(connection);
-
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
@@ -1815,39 +1867,6 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
-  if (messenger->get_myaddrs().empty() ||
-      messenger->get_myaddrs().front().is_blank_ip()) {
-    sockaddr_storage ss;
-    socklen_t len = sizeof(ss);
-    int r = getsockname(connection->cs.socket_fd(), (sockaddr *)&ss, &len);
-    ceph_assert(r == 0);
-    ldout(cct, 1) << __func__ << " getsockname reveals I am " << (sockaddr *)&ss
-                  << " when talking to " << connection->target_addr << dendl;
-    entity_addr_t a;
-    a.set_type(entity_addr_t::TYPE_MSGR2); // anything but NONE; learned_addr ignores this
-    a.set_sockaddr((sockaddr *)&ss);
-    a.set_port(0);
-    connection->lock.unlock();
-    messenger->learned_addr(a);
-    if (cct->_conf->ms_inject_internal_delays &&
-        cct->_conf->ms_inject_socket_failures) {
-      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-        ldout(cct, 10) << __func__ << " sleep for "
-                       << cct->_conf->ms_inject_internal_delays << dendl;
-        utime_t t;
-        t.set_from_double(cct->_conf->ms_inject_internal_delays);
-        t.sleep();
-      }
-    }
-    connection->lock.lock();
-    if (state != SESSION_CONNECTING) {
-      ldout(cct, 1) << __func__
-                    << " state changed while learned_addr, mark_down or "
-                    << " replacing must be happened just now" << dendl;
-      return nullptr;
-    }
-  }
-
   auto client_ident = ClientIdentFrame::Encode(
       messenger->get_myaddrs(),
       connection->target_addr,
@@ -2254,7 +2273,7 @@ CtPtr ProtocolV2::handle_auth_signature(ceph::bufferlist &payload)
     // this happened at client side
     return finish_client_auth();
   } else {
-    ceph_assert_always("state corruption" == nullptr);
+    ceph_abort("state corruption");
   }
 }
 
@@ -2513,7 +2532,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
   return reuse_connection(existing, exproto);
 }
 
-CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
+CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing) {
   ldout(cct, 20) << __func__ << " existing=" << existing << dendl;
 
   std::lock_guard<std::mutex> l(existing->lock);
@@ -2614,7 +2633,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
   }
 }
 
-CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
+CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
                                    ProtocolV2 *exproto) {
   ldout(cct, 20) << __func__ << " existing=" << existing
                  << " reconnect=" << reconnecting << dendl;
@@ -2708,6 +2727,12 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
           ceph_assert(exproto->state == NONE);
 
           exproto->state = SESSION_ACCEPTING;
+          // we have called shutdown_socket above
+          ceph_assert(existing->last_tick_id == 0);
+          // restart timer since we are going to re-build connection
+          existing->last_connect_started = ceph::coarse_mono_clock::now();
+          existing->last_tick_id = existing->center->create_time_event(
+            existing->connect_timeout_us, existing->tick_handler);
           existing->state = AsyncConnection::STATE_CONNECTION_ESTABLISHED;
           existing->center->create_file_event(existing->cs.fd(), EVENT_READABLE,
                                               existing->read_handler);

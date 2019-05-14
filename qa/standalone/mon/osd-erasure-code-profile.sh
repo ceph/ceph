@@ -132,7 +132,7 @@ function TEST_set_idempotent() {
     # ceph osd erasure-code-profile set: verify that it is idempotent,
     # as if it was using the same code path.
     #
-    ceph osd erasure-code-profile set default k=2 m=1 2>&1 || return 1
+    ceph osd erasure-code-profile set default k=2 m=2 2>&1 || return 1
     local profile
     #
     # Because plugin=jerasure is the default, it uses a slightly

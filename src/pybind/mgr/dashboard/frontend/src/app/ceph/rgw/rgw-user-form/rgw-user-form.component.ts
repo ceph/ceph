@@ -8,6 +8,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -40,6 +41,12 @@ export class RgwUserFormComponent implements OnInit {
   swiftKeys: RgwUserSwiftKey[] = [];
   capabilities: RgwUserCapability[] = [];
 
+  action: string;
+  resource: string;
+  subuserLabel: string;
+  s3keyLabel: string;
+  capabilityLabel: string;
+
   constructor(
     private formBuilder: CdFormBuilder,
     private route: ActivatedRoute,
@@ -47,8 +54,13 @@ export class RgwUserFormComponent implements OnInit {
     private rgwUserService: RgwUserService,
     private bsModalService: BsModalService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
+    this.resource = this.i18n('user');
+    this.subuserLabel = this.i18n('subuser');
+    this.s3keyLabel = this.i18n('S3 Key');
+    this.capabilityLabel = this.i18n('capability');
     this.createForm();
     this.listenToChanges();
   }
@@ -158,6 +170,8 @@ export class RgwUserFormComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.editing = this.router.url.startsWith(`/rgw/user/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     // Process route parameters.
     this.route.params.subscribe((params: { uid: string }) => {
       if (!params.hasOwnProperty('uid')) {
@@ -165,8 +179,6 @@ export class RgwUserFormComponent implements OnInit {
       }
       const uid = decodeURIComponent(params.uid);
       this.loading = true;
-      // Load the user data in 'edit' mode.
-      this.editing = true;
       // Load the user and quota information.
       const observables = [];
       observables.push(this.rgwUserService.get(uid));

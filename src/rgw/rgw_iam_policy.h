@@ -29,6 +29,7 @@
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
+#include "rgw_arn.h"
 
 class RGWRados;
 namespace rgw {
@@ -36,8 +37,6 @@ namespace auth {
 class Identity;
 }
 }
-struct rgw_obj;
-struct rgw_bucket;
 
 namespace rgw {
 namespace IAM {
@@ -205,70 +204,6 @@ inline int op_to_perm(std::uint64_t op) {
 }
 
 using Environment = boost::container::flat_map<std::string, std::string>;
-
-enum struct Partition {
-  aws, aws_cn, aws_us_gov, wildcard
-  // If we wanted our own ARNs for principal type unique to us
-  // (maybe to integrate better with Swift) or for anything else we
-  // provide that doesn't map onto S3, we could add an 'rgw'
-  // partition type.
-};
-
-enum struct Service {
-  apigateway, appstream, artifact, autoscaling, aws_portal, acm,
-  cloudformation, cloudfront, cloudhsm, cloudsearch, cloudtrail,
-  cloudwatch, events, logs, codebuild, codecommit, codedeploy,
-  codepipeline, cognito_idp, cognito_identity, cognito_sync,
-  config, datapipeline, dms, devicefarm, directconnect,
-  ds, dynamodb, ec2, ecr, ecs, ssm, elasticbeanstalk, elasticfilesystem,
-  elasticloadbalancing, elasticmapreduce, elastictranscoder, elasticache,
-  es, gamelift, glacier, health, iam, importexport, inspector, iot,
-  kms, kinesisanalytics, firehose, kinesis, lambda, lightsail,
-  machinelearning, aws_marketplace, aws_marketplace_management,
-  mobileanalytics, mobilehub, opsworks, opsworks_cm, polly,
-  redshift, rds, route53, route53domains, sts, servicecatalog,
-  ses, sns, sqs, s3, swf, sdb, states, storagegateway, support,
-  trustedadvisor, waf, workmail, workspaces, wildcard
-};
-
-struct ARN {
-  Partition partition;
-  Service service;
-  std::string region;
-  // Once we refit tenant, we should probably use that instead of a
-  // string.
-  std::string account;
-  std::string resource;
-
-  ARN()
-    : partition(Partition::wildcard), service(Service::wildcard) {}
-  ARN(Partition partition, Service service, std::string region,
-      std::string account, std::string resource)
-    : partition(partition), service(service), region(std::move(region)),
-      account(std::move(account)), resource(std::move(resource)) {}
-  ARN(const rgw_obj& o);
-  ARN(const rgw_bucket& b);
-  ARN(const rgw_bucket& b, const std::string& o);
-  ARN(const string& resource_name, const string& type, const string& tenant, bool has_path=false);
-
-  static boost::optional<ARN> parse(const std::string& s,
-				    bool wildcard = false);
-  std::string to_string() const;
-
-  // `this` is the pattern
-  bool match(const ARN& candidate) const;
-};
-
-inline std::string to_string(const ARN& a) {
-  return a.to_string();
-}
-
-inline std::ostream& operator <<(std::ostream& m, const ARN& a) {
-  return m << to_string(a);
-}
-
-bool operator ==(const ARN& l, const ARN& r);
-bool operator <(const ARN& l, const ARN& r);
 
 using Address = std::bitset<128>;
 struct MaskedIP {
@@ -525,16 +460,6 @@ struct Policy {
 
 std::ostream& operator <<(ostream& m, const Policy& p);
 }
-}
-
-namespace std {
-template<>
-struct hash<::rgw::IAM::Service> {
-  size_t operator()(const ::rgw::IAM::Service& s) const noexcept {
-    // Invoke a default-constructed hash object for int.
-    return hash<int>()(static_cast<int>(s));
-  }
-};
 }
 
 #endif

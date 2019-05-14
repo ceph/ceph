@@ -49,7 +49,7 @@ class MonmapMonitor : public PaxosService {
 
   void on_active() override;
   void apply_mon_features(const mon_feature_t& features,
-			  int min_mon_release);
+			  ceph_release_t min_mon_release);
 
   void dump_info(Formatter *f);
 
@@ -71,6 +71,8 @@ class MonmapMonitor : public PaxosService {
   bool should_propose(double& delay) override;
 
   void check_sub(Subscription *sub);
+
+  void tick() override;
 
 private:
   void check_subs();

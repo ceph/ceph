@@ -7,7 +7,12 @@ import { ToastModule } from 'ng2-toastr';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  FixtureHelper,
+  FormHelper,
+  i18nProviders
+} from '../../../../testing/unit-test-helper';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -19,6 +24,7 @@ describe('ErasureCodeProfileFormComponent', () => {
   let ecpService: ErasureCodeProfileService;
   let fixture: ComponentFixture<ErasureCodeProfileFormComponent>;
   let formHelper: FormHelper;
+  let fixtureHelper: FixtureHelper;
   let data: {};
 
   configureTestBed({
@@ -28,6 +34,7 @@ describe('ErasureCodeProfileFormComponent', () => {
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ErasureCodeProfileFormComponent);
+    fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
     ecpService = TestBed.get(ErasureCodeProfileService);
@@ -75,8 +82,7 @@ describe('ErasureCodeProfileFormComponent', () => {
     it(`should show all default form controls`, () => {
       const showDefaults = (plugin) => {
         formHelper.setValue('plugin', plugin);
-        formHelper.expectIdElementsVisible(
-          fixture,
+        fixtureHelper.expectIdElementsVisible(
           [
             'name',
             'plugin',
@@ -103,11 +109,11 @@ describe('ErasureCodeProfileFormComponent', () => {
       });
 
       it(`should show 'packetSize' and 'technique'`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['packetSize', 'technique'], true);
+        fixtureHelper.expectIdElementsVisible(['packetSize', 'technique'], true);
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['c', 'l', 'crushLocality'], false);
+        fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality'], false);
       });
     });
 
@@ -123,16 +129,12 @@ describe('ErasureCodeProfileFormComponent', () => {
       });
 
       it(`should show 'technique'`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['technique'], true);
+        fixtureHelper.expectIdElementsVisible(['technique'], true);
         expect(fixture.debugElement.query(By.css('#technique'))).toBeTruthy();
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        formHelper.expectIdElementsVisible(
-          fixture,
-          ['c', 'l', 'crushLocality', 'packetSize'],
-          false
-        );
+        fixtureHelper.expectIdElementsVisible(['c', 'l', 'crushLocality', 'packetSize'], false);
       });
     });
 
@@ -147,11 +149,11 @@ describe('ErasureCodeProfileFormComponent', () => {
       });
 
       it(`should show 'l' and 'crushLocality'`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['l', 'crushLocality'], true);
+        fixtureHelper.expectIdElementsVisible(['l', 'crushLocality'], true);
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['c', 'packetSize', 'technique'], false);
+        fixtureHelper.expectIdElementsVisible(['c', 'packetSize', 'technique'], false);
       });
     });
 
@@ -166,12 +168,11 @@ describe('ErasureCodeProfileFormComponent', () => {
       });
 
       it(`should show 'c'`, () => {
-        formHelper.expectIdElementsVisible(fixture, ['c'], true);
+        fixtureHelper.expectIdElementsVisible(['c'], true);
       });
 
       it(`should not show any other plugin specific form control`, () => {
-        formHelper.expectIdElementsVisible(
-          fixture,
+        fixtureHelper.expectIdElementsVisible(
           ['l', 'crushLocality', 'packetSize', 'technique'],
           false
         );

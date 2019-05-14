@@ -23,11 +23,15 @@ namespace cache {
 template <typename ImageCtxT = ImageCtx>
 class ObjectCacherObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new ObjectCacherObjectDispatch(image_ctx);
+  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx,
+                                            size_t max_dirty,
+                                            bool writethrough_until_flush) {
+    return new ObjectCacherObjectDispatch(image_ctx, max_dirty,
+                                          writethrough_until_flush);
   }
 
-  ObjectCacherObjectDispatch(ImageCtxT* image_ctx);
+  ObjectCacherObjectDispatch(ImageCtxT* image_ctx, size_t max_dirty,
+                             bool writethrough_until_flush);
   ~ObjectCacherObjectDispatch() override;
 
   io::ObjectDispatchLayer get_object_dispatch_layer() const override {
@@ -78,8 +82,8 @@ public:
 
   bool flush(
       io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      io::DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) override;
+      uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) override;
 
   bool invalidate_cache(Context* on_finish) override;
   bool reset_existence_cache(Context* on_finish) override;
@@ -93,6 +97,8 @@ private:
   struct C_InvalidateCache;
 
   ImageCtxT* m_image_ctx;
+  size_t m_max_dirty;
+  bool m_writethrough_until_flush;
 
   Mutex m_cache_lock;
   ObjectCacher *m_object_cacher = nullptr;

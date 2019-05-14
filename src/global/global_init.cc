@@ -142,6 +142,11 @@ void global_pre_init(
   // command line (as passed by caller)
   conf.parse_argv(args);
 
+  if (conf->log_early &&
+      !cct->_log->is_started()) {
+    cct->_log->start();
+  }
+
   if (!conf->no_mon_config) {
     // make sure our mini-session gets legacy values
     conf.apply_changes(nullptr);
@@ -153,6 +158,9 @@ void global_pre_init(
 	   << std::endl;
       _exit(1);
     }
+  }
+  if (!cct->_log->is_started()) {
+    cct->_log->start();
   }
 
   // do the --show-config[-val], if present in argv
@@ -385,7 +393,7 @@ int global_init_prefork(CephContext *cct)
   const auto& conf = cct->_conf;
   if (!conf->daemonize) {
 
-    if (pidfile_write(conf) < 0)
+    if (pidfile_write(conf->pid_file) < 0)
       exit(1);
 
     if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
@@ -466,7 +474,7 @@ void global_init_postfork_start(CephContext *cct)
   reopen_as_null(cct, STDIN_FILENO);
 
   const auto& conf = cct->_conf;
-  if (pidfile_write(conf) < 0)
+  if (pidfile_write(conf->pid_file) < 0)
     exit(1);
 
   if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&

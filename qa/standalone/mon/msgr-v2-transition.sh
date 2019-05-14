@@ -23,7 +23,7 @@ function run() {
 function TEST_mon_v1_osd_addrs() {
     local dir=$1
 
-    export CEPH_ARGS="$CEPH_ARGS --mon-host=$CEPH_MON_V1 --mon-debug-no-require-nautilus"
+    export CEPH_ARGS="$CEPH_ARGS --mon-host=$CEPH_MON_V1 --mon-debug-no-require-octopus --mon-debug-no-require-nautilus"
     run_mon $dir a || return 1
 
     ceph mon dump | grep mon.a | grep $CEPH_MON_V1
@@ -58,7 +58,7 @@ function TEST_mon_v1_osd_addrs() {
 function TEST_mon_v2v1_osd_addrs() {
     local dir=$1
 
-    export CEPH_ARGS="$CEPH_ARGS --mon-host=[$CEPH_MON_V2,$CEPH_MON_V1] --mon-debug-no-require-nautilus"
+    export CEPH_ARGS="$CEPH_ARGS --mon-host=[$CEPH_MON_V2,$CEPH_MON_V1] --mon-debug-no-require-octopus --mon-debug-no-require-nautilus"
     run_mon $dir a || return 1
 
     ceph mon dump | grep mon.a | grep $CEPH_MON_V1

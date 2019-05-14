@@ -22,10 +22,8 @@
  * instruct an OSD to scrub some or all pg(s)
  */
 
-class MOSDScrub : public MessageInstance<MOSDScrub> {
+class MOSDScrub : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
 
@@ -34,12 +32,12 @@ public:
   bool repair = false;
   bool deep = false;
 
-  MOSDScrub() : MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDScrub() : Message{MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDScrub(const uuid_d& f, bool r, bool d) :
-    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), repair(r), deep(d) {}
   MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r, bool d) :
-    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION},
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
   ~MOSDScrub() override {}
@@ -73,6 +71,9 @@ public:
     decode(repair, p);
     decode(deep, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

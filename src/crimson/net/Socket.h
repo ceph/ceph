@@ -4,11 +4,16 @@
 #pragma once
 
 #include <seastar/core/reactor.hh>
+#include <seastar/core/sharded.hh>
 #include <seastar/net/packet.hh>
 
 #include "include/buffer.h"
+#include "msg/msg_types.h"
 
 namespace ceph::net {
+
+class Socket;
+using SocketFRef = seastar::foreign_ptr<std::unique_ptr<Socket>>;
 
 class Socket
 {
@@ -23,13 +28,40 @@ class Socket
     size_t remaining;
   } r;
 
+  struct construct_tag {};
+
  public:
-  explicit Socket(seastar::connected_socket&& _socket)
+  Socket(seastar::connected_socket&& _socket, construct_tag)
     : sid{seastar::engine().cpu_id()},
       socket(std::move(_socket)),
       in(socket.input()),
-      out(socket.output()) {}
+      // the default buffer size 8192 is too small that may impact our write
+      // performance. see seastar::net::connected_socket::output()
+      out(socket.output(65536)) {}
+
   Socket(Socket&& o) = delete;
+
+  static seastar::future<SocketFRef>
+  connect(const entity_addr_t& peer_addr) {
+    return seastar::connect(peer_addr.in4_addr())
+      .then([] (seastar::connected_socket socket) {
+        return seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
+							      construct_tag{}));
+      });
+  }
+
+  static seastar::future<SocketFRef, entity_addr_t>
+  accept(seastar::server_socket& listener) {
+    return listener.accept().then([] (seastar::connected_socket socket,
+				      seastar::socket_address paddr) {
+        entity_addr_t peer_addr;
+        peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        return seastar::make_ready_future<SocketFRef, entity_addr_t>(
+          seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
+							 construct_tag{})),
+	  peer_addr);
+      });
+  }
 
   /// read the requested number of bytes into a bufferlist
   seastar::future<bufferlist> read(size_t bytes);

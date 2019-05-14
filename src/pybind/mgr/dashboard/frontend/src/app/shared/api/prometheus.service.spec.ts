@@ -2,6 +2,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
+import { PrometheusNotification } from '../models/prometheus-alerts';
 import { PrometheusService } from './prometheus.service';
 import { SettingsService } from './settings.service';
 
@@ -33,10 +34,16 @@ describe('PrometheusService', () => {
     expect(req.request.method).toBe('GET');
   });
 
-  it('should call getNotificationSince', () => {
-    service.getNotificationSince({}).subscribe();
-    const req = httpTesting.expectOne('api/prometheus/get_notifications_since');
-    expect(req.request.method).toBe('POST');
+  it('should call getNotificationSince without a notification', () => {
+    service.getNotifications().subscribe();
+    const req = httpTesting.expectOne('api/prometheus/notifications?from=last');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getNotificationSince with notification', () => {
+    service.getNotifications({ id: '42' } as PrometheusNotification).subscribe();
+    const req = httpTesting.expectOne('api/prometheus/notifications?from=42');
+    expect(req.request.method).toBe('GET');
   });
 
   describe('ifAlertmanagerConfigured', () => {

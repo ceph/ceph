@@ -100,12 +100,13 @@ public:
                                      dispatch_result, on_dispatched);
   }
 
-  MOCK_METHOD3(execute_flush, bool(FlushSource, DispatchResult*,
+  MOCK_METHOD4(execute_flush, bool(FlushSource, uint64_t*, DispatchResult*,
                                    Context*));
   bool flush(FlushSource flush_source, const ZTracer::Trace &parent_trace,
-             DispatchResult* dispatch_result, Context** on_finish,
-             Context* on_dispatched) {
-    return execute_flush(flush_source, dispatch_result, on_dispatched);
+             uint64_t* journal_tid, DispatchResult* dispatch_result,
+             Context** on_finish, Context* on_dispatched) {
+    return execute_flush(flush_source, journal_tid, dispatch_result,
+                         on_dispatched);
   }
 
   MOCK_METHOD1(invalidate_cache, bool(Context*));

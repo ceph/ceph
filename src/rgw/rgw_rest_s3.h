@@ -58,7 +58,6 @@ public:
 
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
 {
-  bufferlist tags_bl;
 public:
   RGWGetObjTags_ObjStore_S3() {}
   ~RGWGetObjTags_ObjStore_S3() {}
@@ -537,6 +536,7 @@ public:
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
     bool isSTSenabled;
+    bool isIAMenabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
   }
@@ -545,8 +545,8 @@ protected:
   RGWOp *op_post() override;
 public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool isSTSenabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled) {}
+                              bool isSTSenabled, bool isIAMenabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled), isIAMenabled(isIAMenabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -614,10 +614,12 @@ class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
   bool enable_sts;
+  bool enable_iam;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false)
+  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false, bool enable_iam = false)
     : enable_s3website(enable_s3website),
-      enable_sts(enable_sts) {
+      enable_sts(enable_sts),
+      enable_iam(enable_iam) {
   }
 
   ~RGWRESTMgr_S3() override = default;
@@ -918,7 +920,7 @@ class STSEngine : public AWSEngine {
   acl_strategy_t get_acl_strategy() const { return nullptr; };
   auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
 
-  int get_session_token(const boost::string_view& session_token,
+  int get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
                         STS::SessionToken& token) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp, 

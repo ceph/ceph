@@ -18,9 +18,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGUpdateLogMissingReply : public MessageInstance<MOSDPGUpdateLogMissingReply, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDPGUpdateLogMissingReply : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
@@ -52,11 +50,9 @@ public:
   }
 
   MOSDPGUpdateLogMissingReply()
-    : MessageInstance(
-      MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
-      HEAD_VERSION,
-      COMPAT_VERSION)
-      {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY, HEAD_VERSION,
+			 COMPAT_VERSION}
+  {}
   MOSDPGUpdateLogMissingReply(
     spg_t pgid,
     shard_id_t from,
@@ -64,10 +60,8 @@ public:
     epoch_t min_epoch,
     ceph_tid_t rep_tid,
     eversion_t last_complete_ondisk)
-    : MessageInstance(
-        MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
-        HEAD_VERSION,
-        COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY, HEAD_VERSION,
+			 COMPAT_VERSION},
       map_epoch(epoch),
       min_epoch(min_epoch),
       pgid(pgid),
@@ -112,6 +106,9 @@ public:
       decode(last_complete_ondisk, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

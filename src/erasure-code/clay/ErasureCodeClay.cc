@@ -36,7 +36,7 @@
 #define talloc(type, num) (type *) malloc(sizeof(type)*(num))
 
 using namespace std;
-
+using namespace ceph;
 static ostream& _prefix(std::ostream* _dout)
 {
   return *_dout << "ErasureCodeClay: ";

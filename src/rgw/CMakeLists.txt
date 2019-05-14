@@ -34,9 +34,11 @@ set(librgw_common_srcs
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
+  rgw_aio.cc
   rgw_aio_throttle.cc
   rgw_auth.cc
   rgw_auth_s3.cc
+  rgw_arn.cc
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_cache.cc
@@ -70,8 +72,10 @@ set(librgw_common_srcs
   rgw_sync_module_pubsub.cc
   rgw_pubsub_push.cc
   rgw_sync_module_pubsub_rest.cc
-  rgw_sync_log_trim.cc
   rgw_sync_trace.cc
+  rgw_trim_bilog.cc
+  rgw_trim_datalog.cc
+  rgw_trim_mdlog.cc
   rgw_period_history.cc
   rgw_period_puller.cc
   rgw_reshard.cc
@@ -113,7 +117,8 @@ set(librgw_common_srcs
   rgw_zone.cc
   rgw_sts.cc
   rgw_rest_sts.cc
-  rgw_perf_counters.cc)
+  rgw_perf_counters.cc
+  rgw_rest_iam.cc)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)

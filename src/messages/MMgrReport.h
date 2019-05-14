@@ -37,7 +37,7 @@ public:
   uint8_t priority = PerfCountersBuilder::PRIO_USEFUL;
   enum unit_t unit;
 
-  void encode(bufferlist &bl) const
+  void encode(ceph::buffer::list &bl) const
   {
     // TODO: decide whether to drop the per-type
     // encoding here, we could rely on the MgrReport
@@ -53,7 +53,7 @@ public:
     ENCODE_FINISH(bl);
   }
   
-  void decode(bufferlist::const_iterator &p)
+  void decode(ceph::buffer::list::const_iterator &p)
   {
     DECODE_START(3, p);
     decode(path, p);
@@ -71,11 +71,8 @@ public:
 };
 WRITE_CLASS_ENCODER(PerfCounterType)
 
-class MMgrReport : public MessageInstance<MMgrReport> {
-public:
-  friend factory;
+class MMgrReport : public Message {
 private:
-
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -93,8 +90,8 @@ public:
 
   // Decode: iterate over the types we know about, sorted by idx,
   // and use the current type's type to decide how to decode
-  // the next bytes from the bufferlist.
-  bufferlist packed;
+  // the next bytes from the ceph::buffer::list.
+  ceph::buffer::list packed;
 
   std::string daemon_name;
   std::string service_name;  // optional; otherwise infer from entity type
@@ -105,12 +102,13 @@ public:
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   // encode map<string,map<int32_t,string>> of current config
-  bufferlist config_bl;
+  ceph::buffer::list config_bl;
 
   std::map<OSDPerfMetricQuery, OSDPerfMetricReport>  osd_perf_metric_reports;
 
   void decode_payload() override
   {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(daemon_name, p);
     decode(declare_types, p);
@@ -146,7 +144,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mgrreport"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {
       out << service_name;
@@ -166,10 +164,14 @@ public:
     out << ")";
   }
 
+private:
   MMgrReport()
-    : MessageInstance(MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION)
+    : Message{MSG_MGR_REPORT, HEAD_VERSION, COMPAT_VERSION}
   {}
+  using RefCountedObject::put;
+  using RefCountedObject::get;
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif
-

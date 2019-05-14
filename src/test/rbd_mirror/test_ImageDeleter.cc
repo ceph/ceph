@@ -158,7 +158,7 @@ public:
                                   false);
     EXPECT_EQ(0, ictx->state->open(0));
     {
-      RWLock::WLocker snap_locker(ictx->snap_lock);
+      RWLock::WLocker image_locker(ictx->image_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
     }
 
@@ -178,7 +178,7 @@ public:
                                   false);
     EXPECT_EQ(0, ictx->state->open(0));
     {
-      RWLock::WLocker snap_locker(ictx->snap_lock);
+      RWLock::WLocker image_locker(ictx->image_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
     }
 

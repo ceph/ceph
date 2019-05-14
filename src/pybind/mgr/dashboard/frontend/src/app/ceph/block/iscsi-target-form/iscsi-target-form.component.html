@@ -7,8 +7,8 @@
         *ngIf="targetForm">
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title"
-            i18n>{isEdit, select, 1 {Edit} other {Add}} target</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
 
       <div class="panel-body">
@@ -144,7 +144,7 @@
 
               <span class="help-block">
                 <ng-container *ngIf="backstores.length > 1"
-                              i18n>Backstore: {{ imagesSettings[image].backstore }}.&nbsp;</ng-container>
+                              i18n>Backstore: {{ imagesSettings[image].backstore | iscsiBackstore }}.&nbsp;</ng-container>
 
                 <ng-container *ngIf="hasAdvancedSettings(imagesSettings[image][imagesSettings[image].backstore])"
                               i18n>This image has modified settings.</ng-container>
@@ -244,7 +244,7 @@
                            for="user"
                            i18n>User</label>
                     <div class="col-sm-9">
-                      <input id="user"
+                      <input [id]="'user' + ii"
                              class="form-control"
                              formControlName="user"
                              type="text">
@@ -267,7 +267,7 @@
                            i18n>Password</label>
                     <div class="col-sm-9">
                       <div class="input-group">
-                        <input id="password"
+                        <input [id]="'password' + ii"
                                class="form-control"
                                formControlName="password"
                                type="password">
@@ -275,11 +275,11 @@
                         <span class="input-group-btn">
                           <button type="button"
                                   class="btn btn-default"
-                                  cdPasswordButton="password">
+                                  [cdPasswordButton]="'password' + ii">
                           </button>
                           <button type="button"
                                   class="btn btn-default"
-                                  cdCopy2ClipboardButton="password">
+                                  [cdCopy2ClipboardButton]="'password' + ii">
                           </button>
                         </span>
                       </div>
@@ -303,7 +303,7 @@
                       <ng-container i18n>Mutual User</ng-container>
                     </label>
                     <div class="col-sm-9">
-                      <input id="mutual_user"
+                      <input [id]="'mutual_user' + ii"
                              class="form-control"
                              formControlName="mutual_user"
                              type="text">
@@ -327,7 +327,7 @@
                            i18n>Mutual Password</label>
                     <div class="col-sm-9">
                       <div class="input-group">
-                        <input id="mutual_password"
+                        <input [id]="'mutual_password' + ii"
                                class="form-control"
                                formControlName="mutual_password"
                                type="password">
@@ -335,11 +335,11 @@
                         <span class="input-group-btn">
                           <button type="button"
                                   class="btn btn-default"
-                                  cdPasswordButton="mutual_password">
+                                  [cdPasswordButton]="'mutual_password' + ii">
                           </button>
                           <button type="button"
                                   class="btn btn-default"
-                                  cdCopy2ClipboardButton="mutual_password">
+                                  [cdCopy2ClipboardButton]="'mutual_password' + ii">
                           </button>
                         </span>
                       </div>
@@ -556,15 +556,12 @@
       </div>
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button [form]="formDir"
-                            type="button"
-                            (submitAction)="submit()"
-                            i18n>Submit</cd-submit-button>
-
-          <button type="button"
-                  class="btn btn-sm btn-default"
-                  routerLink="/block/iscsi/targets"
-                  i18n>Back</button>
+          <cd-submit-button
+            [form]="formDir"
+            (submitAction)="submit()"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

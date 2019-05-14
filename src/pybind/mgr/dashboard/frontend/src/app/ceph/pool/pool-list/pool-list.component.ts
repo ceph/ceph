@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -19,13 +20,20 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { Pool } from '../pool';
+import { PoolStats } from '../pool-stat';
+
+const BASE_URL = 'pool';
 
 @Component({
   selector: 'cd-pool-list',
   templateUrl: './pool-list.component.html',
-  providers: [TaskListService],
+  providers: [
+    TaskListService,
+    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
+  ],
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent implements OnInit {
@@ -55,27 +63,30 @@ export class PoolListComponent implements OnInit {
     private modalService: BsModalService,
     private i18n: I18n,
     private pgCategoryService: PgCategoryService,
-    private dimlessPipe: DimlessPipe
+    private dimlessPipe: DimlessPipe,
+    private urlBuilder: URLBuilderService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
         permission: 'create',
         icon: 'fa-plus',
-        routerLink: () => '/pool/add',
-        name: this.i18n('Add')
+        routerLink: () => this.urlBuilder.getCreate(),
+        name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
         icon: 'fa-pencil',
-        routerLink: () => '/pool/edit/' + encodeURIComponent(this.selection.first().pool_name),
-        name: this.i18n('Edit')
+        routerLink: () =>
+          this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
+        name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
         icon: 'fa-trash-o',
         click: () => this.deletePoolModal(),
-        name: this.i18n('Delete')
+        name: this.actionLabels.DELETE
       }
     ];
   }
@@ -128,7 +139,12 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('Crush Ruleset'),
         flexGrow: 3
       },
-      { name: this.i18n('Usage'), cellTemplate: this.poolUsageTpl, flexGrow: 3 },
+      {
+        name: this.i18n('Usage'),
+        prop: 'usage',
+        cellTemplate: this.poolUsageTpl,
+        flexGrow: 3
+      },
       {
         prop: 'stats.rd_bytes.series',
         name: this.i18n('Read bytes'),
@@ -165,7 +181,7 @@ export class PoolListComponent implements OnInit {
         this.table.reset(); // Disable loading indicator.
         this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
       },
-      (task) => task.name.startsWith('pool/'),
+      (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,
       { default: (task: ExecutingTask) => new Pool(task.metadata['pool_name']) }
     );
@@ -183,7 +199,7 @@ export class PoolListComponent implements OnInit {
         itemDescription: 'Pool',
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('pool/delete', { pool_name: name }),
+            task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
             call: this.poolService.delete(name)
           })
       }
@@ -203,11 +219,13 @@ export class PoolListComponent implements OnInit {
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
-      const stats = {};
+      const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
         stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
+      const avail = stats.bytes_used.latest + stats.max_avail.latest;
+      pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         pool.stats[stat].series = pool.stats[stat].series.map((point) => point[1]);

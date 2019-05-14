@@ -354,41 +354,49 @@ std::vector<Option> get_global_options() {
     Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
     .set_description("cluster fsid (uuid)")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("service"),
 
     Option("public_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
     .set_description("public-facing address to bind to")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "mds", "osd", "mgr"}),
 
     Option("public_bind_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
     .set_default(entity_addr_t())
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("mon")
     .set_description(""),
 
     Option("cluster_addr", Option::TYPE_ADDR, Option::LEVEL_BASIC)
     .set_description("cluster-facing address to bind to")
     .add_service("osd")
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network"),
 
     Option("public_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Network(s) from which to choose a public address to bind to"),
 
     Option("public_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
     .add_tag("network")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Interface name(s) from which to choose an address from a public_network to bind to; public_network must also be specified.")
     .add_see_also("public_network"),
 
     Option("cluster_network", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service("osd")
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Network(s) from which to choose a cluster address to bind to"),
 
     Option("cluster_network_interface", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .add_service({"mon", "mds", "osd", "mgr"})
+    .set_flag(Option::FLAG_STARTUP)
     .add_tag("network")
     .set_description("Interface name(s) from which to choose an address from a cluster_network to bind to; cluster_network must also be specified.")
     .add_see_also("cluster_network"),
@@ -408,12 +416,14 @@ std::vector<Option> get_global_options() {
   			"resolved via DNS and all A or AAAA records are "
   			"included in the search list.")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common"),
 
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_tag("network")
     .add_see_also("mon_host"),
@@ -422,15 +432,18 @@ std::vector<Option> get_global_options() {
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common"),
 
     Option("lockdep_force_backtrace", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("always gather current backtrace at every lock")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_see_also("lockdep"),
 
     Option("run_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/run/ceph")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path for the 'run' directory for storing pid and socket files")
     .add_service("common")
     .add_see_also("admin_socket"),
@@ -438,11 +451,13 @@ std::vector<Option> get_global_options() {
     Option("admin_socket", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_daemon_default("$run_dir/$cluster-$name.asok")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path for the runtime control socket file, used by the 'ceph daemon' command")
     .add_service("common"),
 
     Option("admin_socket_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("file mode to set for the admin socket file, e.g, '0755'")
+    .set_flag(Option::FLAG_STARTUP)
     .add_service("common")
     .add_see_also("admin_socket"),
 
@@ -451,12 +466,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_daemon_default(true)
     .set_description("whether to daemonize (background) after startup")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also({"pid_file", "chdir"}),
 
     Option("setuser", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("uid or user name to switch to on startup")
     .set_long_description("This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -464,6 +481,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("setgroup"),
 
     Option("setgroup", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("gid or group name to switch to on startup")
     .set_long_description("This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -471,6 +489,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("setuser"),
 
     Option("setuser_match_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("if set, setuser/setgroup is condition on this path matching ownership")
     .set_long_description("If setuser or setgroup are specified, and this option is non-empty, then the uid/gid of the daemon will only be changed if the file or directory specified by this option has a matching uid and/or gid.  This exists primarily to allow switching to user ceph for OSDs to be conditional on whether the osd data contents have also been chowned after an upgrade.  This is normally specified by the systemd unit file.")
     .add_service({"mon", "mgr", "osd", "mds"})
@@ -478,12 +497,14 @@ std::vector<Option> get_global_options() {
     .add_see_also({"setuser", "setgroup"}),
 
     Option("pid_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("path to write a pid file (if any)")
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
     Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to chdir(2) to after daemonizing")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
@@ -491,12 +512,14 @@ std::vector<Option> get_global_options() {
 
     Option("fatal_signal_handlers", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("whether to register signal handlers for SIGABRT etc that dump a stack trace")
     .set_long_description("This is normally true for daemons and values for libraries.")
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
     Option("crash_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_default("/var/lib/ceph/crash")
     .set_description("Directory where crash reports are archived"),
 
@@ -509,6 +532,7 @@ std::vector<Option> get_global_options() {
 
     Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR"/erasure-code")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("directory where erasure-code plugins can be found")
     .add_service({"mon", "osd"}),
 
@@ -610,94 +634,120 @@ std::vector<Option> get_global_options() {
     // unmodified
     Option("clog_to_monitors", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=true")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Make daemons send cluster log messages to monitors"),
 
     Option("clog_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Make daemons send cluster log messages to syslog"),
 
     Option("clog_to_syslog_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Syslog level for cluster log messages")
     .add_see_also("clog_to_syslog"),
 
     Option("clog_to_syslog_facility", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=daemon audit=local0")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Syslog facility for cluster log messages")
     .add_see_also("clog_to_syslog"),
 
     Option("clog_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Make daemons send cluster log to graylog"),
 
     Option("clog_to_graylog_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("127.0.0.1")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Graylog host to cluster log messages")
     .add_see_also("clog_to_graylog"),
 
     Option("clog_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Graylog port number for cluster log messages")
     .add_see_also("clog_to_graylog"),
 
     Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .add_service("mon")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Make monitor send cluster log messages to stderr (prefixed by channel)")
     .add_see_also("log_stderr_prefix"),
 
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Make monitor send cluster log messages to syslog"),
 
     Option("mon_cluster_log_to_syslog_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("info")
     .add_service("mon")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Syslog level for cluster log messages")
     .add_see_also("mon_cluster_log_to_syslog"),
 
     Option("mon_cluster_log_to_syslog_facility", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("daemon")
     .add_service("mon")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Syslog facility for cluster log messages")
     .add_see_also("mon_cluster_log_to_syslog"),
 
+    Option("mon_cluster_log_to_file", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("Make monitor send cluster log messages to file")
+    .add_see_also("mon_cluster_log_file"),
+
     Option("mon_cluster_log_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("File(s) to write cluster log to")
-    .set_long_description("This can either be a simple file name to receive all messages, or a list of key/value pairs where the key is the log channel and the value is the filename, which may include $cluster and $channel metavariables"),
+    .set_long_description("This can either be a simple file name to receive all messages, or a list of key/value pairs where the key is the log channel and the value is the filename, which may include $cluster and $channel metavariables")
+    .add_see_also("mon_cluster_log_to_file"),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("debug")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Lowest level to include is cluster log file")
     .add_see_also("mon_cluster_log_file"),
 
     Option("mon_cluster_log_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("false")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Make monitor send cluster log to graylog"),
 
     Option("mon_cluster_log_to_graylog_host", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("127.0.0.1")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Graylog host for cluster log messages")
     .add_see_also("mon_cluster_log_to_graylog"),
 
     Option("mon_cluster_log_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Graylog port for cluster log messages")
     .add_see_also("mon_cluster_log_to_graylog"),
 
     Option("enable_experimental_unrecoverable_data_corrupting_features", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_default("")
     .set_description("Enable named (or all with '*') experimental features that may be untested, dangerous, and/or cause permanent data loss"),
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
+    .set_flag(Option::FLAG_STARTUP)
     .add_service({"mon", "osd"})
     .set_description("Base directory for dynamically loaded plugins"),
 
@@ -727,6 +777,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Authentication key")
     .set_long_description("A CephX authentication key, base64 encoded.  It normally looks something like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("keyfile")
     .add_see_also("keyring"),
@@ -735,6 +786,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Path to a file containing a key")
     .set_long_description("The file should contain a CephX authentication key and optionally a trailing newline, but nothing else.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key"),
 
@@ -750,16 +802,19 @@ std::vector<Option> get_global_options() {
     )
     .set_description("Path to a keyring file.")
     .set_long_description("A keyring file is an INI-style formatted file where the section names are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property with CephX authentication key as the value.")
+    .set_flag(Option::FLAG_STARTUP)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key")
     .add_see_also("keyfile"),
 
     Option("heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Frequency of internal heartbeat checks (seconds)"),
 
     Option("heartbeat_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("File to touch on successful internal heartbeat")
     .set_long_description("If set, this file will be touched every time an internal heartbeat check succeeds.")
     .add_see_also("heartbeat_interval"),
@@ -774,23 +829,27 @@ std::vector<Option> get_global_options() {
     .set_long_description("If enabled, collect and expose internal health metrics"),
 
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_STARTUP)
     .set_default("async+posix")
     .set_description("Messenger implementation to use for network communication"),
 
     Option("ms_public_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Messenger implementation to use for the public network")
     .set_long_description("If not specified, use ms_type")
     .add_see_also("ms_type"),
 
     Option("ms_cluster_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Messenger implementation to use for the internal cluster network")
     .set_long_description("If not specified, use ms_type")
     .add_see_also("ms_type"),
 
     Option("ms_mon_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("secure crc")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for intra-mon connections in order of preference")
     .add_see_also("ms_mon_service_mode")
     .add_see_also("ms_mon_client_mode")
@@ -800,6 +859,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_mon_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("secure crc")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Allowed connection modes (crc, secure) for connections to mons")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_mon_cluster_mode")
@@ -809,6 +869,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_mon_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("secure crc")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for connections from clients to monitors in order of preference")
     .add_see_also("ms_mon_service_mode")
     .add_see_also("ms_mon_cluster_mode")
@@ -818,21 +879,29 @@ std::vector<Option> get_global_options() {
 
     Option("ms_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("crc secure")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for intra-cluster connections in order of preference")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("crc secure")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Allowed connection modes (crc, secure) for connections to daemons")
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("crc secure")
+    .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for connections from clients in order of preference")
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_service_mode"),
+
+    Option("ms_learn_addr_from_peer", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Learn address from what IP our first peer thinks we connect from")
+    .set_long_description("Use the IP address our first peer (usually a monitor) sees that we are connecting from.  This is useful if a client is behind some sort of NAT and we want to see it identified by its local (not NATed) address."),
 
     Option("ms_tcp_nodelay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -955,9 +1024,14 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .set_description("Size of queue of incoming connections for accept(2)"),
 
-    Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+
+    Option("ms_connection_ready_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Time before we declare a not yet ready connection as dead (seconds)"),
+
+    Option("ms_connection_idle_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
-    .set_description("Time before an idle TCP connection is closed (seconds)"),
+    .set_description("Time before an idle connection is closed (seconds)"),
 
     Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(16777216)
@@ -1338,6 +1412,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_down_out_subtree_limit", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rack")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("do not automatically mark OSDs 'out' if an entire subtree of this size is down")
     .add_see_also("mon_osd_down_out_interval"),
@@ -1555,7 +1630,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mon_crush_min_required_version"),
 
     Option("mon_crush_min_required_version", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("firefly")
+    .set_default("hammer")
     .add_service("mgr")
     .set_description("minimum ceph release to use for mon_warn_on_legacy_crush_tunables")
     .add_see_also("mon_warn_on_legacy_crush_tunables"),
@@ -1861,6 +1936,12 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set nautilus feature for new mon clusters"),
+
+    Option("mon_debug_no_require_octopus", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .add_service("mon")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
+    .set_description("do not set octopus feature for new mon clusters"),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -2406,7 +2487,7 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
+    .set_default("plugin=jerasure technique=reed_sol_van k=2 m=2")
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("default erasure code profile for new erasure-coded pools")
     .add_service("mon"),
@@ -2484,6 +2565,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_pg_autoscale_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("warn")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_enum_allowed({"off", "warn", "on"})
     .set_description("Default PG autoscaling behavior for new pools"),
 
@@ -3123,6 +3205,11 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("osd_debug_feed_pullee", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(-1)
+    .set_description("Feed a pullee, and force primary to pull "
+                     "a currently missing object from it"),
+
     Option("osd_backfill_scan_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(64)
     .set_description(""),
@@ -3462,6 +3549,14 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_min_pg_log_entries")
     .add_see_also("osd_max_pg_log_entries"),
 
+    Option("osd_object_clean_region_max_num_intervals", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("number of intervals in clean_offsets")
+    .set_long_description("partial recovery uses multiple intervals to record the clean part of the object"
+        "when the number of intervals is greater than osd_object_clean_region_max_num_intervals, minimum interval will be trimmed"
+        "(0 will recovery the entire object data interval)")
+    .add_service("osd"),
+
     Option("osd_force_recovery_pg_log_entries_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1.3)
     .set_description(""),
@@ -3789,7 +3884,12 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Refer to github.com/facebook/rocksdb/wiki/DeleteRange-Implementation"),
+
+    Option("rocksdb_max_items_rmrange", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1024)
+    .set_description("Delete Range will be called if number of keys exceeded, must enable rocksdb_enable_rmrange first")
+    .add_see_also("rocksdb_enable_rmrange"),
 
     Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
@@ -3807,7 +3907,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means they are cached with higher priority than other data and should typically stay in the block cache."),
 
     Option("rocksdb_pin_l0_filter_and_index_blocks_in_cache", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
+    .set_default(false)
     .set_description("Whether to pin Level 0 indices and bloom filters in the block cache")
     .set_long_description("A downside of setting rocksdb_cache_index_and_filter_blocks to true is that regular data can push indices and filters out of memory.  Setting this option to true means that level 0 SST files will always have their indices and filters pinned in the block cache."),
 
@@ -4677,6 +4777,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable health indication on bluefs slow device usage"),
 
+    Option("bluestore_warn_on_legacy_statfs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable health indication on lack of per-pool statfs reporting from bluestore"),
+
     Option("bluestore_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("log operation if it's slower than this age (seconds)"),
@@ -4684,6 +4788,13 @@ std::vector<Option> get_global_options() {
     Option("bluestore_log_omap_iterator_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("log omap iteration operation if it's slower than this age (seconds)"),
+
+    Option("bluestore_debug_enforce_settings", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("default")
+    .set_enum_allowed({"default", "hdd", "ssd"})
+    .set_description("Enforces specific hw profile settings")
+    .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
+
 
     // -----------------------------------------
     // kstore
@@ -5463,7 +5574,7 @@ std::vector<Option> get_rgw_options() {
         "will be located in the path that is specified here. "),
 
     Option("rgw_enable_apis", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("s3, s3website, swift, swift_auth, admin, sts")
+    .set_default("s3, s3website, swift, swift_auth, admin, sts, iam")
     .set_description("A list of set of RESTful APIs that rgw handles."),
 
     Option("rgw_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5912,6 +6023,16 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_nfs_write_completion_interval_s", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),
+
+    Option("rgw_rados_pool_autoscale_bias", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(4.0)
+    .set_min_max(0.01, 100000.0)
+    .set_description("pg_autoscale_bias value for RGW metadata (omap-heavy) pools"),
+
+    Option("rgw_rados_pool_pg_num_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(8)
+    .set_min_max(1, 1024)
+    .set_description("pg_num_min value for RGW metadata (omap-heavy) pools"),
 
     Option("rgw_zone", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -6950,6 +7071,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("whether to enable caching (writeback unless rbd_cache_max_dirty is 0)"),
 
+    Option("rbd_cache_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"writethrough", "writeback", "writearound"})
+    .set_default("writearound")
+    .set_description("cache policy for handling writes."),
+
     Option("rbd_cache_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("whether to make writeback caching writethrough until "
@@ -7092,6 +7218,10 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_move_to_trash_on_remove_expire_seconds", Option::TYPE_UINT, Option::LEVEL_BASIC)
     .set_default(0)
     .set_description("default number of seconds to protect deleted images in the trash"),
+
+    Option("rbd_move_parent_to_trash_on_remove", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("move parent with clone format v2 children to the trash when deleted"),
 
     Option("rbd_mirroring_resync_after_disconnect", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -7250,7 +7380,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
 
     Option("rbd_io_scheduler", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("none")
+    .set_default("simple")
     .set_enum_allowed({"none", "simple"})
     .set_description("RBD IO scheduler"),
 
@@ -8106,6 +8236,10 @@ std::vector<Option> get_mds_client_options() {
     Option("fake_statfs_for_testing", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Set a value for kb and compute kb_used from total of num_bytes"),
+
+    Option("debug_allow_any_pool_priority", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Allow any pool priority to be set to test conversion to new range"),
   });
 }
 

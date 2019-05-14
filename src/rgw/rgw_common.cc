@@ -16,6 +16,7 @@
 #include "rgw_string.h"
 #include "rgw_rados.h"
 #include "rgw_http_errors.h"
+#include "rgw_arn.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
@@ -33,7 +34,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-using rgw::IAM::ARN;
+using rgw::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::op_to_perm;
 using rgw::IAM::Policy;
@@ -73,6 +74,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
+    { ERR_LIMIT_EXCEEDED, {400, "LimitExceeded" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
     { EPERM, {403, "AccessDenied" }},
@@ -102,8 +104,6 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
     { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
-    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
-    { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
     { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
     { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
     { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
@@ -144,6 +144,11 @@ rgw_http_errors rgw_http_swift_errors({
 rgw_http_errors rgw_http_sts_errors({
     { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
     { ERR_INVALID_IDENTITY_TOKEN, {400, "InvalidIdentityToken" }},
+});
+
+rgw_http_errors rgw_http_iam_errors({
+    { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
+    { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
 });
 
 using namespace ceph::crypto;
@@ -297,6 +302,11 @@ void set_req_state_err(struct rgw_err& err,	/* out */
 
   if (prot_flags & RGW_REST_STS) {
     if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code))
+      return;
+  }
+
+  if (prot_flags & RGW_REST_IAM) {
+    if (search_err(rgw_http_iam_errors, err_no, err.http_ret, err.err_code))
       return;
   }
 
@@ -1089,7 +1099,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const vector<rgw::IAM::Policy>& user_policies,
-                            const rgw::IAM::ARN& res,
+                            const rgw::ARN& res,
                             const uint64_t op)
 {
   auto usr_policy_res = eval_user_policies(user_policies, s->env, boost::none, op, res);
@@ -1129,7 +1139,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, struct req_
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             struct req_state * const s,
-                            const rgw::IAM::ARN& res,
+                            const rgw::ARN& res,
                             const uint64_t op)
 {
   return verify_user_permission(dpp, s, s->user_acl.get(), s->iam_user_policies, res, op);

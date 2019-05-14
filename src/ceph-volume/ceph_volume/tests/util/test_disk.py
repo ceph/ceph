@@ -208,6 +208,45 @@ class TestHumanReadableSize(object):
         assert result == '81.20 TB'
 
 
+class TestSizeFromHumanReadable(object):
+
+    def test_bytes(self):
+        result = disk.size_from_human_readable('2')
+        assert result == disk.Size(b=2)
+
+    def test_kilobytes(self):
+        result = disk.size_from_human_readable('2 K')
+        assert result == disk.Size(kb=2)
+
+    def test_megabytes(self):
+        result = disk.size_from_human_readable('2 M')
+        assert result == disk.Size(mb=2)
+
+    def test_gigabytes(self):
+        result = disk.size_from_human_readable('2 G')
+        assert result == disk.Size(gb=2)
+
+    def test_terrabytes(self):
+        result = disk.size_from_human_readable('2 T')
+        assert result == disk.Size(tb=2)
+
+    def test_case(self):
+        result = disk.size_from_human_readable('2 t')
+        assert result == disk.Size(tb=2)
+
+    def test_space(self):
+        result = disk.size_from_human_readable('2T')
+        assert result == disk.Size(tb=2)
+
+    def test_float(self):
+        result = disk.size_from_human_readable('2.0')
+        assert result == disk.Size(b=2)
+        result = disk.size_from_human_readable('2.0T')
+        assert result == disk.Size(tb=2)
+        result = disk.size_from_human_readable('1.8T')
+        assert result == disk.Size(tb=1.8)
+
+
 class TestGetDevices(object):
 
     def setup_paths(self, tmpdir):

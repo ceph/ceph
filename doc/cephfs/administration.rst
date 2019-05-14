@@ -213,6 +213,28 @@ does not change a MDS; it manipulates the file system rank which has been
 marked damaged.
 
 
+Minimum Client Version
+----------------------
+
+It is sometimes desirable to set the minimum version of Ceph that a client must be
+running to connect to a CephFS cluster. Older clients may sometimes still be
+running with bugs that can cause locking issues between clients (due to
+capability release). CephFS provides a mechanism to set the minimum
+client version:
+
+::
+
+    fs set <fs name> min_compat_client <release>
+
+For example, to only allow Nautilus clients, use:
+
+::
+
+    fs set cephfs min_compat_client nautilus
+
+Clients running an older version will be automatically evicted.
+
+
 Global settings
 ---------------
 

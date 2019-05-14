@@ -260,7 +260,7 @@ TEST_P(ParameterTest, parameter_all)
   delete crush;
 }
 
-INSTANTIATE_TEST_CASE_P(Test, ParameterTest, ::testing::ValuesIn(param));
+INSTANTIATE_TEST_SUITE_P(Test, ParameterTest, ::testing::ValuesIn(param));
 
 int main(int argc, char **argv)
 {

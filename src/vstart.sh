@@ -28,7 +28,7 @@ if [ -e CMakeCache.txt ]; then
   CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
-  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f 1)
   if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
       CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
   else
@@ -48,10 +48,11 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
         # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
+	[ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/cephfs-shell
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
         [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
-        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BUILD_DIR/bin/init-ceph
+        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
@@ -144,6 +145,7 @@ fi
 
 filestore_path=
 kstore_path=
+bluestore_dev=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -196,6 +198,7 @@ usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
+usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 
 usage_exit() {
 	printf "$usage"
@@ -377,6 +380,16 @@ case $1 in
         pci_id="$2"
         spdk_enabled=1
         shift
+	;;
+    --bluestore-devs )
+	IFS=',' read -r -a bluestore_dev <<< "$2"
+	for dev in "${bluestore_dev[@]}"; do
+	    if [ ! -b $dev -o ! -w $dev ]; then
+		    echo "All --bluestore-devs must refer to writable block devices"
+		    exit 1
+	    fi
+	done
+	shift
         ;;
     * )
 	    usage_exit
@@ -391,15 +404,15 @@ fi
 if [ "$overwrite_conf" -eq 0 ]; then
     CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
     mkdir -p $CEPH_ASOK_DIR
-    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
+    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
-    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
+    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_osd 2>/dev/null` && \
         CEPH_NUM_OSD="$OSD"
-    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mds 2>/dev/null` && \
+    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mds 2>/dev/null` && \
         CEPH_NUM_MDS="$MDS"
-    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mgr 2>/dev/null` && \
+    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mgr 2>/dev/null` && \
         CEPH_NUM_MGR="$MGR"
-    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_rgw 2>/dev/null` && \
+    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
 else
     if [ "$new" -ne 0 ]; then
@@ -459,7 +472,7 @@ run() {
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
         else
-            prunb ./ceph-run "$@" -f
+            prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
         fi
     fi
 }
@@ -471,7 +484,12 @@ wconf() {
 }
 
 get_pci_selector() {
-    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
+    which_pci=$1
+    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1 | sed -n $which_pci'p'
+}
+
+get_pci_selector_num() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f 1 | wc -l
 }
 
 prepare_conf() {
@@ -562,8 +580,12 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_pci_selector)" == "" ]; then
-                    echo "Not find the specified NVME device, please check."
+                if [ "$(get_pci_selector_num)" -eq 0 ]; then
+                    echo "Not find the specified NVME device, please check." >&2
+                    exit
+                fi
+                if [ $(get_pci_selector_num) -lt $CEPH_NUM_OSD ]; then
+                    echo "OSD number ($CEPH_NUM_OSD) is greater than NVME SSD number ($(get_pci_selector_num)), please check." >&2
                     exit
                 fi
                 BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
@@ -572,8 +594,7 @@ EOF
         bluestore_block_wal_path = \"\"
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
-        bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_pci_selector)"
+        bluestore_spdk_mem = 2048"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 1073741824
@@ -738,13 +759,18 @@ EOF
 }
 
 start_osd() {
-    for osd in `seq 0 $((CEPH_NUM_OSD-1))`
+    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
-	    if [ "$new" -eq 1 ]; then
-		    wconf <<EOF
+	if [ "$new" -eq 1 ]; then
+            wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
 EOF
+            if [ "$spdk_enabled" -eq 1 ]; then
+                wconf <<EOF
+        bluestore_block_path = spdk:$(get_pci_selector $((osd+1)))
+EOF
+            fi
 
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
@@ -756,6 +782,13 @@ EOF
 		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
 	    else
 		mkdir -p $CEPH_DEV_DIR/osd$osd
+		if [ -n "${bluestore_dev[$osd]}" ]; then
+		    dd if=/dev/zero of=${bluestore_dev[$osd]} bs=1M count=1
+		    ln -s ${bluestore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
+		    wconf <<EOF
+	bluestore fsck on mount = false
+EOF
+		fi
 	    fi
 
             local uuid=`uuidgen`
@@ -781,6 +814,7 @@ EOF
 
 start_mgr() {
     local mgr=0
+    local ssl=${DASHBOARD_SSL:-1}
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
@@ -799,11 +833,18 @@ start_mgr() {
 EOF
 
             if $with_mgr_dashboard ; then
-                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT --force
+                local port_option="ssl_server_port"
+                local http_proto="https"
+                if [ "$ssl" == "0" ]; then
+                    port_option="server_port"
+                    http_proto="http"
+                    ceph_adm config set mgr mgr/dashboard/ssl false --force
+                fi
+                ceph_adm config set mgr mgr/dashboard/$name/$port_option $MGR_PORT --force
                 if [ $mgr -eq 1 ]; then
-                    DASH_URLS="https://$IP:$MGR_PORT"
+                    DASH_URLS="$http_proto://$IP:$MGR_PORT"
                 else
-                    DASH_URLS+=", https://$IP:$MGR_PORT"
+                    DASH_URLS+=", $http_proto://$IP:$MGR_PORT"
                 fi
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
@@ -827,8 +868,10 @@ EOF
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
             ceph_adm tell mgr dashboard ac-user-create admin admin administrator
-            if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
-                echo dashboard module not working correctly!
+            if [ "$ssl" != "0" ]; then
+                if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                    echo dashboard module not working correctly!
+                fi
             fi
         fi
 
@@ -931,7 +974,7 @@ then
   while [ true ]
   do
     CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
+    ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
   done
 fi
 
@@ -962,7 +1005,7 @@ else
     else
 	IP_CMD="ifconfig"
     fi
-    # filter out IPv6 and localhost addresses
+    # filter out IPv4 and localhost addresses
     IP="$($IP_CMD | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
     # if nothing left, try using localhost address, it might work
     if [ -z "$IP" ]; then IP="127.0.0.1"; fi
@@ -1185,7 +1228,7 @@ do_rgw()
     # Start server
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
+        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
@@ -1202,7 +1245,7 @@ do_rgw()
     for rgw in j k l m n o p q r s t u v; do
         current_port=$((CEPH_RGW_PORT_NUM + i))
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done
@@ -1224,13 +1267,27 @@ if [ "$new" -eq 1 ]; then
     echo ""
 fi
 echo ""
-echo "export PYTHONPATH=./pybind:$PYTHONPATH"
-echo "export LD_LIBRARY_PATH=$CEPH_LIB"
+# add header to the environment file
+{
+    echo "#"
+    echo "# source this file into your shell to set up the environment."
+    echo "# For example:"
+    echo "# $ . $CEPH_DIR/vstart_environment.sh"
+    echo "#"
+} > $CEPH_DIR/vstart_environment.sh
+{
+    echo "export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:\$PYTHONPATH"
+    echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
 
-if [ "$CEPH_DIR" != "$PWD" ]; then
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
-fi
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
+
+    if [ -n "$CEPHFS_SHELL" ]; then
+	    echo "alias cephfs-shell=$CEPHFS_SHELL"
+    fi
+} | tee -a $CEPH_DIR/vstart_environment.sh
 
 echo "CEPH_DEV=1"
 

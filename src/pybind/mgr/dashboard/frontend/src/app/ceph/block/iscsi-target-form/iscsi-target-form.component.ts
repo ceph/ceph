@@ -11,6 +11,7 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -31,7 +32,7 @@ export class IscsiTargetFormComponent implements OnInit {
   disk_default_controls: any;
   backstores: string[];
   default_backstore: string;
-  supported_rbd_features: any;
+  unsupported_rbd_features: any;
   required_rbd_features: any;
 
   isEdit = false;
@@ -76,6 +77,8 @@ export class IscsiTargetFormComponent implements OnInit {
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
   USER_REGEX = /[\w\.:@_-]{8,64}/;
   PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  action: string;
+  resource: string;
 
   constructor(
     private iscsiService: IscsiService,
@@ -84,8 +87,11 @@ export class IscsiTargetFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private i18n: I18n,
-    private taskWrapper: TaskWrapperService
-  ) {}
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('target');
+  }
 
   ngOnInit() {
     const promises: any[] = [
@@ -102,6 +108,7 @@ export class IscsiTargetFormComponent implements OnInit {
         promises.push(this.iscsiService.getTarget(this.target_iqn));
       });
     }
+    this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
 
     forkJoin(promises).subscribe((data: any[]) => {
       // iscsiService.listTargets
@@ -117,7 +124,7 @@ export class IscsiTargetFormComponent implements OnInit {
       this.disk_default_controls = data[3].disk_default_controls;
       this.backstores = data[3].backstores;
       this.default_backstore = data[3].default_backstore;
-      this.supported_rbd_features = data[3].supported_rbd_features;
+      this.unsupported_rbd_features = data[3].unsupported_rbd_features;
       this.required_rbd_features = data[3].required_rbd_features;
 
       // rbdService.list()
@@ -219,7 +226,6 @@ export class IscsiTargetFormComponent implements OnInit {
 
     _.forEach(res.groups, (group) => {
       const fg = this.addGroup();
-      console.log(group);
       group.disks = _.map(group.disks, (disk) => `${disk.pool}/${disk.image}`);
       fg.patchValue(group);
       _.forEach(group.members, (member) => {
@@ -487,7 +493,7 @@ export class IscsiTargetFormComponent implements OnInit {
 
     const initiators = _.map(
       this.initiators.value,
-      (initiator) => new SelectOption(false, initiator.client_iqn, '')
+      (initiator) => new SelectOption(false, initiator.client_iqn, '', !initiator.cdIsInGroup)
     );
     this.groupMembersSelections.push(initiators);
 
@@ -502,11 +508,19 @@ export class IscsiTargetFormComponent implements OnInit {
   onGroupMemberSelection($event) {
     const option = $event.option;
 
-    this.initiators.controls.forEach((element) => {
+    let initiator_index: number;
+    this.initiators.controls.forEach((element, index) => {
       if (element.value.client_iqn === option.name) {
         element.patchValue({ luns: [] });
         element.get('cdIsInGroup').setValue(option.selected);
+        initiator_index = index;
       }
+    });
+
+    // Members can only be at one group at a time, so when a member is selected
+    // in one group we need to disable its selection in other groups
+    _.forEach(this.groupMembersSelections, (group) => {
+      group[initiator_index].enabled = !option.selected;
     });
   }
 
@@ -537,7 +551,7 @@ export class IscsiTargetFormComponent implements OnInit {
   }
 
   submit() {
-    const formValue = this.targetForm.value;
+    const formValue = _.cloneDeep(this.targetForm.value);
 
     const request = {
       target_iqn: this.targetForm.getValue('target_iqn'),
@@ -563,10 +577,10 @@ export class IscsiTargetFormComponent implements OnInit {
 
     // Portals
     formValue.portals.forEach((portal) => {
-      const portalSplit = portal.split(':');
+      const index = portal.indexOf(':');
       request.portals.push({
-        host: portalSplit[0],
-        ip: portalSplit[1]
+        host: portal.substring(0, index),
+        ip: portal.substring(index + 1)
       });
     });
 
@@ -574,17 +588,18 @@ export class IscsiTargetFormComponent implements OnInit {
     if (request.acl_enabled) {
       formValue.initiators.forEach((initiator) => {
         if (!initiator.auth.user) {
-          initiator.auth.user = null;
+          initiator.auth.user = '';
         }
         if (!initiator.auth.password) {
-          initiator.auth.password = null;
+          initiator.auth.password = '';
         }
         if (!initiator.auth.mutual_user) {
-          initiator.auth.mutual_user = null;
+          initiator.auth.mutual_user = '';
         }
         if (!initiator.auth.mutual_password) {
-          initiator.auth.mutual_password = null;
+          initiator.auth.mutual_password = '';
         }
+        delete initiator.cdIsInGroup;
 
         const newLuns = [];
         initiator.luns.forEach((lun) => {
@@ -670,11 +685,11 @@ export class IscsiTargetFormComponent implements OnInit {
   validFeatures(image, backstore) {
     const imageFeatures = image.features;
     const requiredFeatures = this.required_rbd_features[backstore];
-    const supportedFeatures = this.supported_rbd_features[backstore];
+    const unsupportedFeatures = this.unsupported_rbd_features[backstore];
     // tslint:disable-next-line:no-bitwise
     const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
     // tslint:disable-next-line:no-bitwise
-    const validSupportedFeatures = (imageFeatures & supportedFeatures) === imageFeatures;
+    const validSupportedFeatures = (imageFeatures & unsupportedFeatures) === 0;
     return validRequiredFeatures && validSupportedFeatures;
   }
 

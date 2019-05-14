@@ -122,6 +122,9 @@ void RemoveRequest<I>::handle_pre_remove_image(int r) {
   ldout(m_cct, 5) << "r=" << r << dendl;
 
   if (r < 0) {
+    if (r == -ECHILD) {
+      r = -ENOTEMPTY;
+    }
     send_close_image(r);
     return;
   }

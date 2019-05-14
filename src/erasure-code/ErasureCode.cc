@@ -15,8 +15,8 @@
  * 
  */
 
-#include <errno.h>
 #include <algorithm>
+#include <cerrno>
 
 #include "ErasureCode.h"
 
@@ -28,6 +28,17 @@
 #define DEFAULT_RULE_ROOT "default"
 #define DEFAULT_RULE_FAILURE_DOMAIN "host"
 
+using std::make_pair;
+using std::map;
+using std::ostream;
+using std::pair;
+using std::set;
+using std::string;
+using std::vector;
+
+using ceph::bufferlist;
+
+namespace ceph {
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 
 int ErasureCode::init(
@@ -347,4 +358,5 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
     }
   }
   return r;
+}
 }

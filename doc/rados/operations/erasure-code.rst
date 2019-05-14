@@ -28,14 +28,14 @@ requires at least three hosts::
 Erasure code profiles
 ---------------------
 
-The default erasure code profile sustains the loss of a single OSD. It
-is equivalent to a replicated pool of size two but requires 1.5TB
-instead of 2TB to store 1TB of data. The default profile can be
+The default erasure code profile sustains the loss of a two OSDs. It
+is equivalent to a replicated pool of size three but requires 2TB
+instead of 3TB to store 1TB of data. The default profile can be
 displayed with::
 
     $ ceph osd erasure-code-profile get default
     k=2
-    m=1
+    m=2
     plugin=jerasure
     crush-failure-domain=host
     technique=reed_sol_van

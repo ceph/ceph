@@ -10,7 +10,12 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  FixtureHelper,
+  FormHelper,
+  i18nProviders
+} from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
@@ -29,6 +34,7 @@ import { PoolFormComponent } from './pool-form.component';
 describe('PoolFormComponent', () => {
   const OSDS = 8;
   let formHelper: FormHelper;
+  let fixtureHelper: FixtureHelper;
   let component: PoolFormComponent;
   let fixture: ComponentFixture<PoolFormComponent>;
   let poolService: PoolService;
@@ -40,6 +46,16 @@ describe('PoolFormComponent', () => {
     const control = formHelper.setValue('pgNum', pgs);
     fixture.debugElement.query(By.css('#pgNum')).nativeElement.dispatchEvent(new Event('blur'));
     return control;
+  };
+
+  const testPgUpdate = (pgs, jump, returnValue) => {
+    if (pgs) {
+      setPgNum(pgs);
+    }
+    if (jump) {
+      setPgNum(form.getValue('pgNum') + jump);
+    }
+    expect(form.getValue('pgNum')).toBe(returnValue);
   };
 
   const createCrushRule = ({
@@ -104,6 +120,7 @@ describe('PoolFormComponent', () => {
 
   const setUpPoolComponent = () => {
     fixture = TestBed.createComponent(PoolFormComponent);
+    fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     component.info = {
       pool_names: [],
@@ -253,7 +270,7 @@ describe('PoolFormComponent', () => {
       component.ngOnInit(); // Switches form into edit mode
       formHelper.setValue('poolType', 'erasure');
       fixture.detectChanges();
-      formHelper.expectError(setPgNum('8'), 'noDecrease');
+      formHelper.expectValid(setPgNum('8'));
     });
 
     it('is valid if pgNum, poolType and name are valid', () => {
@@ -572,21 +589,6 @@ describe('PoolFormComponent', () => {
   });
 
   describe('pg number changes', () => {
-    const setPgs = (pgs) => {
-      formHelper.setValue('pgNum', pgs);
-      fixture.debugElement.query(By.css('#pgNum')).nativeElement.dispatchEvent(new Event('blur'));
-    };
-
-    const testPgUpdate = (pgs, jump, returnValue) => {
-      if (pgs) {
-        setPgs(pgs);
-      }
-      if (jump) {
-        setPgs(form.getValue('pgNum') + jump);
-      }
-      expect(form.getValue('pgNum')).toBe(returnValue);
-    };
-
     beforeEach(() => {
       formHelper.setValue('crushRule', {
         min_size: 1,
@@ -746,8 +748,8 @@ describe('PoolFormComponent', () => {
     });
 
     it('should not show info per default', () => {
-      formHelper.expectElementVisible(fixture, '#crushRule', true);
-      formHelper.expectElementVisible(fixture, '#crush-info-block', false);
+      fixtureHelper.expectElementVisible('#crushRule', true);
+      fixtureHelper.expectElementVisible('#crush-info-block', false);
     });
 
     it('should show info if the info button is clicked', () => {
@@ -757,7 +759,7 @@ describe('PoolFormComponent', () => {
       expect(component.data.crushInfo).toBeTruthy();
       fixture.detectChanges();
       expect(infoButton.classes['active']).toBeTruthy();
-      formHelper.expectIdElementsVisible(fixture, ['crushRule', 'crush-info-block'], true);
+      fixtureHelper.expectIdElementsVisible(['crushRule', 'crush-info-block'], true);
     });
   });
 
@@ -772,8 +774,8 @@ describe('PoolFormComponent', () => {
     });
 
     it('should not show info per default', () => {
-      formHelper.expectElementVisible(fixture, '#erasureProfile', true);
-      formHelper.expectElementVisible(fixture, '#ecp-info-block', false);
+      fixtureHelper.expectElementVisible('#erasureProfile', true);
+      fixtureHelper.expectElementVisible('#ecp-info-block', false);
     });
 
     it('should show info if the info button is clicked', () => {
@@ -782,7 +784,7 @@ describe('PoolFormComponent', () => {
       expect(component.data.erasureInfo).toBeTruthy();
       fixture.detectChanges();
       expect(infoButton.classes['active']).toBeTruthy();
-      formHelper.expectIdElementsVisible(fixture, ['erasureProfile', 'ecp-info-block'], true);
+      fixtureHelper.expectIdElementsVisible(['erasureProfile', 'ecp-info-block'], true);
     });
 
     describe('ecp deletion', () => {
@@ -1043,9 +1045,14 @@ describe('PoolFormComponent', () => {
         expect(form.getValue('ratio')).toBe(pool.options.compression_required_ratio);
       });
 
-      it('is only be possible to use the same or more pgs like before', () => {
+      it('updates pgs on every change', () => {
+        testPgUpdate(undefined, -1, 16);
+        testPgUpdate(undefined, -1, 8);
+      });
+
+      it('is possible to use less or more pgs than before', () => {
         formHelper.expectValid(setPgNum(64));
-        formHelper.expectError(setPgNum(4), 'noDecrease');
+        formHelper.expectValid(setPgNum(4));
       });
 
       describe('submit', () => {

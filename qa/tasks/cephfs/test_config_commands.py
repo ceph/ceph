@@ -1,5 +1,4 @@
 
-from unittest import case
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 
@@ -21,7 +20,7 @@ class TestConfigCommands(CephFSTestCase):
         """
 
         if not isinstance(self.mount_a, FuseMount):
-            raise case.SkipTest("Test only applies to FUSE clients")
+            self.skipTest("Test only applies to FUSE clients")
 
         test_key = "client_cache_size"
         test_val = "123"

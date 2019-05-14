@@ -38,7 +38,7 @@ like this:
    :align: center
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
-Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/2/html/ceph_object_gateway_for_production/>`__.
+Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
 
 Functional Changes from Infernalis
 ==================================
@@ -82,6 +82,7 @@ of the master zone group.
 See `Pools`_ for instructions on creating and tuning pools for Ceph
 Object Storage.
 
+.. _master-zone-label:
 
 Configuring a Master Zone
 =========================
@@ -321,6 +322,8 @@ service:
 
     # systemctl start ceph-radosgw@rgw.`hostname -s`
     # systemctl enable ceph-radosgw@rgw.`hostname -s`
+
+.. _secondary-zone-label:
 
 Configure Secondary Zones
 =========================

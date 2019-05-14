@@ -597,6 +597,15 @@ private:
    * this list.  When it commits, these finishers are notified.
    */
   list<Context*> committing_finishers;
+  /**
+   * This function re-triggers pending_ and committing_finishers
+   * safely, so as to maintain existing system invariants. In particular
+   * we maintain ordering by triggering committing before pending, and
+   * we clear out pending_finishers prior to any triggers so that
+   * we don't trigger asserts on them being empty. You should
+   * use it instead of sending -EAGAIN to them with finish_contexts.
+   */
+  void reset_pending_committing_finishers();
 
   /**
    * @defgroup Paxos_h_sync_warns Synchronization warnings

@@ -464,7 +464,7 @@ flushjournal_out:
   
   string magic;
   uuid_d cluster_fsid, osd_fsid;
-  int require_osd_release = 0;
+  ceph_release_t require_osd_release = ceph_release_t::unknown;
   int w;
   int r = OSD::peek_meta(store, &magic, &cluster_fsid, &osd_fsid, &w,
 			 &require_osd_release);
@@ -497,19 +497,13 @@ flushjournal_out:
     forker.exit(0);
   }
 
-  if (require_osd_release > 0 &&
-      require_osd_release + 2 < (int)ceph_release()) {
-    derr << "OSD's recorded require_osd_release " << require_osd_release
-	 << " (" << ceph_release_name(require_osd_release)
-	 << ") is >2 releases older than installed " << ceph_release()
-	 << " (" << ceph_release_name(ceph_release())
-	 << "); you can only upgrade 2 releases at a time" << dendl;
-    derr << "you should first upgrade to "
-	 << (require_osd_release + 1)
-	 << " (" << ceph_release_name(require_osd_release + 1) << ") or "
-	 << (require_osd_release + 2)
-	 << " (" << ceph_release_name(require_osd_release + 2) << ")" << dendl;
-    forker.exit(1);
+  {
+    auto from_release = require_osd_release;
+    ostringstream err;
+    if (!can_upgrade_from(from_release, "require_osd_release", err)) {
+      derr << err.str() << dendl;
+      forker.exit(1);
+    }
   }
 
   // consider objectstore numa node

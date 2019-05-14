@@ -169,12 +169,15 @@ export class NfsFormComponent implements OnInit {
       }),
       tag: new FormControl(''),
       pseudo: new FormControl('', {
-        validators: [Validators.required, Validators.pattern('^/[^><|&()]*$')]
+        validators: [
+          CdValidators.requiredIf({ protocolNfsv4: true }),
+          Validators.pattern('^/[^><|&()]*$')
+        ]
       }),
       access_type: new FormControl('RW', {
         validators: [Validators.required]
       }),
-      squash: new FormControl('None', {
+      squash: new FormControl('', {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
@@ -197,6 +200,10 @@ export class NfsFormComponent implements OnInit {
         'security.selinux',
         CdValidators.requiredIf({ security_label: true, 'fsal.name': 'CEPH' })
       )
+    });
+
+    this.nfsForm.get('protocolNfsv4').valueChanges.subscribe(() => {
+      this.nfsForm.get('pseudo').updateValueAndValidity({ emitEvent: false });
     });
   }
 
@@ -503,27 +510,27 @@ export class NfsFormComponent implements OnInit {
 
     requestModel.protocols = [];
     if (requestModel.protocolNfsv3) {
-      delete requestModel.protocolNfsv3;
       requestModel.protocols.push(3);
     } else {
       requestModel.tag = null;
     }
+    delete requestModel.protocolNfsv3;
     if (requestModel.protocolNfsv4) {
-      delete requestModel.protocolNfsv4;
       requestModel.protocols.push(4);
     } else {
       requestModel.pseudo = null;
     }
+    delete requestModel.protocolNfsv4;
 
     requestModel.transports = [];
     if (requestModel.transportTCP) {
-      delete requestModel.transportTCP;
       requestModel.transports.push('TCP');
     }
+    delete requestModel.transportTCP;
     if (requestModel.transportUDP) {
-      delete requestModel.transportUDP;
       requestModel.transports.push('UDP');
     }
+    delete requestModel.transportUDP;
 
     requestModel.clients.forEach((client) => {
       if (_.isString(client.addresses)) {
@@ -545,9 +552,5 @@ export class NfsFormComponent implements OnInit {
     delete requestModel.sec_label_xattr;
 
     return requestModel;
-  }
-
-  cancelAction() {
-    this.router.navigate(['/nfs']);
   }
 }

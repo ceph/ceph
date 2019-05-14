@@ -289,6 +289,8 @@ struct lookup_ghobject : public action_on_object_t {
 int file_fd = fd_none;
 bool debug;
 bool force = false;
+bool no_superblock = false;
+
 super_header sh;
 
 static int get_fd_data(int fd, bufferlist &bl)
@@ -459,7 +461,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   map<string,bufferlist> km;
   pg_info_t last_written_info;
-  int ret = PG::_prepare_write_info(
+  int ret = prepare_info_keymap(
     g_ceph_context,
     &km, epoch,
     info,
@@ -1455,7 +1457,7 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   }
 }
 
-int ObjectStoreTool::dump_import(Formatter *formatter)
+int ObjectStoreTool::dump_export(Formatter *formatter)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1510,7 +1512,7 @@ int ObjectStoreTool::dump_import(Formatter *formatter)
       return ret;
 
     if (debug) {
-      cerr << "dump_import: Section type " << std::to_string(type) << std::endl;
+      cerr << "dump_export: Section type " << std::to_string(type) << std::endl;
     }
     if (type >= END_OF_TYPES) {
       cerr << "Skipping unknown section type" << std::endl;
@@ -2436,6 +2438,8 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
            << cpp_strerror(r) << std::endl;
     }
   }
+  gr = store->dump_onode(ch, ghobj, "onode", formatter);
+
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
@@ -3074,7 +3078,7 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3091,6 +3095,7 @@ int main(int argc, char **argv)
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
     ("no-mon-config", "Do not contact mons for config")
+    ("no-superblock", "Do not read superblock")
     ("force", "Ignore some types of errors and proceed with operation - USE WITH CAUTION: CORRUPTION POSSIBLE NOW OR IN THE FUTURE")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -3134,9 +3139,15 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  // Compatibility with previous option name
+  if (op == "dump-import")
+    op = "dump-export";
+
   debug = (vm.count("debug") > 0);
 
   force = (vm.count("force") > 0);
+
+  no_superblock = (vm.count("no-superblock") > 0);
 
   if (vm.count("namespace"))
     nspace = argnspace;
@@ -3202,7 +3213,7 @@ int main(int argc, char **argv)
     type = "bluestore";
   }
   if (!vm.count("data-path") &&
-     op != "dump-import" &&
+     op != "dump-export" &&
      !(op == "dump-journal" && type == "filestore")) {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
@@ -3251,7 +3262,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "dump-import" || op == "set-osdmap" || op == "set-inc-osdmap") {
+  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -3266,7 +3277,7 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, dump-import, export, export-remove, "
+    cerr << "--file option only applies to import, dump-export, export, export-remove, "
 	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     return 1;
   }
@@ -3319,10 +3330,10 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  if (op == "dump-import") {
-    int ret = tool.dump_import(formatter);
+  if (op == "dump-export") {
+    int ret = tool.dump_export(formatter);
     if (ret < 0) {
-      cerr << "dump-import: "
+      cerr << "dump-export: "
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
@@ -3471,32 +3482,35 @@ int main(int argc, char **argv)
 #endif
 
   bufferlist bl;
-  OSDSuperblock superblock;
   auto ch = fs->open_collection(coll_t::meta());
-  bufferlist::const_iterator p;
-  ret = fs->read(ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
-  if (ret < 0) {
-    cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
-    goto out;
-  }
+  std::unique_ptr<OSDSuperblock> superblock;
+  if (!no_superblock) {
+    superblock.reset(new OSDSuperblock);
+    bufferlist::const_iterator p;
+    ret = fs->read(ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
+    if (ret < 0) {
+      cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
 
-  p = bl.cbegin();
-  decode(superblock, p);
+    p = bl.cbegin();
+    decode(*superblock, p);
 
-  if (debug) {
-    cerr << "Cluster fsid=" << superblock.cluster_fsid << std::endl;
-  }
+    if (debug) {
+      cerr << "Cluster fsid=" << superblock->cluster_fsid << std::endl;
+    }
 
-  if (debug) {
-    cerr << "Supported features: " << supported << std::endl;
-    cerr << "On-disk features: " << superblock.compat_features << std::endl;
-  }
-  if (supported.compare(superblock.compat_features) == -1) {
-    CompatSet unsupported = supported.unsupported(superblock.compat_features);
-    cerr << "On-disk OSD incompatible features set "
-      << unsupported << std::endl;
-    ret = -EINVAL;
-    goto out;
+    if (debug) {
+      cerr << "Supported features: " << supported << std::endl;
+      cerr << "On-disk features: " << superblock->compat_features << std::endl;
+    }
+    if (supported.compare(superblock->compat_features) == -1) {
+      CompatSet unsupported = supported.unsupported(superblock->compat_features);
+      cerr << "On-disk OSD incompatible features set "
+	<< unsupported << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
   }
 
   if (op == "apply-layout-settings") {
@@ -3511,7 +3525,8 @@ int main(int argc, char **argv)
     } else if (vm.count("arg1") && isdigit(arg1[0])) {
       target_level = atoi(arg1.c_str());
     }
-    ret = apply_layout_settings(fs, superblock, pool, pgid, dry_run, target_level);
+    ceph_assert(superblock != nullptr);
+    ret = apply_layout_settings(fs, *superblock, pool, pgid, dry_run, target_level);
     goto out;
   }
 
@@ -3626,9 +3641,9 @@ int main(int argc, char **argv)
   }
 
   if (op == "import") {
-
+    ceph_assert(superblock != nullptr);
     try {
-      ret = tool.do_import(fs, superblock, force, pgidstr);
+      ret = tool.do_import(fs, *superblock, force, pgidstr);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;
@@ -3657,7 +3672,8 @@ int main(int argc, char **argv)
     bufferlist bl;
     OSDMap osdmap;
     if (epoch == 0) {
-      epoch = superblock.current_epoch;
+      ceph_assert(superblock != nullptr);
+      epoch = superblock->current_epoch;
     }
     ret = get_osdmap(fs, epoch, osdmap, bl);
     if (ret) {
@@ -3684,7 +3700,8 @@ int main(int argc, char **argv)
   } else if (op == "get-inc-osdmap") {
     bufferlist bl;
     if (epoch == 0) {
-      epoch = superblock.current_epoch;
+      ceph_assert(superblock != nullptr);
+      epoch = superblock->current_epoch;
     }
     ret = get_inc_osdmap(fs, epoch, bl);
     if (ret < 0) {
@@ -3714,7 +3731,8 @@ int main(int argc, char **argv)
       cerr << "Please specify the path to monitor db to update" << std::endl;
       ret = -EINVAL;
     } else {
-      ret = update_mon_db(*fs, superblock, dpath + "/keyring", mon_store_path);
+      ceph_assert(superblock != nullptr);
+      ret = update_mon_db(*fs, *superblock, dpath + "/keyring", mon_store_path);
     }
     goto out;
   }
@@ -3754,8 +3772,9 @@ int main(int argc, char **argv)
   }
 
   if (op == "dump-super") {
+    ceph_assert(superblock != nullptr);
     formatter->open_object_section("superblock");
-    superblock.dump(formatter);
+    superblock->dump(formatter);
     formatter->close_section();
     formatter->flush(cout);
     cout << std::endl;
@@ -3819,7 +3838,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-import, trim-pg-log)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -4108,7 +4127,8 @@ int main(int argc, char **argv)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
     if (op == "export" || op == "export-remove") {
-      ret = tool.do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
+      ceph_assert(superblock != nullptr);
+      ret = tool.do_export(fs, coll, pgid, info, map_epoch, struct_ver, *superblock, past_intervals);
       if (ret == 0) {
         cerr << "Export successful" << std::endl;
         if (op == "export-remove") {
@@ -4146,11 +4166,12 @@ int main(int argc, char **argv)
 
       cout << "Marking complete " << std::endl;
 
-      info.last_update = eversion_t(superblock.current_epoch, info.last_update.version + 1);
+      ceph_assert(superblock != nullptr);
+      info.last_update = eversion_t(superblock->current_epoch, info.last_update.version + 1);
       info.last_backfill = hobject_t::get_max();
-      info.last_epoch_started = superblock.current_epoch;
-      info.history.last_epoch_started = superblock.current_epoch;
-      info.history.last_epoch_clean = superblock.current_epoch;
+      info.last_epoch_started = superblock->current_epoch;
+      info.history.last_epoch_started = superblock->current_epoch;
+      info.history.last_epoch_clean = superblock->current_epoch;
       past_intervals.clear();
 
       if (!dry_run) {
@@ -4211,6 +4232,16 @@ int main(int argc, char **argv)
   }
 
 out:
+  if (debug) {
+    ostringstream ostr;
+    Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+    cct->get_perfcounters_collection()->dump_formatted(f, false);
+    ostr << "ceph-objectstore-tool ";
+    f->flush(ostr);
+    delete f;
+    cout <<  ostr.str() << std::endl;
+  }
+
   int r = fs->umount();
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;

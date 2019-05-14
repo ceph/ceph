@@ -26,9 +26,6 @@
 #include "include/ceph_assert.h"
 
 struct RefCountedObject {
-private:
-  mutable std::atomic<uint64_t> nref;
-  CephContext *cct;
 public:
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
@@ -53,7 +50,7 @@ public:
   }
   void put() const {
     CephContext *local_cct = cct;
-    int v = --nref;
+    auto v = --nref;
     if (local_cct)
       lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
 				   << (v + 1) << " -> " << v
@@ -73,6 +70,15 @@ public:
   uint64_t get_nref() const {
     return nref;
   }
+
+private:
+#ifndef WITH_SEASTAR
+  mutable std::atomic<uint64_t> nref;
+#else
+  // crimson is single threaded at the moment
+  mutable uint64_t nref;
+#endif
+  CephContext *cct;
 };
 
 #ifndef WITH_SEASTAR

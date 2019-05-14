@@ -101,7 +101,7 @@ private:
 
   bool is_within_overlap_bounds() {
     I &image_ctx = this->m_image_ctx;
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
 
     auto overlap = std::min(image_ctx.size, image_ctx.migration_info.overlap);
     return overlap > 0 &&
@@ -220,8 +220,7 @@ uint64_t MigrateRequest<I>::get_num_overlap_objects() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  RWLock::RLocker parent_locker(image_ctx.parent_lock);
+  RWLock::RLocker image_locker(image_ctx.image_lock);
 
   auto overlap = image_ctx.migration_info.overlap;
 

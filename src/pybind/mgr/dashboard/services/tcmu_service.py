@@ -86,13 +86,8 @@ class TcmuService(object):
         }
 
     @staticmethod
-    def get_iscsi_daemons_amount():
-        daemons = {}
-        for service in CephService.get_service_list(SERVICE_TYPE):
-            hostname = service['hostname']
-
-            daemon = daemons.get(hostname, None)
-            if daemon is None:
-                daemons[hostname] = True
-
-        return len(daemons)
+    def get_image_info(pool_name, image_name, get_iscsi_info):
+        for image in get_iscsi_info['images']:
+            if image['pool_name'] == pool_name and image['name'] == image_name:
+                return image
+        return None

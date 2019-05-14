@@ -15,21 +15,22 @@
 #ifndef CEPH_MMONGETOSDMAP_H
 #define CEPH_MMONGETOSDMAP_H
 
+#include <iostream>
+#include <string>
+#include <string_view>
+
 #include "msg/Message.h"
 
 #include "include/types.h"
 
-class MMonGetOSDMap : public MessageInstance<MMonGetOSDMap, PaxosServiceMessage> {
-public:
-  friend factory;
+class MMonGetOSDMap : public PaxosServiceMessage {
 private:
-
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
 
 public:
   MMonGetOSDMap()
-    : MessageInstance(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : PaxosServiceMessage{CEPH_MSG_MON_GET_OSDMAP, 0},
       full_first(0),
       full_last(0),
       inc_first(0),
@@ -62,7 +63,7 @@ public:
   }
 
   std::string_view get_type_name() const override { return "mon_get_osdmap"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)
       out << "full " << full_first << "-" << full_last;
@@ -88,6 +89,9 @@ public:
     decode(inc_first, p);
     decode(inc_last, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

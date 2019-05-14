@@ -19,9 +19,7 @@
 #include <sys/statvfs.h>    /* or <sys/statfs.h> */
 #include "messages/PaxosServiceMessage.h"
 
-class MStatfs : public MessageInstance<MStatfs, PaxosServiceMessage> {
-public:
-  friend factory;
+class MStatfs : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -30,11 +28,11 @@ public:
   uuid_d fsid;
   boost::optional<int64_t> data_pool;
 
-  MStatfs() : MessageInstance(CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MStatfs() : PaxosServiceMessage{CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION} {}
   MStatfs(const uuid_d& f, ceph_tid_t t, boost::optional<int64_t> _data_pool,
-	      version_t v) : MessageInstance(CEPH_MSG_STATFS, v,
-                                            HEAD_VERSION, COMPAT_VERSION),
-					         fsid(f), data_pool(_data_pool) {
+	  version_t v)
+    : PaxosServiceMessage{CEPH_MSG_STATFS, v, HEAD_VERSION, COMPAT_VERSION},
+      fsid(f), data_pool(_data_pool) {
     set_tid(t);
   }
 
@@ -43,7 +41,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "statfs"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "statfs(" << get_tid() << " pool "
         << (data_pool ? *data_pool : -1) << " v" << version << ")";
   }
@@ -55,6 +53,7 @@ public:
     encode(data_pool, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
@@ -64,6 +63,9 @@ public:
       data_pool = boost::optional<int64_t> ();
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

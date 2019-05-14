@@ -23,10 +23,8 @@
  * PGCreate - instruct an OSD to create a pg, if it doesn't already exist
  */
 
-class MOSDPGCreate : public MessageInstance<MOSDPGCreate> {
+class MOSDPGCreate : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 3;
 
@@ -35,10 +33,12 @@ public:
   map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MOSDPGCreate{0}
+  {}
   MOSDPGCreate(epoch_t e)
-    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
-      epoch(e) { }
+    : Message{MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION},
+      epoch(e)
+  {}
 private:
   ~MOSDPGCreate() override {}
 
@@ -57,7 +57,6 @@ public:
     decode(mkpg, p);
     decode(ctimes, p);
   }
-
   void print(ostream& out) const override {
     out << "osd_pg_create(e" << epoch;
     for (map<pg_t,pg_create_t>::const_iterator i = mkpg.begin();
@@ -67,6 +66,9 @@ public:
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

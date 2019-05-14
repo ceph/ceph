@@ -578,7 +578,7 @@ void MDSDaemon::tick()
   }
 }
 
-void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_rank,
+void MDSDaemon::send_command_reply(const cref_t<MCommand> &m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
 				   std::string_view outs)
 {
@@ -601,13 +601,13 @@ void MDSDaemon::send_command_reply(const MCommand::const_ref &m, MDSRank *mds_ra
   }
   priv.reset();
 
-  auto reply = MCommandReply::create(r, outs);
+  auto reply = make_message<MCommandReply>(r, outs);
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
   m->get_connection()->send_message2(reply);
 }
 
-void MDSDaemon::handle_command(const MCommand::const_ref &m)
+void MDSDaemon::handle_command(const cref_t<MCommand> &m)
 {
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<Session *>(priv.get());
@@ -687,7 +687,7 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
-    const MCommand::const_ref &m,
+    const cref_t<MCommand> &m,
     bufferlist *outbl,
     std::string *outs,
     Context **run_later,
@@ -869,7 +869,7 @@ out:
   return r;
 }
 
-void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
+void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
 {
   version_t epoch = m->get_epoch();
 
@@ -1136,7 +1136,7 @@ void MDSDaemon::respawn()
 
 
 
-bool MDSDaemon::ms_dispatch2(const Message::ref &m)
+bool MDSDaemon::ms_dispatch2(const ref_t<Message> &m)
 {
   std::lock_guard l(mds_lock);
   if (stopping) {
@@ -1163,24 +1163,10 @@ bool MDSDaemon::ms_dispatch2(const Message::ref &m)
   }
 }
 
-bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  dout(10) << "MDSDaemon::ms_get_authorizer type="
-           << ceph_entity_type_name(dest_type) << dendl;
-
-  /* monitor authorization is being handled on different layer */
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc->build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
-
 /*
  * high priority messages we always process
  */
-bool MDSDaemon::handle_core_message(const Message::const_ref &m)
+bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
 {
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
@@ -1190,12 +1176,12 @@ bool MDSDaemon::handle_core_message(const Message::const_ref &m)
     // MDS
   case CEPH_MSG_MDS_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_MDS);
-    handle_mds_map(MMDSMap::msgref_cast(m));
+    handle_mds_map(ref_cast<MMDSMap>(m));
     break;
 
     // OSD
   case MSG_COMMAND:
-    handle_command(MCommand::msgref_cast(m));
+    handle_command(ref_cast<MCommand>(m));
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
@@ -1275,11 +1261,6 @@ bool MDSDaemon::ms_handle_refused(Connection *con)
 {
   // do nothing for now
   return false;
-}
-
-KeyStore *MDSDaemon::ms_get_auth1_authorizer_keystore()
-{
-  return monc->rotating_secrets.get();
 }
 
 bool MDSDaemon::parse_caps(const AuthCapsInfo& info, MDSAuthCaps& caps)

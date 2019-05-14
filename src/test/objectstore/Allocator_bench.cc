@@ -22,8 +22,6 @@ typedef boost::mt11213b gen_type;
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
 
-#if GTEST_HAS_PARAM_TEST
-
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
 public:
@@ -329,12 +327,7 @@ TEST_P(AllocTest, test_alloc_bench_10_300)
   doOverwriteTest(capacity, prefill, overwrite);
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));
-
-#else
-
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-#endif

@@ -75,7 +75,7 @@ bool SnapshotCreateRequest::should_complete(int r) {
 }
 
 void SnapshotCreateRequest::send_read_map() {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
@@ -110,7 +110,7 @@ void SnapshotCreateRequest::send_write_map() {
 }
 
 bool SnapshotCreateRequest::send_add_snapshot() {
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(m_image_ctx.image_lock);
   if ((m_image_ctx.features & RBD_FEATURE_FAST_DIFF) == 0) {
     return true;
   }
@@ -132,8 +132,7 @@ bool SnapshotCreateRequest::send_add_snapshot() {
 }
 
 void SnapshotCreateRequest::update_object_map() {
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+  RWLock::WLocker object_map_locker(*m_object_map_lock);
 
   auto it = m_object_map.begin();
   auto end_it = m_object_map.end();

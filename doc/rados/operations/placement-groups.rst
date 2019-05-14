@@ -29,7 +29,7 @@ For example to enable autoscaling on pool ``foo``,::
 You can also configure the default ``pg_autoscale_mode`` that is
 applied to any pools that are created in the future with::
 
-  ceph config set global osd_pool_default_autoscale_mode <mode>
+  ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
 Viewing PG scaling recommendations
 ----------------------------------

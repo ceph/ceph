@@ -24,7 +24,7 @@ class Command
 protected:
   C_SaferCond cond;
 public:
-  bufferlist outbl;
+  ceph::buffer::list outbl;
   std::string outs;
   int r;
 

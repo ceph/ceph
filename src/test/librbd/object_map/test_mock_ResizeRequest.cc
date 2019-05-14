@@ -55,13 +55,14 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateInMemory) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new ResizeRequest(
-    *ictx, &object_map, CEPH_NOSNAP, object_map.size(), OBJECT_EXISTS,
-    &cond_ctx);
+    *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, object_map.size(),
+    OBJECT_EXISTS, &cond_ctx);
   req->send();
   ASSERT_EQ(0, cond_ctx.wait());
 
@@ -80,13 +81,14 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateHeadOnDisk) {
 
   expect_resize(ictx, CEPH_NOSNAP, 0);
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new ResizeRequest(
-    *ictx, &object_map, CEPH_NOSNAP, object_map.size(), OBJECT_EXISTS,
-    &cond_ctx);
+    *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, object_map.size(),
+    OBJECT_EXISTS, &cond_ctx);
   req->send();
   ASSERT_EQ(0, cond_ctx.wait());
 
@@ -106,13 +108,14 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateSnapOnDisk) {
   uint64_t snap_id = ictx->snap_id;
   expect_resize(ictx, snap_id, 0);
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new ResizeRequest(
-    *ictx, &object_map, snap_id, object_map.size(), OBJECT_EXISTS,
-    &cond_ctx);
+    *ictx, &object_map_lock, &object_map, snap_id, object_map.size(),
+    OBJECT_EXISTS, &cond_ctx);
   req->send();
   ASSERT_EQ(0, cond_ctx.wait());
 
@@ -129,13 +132,14 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateOnDiskError) {
   expect_resize(ictx, CEPH_NOSNAP, -EINVAL);
   expect_invalidate(ictx);
 
+  RWLock object_map_lock("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new ResizeRequest(
-    *ictx, &object_map, CEPH_NOSNAP, object_map.size(), OBJECT_EXISTS,
-    &cond_ctx);
+    *ictx, &object_map_lock, &object_map, CEPH_NOSNAP, object_map.size(),
+    OBJECT_EXISTS, &cond_ctx);
   req->send();
   ASSERT_EQ(0, cond_ctx.wait());
 

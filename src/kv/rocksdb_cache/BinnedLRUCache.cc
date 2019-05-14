@@ -563,8 +563,8 @@ int64_t BinnedLRUCache::request_cache_bytes(PriorityCache::Priority pri, uint64_
       request = GetHighPriPoolUsage();
       break;
     }
-  // All other cache items are currently shoved into the LAST priority. 
-  case PriorityCache::Priority::LAST:
+  // All other cache items are currently shoved into the PRI1 priority. 
+  case PriorityCache::Priority::PRI1:
     {
       request = GetUsage();
       request -= GetHighPriPoolUsage();
@@ -587,8 +587,14 @@ int64_t BinnedLRUCache::commit_cache_size(uint64_t total_bytes)
   ldout(cct, 10) << __func__ << " old: " << old_bytes
                  << " new: " << new_bytes << dendl;
   SetCapacity((size_t) new_bytes);
-  double ratio =
-      (double) get_cache_bytes(PriorityCache::Priority::PRI0) / new_bytes;
+
+  double ratio = 0;
+  if (new_bytes > 0) {
+    int64_t pri0_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
+    // Add 10% of the "reserved" bytes so the ratio can't get stuck at 0 
+    pri0_bytes += (new_bytes - get_cache_bytes()) / 10;
+    ratio = (double) pri0_bytes / new_bytes;
+  }
   ldout(cct, 10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
   SetHighPriPoolRatio(ratio);
   return new_bytes;

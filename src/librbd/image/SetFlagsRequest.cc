@@ -36,7 +36,7 @@ void SetFlagsRequest<I>::send_set_flags() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx->image_lock);
   std::vector<uint64_t> snap_ids;
   snap_ids.push_back(CEPH_NOSNAP);
   for (auto it : m_image_ctx->snap_info) {

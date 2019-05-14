@@ -6,10 +6,12 @@
 #pragma once
 
 #include <functional>
+#include <iostream>
+#include <ostream>
+
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <ostream>
 
 #include "include/ceph_assert.h"
 #include "common/errno.h"

@@ -38,10 +38,10 @@
           <cd-submit-button i18n
                             [form]="moveForm"
                             (submitAction)="moveImage()">Move Image</cd-submit-button>
-          <button i18n
-                  type="button"
-                  class="btn btn-sm btn-default"
-                  (click)="modalRef.hide()">Cancel</button>
+          <cd-back-button [back]="modalRef.hide"
+                          name="Cancel"
+                          i18n-name>
+          </cd-back-button>
         </div>
       </div>
     </form>

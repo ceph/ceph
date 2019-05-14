@@ -226,7 +226,7 @@ int CephxServiceHandler::handle_request(
       CephXServiceTicketInfo auth_ticket_info;
       // note: no challenge here.
       if (!cephx_verify_authorizer(
-	    cct, key_server, indata, 0, auth_ticket_info, nullptr,
+	    cct, *key_server, indata, 0, auth_ticket_info, nullptr,
 	    nullptr,
 	    &tmp_bl)) {
         ret = -EPERM;

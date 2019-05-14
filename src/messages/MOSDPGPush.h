@@ -17,9 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDPGPush : public MessageInstance<MOSDPGPush, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDPGPush : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 2;
@@ -32,7 +30,7 @@ public:
   bool is_repair = false;
 
 private:
-  uint64_t cost;
+  uint64_t cost = 0;
 
 public:
   void compute_cost(CephContext *cct) {
@@ -63,9 +61,8 @@ public:
   }
 
   MOSDPGPush()
-    : MessageInstance(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
-      cost(0)
-    {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION}
+  {}
 
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -107,6 +104,10 @@ public:
 	<< " " << pushes;
     out << ")";
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

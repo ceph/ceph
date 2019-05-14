@@ -18,9 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirCancel : public MessageInstance<MExportDirCancel> {
-public:
-  friend factory;
+class MExportDirCancel : public Message {
 private:
   dirfrag_t dirfrag;
 
@@ -28,9 +26,9 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
 protected:
-  MExportDirCancel() : MessageInstance(MSG_MDS_EXPORTDIRCANCEL) {}
+  MExportDirCancel() : Message{MSG_MDS_EXPORTDIRCANCEL} {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    Message{MSG_MDS_EXPORTDIRCANCEL}, dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirCancel() override {}
@@ -49,6 +47,9 @@ public:
     auto p = payload.cbegin();
     decode(dirfrag, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

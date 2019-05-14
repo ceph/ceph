@@ -6,8 +6,8 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title"
-            i18n>{mode, select, editing {Edit} other {Add}} Role</h3>
+        <h3 i18n="form title|Example: Create Pool@@formTitle"
+            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
       </div>
       <div class="panel-body">
 
@@ -75,14 +75,11 @@
       </div>
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button [form]="formDir"
-                            type="button"
-                            (submitAction)="submit()"
-                            i18n>{mode, select, editing {Update} other {Create}} Role</cd-submit-button>
-          <button i18n
-                  type="button"
-                  class="btn btn-sm btn-default"
-                  routerLink="/user-management/roles">Back</button>
+          <cd-submit-button
+            [form]="formDir" (submitAction)="submit()"
+            i18n="form action button|Example: Create Pool@@formActionButton"
+            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button></cd-back-button>
         </div>
       </div>
     </div>

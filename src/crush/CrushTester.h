@@ -10,9 +10,9 @@
 
 class CrushTester {
   CrushWrapper& crush;
-  ostream& err;
+  std::ostream& err;
 
-  map<int, int> device_weight;
+  std::map<int, int> device_weight;
   int min_rule, max_rule;
   int ruleset;
   int min_x, max_x;
@@ -35,13 +35,13 @@ class CrushTester {
   bool output_data_file;
   bool output_csv;
 
-  string output_data_file_name;
+  std::string output_data_file_name;
 
 /*
  * mark a ratio of devices down, can be used to simulate placement distributions
  * under degrated cluster conditions
  */
-  void adjust_weights(vector<__u32>& weight);
+  void adjust_weights(std::vector<__u32>& weight);
 
   /*
    * Get the maximum number of devices that could be selected to satisfy ruleno.
@@ -60,56 +60,56 @@ class CrushTester {
    *
    * which can help make post-processing easier
    */
-  map<int,int> get_collapsed_mapping();
+  std::map<int,int> get_collapsed_mapping();
 
   /*
    * Essentially a re-implementation of CRUSH. Given a vector of devices
    * check that the vector represents a valid placement for a given ruleno.
    */
-  bool check_valid_placement(int ruleno, vector<int> in, const vector<__u32>& weight);
+  bool check_valid_placement(int ruleno, std::vector<int> in, const std::vector<__u32>& weight);
 
   /*
    * Generate a random selection of devices which satisfies ruleno. Essentially a
    * monte-carlo simulator for CRUSH placements which can be used to compare the
    * statistical distribution of the CRUSH algorithm to a random number generator
    */
-  int random_placement(int ruleno, vector<int>& out, int maxout, vector<__u32>& weight);
+  int random_placement(int ruleno, std::vector<int>& out, int maxout, std::vector<__u32>& weight);
 
   // scaffolding to store data for off-line processing
    struct tester_data_set {
-     vector <string> device_utilization;
-     vector <string> device_utilization_all;
-     vector <string> placement_information;
-     vector <string> batch_device_utilization_all;
-     vector <string> batch_device_expected_utilization_all;
-     map<int, float> proportional_weights;
-     map<int, float> proportional_weights_all;
-     map<int, float> absolute_weights;
+     std::vector<std::string> device_utilization;
+     std::vector<std::string> device_utilization_all;
+     std::vector<std::string> placement_information;
+     std::vector<std::string> batch_device_utilization_all;
+     std::vector<std::string> batch_device_expected_utilization_all;
+     std::map<int, float> proportional_weights;
+     std::map<int, float> proportional_weights_all;
+     std::map<int, float> absolute_weights;
    } ;
 
-   void write_to_csv(ofstream& csv_file, vector<string>& payload)
+  void write_to_csv(std::ofstream& csv_file, std::vector<std::string>& payload)
    {
      if (csv_file.good())
-       for (vector<string>::iterator it = payload.begin(); it != payload.end(); ++it)
+       for (std::vector<std::string>::iterator it = payload.begin(); it != payload.end(); ++it)
          csv_file << (*it);
    }
 
-   void write_to_csv(ofstream& csv_file, map<int, float>& payload)
+  void write_to_csv(std::ofstream& csv_file, std::map<int, float>& payload)
    {
      if (csv_file.good())
-       for (map<int, float>::iterator it = payload.begin(); it != payload.end(); ++it)
+       for (std::map<int, float>::iterator it = payload.begin(); it != payload.end(); ++it)
          csv_file << (*it).first << ',' << (*it).second << std::endl;
    }
 
-   void write_data_set_to_csv(string user_tag, tester_data_set& tester_data)
+   void write_data_set_to_csv(std::string user_tag, tester_data_set& tester_data)
    {
 
-     ofstream device_utilization_file ((user_tag + (string)"-device_utilization.csv").c_str());
-     ofstream device_utilization_all_file ((user_tag + (string)"-device_utilization_all.csv").c_str());
-     ofstream placement_information_file ((user_tag + (string)"-placement_information.csv").c_str());
-     ofstream proportional_weights_file ((user_tag + (string)"-proportional_weights.csv").c_str());
-     ofstream proportional_weights_all_file ((user_tag + (string)"-proportional_weights_all.csv").c_str());
-     ofstream absolute_weights_file ((user_tag + (string)"-absolute_weights.csv").c_str());
+     std::ofstream device_utilization_file((user_tag + (std::string)"-device_utilization.csv").c_str());
+     std::ofstream device_utilization_all_file((user_tag + (std::string)"-device_utilization_all.csv").c_str());
+     std::ofstream placement_information_file((user_tag + (std::string)"-placement_information.csv").c_str());
+     std::ofstream proportional_weights_file((user_tag + (std::string)"-proportional_weights.csv").c_str());
+     std::ofstream proportional_weights_all_file((user_tag + (std::string)"-proportional_weights_all.csv").c_str());
+     std::ofstream absolute_weights_file((user_tag + (std::string)"-absolute_weights.csv").c_str());
 
      // write the headers
      device_utilization_file << "Device ID, Number of Objects Stored, Number of Objects Expected" << std::endl;
@@ -138,8 +138,8 @@ class CrushTester {
      absolute_weights_file.close();
 
      if (num_batches > 1) {
-       ofstream batch_device_utilization_all_file ((user_tag + (string)"-batch_device_utilization_all.csv").c_str());
-       ofstream batch_device_expected_utilization_all_file ((user_tag + (string)"-batch_device_expected_utilization_all.csv").c_str());
+       std::ofstream batch_device_utilization_all_file ((user_tag + (std::string)"-batch_device_utilization_all.csv").c_str());
+       std::ofstream batch_device_expected_utilization_all_file ((user_tag + (std::string)"-batch_device_expected_utilization_all.csv").c_str());
 
        batch_device_utilization_all_file << "Batch Round";
        for (unsigned i = 0; i < tester_data.device_utilization.size(); i++) {
@@ -160,13 +160,13 @@ class CrushTester {
      }
    }
 
-   void write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<int> vector_data);
-   void write_integer_indexed_vector_data_string(vector<string> &dst, int index, vector<float> vector_data);
-   void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, int scalar_data);
-   void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, float scalar_data);
+   void write_integer_indexed_vector_data_string(std::vector<std::string> &dst, int index, std::vector<int> vector_data);
+   void write_integer_indexed_vector_data_string(std::vector<std::string> &dst, int index, std::vector<float> vector_data);
+   void write_integer_indexed_scalar_data_string(std::vector<std::string> &dst, int index, int scalar_data);
+   void write_integer_indexed_scalar_data_string(std::vector<std::string> &dst, int index, float scalar_data);
 
 public:
-  CrushTester(CrushWrapper& c, ostream& eo)
+  CrushTester(CrushWrapper& c, std::ostream& eo)
     : crush(c), err(eo),
       min_rule(-1), max_rule(-1),
       ruleset(-1),
@@ -189,10 +189,10 @@ public:
 
   { }
 
-  void set_output_data_file_name(string name) {
+  void set_output_data_file_name(std::string name) {
     output_data_file_name = name;
   }
-  string get_output_data_file_name() const {
+  std::string get_output_data_file_name() const {
     return output_data_file_name;
   }
 

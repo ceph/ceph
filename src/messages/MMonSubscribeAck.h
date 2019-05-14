@@ -17,28 +17,27 @@
 
 #include "msg/Message.h"
 
-class MMonSubscribeAck : public MessageInstance<MMonSubscribeAck> {
+class MMonSubscribeAck : public Message {
 public:
-  friend factory;
-
   __u32 interval;
   uuid_d fsid;
   
-  MMonSubscribeAck() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck() : Message{CEPH_MSG_MON_SUBSCRIBE_ACK},
 		       interval(0) {
   }
-  MMonSubscribeAck(uuid_d& f, int i) : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck(uuid_d& f, int i) : Message{CEPH_MSG_MON_SUBSCRIBE_ACK},
 				       interval(i), fsid(f) { }
 private:
   ~MMonSubscribeAck() override {}
 
 public:
   std::string_view get_type_name() const override { return "mon_subscribe_ack"; }
-  void print(ostream& o) const override {
+  void print(std::ostream& o) const override {
     o << "mon_subscribe_ack(" << interval << "s)";
   }
 
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(interval, p);
     decode(fsid, p);
@@ -48,6 +47,9 @@ public:
     encode(interval, payload);
     encode(fsid, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

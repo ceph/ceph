@@ -297,21 +297,21 @@ public:
       return const_iterator(this);
     return const_iterator(this, map->upper_bound(k));
   }
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
     using ceph::encode;
     if (map)
       encode(*map, bl);
     else
       encode((uint32_t)0, bl);
   }
-  void encode(bufferlist &bl, uint64_t features) const {
+  void encode(ceph::buffer::list &bl, uint64_t features) const {
     using ceph::encode;
     if (map)
       encode(*map, bl, features);
     else
       encode((uint32_t)0, bl);
   }
-  void decode(bufferlist::const_iterator& p) {
+  void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     using ceph::decode_nohead;
     uint32_t n;
@@ -325,16 +325,16 @@ public:
 };
 
 template<class Key, class T, class Map>
-inline void encode(const compact_map_base<Key, T, Map>& m, bufferlist& bl) {
+inline void encode(const compact_map_base<Key, T, Map>& m, ceph::buffer::list& bl) {
   m.encode(bl);
 }
 template<class Key, class T, class Map>
-inline void encode(const compact_map_base<Key, T, Map>& m, bufferlist& bl,
+inline void encode(const compact_map_base<Key, T, Map>& m, ceph::buffer::list& bl,
 		   uint64_t features) {
   m.encode(bl, features);
 }
 template<class Key, class T, class Map>
-inline void decode(compact_map_base<Key, T, Map>& m, bufferlist::const_iterator& p) {
+inline void decode(compact_map_base<Key, T, Map>& m, ceph::buffer::list::const_iterator& p) {
   m.decode(p);
 }
 

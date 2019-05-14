@@ -7,6 +7,7 @@ import { NodeEvent, TreeModel } from 'ng2-tree';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 
 @Component({
   selector: 'cd-iscsi-target-details',
@@ -38,7 +39,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   title: string;
   tree: TreeModel;
 
-  constructor(private i18n: I18n) {}
+  constructor(private i18n: I18n, private iscsiBackstorePipe: IscsiBackstorePipe) {}
 
   ngOnInit() {
     this.columns = [
@@ -248,8 +249,8 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
         this.data.push({
           displayName: 'backstore',
-          default: this.settings.default_backstore,
-          current: tempData.backstore
+          default: this.iscsiBackstorePipe.transform(this.settings.default_backstore),
+          current: this.iscsiBackstorePipe.transform(tempData.backstore)
         });
       } else {
         this.columns[2].isHidden = true;

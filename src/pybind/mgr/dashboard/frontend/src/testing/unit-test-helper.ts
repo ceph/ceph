@@ -169,22 +169,49 @@ export class FormHelper {
   expectError(control: AbstractControl | string, error: string) {
     expect(this.getControl(control).hasError(error)).toBeTruthy();
   }
+}
+
+export class FixtureHelper {
+  fixture: ComponentFixture<any>;
+
+  constructor(fixture: ComponentFixture<any>) {
+    this.fixture = fixture;
+  }
 
   /**
    * Expect a list of id elements to be visible or not.
    */
-  expectIdElementsVisible(fixture: ComponentFixture<any>, ids: string[], visibility: boolean) {
-    fixture.detectChanges();
+  expectIdElementsVisible(ids: string[], visibility: boolean) {
     ids.forEach((css) => {
-      this.expectElementVisible(fixture, `#${css}`, visibility);
+      this.expectElementVisible(`#${css}`, visibility);
     });
   }
 
   /**
-   * Expect a specific element in fixture to be visible or not.
+   * Expect a specific element to be visible or not.
    */
-  expectElementVisible(fixture: ComponentFixture<any>, css: string, visibility: boolean) {
-    expect(Boolean(fixture.debugElement.query(By.css(css)))).toBe(visibility);
+  expectElementVisible(css: string, visibility: boolean) {
+    expect(Boolean(this.getElementByCss(css))).toBe(visibility);
+  }
+
+  expectFormFieldToBe(css: string, value: string) {
+    const props = this.getElementByCss(css).properties;
+    expect(props['value'] || props['checked'].toString()).toBe(value);
+  }
+
+  clickElement(css: string) {
+    this.getElementByCss(css).triggerEventHandler('click', null);
+    this.fixture.detectChanges();
+  }
+
+  getText(css: string) {
+    const e = this.getElementByCss(css);
+    return e ? e.nativeElement.textContent.trim() : null;
+  }
+
+  getElementByCss(css: string) {
+    this.fixture.detectChanges();
+    return this.fixture.debugElement.query(By.css(css));
   }
 }
 

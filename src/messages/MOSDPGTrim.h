@@ -17,10 +17,9 @@
 
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
-class MOSDPGTrim : public MessageInstance<MOSDPGTrim, MOSDPeeringOp> {
-public:
-  friend factory;
+class MOSDPGTrim : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 2;
@@ -47,9 +46,9 @@ public:
       MTrim(epoch, get_source().num(), pgid.shard, trim_to));
   }
 
-  MOSDPGTrim() : MessageInstance(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDPGTrim() : MOSDPeeringOp{MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION} {}
   MOSDPGTrim(version_t mv, spg_t p, eversion_t tt) :
-    MessageInstance(MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION),
+    MOSDPeeringOp{MSG_OSD_PG_TRIM, HEAD_VERSION, COMPAT_VERSION},
     epoch(mv), pgid(p), trim_to(tt) { }
 private:
   ~MOSDPGTrim() override {}
@@ -74,6 +73,9 @@ public:
     decode(trim_to, p);
     decode(pgid.shard, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

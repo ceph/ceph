@@ -8,6 +8,7 @@ import { Observable } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -85,6 +86,8 @@ export class RbdFormComponent implements OnInit {
     '16 MiB',
     '32 MiB'
   ];
+  action: string;
+  resource: string;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -95,9 +98,11 @@ export class RbdFormComponent implements OnInit {
     private formatter: FormatterService,
     private taskWrapper: TaskWrapperService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.poolPermission = this.authStorageService.getPermissions().pool;
+    this.resource = this.i18n('RBD');
     this.features = {
       'deep-flatten': {
         desc: this.i18n('Deep flatten'),
@@ -207,13 +212,18 @@ export class RbdFormComponent implements OnInit {
   ngOnInit() {
     if (this.router.url.startsWith('/block/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
+      this.action = this.actionLabels.EDIT;
       this.disableForEdit();
     } else if (this.router.url.startsWith('/block/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
+      this.action = this.actionLabels.CLONE;
     } else if (this.router.url.startsWith('/block/rbd/copy')) {
       this.mode = this.rbdFormMode.copying;
+      this.action = this.actionLabels.COPY;
       this.disableForCopy();
+    } else {
+      this.action = this.actionLabels.CREATE;
     }
     if (
       this.mode === this.rbdFormMode.editing ||

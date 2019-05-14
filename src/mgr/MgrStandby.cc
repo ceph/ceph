@@ -374,7 +374,7 @@ void MgrStandby::_update_log_config()
   }
 }
 
-void MgrStandby::handle_mgr_map(MMgrMap* mmap)
+void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
 {
   auto &map = mmap->get_map();
   dout(4) << "received map epoch " << map.get_epoch() << dendl;
@@ -429,19 +429,19 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   }
 }
 
-bool MgrStandby::ms_dispatch(Message *m)
+bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {
-    handle_mgr_map(static_cast<MMgrMap*>(m));
+    handle_mgr_map(ref_cast<MMgrMap>(m));
   }
   bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
     lock.Unlock();
-    handled = am->ms_dispatch(m);
+    handled = am->ms_dispatch2(m);
     lock.Lock();
   }
   if (m->get_type() == MSG_MGR_MAP) {
@@ -451,15 +451,6 @@ bool MgrStandby::ms_dispatch(Message *m)
   return handled;
 }
 
-
-bool MgrStandby::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc.build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
 
 bool MgrStandby::ms_handle_refused(Connection *con)
 {

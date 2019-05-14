@@ -53,7 +53,7 @@ protected:
 public:
 
   void load_digest(MMgrDigest *m);
-  void ingest_pgstats(MPGStats *stats);
+  void ingest_pgstats(ceph::ref_t<MPGStats> stats);
 
   void update_delta_stats();
 

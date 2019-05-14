@@ -80,10 +80,8 @@ public:
 
   bool flush(
       io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      io::DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) override {
-    return false;
-  }
+      uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) override;
 
   bool invalidate_cache(Context* on_finish) override {
     return false;

@@ -212,7 +212,7 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, Flush) {
   C_SaferCond cond;
   Context *on_finish = &cond;
   ASSERT_FALSE(mock_simple_scheduler_object_dispatch.flush(
-      FLUSH_SOURCE_USER, {}, nullptr, &on_finish, nullptr));
+      FLUSH_SOURCE_USER, {}, nullptr, nullptr, &on_finish, nullptr));
   ASSERT_EQ(on_finish, &cond); // not modified
   on_finish->complete(0);
   ASSERT_EQ(0, cond.wait());
@@ -308,7 +308,7 @@ TEST_F(TestMockIoSimpleSchedulerObjectDispatch, WriteDelayedFlush) {
   C_SaferCond cond3;
   Context *on_finish3 = &cond3;
   ASSERT_FALSE(mock_simple_scheduler_object_dispatch.flush(
-      FLUSH_SOURCE_USER, {}, nullptr, &on_finish3, nullptr));
+      FLUSH_SOURCE_USER, {}, nullptr, nullptr, &on_finish3, nullptr));
   ASSERT_EQ(on_finish3, &cond3);
 
   on_finish1->complete(0);

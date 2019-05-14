@@ -165,6 +165,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost-random1.67-dev \
 	ceph-libboost-regex1.67-dev \
 	ceph-libboost-system1.67-dev \
+	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
 }
@@ -278,10 +279,10 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 7 xenial
-                install_boost_on_ubuntu xenial
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
-                install_boost_on_ubuntu bionic
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -349,7 +350,7 @@ else
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
@@ -361,6 +362,7 @@ else
                 ;;
         esac
         munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then

@@ -100,7 +100,7 @@ describe('NfsFormComponent', () => {
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
-      squash: 'None',
+      squash: '',
       tag: '',
       transportTCP: true,
       transportUDP: true
@@ -115,8 +115,8 @@ describe('NfsFormComponent', () => {
     component.onClusterChange();
 
     expect(component.daemonsSelections).toEqual([
-      { description: '', name: 'node1', selected: false },
-      { description: '', name: 'node2', selected: false }
+      { description: '', name: 'node1', selected: false, enabled: true },
+      { description: '', name: 'node2', selected: false, enabled: true }
     ]);
   });
 
@@ -145,6 +145,16 @@ describe('NfsFormComponent', () => {
         transportTCP: true,
         transportUDP: true
       });
+    });
+
+    it('should remove "pseudo" requirement when NFS v4 disabled', () => {
+      component.nfsForm.patchValue({
+        protocolNfsv4: false,
+        pseudo: ''
+      });
+
+      component.nfsForm.updateValueAndValidity({ emitEvent: false });
+      expect(component.nfsForm.valid).toBeTruthy();
     });
 
     it('should call update', () => {

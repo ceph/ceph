@@ -163,12 +163,12 @@ class BackoffThrottle {
   unsigned next_cond = 0;
 
   /// allocated once to avoid constantly allocating new ones
-  vector<std::condition_variable> conds;
+  std::vector<std::condition_variable> conds;
 
   const bool use_perf;
 
   /// pointers into conds
-  list<std::condition_variable*> waiters;
+  std::list<std::condition_variable*> waiters;
 
   std::list<std::condition_variable*>::iterator _push_waiter() {
     unsigned next = next_cond++;
@@ -215,7 +215,7 @@ public:
     double high_multiple,
     double max_multiple,
     uint64_t throttle_max,
-    ostream *errstream);
+    std::ostream *errstream);
 
   ceph::timespan get(uint64_t c = 1);
   ceph::timespan wait() {
@@ -364,7 +364,7 @@ class TokenBucketThrottle {
   SafeTimer *m_timer;
   Mutex *m_timer_lock;
   FunctionContext *m_token_ctx = nullptr;
-  list<Blocker> m_blockers;
+  std::list<Blocker> m_blockers;
   Mutex m_lock;
 
   // minimum of the filling period.

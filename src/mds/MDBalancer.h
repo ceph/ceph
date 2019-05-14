@@ -48,7 +48,7 @@ public:
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 
-  int proc_message(const Message::const_ref &m);
+  int proc_message(const cref_t<Message> &m);
 
   /**
    * Regularly called upkeep function.
@@ -100,7 +100,7 @@ private:
   mds_load_t get_load();
   int localize_balancer();
   void send_heartbeat();
-  void handle_heartbeat(const MHeartbeat::const_ref &m);
+  void handle_heartbeat(const cref_t<MHeartbeat> &m);
   void find_exports(CDir *dir,
                     double amount,
                     std::vector<CDir*>* exports,

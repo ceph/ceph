@@ -234,7 +234,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 void MgrMonitor::prime_mgr_client()
 {
   dout(10) << __func__ << dendl;
-  mon->mgr_client.ms_dispatch(new MMgrMap(map));
+  mon->mgr_client.ms_dispatch2(make_message<MMgrMap>(map));
 }
 
 void MgrMonitor::create_pending()
@@ -584,7 +584,7 @@ void MgrMonitor::check_sub(Subscription *sub)
     if (sub->next <= map.get_epoch()) {
       dout(20) << "Sending map to subscriber " << sub->session->con
 	       << " " << sub->session->con->get_peer_addr() << dendl;
-      sub->session->con->send_message(new MMgrMap(map));
+      sub->session->con->send_message2(make_message<MMgrMap>(map));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
       } else {
@@ -626,7 +626,7 @@ void MgrMonitor::send_digests()
   for (auto sub : *(mon->session_map.subs[type])) {
     dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
 	     << " " << sub->session->con->get_peer_addr() << dendl;
-    MMgrDigest *mdigest = new MMgrDigest;
+    auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
     mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
@@ -638,7 +638,7 @@ void MgrMonitor::send_digests()
     f.flush(mdigest->mon_status_json);
     f.reset();
 
-    sub->session->con->send_message(mdigest);
+    sub->session->con->send_message2(mdigest);
   }
 
 timer:

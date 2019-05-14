@@ -389,7 +389,7 @@ int Migration<I>::prepare(librados::IoCtx& io_ctx,
 
   uint64_t features;
   {
-    RWLock::RLocker snap_locker(image_ctx->snap_lock);
+    RWLock::RLocker image_locker(image_ctx->image_lock);
     features = image_ctx->features;
   }
   opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
@@ -1026,7 +1026,7 @@ int Migration<I>::validate_src_snaps() {
   }
 
   for (auto &snap : snaps) {
-    RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
     cls::rbd::ParentImageSpec parent_spec{m_src_image_ctx->md_ctx.get_id(),
                                           m_src_image_ctx->md_ctx.get_namespace(),
                                           m_src_image_ctx->id, snap.id};
@@ -1193,8 +1193,7 @@ int Migration<I>::create_dst_image() {
   uint64_t size;
   cls::rbd::ParentImageSpec parent_spec;
   {
-    RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
-    RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
+    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
     size = m_src_image_ctx->size;
 
     // use oldest snapshot or HEAD for parent spec
@@ -1542,7 +1541,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
       // Also collect the list of the children currently attached to the
       // source, so we could make a proper decision later about relinking.
 
-      RWLock::RLocker src_snap_locker(to_image_ctx->snap_lock);
+      RWLock::RLocker src_image_locker(to_image_ctx->image_lock);
       cls::rbd::ParentImageSpec src_parent_spec{to_image_ctx->md_ctx.get_id(),
                                                 to_image_ctx->md_ctx.get_namespace(),
                                                 to_image_ctx->id, snap.id};
@@ -1554,7 +1553,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
         return r;
       }
 
-      RWLock::RLocker snap_locker(from_image_ctx->snap_lock);
+      RWLock::RLocker image_locker(from_image_ctx->image_lock);
       snap.id = from_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
                                             snap.name);
       if (snap.id == CEPH_NOSNAP) {
@@ -1565,7 +1564,7 @@ int Migration<I>::relink_children(I *from_image_ctx, I *to_image_ctx) {
 
     std::vector<librbd::linked_image_spec_t> child_images;
     {
-      RWLock::RLocker snap_locker(from_image_ctx->snap_lock);
+      RWLock::RLocker image_locker(from_image_ctx->image_lock);
       cls::rbd::ParentImageSpec parent_spec{from_image_ctx->md_ctx.get_id(),
                                             from_image_ctx->md_ctx.get_namespace(),
                                             from_image_ctx->id, snap.id};
@@ -1615,7 +1614,7 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
 
   librados::snap_t to_snap_id;
   {
-    RWLock::RLocker snap_locker(to_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(to_image_ctx->image_lock);
     to_snap_id = to_image_ctx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
                                              from_snap.name);
     if (to_snap_id == CEPH_NOSNAP) {
@@ -1653,8 +1652,7 @@ int Migration<I>::relink_child(I *from_image_ctx, I *to_image_ctx,
   cls::rbd::ParentImageSpec parent_spec;
   uint64_t parent_overlap;
   {
-    RWLock::RLocker snap_locker(child_image_ctx->snap_lock);
-    RWLock::RLocker parent_locker(child_image_ctx->parent_lock);
+    RWLock::RLocker image_locker(child_image_ctx->image_lock);
 
     // use oldest snapshot or HEAD for parent spec
     if (!child_image_ctx->snap_info.empty()) {

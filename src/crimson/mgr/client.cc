@@ -49,7 +49,7 @@ seastar::future<> Client::stop()
   });
 }
 
-seastar::future<> Client::ms_dispatch(ceph::net::ConnectionRef conn,
+seastar::future<> Client::ms_dispatch(ceph::net::Connection* conn,
                                       MessageRef m)
 {
   switch(m->get_type()) {
@@ -78,7 +78,7 @@ seastar::future<> Client::reconnect()
       logger().warn("No active mgr available yet");
       return seastar::now();
     }
-    auto peer = mgrmap.get_active_addrs().legacy_addr();
+    auto peer = mgrmap.get_active_addrs().front();
     return msgr.connect(peer, CEPH_ENTITY_TYPE_MGR).then(
       [this](auto xconn) {
         conn = xconn->release();
@@ -90,7 +90,7 @@ seastar::future<> Client::reconnect()
   });
 }
 
-seastar::future<> Client::handle_mgr_map(ceph::net::ConnectionRef,
+seastar::future<> Client::handle_mgr_map(ceph::net::Connection*,
                                          Ref<MMgrMap> m)
 {
   mgrmap = m->get_map();
@@ -104,7 +104,7 @@ seastar::future<> Client::handle_mgr_map(ceph::net::ConnectionRef,
   }
 }
 
-seastar::future<> Client::handle_mgr_conf(ceph::net::ConnectionRef conn,
+seastar::future<> Client::handle_mgr_conf(ceph::net::Connection* conn,
                                           Ref<MMgrConfigure> m)
 {
   logger().info("{} {}", __func__, *m);

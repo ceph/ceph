@@ -12,6 +12,9 @@
 #include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDPGInfo.h"
@@ -25,6 +28,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_store.h"
+#include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 
@@ -35,11 +39,6 @@
 namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
-  }
-  template<typename Message, typename... Args>
-  Ref<Message> make_message(Args&&... args)
-  {
-    return {new Message{std::forward<Args>(args)...}, false};
   }
 }
 
@@ -414,7 +413,7 @@ PG::find_best_info(const PG::peer_info_t& infos) const
   // when you find bugs!
   auto min_last_update_acceptable = eversion_t::max();
   epoch_t max_les = 0;
-  for (auto& [shard, info] : infos) {
+  for ([[maybe_unused]] auto& [shard, info] : infos) {
     if (max_les < info.history.last_epoch_started) {
       max_les = info.history.last_epoch_started;
     }
@@ -423,7 +422,7 @@ PG::find_best_info(const PG::peer_info_t& infos) const
       max_les = info.last_epoch_started;
     }
   }
-  for (auto& [shard, info] : infos) {
+  for ([[maybe_unused]] auto& [shard, info] : infos) {
     if (max_les <= info.last_epoch_started &&
         min_last_update_acceptable > info.last_update) {
       min_last_update_acceptable = info.last_update;
@@ -924,7 +923,7 @@ seastar::future<> PG::send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch)
   if (osdmap->is_down(peer) || osdmap->get_info(peer).up_from > from_epoch) {
     return seastar::now();
   } else {
-    return msgr.connect(osdmap->get_cluster_addrs(peer).legacy_addr(),
+    return msgr.connect(osdmap->get_cluster_addrs(peer).front(),
                         CEPH_ENTITY_TYPE_OSD)
      .then([m, this] (auto xconn) {
        return (*xconn)->send(m);
@@ -959,7 +958,7 @@ seastar::future<> PG::share_pg_info()
 
 seastar::future<> PG::wait_for_active()
 {
-  logger().info("wait_for_active: {}", pg_state_string(info.stats.state));
+  logger().debug("wait_for_active: {}", pg_state_string(info.stats.state));
   if (test_state(PG_STATE_ACTIVE)) {
     return seastar::now();
   } else {
@@ -970,50 +969,68 @@ seastar::future<> PG::wait_for_active()
   }
 }
 
+// TODO: split the method accordingly to os' constness needs
 seastar::future<>
-PG::do_osd_op(const object_info_t& oi, OSDOp* osd_op)
+PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
 {
-  switch (const auto& op = osd_op->op; op.op) {
+  // TODO: dispatch via call table?
+  // TODO: we might want to find a way to unify both input and output
+  // of each op.
+  switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
   case CEPH_OSD_OP_READ:
-    return backend->read(oi,
+    return backend->read(os.oi,
                          op.extent.offset,
                          op.extent.length,
                          op.extent.truncate_size,
                          op.extent.truncate_seq,
-                         op.flags).then([osd_op](bufferlist bl) {
-      osd_op->rval = bl.length();
-      osd_op->outdata = std::move(bl);
+                         op.flags).then([&osd_op](bufferlist bl) {
+      osd_op.rval = bl.length();
+      osd_op.outdata = std::move(bl);
       return seastar::now();
     });
-  default:
+  case CEPH_OSD_OP_WRITE:
+    // TODO: handle write separately. For `rados bench write` the fall-
+    // through path somehow works but this is really nasty.
+    [[fallthrough]];
+  case CEPH_OSD_OP_WRITEFULL:
+    // XXX: os = backend->write(std::move(os), ...) instead?
+    return backend->writefull(os, osd_op, txn);
+  case CEPH_OSD_OP_SETALLOCHINT:
     return seastar::now();
+  default:
+    throw std::runtime_error(
+      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
 }
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
-  // todo: issue requests in parallel if they don't write,
-  // with writes being basically a synchronization barrier
-  return seastar::do_with(std::move(m), [this](auto& m) {
-    return seastar::do_for_each(begin(m->ops), end(m->ops),
-                                [m,this](OSDOp& osd_op) {
-      const auto oid = (m->get_snapid() == CEPH_SNAPDIR ?
-                        m->get_hobj().get_head() :
-                        m->get_hobj());
-      return backend->get_object(oid).then([&osd_op,this](auto oi) {
-        return do_osd_op(oi, &osd_op);
-      }).handle_exception_type([&osd_op](const object_not_found&) {
-        osd_op.rval = -ENOENT;
-        throw;
+  return seastar::do_with(std::move(m), ceph::os::Transaction{},
+                          [this](auto& m, auto& txn) {
+    const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
+                                                     : m->get_hobj();
+    return backend->get_object_state(oid).then([m,&txn,this](auto os) {
+      // TODO: issue requests in parallel if they don't write,
+      // with writes being basically a synchronization barrier
+      return seastar::do_for_each(std::begin(m->ops), std::end(m->ops),
+                                  [m,&txn,this,pos=os.get()](OSDOp& osd_op) {
+        return do_osd_op(*pos, osd_op, txn);
+      }).then([&txn,m,this,os=std::move(os)]() mutable {
+        // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
+        return txn.empty() ? seastar::now()
+                           : backend->mutate_object(std::move(os), std::move(txn), *m);
       });
-    }).then([=] {
+    }).then([m,this] {
       auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
                                              0, false);
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
       return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
     }).handle_exception_type([=](const object_not_found& dne) {
+      logger().debug("got object_not_found for {}", oid);
+
+      backend->evict_object_state(oid);
       auto reply = make_message<MOSDOpReply>(m.get(), -ENOENT, get_osdmap_epoch(),
                                              0, false);
       reply->set_enoent_reply_versions(info.last_update,
@@ -1023,7 +1040,7 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
   });
 }
 
-seastar::future<> PG::handle_op(ceph::net::ConnectionRef conn,
+seastar::future<> PG::handle_op(ceph::net::Connection* conn,
                                 Ref<MOSDOp> m)
 {
   return wait_for_active().then([conn, m, this] {

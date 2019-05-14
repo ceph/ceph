@@ -1,3 +1,5 @@
+.. _hardware-recommendations:
+
 ==========================
  Hardware Recommendations
 ==========================

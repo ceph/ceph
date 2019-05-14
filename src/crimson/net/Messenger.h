@@ -22,6 +22,11 @@
 
 class AuthAuthorizer;
 
+namespace ceph::auth {
+class AuthClient;
+class AuthServer;
+}
+
 namespace ceph::net {
 
 using Throttle = ceph::thread::Throttle;
@@ -32,13 +37,17 @@ class Messenger {
   entity_addrvec_t my_addrs;
   uint32_t global_seq = 0;
   uint32_t crc_flags = 0;
+  ceph::auth::AuthClient* auth_client = nullptr;
+  ceph::auth::AuthServer* auth_server = nullptr;
+  bool require_authorizer = true;
 
- public:
+public:
   Messenger(const entity_name_t& name)
     : my_name(name)
   {}
   virtual ~Messenger() {}
 
+  int get_mytype() const { return my_name.type(); }
   const entity_name_t& get_myname() const { return my_name; }
   const entity_addrvec_t& get_myaddrs() const { return my_addrs; }
   entity_addr_t get_myaddr() const { return my_addrs.front(); }
@@ -87,6 +96,15 @@ class Messenger {
     crc_flags |= MSG_CRC_HEADER;
   }
 
+  ceph::auth::AuthClient* get_auth_client() const { return auth_client; }
+  void set_auth_client(ceph::auth::AuthClient *ac) {
+    auth_client = ac;
+  }
+  ceph::auth::AuthServer* get_auth_server() const { return auth_server; }
+  void set_auth_server(ceph::auth::AuthServer *as) {
+    auth_server = as;
+  }
+
   // get the local messenger shard if it is accessed by another core
   virtual Messenger* get_local_shard() {
     return this;
@@ -94,12 +112,24 @@ class Messenger {
 
   virtual void print(ostream& out) const = 0;
 
+  virtual SocketPolicy get_policy(entity_type_t peer_type) const = 0;
+
+  virtual SocketPolicy get_default_policy() const = 0;
+
   virtual void set_default_policy(const SocketPolicy& p) = 0;
 
   virtual void set_policy(entity_type_t peer_type, const SocketPolicy& p) = 0;
 
   virtual void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) = 0;
 
+  // allow unauthenticated connections.  This is needed for compatibility with
+  // pre-nautilus OSDs, which do not authenticate the heartbeat sessions.
+  bool get_require_authorizer() const {
+    return require_authorizer;
+  }
+  void set_require_authorizer(bool r) {
+    require_authorizer = r;
+  }
   static seastar::future<Messenger*>
   create(const entity_name_t& name,
          const std::string& lname,

@@ -20,9 +20,7 @@
 
 #include "msg/Message.h"
 
-class MDentryLink : public MessageInstance<MDentryLink> {
-public:
-  friend factory;
+class MDentryLink : public Message {
 private:
   dirfrag_t subtree;
   dirfrag_t dirfrag;
@@ -39,9 +37,9 @@ private:
 
 protected:
   MDentryLink() :
-    MessageInstance(MSG_MDS_DENTRYLINK) { }
+    Message{MSG_MDS_DENTRYLINK} { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
-    MessageInstance(MSG_MDS_DENTRYLINK),
+    Message{MSG_MDS_DENTRYLINK},
     subtree(r),
     dirfrag(df),
     dn(n),
@@ -70,6 +68,9 @@ public:
     encode(is_primary, payload);
     encode(bl, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

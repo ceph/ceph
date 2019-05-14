@@ -250,7 +250,7 @@ int seed::save_torrent_file()
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
-  op_ret = sysobj.omap().set(key, bl);
+  op_ret = sysobj.omap().set(key, bl, null_yield);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

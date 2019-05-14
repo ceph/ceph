@@ -70,8 +70,8 @@ namespace {
 
 uint64_t get_encode_features(cls_method_context_t hctx) {
   uint64_t features = 0;
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
-  if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (require_osd_release >= ceph_release_t::nautilus) {
     features |= CEPH_FEATURE_SERVER_NAUTILUS;
   }
   return features;
@@ -704,8 +704,8 @@ int detach(cls_method_context_t hctx, bool legacy_api) {
     return r;
   }
 
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
-  if (has_child_snaps && require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
+  if (has_child_snaps && require_osd_release >= ceph_release_t::nautilus) {
     // remove overlap from HEAD revision but keep spec for snapshots
     on_disk_parent.head_overlap = std::nullopt;
     r = write_key(hctx, "parent", on_disk_parent, get_encode_features(hctx));
@@ -2566,9 +2566,9 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bool has_parent = (r >= 0 && parent.exists());
   bool is_head_child = (has_parent && parent.head_overlap);
-  int8_t require_osd_release = cls_get_required_osd_release(hctx);
+  ceph_release_t require_osd_release = cls_get_required_osd_release(hctx);
   if (has_parent && !is_head_child && !has_child_snaps &&
-      require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      require_osd_release >= ceph_release_t::nautilus) {
     // remove the unused parent image spec
     r = remove_key(hctx, "parent");
     if (r < 0 && r != -ENOENT) {
@@ -2694,6 +2694,67 @@ int copyup(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return cls_cxx_write(hctx, 0, in->length(), in);
 }
 
+/**
+ * Input:
+ * @param extent_map map of extents to write
+ * @param data bufferlist of data to write
+ *
+ * Output:
+ * @returns 0 on success, or if block already exists in child
+ *  negative error code on other error
+ */
+
+int sparse_copyup(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  std::map<uint64_t, uint64_t> extent_map;
+  bufferlist data;
+
+  try {
+    auto iter = in->cbegin();
+    decode(extent_map, iter);
+    decode(data, iter);
+  } catch (const buffer::error &err) {
+    CLS_LOG(20, "sparse_copyup: invalid decode");
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r == 0) {
+    return 0;
+  }
+
+  if (extent_map.empty()) {
+    CLS_LOG(20, "sparse_copyup: create empty object");
+    r = cls_cxx_create(hctx, true);
+    return r;
+  }
+
+  uint64_t data_offset = 0;
+  for (auto &it: extent_map) {
+    auto off = it.first;
+    auto len = it.second;
+
+    bufferlist tmpbl;
+    try {
+      tmpbl.substr_of(data, data_offset, len);
+    } catch (const buffer::error &err) {
+      CLS_LOG(20, "sparse_copyup: invalid data");
+      return -EINVAL;
+    }
+    data_offset += len;
+
+    CLS_LOG(20, "sparse_copyup: writing extent %" PRIu64 "~%" PRIu64 "\n", off,
+            len);
+    int r = cls_cxx_write(hctx, off, len, &tmpbl);
+    if (r < 0) {
+      CLS_ERR("sparse_copyup: error writing extent %" PRIu64 "~%" PRIu64 ": %s",
+              off, len, cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  return 0;
+}
 
 /************************ rbd_id object methods **************************/
 
@@ -7549,6 +7610,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_namespace_remove;
   cls_method_handle_t h_namespace_list;
   cls_method_handle_t h_copyup;
+  cls_method_handle_t h_sparse_copyup;
   cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_sparsify;
 
@@ -7939,6 +8001,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "copyup",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  copyup, &h_copyup);
+  cls_register_cxx_method(h_class, "sparse_copyup",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  sparse_copyup, &h_sparse_copyup);
   cls_register_cxx_method(h_class, "assert_snapc_seq",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           assert_snapc_seq,

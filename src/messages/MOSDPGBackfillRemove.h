@@ -21,10 +21,8 @@
  * instruct non-primary to remove some objects during backfill
  */
 
-class MOSDPGBackfillRemove : public MessageInstance<MOSDPGBackfillRemove, MOSDFastDispatchOp> {
+class MOSDPGBackfillRemove : public MOSDFastDispatchOp {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -40,12 +38,13 @@ public:
   }
 
   MOSDPGBackfillRemove()
-    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
-			COMPAT_VERSION) {}
+    : MOSDFastDispatchOp{MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+			 COMPAT_VERSION}
+  {}
 
   MOSDPGBackfillRemove(spg_t pgid, epoch_t map_epoch)
-    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
-			 COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+			 COMPAT_VERSION},
       pgid(pgid),
       map_epoch(map_epoch) {}
 
@@ -71,8 +70,10 @@ public:
     decode(map_epoch, p);
     decode(ls, p);
   }
+
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
-
 
 #endif

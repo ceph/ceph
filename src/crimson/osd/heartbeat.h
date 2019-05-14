@@ -22,9 +22,7 @@ class Heartbeat : public ceph::net::Dispatcher {
 public:
   using osd_id_t = int;
 
-  Heartbeat(int whoami,
-	    uint32_t nonce,
-	    const OSDMapService& service,
+  Heartbeat(const OSDMapService& service,
 	    ceph::mon::Client& monc,
 	    ceph::net::Messenger& front_msgr,
 	    ceph::net::Messenger& back_msgr);
@@ -43,18 +41,19 @@ public:
   const entity_addrvec_t& get_front_addrs() const;
   const entity_addrvec_t& get_back_addrs() const;
 
+  void set_require_authorizer(bool);
+
   // Dispatcher methods
-  seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn,
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn,
 				MessageRef m) override;
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
 private:
-  seastar::future<> handle_osd_ping(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_osd_ping(ceph::net::Connection* conn,
 				    Ref<MOSDPing> m);
-  seastar::future<> handle_ping(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_ping(ceph::net::Connection* conn,
 				Ref<MOSDPing> m);
-  seastar::future<> handle_reply(ceph::net::ConnectionRef conn,
+  seastar::future<> handle_reply(ceph::net::Connection* conn,
 				 Ref<MOSDPing> m);
   seastar::future<> handle_you_died();
 
@@ -70,8 +69,6 @@ private:
   seastar::future<> start_messenger(ceph::net::Messenger& msgr,
 				    const entity_addrvec_t& addrs);
 private:
-  const int whoami;
-  const uint32_t nonce;
   const OSDMapService& service;
   ceph::mon::Client& monc;
   ceph::net::Messenger& front_msgr;

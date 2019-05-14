@@ -17,17 +17,15 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-class MRemoveSnaps : public MessageInstance<MRemoveSnaps, PaxosServiceMessage> {
+class MRemoveSnaps : public PaxosServiceMessage {
 public:
-  friend factory;
-
   map<int, vector<snapid_t> > snaps;
   
 protected:
   MRemoveSnaps() : 
-    MessageInstance(MSG_REMOVE_SNAPS, 0) { }
+    PaxosServiceMessage{MSG_REMOVE_SNAPS, 0} { }
   MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    MessageInstance(MSG_REMOVE_SNAPS, 0) {
+    PaxosServiceMessage{MSG_REMOVE_SNAPS, 0} {
     snaps.swap(s);
   }
   ~MRemoveSnaps() override {}
@@ -49,7 +47,9 @@ public:
     decode(snaps, p);
     ceph_assert(p.end());
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

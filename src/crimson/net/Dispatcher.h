@@ -27,7 +27,7 @@ class Dispatcher {
  public:
   virtual ~Dispatcher() {}
 
-  virtual seastar::future<> ms_dispatch(ConnectionRef conn, MessageRef m) {
+  virtual seastar::future<> ms_dispatch(Connection* conn, MessageRef m) {
     return seastar::make_ready_future<>();
   }
 
@@ -52,9 +52,6 @@ class Dispatcher {
 		       auth_proto_t,
 		       bufferlist&) {
     return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});
-  }
-  virtual AuthAuthorizer* ms_get_authorizer(peer_type_t) const {
-    return nullptr;
   }
 
   // get the local dispatcher shard if it is accessed by another core

@@ -69,13 +69,13 @@ class Filer {
 
     Context *onfinish;
 
-    vector<ObjectExtent> probing;
+    std::vector<ObjectExtent> probing;
     uint64_t probing_off, probing_len;
 
-    map<object_t, uint64_t> known_size;
+    std::map<object_t, uint64_t> known_size;
     ceph::real_time max_mtime;
 
-    set<object_t> ops;
+    std::set<object_t> ops;
 
     int err;
     bool found_size;
@@ -122,12 +122,12 @@ class Filer {
 	   snapid_t snap,
 	   uint64_t offset,
 	   uint64_t len,
-	   bufferlist *bl,   // ptr to data
+	   ceph::buffer::list *bl,   // ptr to data
 	   int flags,
 	   Context *onfinish,
 	   int op_flags = 0) {
     ceph_assert(snap);  // (until there is a non-NOSNAP write)
-    vector<ObjectExtent> extents;
+    std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
   }
@@ -137,14 +137,14 @@ class Filer {
 		 snapid_t snap,
 		 uint64_t offset,
 		 uint64_t len,
-		 bufferlist *bl, // ptr to data
+		 ceph::buffer::list *bl, // ptr to data
 		 int flags,
 		 uint64_t truncate_size,
 		 __u32 truncate_seq,
 		 Context *onfinish,
 		 int op_flags = 0) {
     ceph_assert(snap);  // (until there is a non-NOSNAP write)
-    vector<ObjectExtent> extents;
+    std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
 			     extents);
     objecter->sg_read_trunc(extents, snap, bl, flags,
@@ -156,12 +156,12 @@ class Filer {
 	    const SnapContext& snapc,
 	    uint64_t offset,
 	    uint64_t len,
-	    bufferlist& bl,
+	    ceph::buffer::list& bl,
 	    ceph::real_time mtime,
 	    int flags,
 	    Context *oncommit,
 	    int op_flags = 0) {
-    vector<ObjectExtent> extents;
+    std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     objecter->sg_write(extents, snapc, bl, mtime, flags, oncommit, op_flags);
   }
@@ -171,14 +171,14 @@ class Filer {
 		  const SnapContext& snapc,
 		  uint64_t offset,
 		  uint64_t len,
-		  bufferlist& bl,
+		  ceph::buffer::list& bl,
 		  ceph::real_time mtime,
 		  int flags,
 		  uint64_t truncate_size,
 		  __u32 truncate_seq,
 		  Context *oncommit,
 		  int op_flags = 0) {
-    vector<ObjectExtent> extents;
+    std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
 			     extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
@@ -205,7 +205,7 @@ class Filer {
 	   int flags,
 	   bool keep_first,
 	   Context *oncommit) {
-    vector<ObjectExtent> extents;
+    std::vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     if (extents.size() == 1) {
       if (extents[0].offset == 0 && extents[0].length == layout->object_size
@@ -217,9 +217,7 @@ class Filer {
 		       extents[0].length, snapc, mtime, flags, oncommit);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
-      for (vector<ObjectExtent>::iterator p = extents.begin();
-	   p != extents.end();
-	   ++p) {
+      for (auto p = extents.begin(); p != extents.end(); ++p) {
 	if (p->offset == 0 && p->length == layout->object_size &&
 	    (!keep_first || p->objectno != 0))
 	  objecter->remove(p->oid, p->oloc,

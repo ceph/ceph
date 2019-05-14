@@ -17,10 +17,9 @@
 
 #include "msg/Message.h"
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
-class MRecoveryReserve : public MessageInstance<MRecoveryReserve, MOSDPeeringOp> {
-public:
-  friend factory;
+class MRecoveryReserve : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 2;
@@ -74,13 +73,13 @@ public:
   }
 
   MRecoveryReserve()
-    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDPeeringOp{MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       query_epoch(0), type(-1) {}
   MRecoveryReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch,
 		   unsigned prio = 0)
-    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDPeeringOp{MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
@@ -125,6 +124,9 @@ public:
     encode(pgid.shard, payload);
     encode(priority, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

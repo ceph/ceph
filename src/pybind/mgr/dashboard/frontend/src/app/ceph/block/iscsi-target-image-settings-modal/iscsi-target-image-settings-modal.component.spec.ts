@@ -1,6 +1,7 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
@@ -14,7 +15,7 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetImageSettingsModalComponent],
-    imports: [SharedModule, FormsModule, HttpClientTestingModule],
+    imports: [SharedModule, FormsModule, HttpClientTestingModule, RouterTestingModule],
     providers: [BsModalRef, i18nProviders]
   });
 

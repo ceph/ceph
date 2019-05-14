@@ -23,9 +23,7 @@
  * PGQuery - query another OSD as to the contents of their PGs
  */
 
-class MOSDPGQuery : public MessageInstance<MOSDPGQuery> {
-public:
-  friend factory;
+class MOSDPGQuery : public Message {
 private:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
@@ -37,15 +35,15 @@ private:
   using pg_list_t = std::map<spg_t, pg_query_t>;
   pg_list_t pg_list;
 
-  MOSDPGQuery() : MessageInstance(MSG_OSD_PG_QUERY,
+  MOSDPGQuery() : Message{MSG_OSD_PG_QUERY,
 			  HEAD_VERSION,
-			  COMPAT_VERSION) {
+			  COMPAT_VERSION} {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MOSDPGQuery(epoch_t e, pg_list_t&& ls) :
-    MessageInstance(MSG_OSD_PG_QUERY,
+    Message{MSG_OSD_PG_QUERY,
 	    HEAD_VERSION,
-	    COMPAT_VERSION),
+	    COMPAT_VERSION},
     epoch(e),
     pg_list(std::move(ls)) {
     set_priority(CEPH_MSG_PRIO_HIGH);
@@ -76,6 +74,9 @@ public:
     decode(epoch, p);
     decode(pg_list, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

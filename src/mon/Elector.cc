@@ -198,16 +198,15 @@ void Elector::victory()
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
   map<int,Metadata> metadata;
-  int min_mon_release = -1;
-  for (map<int, elector_info_t>::iterator p = acked_me.begin();
-       p != acked_me.end();
-       ++p) {
-    quorum.insert(p->first);
-    cluster_features &= p->second.cluster_features;
-    mon_features &= p->second.mon_features;
-    metadata[p->first] = p->second.metadata;
-    if (min_mon_release < 0 || p->second.mon_release < min_mon_release) {
-      min_mon_release = p->second.mon_release;
+  ceph_release_t min_mon_release{ceph_release_t::unknown};
+  for (const auto& [id, info] : acked_me) {
+    quorum.insert(id);
+    cluster_features &= info.cluster_features;
+    mon_features &= info.mon_features;
+    metadata[id] = info.metadata;
+    if (min_mon_release == ceph_release_t::unknown ||
+	info.mon_release < min_mon_release) {
+      min_mon_release = info.mon_release;
     }
   }
 
@@ -263,8 +262,9 @@ void Elector::handle_propose(MonOpRequestRef op)
     return;
   } else if (mon->monmap->min_mon_release > m->mon_release) {
     dout(5) << " ignoring propose from mon" << from
-	    << " release " << m->mon_release
-	    << " < min_mon_release " << mon->monmap->min_mon_release << dendl;
+	    << " release " << (int)m->mon_release
+	    << " < min_mon_release " << (int)mon->monmap->min_mon_release
+	    << dendl;
     nak_old_peer(op);
     return;
   } else if (!m->mon_features.contains_all(required_mon_features)) {
@@ -427,8 +427,8 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   dout(10) << "sending nak to peer " << m->get_source()
 	   << " supports " << supported_features << " " << m->mon_features
 	   << ", required " << required_features << " " << required_mon_features
-	   << ", release " << m->mon_release
-	   << " vs required " << mon->monmap->min_mon_release
+	   << ", release " << (int)m->mon_release
+	   << " vs required " << (int)mon->monmap->min_mon_release
 	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
                                          mon->monmap);
@@ -446,12 +446,12 @@ void Elector::handle_nak(MonOpRequestRef op)
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features
           << " " << m->mon_features
-	  << " min_mon_release " << m->mon_release
+	  << " min_mon_release " << (int)m->mon_release
           << dendl;
 
   if (m->mon_release > ceph_release()) {
-    derr << "Shutting down because I am release " << ceph_release()
-	 << " < min_mon_release " << m->mon_release << dendl;
+    derr << "Shutting down because I am release " << (int)ceph_release()
+	 << " < min_mon_release " << (int)m->mon_release << dendl;
   } else {
     CompatSet other;
     auto bi = m->sharing_bl.cbegin();

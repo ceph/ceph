@@ -49,6 +49,11 @@ function expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+function expect_true()
+{
+	set -x
+	if ! "$@"; then return 1; else return 0; fi
+}
 
 TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
@@ -1488,9 +1493,11 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release nautilus
-  # can't lower (or use new command for anything but jewel)
-  expect_false ceph osd require-osd-release jewel
+  ceph osd require-osd-release octopus
+  # can't lower
+  expect_false ceph osd require-osd-release nautilus
+  expect_false ceph osd require-osd-release mimic
+  expect_false ceph osd require-osd-release luminous
   # these are no-ops but should succeed.
 
   ceph osd set noup
@@ -1566,6 +1573,34 @@ function test_mon_osd()
   ceph osd rm-noout all
   ! ceph -s | grep 'NODOWN'
   ! ceph -s | grep 'NOOUT'
+
+  # test crush node flags
+  ceph osd add-noup osd.0
+  ceph osd add-nodown osd.0
+  ceph osd add-noin osd.0
+  ceph osd add-noout osd.0
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep "osd.0"
+  ceph osd rm-noup osd.0
+  ceph osd rm-nodown osd.0
+  ceph osd rm-noin osd.0
+  ceph osd rm-noout osd.0
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep "osd.0"
+
+  ceph osd crush add-bucket foo host root=default
+  ceph osd add-noup foo
+  ceph osd add-nodown foo
+  ceph osd add-noin foo
+  ceph osd add-noout foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | grep foo
+  ceph osd rm-noup foo
+  ceph osd rm-nodown foo
+  ceph osd rm-noin foo
+  ceph osd rm-noout foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep foo
+  ceph osd add-noup foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | grep foo
+  ceph osd crush rm foo
+  ceph osd dump -f json-pretty | jq ".crush_node_flags" | expect_false grep foo
 
   # make sure mark out preserves weight
   ceph osd reweight osd.0 .5
@@ -2035,10 +2070,12 @@ function test_mon_osd_pool_set()
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority -5
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: -5'
   ceph osd pool set $TEST_POOL_GETSET recovery_priority 0
   ceph osd pool get $TEST_POOL_GETSET recovery_priority | expect_false grep '.'
-  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority -1
-  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority 30
+  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority -11
+  expect_false ceph osd pool set $TEST_POOL_GETSET recovery_priority 11
 
   ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | expect_false grep '.'
   ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 
@@ -2554,6 +2591,48 @@ function test_mgr_tell()
   ceph tell mgr osd status
 }
 
+function test_per_pool_scrub_status()
+{
+  ceph osd pool create noscrub_pool 12
+  ceph osd pool create noscrub_pool2 12
+  ceph -s | expect_false grep -q "Some pool(s) have the.*scrub.* flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_false grep -q "Some pool(s) have the.*scrub.* flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail |
+    expect_false grep -q "Pool .* has .*scrub.* flag"
+  ceph health detail | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_false grep -q "Pool .* has .*scrub.* flag"
+
+  ceph osd pool set noscrub_pool noscrub 1
+  ceph -s | expect_true grep -q "Some pool(s) have the noscrub flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_true grep -q "Some pool(s) have the noscrub flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has noscrub flag"
+
+  ceph osd pool set noscrub_pool nodeep-scrub 1
+  ceph osd pool set noscrub_pool2 nodeep-scrub 1
+  ceph -s | expect_true grep -q "Some pool(s) have the noscrub, nodeep-scrub flag(s) set"
+  ceph -s --format json | \
+    jq .health.checks.POOL_SCRUB_FLAGS.summary.message | \
+    expect_true grep -q "Some pool(s) have the noscrub, nodeep-scrub flag(s) set"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool has nodeep-scrub flag"
+  ceph report | jq .health.checks.POOL_SCRUB_FLAGS.detail | \
+    expect_true grep -q "Pool noscrub_pool2 has nodeep-scrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has noscrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool has nodeep-scrub flag"
+  ceph health detail | expect_true grep -q "Pool noscrub_pool2 has nodeep-scrub flag"
+
+  ceph osd pool rm noscrub_pool noscrub_pool --yes-i-really-really-mean-it
+  ceph osd pool rm noscrub_pool2 noscrub_pool2 --yes-i-really-really-mean-it
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -2606,6 +2685,7 @@ OSD_TESTS+=" tiering_agent"
 OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
 OSD_TESTS+=" osd_compact"
+OSD_TESTS+=" per_pool_scrub_status"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"

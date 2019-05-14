@@ -20,6 +20,10 @@
 #include <time.h>
 #include <errno.h>
 
+#if defined(WITH_SEASTAR)
+#include <seastar/core/lowres_clock.hh>
+#endif
+
 #include "include/types.h"
 #include "include/timegm.h"
 #include "common/strtol.h"
@@ -77,6 +81,20 @@ public:
   explicit utime_t(const std::chrono::time_point<Clock>& t)
     : utime_t(Clock::to_timespec(t)) {} // forward to timespec ctor
 
+#if defined(WITH_SEASTAR)
+  explicit utime_t(const seastar::lowres_system_clock::time_point& t) {
+    tv.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(
+        t.time_since_epoch()).count();
+    tv.tv_nsec = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        t.time_since_epoch() % std::chrono::seconds(1)).count();
+  }
+  explicit operator seastar::lowres_system_clock::time_point() const noexcept {
+    using clock_t = seastar::lowres_system_clock;
+    return clock_t::time_point{std::chrono::duration_cast<clock_t::duration>(
+      std::chrono::seconds{tv.tv_sec} + std::chrono::nanoseconds{tv.tv_nsec})};
+  }
+#endif
+
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }
@@ -87,19 +105,19 @@ public:
     ts->tv_sec = tv.tv_sec;
     ts->tv_nsec = tv.tv_nsec;
   }
-  void set_from_double(double d) { 
+  void set_from_double(double d) {
     tv.tv_sec = (__u32)trunc(d);
     tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * 1000000000.0);
   }
 
-  real_time to_real_time() const {
+  ceph::real_time to_real_time() const {
     ceph_timespec ts;
     encode_timeval(&ts);
     return ceph::real_clock::from_ceph_timespec(ts);
   }
 
   // accessors
-  time_t        sec()  const { return tv.tv_sec; } 
+  time_t        sec()  const { return tv.tv_sec; }
   long          usec() const { return tv.tv_nsec/1000; }
   int           nsec() const { return tv.tv_nsec; }
 
@@ -130,7 +148,7 @@ public:
       ,
       "utime_t have padding");
   }
-  void encode(bufferlist &bl) const {
+  void encode(ceph::buffer::list &bl) const {
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
 #else
@@ -139,7 +157,7 @@ public:
     encode(tv.tv_nsec, bl);
 #endif
   }
-  void decode(bufferlist::const_iterator &p) {
+  void decode(ceph::buffer::list::const_iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
@@ -154,7 +172,9 @@ public:
     denc(v.tv.tv_nsec, p);
   }
 
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<utime_t*>& o);
+  
   void encode_timeval(struct ceph_timespec *t) const {
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_nsec;
@@ -212,7 +232,7 @@ public:
   }
 
   // output
-  ostream& gmtime(ostream& out) const {
+  std::ostream& gmtime(std::ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -241,7 +261,7 @@ public:
   }
 
   // output
-  ostream& gmtime_nsec(ostream& out) const {
+  std::ostream& gmtime_nsec(std::ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -270,7 +290,7 @@ public:
   }
 
   // output
-  ostream& asctime(ostream& out) const {
+  std::ostream& asctime(std::ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -295,8 +315,8 @@ public:
     out.unsetf(std::ios::right);
     return out;
   }
-  
-  ostream& localtime(ostream& out) const {
+
+  std::ostream& localtime(std::ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
     out.fill('0');
@@ -371,8 +391,9 @@ public:
   }
 
 
-  static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,
-                        string *out_date=NULL, string *out_time=NULL) {
+  static int parse_date(const std::string& date, uint64_t *epoch, uint64_t *nsec,
+                        std::string *out_date=nullptr,
+			std::string *out_time=nullptr) {
     struct tm tm;
     memset(&tm, 0, sizeof(tm));
 
@@ -397,7 +418,7 @@ public:
             buf[i] = '0';
           }
           buf[i] = '\0';
-          string err;
+	  std::string err;
           *nsec = (uint64_t)strict_strtol(buf, 10, &err);
           if (!err.empty()) {
             return -EINVAL;
@@ -436,7 +457,7 @@ public:
     return 0;
   }
 
-  bool parse(const string& s) {
+  bool parse(const std::string& s) {
     uint64_t epoch, nsec;
     int r = parse_date(s, &epoch, &nsec);
     if (r < 0) {
@@ -535,7 +556,7 @@ inline std::ostream& operator<<(std::ostream& out, const utime_t& t)
 
 inline std::string utimespan_str(const utime_t& age) {
   auto age_ts = ceph::timespan(age.nsec()) + std::chrono::seconds(age.sec());
-  return timespan_str(age_ts);
+  return ceph::timespan_str(age_ts);
 }
 
 #endif

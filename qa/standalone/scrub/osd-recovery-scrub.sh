@@ -83,7 +83,8 @@ function TEST_recovery_scrub() {
         ERRORS=$(expr $ERRORS + 1)
     fi
 
-    kill_daemons $dir || return 1
+    # Work around for http://tracker.ceph.com/issues/38195
+    kill_daemons $dir #|| return 1
 
     declare -a err_strings
     err_strings[0]="not scheduling scrubs due to active recovery"

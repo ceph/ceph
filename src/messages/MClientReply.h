@@ -112,7 +112,7 @@ struct InodeStat {
   version_t xattr_version = 0;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
-  utime_t ctime, btime, mtime, atime;
+  utime_t ctime, btime, mtime, atime, snap_btime;
   uint32_t time_warp_seq = 0;
   uint64_t size = 0, max_size = 0;
   uint64_t change_attr = 0;
@@ -190,6 +190,9 @@ struct InodeStat {
       } else {
         dir_pin = -ENODATA;
       }
+      if (struct_v >= 3) {
+        decode(snap_btime, p);
+      } // else remains zero
       DECODE_FINISH(p);
     }
     else {
@@ -260,10 +263,8 @@ struct InodeStat {
 };
 
 
-class MClientReply : public MessageInstance<MClientReply> {
+class MClientReply : public Message {
 public:
-  friend factory;
-
   // reply data
   struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
@@ -286,9 +287,9 @@ public:
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : MessageInstance(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply() : Message{CEPH_MSG_CLIENT_REPLY} {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    MessageInstance(CEPH_MSG_CLIENT_REPLY) {
+    Message{CEPH_MSG_CLIENT_REPLY} {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();
@@ -353,6 +354,9 @@ public:
   const bufferlist& get_trace_bl() const {
     return trace_bl;
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

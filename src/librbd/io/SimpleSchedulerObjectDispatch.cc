@@ -61,8 +61,7 @@ bool SimpleSchedulerObjectDispatch<I>::ObjectRequests::try_delay_request(
     int op_flags, int object_dispatch_flags, Context* on_dispatched) {
   if (!m_delayed_requests.empty()) {
     if (snapc.seq != m_snapc.seq || op_flags != m_op_flags ||
-        data.length() == 0 ||
-        m_delayed_request_extents.intersects(object_off, data.length())) {
+        data.length() == 0 || intersects(object_off, data.length())) {
       return false;
     }
   } else {
@@ -222,7 +221,9 @@ bool SimpleSchedulerObjectDispatch<I>::read(
                  << object_len << dendl;
 
   Mutex::Locker locker(m_lock);
-  dispatch_delayed_requests(object_no);
+  if (intersects(object_no, object_off, object_len)) {
+    dispatch_delayed_requests(object_no);
+  }
 
   return false;
 }
@@ -311,8 +312,8 @@ bool SimpleSchedulerObjectDispatch<I>::compare_and_write(
 template <typename I>
 bool SimpleSchedulerObjectDispatch<I>::flush(
     io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-    io::DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
+    uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -320,6 +321,21 @@ bool SimpleSchedulerObjectDispatch<I>::flush(
   dispatch_all_delayed_requests();
 
   return false;
+}
+
+template <typename I>
+bool SimpleSchedulerObjectDispatch<I>::intersects(
+    uint64_t object_no, uint64_t object_off, uint64_t len) const {
+  ceph_assert(m_lock.is_locked());
+  auto cct = m_image_ctx->cct;
+
+  auto it = m_requests.find(object_no);
+  bool intersects = (it != m_requests.end()) &&
+      it->second->intersects(object_off, len);
+
+  ldout(cct, 20) << intersects << dendl;
+
+  return intersects;
 }
 
 template <typename I>
@@ -483,20 +499,19 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
     object_requests = m_dispatch_queue.front().get();
   }
 
-  auto ctx = new FunctionContext(
-    [this, object_no=object_requests->get_object_no()](int r) {
-      Mutex::Locker locker(m_lock);
-      dispatch_delayed_requests(object_no);
-    });
-
   m_timer_task = new FunctionContext(
-    [this, ctx](int r) {
+    [this, object_no=object_requests->get_object_no()](int r) {
       ceph_assert(m_timer_lock->is_locked());
       auto cct = m_image_ctx->cct;
       ldout(cct, 20) << "running timer task " << m_timer_task << dendl;
 
       m_timer_task = nullptr;
-      m_image_ctx->op_work_queue->queue(ctx, 0);
+      m_image_ctx->op_work_queue->queue(
+          new FunctionContext(
+            [this, object_no](int r) {
+              Mutex::Locker locker(m_lock);
+              dispatch_delayed_requests(object_no);
+            }), 0);
     });
 
   ldout(cct, 20) << "scheduling task " << m_timer_task << " at "

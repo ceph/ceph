@@ -61,12 +61,14 @@ public:
 
 
 class BlockCryptNone: public BlockCrypt {
+  size_t block_size = 256;
 public:
   BlockCryptNone(){};
+  BlockCryptNone(size_t sz) : block_size(sz) {}
   virtual ~BlockCryptNone(){};
   size_t get_block_size() override
   {
-    return 256;
+    return block_size;
   }
   bool encrypt(bufferlist& input,
                        off_t in_ofs,
@@ -519,6 +521,172 @@ TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup)
   ASSERT_EQ(fixup_range(&decrypt,513,1024), range_t(512,1024+255));
 }
 
+using parts_len_t = std::vector<size_t>;
+
+class TestRGWGetObj_BlockDecrypt : public RGWGetObj_BlockDecrypt {
+  using RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt;
+public:
+  void set_parts_len(parts_len_t&& other) {
+    parts_len = std::move(other);
+  }
+};
+
+std::vector<size_t> create_mp_parts(size_t obj_size, size_t mp_part_len){
+  std::vector<size_t> parts_len;
+  size_t part_size;
+  size_t ofs=0;
+
+  while (ofs < obj_size){
+    part_size = std::min(mp_part_len, (obj_size - ofs));
+    ofs += part_size;
+    parts_len.push_back(part_size);
+  }
+  return parts_len;
+}
+
+const size_t part_size = 5*1024*1024;
+const size_t obj_size = 30*1024*1024;
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_simple)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
+  ASSERT_EQ(fixup_range(&decrypt,0,0),     range_t(0,4095));
+  ASSERT_EQ(fixup_range(&decrypt,1,4096),   range_t(0,8191));
+  ASSERT_EQ(fixup_range(&decrypt,0,4095),   range_t(0,4095));
+  ASSERT_EQ(fixup_range(&decrypt,4095,4096), range_t(0,8191));
+
+  // ranges are end-end inclusive, we request bytes just spanning short of first
+  // part to exceeding the first part, part_size - 1 is aligned to a 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 2), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 1), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size),     range_t(0, part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size + 1), range_t(0, part_size + 4095));
+
+  // request bytes spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, part_size -2, part_size + 2),
+	    range_t(part_size - 4096, part_size + 4095));
+
+  // request last byte
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size -1),
+	    range_t(obj_size - 4096, obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_obj_size)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_obj_size = obj_size + 1;
+  decrypt.set_parts_len(create_mp_parts(na_obj_size, part_size));
+
+  // these should be unaffected here
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 2), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size - 1), range_t(0, part_size -1));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size),     range_t(0, part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, part_size + 1), range_t(0, part_size + 4095));
+
+
+  // request last 2 bytes; spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -2 , na_obj_size -1),
+	    range_t(na_obj_size - 1 - 4096, na_obj_size - 1));
+
+  // request last byte, spans last 1B part only
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -1, na_obj_size - 1),
+	    range_t(na_obj_size - 1, na_obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned_part_size)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_part_size = part_size + 1;
+  decrypt.set_parts_len(create_mp_parts(obj_size, na_part_size));
+
+  // na_part_size -2, ie. part_size -1  is aligned to 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 2), range_t(0, na_part_size -2));
+  // even though na_part_size -1 should not align to a 4095 boundary, the range
+  // should not span the next part
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 1), range_t(0, na_part_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size),     range_t(0, na_part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size + 1), range_t(0, na_part_size + 4095));
+
+  // request spanning 2 parts
+  ASSERT_EQ(fixup_range(&decrypt, na_part_size - 2, na_part_size + 2),
+	    range_t(na_part_size - 1 - 4096, na_part_size + 4095));
+
+  // request last byte, this will be interesting, since this a multipart upload
+  // with 5MB+1 size, the last part is actually 5 bytes short of 5 MB, which
+  // should be considered for the ranges alignment; an easier way to look at
+  // this will be that the last offset aligned to a 5MiB part will be 5MiB -
+  // 4095, this is a part that is 5MiB - 5 B
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size -1),
+	    range_t(obj_size +5 -4096, obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_non_aligned)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+  auto na_part_size = part_size + 1;
+  auto na_obj_size = obj_size + 7; // (6*(5MiB + 1) + 1) for the last 1B overflow
+  decrypt.set_parts_len(create_mp_parts(na_obj_size, na_part_size));
+
+  // na_part_size -2, ie. part_size -1  is aligned to 4095 boundary
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 2), range_t(0, na_part_size -2));
+  // even though na_part_size -1 should not align to a 4095 boundary, the range
+  // should not span the next part
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size - 1), range_t(0, na_part_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size),     range_t(0, na_part_size + 4095));
+  ASSERT_EQ(fixup_range(&decrypt, 0, na_part_size + 1), range_t(0, na_part_size + 4095));
+
+  // request last byte, spans last 1B part only
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -1, na_obj_size - 1),
+	    range_t(na_obj_size - 1, na_obj_size -1));
+
+  ASSERT_EQ(fixup_range(&decrypt, na_obj_size -2, na_obj_size -1),
+	    range_t(na_obj_size - 2, na_obj_size -1));
+
+}
+
+TEST(TestRGWCrypto, check_RGWGetObj_BlockDecrypt_fixup_invalid_ranges)
+{
+
+  ut_get_sink get_sink;
+  auto nonecrypt = std::make_unique<BlockCryptNone>(4096);
+  TestRGWGetObj_BlockDecrypt decrypt(g_ceph_context, &get_sink,
+				     std::move(nonecrypt));
+
+  decrypt.set_parts_len(create_mp_parts(obj_size, part_size));
+
+  // the ranges below would be mostly unreachable in current code as rgw
+  // would've returned a 411 before reaching, but we're just doing this to make
+  // sure we don't have invalid access
+  ASSERT_EQ(fixup_range(&decrypt, obj_size - 1, obj_size + 100),
+            range_t(obj_size - 4096, obj_size - 1));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size, obj_size + 1),
+            range_t(obj_size - 1, obj_size - 1));
+  ASSERT_EQ(fixup_range(&decrypt, obj_size+1, obj_size + 100),
+            range_t(obj_size - 1, obj_size - 1));
+
+}
 
 TEST(TestRGWCrypto, verify_RGWPutObj_BlockEncrypt_chunks)
 {

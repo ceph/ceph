@@ -127,8 +127,10 @@ public:
 
   struct FlushRequest {
     FlushSource flush_source;
+    uint64_t journal_tid;
 
-    FlushRequest(FlushSource flush_source) : flush_source(flush_source) {
+    FlushRequest(FlushSource flush_source, uint64_t journal_tid)
+      : flush_source(flush_source), journal_tid(journal_tid) {
     }
   };
 
@@ -235,11 +237,11 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_flush(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      FlushSource flush_source, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  FlushRequest{flush_source}, 0,
+                                  FlushRequest{flush_source, journal_tid}, 0,
                                   parent_trace, on_finish);
   }
 

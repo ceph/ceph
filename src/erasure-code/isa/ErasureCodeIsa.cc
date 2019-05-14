@@ -14,13 +14,14 @@
 
 // -----------------------------------------------------------------------------
 #include <algorithm>
-#include <errno.h>
+#include <cerrno>
 // -----------------------------------------------------------------------------
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
 #include "include/ceph_assert.h"
 using namespace std;
+using namespace ceph;
 
 // -----------------------------------------------------------------------------
 extern "C" {

@@ -184,7 +184,7 @@ void TrashMoveRequest<I>::open_image() {
 
   {
     // don't attempt to open the journal
-    RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx->image_lock);
     m_image_ctx->set_journal_policy(new JournalPolicy());
   }
 
