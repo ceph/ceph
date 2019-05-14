@@ -591,37 +591,30 @@ private:
   }
 };
 
-static int open_device(const char* path, Config *cfg = nullptr, bool try_load_module = false)
+static int load_module(Config *cfg)
 {
-  int nbd = open(path, O_RDWR);
-  bool loaded_module = false;
+  ostringstream param;
+  int ret;
 
-  if (nbd < 0 && try_load_module && access("/sys/module/nbd", F_OK) != 0) {
-    ostringstream param;
-    int r;
-    if (cfg->nbds_max) {
-      param << "nbds_max=" << cfg->nbds_max;
-    }
-    if (cfg->max_part) {
-        param << " max_part=" << cfg->max_part;
-    }
-    r = module_load("nbd", param.str().c_str());
-    if (r < 0) {
-      cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-r) << std::endl;
-      return r;
-    } else {
-      loaded_module = true;
-    }
-    nbd = open(path, O_RDWR);
+  if (cfg->nbds_max)
+    param << "nbds_max=" << cfg->nbds_max;
+
+  if (cfg->max_part)
+    param << " max_part=" << cfg->max_part;
+
+  if (!access("/sys/module/nbd", F_OK)) {
+    if (cfg->nbds_max || cfg->set_max_part)
+      cerr << "rbd-nbd: ignoring kernel module parameter options: nbd module already loaded"
+           << std::endl;
+    return 0;
   }
 
-  if (try_load_module && !loaded_module &&
-      (cfg->nbds_max || cfg->set_max_part)) {
-    cerr << "rbd-nbd: ignoring kernel module parameter options: nbd module already loaded" 
+  ret = module_load("nbd", param.str().c_str());
+  if (ret < 0)
+    cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-ret)
          << std::endl;
-  }
 
-  return nbd;
+  return ret;
 }
 
 static int check_device_size(int nbd_index, unsigned long expected_size)
@@ -679,7 +672,6 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
 
   if (cfg->devpath.empty()) {
     char dev[64];
-    bool try_load_module = true;
     const char *path = "/sys/module/nbd/parameters/nbds_max";
     int nbds_max = -1;
     if (access(path, F_OK) == 0) {
@@ -694,8 +686,7 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
-      nbd = open_device(dev, cfg, try_load_module);
-      try_load_module = false;
+      nbd = open(dev, O_RDWR);
       if (nbd < 0) {
         if (nbd == -EPERM && nbds_max != -1 && index < (nbds_max-1)) {
           ++index;
@@ -722,7 +713,7 @@ static int try_ioctl_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
       goto done;
     index = r;
 
-    nbd = open_device(cfg->devpath.c_str(), cfg, true);
+    nbd = open(cfg->devpath.c_str(), O_RDWR);
     if (nbd < 0) {
       r = nbd;
       cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
@@ -988,7 +979,7 @@ static int try_netlink_setup(Config *cfg, int fd, uint64_t size, uint64_t flags)
   if (ret != 0)
     return ret;
 
-  nbd = open_device(cfg->devpath.c_str());
+  nbd = open(cfg->devpath.c_str(), O_RDWR);
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
     return nbd;
@@ -1167,6 +1158,10 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   size = info.size;
 
+  r = load_module(cfg);
+  if (r < 0)
+    goto close_fd;
+
   server = start_server(fd[1], image);
 
   use_netlink = cfg->try_netlink;
@@ -1249,7 +1244,7 @@ static int do_unmap(Config *cfg)
   if (r != 1)
     return r;
 
-  nbd = open_device(cfg->devpath.c_str());
+  nbd = open(cfg->devpath.c_str(), O_RDWR);
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << cfg->devpath << std::endl;
     return nbd;
