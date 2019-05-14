@@ -82,8 +82,8 @@ def task(ctx, config):
             run.Raw(hadoop_rel)
         ]
     )
-    configure_s3a(remote, endpoint.hostname, access_key, secret_key, bucket_name, testdir)
-    setup_user_bucket(remote, endpoint.hostname, access_key, secret_key, bucket_name, testdir)
+    configure_s3a(remote, endpoint.dns_name, access_key, secret_key, bucket_name, testdir)
+    setup_user_bucket(remote, endpoint.dns_name, access_key, secret_key, bucket_name, testdir)
     if hadoop_ver.startswith('2.8'):
         # test all ITtests but skip AWS test using public bucket landsat-pds
         # which is not available from within this test
