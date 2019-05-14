@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "common/allocator.h"
 #include "common/config_proxy.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
@@ -31,6 +32,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/Types.h"
 
+#include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
 class CephContext;
@@ -170,7 +172,9 @@ namespace librbd {
 
     ContextWQ *op_work_queue;
 
-    boost::lockfree::queue<io::AioCompletion*> completed_reqs;
+    boost::lockfree::queue<
+      io::AioCompletion*,
+      boost::lockfree::allocator<ceph::allocator<void>>> completed_reqs;
     EventSocket event_socket;
 
     bool ignore_migrating = false;
