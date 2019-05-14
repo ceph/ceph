@@ -27,9 +27,6 @@ protected:
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
-  PGBackend(shard_id_t shard,
-            CollectionRef coll,
-            seastar::lw_shared_ptr<ceph::os::CyanStore> store);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> load(
     const spg_t pgid,
@@ -61,6 +58,11 @@ public:
     const MOSDOp& m);
 
 protected:
+  // instantiate via the ::load() or ::create() factories
+  PGBackend(shard_id_t shard,
+            CollectionRef coll,
+            seastar::lw_shared_ptr<ceph::os::CyanStore> store);
+
   const shard_id_t shard;
   CollectionRef coll;
   seastar::lw_shared_ptr<ceph::os::CyanStore> store;
