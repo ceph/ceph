@@ -15,6 +15,7 @@
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
 #include "crimson/net/Dispatcher.h"
+#include "crimson/os/cyan_store.h"
 #include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
@@ -38,7 +39,6 @@ namespace ceph::net {
 }
 
 namespace ceph::os {
-  class CyanStore;
   struct Collection;
   class Transaction;
 }
@@ -68,7 +68,7 @@ class OSD : public ceph::net::Dispatcher,
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<ceph::os::CyanStore> store;
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
 
   std::unordered_map<spg_t, Ref<PG>> pgs;

@@ -14,7 +14,7 @@ class ReplicatedBackend : public PGBackend
 public:
   ReplicatedBackend(shard_id_t shard,
 		    CollectionRef coll,
-		    ceph::os::CyanStore* store);
+		    seastar::lw_shared_ptr<ceph::os::CyanStore> store);
 private:
   seastar::future<ceph::bufferlist> _read(const hobject_t& hoid,
 					  uint64_t off,

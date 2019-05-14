@@ -19,17 +19,22 @@ namespace {
   }
 }
 
-std::unique_ptr<PGBackend> PGBackend::load(const spg_t pgid,
-                                           const pg_pool_t& pool,
-                                           ceph::os::CyanStore* store,
-                                           const ec_profile_t& ec_profile)
+std::unique_ptr<PGBackend> PGBackend::load(
+  const spg_t pgid,
+  const pg_pool_t& pool,
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+  const ec_profile_t& ec_profile)
 {
   auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
+    return std::make_unique<ReplicatedBackend>(shard,
+                                               std::move(coll),
+                                               std::move(store));
   case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>(pgid.shard, coll, store,
+    return std::make_unique<ECBackend>(shard,
+                                       std::move(coll),
+                                       std::move(store),
                                        std::move(ec_profile),
                                        pool.stripe_width);
   default:
@@ -40,10 +45,10 @@ std::unique_ptr<PGBackend> PGBackend::load(const spg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     ceph::os::CyanStore* store)
-  : shard{shard},
-    coll{coll},
-    store{store}
+                     seastar::lw_shared_ptr<ceph::os::CyanStore> store)
+  : shard{std::move(shard)},
+    coll{std::move(coll)},
+    store{std::move(store)}
 {}
 
 seastar::future<PGBackend::cached_os_t>

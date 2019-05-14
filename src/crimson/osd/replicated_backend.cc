@@ -4,10 +4,11 @@
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
 
-ReplicatedBackend::ReplicatedBackend(shard_id_t shard,
-                                     ReplicatedBackend::CollectionRef coll,
-                                     ceph::os::CyanStore* store)
-  : PGBackend{shard, coll, store}
+ReplicatedBackend::ReplicatedBackend(
+  shard_id_t shard,
+  ReplicatedBackend::CollectionRef coll,
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store)
+  : PGBackend{std::move(shard), std::move(coll), std::move(store)}
 {}
 
 seastar::future<bufferlist> ReplicatedBackend::_read(const hobject_t& hoid,

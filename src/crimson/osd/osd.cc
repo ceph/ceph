@@ -57,7 +57,7 @@ OSD::OSD(int id, uint32_t nonce,
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
     heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
-    store{std::make_unique<ceph::os::CyanStore>(
+    store{seastar::make_lw_shared<ceph::os::CyanStore>(
       local_conf().get_val<std::string>("osd_data"))}
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -345,7 +345,7 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
   }).then([pgid, this](pg_pool_t&& pool,
                        string&& name,
                        ec_profile_t&& ec_profile) {
-    auto backend = PGBackend::load(pgid, pool, store.get(), ec_profile);
+    auto backend = PGBackend::load(pgid, pool, store, ec_profile);
     Ref<PG> pg{new PG{pgid,
                       pg_shard_t{whoami, pgid.shard},
                       std::move(pool),

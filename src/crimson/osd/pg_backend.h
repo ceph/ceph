@@ -10,6 +10,7 @@
 
 #include "crimson/common/shared_lru.h"
 #include "os/Transaction.h"
+#include "crimson/os/cyan_store.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
@@ -26,12 +27,15 @@ protected:
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
-  PGBackend(shard_id_t shard, CollectionRef coll, ceph::os::CyanStore* store);
+  PGBackend(shard_id_t shard,
+            CollectionRef coll,
+            seastar::lw_shared_ptr<ceph::os::CyanStore> store);
   virtual ~PGBackend() = default;
-  static std::unique_ptr<PGBackend> load(const spg_t pgid,
-					 const pg_pool_t& pool,
-					 ceph::os::CyanStore* store,
-					 const ec_profile_t& ec_profile);
+  static std::unique_ptr<PGBackend> load(
+    const spg_t pgid,
+    const pg_pool_t& pool,
+    seastar::lw_shared_ptr<ceph::os::CyanStore> store,
+    const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
@@ -53,7 +57,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
-  ceph::os::CyanStore* store;
+  seastar::lw_shared_ptr<ceph::os::CyanStore> store;
 
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;

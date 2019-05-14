@@ -3,10 +3,10 @@
 
 ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
-                     ceph::os::CyanStore* store,
+                     seastar::lw_shared_ptr<ceph::os::CyanStore> store,
                      const ec_profile_t&,
                      uint64_t)
-  : PGBackend{shard, coll, store}
+  : PGBackend{std::move(shard), std::move(coll), std::move(store)}
 {
   // todo
 }
