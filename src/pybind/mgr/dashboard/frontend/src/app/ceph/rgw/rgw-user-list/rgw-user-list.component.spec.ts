@@ -10,7 +10,6 @@ import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserDetailsComponent } from '../rgw-user-details/rgw-user-details.component';
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserListComponent } from './rgw-user-list.component';
 
 describe('RgwUserListComponent', () => {
