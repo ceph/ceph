@@ -223,7 +223,7 @@ out_fail:
   return r;
 }
 
-int KernelDevice::get_devices(std::set<std::string> *ls)
+int KernelDevice::get_devices(std::set<std::string> *ls) const
 {
   if (devname.empty()) {
     return 0;
@@ -272,6 +272,22 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     uint64_t total, avail;
     get_vdo_utilization(vdo_fd, &total, &avail);
     (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  }
+
+  {
+    string res_names;
+    std::set<std::string> devnames;
+    if (get_devices(&devnames) == 0) {
+      for (auto& dev : devnames) {
+	if (!res_names.empty()) {
+	  res_names += ",";
+	}
+	res_names += dev;
+      }
+      if (res_names.size()) {
+	(*pm)[prefix + "devices"] = res_names;
+      }
+    }
   }
 
   struct stat st;
