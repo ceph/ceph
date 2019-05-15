@@ -30,6 +30,7 @@
 #include "common/debug.h"
 #include "common/safe_io.h"
 #include "common/blkdev.h"
+#include "common/PriorityCache.h"
 
 #define dout_context g_ceph_context
 
@@ -54,6 +55,10 @@ class MonitorDBStore
     get_device_by_path(path.c_str(), partition, devname,
 		       sizeof(devname));
     return devname;
+  }
+
+  std::shared_ptr<PriorityCache::PriCache> get_priority_cache() const {
+    return db->get_priority_cache();
   }
 
   struct Op {
