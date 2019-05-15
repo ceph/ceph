@@ -1,0 +1,15 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+- - client.0
+overrides:
+  ceph:
+    log-whitelist:
+    - failed to encode map
+    - CACHE_POOL_NO_HIT_SET
+    fs: xfs
