@@ -116,10 +116,12 @@ namespace rgw {
       fh_hk.bucket = bk;
       fh_hk.object = XXH64(_o, ::strlen(_o), seed);
     }
-    
-    fh_key(const std::string& _b, const std::string& _o)
+
+    fh_key(const std::string& _b, const std::string& _o,
+	   const std::string& _t /* tenant */)
       : version(0) {
-      fh_hk.bucket = XXH64(_b.c_str(), _o.length(), seed);
+      std::string tb = _t + ":" + _b;
+      fh_hk.bucket = XXH64(tb.c_str(), _o.length(), seed);
       fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
     }
 
@@ -522,14 +524,7 @@ namespace rgw {
       return key_name;
     }
 
-    fh_key make_fhk(const std::string& name) const {
-      if (depth <= 1)
-	return fh_key(fhk.fh_hk.object, name.c_str());
-      else {
-	std::string key_name = make_key_name(name.c_str());
-	return fh_key(fhk.fh_hk.bucket, key_name.c_str());
-      }
-    }
+    fh_key make_fhk(const std::string& name);
 
     void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {

@@ -1107,6 +1107,18 @@ namespace rgw {
     }
   }
 
+  fh_key RGWFileHandle::make_fhk(const std::string& name)
+  {
+    if (depth <= 1) {
+      std::string tenanted_name =
+	get_fs()->get_user()->user_id.to_str() + ":" + name;
+      return fh_key(fhk.fh_hk.object, tenanted_name.c_str());
+    } else {
+      std::string key_name = make_key_name(name.c_str());
+      return fh_key(fhk.fh_hk.bucket, key_name.c_str());
+    }
+  }
+
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
   {
@@ -1124,11 +1136,7 @@ namespace rgw {
     fh_key fhk;
     auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
-    if (fhk.version >= 2) {
-      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
-    } else {
-      get<0>(dar) = true;
-    }
+    get<0>(dar) = true;
 
     auto bl_iter_unix1 = ux_attrs1->cbegin();
     decode(*this, bl_iter_unix1);
