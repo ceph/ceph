@@ -233,6 +233,7 @@ void ProtocolV1::send_message(Message *m) {
   if (can_write == WriteStatus::CLOSED) {
     ldout(cct, 10) << __func__ << " connection closed."
                    << " Drop message " << m << dendl;
+    connection->message_sent(m);
     m->put();
   } else {
     m->queue_start = ceph::mono_clock::now();
@@ -595,6 +596,7 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
     Message *m = sent.front();
     sent.pop_front();
+    connection->message_sent(m);
     pending[i++] = m;
     ldout(cct, 10) << __func__ << " got ack seq " << seq
                    << " >= " << m->get_seq() << " on " << m << " " << *m
@@ -1112,7 +1114,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                      << "): sig = " << footer.sig << dendl;
     }
   }
-
+  uint64_t start = connection->outcoming_bl.length();
   connection->outcoming_bl.append(CEPH_MSGR_TAG_MSG);
   connection->outcoming_bl.append((char *)&header, sizeof(header));
 
@@ -1150,6 +1152,10 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
+  unsigned len = connection->outcoming_bl.length() - start;
+  if (connection->policy.lossy) {
+    connection->add_sending(m, start, len);
+  }
   ssize_t total_send_size = connection->outcoming_bl.length();
   ssize_t rc = connection->_try_send(more);
   if (rc < 0) {
@@ -1203,6 +1209,7 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
     ldout(cct, 10) << __func__ << " " << *(p.second) << " for resend seq "
                    << p.second->get_seq() << " <= " << seq << ", discarding"
                    << dendl;
+    connection->message_sent(p.second);
     p.second->put();
     rq.pop_front();
     count++;
@@ -1220,6 +1227,7 @@ void ProtocolV1::discard_out_queue() {
 
   for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
     ldout(cct, 20) << __func__ << " discard " << *p << dendl;
+    connection->message_sent(*p);
     (*p)->put();
   }
   sent.clear();
@@ -1229,6 +1237,7 @@ void ProtocolV1::discard_out_queue() {
     for (list<pair<bufferlist, Message *> >::iterator r = p->second.begin();
          r != p->second.end(); ++r) {
       ldout(cct, 20) << __func__ << " discard " << r->second << dendl;
+      connection->message_sent(r->second);
       r->second->put();
     }
   }
@@ -1643,7 +1652,7 @@ CtPtr ProtocolV1::handle_connect_reply_2() {
     connect_seq = 0;
 
     // see session_reset
-    connection->outcoming_bl.clear();
+    connection->clear_outcoming_bl();
 
     return CONTINUE(send_connect_message);
   }
@@ -2322,7 +2331,7 @@ CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
             std::lock_guard<std::mutex> l(existing->lock);
             existing->write_lock.lock();
             exproto->requeue_sent();
-            existing->outcoming_bl.clear();
+            existing->clear_outcoming_bl();
             existing->open_write = false;
             existing->write_lock.unlock();
             if (exproto->state == NONE) {

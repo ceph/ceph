@@ -1397,6 +1397,22 @@ void Objecter::enable_blacklist_events()
   blacklist_events_enabled = true;
 }
 
+void Objecter::sent_callback(const MessageRef& m)
+{
+  unique_lock wl(rwlock);
+  auto it = op_refs.find(m->get_tid());
+  if (it != op_refs.end()) {
+    if(--it->second == 0) {
+      auto f = waiting_for_op_release.find(m->get_tid());
+      if (f != waiting_for_op_release.end()) {
+        f->second();
+        waiting_for_op_release.erase(f);
+      }
+      op_refs.erase(it);
+    }
+  }
+}
+
 void Objecter::consume_blacklist_events(std::set<entity_addr_t> *events)
 {
   unique_lock wl(rwlock);
@@ -1808,6 +1824,7 @@ int Objecter::_get_session(int osd, OSDSession **session, shunique_lock& sul)
   OSDSession *s = new OSDSession(cct, osd);
   osd_sessions[osd] = s;
   s->con = messenger->connect_to_osd(osdmap->get_addrs(osd));
+  s->con->set_message_sent_callback(std::bind(&Objecter::sent_callback, this, std::placeholders::_1));
   s->con->set_priv(RefCountedPtr{s});
   logger->inc(l_osdc_osd_session_open);
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
@@ -3292,6 +3309,7 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
+  op_refs[m->get_tid()]++;
   op->session->con->send_message(m);
 }
 
@@ -3558,7 +3576,26 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // do callbacks
   if (onfinish) {
-    onfinish->complete(rc);
+    shunique_lock sul(rwlock, ceph::acquire_unique);
+    auto it = op_refs.find(op->tid);
+    if (it != op_refs.end()) {
+      if (completion_lock.mutex()) {
+        waiting_for_op_release[op->tid] =
+          [&completion_lock, onfinish, rc]() {
+            completion_lock.lock();
+            onfinish->complete(rc);
+            completion_lock.unlock();
+          };
+      } else {
+        waiting_for_op_release[op->tid] =
+          [onfinish, rc]() {
+            onfinish->complete(rc);
+          };
+      }
+    } else {
+      sul.unlock();
+      onfinish->complete(rc);
+    }
   }
   if (completion_lock.mutex()) {
     completion_lock.unlock();

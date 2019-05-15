@@ -122,6 +122,7 @@ void DispatchQueue::run_local_delivery()
     fast_preprocess(m);
     if (can_fast_dispatch(m)) {
       fast_dispatch(m);
+      m->get_connection()->message_sent(m);
     } else {
       enqueue(m, priority, 0);
     }
@@ -197,6 +198,7 @@ void DispatchQueue::entry()
 	  msgr->ms_deliver_dispatch(m);
 	  post_dispatch(m, msize);
 	}
+        m->get_connection()->message_sent(m);
       }
 
       lock.Lock();
@@ -220,6 +222,7 @@ void DispatchQueue::discard_queue(uint64_t id) {
     ceph_assert(!(i->is_code())); // We don't discard id 0, ever!
     const ref_t<Message>& m = i->get_message();
     remove_arrival(m);
+    m->get_connection()->message_sent(m);
     dispatch_throttle_release(m->get_dispatch_throttle_size());
   }
 }
@@ -240,6 +243,15 @@ void DispatchQueue::wait()
 
 void DispatchQueue::discard_local()
 {
+  local_delivery_lock.Lock();
+  while (!local_messages.empty()) {
+    auto p = std::move(local_messages.front());
+    local_messages.pop();
+    local_delivery_lock.Unlock();
+    (p.first)->get_connection()->message_sent(p.first);
+    local_delivery_lock.Lock();
+  }
+  local_delivery_lock.Unlock();
   decltype(local_messages)().swap(local_messages);
 }
 

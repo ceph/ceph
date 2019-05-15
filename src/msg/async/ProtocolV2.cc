@@ -121,6 +121,7 @@ void ProtocolV2::discard_out_queue() {
 
   for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
     ldout(cct, 20) << __func__ << " discard " << *p << dendl;
+    connection->message_sent(*p);
     (*p)->put();
   }
   sent.clear();
@@ -128,6 +129,7 @@ void ProtocolV2::discard_out_queue() {
     static_cast<void>(prio);
     for (auto& entry : entries) {
       ldout(cct, 20) << __func__ << " discard " << *entry.m << dendl;
+      connection->message_sent(entry.m);
       entry.m->put();
     }
   }
@@ -144,7 +146,7 @@ void ProtocolV2::reset_session() {
 
   connection->dispatch_queue->discard_queue(connection->conn_id);
   discard_out_queue();
-  connection->outcoming_bl.clear();
+  connection->clear_outcoming_bl();
 
   connection->dispatch_queue->queue_remote_reset(connection);
 
@@ -211,6 +213,7 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
     ldout(cct, 5) << __func__ << " discarding message m=" << m
                   << " seq=" << m->get_seq() << " ack_seq=" << seq << " "
                   << *m << dendl;
+    connection->message_sent(m);
     m->put();
     rq.pop_front();
     count++;
@@ -414,6 +417,7 @@ void ProtocolV2::send_message(Message *m) {
   if (state == CLOSED) {
     ldout(cct, 10) << __func__ << " connection closed."
                    << " Drop message " << m << dendl;
+    connection->message_sent(m);
     m->put();
   } else {
     ldout(cct, 5) << __func__ << " enqueueing message m=" << m
@@ -508,7 +512,12 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 			     m->get_payload(),
 			     m->get_middle(),
 			     m->get_data());
+  uint64_t start = connection->outcoming_bl.length();
   connection->outcoming_bl.append(message.get_buffer(session_stream_handlers));
+  unsigned len = connection->outcoming_bl.length() - start;
+  if (connection->policy.lossy) {
+    connection->add_sending(m, start, len);
+  }
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
@@ -568,6 +577,7 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
     Message *m = sent.front();
     sent.pop_front();
+    connection->message_sent(m);
     pending[i++] = m;
     ldout(cct, 10) << __func__ << " got ack seq " << seq
                    << " >= " << m->get_seq() << " on " << m << " " << *m
@@ -2693,7 +2703,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
           std::lock_guard<std::mutex> l(existing->lock);
           existing->write_lock.lock();
           exproto->requeue_sent();
-          existing->outcoming_bl.clear();
+          existing->clear_outcoming_bl();
           existing->open_write = false;
           existing->write_lock.unlock();
           if (exproto->state == NONE) {

@@ -122,8 +122,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     last_active(ceph::coarse_mono_clock::now()),
     connect_timeout_us(cct->_conf->ms_connection_ready_timeout*1000*1000),
     inactive_timeout_us(cct->_conf->ms_connection_idle_timeout*1000*1000),
-    msgr2(m2), state_offset(0),
-    worker(w), center(&w->center),read_buffer(nullptr)
+    msgr2(m2), state_offset(0), worker(w), center(&w->center),
+    read_buffer(nullptr), sent_pos(0), sent_callback(nullptr)
 {
 #ifdef UNIT_TESTS_BUILT
   this->interceptor = m->interceptor;
@@ -330,6 +330,9 @@ ssize_t AsyncConnection::_try_send(bool more)
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
     return r;
+  }
+  if (policy.lossy) {
+    add_sent(r);
   }
 
   ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
@@ -546,6 +549,7 @@ int AsyncConnection::send_message(Message *m)
     } else {
       ldout(async_msgr->cct, 10) << __func__ << " loopback connection closed."
                                  << " Drop message " << m << dendl;
+      message_sent(m);
       m->put();
     }
     return 0;
@@ -554,9 +558,51 @@ int AsyncConnection::send_message(Message *m)
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);
-
   protocol->send_message(m);
   return 0;
+}
+
+void AsyncConnection::message_sent(const MessageRef& m) {
+  if (sent_callback) {
+    sent_callback(m);
+  }
+}
+
+// called when initialized, no need fro lock.
+void AsyncConnection::set_message_sent_callback(std::function<void(const MessageRef&)> sent) {
+  sent_callback = sent;
+}
+
+// only called in messegner worker, no need for lock.
+void AsyncConnection::add_sending(const MessageRef& m, uint64_t start, unsigned length) {
+  messages_sending.push_back(new sending_item(m, sent_pos + start, length));
+}
+
+// only called in messegner worker, no need for lock.
+void AsyncConnection::add_sent(uint64_t sent) {
+  sent_pos += sent;
+  while(!messages_sending.empty()) {
+    auto it = messages_sending.front();
+    if (it->start + it->len <= sent_pos) {
+      message_sent(it->m);
+      delete it;
+      messages_sending.pop_front();
+    } else {
+      break;
+    }
+  }
+}
+
+// only called in messegner worker, no need for lock.
+void AsyncConnection::clear_outcoming_bl() {
+  if (policy.lossy) {
+    for (auto it: messages_sending) {
+      message_sent(it->m);
+      delete it;
+    }
+    messages_sending.clear();
+  }
+  outcoming_bl.clear();
 }
 
 entity_addr_t AsyncConnection::_infer_target_addr(const entity_addrvec_t& av)
@@ -588,7 +634,7 @@ void AsyncConnection::fault()
 
   recv_start = recv_end = 0;
   state_offset = 0;
-  outcoming_bl.clear();
+  clear_outcoming_bl();
 }
 
 void AsyncConnection::_stop() {
@@ -596,6 +642,7 @@ void AsyncConnection::_stop() {
   dispatch_queue->discard_queue(conn_id);
   async_msgr->unregister_conn(this);
   worker->release_worker();
+  clear_outcoming_bl();
 
   state = STATE_CLOSED;
   open_write = false;

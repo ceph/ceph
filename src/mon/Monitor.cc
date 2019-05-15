@@ -4012,6 +4012,8 @@ struct AnonConnection : public Connection {
   int send_message(Message *m) override {
     ceph_assert(!"send_message on anonymous connection");
   }
+  void message_sent(const MessageRef&) override {}
+  void set_message_sent_callback(std::function<void(const MessageRef&)> sent) override {}
   void send_keepalive() override {
     ceph_assert(!"send_keepalive on anonymous connection");
   }

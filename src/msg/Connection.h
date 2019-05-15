@@ -126,10 +126,13 @@ public:
    *
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
-   *
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m) = 0;
+  // called to notify the connection that message is sent
+  virtual void message_sent(const MessageRef&) = 0;
+  // Callback called when a message is sent.
+  virtual void set_message_sent_callback(std::function<void(const MessageRef&)> sent) = 0;
 
   virtual int send_message2(MessageRef m)
   {

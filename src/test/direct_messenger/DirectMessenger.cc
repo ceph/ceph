@@ -43,6 +43,8 @@ class DirectConnection : public Connection {
 
   /// pass the given message directly to our dispatchers
   int send_message(Message *m) override;
+  virtual void message_sent(const MessageRef&) override {}
+  virtual void set_message_sent_callback(std::function<void(const MessageRef&)> sent) override {}
 
   /// release our pointer to the peer connection. later calls to is_connected()
   /// will return false, and send_message() will fail with -ENOTCONN

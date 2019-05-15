@@ -1255,6 +1255,7 @@ public:
   void maybe_request_map();
 
   void enable_blacklist_events();
+  void sent_callback(const MessageRef&);
 private:
 
   void _maybe_request_map();
@@ -1908,6 +1909,8 @@ public:
   std::map<ceph_tid_t,StatfsOp*> statfs_ops;
   std::map<ceph_tid_t,PoolOp*> pool_ops;
   std::atomic<unsigned> num_homeless_ops{0};
+  std::map<ceph_tid_t, unsigned> op_refs;
+  std::map<ceph_tid_t, std::function<void()> > waiting_for_op_release;
 
   OSDSession *homeless_session;
 

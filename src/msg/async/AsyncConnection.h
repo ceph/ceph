@@ -68,6 +68,10 @@ class AsyncConnection : public Connection {
 
   bool is_queued() const;
   void shutdown_socket();
+  
+  void add_sending(const MessageRef& msg, uint64_t start, unsigned length);
+  void add_sent(uint64_t sent);
+  void clear_outcoming_bl();
 
    /**
    * The DelayedDelivery is for injecting delays into Message delivery off
@@ -123,7 +127,9 @@ class AsyncConnection : public Connection {
   void accept(ConnectedSocket socket,
 	      const entity_addr_t &listen_addr,
 	      const entity_addr_t &peer_addr);
-  int send_message(Message *m) override;
+  int send_message(Message *m);
+  void message_sent(const MessageRef&) override;
+  void set_message_sent_callback(std::function<void(const MessageRef&)> sent) override;
 
   void send_keepalive() override;
   void mark_down() override;
@@ -213,6 +219,16 @@ class AsyncConnection : public Connection {
   std::function<void(char *, ssize_t)> readCallback;
   std::optional<unsigned> pendingReadLen;
   char *read_buffer;
+  struct sending_item {
+    MessageRef m;
+    // offset relative to outcoming_bl = start - sent_pos
+    uint64_t start;
+    unsigned len;
+    sending_item(const MessageRef& m, uint64_t start, unsigned len): m(m), start(start), len(len) {}
+  };
+  std::deque< sending_item* > messages_sending;
+  uint64_t sent_pos;
+  std::function<void(const MessageRef&)> sent_callback;
 
  public:
   // used by eventcallback
