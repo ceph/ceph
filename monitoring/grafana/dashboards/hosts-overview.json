@@ -1,10 +1,11 @@
 {
+  "__inputs": [],
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.0"
+      "version": "5.3.2"
     },
     {
       "type": "panel",
@@ -36,7 +37,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1538079414024,
+  "iteration": 1557393917915,
   "links": [],
   "panels": [
     {
@@ -430,7 +431,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "avg (\n  ((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100)\n  ) *\n  on(instance, device) ceph_disk_occupation{instance=~\"($osd_hosts).*\"}\n)",
+          "expr": "avg (\n  ((irate(node_disk_io_time_ms[5m]) / 10 ) or\n   (irate(node_disk_io_time_seconds_total[5m]) * 100)\n  ) *\n  on(instance, device) label_replace(label_replace(ceph_disk_occupation{instance=~\"($osd_hosts).*\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")\n)",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
@@ -540,7 +541,7 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Show the top 10 busiest hosts by cpu",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -567,7 +568,7 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
@@ -598,12 +599,12 @@
       "yaxes": [
         {
           "decimals": 1,
-          "format": "percentunit",
+          "format": "percent",
           "label": null,
           "logBase": 1,
-          "max": null,
+          "max": "100",
           "min": "0",
-          "show": false
+          "show": true
         },
         {
           "format": "short",
@@ -613,7 +614,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -622,7 +627,7 @@
       "dashes": false,
       "datasource": "$datasource",
       "description": "Top 10 hosts by network load",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -649,11 +654,11 @@
       "renderer": "flot",
       "seriesOverrides": [],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "topk(10, (sum by(instance) (\n  (\n  irate(node_network_receive_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n  ) +\n  (\n  irate(node_network_transmit_bytes{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|mon_hosts|mds_hosts|rgw_hosts).*\",device!=\"lo\"}[1m])\n  ))\n  )\n)",
+          "expr": "topk(10, (sum by(instance) (\n  (\n  irate(node_network_receive_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_receive_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n  ) +\n  (\n  irate(node_network_transmit_bytes{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m]) or\n  irate(node_network_transmit_bytes_total{instance=~\"($osd_hosts|$mon_hosts|$mds_hosts|$rgw_hosts).*\",device!=\"lo\"}[1m])\n  ))\n  )\n)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -680,7 +685,7 @@
       "yaxes": [
         {
           "decimals": 1,
-          "format": "bytes",
+          "format": "Bps",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -695,7 +700,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": "10s",
@@ -706,7 +715,6 @@
     "list": [
       {
         "current": {
-          "tags": [],
           "text": "default",
           "value": "default"
         },
@@ -717,6 +725,7 @@
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
+        "skipUrlSync": false,
         "type": "datasource"
       },
       {
@@ -732,6 +741,7 @@
         "query": "label_values(ceph_disk_occupation, instance)",
         "refresh": 1,
         "regex": "([^.]*).*",
+        "skipUrlSync": false,
         "sort": 1,
         "tagValuesQuery": "",
         "tags": [],
@@ -752,6 +762,7 @@
         "query": "label_values(ceph_mon_metadata, ceph_daemon)",
         "refresh": 1,
         "regex": "mon.(.*)",
+        "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
@@ -772,6 +783,7 @@
         "query": "label_values(ceph_mds_inodes, ceph_daemon)",
         "refresh": 1,
         "regex": "mds.(.*)",
+        "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
@@ -792,6 +804,7 @@
         "query": "label_values(ceph_rgw_qlen, ceph_daemon)",
         "refresh": 1,
         "regex": "rgw.(.*)",
+        "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
@@ -832,6 +845,6 @@
   },
   "timezone": "",
   "title": "Host Overview",
-  "uid": "lxnjcTAmk",
-  "version": 10
+  "uid": "y0KGL0iZz",
+  "version": 3
 }

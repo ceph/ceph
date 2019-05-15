@@ -1,10 +1,11 @@
 {
+  "__inputs": [],
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.0"
+      "version": "5.3.2"
     },
     {
       "type": "panel",
@@ -30,7 +31,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1534385833420,
+  "iteration": 1557395861896,
   "links": [],
   "panels": [
     {
@@ -52,7 +53,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 6,
@@ -77,30 +78,35 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "read",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"osd.[[osd_id]]\"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m]) * 1000",
+          "expr": "irate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"$osd\"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_r_latency_count[1m])",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "READs",
+          "legendFormat": "read",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_osd_op_w_latency_sum{ceph_daemon=~\"osd.[[osd_id]]\"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m]) * 1000",
+          "expr": "irate(ceph_osd_op_w_latency_sum{ceph_daemon=~\"$osd\"}[1m]) / on (ceph_daemon) irate(ceph_osd_op_w_latency_count[1m])",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "WRITEs",
+          "legendFormat": "write",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "OSD $osd_id Latency",
+      "title": "$osd Latency",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -116,8 +122,8 @@
       },
       "yaxes": [
         {
-          "format": "ms",
-          "label": null,
+          "format": "s",
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -131,7 +137,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -139,7 +149,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 6,
@@ -164,20 +174,25 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "Reads",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_osd_op_r{ceph_daemon=~\"osd.[[osd_id]]\"}[1m])",
+          "expr": "irate(ceph_osd_op_r{ceph_daemon=~\"$osd\"}[1m])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Reads",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_osd_op_w{ceph_daemon=~\"osd.[[osd_id]]\"}[1m])",
+          "expr": "irate(ceph_osd_op_w{ceph_daemon=~\"$osd\"}[1m])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Writes",
@@ -187,7 +202,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "OSD $osd_id R/W IOPS",
+      "title": "$osd R/W IOPS",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -204,10 +219,10 @@
       "yaxes": [
         {
           "format": "short",
-          "label": null,
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -218,7 +233,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -226,7 +245,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 6,
@@ -251,20 +270,25 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "Read Bytes",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
       "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"osd.[[osd_id]]\"}[1m])",
+          "expr": "irate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"$osd\"}[1m])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Read Bytes",
           "refId": "A"
         },
         {
-          "expr": "irate(ceph_osd_op_w_in_bytes{ceph_daemon=~\"osd.[[osd_id]]\"}[1m])",
+          "expr": "irate(ceph_osd_op_w_in_bytes{ceph_daemon=~\"$osd\"}[1m])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Write Bytes",
@@ -274,7 +298,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "OSD $osd_id R/W Bytes",
+      "title": "$osd R/W Bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -291,10 +315,10 @@
       "yaxes": [
         {
           "format": "bytes",
-          "label": null,
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -305,7 +329,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "collapsed": false,
@@ -326,7 +354,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 6,
@@ -351,20 +379,25 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/.*Reads/",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_read_time_ms[1m]) / irate(node_disk_reads_completed[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"}) ",
+          "expr": "(irate(node_disk_read_time_seconds_total[1m]) / irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "(irate(node_disk_write_time_ms[1m]) / irate(node_disk_writes_completed[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"}) ",
+          "expr": "(irate(node_disk_write_time_seconds_total[1m]) / irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\"))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}/{{device}} Writes",
@@ -374,7 +407,7 @@
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Physical Device Latency for OSD $osd_id",
+      "title": "Physical Device Latency for $osd",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -391,10 +424,10 @@
       "yaxes": [
         {
           "format": "ms",
-          "label": null,
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -405,7 +438,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -413,7 +450,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 6,
@@ -438,30 +475,35 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/.*Reads/",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
-      "stack": true,
+      "stack": false,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_reads_completed[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"})",
+          "expr": "irate(node_disk_writes_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} {{device}} READS",
+          "legendFormat": "{{device}} on {{instance}} Writes",
           "refId": "A"
         },
         {
-          "expr": "(irate(node_disk_writes_completed[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"}) ",
+          "expr": "irate(node_disk_reads_completed_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} {{device}} WRITES",
+          "legendFormat": "{{device}} on {{instance}} Reads",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Physical Device R/W IOPS for OSD $osd_id",
+      "title": "Physical Device R/W IOPS for $osd",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -478,7 +520,7 @@
       "yaxes": [
         {
           "format": "short",
-          "label": null,
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
           "min": null,
@@ -492,7 +534,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -525,30 +571,35 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/.*Reads/",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_bytes_read[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"})",
+          "expr": "irate(node_disk_read_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} {{device}} READS",
+          "legendFormat": "{{instance}} {{device}} Reads",
           "refId": "A"
         },
         {
-          "expr": "(irate(node_disk_bytes_written[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"}) ",
+          "expr": "irate(node_disk_written_bytes_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} {{device}} WRITES",
+          "legendFormat": "{{instance}} {{device}} Writes",
           "refId": "B"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Physical Device R/W Bytes for OSD $osd_id",
+      "title": "Physical Device R/W Bytes for $osd",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -564,11 +615,11 @@
       },
       "yaxes": [
         {
-          "format": "bytes",
-          "label": null,
+          "format": "Bps",
+          "label": "Read (-) / Write (+)",
           "logBase": 1,
           "max": null,
-          "min": "0",
+          "min": null,
           "show": true
         },
         {
@@ -579,7 +630,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -618,17 +673,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(irate(node_disk_io_time_ms[1m]) and on (instance, device) ceph_disk_occupation{ceph_daemon=~\"osd.[[osd_id]]\"}) / 10",
+          "expr": "irate(node_disk_io_time_seconds_total[1m]) and on (instance, device) label_replace(label_replace(ceph_disk_occupation{ceph_daemon=~\"$osd\"}, \"device\", \"$1\", \"device\", \"/dev/(.*)\"), \"instance\", \"$1:9100\", \"exported_instance\", \"(.*)\")",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "{{instance}} {{device}}",
+          "legendFormat": "{{device}} on {{instance}}",
           "refId": "A"
         }
       ],
       "thresholds": [],
       "timeFrom": null,
       "timeShift": null,
-      "title": "Physical Device Util% for OSD $osd_id",
+      "title": "Physical Device Util% for $osd",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -644,7 +699,7 @@
       },
       "yaxes": [
         {
-          "format": "short",
+          "format": "percentunit",
           "label": null,
           "logBase": 1,
           "max": null,
@@ -659,7 +714,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "schemaVersion": 16,
@@ -669,7 +728,6 @@
     "list": [
       {
         "current": {
-          "tags": [],
           "text": "default",
           "value": "default"
         },
@@ -680,6 +738,7 @@
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
+        "skipUrlSync": false,
         "type": "datasource"
       },
       {
@@ -688,13 +747,14 @@
         "datasource": "$datasource",
         "hide": 0,
         "includeAll": false,
-        "label": "OSD Id",
+        "label": "OSD",
         "multi": false,
-        "name": "osd_id",
+        "name": "osd",
         "options": [],
         "query": "label_values(ceph_osd_metadata,ceph_daemon)",
         "refresh": 1,
-        "regex": "osd.(.*)",
+        "regex": "(.*)",
+        "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
@@ -705,7 +765,7 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-3h",
     "to": "now"
   },
   "timepicker": {
@@ -735,6 +795,6 @@
   },
   "timezone": "",
   "title": "OSD device details",
-  "uid": "MKj_9ipiz",
+  "uid": "CrAHE0iZz",
   "version": 3
 }
