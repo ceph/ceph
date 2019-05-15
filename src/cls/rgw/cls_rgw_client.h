@@ -419,6 +419,13 @@ public:
   start_obj(_start_obj), filter_prefix(_filter_prefix), num_entries(_num_entries), list_versions(_list_versions), result(list_results) {}
 };
 
+void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
+                            const cls_rgw_obj_key& start_obj,
+                            const std::string& filter_prefix,
+                            uint32_t num_entries,
+                            bool list_versions,
+                            rgw_cls_list_ret* result);
+
 class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
   map<int, struct cls_rgw_bi_log_list_ret>& result;
   BucketIndexShardsManager& marker_mgr;
