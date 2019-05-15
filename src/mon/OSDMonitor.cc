@@ -63,6 +63,7 @@
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/perf_counters.h"
+#include "common/PriorityCache.h"
 #include "common/strtol.h"
 #include "common/numa.h"
 
@@ -81,6 +82,7 @@
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/scope_guard.h"
+#include "perfglue/heap_profiler.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "osd/OSDCap.h"
@@ -124,6 +126,105 @@ static const string OSD_SNAP_PREFIX("osd_snap");
   */
 
 namespace {
+
+struct OSDMemCache : public PriorityCache::PriCache {
+  OSDMonitor *osdmon;
+  int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
+  int64_t committed_bytes = 0;
+  double cache_ratio = 0;
+
+  OSDMemCache(OSDMonitor *m) : osdmon(m) {};
+
+  virtual uint64_t _get_used_bytes() const = 0;
+
+  virtual int64_t request_cache_bytes(
+      PriorityCache::Priority pri, uint64_t total_cache) const {
+    int64_t assigned = get_cache_bytes(pri);
+
+    switch (pri) {
+    // All cache items are currently set to have PRI1 priority
+    case PriorityCache::Priority::PRI1:
+      {
+        int64_t request = _get_used_bytes();
+        return (request > assigned) ? request - assigned : 0;
+      }
+    default:
+      break;
+    }
+    return -EOPNOTSUPP;
+  }
+
+  virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
+      return cache_bytes[pri];
+  }
+
+  virtual int64_t get_cache_bytes() const {
+    int64_t total = 0;
+
+    for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+      PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+      total += get_cache_bytes(pri);
+    }
+    return total;
+  }
+
+  virtual void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] = bytes;
+  }
+  virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] += bytes;
+  }
+  virtual int64_t commit_cache_size(uint64_t total_cache) {
+    committed_bytes = PriorityCache::get_chunk(
+        get_cache_bytes(), total_cache);
+    return committed_bytes;
+  }
+  virtual int64_t get_committed_size() const {
+    return committed_bytes;
+  }
+  virtual double get_cache_ratio() const {
+    return cache_ratio;
+  }
+  virtual void set_cache_ratio(double ratio) {
+    cache_ratio = ratio;
+  }
+  virtual string get_cache_name() const = 0;
+};
+
+struct IncCache : public OSDMemCache {
+  IncCache(OSDMonitor *m) : OSDMemCache(m) {};
+
+  virtual uint64_t _get_used_bytes() const {
+    return osdmon->inc_osd_cache.get_bytes();
+  }
+
+  virtual string get_cache_name() const {
+    return "OSDMap Inc Cache";
+  }
+
+  uint64_t _get_num_osdmaps() const {
+    return osdmon->inc_osd_cache.get_size();
+  }
+};
+
+struct FullCache : public OSDMemCache {
+  FullCache(OSDMonitor *m) : OSDMemCache(m) {};
+
+  virtual uint64_t _get_used_bytes() const {
+    return osdmon->full_osd_cache.get_bytes();
+  }
+
+  virtual string get_cache_name() const {
+    return "OSDMap Full Cache";
+  }
+
+  uint64_t _get_num_osdmaps() const {
+    return osdmon->full_osd_cache.get_size();
+  }
+};
+
+std::shared_ptr<IncCache> inc_cache;
+std::shared_ptr<FullCache> full_cache;
 
 const uint32_t MAX_POOL_APPLICATIONS = 4;
 const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
@@ -313,7 +414,42 @@ OSDMonitor::OSDMonitor(
    full_osd_cache(g_conf()->mon_osd_cache_size),
    has_osdmap_manifest(false),
    mapper(mn->cct, &mn->cpu_tp)
-{}
+{
+  inc_cache = std::make_shared<IncCache>(this);
+  full_cache = std::make_shared<FullCache>(this);
+  int r = _set_cache_sizes();
+  if (r < 0) {
+    derr << __func__ << " using default osd cache size - mon_osd_cache_size ("
+         << g_conf()->mon_osd_cache_size
+         << ") without priority cache management"
+         << dendl;
+  }
+}
+
+int OSDMonitor::_set_cache_sizes()
+{
+  if (g_conf()->mon_memory_autotune) {
+    // set the new osdmon cache targets to be managed by pcm
+    mon_osd_cache_size = g_conf()->mon_osd_cache_size;
+    rocksdb_cache_size = g_conf()->rocksdb_cache_size;
+    mon_memory_base = cct->_conf.get_val<Option::size_t>("osd_memory_base");
+    mon_memory_fragmentation = cct->_conf.get_val<double>("osd_memory_expected_fragmentation");
+    mon_memory_target = g_conf()->mon_memory_target;
+    mon_memory_min = g_conf()->mon_osd_cache_size_min;
+    if (mon_memory_target <= 0 || mon_memory_min <= 0) {
+      derr << __func__ << " mon_memory_target:" << mon_memory_target
+           << " mon_memory_min:" << mon_memory_min
+           << ". Invalid size option(s) provided."
+           << dendl;
+      return -EINVAL;
+    }
+    // Set the initial inc and full LRU cache sizes
+    inc_osd_cache.set_bytes(mon_memory_min);
+    full_osd_cache.set_bytes(mon_memory_min);
+    mon_memory_autotune = g_conf()->mon_memory_autotune;
+  }
+  return 0;
+}
 
 bool OSDMonitor::_have_pending_crush()
 {
@@ -505,6 +641,17 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     int err = get_version(osdmap.epoch+1, inc_bl);
     ceph_assert(err == 0);
     ceph_assert(inc_bl.length());
+    // set priority cache manager levels if the osdmap is
+    // being populated for the first time.
+    if (mon_memory_autotune && pcm == nullptr) {
+      int r = register_cache_with_pcm();
+      if (r < 0) {
+        dout(10) << __func__
+                 << " Error while registering osdmon caches with pcm."
+                 << " Proceeding without cache auto tuning."
+                 << dendl;
+      }
+    }
 
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1
 	    << dendl;
@@ -630,6 +777,78 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     // will be called by on_active() on the leader, avoid doing so twice
     start_mapping();
   }
+}
+
+int OSDMonitor::register_cache_with_pcm()
+{
+  if (mon_memory_target <= 0 || mon_memory_min <= 0) {
+    derr << __func__ << " Invalid memory size specified for mon caches."
+         << " Caches will not be auto-tuned."
+         << dendl;
+    return -EINVAL;
+  }
+  uint64_t base = mon_memory_base;
+  double fragmentation = mon_memory_fragmentation;
+  // For calculating total target memory, consider rocksdb cache size.
+  uint64_t target = mon_memory_target;
+  uint64_t min = mon_memory_min;
+  uint64_t max = min;
+
+  // Apply the same logic as in bluestore to set the max amount
+  // of memory to use for cache. Assume base memory for OSDMaps
+  // and then add in some overhead for fragmentation.
+  uint64_t ltarget = (1.0 - fragmentation) * target;
+  if (ltarget > base + min) {
+    max = ltarget - base;
+  }
+
+  rocksdb_binned_kv_cache = mon->store->get_priority_cache();
+  ceph_assert(rocksdb_binned_kv_cache);
+
+  int r = _set_cache_ratios();
+  if (r < 0) {
+    derr << __func__ << " Cache ratios for pcm could not be set."
+         << " Review the kv (rocksdb) and mon_memory_target sizes."
+         << dendl;
+    return -EINVAL;
+  }
+
+  pcm = std::make_shared<PriorityCache::Manager>(
+      cct, min, max, target, true);
+  pcm->insert("kv", rocksdb_binned_kv_cache, true);
+  pcm->insert("inc", inc_cache, true);
+  pcm->insert("full", full_cache, true);
+  dout(10) << __func__ << " pcm target: " << target
+           << " pcm max: " << max
+           << " pcm min: " << min
+           << " inc_osd_cache size: " << inc_osd_cache.get_size()
+           << dendl;
+  return 0;
+}
+
+int OSDMonitor::_set_cache_ratios()
+{
+  double old_cache_kv_ratio = cache_kv_ratio;
+
+  // Set the cache ratios for kv(rocksdb), inc and full caches
+  cache_kv_ratio = (double)rocksdb_cache_size / (double)mon_memory_target;
+  if (cache_kv_ratio >= 1.0) {
+    derr << __func__ << " Cache kv ratio (" << cache_kv_ratio
+         << ") must be in range [0,<1.0]."
+         << dendl;
+    cache_kv_ratio = old_cache_kv_ratio;
+    return -EINVAL;
+  }
+  rocksdb_binned_kv_cache->set_cache_ratio(cache_kv_ratio);
+  cache_inc_ratio = cache_full_ratio = (1.0 - cache_kv_ratio) / 2;
+  inc_cache->set_cache_ratio(cache_inc_ratio);
+  full_cache->set_cache_ratio(cache_full_ratio);
+
+  dout(10) << __func__ << " kv ratio " << cache_kv_ratio
+           << " inc ratio " << cache_inc_ratio
+           << " full ratio " << cache_full_ratio
+           << dendl;
+  return 0;
 }
 
 void OSDMonitor::start_mapping()
@@ -4146,7 +4365,7 @@ int OSDMonitor::get_version(version_t ver, uint64_t features, bufferlist& bl)
       OSDMap::get_significant_features(mon->get_quorum_con_features())) {
     reencode_incremental_map(bl, features);
   }
-  inc_osd_cache.add({ver, significant_features}, bl);
+  inc_osd_cache.add_bytes({ver, significant_features}, bl);
   return 0;
 }
 
@@ -4295,7 +4514,7 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features,
       OSDMap::get_significant_features(mon->get_quorum_con_features())) {
     reencode_full_map(bl, features);
   }
-  full_osd_cache.add({ver, significant_features}, bl);
+  full_osd_cache.add_bytes({ver, significant_features}, bl);
   return 0;
 }
 
@@ -4733,6 +4952,48 @@ void OSDMonitor::tick()
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
+
+  if (ceph_using_tcmalloc() && pcm != nullptr) {
+    pcm->tune_memory();
+    pcm->balance();
+    _set_new_cache_sizes();
+    dout(10) << "tick balancer "
+             << " inc cache_bytes: " << inc_cache->get_cache_bytes()
+             << " inc comtd_bytes: " << inc_cache->get_committed_size()
+             << " inc used_bytes: " << inc_cache->_get_used_bytes()
+             << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
+             << dendl;
+    dout(10) << "tick balancer "
+             << " full cache_bytes: " << full_cache->get_cache_bytes()
+             << " full comtd_bytes: " << full_cache->get_committed_size()
+             << " full used_bytes: " << full_cache->_get_used_bytes()
+             << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
+             << dendl;
+  }
+}
+
+void OSDMonitor::_set_new_cache_sizes()
+{
+  uint64_t cache_size = 0;
+  int64_t inc_alloc = 0;
+  int64_t full_alloc = 0;
+  int64_t kv_alloc = 0;
+
+  if (pcm != nullptr && rocksdb_binned_kv_cache != nullptr) {
+    cache_size = pcm->get_tuned_mem();
+    inc_alloc = inc_cache->get_committed_size();
+    full_alloc = full_cache->get_committed_size();
+    kv_alloc = rocksdb_binned_kv_cache->get_committed_size();
+  }
+
+  inc_osd_cache.set_bytes(inc_alloc);
+  full_osd_cache.set_bytes(full_alloc);
+
+  dout(10) << __func__ << " cache_size:" << cache_size
+           << " inc_alloc: " << inc_alloc
+           << " full_alloc: " << full_alloc
+           << " kv_alloc: " << kv_alloc
+           << dendl;
 }
 
 bool OSDMonitor::handle_osd_timeouts(const utime_t &now,
