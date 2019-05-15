@@ -201,6 +201,9 @@ OPTION(mon_compact_on_bootstrap, OPT_BOOL)  // trigger leveldb compaction on boo
 OPTION(mon_compact_on_trim, OPT_BOOL)       // compact (a prefix) when we trim old states
 OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely on underlying store's cache
 
+OPTION(mon_osd_cache_size_min, OPT_U64) // minimum amount of memory to cache osdmaps
+OPTION(mon_memory_target, OPT_U64) // amount of mapped memory for osdmaps
+OPTION(mon_memory_autotune, OPT_BOOL) // autotune cache memory for osdmap
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
 OPTION(mon_clean_pg_upmaps_per_chunk, OPT_INT)
