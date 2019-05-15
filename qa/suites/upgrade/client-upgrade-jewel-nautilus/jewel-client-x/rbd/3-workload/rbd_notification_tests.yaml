@@ -1,0 +1,21 @@
+tasks:
+- workunit:
+    branch: jewel
+    clients:
+      client.0:
+        - rbd/notify_master.sh
+      client.1:
+        - rbd/notify_slave.sh
+    env:
+      RBD_FEATURES: "13"
+- print: "**** done rbd: old librbd -> new librbd"
+- workunit:
+    branch: jewel
+    clients:
+      client.0:
+        - rbd/notify_slave.sh
+      client.1:
+        - rbd/notify_master.sh
+    env:
+      RBD_FEATURES: "13"
+- print: "**** done rbd: new librbd -> old librbd"
