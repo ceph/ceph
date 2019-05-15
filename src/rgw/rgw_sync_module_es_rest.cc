@@ -166,7 +166,7 @@ void RGWMetadataSearchOp::execute()
   list<pair<string, string> > conds;
 
   if (!s->user->system) {
-    conds.push_back(make_pair("permissions", s->user->user_id.to_str()));
+    conds.push_back(make_pair("permissions.keyword", s->user->user_id.to_str()));
   }
 
   if (!s->bucket_name.empty()) {
@@ -189,13 +189,14 @@ void RGWMetadataSearchOp::execute()
                                   { "content_type", "meta.content_type" },
                                   { "storageclass", "meta.storage_class" },
                                   { "storage_class", "meta.storage_class" },
+				  { "permissions", "permissions.keyword" },
   };
   es_query.set_field_aliases(&aliases);
 
   static map<string, ESEntityTypeMap::EntityType> generic_map = { {"bucket", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"name", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"instance", ESEntityTypeMap::ES_ENTITY_STR},
-                                                           {"permissions", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"permissions.keyword", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.content_type", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
@@ -204,7 +205,7 @@ void RGWMetadataSearchOp::execute()
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
 
-  static set<string> restricted_fields = { {"permissions"} };
+  static set<string> restricted_fields = { {"permissions.keyword"} };
   es_query.set_restricted_fields(&restricted_fields);
 
   map<string, ESEntityTypeMap::EntityType> custom_map;
