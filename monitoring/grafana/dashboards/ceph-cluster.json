@@ -35,7 +35,7 @@
     "list": []
   },
   "description": "Ceph cluster overview",
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
@@ -52,7 +52,7 @@
         "rgb(255, 0, 0)"
       ],
       "datasource": "$datasource",
-      "editable": true,
+      "editable": false,
       "error": false,
       "format": "none",
       "gauge": {
@@ -850,7 +850,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(deriv(ceph_pool_bytes_used{instance=~\"$instance\"}[1m]))",
+          "expr": "sum(deriv(ceph_pool_stored{instance=~\"$instance\"}[1m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
