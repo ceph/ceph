@@ -1920,7 +1920,7 @@ static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
 
   read_op.params.attrs = &attrs;
 
-  return read_op.prepare();
+  return read_op.prepare(s->yield);
 }
 
 static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
@@ -4131,7 +4131,7 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   obj_ctx.set_prefetch_data(obj);
 
   RGWObjState* state = nullptr;
-  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false) < 0) {
+  if (store->get_obj_state(&obj_ctx, s->bucket_info, obj, &state, false, s->yield) < 0) {
     return false;
   }
   if (! state->exists) {

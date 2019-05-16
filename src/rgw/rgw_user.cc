@@ -2083,7 +2083,7 @@ int RGWUser::add(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
 {
   int ret;
 
@@ -2117,7 +2117,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     std::map<std::string, RGWBucketEnt>::iterator it;
     for (it = m.begin(); it != m.end(); ++it) {
-      ret = rgw_remove_bucket(store, ((*it).second).bucket, true);
+      ret = rgw_remove_bucket(store, ((*it).second).bucket, true, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2140,7 +2140,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -2151,7 +2151,7 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_remove(op_state, &subprocess_msg);
+  ret = execute_remove(op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user, " + subprocess_msg);
     return ret;
@@ -2537,7 +2537,7 @@ int RGWUserAdminOp_User::modify(RGWRados *store, RGWUserAdminOpState& op_state,
 }
 
 int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+                  RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
@@ -2546,7 +2546,7 @@ int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
     return ret;
 
 
-  ret = user.remove(op_state, NULL);
+  ret = user.remove(op_state, y, NULL);
 
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_USER;

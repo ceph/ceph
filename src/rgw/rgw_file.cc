@@ -1552,7 +1552,7 @@ namespace rgw {
                       *static_cast<RGWObjectCtx *>(s->obj_ctx),
                       obj, olh_epoch, s->req_id, this, s->yield);
 
-    op_ret = processor->prepare();
+    op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
       ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
 			<< dendl;
