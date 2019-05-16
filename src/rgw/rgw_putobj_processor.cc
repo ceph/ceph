@@ -199,7 +199,7 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
   return 0;
 }
 
-int AtomicObjectProcessor::prepare()
+int AtomicObjectProcessor::prepare(optional_yield y)
 {
   uint64_t max_head_chunk_size;
   uint64_t head_max_size;
@@ -401,7 +401,7 @@ int MultipartObjectProcessor::prepare_head()
   return 0;
 }
 
-int MultipartObjectProcessor::prepare()
+int MultipartObjectProcessor::prepare(optional_yield y)
 {
   manifest.set_prefix(target_obj.key.name + "." + upload_id);
 
@@ -511,10 +511,10 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
   return 0;
 }
 
-int AppendObjectProcessor::prepare()
+int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = store->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate);
+  int r = store->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate, y);
   if (r < 0) {
     return r;
   }

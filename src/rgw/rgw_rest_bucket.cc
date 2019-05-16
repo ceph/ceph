@@ -109,7 +109,7 @@ void RGWOp_Check_Bucket_Index::execute()
   op_state.set_fix_index(fix_index);
   op_state.set_check_objects(check_objects);
 
-  http_ret = RGWBucketAdminOp::check_index(store, op_state, flusher);
+  http_ret = RGWBucketAdminOp::check_index(store, op_state, flusher, s->yield);
 }
 
 class RGWOp_Bucket_Link : public RGWRESTOp {
@@ -205,7 +205,7 @@ void RGWOp_Bucket_Remove::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_delete_children(delete_children);
 
-  http_ret = RGWBucketAdminOp::remove_bucket(store, op_state);
+  http_ret = RGWBucketAdminOp::remove_bucket(store, op_state, s->yield);
 }
 
 class RGWOp_Set_Bucket_Quota : public RGWRESTOp {

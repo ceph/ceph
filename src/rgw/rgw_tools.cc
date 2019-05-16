@@ -445,7 +445,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                   owner.get_id(), obj_ctx, obj, olh_epoch,
                                   req_id, dpp, y);
 
-  int ret = processor.prepare();
+  int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
 
