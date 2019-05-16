@@ -390,7 +390,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
   set<string> obj_oids;
   rgw_bucket& bucket = result.obj.bucket;
   if (!result.has_manifest) { /* a very very old object, or part of a multipart upload during upload */
-    const string loc = bucket.bucket_id + "_" + result.obj.get_object();
+    const string loc = bucket.marker + "_" + result.obj.get_object();
     obj_oids.insert(obj_fingerprint(loc));
 
     /*
@@ -404,7 +404,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_obj& loc = miter.get_location();
-      string s = bucket.bucket_id + "_" + loc.get_object();
+      string s = bucket.marker + "_" + loc.get_object();
       obj_oids.insert(obj_fingerprint(s));
     }
   }
