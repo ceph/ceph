@@ -81,7 +81,9 @@ template <typename I>
 bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
 {
   ceph_assert(m_image_ctx.image_lock.is_locked());
-
+  if (object_no >= m_object_map.size()){
+  	return true;
+  }
   // Fall back to default logic if object map is disabled or invalid
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
                                  m_image_ctx.image_lock)) {
