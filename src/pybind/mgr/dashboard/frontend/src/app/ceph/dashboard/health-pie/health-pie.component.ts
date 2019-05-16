@@ -37,6 +37,8 @@ export class HealthPieComponent implements OnChanges, OnInit {
   displayLegend = false;
   @Input()
   tooltipFn: any;
+  @Input()
+  showLabelAsTooltip = false;
   @Output()
   prepareFn = new EventEmitter();
 
@@ -146,6 +148,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
   private getChartTooltipBody(body) {
     const bodySplit = body[0].split(': ');
+
+    if (this.showLabelAsTooltip) {
+      return bodySplit[0];
+    }
 
     if (this.isBytesData) {
       bodySplit[1] = this.dimlessBinary.transform(bodySplit[1]);
