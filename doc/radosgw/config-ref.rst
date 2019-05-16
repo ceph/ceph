@@ -500,6 +500,15 @@ file under each ``[client.radosgw.{instance-name}]`` instance.
    ``rgw md log max shards`` should not be changed after sync has
    started.
 
+S3 Settings
+===========
+
+``rgw s3 auth use ldap``
+
+:Description: Should S3 authentication use LDAP.
+:Type: Boolean
+:Default: ``false``
+
 
 Swift Settings
 ==============
