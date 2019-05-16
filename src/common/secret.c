@@ -101,8 +101,8 @@ int get_secret_option(const char *secret, const char *key_name,
 
   option[olen] = '\0';
 
-
-  if (secret) {
+  /* when parsing kernel options (-o remount) we get '<hidden>' as the secret */
+  if (secret && (strcmp(secret, "<hidden>") != 0)) {
     ret = set_kernel_secret(secret, key_name);
     if (ret < 0) {
       if (ret == -ENODEV || ret == -ENOSYS) {
