@@ -463,11 +463,11 @@ void md_config_t::parse_env(unsigned entity_type,
   if (!args_var) {
     args_var = "CEPH_ARGS";
   }
-  if (getenv("CEPH_KEYRING")) {
-    _set_val(values, tracker, getenv("CEPH_KEYRING"), *find_option("keyring"),
-	     CONF_ENV, nullptr);
+  if (auto s = getenv("CEPH_KEYRING"); s) {
+    string err;
+    _set_val(values, tracker, s, *find_option("keyring"), CONF_ENV, &err);
   }
-  if (const char *dir = getenv("CEPH_LIB")) {
+  if (auto dir = getenv("CEPH_LIB"); dir) {
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
@@ -475,15 +475,15 @@ void md_config_t::parse_env(unsigned entity_type,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
-  const char *pod_req = getenv("POD_MEMORY_REQUEST");
-  if (pod_req) {
+  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+    string err;
     uint64_t v = atoll(pod_req);
     if (v) {
       switch (entity_type) {
       case CEPH_ENTITY_TYPE_OSD:
 	_set_val(values, tracker, stringify(v),
 		 *find_option("osd_memory_target"),
-		 CONF_ENV, nullptr);
+		 CONF_ENV, &err);
 	break;
       }
     }
@@ -1295,6 +1295,7 @@ int md_config_t::_set_val(
   std::string *error_message)
 {
   Option::value_t new_value;
+  ceph_assert(error_message);
   int r = opt.parse_value(raw_val, &new_value, error_message);
   if (r < 0) {
     return r;
