@@ -11,6 +11,7 @@ import { NfsService } from '../../../shared/api/nfs.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -51,6 +52,9 @@ export class NfsFormComponent implements OnInit {
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   nfsSquash: any[] = this.nfsService.nfsSquash;
 
+  action: string;
+  resource: string;
+
   daemonsSelections: SelectOption[] = [];
   daemonsMessages = new SelectMessages(
     { noOptions: this.i18n('There are no daemons available.') },
@@ -77,9 +81,11 @@ export class NfsFormComponent implements OnInit {
     private formBuilder: CdFormBuilder,
     private taskWrapper: TaskWrapperService,
     private cdRef: ChangeDetectorRef,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().pool;
+    this.resource = this.i18n('NFS export');
     this.createForm();
   }
 
@@ -96,6 +102,7 @@ export class NfsFormComponent implements OnInit {
     }
 
     if (this.isEdit) {
+      this.action = this.actionLabels.EDIT;
       this.route.params.subscribe((params: { cluster_id: string; export_id: string }) => {
         this.cluster_id = decodeURIComponent(params.cluster_id);
         this.export_id = decodeURIComponent(params.export_id);
@@ -104,6 +111,7 @@ export class NfsFormComponent implements OnInit {
         this.getData(promises);
       });
     } else {
+      this.action = this.actionLabels.CREATE;
       this.getData(promises);
     }
   }
