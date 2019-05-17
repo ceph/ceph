@@ -29,6 +29,8 @@
 
 class AdminSocketHook;
 
+namespace journal { struct CacheManagerHandler; }
+
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
@@ -47,7 +49,8 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class PoolReplayer {
 public:
   PoolReplayer(Threads<ImageCtxT> *threads,
-               ServiceDaemon<ImageCtxT>* service_daemon,
+               ServiceDaemon<ImageCtxT> *service_daemon,
+               journal::CacheManagerHandler *cache_manager_handler,
 	       int64_t local_pool_id, const PeerSpec &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -211,7 +214,8 @@ private:
   void handle_instances_removed(const InstanceIds &instance_ids);
 
   Threads<ImageCtxT> *m_threads;
-  ServiceDaemon<ImageCtxT>* m_service_daemon;
+  ServiceDaemon<ImageCtxT> *m_service_daemon;
+  journal::CacheManagerHandler *m_cache_manager_handler;
   int64_t m_local_pool_id = -1;
   PeerSpec m_peer;
   std::vector<const char*> m_args;

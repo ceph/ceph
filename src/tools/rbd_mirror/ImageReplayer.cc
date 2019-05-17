@@ -70,7 +70,9 @@ struct ReplayHandler : public ::journal::ReplayHandler {
   }
   void handle_complete(int r) override {
     std::stringstream ss;
-    if (r < 0) {
+    if (r == -ENOMEM) {
+      ss << "not enough memory in autotune cache";
+    } else if (r < 0) {
       ss << "replay completed with error: " << cpp_strerror(r);
     }
     replayer->handle_replay_complete(r, ss.str());
@@ -255,14 +257,14 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 }
 
 template <typename I>
-ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
-                                InstanceWatcher<I> *instance_watcher,
-                                RadosRef local,
-                                const std::string &local_mirror_uuid,
-                                int64_t local_pool_id,
-                                const std::string &global_image_id) :
+ImageReplayer<I>::ImageReplayer(
+    Threads<I> *threads, InstanceWatcher<I> *instance_watcher,
+    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
+    const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) :
   m_threads(threads),
   m_instance_watcher(instance_watcher),
+  m_cache_manager_handler(cache_manager_handler),
   m_local(local),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_pool_id(local_pool_id),
@@ -446,9 +448,9 @@ void ImageReplayer<I>::prepare_remote_image() {
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
   auto req = PrepareRemoteImageRequest<I>::create(
     m_threads, m_remote_image.io_ctx, m_global_image_id, m_local_mirror_uuid,
-    m_local_image_id, journal_settings, &m_remote_image.mirror_uuid,
-    &m_remote_image.image_id, &m_remote_journaler, &m_client_state,
-    &m_client_meta, ctx);
+    m_local_image_id, journal_settings, m_cache_manager_handler,
+    &m_remote_image.mirror_uuid, &m_remote_image.image_id, &m_remote_journaler,
+    &m_client_state, &m_client_meta, ctx);
   req->send();
 }
 
