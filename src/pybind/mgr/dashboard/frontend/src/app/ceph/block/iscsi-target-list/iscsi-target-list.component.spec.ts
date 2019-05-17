@@ -190,7 +190,7 @@ describe('IscsiTargetListComponent', () => {
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
         single: 'Edit',
-        empty: 'Add'
+        empty: 'Create'
       };
     });
 
@@ -199,7 +199,7 @@ describe('IscsiTargetListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
       });
 
-      it(`shows 'Edit' for single selection else 'Add' as main action`, () => {
+      it(`shows 'Edit' for single selection else 'Create' as main action`, () => {
         permissionHelper.testScenarios(scenario);
       });
 
@@ -231,12 +231,12 @@ describe('IscsiTargetListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
       });
 
-      it(`shows 'Delete' for single selection else 'Add' as main action`, () => {
+      it(`shows 'Delete' for single selection else 'Create' as main action`, () => {
         scenario.single = 'Delete';
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Add' and 'Delete' actions`, () => {
+      it(`shows 'Create' and 'Delete' actions`, () => {
         expect(tableActions.tableActions.length).toBe(2);
         expect(tableActions.tableActions).toEqual([
           component.tableActions[0],
@@ -269,12 +269,12 @@ describe('IscsiTargetListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
       });
 
-      it(`shows 'Add' for single selection and 'Add' as main action`, () => {
-        scenario.single = 'Add';
+      it(`shows 'Create' for single selection and 'Create' as main action`, () => {
+        scenario.single = 'Create';
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Add' actions`, () => {
+      it(`shows 'Create' actions`, () => {
         expect(tableActions.tableActions.length).toBe(1);
         expect(tableActions.tableActions).toEqual([component.tableActions[0]]);
       });
