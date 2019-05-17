@@ -8,6 +8,7 @@ import { of } from 'rxjs';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -74,10 +75,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private notificationService: NotificationService,
     private summaryService: SummaryService,
     private taskListService: TaskListService,
-    private i18n: I18n
+    private i18n: I18n,
+    private actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
-    const actions = new RbdSnapshotActionsModel(this.i18n);
+    const actions = new RbdSnapshotActionsModel(this.i18n, this.actionLabels);
     actions.create.click = () => this.openCreateSnapshotModal();
     actions.rename.click = () => this.openEditSnapshotModal();
     actions.protect.click = () => this.toggleProtection();

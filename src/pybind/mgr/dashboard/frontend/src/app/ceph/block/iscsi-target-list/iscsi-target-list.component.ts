@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -58,7 +59,8 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private summaryservice: SummaryService,
     private modalService: BsModalService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
 
@@ -66,20 +68,20 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       {
         permission: 'create',
         icon: 'fa-plus',
-        routerLink: () => '/block/iscsi/targets/add',
-        name: this.i18n('Add')
+        routerLink: () => '/block/iscsi/targets/create',
+        name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
         icon: 'fa-pencil',
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
-        name: this.i18n('Edit')
+        name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
         icon: 'fa-times',
         click: () => this.deleteIscsiTargetModal(),
-        name: this.i18n('Delete')
+        name: this.actionLabels.DELETE
       }
     ];
   }
