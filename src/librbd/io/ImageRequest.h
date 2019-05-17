@@ -129,8 +129,6 @@ protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
   using typename ImageRequest<ImageCtxT>::Extents;
 
-  typedef std::vector<ObjectExtent> ObjectExtents;
-
   AbstractImageWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                             Extents &&image_extents, const char *trace_name,
 			    const ZTracer::Trace &parent_trace)
@@ -141,15 +139,16 @@ protected:
 
   void send_request() override;
 
-  virtual int prune_object_extents(ObjectExtents* object_extents) const {
+  virtual int prune_object_extents(
+      LightweightObjectExtents* object_extents) const {
     return 0;
   }
 
-  void send_object_requests(const ObjectExtents &object_extents,
+  void send_object_requests(const LightweightObjectExtents &object_extents,
                             const ::SnapContext &snapc, uint64_t journal_tid);
   virtual ObjectDispatchSpec *create_object_request(
-      const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) = 0;
+      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, bool single_extent, Context *on_finish) = 0;
 
   virtual uint64_t append_journal_event(bool synchronous) = 0;
   virtual void update_stats(size_t length) = 0;
@@ -173,7 +172,6 @@ public:
 
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
-  using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITE;
@@ -182,14 +180,15 @@ protected:
     return "aio_write";
   }
 
-  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
+  void assemble_extent(const LightweightObjectExtent &object_extent,
+                       bufferlist *bl);
 
   void send_image_cache_request() override;
 
 
   ObjectDispatchSpec *create_object_request(
-      const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -213,7 +212,6 @@ public:
 
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
-  using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_DISCARD;
@@ -225,13 +223,14 @@ protected:
   void send_image_cache_request() override;
 
   ObjectDispatchSpec *create_object_request(
-      const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
 
-  int prune_object_extents(ObjectExtents* object_extents) const override;
+  int prune_object_extents(
+      LightweightObjectExtents* object_extents) const override;
 
 private:
   uint32_t m_discard_granularity_bytes;
@@ -284,7 +283,6 @@ public:
 
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
-  using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
   aio_type_t get_aio_type() const override {
     return AIO_TYPE_WRITESAME;
@@ -296,8 +294,8 @@ protected:
   void send_image_cache_request() override;
 
   ObjectDispatchSpec *create_object_request(
-      const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -310,7 +308,6 @@ template <typename ImageCtxT = ImageCtx>
 class ImageCompareAndWriteRequest : public AbstractImageWriteRequest<ImageCtxT> {
 public:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
-  using typename AbstractImageWriteRequest<ImageCtxT>::ObjectExtents;
 
   ImageCompareAndWriteRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                               Extents &&image_extents, bufferlist &&cmp_bl,
@@ -325,11 +322,12 @@ public:
 protected:
   void send_image_cache_request() override;
 
-  void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
+  void assemble_extent(const LightweightObjectExtent &object_extent,
+                       bufferlist *bl);
 
   ObjectDispatchSpec *create_object_request(
-      const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      uint64_t journal_tid, Context *on_finish) override;
+      const LightweightObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
   uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
@@ -341,7 +339,8 @@ protected:
     return "aio_compare_and_write";
   }
 
-  int prune_object_extents(ObjectExtents* object_extents) const override;
+  int prune_object_extents(
+      LightweightObjectExtents* object_extents) const override;
 
 private:
   bufferlist m_cmp_bl;

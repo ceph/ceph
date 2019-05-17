@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_IO_TYPES_H
 
 #include "include/int_types.h"
+#include "osdc/StriperTypes.h"
 #include <map>
 #include <vector>
 
@@ -74,6 +75,10 @@ enum {
   OBJECT_DISPATCH_FLAG_FLUSH                    = 1UL << 0,
   OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1
 };
+
+using striper::LightweightBufferExtents;
+using striper::LightweightObjectExtent;
+using striper::LightweightObjectExtents;
 
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 typedef std::map<uint64_t, uint64_t> ExtentMap;
