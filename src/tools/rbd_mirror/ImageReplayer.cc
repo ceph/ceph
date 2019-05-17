@@ -441,8 +441,6 @@ void ImageReplayer<I>::prepare_remote_image() {
   journal::Settings journal_settings;
   journal_settings.commit_interval = cct->_conf.get_val<double>(
     "rbd_mirror_journal_commit_age");
-  journal_settings.max_fetch_bytes = cct->_conf.get_val<Option::size_t>(
-    "rbd_mirror_journal_max_fetch_bytes");
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
