@@ -86,18 +86,12 @@ class RGWGetBucketTags_ObjStore_S3 : public RGWGetBucketTags_ObjStore
 {
   bufferlist tags_bl;
 public:
-  RGWGetBucketTags_ObjStore_S3() = default;
-  ~RGWGetBucketTags_ObjStore_S3() = default;
-
   void send_response_data(bufferlist &bl) override;
 };
 
 class RGWPutBucketTags_ObjStore_S3 : public RGWPutBucketTags_ObjStore
 {
 public:
-  RGWPutBucketTags_ObjStore_S3() {}
-  ~RGWPutBucketTags_ObjStore_S3() {}
-
   int get_params() override;
   void send_response() override;
 };
@@ -105,7 +99,6 @@ public:
 class RGWDeleteBucketTags_ObjStore_S3 : public RGWDeleteBucketTags
 {
 public:
-  ~RGWDeleteBucketTags_ObjStore_S3() override {}
   void send_response() override;
 };
 
