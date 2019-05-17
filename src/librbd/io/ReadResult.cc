@@ -120,7 +120,7 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
 
 ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
     AioCompletion *aio_completion, uint64_t object_off, uint64_t object_len,
-    Extents&& buffer_extents)
+    LightweightBufferExtents&& buffer_extents)
   : aio_completion(aio_completion), object_off(object_off),
     object_len(object_len), buffer_extents(std::move(buffer_extents)) {
   aio_completion->add_request();
@@ -138,14 +138,15 @@ void ReadResult::C_ObjectReadRequest::finish(int r) {
     ldout(cct, 10) << " got " << extent_map
                    << " for " << buffer_extents
                    << " bl " << bl.length() << dendl;
-    // handle the case where a sparse-read wasn't issued
-    if (extent_map.empty()) {
-      extent_map[object_off] = bl.length();
-    }
-
     aio_completion->lock.lock();
-    aio_completion->read_result.m_destriper.add_partial_sparse_result(
-      cct, bl, extent_map, object_off, buffer_extents);
+    if (!extent_map.empty()) {
+      aio_completion->read_result.m_destriper.add_partial_sparse_result(
+        cct, bl, extent_map, object_off, buffer_extents);
+    } else {
+      // handle the case where a sparse-read wasn't issued
+      aio_completion->read_result.m_destriper.add_partial_result(
+        cct, std::move(bl), buffer_extents);
+    }
     aio_completion->lock.unlock();
 
     r = object_len;

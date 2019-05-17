@@ -40,13 +40,14 @@ public:
     AioCompletion *aio_completion;
     uint64_t object_off;
     uint64_t object_len;
-    Extents buffer_extents;
+    LightweightBufferExtents buffer_extents;
 
     bufferlist bl;
     ExtentMap extent_map;
 
     C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
-                        uint64_t object_len, Extents&& buffer_extents);
+                        uint64_t object_len,
+                        LightweightBufferExtents&& buffer_extents);
 
     void finish(int r) override;
   };

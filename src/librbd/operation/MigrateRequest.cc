@@ -118,8 +118,7 @@ private:
 
     if (is_within_overlap_bounds()) {
       bufferlist bl;
-      string oid = image_ctx.get_object_name(m_object_no);
-      auto req = new io::ObjectWriteRequest<I>(&image_ctx, oid, m_object_no, 0,
+      auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
                                                std::move(bl), m_snapc, 0, {},
                                                ctx);
 

@@ -29,15 +29,15 @@ template <typename I> class AbstractObjectWriteRequest;
 template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
 public:
-  static CopyupRequest* create(ImageCtxT *ictx, const std::string &oid,
-                               uint64_t objectno, Extents &&image_extents,
+  static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
+                               Extents &&image_extents,
                                const ZTracer::Trace &parent_trace) {
-    return new CopyupRequest(ictx, oid, objectno, std::move(image_extents),
+    return new CopyupRequest(ictx, objectno, std::move(image_extents),
                              parent_trace);
   }
 
-  CopyupRequest(ImageCtxT *ictx, const std::string &oid, uint64_t objectno,
-                Extents &&image_extents, const ZTracer::Trace &parent_trace);
+  CopyupRequest(ImageCtxT *ictx, uint64_t objectno, Extents &&image_extents,
+                const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
@@ -80,7 +80,6 @@ private:
   typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> WriteRequests;
 
   ImageCtxT *m_image_ctx;
-  std::string m_oid;
   uint64_t m_object_no;
   Extents m_image_extents;
   ZTracer::Trace m_trace;
