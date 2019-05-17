@@ -7,6 +7,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -54,7 +55,8 @@ export class RbdTrashListComponent implements OnInit {
     private cdDatePipe: CdDatePipe,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
 
@@ -62,13 +64,13 @@ export class RbdTrashListComponent implements OnInit {
       permission: 'update',
       icon: 'fa-undo',
       click: () => this.restoreModal(),
-      name: this.i18n('Restore')
+      name: this.actionLabels.RESTORE
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteModal(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [restoreAction, deleteAction];
   }
