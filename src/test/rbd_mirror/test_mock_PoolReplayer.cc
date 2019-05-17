@@ -110,6 +110,7 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
 
   static InstanceReplayer* create(Threads<librbd::MockTestImageCtx> *threads,
                                   ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
+                                  journal::CacheManagerHandler *cache_manager_handler,
                                   RadosRef rados, const std::string& uuid,
                                   int64_t pool_id) {
     ceph_assert(s_instance != nullptr);
@@ -428,7 +429,7 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockThreads mock_threads(m_threads);
-  MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon,
+  MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init();
 

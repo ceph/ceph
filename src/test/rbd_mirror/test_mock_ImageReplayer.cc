@@ -166,6 +166,7 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
                                            const journal::Settings &settings,
+                                           journal::CacheManagerHandler *cache_manager_handler,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
                                            ::journal::MockJournalerProxy **remote_journaler,
@@ -602,7 +603,7 @@ public:
 
   void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
-      &mock_threads, &m_instance_watcher,
+      &mock_threads, &m_instance_watcher, nullptr,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
       "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
     m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
