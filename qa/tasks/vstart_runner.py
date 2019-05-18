@@ -242,8 +242,11 @@ class LocalRemote(object):
 
         # We'll let sudo be a part of command even omit flag says otherwise in
         # cases of commands which can normally be ran only by root.
+        cmds_that_need_root_access = ['-u', 'useradd', 'passwd', 'usermod',
+                                      'userdel', 'groupadd', 'groupmod',
+                                      'groupdel', 'chown']
         try:
-            if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
+            if args[args.index('sudo') + 1] in cmds_that_need_root_access:
                 omit_sudo = False
         except ValueError:
             pass
