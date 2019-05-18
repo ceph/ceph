@@ -32,6 +32,7 @@ class TestVolumeClient(CephFSTestCase):
 from __future__ import print_function
 from ceph_volume_client import CephFSVolumeClient, VolumePath
 import logging
+from rados import OSError as rados_OSError
 log = logging.getLogger("ceph_volume_client")
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.DEBUG)
@@ -995,14 +996,19 @@ vc.disconnect()
 
         # Test if put_object_versioned() crosschecks the version of the
         # given object. Being a negative test, an exception is expected.
-        with self.assertRaises(CommandFailedError):
-            self._volume_client_python(vc_mount, dedent("""
-                data, version = vc.get_object_and_version("{pool_name}", "{obj_name}")
-                data += 'm1'
-                vc.put_object("{pool_name}", "{obj_name}", data)
-                data += 'm2'
-                vc.put_object_versioned("{pool_name}", "{obj_name}", data, version)
-            """).format(pool_name=pool_name, obj_name=obj_name))
+        expected_exception = 'rados_OSError'
+        output = self._volume_client_python(vc_mount, dedent("""
+                    data, version = vc.get_object_and_version("{pool_name}", "{obj_name}")
+                    data += 'm1'
+                    vc.put_object("{pool_name}", "{obj_name}", data)
+                    data += 'm2'
+                    try:
+                        vc.put_object_versioned("{pool_name}", "{obj_name}", data, version)
+                    except {expected_exception}:
+                        print('{expected_exception} raised')
+                """).format(pool_name=pool_name, obj_name=obj_name,
+                            expected_exception=expected_exception))
+        self.assertEqual(expected_exception + ' raised', output)
 
     def test_delete_object(self):
         vc_mount = self.mounts[1]
