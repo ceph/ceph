@@ -104,6 +104,31 @@ seastar::future<> CyanStore::mkfs()
   return seastar::now();
 }
 
+seastar::future<std::vector<ghobject_t>, ghobject_t>
+CyanStore::list_objects(CollectionRef c,
+                        const ghobject_t& start,
+                        const ghobject_t& end,
+                        uint64_t limit)
+{
+  logger().debug("{} {} {} {} {}",
+                 __func__, c->cid, start, end, limit);
+  std::vector<ghobject_t> objects;
+  objects.reserve(limit);
+  ghobject_t next = ghobject_t::get_max();
+  for (const auto& [oid, obj] :
+         boost::make_iterator_range(c->object_map.lower_bound(start),
+                                    c->object_map.end())) {
+    std::ignore = obj;
+    if (oid >= end || objects.size() >= limit) {
+      next = oid;
+      break;
+    }
+    objects.push_back(oid);
+  }
+  return seastar::make_ready_future<std::vector<ghobject_t>, ghobject_t>(
+    std::move(objects), next);
+}
+
 CyanStore::CollectionRef CyanStore::create_new_collection(const coll_t& cid)
 {
   auto c = new Collection{cid};
@@ -217,6 +242,12 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     switch (op->op) {
     case Transaction::OP_NOP:
       break;
+    case Transaction::OP_REMOVE:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        r = _remove(cid, oid);
+      }
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -271,6 +302,23 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     }
   }
   return seastar::now();
+}
+
+int CyanStore::_remove(const coll_t& cid, const ghobject_t& oid)
+{
+  logger().debug("{} cid={} oid={}",
+                __func__, cid, oid);
+  auto c = open_collection(cid);
+  if (!c)
+    return -ENOENT;
+
+  auto i = c->object_hash.find(oid);
+  if (i == c->object_hash.end())
+    return -ENOENT;
+  used_bytes -= i->second->get_size();
+  c->object_hash.erase(i);
+  c->object_map.erase(oid);
+  return 0;
 }
 
 int CyanStore::_touch(const coll_t& cid, const ghobject_t& oid)
