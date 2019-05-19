@@ -148,12 +148,17 @@ namespace PriorityCache
     logger->set(MallocStats::M_CACHE_BYTES, new_size);
   }
 
-  void Manager::insert(const std::string& name, std::shared_ptr<PriCache> c)
+  void Manager::insert(const std::string& name, std::shared_ptr<PriCache> c,
+                       bool enable_perf_counters)
   {
     ceph_assert(!caches.count(name));
     ceph_assert(!indexes.count(name));
 
     caches.emplace(name, c);
+
+    if (!enable_perf_counters) {
+      return;
+    }
 
     // TODO: If we ever assign more than
     // PERF_COUNTER_MAX_BOUND - PERF_COUNTER_LOWER_BOUND perf counters for
@@ -282,25 +287,29 @@ namespace PriorityCache
       balance_priority(&mem_avail, pri);
 
       // Update the per-priority perf counters
-      for (auto it = caches.begin(); it != caches.end(); it++) {
+      for (auto &l : loggers) {
+        auto it = caches.find(l.first);
+        ceph_assert(it != caches.end());
+
         auto bytes = it->second->get_cache_bytes(pri);
-        auto l = loggers.find(it->first);
-        l->second->set(indexes[it->first][pri], bytes);
+        l.second->set(indexes[it->first][pri], bytes);
       }
     }
     // assert if we assigned more memory than is available.
     ceph_assert(mem_avail >= 0);
 
-    for (auto it = caches.begin(); it != caches.end(); it++) {
+    for (auto &l : loggers) {
+      auto it = caches.find(l.first);
+      ceph_assert(it != caches.end());
+
       // Commit the new cache size
       int64_t committed = it->second->commit_cache_size(tuned_mem);
 
       // Update the perf counters
       int64_t alloc = it->second->get_cache_bytes();
 
-      auto l = loggers.find(it->first);
-      l->second->set(indexes[it->first][Extra::E_RESERVED], committed - alloc);
-      l->second->set(indexes[it->first][Extra::E_COMMITTED], committed);
+      l.second->set(indexes[it->first][Extra::E_RESERVED], committed - alloc);
+      l.second->set(indexes[it->first][Extra::E_COMMITTED], committed);
     }
   }
 
