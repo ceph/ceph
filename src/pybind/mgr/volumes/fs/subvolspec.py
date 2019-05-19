@@ -30,6 +30,20 @@ class SubvolumeSpec(object):
         return self.groupid == SubvolumeSpec.NO_GROUP_NAME
 
     @property
+    def subvolume_id(self):
+        """
+        Return the subvolume-id from the subvolume specification
+        """
+        return self.subvolumeid
+
+    @property
+    def group_id(self):
+        """
+        Return the group-id from the subvolume secification
+        """
+        return self.groupid
+
+    @property
     def subvolume_path(self):
         """
         return the subvolume path from subvolume specification
