@@ -41,6 +41,9 @@ public:
 				   size_t truncate_size,
 				   uint32_t truncate_seq,
 				   uint32_t flags);
+  seastar::future<> remove(
+    ObjectState& os,
+    ceph::os::Transaction& txn);
   seastar::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -49,6 +52,9 @@ public:
     cached_os_t&& os,
     ceph::os::Transaction&& txn,
     const MOSDOp& m);
+  seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
+    const hobject_t& start,
+    uint64_t limit);
 
 protected:
   const shard_id_t shard;

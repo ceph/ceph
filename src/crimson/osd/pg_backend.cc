@@ -1,6 +1,9 @@
 #include "pg_backend.h"
 
 #include <optional>
+#include <boost/range/adaptor/filtered.hpp>
+#include <boost/range/adaptor/transformed.hpp>
+#include <boost/range/algorithm/copy.hpp>
 #include <fmt/ostream.h>
 #include <seastar/core/print.hh>
 
@@ -270,4 +273,47 @@ seastar::future<> PGBackend::writefull(
     os.oi.size = op.extent.length;
   }
   return seastar::now();
+}
+
+seastar::future<> PGBackend::remove(ObjectState& os,
+                                    ceph::os::Transaction& txn)
+{
+  // todo: snapset
+  txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+  os.oi.size = 0;
+  os.oi.new_object();
+  // todo: update watchers
+  if (os.oi.is_whiteout()) {
+    os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+  }
+  return seastar::now();
+}
+
+seastar::future<std::vector<hobject_t>, hobject_t>
+PGBackend::list_objects(const hobject_t& start, uint64_t limit)
+{
+  auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
+  return store->list_objects(coll,
+                             gstart,
+                             ghobject_t::get_max(),
+                             limit)
+    .then([this](std::vector<ghobject_t> gobjects, ghobject_t next) {
+      std::vector<hobject_t> objects;
+      boost::copy(gobjects |
+        boost::adaptors::filtered([](const ghobject_t& o) {
+          if (o.is_pgmeta()) {
+            return false;
+          } else if (o.hobj.is_temp()) {
+            return false;
+          } else {
+            return o.is_no_gen();
+          }
+        }) |
+        boost::adaptors::transformed([](const ghobject_t& o) {
+          return o.hobj;
+        }),
+        std::back_inserter(objects));
+      return seastar::make_ready_future<std::vector<hobject_t>, hobject_t>(
+        objects, next.hobj);
+    });
 }
