@@ -6,10 +6,12 @@ LGPL2.1.  See file COPYING.
 
 import logging
 import os
+import errno
 
 import cephfs
 
 from .subvolspec import SubvolumeSpec
+from .exception import VolumeException
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,8 @@ class SubVolume(object):
                 self.fs.stat(subpath)
             except cephfs.ObjectNotFound:
                 self.fs.mkdir(subpath, mode)
+            except cephfs.Error as e:
+                raise VolumeException(e.args[0], e.args[1])
 
     ### basic subvolume operations
 
@@ -91,13 +95,14 @@ class SubVolume(object):
         # TODO: handle error...
         self.fs.setxattr(subvolpath, xattr_key, xattr_val.encode('utf-8'), 0)
 
-    def remove_subvolume(self, spec):
+    def remove_subvolume(self, spec, force):
         """
         Make a subvolume inaccessible to guests.  This function is idempotent.
         This is the fast part of tearing down a subvolume: you must also later
         call purge_subvolume, which is the slow part.
 
         :param spec: subvolume path specification
+        :param force: flag to ignore non-existent path (never raise exception)
         :return: None
         """
 
@@ -109,7 +114,14 @@ class SubVolume(object):
         self._mkdir_p(trashdir)
 
         trashpath = spec.trash_path
-        self.fs.rename(subvolpath, trashpath)
+        try:
+            self.fs.rename(subvolpath, trashpath)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(
+                    -errno.ENOENT, "Subvolume '{0}' not found, cannot remove it".format(spec.subvolume_id))
+        except cephfs.Error as e:
+            raise VolumeException(e.args[0], e.args[1])
 
     def purge_subvolume(self, spec):
         """
@@ -123,6 +135,8 @@ class SubVolume(object):
                 dir_handle = self.fs.opendir(root_path)
             except cephfs.ObjectNotFound:
                 return
+            except cephfs.Error as e:
+                raise VolumeException(e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
             while d:
                 d_name = d.d_name.decode('utf-8')
@@ -149,6 +163,8 @@ class SubVolume(object):
             self.fs.stat(path)
         except cephfs.ObjectNotFound:
             return None
+        except cephfs.Error as e:
+            raise VolumeException(e.args[0]. e.args[1])
         return path
 
     ### group operations
@@ -157,9 +173,15 @@ class SubVolume(object):
         path = spec.group_path
         self._mkdir_p(path, mode)
 
-    def remove_group(self, spec):
+    def remove_group(self, spec, force):
         path = spec.group_path
-        self.fs.rmdir(path)
+        try:
+            self.fs.rmdir(path)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(-errno.ENOENT, "Subvolume group '{0}' not found".format(spec.group_id))
+        except cephfs.Error as e:
+            raise VolumeException(e.args[0], e.args[1])
 
     def get_group_path(self, spec):
         path = spec.group_path
@@ -197,31 +219,39 @@ class SubVolume(object):
             self.fs.stat(snappath)
         except cephfs.ObjectNotFound:
             self.fs.mkdir(snappath, mode)
+        except cephfs.Error as e:
+            raise VolumeException(e.args[0], e.args[1])
         else:
             log.warn("Snapshot '{0}' already exists".format(snappath))
 
-    def _snapshot_delete(self, snappath):
+    def _snapshot_delete(self, snappath, force):
         """
         Remove a snapshot, or do nothing if it doesn't exist.
         """
-        self.fs.stat(snappath)
-        self.fs.rmdir(snappath)
+        try:
+            self.fs.stat(snappath)
+            self.fs.rmdir(snappath)
+        except cephfs.ObjectNotFound:
+            if not force:
+                raise VolumeException(-errno.ENOENT, "Snapshot '{0}' not found, cannot remove it".format(snappath))
+        except cephfs.Error as e:
+            raise VolumeException(e.args[0], e.args[1])
 
     def create_subvolume_snapshot(self, spec, snapname, mode=0o755):
         snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
         self._snapshot_create(snappath, mode)
 
-    def remove_subvolume_snapshot(self, spec, snapname):
+    def remove_subvolume_snapshot(self, spec, snapname, force):
         snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
-        self._snapshot_delete(snappath)
+        self._snapshot_delete(snappath, force)
 
     def create_group_snapshot(self, spec, snapname, mode=0o755):
         snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
         self._snapshot_create(snappath, mode)
 
-    def remove_group_snapshot(self, spec, snapname):
+    def remove_group_snapshot(self, spec, snapname, force):
         snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
-        return self._snapshot_delete(snappath)
+        return self._snapshot_delete(snappath, force)
 
     ### context manager routines
 
