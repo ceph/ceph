@@ -3552,9 +3552,9 @@ void *BlueStore::MempoolThread::entry()
   if (store->cache_autotune && binned_kv_cache != nullptr) {
     pcm = std::make_shared<PriorityCache::Manager>(
         store->cct, min, max, target, true);
-    pcm->insert("kv", binned_kv_cache);
-    pcm->insert("meta", meta_cache);
-    pcm->insert("data", data_cache);
+    pcm->insert("kv", binned_kv_cache, true);
+    pcm->insert("meta", meta_cache, true);
+    pcm->insert("data", data_cache, true);
   }
 
   utime_t next_balance = ceph_clock_now();

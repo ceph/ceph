@@ -134,7 +134,8 @@ namespace PriorityCache {
     uint64_t get_tuned_mem() const {
       return tuned_mem;
     }
-    void insert(const std::string& name, const std::shared_ptr<PriCache> c);
+    void insert(const std::string& name, const std::shared_ptr<PriCache> c,
+                bool enable_perf_counters);
     void erase(const std::string& name);
     void clear();
     void tune_memory();
