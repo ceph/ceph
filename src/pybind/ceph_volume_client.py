@@ -288,7 +288,7 @@ class CephFSVolumeClient(object):
             # Identify auth IDs from auth meta filenames. The auth meta files
             # are named as, "$<auth_id><meta filename extension>"
             regex = "^\$(.*){0}$".format(re.escape(META_FILE_EXT))
-            match = re.search(regex, d.d_name)
+            match = re.search(regex, d.d_name.decode(encoding='utf-8'))
             if match:
                 auth_ids.append(match.group(1))
 
@@ -725,11 +725,12 @@ class CephFSVolumeClient(object):
             dir_handle = self.fs.opendir(root_path)
             d = self.fs.readdir(dir_handle)
             while d:
-                if d.d_name not in [".", ".."]:
+                d_name = d.d_name.decode(encoding='utf-8')
+                if d_name not in [".", ".."]:
                     # Do not use os.path.join because it is sensitive
                     # to string encoding, we just pass through dnames
                     # as byte arrays
-                    d_full = "{0}/{1}".format(root_path, d.d_name)
+                    d_full = u"{0}/{1}".format(root_path, d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
