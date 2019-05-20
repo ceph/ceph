@@ -433,7 +433,7 @@
           <!-- Maximum size -->
           <div class="form-group"
                [ngClass]="{'has-error': userForm.showError('user_quota_max_size', frm)}"
-               *ngIf="!userForm.getValue('user_quota_max_size_unlimited')">
+               *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
                    for="user_quota_max_size">
               <ng-container i18n>Max. size</ng-container>
@@ -471,7 +471,7 @@
           <!-- Maximum objects -->
           <div class="form-group"
                [ngClass]="{'has-error': userForm.showError('user_quota_max_objects', frm)}"
-               *ngIf="!userForm.getValue('user_quota_max_objects_unlimited')">
+               *ngIf="userForm.controls.user_quota_enabled.value && !userForm.getValue('user_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
                    for="user_quota_max_objects">
               <ng-container i18n>Max. objects</ng-container>
@@ -526,7 +526,7 @@
           <!-- Maximum size -->
           <div class="form-group"
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_size', frm)}"
-               *ngIf="!userForm.getValue('bucket_quota_max_size_unlimited')">
+               *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
                    for="bucket_quota_max_size">
               <ng-container i18n>Max. size</ng-container>
@@ -564,7 +564,7 @@
           <!-- Maximum objects -->
           <div class="form-group"
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_objects', frm)}"
-               *ngIf="!userForm.getValue('bucket_quota_max_objects_unlimited')">
+               *ngIf="userForm.controls.bucket_quota_enabled.value && !userForm.getValue('bucket_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
                    for="bucket_quota_max_objects">
               <ng-container i18n>Max. objects</ng-container>
