@@ -94,6 +94,7 @@ static CephContext *rados_create_cct(const char * const clustername,
     cct->_conf->cluster = clustername;
   cct->_conf.parse_env(cct->get_module_type()); // environment variables override
   cct->_conf.apply_changes(nullptr);
+  cct->_log->start();
 
   TracepointProvider::initialize<tracepoint_traits>(cct);
   return cct;
