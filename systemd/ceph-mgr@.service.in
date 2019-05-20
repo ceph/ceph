@@ -12,7 +12,11 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
 LockPersonality=true
-MemoryDenyWriteExecute=true
+
+# We need to disable this protection as some python libraries generate
+# dynamic code, like python-cffi, and require mmap calls to succeed
+MemoryDenyWriteExecute=false
+
 NoNewPrivileges=true
 PrivateDevices=yes
 ProtectControlGroups=true
