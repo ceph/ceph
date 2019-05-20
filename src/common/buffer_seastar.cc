@@ -31,10 +31,6 @@ class raw_seastar_foreign_ptr : public raw {
   }
 };
 
-raw* create_foreign(temporary_buffer&& buf) {
-  return new raw_seastar_foreign_ptr(std::move(buf));
-}
-
 class raw_seastar_local_ptr : public raw {
   temporary_buffer buf;
  public:
@@ -45,9 +41,17 @@ class raw_seastar_local_ptr : public raw {
   }
 };
 
+inline namespace v14_2_0 {
+
+raw* create_foreign(temporary_buffer&& buf) {
+  return new raw_seastar_foreign_ptr(std::move(buf));
+}
+
 raw* create(temporary_buffer&& buf) {
   return new raw_seastar_local_ptr(std::move(buf));
 }
+
+} // inline namespace v14_2_0
 
 // buffer::ptr conversions
 

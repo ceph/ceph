@@ -102,6 +102,8 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 };
 
 namespace buffer CEPH_BUFFER_API {
+inline namespace v14_2_0 {
+
   /*
    * exceptions
    */
@@ -180,8 +182,6 @@ namespace buffer CEPH_BUFFER_API {
   /// destructed on this cpu
   raw* create(seastar::temporary_buffer<char>&& buf);
 #endif
-
-inline namespace v14_2_0 {
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -1302,7 +1302,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
-std::ostream& operator<<(std::ostream& out, const raw &r);
+std::ostream& operator<<(std::ostream& out, const buffer::raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
