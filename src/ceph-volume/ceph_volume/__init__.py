@@ -14,7 +14,8 @@ class UnloadedConfig(object):
     def __getattr__(self, *a):
         raise RuntimeError("No valid ceph configuration file was loaded.")
 
-conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path'])
+conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path',
+                             'osd_root'])
 conf.ceph = UnloadedConfig()
 
 __version__ = "1.0.0"

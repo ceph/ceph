@@ -3,7 +3,7 @@ from textwrap import dedent
 import logging
 from ceph_volume.util import system
 from ceph_volume.util.arg_validators import exclude_group_options
-from ceph_volume import decorators, terminal
+from ceph_volume import conf, decorators, terminal
 from .common import create_parser, rollback_osd
 from .prepare import Prepare
 from .activate import Activate
@@ -33,7 +33,7 @@ class Create(object):
         except Exception:
             logger.exception('lvm activate was unable to complete, while creating the OSD')
             logger.info('will rollback OSD ID creation')
-            rollback_osd(args, osd_id)
+            rollback_osd(args, self.bstrap_keyring, osd_id)
             raise
         terminal.success("ceph-volume lvm create successful for: %s" % args.data)
 
@@ -62,6 +62,10 @@ class Create(object):
             return
         exclude_group_options(parser, groups=['filestore', 'bluestore'], argv=self.argv)
         args = parser.parse_args(self.argv)
+        if "%s" in args.bootstrap_keyring:
+          self.bstrap_keyring = args.bootstrap_keyring % conf.cluster
+        else:
+          self.bstrap_keyring = args.bootstrap_keyring
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
         if not args.bluestore and not args.filestore:

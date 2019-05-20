@@ -36,7 +36,8 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     :param keyring_name: Alternative keyring name, for supporting other
                          types of keys like for lockbox
     """
-    osd_keyring = '/var/lib/ceph/osd/%s-%s/%s' % (conf.cluster, osd_id, keyring_name)
+    osd_keyring = os.path.join(conf.osd_root,
+                               '%s-%s/%s' % (conf.cluster, osd_id, keyring_name))
     name = name or 'osd.%s' % str(osd_id)
     process.run(
         [
@@ -139,7 +140,7 @@ def get_block_wal_size(lv_format=True):
     return wal_size
 
 
-def create_id(fsid, json_secrets, osd_id=None):
+def create_id(fsid, json_secrets, keyring, osd_id=None):
     """
     :param fsid: The osd fsid to create, always required
     :param json_secrets: a json-ready object with whatever secrets are wanted
@@ -147,17 +148,16 @@ def create_id(fsid, json_secrets, osd_id=None):
     :param osd_id: Reuse an existing ID from an OSD that's been destroyed, if the
                    id does not exist in the cluster a new ID will be created
     """
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     cmd = [
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
+        '--keyring', keyring,
         '-i', '-',
         'osd', 'new', fsid
     ]
     if osd_id is not None:
-        if osd_id_available(osd_id):
+        if osd_id_available(keyring, osd_id):
             cmd.append(osd_id)
         else:
             raise RuntimeError("The osd ID {} is already in use or does not exist.".format(osd_id))
@@ -171,7 +171,7 @@ def create_id(fsid, json_secrets, osd_id=None):
     return ' '.join(stdout).strip()
 
 
-def osd_id_available(osd_id):
+def osd_id_available(keyring, osd_id):
     """
     Checks to see if an osd ID exists and if it's available for
     reuse. Returns True if it is, False if it isn't.
@@ -180,13 +180,12 @@ def osd_id_available(osd_id):
     """
     if osd_id is None:
         return False
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
             'ceph',
             '--cluster', conf.cluster,
             '--name', 'client.bootstrap-osd',
-            '--keyring', bootstrap_keyring,
+            '--keyring', keyring,
             'osd',
             'tree',
             '-f', 'json',
@@ -217,8 +216,9 @@ def mount_tmpfs(path):
 
 
 def create_osd_path(osd_id, tmpfs=False):
-    path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
-    system.mkdir_p('/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id))
+    path = os.path.join(conf.osd_root,'%s-%s' % (conf.cluster, osd_id))
+    system.mkdir_p(os.path.join(conf.osd_root,
+                                '%s-%s' % (conf.cluster, osd_id)))
     if tmpfs:
         mount_tmpfs(path)
 
@@ -299,7 +299,7 @@ def mount_osd(device, osd_id, **kw):
     is_vdo = kw.get('is_vdo', '0')
     if is_vdo == '1':
         extras = ['discard']
-    destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    destination = os.path.join(conf.osd_root,'%s-%s' % (conf.cluster, osd_id))
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
         'osd',
@@ -324,11 +324,11 @@ def _link_device(device, device_type, osd_id):
     source, with an absolute path and ``device_type`` will be the destination
     name, like 'journal', or 'block'
     """
-    device_path = '/var/lib/ceph/osd/%s-%s/%s' % (
+    device_path = os.path.join(conf.osd_root,'%s-%s/%s' % (
         conf.cluster,
         osd_id,
         device_type
-    )
+    ))
     command = ['ln', '-s', device, device_path]
     system.chown(device)
 
@@ -351,7 +351,7 @@ def link_db(db_device, osd_id):
     _link_device(db_device, 'block.db', osd_id)
 
 
-def get_monmap(osd_id):
+def get_monmap(keyring, osd_id):
     """
     Before creating the OSD files, a monmap needs to be retrieved so that it
     can be used to tell the monitor(s) about the new OSD. A call will look like::
@@ -360,15 +360,14 @@ def get_monmap(osd_id):
              --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring \
              mon getmap -o /var/lib/ceph/osd/ceph-0/activate.monmap
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    path = os.path.join(conf.osd_root, '%s-%s/' % (conf.cluster, osd_id))
     monmap_destination = os.path.join(path, 'activate.monmap')
 
     process.run([
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
+        '--keyring', keyring,
         'mon', 'getmap', '-o', monmap_destination
     ])
 
@@ -387,7 +386,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     In some cases it is required to use the keyring, when it is passed in as
     a keyword argument it is used as part of the ceph-osd command
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    path = os.path.join(conf.osd_root,'%s-%s/' % (conf.cluster, osd_id))
     monmap = os.path.join(path, 'activate.monmap')
 
     system.chown(path)
@@ -443,7 +442,7 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
                    --setuser ceph --setgroup ceph
 
     """
-    path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
+    path = os.path.join(conf.osd_root, '%s-%s/' % (conf.cluster, osd_id))
     monmap = os.path.join(path, 'activate.monmap')
     journal = os.path.join(path, 'journal')
 

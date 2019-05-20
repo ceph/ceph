@@ -4,7 +4,7 @@ from ceph_volume import terminal
 import argparse
 
 
-def rollback_osd(args, osd_id=None):
+def rollback_osd(args, keyring, osd_id=None):
     """
     When the process of creating or preparing fails, the OSD needs to be
     destroyed so that the ID cane be reused.  This is prevents leaving the ID
@@ -21,12 +21,11 @@ def rollback_osd(args, osd_id=None):
     # once here, this is an error condition that needs to be rolled back
     terminal.error('Was unable to complete a new OSD, will rollback changes')
     osd_name = 'osd.%s'
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     cmd = [
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
+        '--keyring', keyring,
         'osd', 'purge-new', osd_name % osd_id,
         '--yes-i-really-mean-it',
     ]
@@ -117,6 +116,11 @@ def common_parser(prog, description):
         dest='no_systemd',
         action='store_true',
         help='Skip creating and enabling systemd units and starting OSD services when activating',
+    )
+    parser.add_argument(
+        '--bootstrap-keyring',
+        default='/var/lib/ceph/bootstrap-osd/%s.keyring',
+        help='Change the bootstrap keyring path (defaults to /var/lib/ceph/bootstrap-osd)',
     )
 
     # Do not parse args, so that consumers can do something before the args get

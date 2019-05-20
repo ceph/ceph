@@ -59,7 +59,7 @@ def activate_filestore(lvs, no_systemd=False):
         source = osd_lv.lv_path
 
     # mount the osd
-    destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    destination = os.path.join(conf.osd_root, '%s-%s' % (conf.cluster, osd_id))
     if not system.device_is_mounted(source, destination=destination):
         prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
 
@@ -68,7 +68,7 @@ def activate_filestore(lvs, no_systemd=False):
 
     # always re-do the symlink regardless if it exists, so that the journal
     # device path that may have changed can be mapped correctly every time
-    destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
+    destination = os.path.join(conf.osd_root, '%s-%s/journal' % (conf.cluster, osd_id))
     process.run(['ln', '-snf', osd_journal, destination])
 
     # make sure that the journal has proper permissions
@@ -131,7 +131,7 @@ def activate_bluestore(lvs, no_systemd=False):
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
 
     # mount on tmpfs the osd directory
-    osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    osd_path = os.path.join(conf.osd_root, '%s-%s' % (conf.cluster, osd_id))
     if not system.path_is_mounted(osd_path):
         # mkdir -p and mount as tmpfs
         prepare_utils.create_osd_path(osd_id, tmpfs=True)

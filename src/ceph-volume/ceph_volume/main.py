@@ -126,8 +126,14 @@ Ceph Conf: {ceph_path}
             default='/var/log/ceph/',
             help='Change the log path (defaults to /var/log/ceph)',
         )
+        parser.add_argument(
+            '--osd-root',
+            default='/var/lib/ceph/osd',
+            help='Change the osd mount point location (defaults to /var/lib/ceph/osd)',
+        )
         args = parser.parse_args(main_args)
         conf.log_path = args.log_path
+        conf.osd_root = args.osd_root
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
         log.setup()
