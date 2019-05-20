@@ -960,14 +960,13 @@ void ImageReplayer<I>::handle_replay_complete(int r, const std::string &error_de
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "replay encountered an error: " << cpp_strerror(r) << dendl;
-    set_state_description(r, error_desc);
   }
 
   {
     Mutex::Locker locker(m_lock);
     m_stop_requested = true;
   }
-  on_replay_interrupted();
+  on_stop_journal_replay(r, error_desc);
 }
 
 template <typename I>
