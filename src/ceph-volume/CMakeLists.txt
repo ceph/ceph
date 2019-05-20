@@ -7,6 +7,8 @@ if(FREEBSD)
   add_subdirectory(plugin/zfs)
 endif()
 
+add_subdirectory(plugin/lvmcache)
+
 # Required for running ceph-volume inventory in a vstart environment
 set(CEPH_VOLUME_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-volume-virtualenv)
 

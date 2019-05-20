@@ -3,7 +3,7 @@
 
 """The setup script."""
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 requirements = [ ]
 
@@ -15,7 +15,12 @@ setup(
     description="Manage an LVM cache layer in front of OSDs",
     install_requires=requirements,
     license="BSD license",
-    url='https://github.com/ceph/ceph/src/ceph-volume/plugin/lvmcache',
+    include_package_data=True,
+    keywords='ceph-lvmcache',
+    name='ceph-lvmcache',
+    packages=find_packages(include=['ceph_volume_lvmcache']),
+    setup_requires=setup_requirements,
+    url='https://github.com/SUSE/ceph/tree/master/src/ceph-volume/plugin/lvmcache',
     version='0.1.0',
     zip_safe=False,
     entry_points = dict(

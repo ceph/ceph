@@ -1388,10 +1388,14 @@ rm -rf %{buildroot}
 %dir %{python_sitelib}/ceph_volume
 %{python_sitelib}/ceph_volume/*
 %{python_sitelib}/ceph_volume-*
+%{python_sitelib}/ceph_lvm*
+%{python_sitelib}/ceph_volume_lvm*
 %else
 %dir %{python3_sitelib}/ceph_volume
 %{python3_sitelib}/ceph_volume/*
 %{python3_sitelib}/ceph_volume-*
+%{python3_sitelib}/ceph_lvm*
+%{python3_sitelib}/ceph_volume_lvm*
 %endif
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-create-keys.8*
