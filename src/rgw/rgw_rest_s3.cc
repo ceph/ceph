@@ -4504,9 +4504,14 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
     ldout(cct, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;
   } else {
-    dec_output.append('\0');
-    auto iter = dec_output.cbegin();
-    decode(token, iter);
+    try {
+      dec_output.append('\0');
+      auto iter = dec_output.cbegin();
+      decode(token, iter);
+    } catch (const buffer::error& e) {
+      ldout(cct, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      return -EINVAL;
+    }
   }
   return 0;
 }
