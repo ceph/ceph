@@ -247,6 +247,8 @@ BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
 BuildRequires:	liblz4-devel >= 1.7
+# for prometheus-alerts
+BuildRequires:  golang-github-prometheus-prometheus
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -1058,6 +1060,15 @@ collecting data from Ceph Manager "prometheus" module and Prometheus
 project "node_exporter" module. The dashboards are designed to be
 integrated with the Ceph Manager Dashboard web UI.
 
+%if 0%{?suse_version}
+%package prometheus-alerts
+Summary:        Prometheus alerts for a Ceph deplyoment
+BuildArch:      noarch
+Group:          System/Monitoring
+%description prometheus-alerts
+This package provides Ceph’s default alerts for Prometheus.
+%endif
+
 #################################################################################
 # common
 #################################################################################
@@ -1245,6 +1256,8 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
 %py3_compile %{buildroot}%{python3_sitelib}
+# prometheus alerts
+install -m 644 -D monitoring/prometheus/alerts/ceph_default_alerts.yml %{buildroot}/etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
 %endif
 %if 0%{?rhel} == 8
 %py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
@@ -2246,6 +2259,13 @@ exit 0
 %config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
 %doc monitoring/grafana/dashboards/README
 %doc monitoring/grafana/README.md
+
+%if 0%{?suse_version}
+%files prometheus-alerts
+%dir /etc/prometheus/SUSE/
+%dir /etc/prometheus/SUSE/default_rules/
+%config /etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
+%endif
 
 
 %changelog
