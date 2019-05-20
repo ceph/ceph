@@ -85,8 +85,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"
 #define RGW_ATTR_OBJECT_RETENTION   RGW_ATTR_PREFIX "object-retention"
 #define RGW_ATTR_OBJECT_LEGAL_HOLD  RGW_ATTR_PREFIX "object-legal-hold"
-#define RGW_ATTR_OBJECT_LOCK_MODE   RGW_ATTR_PREFIX "object-lock-mode"
-#define RGW_ATTR_OBJECT_LOCK_UNTIL_DATE    RGW_ATTR_PREFIX "object-lock-until-date"
 
 
 #define RGW_ATTR_PG_VER 	RGW_ATTR_PREFIX "pg_ver"
@@ -218,7 +216,6 @@ using ceph::crypto::MD5;
 #define ERR_MFA_REQUIRED         2044
 #define ERR_NO_SUCH_CORS_CONFIGURATION 2045
 #define ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION  2046
-#define ERR_INVALID_BUCKET_STATE 2047
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201

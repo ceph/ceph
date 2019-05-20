@@ -329,12 +329,11 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
         }
         dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
-      } else if (iter->first.compare(RGW_ATTR_OBJECT_LOCK_MODE) == 0 && get_retention) {
-        dump_header(s, "x-amz-object-lock-mode", iter->second.to_str());
-      } else if (iter->first.compare(RGW_ATTR_OBJECT_LOCK_UNTIL_DATE) == 0 && get_retention) {
-        real_time lock_until_date;
-        decode(lock_until_date, iter->second);
-        dump_time_header(s, "x-amz-object-lock-retain-until-date", lock_until_date);
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_RETENTION) == 0 && get_retention){
+        RGWObjectRetention retention;
+        decode(retention, iter->second);
+        dump_header(s, "x-amz-object-lock-mode", retention.get_mode());
+        dump_time_header(s, "x-amz-object-lock-retain-until-date", retention.get_retain_until_date());
       }
     }
   }
@@ -1278,10 +1277,10 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   }
   auto iter = s->info.x_meta_map.find("x-amz-bucket-object-lock-enabled");
   if (iter != s->info.x_meta_map.end()) {
-    if ((iter->second.compare("true") != 0 && (iter->second.compare("false") != 0))) {
+    if (!boost::algorithm::iequals(iter->second, "true") && !boost::algorithm::iequals(iter->second, "false")) {
       return -EINVAL;
     }
-    obj_lock_enabled = iter->second.compare("true") == 0;
+    obj_lock_enabled = boost::algorithm::iequals(iter->second, "true");
   }
   return 0;
 }
