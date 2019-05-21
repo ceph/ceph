@@ -479,6 +479,7 @@ class RbdTest(DashboardTestCase):
         self._validate_image(img, features_name=["layering"])
         self.edit_image('rbd', 'edit_img',
                         features=["fast-diff", "object-map", "exclusive-lock"])
+        self.assertStatus(200)
         img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
@@ -486,6 +487,7 @@ class RbdTest(DashboardTestCase):
                                                  'object-map'])
         self.edit_image('rbd', 'edit_img',
                         features=["journaling", "exclusive-lock"])
+        self.assertStatus(200)
         img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
