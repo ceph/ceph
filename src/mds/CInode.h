@@ -627,7 +627,7 @@ public:
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
-  bool split_need_snapflush(CInode *cowin, CInode *in);
+  pair<bool,bool> split_need_snapflush(CInode *cowin, CInode *in);
 
 protected:
 
