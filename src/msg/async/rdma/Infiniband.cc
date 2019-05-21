@@ -921,11 +921,9 @@ void Infiniband::init()
     rx_queue_len = device->device_attr.max_qp_wr;
   if (rx_queue_len > cct->_conf->ms_async_rdma_receive_queue_len) {
     rx_queue_len = cct->_conf->ms_async_rdma_receive_queue_len;
-    ldout(cct, 1) << __func__ << " receive queue length is " << rx_queue_len << " receive buffers" << dendl;
+    ldout(cct, 1) << __func__ << " assigning: " << rx_queue_len << " receive buffers" << dendl;
   } else {
-    ldout(cct, 0) << __func__ << " requested receive queue length " <<
-                  cct->_conf->ms_async_rdma_receive_queue_len <<
-                  " is too big. Setting " << rx_queue_len << dendl;
+    ldout(cct, 0) << __func__ << " using the max allowed receive buffers: " << rx_queue_len << dendl;
   }
 
   // check for the misconfiguration
