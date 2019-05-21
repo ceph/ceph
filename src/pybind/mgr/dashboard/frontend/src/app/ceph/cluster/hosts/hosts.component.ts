@@ -80,7 +80,7 @@ export class HostsComponent implements OnInit {
       .then((resp) => {
         resp.map((host) => {
           host.services.map((service) => {
-            service.cdLink = `/perf_counters/${service.type}/${service.id}`;
+            service.cdLink = `/perf_counters/${service.type}/${encodeURIComponent(service.id)}`;
             const permission = this.permissions[typeToPermissionKey[service.type]];
             service.canRead = permission ? permission.read : false;
             return service;
