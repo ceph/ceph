@@ -254,6 +254,9 @@ class LocalRemote(object):
         errmsg = "Don't surround arguments commands by quotes if it " + \
                  "contains spaces.\nargs - %s" % (args)
         for arg in args:
+            if isinstance(arg, Raw):
+                continue
+
             if (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
                (arg.find(' ') != -1 and 0 < arg.find(' ') < len(arg) - 1):
                 raise RuntimeError(errmsg)
