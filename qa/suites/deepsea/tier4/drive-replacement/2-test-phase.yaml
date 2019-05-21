@@ -1,0 +1,8 @@
+tasks:
+    - ses_qa:
+    - ses_qa.validation:
+        drive_replace_initiate:
+    - deepsea.orch:
+        stage: 3
+    - ses_qa.validation:
+        drive_replace_check:

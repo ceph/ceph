@@ -16,6 +16,8 @@ from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 ses_qa_ctx = {}
+number_of_osds_in_cluster = """sudo ceph osd tree -f json-pretty |
+                               jq '[.nodes[] | select(.type == \"osd\")] | length'"""
 
 
 class SESQA(Task):
@@ -132,7 +134,7 @@ class Validation(SESQA):
             if not isinstance(kwargs, dict):
                 raise ConfigError(self.err_prefix + "Method config must be a dict")
             self.log.info(
-                "Running MGR plugin test {} with config ->{}<-"
+                "Running test {} with config ->{}<-"
                 .format(method_spec, kwargs)
                 )
             method = getattr(self, method_spec, None)
@@ -141,6 +143,36 @@ class Validation(SESQA):
             else:
                 raise ConfigError(self.err_prefix + "No such method ->{}<-"
                                   .format(method_spec))
+
+    def drive_replace_initiate(self, **kwargs):
+        """
+        Initiate Deepsea drive replacement
+
+        Assumes there is 1 drive not being deployed (1node5disks - with DriveGroup `limit: 4`)
+
+        In order to "hide" an existing disk from the ceph.c_v in teuthology
+        the disk is formatted and mounted.
+        """
+        # :TODO: make this random and find correct disk device
+        osd_id = "2"
+        total_osds = self.master_remote.sh(number_of_osds_in_cluster)
+        assert int(total_osds) == 4, "Unexpected number of osds {} (expected 4)".format(total_osds)
+        self.master_remote.sh("sudo ceph osd tree --format json | tee before.json")
+        self.master_remote.sh("sudo salt-run osd.replace {} 2>/dev/null".format(osd_id))
+        self.master_remote.sh("sudo mkfs.ext4 -F /dev/vdd; sudo mount /dev/vdd /mnt")
+        self.master_remote.sh("sudo salt-run disks.c_v_commands 2>/dev/null")
+        # Output is like: ceph-volume lvm batch --no-auto /dev/vdf --yes --osd-ids 2
+
+    def drive_replace_check(self, **kwargs):
+        """
+        Deepsea drive replacement after check
+
+        Replaced osd_id should be back in the osd tree once stage.3 is ran
+        """
+        total_osds = self.master_remote.sh(number_of_osds_in_cluster)
+        assert int(total_osds) == 4, "Unexpected number of osds {} (expected 4)".format(total_osds)
+        self.master_remote.sh("sudo ceph osd tree --format json | tee after.json")
+        self.master_remote.sh("diff before.json after.json && echo 'Drive Replaced OK'")
 
 
 task = SESQA
