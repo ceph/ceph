@@ -30,8 +30,6 @@ public:
 
 private:
   ImageCtxT *m_image_ctx;
-  std::string m_cache_path;
-  Mutex m_file_map_lock;
 };
 
 } // namespace cache

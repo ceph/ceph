@@ -9,7 +9,7 @@
 #include "include/Context.h"
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "test/immutable_object_cache/MockCacheDaemon.h"
-#include "librbd/cache/SharedReadOnlyObjectDispatch.h"
+#include "librbd/cache/ParentCacheObjectDispatch.h"
 #include "librbd/cache/SharedPersistentObjectCacher.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -33,9 +33,9 @@ struct MockParentImageCacheImageCtx : public MockImageCtx {
 
 };
 
-#include "librbd/cache/SharedReadOnlyObjectDispatch.cc"
+#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/cache/SharedPersistentObjectCacher.cc"
-template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient>;
+template class librbd::cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient>;
 template class librbd::cache::SharedPersistentObjectCacher<librbd::MockParentImageCacheImageCtx>;
 
 namespace librbd {
@@ -50,7 +50,7 @@ using ::testing::WithArgs;
 
 class TestMockParentImageCache : public TestMockFixture {
   public : 
-  typedef cache::SharedReadOnlyObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient> MockParentImageCache;
+  typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient> MockParentImageCache;
 
   // ====== mock cache client ==== 
   void expect_cache_run(MockParentImageCache& mparent_image_cache, bool ret_val) {
@@ -150,7 +150,7 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
   mock_parent_image_cache->init();
 
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
-            io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE);
+            io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), true);
 
@@ -179,7 +179,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
 
   // initialization fails.
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
-            io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE);
+            io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), false);
   ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), false);
 
@@ -212,7 +212,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   mock_parent_image_cache->init();
 
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
-            io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE);
+            io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), false);
   ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), false);
  
@@ -288,7 +288,7 @@ TEST_F(TestMockParentImageCache, test_read) {
   mock_parent_image_cache->init();
 
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
-            io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE);
+            io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
   ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), true);
 

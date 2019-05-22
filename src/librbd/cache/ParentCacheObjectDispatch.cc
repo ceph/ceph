@@ -8,7 +8,7 @@
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
-#include "librbd/cache/SharedReadOnlyObjectDispatch.h"
+#include "librbd/cache/ParentCacheObjectDispatch.h"
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
@@ -16,27 +16,27 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::cache::SharedReadOnlyObjectDispatch: " \
+#define dout_prefix *_dout << "librbd::cache::ParentCacheObjectDispatch: " \
                            << this << " " << __func__ << ": "
 
 namespace librbd {
 namespace cache {
 
 template <typename I, typename C>
-SharedReadOnlyObjectDispatch<I, C>::SharedReadOnlyObjectDispatch(
+ParentCacheObjectDispatch<I, C>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialzed(false), m_object_store(nullptr) {
+    m_initialized(false), m_object_store(nullptr) {
 }
 
 template <typename I, typename C>
-SharedReadOnlyObjectDispatch<I, C>::~SharedReadOnlyObjectDispatch() {
+ParentCacheObjectDispatch<I, C>::~ParentCacheObjectDispatch() {
     delete m_object_store;
     delete m_cache_client;
 }
 
 // TODO if connect fails, init will return error to high layer.
 template <typename I, typename C>
-void SharedReadOnlyObjectDispatch<I, C>::init() {
+void ParentCacheObjectDispatch<I, C>::init() {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
@@ -73,13 +73,13 @@ void SharedReadOnlyObjectDispatch<I, C>::init() {
     if (ret >= 0) {
       // add ourself to the IO object dispatcher chain
       m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
-      m_initialzed = true;
+      m_initialized = true;
     }
   }
 }
 
 template <typename I, typename C>
-bool SharedReadOnlyObjectDispatch<I, C>::read(
+bool ParentCacheObjectDispatch<I, C>::read(
     const std::string &oid, uint64_t object_no, uint64_t object_off,
     uint64_t object_len, librados::snap_t snap_id, int op_flags,
     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
@@ -91,8 +91,8 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
                  << object_len << dendl;
 
   // if any failse, reads will go to rados
-  if(!m_cache_client->is_session_work() || m_cache_client == nullptr ||
-     m_object_store == nullptr || !m_initialzed) {
+  if(m_cache_client == nullptr || !m_cache_client->is_session_work() ||
+     m_object_store == nullptr || !m_initialized) {
     ldout(cct, 5) << "SRO cache client session failed " << dendl;
     return false;
   }
@@ -112,7 +112,7 @@ bool SharedReadOnlyObjectDispatch<I, C>::read(
 }
 
 template <typename I, typename C>
-void SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
+void ParentCacheObjectDispatch<I, C>::handle_read_cache(
     ObjectCacheRequest* ack, uint64_t read_off,
     uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
@@ -139,12 +139,11 @@ void SharedReadOnlyObjectDispatch<I, C>::handle_read_cache(
   }
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  //TODO(): complete in syncfile
   on_dispatched->complete(r);
 }
 
 template <typename I, typename C>
-int SharedReadOnlyObjectDispatch<I, C>::handle_register_client(bool reg) {
+int ParentCacheObjectDispatch<I, C>::handle_register_client(bool reg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -155,14 +154,7 @@ int SharedReadOnlyObjectDispatch<I, C>::handle_register_client(bool reg) {
   return 0;
 }
 
-template <typename I, typename C>
-void SharedReadOnlyObjectDispatch<I, C>::client_handle_request(std::string msg) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-
-}
-
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
+template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;

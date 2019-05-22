@@ -36,7 +36,7 @@ set(librbd_internal_srcs
   api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
-  cache/SharedReadOnlyObjectDispatch.cc
+  cache/ParentCacheObjectDispatch.cc
   cache/SharedPersistentObjectCacher.cc
   cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc

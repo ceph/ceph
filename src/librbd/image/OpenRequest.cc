@@ -9,7 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/cache/WriteAroundObjectDispatch.h"
-#include "librbd/cache/SharedReadOnlyObjectDispatch.cc"
+#include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -525,7 +525,7 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
      // enable Shared Read-only cache for parent image
     if (m_image_ctx->child != nullptr && m_image_ctx->parent_cache_enabled ) {
       ldout(cct, 10) << this << " " << "setting up parent cache"<< dendl;
-      auto sro_cache = cache::SharedReadOnlyObjectDispatch<I>::create(m_image_ctx);
+      auto sro_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
       sro_cache->init();
     }
     return send_register_watch(result);
