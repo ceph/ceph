@@ -1483,213 +1483,6 @@ public:
     int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
-  class Object {
-    RGWRados *store;
-    RGWBucketInfo bucket_info;
-    RGWObjectCtx& ctx;
-    rgw_obj obj;
-
-    BucketShard bs;
-
-    RGWObjState *state;
-
-    bool versioning_disabled;
-
-    bool bs_initialized;
-
-  protected:
-    int get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent = false);
-    void invalidate_state();
-
-    int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail);
-    int complete_atomic_modification();
-
-  public:
-    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
-                                                                                               ctx(_ctx), obj(_obj), bs(store),
-                                                                                               state(NULL), versioning_disabled(false),
-                                                                                               bs_initialized(false) {}
-
-    RGWRados *get_store() { return store; }
-    rgw_obj& get_obj() { return obj; }
-    RGWObjectCtx& get_ctx() { return ctx; }
-    RGWBucketInfo& get_bucket_info() { return bucket_info; }
-    int get_manifest(RGWObjManifest **pmanifest);
-
-    int get_bucket_shard(BucketShard **pbs) {
-      if (!bs_initialized) {
-        int r =
-	  bs.init(bucket_info.bucket, obj, nullptr /* no RGWBucketInfo */);
-        if (r < 0) {
-          return r;
-        }
-        bs_initialized = true;
-      }
-      *pbs = &bs;
-      return 0;
-    }
-
-    void set_versioning_disabled(bool status) {
-      versioning_disabled = status;
-    }
-
-    bool versioning_enabled() {
-      return (!versioning_disabled && bucket_info.versioning_enabled());
-    }
-
-    struct Read {
-      RGWRados::Object *source;
-
-      struct GetObjState {
-        map<rgw_pool, librados::IoCtx> io_ctxs;
-        rgw_pool cur_pool;
-        librados::IoCtx *cur_ioctx{nullptr};
-        rgw_obj obj;
-        rgw_raw_obj head_obj;
-      } state;
-      
-      struct ConditionParams {
-        const ceph::real_time *mod_ptr;
-        const ceph::real_time *unmod_ptr;
-        bool high_precision_time;
-        uint32_t mod_zone_id;
-        uint64_t mod_pg_ver;
-        const char *if_match;
-        const char *if_nomatch;
-        
-        ConditionParams() : 
-                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
-                 if_match(NULL), if_nomatch(NULL) {}
-      } conds;
-
-      struct Params {
-        ceph::real_time *lastmod;
-        uint64_t *obj_size;
-        map<string, bufferlist> *attrs;
-
-        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
-      } params;
-
-      explicit Read(RGWRados::Object *_source) : source(_source) {}
-
-      int prepare();
-      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
-      int read(int64_t ofs, int64_t end, bufferlist& bl);
-      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
-      int get_attr(const char *name, bufferlist& dest);
-    };
-
-    struct Write {
-      RGWRados::Object *target;
-      
-      struct MetaParams {
-        ceph::real_time *mtime;
-        map<std::string, bufferlist>* rmattrs;
-        const bufferlist *data;
-        RGWObjManifest *manifest;
-        const string *ptag;
-        list<rgw_obj_index_key> *remove_objs;
-        ceph::real_time set_mtime;
-        rgw_user owner;
-        RGWObjCategory category;
-        int flags;
-        const char *if_match;
-        const char *if_nomatch;
-        std::optional<uint64_t> olh_epoch;
-        ceph::real_time delete_at;
-        bool canceled;
-        const string *user_data;
-        rgw_zone_set *zones_trace;
-        bool modify_tail;
-        bool completeMultipart;
-        bool appendable;
-
-        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
-                 remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
-                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false), appendable(false) {}
-      } meta;
-
-      explicit Write(RGWRados::Object *_target) : target(_target) {}
-
-      int _do_write_meta(uint64_t size, uint64_t accounted_size,
-                     map<std::string, bufferlist>& attrs,
-                     bool modify_tail, bool assume_noent,
-                     void *index_op);
-      int write_meta(uint64_t size, uint64_t accounted_size,
-                     map<std::string, bufferlist>& attrs);
-      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
-      const req_state* get_req_state() {
-        return (req_state *)target->get_ctx().get_private();
-      }
-    };
-
-    struct Delete {
-      RGWRados::Object *target;
-
-      struct DeleteParams {
-        rgw_user bucket_owner;
-        int versioning_status;
-        ACLOwner obj_owner; /* needed for creation of deletion marker */
-        uint64_t olh_epoch;
-        string marker_version_id;
-        uint32_t bilog_flags;
-        list<rgw_obj_index_key> *remove_objs;
-        ceph::real_time expiration_time;
-        ceph::real_time unmod_since;
-        ceph::real_time mtime; /* for setting delete marker mtime */
-        bool high_precision_time;
-        rgw_zone_set *zones_trace;
-
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr) {}
-      } params;
-
-      struct DeleteResult {
-        bool delete_marker;
-        string version_id;
-
-        DeleteResult() : delete_marker(false) {}
-      } result;
-      
-      explicit Delete(RGWRados::Object *_target) : target(_target) {}
-
-      int delete_obj();
-    };
-
-    struct Stat {
-      RGWRados::Object *source;
-
-      struct Result {
-        rgw_obj obj;
-        RGWObjManifest manifest;
-        bool has_manifest;
-        uint64_t size;
-	struct timespec mtime {};
-        map<string, bufferlist> attrs;
-
-        Result() : has_manifest(false), size(0) {}
-      } result;
-
-      struct State {
-        librados::IoCtx io_ctx;
-        librados::AioCompletion *completion;
-        int ret;
-
-        State() : completion(NULL), ret(0) {}
-      } state;
-
-
-      explicit Stat(RGWRados::Object *_source) : source(_source) {}
-
-      int stat_async();
-      int wait();
-      int stat();
-    private:
-      int finish();
-    };
-  };
-
   class Bucket {
     RGWRados *store;
     RGWBucketInfo bucket_info;
@@ -1834,6 +1627,213 @@ public:
       }
     }; // class List
   }; // class Bucket
+
+  class Object {
+    RGWRados *store;
+    RGWBucketInfo bucket_info;
+    RGWObjectCtx& ctx;
+    rgw_obj obj;
+
+    BucketShard bs;
+
+    RGWObjState *state;
+
+    bool versioning_disabled;
+
+    bool bs_initialized;
+
+  protected:
+    int get_state(RGWObjState **pstate, bool follow_olh, bool assume_noent = false);
+    void invalidate_state();
+
+    int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
+                                    const char *ifmatch, const char *ifnomatch, bool removal_op, bool modify_tail);
+    int complete_atomic_modification();
+
+  public:
+    Object(RGWRados *_store, const RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, const rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
+                                                                                               ctx(_ctx), obj(_obj), bs(store),
+                                                                                               state(NULL), versioning_disabled(false),
+                                                                                               bs_initialized(false) {}
+
+    RGWRados *get_store() { return store; }
+    rgw_obj& get_obj() { return obj; }
+    RGWObjectCtx& get_ctx() { return ctx; }
+    RGWBucketInfo& get_bucket_info() { return bucket_info; }
+    int get_manifest(RGWObjManifest **pmanifest);
+
+    int get_bucket_shard(BucketShard **pbs) {
+      if (!bs_initialized) {
+        int r =
+	  bs.init(bucket_info.bucket, obj, nullptr /* no RGWBucketInfo */);
+        if (r < 0) {
+          return r;
+        }
+        bs_initialized = true;
+      }
+      *pbs = &bs;
+      return 0;
+    }
+
+    void set_versioning_disabled(bool status) {
+      versioning_disabled = status;
+    }
+
+    bool versioning_enabled() {
+      return (!versioning_disabled && bucket_info.versioning_enabled());
+    }
+
+    struct Read {
+      RGWRados::Object *source;
+
+      struct GetObjState {
+        map<rgw_pool, librados::IoCtx> io_ctxs;
+        rgw_pool cur_pool;
+        librados::IoCtx *cur_ioctx{nullptr};
+        rgw_obj obj;
+        rgw_raw_obj head_obj;
+      } state;
+      
+      struct ConditionParams {
+        const ceph::real_time *mod_ptr;
+        const ceph::real_time *unmod_ptr;
+        bool high_precision_time;
+        uint32_t mod_zone_id;
+        uint64_t mod_pg_ver;
+        const char *if_match;
+        const char *if_nomatch;
+        
+        ConditionParams() : 
+                 mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
+                 if_match(NULL), if_nomatch(NULL) {}
+      } conds;
+
+      struct Params {
+        ceph::real_time *lastmod;
+        uint64_t *obj_size;
+        map<string, bufferlist> *attrs;
+
+        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
+      } params;
+
+      explicit Read(RGWRados::Object *_source) : source(_source) {}
+
+      int prepare();
+      static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
+      int read(int64_t ofs, int64_t end, bufferlist& bl);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
+      int get_attr(const char *name, bufferlist& dest);
+    };
+
+    struct Write {
+      RGWRados::Object *target;
+      
+      struct MetaParams {
+        ceph::real_time *mtime;
+        map<std::string, bufferlist>* rmattrs;
+        const bufferlist *data;
+        RGWObjManifest *manifest;
+        const string *ptag;
+        list<rgw_obj_index_key> *remove_objs;
+        ceph::real_time set_mtime;
+        rgw_user owner;
+        RGWObjCategory category;
+        int flags;
+        const char *if_match;
+        const char *if_nomatch;
+        std::optional<uint64_t> olh_epoch;
+        ceph::real_time delete_at;
+        bool canceled;
+        const string *user_data;
+        rgw_zone_set *zones_trace;
+        bool modify_tail;
+        bool completeMultipart;
+        bool appendable;
+
+        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
+                 remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
+                 if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
+                 modify_tail(false),  completeMultipart(false), appendable(false) {}
+      } meta;
+
+      explicit Write(RGWRados::Object *_target) : target(_target) {}
+
+      int _do_write_meta(uint64_t size, uint64_t accounted_size,
+                     map<std::string, bufferlist>& attrs,
+                     bool modify_tail, bool assume_noent,
+                     RGWRados::Bucket::UpdateIndex *index_op);
+      int write_meta(uint64_t size, uint64_t accounted_size,
+                     map<std::string, bufferlist>& attrs);
+      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+      const req_state* get_req_state() {
+        return (req_state *)target->get_ctx().get_private();
+      }
+    };
+
+    struct Delete {
+      RGWRados::Object *target;
+
+      struct DeleteParams {
+        rgw_user bucket_owner;
+        int versioning_status;
+        ACLOwner obj_owner; /* needed for creation of deletion marker */
+        uint64_t olh_epoch;
+        string marker_version_id;
+        uint32_t bilog_flags;
+        list<rgw_obj_index_key> *remove_objs;
+        ceph::real_time expiration_time;
+        ceph::real_time unmod_since;
+        ceph::real_time mtime; /* for setting delete marker mtime */
+        bool high_precision_time;
+        rgw_zone_set *zones_trace;
+
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr) {}
+      } params;
+
+      struct DeleteResult {
+        bool delete_marker;
+        string version_id;
+
+        DeleteResult() : delete_marker(false) {}
+      } result;
+      
+      explicit Delete(RGWRados::Object *_target) : target(_target) {}
+
+      int delete_obj();
+    };
+
+    struct Stat {
+      RGWRados::Object *source;
+
+      struct Result {
+        rgw_obj obj;
+        RGWObjManifest manifest;
+        bool has_manifest;
+        uint64_t size;
+	struct timespec mtime {};
+        map<string, bufferlist> attrs;
+
+        Result() : has_manifest(false), size(0) {}
+      } result;
+
+      struct State {
+        librados::IoCtx io_ctx;
+        librados::AioCompletion *completion;
+        int ret;
+
+        State() : completion(NULL), ret(0) {}
+      } state;
+
+
+      explicit Stat(RGWRados::Object *_source) : source(_source) {}
+
+      int stat_async();
+      int wait();
+      int stat();
+    private:
+      int finish();
+    };
+  };
 
   int on_last_entry_in_listing(RGWBucketInfo& bucket_info,
                                const std::string& obj_prefix,
