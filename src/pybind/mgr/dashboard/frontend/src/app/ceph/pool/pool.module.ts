@@ -9,7 +9,6 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { ActionLabels, URLVerbs } from '../../shared/constants/app.constants';
-import { ServicesModule } from '../../shared/services/services.module';
 import { SharedModule } from '../../shared/shared.module';
 import { BlockModule } from '../block/block.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
@@ -28,7 +27,6 @@ import { PoolListComponent } from './pool-list/pool-list.component';
     RouterModule,
     ReactiveFormsModule,
     BsDropdownModule,
-    ServicesModule,
     TooltipModule.forRoot(),
     BlockModule
   ],

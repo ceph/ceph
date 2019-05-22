@@ -5,7 +5,6 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
-import { ServicesModule } from './services.module';
 
 export class TaskMessageOperation {
   running: string;
@@ -55,7 +54,7 @@ class TaskMessage {
 }
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class TaskMessageService {
   constructor(private i18n: I18n) {}

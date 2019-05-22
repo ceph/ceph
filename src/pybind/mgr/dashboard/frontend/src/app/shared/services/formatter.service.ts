@@ -2,10 +2,8 @@ import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
 
-import { ServicesModule } from './services.module';
-
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class FormatterService {
   constructor() {}

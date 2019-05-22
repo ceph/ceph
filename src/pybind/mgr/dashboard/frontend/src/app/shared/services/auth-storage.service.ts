@@ -1,10 +1,9 @@
 import { Injectable } from '@angular/core';
 
 import { Permissions } from '../models/permissions';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class AuthStorageService {
   constructor() {}

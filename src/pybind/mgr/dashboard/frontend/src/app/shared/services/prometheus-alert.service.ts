@@ -5,10 +5,9 @@ import * as _ from 'lodash';
 import { PrometheusService } from '../api/prometheus.service';
 import { PrometheusAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
