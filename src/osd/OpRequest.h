@@ -170,7 +170,7 @@ private:
   void set_rmw_flags(int flags);
   void mark_flag_point(uint8_t flag, const char *s);
   void mark_flag_point_string(uint8_t flag, const std::string& s);
-};
+}; // class OpRequest
 
 typedef OpRequest::Ref OpRequestRef;
 

@@ -637,6 +637,7 @@ public:
   int request_complete() override;
 };
 
+
 #define OMAP_APPEND_MAX_ENTRIES_DEFAULT 100
 
 class RGWOmapAppend : public RGWConsumerCR<string> {

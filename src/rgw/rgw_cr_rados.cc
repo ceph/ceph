@@ -192,7 +192,8 @@ int RGWAsyncLockSystemObj::_send_request()
   rgw_rados_ref ref;
   int r = store->get_raw_obj_ref(obj, &ref);
   if (r < 0) {
-    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj <<
+      ") ret=" << r << dendl;
     return r;
   }
 
@@ -205,14 +206,23 @@ int RGWAsyncLockSystemObj::_send_request()
   return l.lock_exclusive(&ref.ioctx, ref.obj.oid);
 }
 
-RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                      RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       const string& _name, const string& _cookie, uint32_t _duration_secs) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                              obj(_obj),
-                                                              lock_name(_name),
-                                                              cookie(_cookie),
-                                                              duration_secs(_duration_secs)
+RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(
+  RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+  RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
+  const string& _name,
+  const string& _cookie,
+  uint32_t _duration_secs,
+  int32_t _bid_amount,
+  uint32_t _bid_duration_secs) : RGWAsyncRadosRequest(caller, cn),
+				 store(_store),
+				 obj(_obj),
+				 lock_name(_name),
+				 cookie(_cookie),
+				 duration_secs(_duration_secs),
+				 bid_amount(_bid_amount),
+				 bid_duration_secs(_bid_duration_secs)
 {
+  // empty
 }
 
 int RGWAsyncUnlockSystemObj::_send_request()
@@ -429,18 +439,21 @@ int RGWSimpleRadosLockCR::request_complete()
   return req->get_ret_status();
 }
 
-RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                      const rgw_raw_obj& _obj,
-                      const string& _lock_name,
-                      const string& _cookie) : RGWSimpleCoroutine(_store->ctx()),
-                                                async_rados(_async_rados),
-                                                store(_store),
-                                                lock_name(_lock_name),
-                                                cookie(_cookie),
-                                                obj(_obj),
-                                                req(NULL)
+RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_rados,
+					       RGWRados *_store,
+					       const rgw_raw_obj& _obj,
+					       const string& _lock_name,
+					       const string& _cookie) :
+  RGWSimpleCoroutine(_store->ctx()),
+  async_rados(_async_rados),
+  store(_store),
+  lock_name(_lock_name),
+  cookie(_cookie),
+  obj(_obj),
+  req(NULL)
 {
-  set_description() << "rados unlock dest=" << obj << " lock=" << lock_name << " cookie=" << cookie;
+  set_description() << "rados unlock dest=" << obj << " lock=" <<
+    lock_name << " cookie=" << cookie;
 }
 
 void RGWSimpleRadosUnlockCR::request_cleanup()
@@ -456,7 +469,7 @@ int RGWSimpleRadosUnlockCR::send_request()
   set_status() << "sending request";
 
   req = new RGWAsyncUnlockSystemObj(this, stack->create_completion_notifier(),
-                                 store, NULL, obj, lock_name, cookie);
+				    store, NULL, obj, lock_name, cookie);
   async_rados->queue(req);
   return 0;
 }
@@ -744,19 +757,22 @@ int RGWContinuousLeaseCR::operate()
     while (!going_down) {
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
 
-      caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
+      caller->set_sleeping(false); /* will only be relevant when we return,
+				      which is why we can do it early */
       if (retcode < 0) {
         set_locked(false);
-        ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj << ":" << lock_name << ": retcode=" << retcode << dendl;
+        ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj <<
+	  ":" << lock_name << ": retcode=" << retcode << dendl;
         return set_state(RGWCoroutine_Error, retcode);
       }
       set_locked(true);
       yield wait(utime_t(interval / 2, 0));
-    }
+    } // while loop
     set_locked(false); /* moot at this point anyway */
-    yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
+    yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name,
+					  cookie));
     return set_state(RGWCoroutine_Done);
-  }
+  } // reenter
   return 0;
 }
 
