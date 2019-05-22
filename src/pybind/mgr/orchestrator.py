@@ -327,8 +327,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
-        # type: (str, str, str) -> ReadCompletion[List[ServiceDescription]]
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
