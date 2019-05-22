@@ -64,7 +64,7 @@ ImageRequest<MockTestImageCtx> *ImageRequest<MockTestImageCtx>::s_instance = nul
 #include "librbd/deep_copy/ObjectCopyRequest.cc"
 template class librbd::deep_copy::ObjectCopyRequest<librbd::MockTestImageCtx>;
 
-bool operator==(const SnapContext& rhs, const SnapContext& lhs) {
+static bool operator==(const SnapContext& rhs, const SnapContext& lhs) {
   return (rhs.seq == lhs.seq && rhs.snaps == lhs.snaps);
 }
 
@@ -207,7 +207,6 @@ public:
       librbd::MockTestImageCtx &mock_src_image_ctx,
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish) {
     expect_get_object_name(mock_dst_image_ctx);
-    expect_get_object_count(mock_dst_image_ctx);
     return new MockObjectCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
                                      m_snap_map, 0, false, on_finish);
   }
@@ -453,6 +452,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, DNE) {
   librbd::MockObjectMap mock_object_map;
   mock_dst_image_ctx.object_map = &mock_object_map;
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -484,6 +484,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Write) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -529,6 +530,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ReadMissingStaleSnapSet) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -661,6 +663,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteError) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -709,6 +712,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -773,6 +777,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -825,6 +830,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,
@@ -875,6 +881,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, ObjectMapUpdateError) {
   mock_dst_image_ctx.object_map = &mock_object_map;
 
   expect_test_features(mock_dst_image_ctx);
+  expect_get_object_count(mock_dst_image_ctx);
 
   C_SaferCond ctx;
   MockObjectCopyRequest *request = create_request(mock_src_image_ctx,

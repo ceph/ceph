@@ -145,11 +145,17 @@ void AioCompletion::set_request_count(uint32_t count) {
 
   ldout(cct, 20) << "pending=" << count << dendl;
   ceph_assert(pending_count == 0);
-  pending_count = count;
-  lock.Unlock();
 
-  // if no pending requests, completion will fire now
-  unblock();
+  if (count > 0) {
+    pending_count = count;
+    lock.Unlock();
+  } else {
+    pending_count = 1;
+    lock.Unlock();
+
+    // ensure completion fires in clean lock context
+    ictx->op_work_queue->queue(new C_AioRequest(this), 0);
+  }
 }
 
 void AioCompletion::complete_request(ssize_t r)
@@ -169,7 +175,7 @@ void AioCompletion::complete_request(ssize_t r)
 
   ldout(cct, 20) << "cb=" << complete_cb << ", "
                  << "pending=" << pending_count << dendl;
-  if (!count && blockers == 0) {
+  if (!count) {
     finalize(rval);
     complete();
   }
