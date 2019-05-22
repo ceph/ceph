@@ -216,8 +216,9 @@ def remote_exec(remote, cmd_str, logger, log_spec, quiet=True, rerun=False, trie
                 remote.run(args=cmd_str)
                 break
             except CommandFailedError:
-                logger.error("{} failed. Here comes journalctl!".format(log_spec))
-                remote.run(args="sudo journalctl --all")
+                logger.error(("{} failed. Creating /var/log/journalctl.log with "
+                              "output of \"journalctl --all\"!").format(log_spec))
+                remote.sh("sudo journalctl --all > /var/log/journalctl.log")
                 raise
             except ConnectionLostError:
                 already_rebooted_at_least_once = True
