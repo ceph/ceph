@@ -810,8 +810,8 @@ int64_t BlueStore::GarbageCollector::estimate(
   used_alloc_unit = boost::optional<uint64_t >();
   blob_info_counted = nullptr;
 
-  gc_start_offset = start_offset;
-  gc_end_offset = start_offset + length;
+  uint64_t gc_start_offset = start_offset;
+  uint64_t gc_end_offset = start_offset + length;
 
   uint64_t end_offset = start_offset + length;
 
