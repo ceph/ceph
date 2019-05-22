@@ -88,8 +88,8 @@ CINDER_ENABLED_BACKENDS=ceph:ceph
 TEMPEST_STORAGE_PROTOCOL=ceph
 REMOTE_CEPH=True
 
-enable_plugin devstack-plugin-mariadb git://github.com/openstack/devstack-plugin-mariadb
-enable_plugin devstack-plugin-ceph git://git.openstack.org/openstack/devstack-plugin-ceph
+enable_plugin devstack-plugin-mariadb https://github.com/openstack/devstack-plugin-mariadb
+enable_plugin devstack-plugin-ceph https://git.openstack.org/openstack/devstack-plugin-ceph
 EOF
 
 cat<<EOF > ${STACK_HOME_PATH}/start.sh
