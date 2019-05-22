@@ -197,10 +197,23 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
   return *outdatalen;
 }
 
-int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
+int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t* origin)
 {
-  PrimaryLogPG::OpContext **pctx = static_cast<PrimaryLogPG::OpContext **>(hctx);
+  PrimaryLogPG::OpContext **pctx =
+    static_cast<PrimaryLogPG::OpContext **>(hctx);
   *origin = (*pctx)->op->get_req()->get_orig_source_inst();
+  return 0;
+}
+
+int cls_get_obj_info(cls_method_context_t hctx, hobject_t** obj_info)
+{
+  PrimaryLogPG::OpContext **pctx =
+    static_cast<PrimaryLogPG::OpContext **>(hctx);
+
+  object_info_t& the_obj_info = (*pctx)->new_obs.oi;
+  hobject_t& hobj = the_obj_info.soid;
+  *obj_info = &hobj;
+
   return 0;
 }
 
