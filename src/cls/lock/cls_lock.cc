@@ -119,7 +119,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
  * helper function to add a lock and update disk state.
  *
  * Input:
- * @param name Lock name
+ * @param lock_name Lock name
  * @param lock_type Type of lock (exclusive / shared)
  * @param duration Duration of lock (in seconds). Zero means it doesn't expire.
  *                 Also the duration of bids when a bid is submitted.
@@ -134,7 +134,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
  * @return 0 on success, or -errno on failure
  */
 static int lock_obj(cls_method_context_t hctx,
-                    const string& name,
+                    const string& lock_name,
                     ClsLockType lock_type,
                     const utime_t& duration,
                     const string& description,
@@ -178,7 +178,7 @@ static int lock_obj(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  if (name.empty())
+  if (lock_name.empty())
     return -EINVAL;
 
   if (!fail_if_exists && fail_if_does_not_exist) {
@@ -249,7 +249,7 @@ static int lock_obj(cls_method_context_t hctx,
   } // if (bid_amount >= 0)
 
   // see if there's already a locker
-  r = read_lock(hctx, name, &linfo); // this also erases expired locks
+  r = read_lock(hctx, lock_name, &linfo); // this also erases expired locks
   if (r < 0 && r != -ENOENT) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
@@ -283,7 +283,7 @@ static int lock_obj(cls_method_context_t hctx,
       lockers.erase(iter); // remove old entry
     }
   } else if (fail_if_does_not_exist) {
-      CLS_LOG(20, "there is no existing lock to renew");
+    CLS_LOG(20, "there is no existing lock to renew");
     return -ENOENT;
   }
 
@@ -350,7 +350,7 @@ static int lock_obj(cls_method_context_t hctx,
 
   linfo.lockers[id] = info;
 
-  r = write_lock(hctx, name, linfo);
+  r = write_lock(hctx, lock_name, linfo);
   if (r < 0)
     return r;
 
