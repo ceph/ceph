@@ -489,16 +489,27 @@ The state of specific problematic PGs can be queried with::
   ceph tell <pgid> query
 
 
-PG_DEGRADED_FULL
+PG_RECOVERY_FULL
 ________________
 
 Data redundancy may be reduced or at risk for some data due to a lack
 of free space in the cluster.  Specifically, one or more PGs has the
-*backfill_toofull* or *recovery_toofull* flag set, meaning that the
+*recovery_toofull* flag set, meaning that the
+cluster is unable to migrate or recover data because one or more OSDs
+is above the *full* threshold.
+
+See the discussion for *OSD_FULL* above for steps to resolve this condition.
+
+PG_BACKFILL_FULL
+________________
+
+Data redundancy may be reduced or at risk for some data due to a lack
+of free space in the cluster.  Specifically, one or more PGs has the
+*backfill_toofull* flag set, meaning that the
 cluster is unable to migrate or recover data because one or more OSDs
 is above the *backfillfull* threshold.
 
-See the discussion for *OSD_BACKFILLFULL* or *OSD_FULL* above for
+See the discussion for *OSD_BACKFILLFULL* above for
 steps to resolve this condition.
 
 PG_DAMAGED
