@@ -1,14 +1,13 @@
 import { Injectable } from '@angular/core';
 import { FormBuilder } from '@angular/forms';
 
-import { ServicesModule } from '../services/services.module';
 import { CdFormGroup } from './cd-form-group';
 
 /**
  * CdFormBuilder extends FormBuilder to create an CdFormGroup based form.
  */
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class CdFormBuilder extends FormBuilder {
   group(

@@ -4,10 +4,9 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@
 import { map } from 'rxjs/operators';
 
 import { FeatureTogglesMap, FeatureTogglesService } from './feature-toggles.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class FeatureTogglesGuardService implements CanActivate, CanActivateChild {
   constructor(private router: Router, private featureToggles: FeatureTogglesService) {}

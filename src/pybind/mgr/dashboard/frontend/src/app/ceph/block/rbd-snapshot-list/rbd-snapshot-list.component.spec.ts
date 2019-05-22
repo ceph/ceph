@@ -23,7 +23,6 @@ import { Permissions } from '../../../shared/models/permissions';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ServicesModule } from '../../../shared/services/services.module';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
@@ -49,7 +48,6 @@ describe('RbdSnapshotListComponent', () => {
       DataTableModule,
       ComponentsModule,
       ToastModule.forRoot(),
-      ServicesModule,
       ApiModule,
       HttpClientTestingModule,
       RouterTestingModule,

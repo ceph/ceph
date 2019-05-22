@@ -6,10 +6,9 @@ import { PrometheusService } from '../api/prometheus.service';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { PrometheusNotification } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class PrometheusNotificationService {
   private notifications: PrometheusNotification[];
