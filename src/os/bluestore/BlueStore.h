@@ -963,7 +963,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<bluestore_pextent_t>& get_extents_to_collect() const {
+    const interval_set<uint64_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -994,7 +994,7 @@ public:
                                          ///< specific write
 
     ///< protrusive extents that should be collected if GC takes place
-    vector<bluestore_pextent_t> extents_to_collect;
+    interval_set<uint64_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
