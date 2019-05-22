@@ -784,7 +784,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
           bool bExit = false;
           do {
             if (it->blob.get() == b) {
-              extents_to_collect.emplace_back(it->logical_offset, it->length);
+              extents_to_collect.insert(it->logical_offset, it->length);
             }
             bExit = it == bi.last_lextent;
             ++it;
@@ -11592,7 +11592,9 @@ void BlueStore::_do_write_small(
 
     if (ep != end && ep->logical_offset < offset + max_bsize) {
       BlobRef b = ep->blob;
+
       auto bstart = ep->blob_start();
+
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
       if (bstart >= end_offs) {
@@ -11797,6 +11799,7 @@ void BlueStore::_do_write_small(
     // check extent for reuse in reverse order
     if (prev_ep != end && prev_ep->logical_offset >= min_off) {
       BlobRef b = prev_ep->blob;
+
       auto bstart = prev_ep->blob_start();
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
@@ -12477,19 +12480,22 @@ int BlueStore::_do_gc(
        it != extents_to_collect.end();
        ++it) {
     bufferlist bl;
-    int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
-    ceph_assert(r == (int)it->length);
+    auto offset = (*it).first;
+    auto length = (*it).second;
 
-    _do_write_data(txc, c, o, it->offset, it->length, bl, &wctx_gc);
-    logger->inc(l_bluestore_gc_merged, it->length);
+    int r = _do_read(c.get(), o, offset, length, bl, 0);
+    ceph_assert(r == (int)length);
 
-    if (*dirty_start > it->offset) {
-      *dirty_start = it->offset;
+    _do_write_data(txc, c, o, offset, length, bl, &wctx_gc);
+    logger->inc(l_bluestore_gc_merged, length);
+
+    if (*dirty_start > offset) {
+      *dirty_start = offset;
       dirty_range_updated = true;
     }
 
-    if (*dirty_end < it->offset + it->length) {
-      *dirty_end = it->offset + it->length;
+    if (*dirty_end < offset + length) {
+      *dirty_end = offset + length;
       dirty_range_updated = true;
     }
   }
