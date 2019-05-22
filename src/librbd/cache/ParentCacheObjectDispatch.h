@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_CACHE_SHARED_PERSISTENT_OBJECT_CACHER_OBJECT_DISPATCH_H
-#define CEPH_LIBRBD_CACHE_SHARED_PERSISTENT_OBJECT_CACHER_OBJECT_DISPATCH_H
+#ifndef CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
+#define CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
 
 #include "common/Mutex.h"
 #include "SharedPersistentObjectCacher.h"
@@ -19,17 +19,17 @@ class ImageCtx;
 namespace cache {
 
 template <typename ImageCtxT = ImageCtx, typename CacheClientT = CacheClient>
-class SharedReadOnlyObjectDispatch : public io::ObjectDispatchInterface {
+class ParentCacheObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static SharedReadOnlyObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new SharedReadOnlyObjectDispatch(image_ctx);
+  static ParentCacheObjectDispatch* create(ImageCtxT* image_ctx) {
+    return new ParentCacheObjectDispatch(image_ctx);
   }
 
-  SharedReadOnlyObjectDispatch(ImageCtxT* image_ctx);
-  ~SharedReadOnlyObjectDispatch() override;
+  ParentCacheObjectDispatch(ImageCtxT* image_ctx);
+  ~ParentCacheObjectDispatch() override;
 
   io::ObjectDispatchLayer get_object_dispatch_layer() const override {
-    return io::OBJECT_DISPATCH_LAYER_SHARED_PERSISTENT_CACHE;
+    return io::OBJECT_DISPATCH_LAYER_PARENT_CACHE;
   }
 
   void init();
@@ -105,7 +105,7 @@ public:
   }
 
   bool get_state() {
-    return m_initialzed;
+    return m_initialized;
   }
 
   CacheClientT *m_cache_client = nullptr;
@@ -119,15 +119,14 @@ private:
          io::DispatchResult* dispatch_result,
          Context* on_dispatched);
   int handle_register_client(bool reg);
-  void client_handle_request(std::string msg);
 
   SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
-  bool m_initialzed;
+  bool m_initialized;
 };
 
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::SharedReadOnlyObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
+extern template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
 
-#endif // CEPH_LIBRBD_CACHE_OBJECT_CACHER_OBJECT_DISPATCH_H
+#endif // CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H

@@ -16,8 +16,7 @@ namespace cache {
 
 template <typename I>
 SharedPersistentObjectCacher<I>::SharedPersistentObjectCacher(I *image_ctx, std::string cache_path)
-  : m_image_ctx(image_ctx), m_cache_path(cache_path),
-    m_file_map_lock("librbd::cache::SharedObjectCacher::filemaplock") {
+  : m_image_ctx(image_ctx) {
   auto *cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 }
