@@ -2764,6 +2764,7 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     old_extent_map_t old_extents;   ///< must deref these blobs
+    interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -2882,7 +2883,6 @@ private:
   int _do_gc(TransContext *txc,
              CollectionRef& c,
              OnodeRef o,
-             const GarbageCollector& gc,
              const WriteContext& wctx,
              uint64_t *dirty_start,
              uint64_t *dirty_end);

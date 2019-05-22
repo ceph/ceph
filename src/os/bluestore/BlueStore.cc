@@ -12465,17 +12465,16 @@ int BlueStore::_do_gc(
   TransContext *txc,
   CollectionRef& c,
   OnodeRef o,
-  const GarbageCollector& gc,
   const WriteContext& wctx,
   uint64_t *dirty_start,
   uint64_t *dirty_end)
 {
-  auto& extents_to_collect = gc.get_extents_to_collect();
 
   bool dirty_range_updated = false;
   WriteContext wctx_gc;
   wctx_gc.fork(wctx); // make a clone for garbage collection
 
+  auto & extents_to_collect = wctx.extents_to_gc;
   for (auto it = extents_to_collect.begin();
        it != extents_to_collect.end();
        ++it) {
@@ -12558,14 +12557,18 @@ int BlueStore::_do_write(
     goto out;
   }
 
+  if (wctx.extents_to_gc.empty() ||
+      !(wctx.extents_to_gc.range_start() <= offset &&
+        wctx.extents_to_gc.range_end() >= offset + length)) {
+    benefit = gc.estimate(offset,
+			  length,
+			  o->extent_map,
+			  wctx.old_extents,
+			  min_alloc_size);
+  }
+
   // NB: _wctx_finish() will empty old_extents
   // so we must do gc estimation before that
-  benefit = gc.estimate(offset,
-                        length,
-		        o->extent_map,
-			wctx.old_extents,
-			min_alloc_size);
-
   _wctx_finish(txc, c, o, &wctx);
   if (end > o->onode.size) {
     dout(20) << __func__ << " extending size to 0x" << std::hex << end
@@ -12574,18 +12577,23 @@ int BlueStore::_do_write(
   }
 
   if (benefit >= g_conf()->bluestore_gc_enable_total_threshold) {
-    if (!gc.get_extents_to_collect().empty()) {
-      dout(20) << __func__ << " perform garbage collection, "
-               << "expected benefit = " << benefit << " AUs" << dendl;
-      r = _do_gc(txc, c, o, gc, wctx, &dirty_start, &dirty_end);
-      if (r < 0) {
-        derr << __func__ << " _do_gc failed with " << cpp_strerror(r)
-             << dendl;
-        goto out;
-      }
-      dout(20)<<__func__<<" gc range is " << std::hex << dirty_start
-	      << "~" << dirty_end - dirty_start << std::dec << dendl;
+    wctx.extents_to_gc.union_of(gc.get_extents_to_collect());
+    dout(20) << __func__
+             << " perform garbage collection for compressed extents, "
+             << "expected benefit = " << benefit << " AUs" << dendl;
+  }
+  if (!wctx.extents_to_gc.empty()) {
+    dout(20) << __func__ << " perform garbage collection" << dendl;
+    r = _do_gc(txc, c, o,
+      wctx,
+      &dirty_start, &dirty_end);
+    if (r < 0) {
+      derr << __func__ << " _do_gc failed with " << cpp_strerror(r)
+            << dendl;
+      goto out;
     }
+    dout(20)<<__func__<<" gc range is " << std::hex << dirty_start
+	    << "~" << dirty_end - dirty_start << std::dec << dendl;
   }
   o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
   o->extent_map.dirty_range(dirty_start, dirty_end - dirty_start);
