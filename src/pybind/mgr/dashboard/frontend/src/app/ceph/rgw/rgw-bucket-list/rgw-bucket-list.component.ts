@@ -34,7 +34,7 @@ export class RgwBucketListComponent {
     this.columns = [
       {
         name: 'Name',
-        prop: 'bucket',
+        prop: 'bid',
         flexGrow: 1
       },
       {

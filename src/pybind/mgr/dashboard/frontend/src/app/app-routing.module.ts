@@ -75,7 +75,7 @@ const routes: Routes = [
         canActivate: [AuthGuardService]
       },
       {
-        path: 'bucket/edit/:bucket',
+        path: 'bucket/edit/:bid',
         component: RgwBucketFormComponent,
         canActivate: [AuthGuardService]
       }

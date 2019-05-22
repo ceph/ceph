@@ -42,17 +42,14 @@ export class RgwBucketService {
   }
 
   get(bucket: string) {
-    let params = new HttpParams();
-    params = params.append('bucket', bucket);
-    return this.http.get(this.url, {params: params});
+    return this.http.get(`api/rgw/bucket/${bucket}`);
   }
 
   create(bucket: string, uid: string) {
-    const body = {
-      'bucket': bucket,
-      'uid': uid
-    };
-    return this.http.post('api/rgw/bucket', body);
+    let params = new HttpParams();
+    params = params.append('bucket', bucket);
+    params = params.append('uid', uid);
+    return this.http.post('api/rgw/bucket', null, {params: params});
   }
 
   update(bucketId: string, bucket: string, uid: string) {
@@ -60,7 +57,7 @@ export class RgwBucketService {
     params = params.append('bucket', bucket);
     params = params.append('bucket-id', bucketId as string);
     params = params.append('uid', uid);
-    return this.http.put(this.url, null, { params: params });
+    return this.http.put(this.url, null, {params: params});
   }
 
   delete(bucket: string, purgeObjects = true) {

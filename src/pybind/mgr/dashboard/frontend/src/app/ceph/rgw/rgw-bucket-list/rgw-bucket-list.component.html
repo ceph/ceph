@@ -29,7 +29,7 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="selection.hasSingleSelection"
-              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}">
+              routerLink="/rgw/bucket/edit/{{ selection.first()?.bid | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <ng-container i18n>Edit</ng-container>
       </button>
@@ -60,7 +60,7 @@
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection}">
           <a class="dropdown-item"
-             routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}"
+             routerLink="/rgw/bucket/edit/{{ selection.first()?.bid | encodeUri }}"
              i18n>
             <i class="fa fa-fw fa-pencil"></i>
             Edit

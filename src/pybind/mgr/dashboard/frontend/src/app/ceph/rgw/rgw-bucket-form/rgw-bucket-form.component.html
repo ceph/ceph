@@ -58,36 +58,35 @@
 
         <!-- Name -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.invalid}">
+             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.bid.dirty) && bucketForm.controls.bid.invalid}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="bucket">Name
+                 for="bid">Name
             <span class="required"
                   *ngIf="!editing"></span>
           </label>
           <div class="col-sm-9">
-            <input id="bucket"
-                   name="bucket"
+            <input id="bid"
                    class="form-control"
                    type="text"
                    i18n-placeholder
                    placeholder="Name..."
-                   formControlName="bucket"
+                   formControlName="bid"
                    [readonly]="editing"
                    autofocus>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('required')">
+                  *ngIf="(frm.submitted || bucketForm.controls.bid.dirty) && bucketForm.controls.bid.hasError('required')">
               This field is required.
             </span>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameInvalid')">
+                  *ngIf="(frm.submitted || bucketForm.controls.bid.dirty) && bucketForm.controls.bid.hasError('bucketNameInvalid')">
               The value is not valid.
             </span>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameExists')">
+                  *ngIf="(frm.submitted || bucketForm.controls.bid.dirty) && bucketForm.controls.bid.hasError('bucketNameExists')">
               The chosen name is already in use.
             </span>
           </div>
