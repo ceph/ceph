@@ -17,6 +17,16 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
+BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
+  : query_map(std::move(ctx.query_map)),
+    info_map(std::move(ctx.info_map)),
+    notify_list(std::move(ctx.notify_list))
+{
+  ctx.query_map.clear();
+  ctx.info_map.clear();
+  ctx.notify_list.clear();
+}
+
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);

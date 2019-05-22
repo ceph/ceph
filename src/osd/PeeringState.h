@@ -54,25 +54,16 @@ struct PGPool {
   void update(CephContext *cct, OSDMapRef map);
 };
 
+class PeeringCtx;
+
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
   map<int, map<spg_t, pg_query_t> > query_map;
   map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
   map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
-};
 
-struct PeeringCtx {
-  map<int, map<spg_t, pg_query_t> > query_map;
-  map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
-  map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
-  ObjectStore::Transaction transaction;
-  HBHandle* handle = nullptr;
-
-  PeeringCtx() = default;
-
-  void reset_transaction() {
-    transaction = ObjectStore::Transaction();
-  }
+  BufferedRecoveryMessages() = default;
+  BufferedRecoveryMessages(PeeringCtx &);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
     for (auto &[target, qmap] : m.query_map) {
@@ -94,6 +85,22 @@ struct PeeringCtx {
   }
 };
 
+struct PeeringCtx : BufferedRecoveryMessages {
+  ObjectStore::Transaction transaction;
+  HBHandle* handle = nullptr;
+
+  PeeringCtx() = default;
+
+  PeeringCtx(const PeeringCtx &) = delete;
+  PeeringCtx &operator=(const PeeringCtx &) = delete;
+
+  PeeringCtx(PeeringCtx &&) = default;
+  PeeringCtx &operator=(PeeringCtx &&) = default;
+
+  void reset_transaction() {
+    transaction = ObjectStore::Transaction();
+  }
+};
 
   /* Encapsulates PG recovery process */
 class PeeringState : public MissingLoc::MappingInfo {
