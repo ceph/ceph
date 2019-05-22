@@ -1,5 +1,10 @@
 import ceph_module  # noqa
 
+try:
+    from typing import Set, Tuple, Iterator, Any
+except ImportError:
+    # just for type checking
+    pass
 import logging
 import json
 import six
@@ -1311,3 +1316,69 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param int query_id: query ID
         """
         return self._ceph_get_osd_perf_counters(query_id)
+
+
+class PersistentStoreDict(object):
+    def __init__(self, mgr, prefix):
+        # type: (MgrModule, str) -> None
+        self.mgr = mgr
+        self.prefix = prefix + '.'
+
+    def _mk_store_key(self, key):
+        return self.prefix + key
+
+    def __missing__(self, key):
+        # KeyError won't work for the `in` operator.
+        # https://docs.python.org/3/reference/expressions.html#membership-test-details
+        raise IndexError('PersistentStoreDict: "{}" not found'.format(key))
+
+    def clear(self):
+        # Don't make any assumptions about the content of the values.
+        for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
+            k, _ = item
+            self.mgr.set_store(k, None)
+
+    def __getitem__(self, item):
+        # type: (str) -> Any
+        key = self._mk_store_key(item)
+        try:
+            val = self.mgr.get_store(key)
+            if val is None:
+                self.__missing__(key)
+            return json.loads(val)
+        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
+            logging.getLogger(__name__).exception('failed to deserialize')
+            self.mgr.set_store(key, None)
+            raise
+
+    def __setitem__(self, item, value):
+        # type: (str, Any) -> None
+        """
+        value=None is not allowed, as it will remove the key.
+        """
+        key = self._mk_store_key(item)
+        self.mgr.set_store(key, json.dumps(value) if value is not None else None)
+
+    def __delitem__(self, item):
+        self[item] = None
+
+    def __len__(self):
+        return len(self.keys())
+
+    def items(self):
+        # type: () -> Iterator[Tuple[str, Any]]
+        prefix_len = len(self.prefix)
+        try:
+            for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
+                k, v = item
+                yield k[prefix_len:], json.loads(v)
+        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
+            logging.getLogger(__name__).exception('failed to deserialize')
+            self.clear()
+
+    def keys(self):
+        # type: () -> Set[str]
+        return {item[0] for item in self.items()}
+
+    def __iter__(self):
+        return iter(self.keys())
