@@ -385,6 +385,11 @@ and, ``backfill_toofull`` indicates that a backfill operation was requested,
 but couldn't be completed due to insufficient storage capacity. When a 
 placement group cannot be backfilled, it may be considered ``incomplete``.
 
+The ``backfill_toofull`` state may be transient.  It is possible that as PGs
+are moved around, space may become available.  The ``backfill_toofull`` is
+similar to ``backfill_wait`` in that as soon as conditions change
+backfill can proceed.
+
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
 ``osd_max_backfills`` sets the maximum number of concurrent backfills to and from
