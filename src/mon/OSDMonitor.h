@@ -209,12 +209,17 @@ struct osdmap_manifest_t {
 };
 WRITE_CLASS_ENCODER(osdmap_manifest_t);
 
-class OSDMonitor : public PaxosService {
+class OSDMonitor : public PaxosService,
+                   public md_config_obs_t {
   CephContext *cct;
 
 public:
   OSDMap osdmap;
 
+  // config observer
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+    const std::set<std::string> &changed) override;
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, bufferlist> pending_metadata;
@@ -224,6 +229,7 @@ public:
   bool priority_convert = false;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
+  ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   map<int,double> osd_weight;
 
@@ -322,6 +328,7 @@ private:
   int _set_cache_ratios();
   void _set_new_cache_sizes();
   void _set_cache_autotuning();
+  int _update_mon_cache_settings();
 
   friend struct OSDMemCache;
   friend struct IncCache;
