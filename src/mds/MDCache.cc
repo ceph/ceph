@@ -5483,8 +5483,10 @@ void MDCache::choose_lock_states_and_reconnect_caps()
       for (const auto &it : q->second)
 	dirty_caps |= it.second.dirty_caps;
     }
-    in->choose_lock_states(dirty_caps);
-    dout(15) << " chose lock states on " << *in << dendl;
+    if (dirty_caps) {
+      in->choose_lock_states(dirty_caps);
+      dout(15) << " chose lock states on " << *in << dendl;
+    }
 
     if (in->snaprealm && !rejoin_pending_snaprealms.count(in)) {
       in->get(CInode::PIN_OPENINGSNAPPARENTS);
