@@ -5,6 +5,7 @@ tasks:
         - deepsea.orch:
                 stage: 4
         - deepsea.validation:
+                grafana_service_check:
         - exec:
                 client.salt_master:
                         - 'ceph -s'

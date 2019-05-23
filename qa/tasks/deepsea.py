@@ -1711,6 +1711,15 @@ class Validation(DeepSea):
             raise ConfigError(self.err_prefix +
                               "ganesha_smoke_test needs a client role, but none was given")
 
+    def grafana_service_check(self, **kwargs):
+        grafana = self.role_type_present("grafana")
+        if grafana:
+            remote = self.remotes[grafana]
+            remote.sh('sudo systemctl status grafana-server.service')
+        else:
+            raise ConfigError(self.err_prefix +
+                              "grafana_service_check needs a grafana role, but none was given")
+
     def iscsi_smoke_test(self, **kwargs):
         igw_host = self.role_type_present("igw")
         if igw_host:
