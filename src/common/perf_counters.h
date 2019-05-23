@@ -243,11 +243,11 @@ public:
 
   void reset();
   void dump_formatted(ceph::Formatter *f, bool schema,
-                      const std::string &counter = "") {
+                      const std::string &counter = "") const {
     dump_formatted_generic(f, schema, false, counter);
   }
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
-                                 const std::string &counter = "") {
+                                 const std::string &counter = "") const {
     dump_formatted_generic(f, schema, true, counter);
   }
   pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
@@ -274,7 +274,7 @@ private:
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
-                              const std::string &counter = "");
+                              const std::string &counter = "") const;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
 
@@ -321,13 +321,13 @@ public:
 
   void dump_formatted(ceph::Formatter *f, bool schema,
                       const std::string &logger = "",
-                      const std::string &counter = "") {
+                      const std::string &counter = "") const {
     dump_formatted_generic(f, schema, false, logger, counter);
   }
 
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &logger = "",
-                                 const std::string &counter = "") {
+                                 const std::string &counter = "") const {
     dump_formatted_generic(f, schema, true, logger, counter);
   }
 
@@ -348,7 +348,7 @@ public:
 private:
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
                               const std::string &logger = "",
-                              const std::string &counter = "");
+                              const std::string &counter = "") const;
 
   perf_counters_set_t m_loggers;
 
