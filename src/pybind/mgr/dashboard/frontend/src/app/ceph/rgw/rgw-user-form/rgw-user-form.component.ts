@@ -10,10 +10,8 @@ import {
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
-import 'rxjs/add/observable/forkJoin';
-import { Observable } from 'rxjs/Observable';
-
+import { BsModalService } from 'ngx-bootstrap/modal';
+import { concat as observableConcat, Observable } from 'rxjs';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { CdValidators, isEmptyInputValue } from '../../../shared/validators/cd-validators';
@@ -248,16 +246,16 @@ export class RgwUserFormComponent implements OnInit {
       const bucketQuotaArgs = this._getApiBucketQuotaArgs();
       this.submitObservables.push(this.rgwUserService.putQuota(bucketQuotaArgs));
     }
-    // Finally execute all observables.
-    Observable.forkJoin(this.submitObservables).subscribe(
-      () => {
-        this.goToListView();
-      },
-      () => {
+    // Finally execute all observables one by one in serial.
+    observableConcat(...this.submitObservables).subscribe({
+      error: () => {
         // Reset the 'Submit' button.
         this.userForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.goToListView();
       }
-    );
+    });
   }
 
   /**
