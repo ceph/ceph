@@ -19,24 +19,29 @@
 #define dout_prefix *_dout << "librbd::cache::ParentCacheObjectDispatch: " \
                            << this << " " << __func__ << ": "
 
+using namespace ceph::immutable_obj_cache;
+
 namespace librbd {
 namespace cache {
 
-template <typename I, typename C>
-ParentCacheObjectDispatch<I, C>::ParentCacheObjectDispatch(
+template <typename I>
+ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
     m_initialized(false), m_object_store(nullptr) {
+  std::string controller_path =
+    ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+  m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
 }
 
-template <typename I, typename C>
-ParentCacheObjectDispatch<I, C>::~ParentCacheObjectDispatch() {
+template <typename I>
+ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
     delete m_object_store;
     delete m_cache_client;
 }
 
 // TODO if connect fails, init will return error to high layer.
-template <typename I, typename C>
-void ParentCacheObjectDispatch<I, C>::init() {
+template <typename I>
+void ParentCacheObjectDispatch<I>::init() {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
@@ -47,10 +52,6 @@ void ParentCacheObjectDispatch<I, C>::init() {
 
   ldout(cct, 5) << "parent image: setup SRO cache client" << dendl;
 
-  std::string controller_path = ((CephContext*)cct)->_conf.get_val<std::string>("immutable_object_cache_sock");
-  if(m_cache_client == nullptr) {
-    m_cache_client = new C(controller_path.c_str(), m_image_ctx->cct);
-  }
   m_cache_client->run();
 
   int ret = m_cache_client->connect();
@@ -78,8 +79,8 @@ void ParentCacheObjectDispatch<I, C>::init() {
   }
 }
 
-template <typename I, typename C>
-bool ParentCacheObjectDispatch<I, C>::read(
+template <typename I>
+bool ParentCacheObjectDispatch<I>::read(
     const std::string &oid, uint64_t object_no, uint64_t object_off,
     uint64_t object_len, librados::snap_t snap_id, int op_flags,
     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
@@ -111,8 +112,8 @@ bool ParentCacheObjectDispatch<I, C>::read(
   return true;
 }
 
-template <typename I, typename C>
-void ParentCacheObjectDispatch<I, C>::handle_read_cache(
+template <typename I>
+void ParentCacheObjectDispatch<I>::handle_read_cache(
     ObjectCacheRequest* ack, uint64_t read_off,
     uint64_t read_len, ceph::bufferlist* read_data,
     io::DispatchResult* dispatch_result, Context* on_dispatched) {
@@ -142,8 +143,8 @@ void ParentCacheObjectDispatch<I, C>::handle_read_cache(
   on_dispatched->complete(r);
 }
 
-template <typename I, typename C>
-int ParentCacheObjectDispatch<I, C>::handle_register_client(bool reg) {
+template <typename I>
+int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -157,4 +158,4 @@ int ParentCacheObjectDispatch<I, C>::handle_register_client(bool reg) {
 } // namespace cache
 } // namespace librbd
 
-template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
+template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx>;
