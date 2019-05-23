@@ -417,6 +417,7 @@ OSDMonitor::OSDMonitor(
 {
   inc_cache = std::make_shared<IncCache>(this);
   full_cache = std::make_shared<FullCache>(this);
+  cct->_conf.add_observer(this);
   int r = _set_cache_sizes();
   if (r < 0) {
     derr << __func__ << " using default osd cache size - mon_osd_cache_size ("
@@ -424,6 +425,114 @@ OSDMonitor::OSDMonitor(
          << ") without priority cache management"
          << dendl;
   }
+}
+
+const char **OSDMonitor::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mon_memory_target",
+    "mon_memory_autotune",
+    "rocksdb_cache_size",
+    NULL
+  };
+  return KEYS;
+}
+
+void OSDMonitor::handle_conf_change(const ConfigProxy& conf,
+                                    const std::set<std::string> &changed)
+{
+  dout(10) << __func__ << " " << changed << dendl;
+
+  if (changed.count("mon_memory_autotune")) {
+    _set_cache_autotuning();
+  }
+  if (changed.count("mon_memory_target") ||
+      changed.count("rocksdb_cache_size")) {
+    int r = _update_mon_cache_settings();
+    if (r < 0) {
+      derr << __func__ << " mon_memory_target:"
+           << g_conf()->mon_memory_target
+           << " rocksdb_cache_size:"
+           << g_conf()->rocksdb_cache_size
+           << ". Invalid size provided."
+           << dendl;
+    }
+  }
+}
+
+void OSDMonitor::_set_cache_autotuning()
+{
+  mon_memory_autotune = g_conf()->mon_memory_autotune;
+  if (!mon_memory_autotune && pcm != nullptr) {
+    // Disable cache autotuning
+    std::lock_guard l(balancer_lock);
+    pcm = nullptr;
+  }
+
+  if (mon_memory_autotune && pcm == nullptr) {
+    int r = register_cache_with_pcm();
+    if (r < 0) {
+      dout(10) << __func__
+               << " Error while registering osdmon caches with pcm."
+               << " Cache auto tuning not enabled."
+               << dendl;
+    }
+  }
+}
+
+int OSDMonitor::_update_mon_cache_settings()
+{
+  if (g_conf()->mon_memory_target <= 0 ||
+      g_conf()->mon_memory_target < mon_memory_min ||
+      g_conf()->rocksdb_cache_size <= 0) {
+    return -EINVAL;
+  }
+
+  uint64_t old_mon_memory_target = mon_memory_target;
+  uint64_t old_rocksdb_cache_size = rocksdb_cache_size;
+
+  // Set the new pcm memory cache sizes
+  mon_memory_target = g_conf()->mon_memory_target;
+  rocksdb_cache_size = g_conf()->rocksdb_cache_size;
+
+  uint64_t base = mon_memory_base;
+  double fragmentation = mon_memory_fragmentation;
+  uint64_t target = mon_memory_target;
+  uint64_t min = mon_memory_min;
+  uint64_t max = min;
+
+  uint64_t ltarget = (1.0 - fragmentation) * target;
+  if (ltarget > base + min) {
+    max = ltarget - base;
+  }
+
+  int r = _set_cache_ratios();
+  if (r < 0) {
+    derr << __func__ << " Cache ratios for pcm could not be set."
+         << " Review the kv (rocksdb) and mon_memory_target sizes."
+         << dendl;
+    mon_memory_target = old_mon_memory_target;
+    rocksdb_cache_size = old_rocksdb_cache_size;
+    return -EINVAL;
+  }
+
+  if (mon_memory_autotune && pcm != nullptr) {
+    std::lock_guard l(balancer_lock);
+    // set pcm cache levels
+    pcm->set_target_memory(target);
+    pcm->set_min_memory(min);
+    pcm->set_max_memory(max);
+    // tune memory based on new values
+    pcm->tune_memory();
+    pcm->balance();
+    _set_new_cache_sizes();
+    dout(10) << __func__ << " Updated mon cache setting."
+             << " target: " << target
+             << " min: " << min
+             << " max: " << max
+             << dendl;
+  }
+  return 0;
 }
 
 int OSDMonitor::_set_cache_sizes()
@@ -4953,22 +5062,25 @@ void OSDMonitor::tick()
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
     propose_pending();
 
-  if (ceph_using_tcmalloc() && pcm != nullptr) {
-    pcm->tune_memory();
-    pcm->balance();
-    _set_new_cache_sizes();
-    dout(10) << "tick balancer "
-             << " inc cache_bytes: " << inc_cache->get_cache_bytes()
-             << " inc comtd_bytes: " << inc_cache->get_committed_size()
-             << " inc used_bytes: " << inc_cache->_get_used_bytes()
-             << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
-             << dendl;
-    dout(10) << "tick balancer "
-             << " full cache_bytes: " << full_cache->get_cache_bytes()
-             << " full comtd_bytes: " << full_cache->get_committed_size()
-             << " full used_bytes: " << full_cache->_get_used_bytes()
-             << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
-             << dendl;
+  {
+    std::lock_guard l(balancer_lock);
+    if (ceph_using_tcmalloc() && mon_memory_autotune && pcm != nullptr) {
+      pcm->tune_memory();
+      pcm->balance();
+      _set_new_cache_sizes();
+      dout(10) << "tick balancer "
+               << " inc cache_bytes: " << inc_cache->get_cache_bytes()
+               << " inc comtd_bytes: " << inc_cache->get_committed_size()
+               << " inc used_bytes: " << inc_cache->_get_used_bytes()
+               << " inc num_osdmaps: " << inc_cache->_get_num_osdmaps()
+               << dendl;
+      dout(10) << "tick balancer "
+               << " full cache_bytes: " << full_cache->get_cache_bytes()
+               << " full comtd_bytes: " << full_cache->get_committed_size()
+               << " full used_bytes: " << full_cache->_get_used_bytes()
+               << " full num_osdmaps: " << full_cache->_get_num_osdmaps()
+               << dendl;
+    }
   }
 }
 
