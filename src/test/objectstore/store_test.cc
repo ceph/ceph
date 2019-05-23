@@ -1320,6 +1320,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     return;
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   // just a big number to disble gc
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
