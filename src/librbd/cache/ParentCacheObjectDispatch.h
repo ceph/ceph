@@ -8,9 +8,8 @@
 #include "SharedPersistentObjectCacher.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "tools/immutable_object_cache/CacheClient.h"
+#include "librbd/cache/TypeTraits.h"
 #include "tools/immutable_object_cache/Types.h"
-
-using namespace ceph::immutable_obj_cache;
 
 namespace librbd {
 
@@ -18,8 +17,12 @@ class ImageCtx;
 
 namespace cache {
 
-template <typename ImageCtxT = ImageCtx, typename CacheClientT = CacheClient>
+template <typename ImageCtxT = ImageCtx>
 class ParentCacheObjectDispatch : public io::ObjectDispatchInterface {
+  // mock unit testing support
+  typedef cache::TypeTraits<ImageCtxT> TypeTraits;
+  typedef typename TypeTraits::CacheClient CacheClient;
+
 public:
   static ParentCacheObjectDispatch* create(ImageCtxT* image_ctx) {
     return new ParentCacheObjectDispatch(image_ctx);
@@ -108,18 +111,25 @@ public:
     return m_initialized;
   }
 
-  CacheClientT *m_cache_client = nullptr;
-  ImageCtxT* m_image_ctx;
+  ImageCtxT* get_image_ctx() {
+    return m_image_ctx;
+  }
+
+  CacheClient* get_cache_client() {
+    return m_cache_client;
+  }
 
 private:
-
   void handle_read_cache(
-         ObjectCacheRequest* ack, uint64_t read_off,
-         uint64_t read_len, ceph::bufferlist* read_data,
+         ceph::immutable_obj_cache::ObjectCacheRequest* ack,
+         uint64_t read_off, uint64_t read_len,
+         ceph::bufferlist* read_data,
          io::DispatchResult* dispatch_result,
          Context* on_dispatched);
   int handle_register_client(bool reg);
 
+  CacheClient *m_cache_client = nullptr;
+  ImageCtxT* m_image_ctx;
   SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
   bool m_initialized;
 };
@@ -127,6 +137,6 @@ private:
 } // namespace cache
 } // namespace librbd
 
-extern template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx, ceph::immutable_obj_cache::CacheClient>;
+extern template class librbd::cache::ParentCacheObjectDispatch<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
