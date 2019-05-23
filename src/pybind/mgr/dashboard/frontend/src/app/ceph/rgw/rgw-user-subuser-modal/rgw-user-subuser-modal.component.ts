@@ -38,7 +38,6 @@ export class RgwUserSubuserModalComponent {
   ) {
     this.resource = this.i18n('Subuser');
     this.createForm();
-    this.listenToChanges();
   }
 
   createForm() {
@@ -49,17 +48,6 @@ export class RgwUserSubuserModalComponent {
       // Swift key
       generate_secret: [true],
       secret_key: [null, [CdValidators.requiredIf({ generate_secret: false })]]
-    });
-  }
-
-  listenToChanges() {
-    // Reset the validation status of various controls, especially those that are using
-    // the 'requiredIf' validator. This is necessary because the controls itself are not
-    // validated again if the status of their prerequisites have been changed.
-    this.formGroup.get('generate_secret').valueChanges.subscribe(() => {
-      ['secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
-      });
     });
   }
 
