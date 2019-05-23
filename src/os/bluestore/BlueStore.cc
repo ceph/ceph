@@ -18,6 +18,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include <boost/container/flat_set.hpp>
+
 #include "include/cpp-btree/btree_set.h"
 
 #include "BlueStore.h"
@@ -11587,12 +11589,27 @@ void BlueStore::_do_write_small(
     prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
+  boost::container::flat_set<const bluestore_blob_t*> inspected_blobs;
+  // We don't want to have more blobs than min alloc units fit
+  // into 2 max blobs
+  size_t blob_threshold = max_blob_size / min_alloc_size * 2 + 1;
+  bool above_blob_threshold = false;
+
+  inspected_blobs.reserve(blob_threshold);
+
+  uint64_t max_off = 0;
+  auto start_ep = ep;
+  auto end_ep = ep; // exclusively
   do {
     any_change = false;
 
     if (ep != end && ep->logical_offset < offset + max_bsize) {
       BlobRef b = ep->blob;
-
+      if (!above_blob_threshold) {
+	inspected_blobs.insert(&b->get_blob());
+	above_blob_threshold = inspected_blobs.size() >= blob_threshold;
+      }
+      max_off = ep->logical_end();
       auto bstart = ep->blob_start();
 
       dout(20) << __func__ << " considering " << *b
@@ -11793,13 +11810,18 @@ void BlueStore::_do_write_small(
 	}
       }
       ++ep;
+      end_ep = ep;
       any_change = true;
     } // if (ep != end && ep->logical_offset < offset + max_bsize)
 
     // check extent for reuse in reverse order
     if (prev_ep != end && prev_ep->logical_offset >= min_off) {
       BlobRef b = prev_ep->blob;
-
+      if (!above_blob_threshold) {
+	inspected_blobs.insert(&b->get_blob());
+	above_blob_threshold = inspected_blobs.size() >= blob_threshold;
+      }
+      start_ep = prev_ep;
       auto bstart = prev_ep->blob_start();
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
@@ -11846,6 +11868,24 @@ void BlueStore::_do_write_small(
     } // if (prev_ep != end && prev_ep->logical_offset >= min_off) 
   } while (any_change);
 
+  if (above_blob_threshold) {
+    dout(10) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
+            << " " << std::hex << min_off << "~" << max_off << std::dec
+	    << dendl;
+    ceph_assert(start_ep != end_ep);
+    for (auto ep = start_ep; ep != end_ep; ++ep) {
+      dout(20) << __func__ << " inserting for GC "
+              << std::hex << ep->logical_offset << "~" << ep->length
+	      << std::dec << dendl;
+
+      wctx->extents_to_gc.union_insert(ep->logical_offset, ep->length);
+    }
+    // insert newly written extent to GC
+    wctx->extents_to_gc.union_insert(offset, length);
+      dout(20) << __func__ << " inserting (last) for GC "
+              << std::hex << offset << "~" << length
+	      << std::dec << dendl;
+  }
   // new blob.
   BlobRef b = c->new_blob();
   uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
@@ -12481,7 +12521,9 @@ int BlueStore::_do_gc(
     bufferlist bl;
     auto offset = (*it).first;
     auto length = (*it).second;
-
+    dout(20) << __func__ << " processing " << std::hex
+            << offset << "~" << length << std::dec
+	    << dendl;
     int r = _do_read(c.get(), o, offset, length, bl, 0);
     ceph_assert(r == (int)length);
 
@@ -12542,7 +12584,7 @@ int BlueStore::_do_write(
   uint64_t end = offset + length;
 
   GarbageCollector gc(c->store->cct);
-  int64_t benefit;
+  int64_t benefit = 0;
   auto dirty_start = offset;
   auto dirty_end = end;
 
@@ -12558,8 +12600,8 @@ int BlueStore::_do_write(
   }
 
   if (wctx.extents_to_gc.empty() ||
-      !(wctx.extents_to_gc.range_start() <= offset &&
-        wctx.extents_to_gc.range_end() >= offset + length)) {
+      wctx.extents_to_gc.range_start() > offset ||
+      wctx.extents_to_gc.range_end() < offset + length) {
     benefit = gc.estimate(offset,
 			  length,
 			  o->extent_map,
@@ -12584,6 +12626,7 @@ int BlueStore::_do_write(
   }
   if (!wctx.extents_to_gc.empty()) {
     dout(20) << __func__ << " perform garbage collection" << dendl;
+
     r = _do_gc(txc, c, o,
       wctx,
       &dirty_start, &dirty_end);
