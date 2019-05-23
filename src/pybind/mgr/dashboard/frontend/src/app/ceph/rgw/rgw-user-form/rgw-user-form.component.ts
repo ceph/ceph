@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { forkJoin as observableForkJoin, Observable } from 'rxjs';
+import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
@@ -238,17 +238,17 @@ export class RgwUserFormComponent implements OnInit {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
       this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
     }
-    // Finally execute all observables.
-    observableForkJoin(this.submitObservables).subscribe(
-      () => {
-        this.notificationService.show(NotificationType.success, notificationTitle);
-        this.goToListView();
-      },
-      () => {
+    // Finally execute all observables one by one in serial.
+    observableConcat(...this.submitObservables).subscribe({
+      error: () => {
         // Reset the 'Submit' button.
         this.userForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+        this.goToListView();
       }
-    );
+    });
   }
 
   /**
