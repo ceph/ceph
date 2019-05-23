@@ -31,11 +31,20 @@ struct MockParentImageCacheImageCtx : public MockImageCtx {
 
 }; // anonymous namespace
 
+namespace cache {
+
+template<>
+struct TypeTraits<MockParentImageCacheImageCtx> {
+  typedef ceph::immutable_obj_cache::MockCacheClient CacheClient;
 };
+
+}; // namespace cache
+
+}; // namespace librbd
 
 #include "librbd/cache/ParentCacheObjectDispatch.cc"
 #include "librbd/cache/SharedPersistentObjectCacher.cc"
-template class librbd::cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient>;
+template class librbd::cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx>;
 template class librbd::cache::SharedPersistentObjectCacher<librbd::MockParentImageCacheImageCtx>;
 
 namespace librbd {
@@ -50,18 +59,18 @@ using ::testing::WithArgs;
 
 class TestMockParentImageCache : public TestMockFixture {
   public : 
-  typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx, MockCacheClient> MockParentImageCache;
+  typedef cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx> MockParentImageCache;
 
   // ====== mock cache client ==== 
   void expect_cache_run(MockParentImageCache& mparent_image_cache, bool ret_val) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), run());
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), run());
 
     expect.WillOnce((Invoke([ret_val]() {
     })));
   }
 
    void expect_cache_session_state(MockParentImageCache& mparent_image_cache, bool ret_val) {
-     auto & expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), is_session_work());
+     auto & expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), is_session_work());
 
      expect.WillOnce((Invoke([ret_val]() {
         return ret_val;
@@ -69,7 +78,7 @@ class TestMockParentImageCache : public TestMockFixture {
    }
 
    void expect_cache_connect(MockParentImageCache& mparent_image_cache, int ret_val) {
-     auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), connect());
+     auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), connect());
 
      expect.WillOnce((Invoke([ret_val]() {
         return ret_val;
@@ -78,7 +87,7 @@ class TestMockParentImageCache : public TestMockFixture {
 
   void expect_cache_lookup_object(MockParentImageCache& mparent_image_cache,
                                   Context* on_finish) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client),
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()),
                                internal_lookup(_, _, _, _));
 
      expect.WillOnce(WithArg<3>(Invoke([on_finish](std::string oid) {
@@ -87,21 +96,21 @@ class TestMockParentImageCache : public TestMockFixture {
   }
 
   void expect_cache_close(MockParentImageCache& mparent_image_cache, int ret_val) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), close());
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), close());
 
     expect.WillOnce((Invoke([ret_val]() {
     })));
   }
 
   void expect_cache_stop(MockParentImageCache& mparent_image_cache, int ret_val) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), stop());
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), stop());
 
     expect.WillOnce((Invoke([ret_val]() {
     })));
   }
 
   void expect_cache_register(MockParentImageCache& mparent_image_cache, Context* mock_handle_register, int ret_val) {
-    auto& expect = EXPECT_CALL(*(mparent_image_cache.m_cache_client), register_client(_));
+    auto& expect = EXPECT_CALL(*(mparent_image_cache.get_cache_client()), register_client(_));
 
     expect.WillOnce(WithArg<0>(Invoke([mock_handle_register, ret_val](Context* ctx) { 
       if(ret_val == 0) {
@@ -116,7 +125,7 @@ class TestMockParentImageCache : public TestMockFixture {
 
   void expect_io_object_dispatcher_register_state(MockParentImageCache& mparent_image_cache, 
                                                   int ret_val) {
-    auto& expect = EXPECT_CALL((*(mparent_image_cache.m_image_ctx->io_object_dispatcher)), 
+    auto& expect = EXPECT_CALL((*(mparent_image_cache.get_image_ctx()->io_object_dispatcher)),
                                register_object_dispatch(_));
 
         expect.WillOnce(WithArg<0>(Invoke([ret_val, &mparent_image_cache]
@@ -132,9 +141,6 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
-
-  // will be released by MockParentImageCache's destruction.
-  mock_parent_image_cache->m_cache_client = new MockCacheClient("/cache/path", ictx->cct);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   expect_cache_connect(*mock_parent_image_cache, 0);
@@ -152,10 +158,10 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
-  ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), true);
+  ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
-  mock_parent_image_cache->m_cache_client->close();
-  mock_parent_image_cache->m_cache_client->stop();
+  mock_parent_image_cache->get_cache_client()->close();
+  mock_parent_image_cache->get_cache_client()->stop();
 
   delete mock_parent_image_cache;
 }
@@ -166,8 +172,6 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
   MockParentImageCacheImageCtx mock_image_ctx(*ictx); 
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
-
-  mock_parent_image_cache->m_cache_client = new MockCacheClient("/cache/path", ictx->cct);
 
   expect_cache_run(*mock_parent_image_cache, 0);
   expect_cache_connect(*mock_parent_image_cache, -1);
@@ -181,10 +185,10 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), false);
-  ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), false);
+  ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), false);
 
-  mock_parent_image_cache->m_cache_client->close();
-  mock_parent_image_cache->m_cache_client->stop();
+  mock_parent_image_cache->get_cache_client()->close();
+  mock_parent_image_cache->get_cache_client()->stop();
 
   delete mock_parent_image_cache;
 
@@ -197,8 +201,6 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
-  mock_parent_image_cache->m_cache_client = new MockCacheClient("/cache/path", ictx->cct);
- 
   expect_cache_run(*mock_parent_image_cache, 0);
   expect_cache_connect(*mock_parent_image_cache, 0);
   Context* ctx = new FunctionContext([](bool reg) {
@@ -214,10 +216,10 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), false);
-  ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), false);
+  ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), false);
  
-  mock_parent_image_cache->m_cache_client->close();
-  mock_parent_image_cache->m_cache_client->stop();
+  mock_parent_image_cache->get_cache_client()->close();
+  mock_parent_image_cache->get_cache_client()->stop();
 
   delete mock_parent_image_cache;
 }
@@ -269,11 +271,6 @@ TEST_F(TestMockParentImageCache, test_read) {
 
   auto mock_parent_image_cache = MockParentImageCache::create(&mock_image_ctx);
 
-  mock_parent_image_cache->m_cache_client = new MockCacheClient("/cache/path", ictx->cct);
-
-  // will be released by MockParentImageCache's destruction.
-  mock_parent_image_cache->m_cache_client = new MockCacheClient("/cache/path", ictx->cct);
-
   expect_cache_run(*mock_parent_image_cache, 0);
   expect_cache_connect(*mock_parent_image_cache, 0);
   Context* ctx = new FunctionContext([](bool reg) {
@@ -290,12 +287,12 @@ TEST_F(TestMockParentImageCache, test_read) {
   ASSERT_EQ(mock_parent_image_cache->get_object_dispatch_layer(),
             io::OBJECT_DISPATCH_LAYER_PARENT_CACHE);
   ASSERT_EQ(mock_parent_image_cache->get_state(), true);
-  ASSERT_EQ(mock_parent_image_cache->m_cache_client->is_session_work(), true);
+  ASSERT_EQ(mock_parent_image_cache->get_cache_client()->is_session_work(), true);
 
   C_SaferCond cond;
   Context* on_finish = &cond;
 
-  auto& expect = EXPECT_CALL(*(mock_parent_image_cache->m_cache_client), is_session_work())
+  auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work())
                    .WillOnce(Return(true));
   expect_cache_lookup_object(*mock_parent_image_cache, on_finish); 
 
@@ -303,8 +300,8 @@ TEST_F(TestMockParentImageCache, test_read) {
                         nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr);
   ASSERT_EQ(0, cond.wait());
 
-  mock_parent_image_cache->m_cache_client->close();
-  mock_parent_image_cache->m_cache_client->stop();
+  mock_parent_image_cache->get_cache_client()->close();
+  mock_parent_image_cache->get_cache_client()->stop();
   delete mock_parent_image_cache;
 }
 
