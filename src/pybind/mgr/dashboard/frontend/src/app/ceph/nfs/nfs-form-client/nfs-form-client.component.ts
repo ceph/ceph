@@ -52,8 +52,8 @@ export class NfsFormClientComponent {
       addresses: new FormControl('', {
         validators: [Validators.required, Validators.pattern(REGEX_LIST_IP)]
       }),
-      access_type: new FormControl(this.form.getValue('access_type')),
-      squash: new FormControl(this.form.getValue('squash'))
+      access_type: new FormControl(''),
+      squash: new FormControl('')
     });
 
     clients.push(fg);
