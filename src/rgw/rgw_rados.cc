@@ -749,9 +749,15 @@ public:
 class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
 {
   RGWMetaSyncStatusManager sync;
+  bool initialized;
 
   uint64_t interval_msec() override {
-    return 0; /* no interval associated, it'll run once until stopped */
+    if (initialized) {
+      return 0; /* no interval associated, it'll run once until stopped */
+    } else {
+      static constexpr int META_SYNC_INIT_WAIT_SEC=20;
+      return META_SYNC_INIT_WAIT_SEC * 1000;
+    }
   }
   void stop_process() override {
     sync.stop();
@@ -768,15 +774,24 @@ public:
   RGWMetaSyncStatusManager* get_manager() { return &sync; }
 
   int init() override {
-    int ret = sync.init();
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: sync.init() returned " << ret << dendl;
-      return ret;
-    }
     return 0;
   }
 
   int process() override {
+    while (!initialized) {
+      if (going_down()) {
+	return 0;
+      }
+
+      int ret = sync.init();
+      if (ret >= 0) {
+	initialized = true;
+	break;
+      }
+
+      /* we'll be back! */
+      return 0;
+    }
     sync.run();
     return 0;
   }

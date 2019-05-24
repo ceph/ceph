@@ -26,6 +26,7 @@
 #include "cls/lock/cls_lock_client.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_sync_modules.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -312,6 +313,12 @@ int RGWMetaSyncStatusManager::init()
   if (!store->svc.zone->get_master_conn()) {
     lderr(store->ctx()) << "no REST connection to master zone" << dendl;
     return -EIO;
+  }
+  auto& zone_public_config = store->svc.zone->get_zone();
+  auto tier_type = zone_public_config.tier_type;  
+
+  if (!store->svc.sync_modules->get_manager()->needs_meta_sync(tier_type)) {
+    return -ENOTSUP;
   }
 
   int r = rgw_init_ioctx(store->get_rados_handle(), store->svc.zone->get_zone_params().log_pool, ioctx, true);

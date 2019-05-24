@@ -66,6 +66,11 @@ public:
   virtual bool supports_writes() {
     return false;
   }
+
+  virtual bool needs_meta_sync() {
+    return false;
+  }
+
   virtual bool supports_data_export() = 0;
   virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
@@ -108,6 +113,15 @@ public:
     }
 
     return module.get()->supports_data_export();
+  }
+
+  int needs_meta_sync(const string& name) {
+    RGWSyncModuleRef module;
+    if (!get_module(name, &module)) {
+      return -ENOENT;
+    }
+
+    return module.get()->needs_meta_sync();
   }
 
   int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
