@@ -580,6 +580,13 @@ if(WITH_MGR)
   list(APPEND tox_tests run-tox-python-common)
 endif()
 
+if(WITH_CEPHFS_SHELL)
+  add_test(NAME run-tox-cephfs-shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/tools/cephfs/run-tox.sh)
+  list(APPEND tox_tests run-tox-cephfs-shell)
+  set(CEPHFS_SHELL_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/cephfs-shell-virtualenv)
+  list(APPEND env_vars_for_tox_tests CEPHFS_SHELL_VIRTUALENV=${CEPHFS_SHELL_VIRTUALENV})
+endif()
+
 set_property(
   TEST ${tox_tests}
   PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
