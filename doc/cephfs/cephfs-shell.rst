@@ -362,3 +362,14 @@ Options :
   -c       Count number of items found
   -i       Ignore case 
 
+stat
+------
+
+Display file status.
+
+Usage :
+
+     stat [-h] <file_name> [file_name ...]
+
+Options :
+  -h     Shows the help message
