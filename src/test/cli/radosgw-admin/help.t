@@ -112,7 +112,7 @@
     usage trim                 trim usage (by user, by bucket, date range)
     usage clear                reset all the usage stats for the cluster
     gc list                    dump expired garbage collection objects (specify
-                               --include-all to list all entries, including unexpired)
+                               --include-all to list all entries, including unexpired; --extra-info for manifest detail)
     gc process                 manually process garbage (specify
                                --include-all to process all entries, including unexpired)
     lc list                    list all bucket lifecycle progress

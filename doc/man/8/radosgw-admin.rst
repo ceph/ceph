@@ -344,7 +344,7 @@ which are as follows:
 
 :command:`gc list`
   Dump expired garbage collection objects (specify --include-all to list all
-  entries, including unexpired).
+  entries, including unexpired; --extra-info for manifest detail).
 
 :command:`gc process`
   Manually process garbage.

@@ -98,7 +98,7 @@ void usage()
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
   cout << "  bucket list                list buckets (specify --allow-unordered for\n";
-  cout << "                             faster, unsorted listing)\n";
+  cout << "                             faster, unsorted listing; --extra-info for manifest detail)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
   cout << "  bucket link                link bucket to specified user\n";
   cout << "  bucket unlink              unlink bucket from specified user\n";
@@ -1108,6 +1108,44 @@ void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
       ceph_abort();
       break;
   }
+}
+
+static void show_obj_manifest(RGWRados* store, RGWBucketInfo& bucket_info,
+			      const rgw_obj& obj, Formatter* formatter)
+{
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+
+  int ret = read_op.prepare();
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
+    return;
+  }
+
+  map<string, buffer::list>::iterator iter;
+  iter = attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == attrs.end()) {
+    lderr(store->ctx()) << "ERROR: no manifest found for object" << dendl;
+    return;
+  }
+
+  RGWObjManifest manifest;
+
+  try {
+    buffer::list& bl = iter->second;
+    auto biter = bl.cbegin();
+    decode(manifest, biter);
+  } catch (buffer::error& err) {
+    ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
+    return;
+  }
+  formatter->open_object_section("manifest");
+  encode_json("manifest", manifest, formatter);
+  formatter->close_section();
 }
 
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
@@ -5485,7 +5523,13 @@ int main(int argc, const char **argv)
 
         for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
           rgw_bucket_dir_entry& entry = *iter;
+	  formatter->open_object_section("entry");
           encode_json("entry", entry, formatter);
+	  if (extra_info) {
+	    rgw_obj obj(bucket_info.bucket, entry.key);
+	    show_obj_manifest(store, bucket_info, obj, formatter);
+	  }
+	  formatter->close_section();
         }
         formatter->flush(cout);
       } while (truncated && count < max_entries);
