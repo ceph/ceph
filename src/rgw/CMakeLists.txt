@@ -315,6 +315,9 @@ target_link_libraries(rgw
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
 endif()
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw PRIVATE Boost::coroutine Boost::context)
+endif()
 
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
