@@ -299,7 +299,14 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   m_in_flight_flushes_cond.Signal();
 
   if (!m_aio_scheduled) {
-    if (m_in_flight_appends.empty() && m_object_closed) {
+    if (m_in_flight_appends.empty() &&
+        (m_object_closed || m_aio_sent_size >= m_soft_max_size)) {
+      if (m_aio_sent_size >= m_soft_max_size) {
+        ldout(m_cct, 20) << __func__ << ": " << m_oid
+                         << " soft max size reached, notifying overflow"
+                         << dendl;
+        m_overflowed = true;
+      }
       // all remaining unsent appends should be redirected to new object
       m_append_buffers.splice(m_append_buffers.begin(), m_pending_buffers);
       notify_handler_unlock();
@@ -386,6 +393,12 @@ void ObjectRecorder::send_appends_aio() {
         m_in_flight_tids.size() >= m_max_in_flight_appends) {
       ldout(m_cct, 20) << __func__ << ": " << m_oid
                        << " max in flight appends reached" << dendl;
+      return;
+    }
+
+    if (m_aio_sent_size >= m_soft_max_size) {
+      ldout(m_cct, 20) << __func__ << ": " << m_oid
+                       << " soft max size reached" << dendl;
       return;
     }
 
