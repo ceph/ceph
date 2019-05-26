@@ -12,6 +12,7 @@
 
 #include "include/ceph_assert.h"
 #include "include/Context.h"
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "Types.h"
 #include "SocketCommon.h"
@@ -31,6 +32,7 @@ class CacheClient {
   void close();
   int stop();
   int connect();
+  void connect(Context* on_finish);
   void lookup_object(std::string pool_nspace, uint64_t pool_id,
                      uint64_t snap_id, std::string oid,
                      CacheGenContextURef&& on_finish);
@@ -40,6 +42,7 @@ class CacheClient {
   void send_message();
   void try_send();
   void fault(const int err_type, const boost::system::error_code& err);
+  void handle_connect(Context* on_finish, const boost::system::error_code& err);
   void try_receive();
   void receive_message();
   void process(ObjectCacheRequest* reply, uint64_t seq_id);
