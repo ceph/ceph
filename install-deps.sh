@@ -168,6 +168,11 @@ function install_boost_on_ubuntu {
 	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
+    echo '========'
+    ls -l /etc/ld.so.conf.d/ceph-libboost1.67-x86_64-linux-gnu.conf
+    cat /etc/ld.so.conf.d/ceph-libboost1.67-x86_64-linux-gnu.conf
+    ls -l /opt/ceph/lib/x86_64-linux-gnu/libboost_context.so.1.67.0
+    echo '========'
 }
 
 function version_lt {
