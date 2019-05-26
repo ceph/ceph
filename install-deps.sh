@@ -134,9 +134,7 @@ function install_pkg_on_ubuntu {
     local pkgs=$@
     local missing_pkgs
     for pkg in $pkgs; do
-	if ! dpkg -s $pkg &> /dev/null; then
-	    missing_pkgs+=" $pkg"
-	fi
+	missing_pkgs+=" $pkg"
     done
     if test -n "$missing_pkgs"; then
 	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
