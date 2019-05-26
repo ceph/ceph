@@ -249,9 +249,9 @@ namespace immutable_obj_cache {
        if (dedicated) {
          // dedicated thrad to execute this context.
        }
-       current_request->process_msg->complete(reply);
-       //delete current_request;
-       //delete reply;
+       current_request->process_msg.release()->complete(reply);
+       delete current_request;
+       delete reply;
     });
 
     if (m_worker_thread_num != 0) {
