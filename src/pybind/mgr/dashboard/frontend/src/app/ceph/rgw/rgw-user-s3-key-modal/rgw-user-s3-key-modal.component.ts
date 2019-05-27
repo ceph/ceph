@@ -37,7 +37,6 @@ export class RgwUserS3KeyModalComponent {
   ) {
     this.resource = this.i18n('S3 Key');
     this.createForm();
-    this.listenToChanges();
   }
 
   createForm() {
@@ -46,17 +45,6 @@ export class RgwUserS3KeyModalComponent {
       generate_key: [true],
       access_key: [null, [CdValidators.requiredIf({ generate_key: false })]],
       secret_key: [null, [CdValidators.requiredIf({ generate_key: false })]]
-    });
-  }
-
-  listenToChanges() {
-    // Reset the validation status of various controls, especially those that are using
-    // the 'requiredIf' validator. This is necessary because the controls itself are not
-    // validated again if the status of their prerequisites have been changed.
-    this.formGroup.get('generate_key').valueChanges.subscribe(() => {
-      ['access_key', 'secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
-      });
     });
   }
 
