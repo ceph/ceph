@@ -528,7 +528,7 @@ if(WITH_TESTS)
     find_package(GMock REQUIRED)
   else()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    add_subdirectory(googletest/googlemock)
+    add_subdirectory(googletest)
     add_library(GMock::GMock ALIAS gmock)
     add_library(GMock::Main ALIAS gmock_main)
     target_include_directories(gmock INTERFACE
