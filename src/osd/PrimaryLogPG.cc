@@ -2472,41 +2472,52 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     pg_pool_t::fingerprint_t fp_algo_t = pool.info.get_fingerprint_type();
     if (iter->second.has_reference() &&
 	fp_algo_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+      object_t fp_oid;
+      bufferlist in;
       switch (fp_algo_t) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
 	  {
 	    sha1_digest_t sha1r = chunk_data.sha1();
-	    object_t fp_oid = sha1r.to_str();
-	    bufferlist in;
-	    if (fp_oid != tgt_soid.oid) {
-	      // decrement old chunk's reference count 
-	      ObjectOperation dec_op;
-	      cls_chunk_refcount_put_op put_call;
-	      ::encode(put_call, in);                             
-	      dec_op.call("refcount", "chunk_put", in);         
-	      // we don't care dec_op's completion. scrub for dedup will fix this.
-	      tid = osd->objecter->mutate(
-		tgt_soid.oid, oloc, dec_op, snapc,
-		ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-		flags, NULL);
-	      in.clear();
-	    }
-	    tgt_soid.oid = fp_oid;
-	    iter->second.oid = tgt_soid;
-	    // add data op
-	    ceph_osd_op osd_op;
-	    osd_op.extent.offset = 0;
-	    osd_op.extent.length = chunk_data.length();
-	    encode(osd_op, in);
-	    encode(soid, in);
-	    in.append(chunk_data);
-	    obj_op.call("cas", "cas_write_or_get", in);
+	    fp_oid = sha1r.to_str();
 	    break;
+	  }
+	case pg_pool_t::TYPE_FINGERPRINT_SHA256:
+	  {
+	    sha256_digest_t sha256r = chunk_data.sha256();
+	    fp_oid = sha256r.to_str();
+	  }
+	case pg_pool_t::TYPE_FINGERPRINT_SHA512:
+	  {
+	    sha512_digest_t sha512r = chunk_data.sha512();
+	    fp_oid = sha512r.to_str();
 	  }
 	default:
 	  assert(0 == "unrecognized fingerprint type");
 	  break;
       }
+      if (fp_oid != tgt_soid.oid) {
+	// decrement old chunk's reference count 
+	ObjectOperation dec_op;
+	cls_chunk_refcount_put_op put_call;
+	::encode(put_call, in);                             
+	dec_op.call("refcount", "chunk_put", in);         
+	// we don't care dec_op's completion. scrub for dedup will fix this.
+	tid = osd->objecter->mutate(
+	  tgt_soid.oid, oloc, dec_op, snapc,
+	  ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+	  flags, NULL);
+	in.clear();
+      }
+      tgt_soid.oid = fp_oid;
+      iter->second.oid = tgt_soid;
+      // add data op
+      ceph_osd_op osd_op;
+      osd_op.extent.offset = 0;
+      osd_op.extent.length = chunk_data.length();
+      encode(osd_op, in);
+      encode(soid, in);
+      in.append(chunk_data);
+      obj_op.call("cas", "cas_write_or_get", in);
     } else {
       obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
     }
