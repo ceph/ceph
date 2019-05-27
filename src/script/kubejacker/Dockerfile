@@ -1,4 +1,4 @@
-FROM ceph/ceph:latest
+FROM ceph/daemon-base:latest-master
 # for openSUSE, use:
 # FROM registry.opensuse.org/home/ssebastianwagner/rook-ceph/images/opensuse/leap:latest
 
@@ -11,6 +11,4 @@ FROM ceph/ceph:latest
 #ADD eclib.tar.gz /usr/local/lib64/ceph/erasure-code/
 #ADD clslib.tar.gz /usr/local/lib64/rados-classes/
 
-ADD mgr_plugins.tar.gz /usr/local/lib64/ceph/mgr
-# for openSUSE, use:
-# ADD mgr_plugins.tar.gz /usr/share/ceph/mgr
+ADD mgr_plugins.tar.gz /usr/share/ceph/mgr
