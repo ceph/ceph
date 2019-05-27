@@ -100,7 +100,19 @@ export class CdValidators {
    * @return {ValidatorFn} Returns the validator function.
    */
   static requiredIf(prerequisites: Object, condition?: Function | undefined): ValidatorFn {
+    let isWatched = false;
+
     return (control: AbstractControl): ValidationErrors | null => {
+      if (!isWatched && control.parent) {
+        Object.keys(prerequisites).forEach((key) => {
+          control.parent.get(key).valueChanges.subscribe(() => {
+            control.updateValueAndValidity({ emitEvent: false });
+          });
+        });
+
+        isWatched = true;
+      }
+
       // Check if all prerequisites matches.
       if (
         !Object.keys(prerequisites).every((key) => {

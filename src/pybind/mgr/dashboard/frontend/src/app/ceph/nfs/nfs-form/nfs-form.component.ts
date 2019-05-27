@@ -201,10 +201,6 @@ export class NfsFormComponent implements OnInit {
         CdValidators.requiredIf({ security_label: true, 'fsal.name': 'CEPH' })
       )
     });
-
-    this.nfsForm.get('protocolNfsv4').valueChanges.subscribe(() => {
-      this.nfsForm.get('pseudo').updateValueAndValidity({ emitEvent: false });
-    });
   }
 
   resolveModel(res) {
