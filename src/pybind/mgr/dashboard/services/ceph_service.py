@@ -121,7 +121,7 @@ class CephService(object):
                 s[stat_name] = {
                     'latest': stat_series[0][1],
                     'rate': get_rate(stat_series),
-                    'series': [i for i in stat_series]
+                    'rates': get_rates_from_data(stat_series)
                 }
             pool['stats'] = s
             pools_w_stats.append(pool)
@@ -179,11 +179,7 @@ class CephService(object):
         :return: the derivative of mgr.get_counter()
         :rtype: list[tuple[int, float]]"""
         data = mgr.get_counter(svc_type, svc_name, path)[path]
-        if not data:
-            return [(0, 0.0)]
-        if len(data) == 1:
-            return [(data[0][0], 0.0)]
-        return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
+        return get_rates_from_data(data)
 
     @classmethod
     def get_rate(cls, svc_type, svc_name, path):
@@ -260,11 +256,31 @@ class CephService(object):
         }
 
 
+def get_rates_from_data(data):
+    """
+    >>> get_rates_from_data([])
+    [(0, 0.0)]
+    >>> get_rates_from_data([[1, 42]])
+    [(1, 0.0)]
+    >>> get_rates_from_data([[0, 100], [2, 101], [3, 100], [4, 100]])
+    [(2, 0.5), (3, 1.0), (4, 0.0)]
+    """
+    if not data:
+        return [(0, 0.0)]
+    if len(data) == 1:
+        return [(data[0][0], 0.0)]
+    return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
+
+
 def differentiate(data1, data2):
     """
     >>> times = [0, 2]
     >>> values = [100, 101]
     >>> differentiate(*zip(times, values))
     0.5
+    >>> times = [0, 2]
+    >>> values = [100, 99]
+    >>> differentiate(*zip(times, values))
+    0.5
     """
-    return (data2[1] - data1[1]) / float(data2[0] - data1[0])
+    return abs((data2[1] - data1[1]) / float(data2[0] - data1[0]))
