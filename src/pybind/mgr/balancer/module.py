@@ -426,6 +426,11 @@ class Module(MgrModule):
                            'Try "ceph osd set-require-min-compat-client luminous" ' \
                            'before enabling this mode' % min_compat_client
                     return (-errno.EPERM, '', warn)
+            elif command['mode'] == 'crush-compat':
+                ms = MappingState(self.get_osdmap(),
+                                  self.get("pg_dump"),
+                                  'initialize compat weight-set')
+                self.get_compat_weight_set_weights(ms) # ignore error
             self.set_module_option('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
