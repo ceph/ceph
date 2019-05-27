@@ -106,6 +106,8 @@ export class PoolListComponent implements OnInit {
   }
 
   ngOnInit() {
+    const compare = (prop: string, pool1: Pool, pool2: Pool) =>
+      _.get(pool1, prop) > _.get(pool2, prop) ? 1 : -1;
     this.columns = [
       {
         prop: 'pool_name',
@@ -160,14 +162,18 @@ export class PoolListComponent implements OnInit {
         flexGrow: 3
       },
       {
-        prop: 'stats.rd_bytes.series',
+        prop: 'stats.rd_bytes.rates',
         name: this.i18n('Read bytes'),
+        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+          compare('stats.rd_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
       },
       {
-        prop: 'stats.wr_bytes.series',
+        prop: 'stats.wr_bytes.rates',
         name: this.i18n('Write bytes'),
+        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+          compare('stats.wr_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
       },
@@ -229,7 +235,7 @@ export class PoolListComponent implements OnInit {
 
   transformPoolsData(pools: any) {
     const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
-    const emptyStat = { latest: 0, rate: 0, series: [] };
+    const emptyStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
@@ -242,7 +248,7 @@ export class PoolListComponent implements OnInit {
       pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].series = pool.stats[stat].series.map((point) => point[1]);
+        pool.stats[stat].rates = pool.stats[stat].rates.map((point) => point[1]);
       });
       pool.cdIsBinary = true;
     });
