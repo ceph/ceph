@@ -16,6 +16,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
+#include "rgw_zone.h"
 #include "rgw_string.h"
 
 #include "services/svc_sys_obj.h"
@@ -814,6 +815,13 @@ public:
     rgw_placement_rule target_placement;
     target_placement.inherit_from(oc.bucket_info.placement_rule);
     target_placement.storage_class = transition.storage_class;
+
+    if (!oc.store->svc.zone->get_zone_params().valid_placement(target_placement)) {
+      ldout(oc.cct, 0) << "ERROR: non existent dest placement: " << target_placement
+                       << " bucket="<< oc.bucket_info.bucket
+                       << " rule_id=" << oc.op.id << dendl;
+      return -EINVAL;
+    }
 
     int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
                                      target_placement, o.meta.mtime, o.versioned_epoch);
