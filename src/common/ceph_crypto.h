@@ -10,6 +10,7 @@
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
+#define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
 
 #ifdef USE_NSS
 // you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
@@ -33,6 +34,7 @@ extern "C" {
   const EVP_MD *EVP_md5(void);
   const EVP_MD *EVP_sha1(void);
   const EVP_MD *EVP_sha256(void);
+  const EVP_MD *EVP_sha512(void);
 }
 #endif /*USE_OPENSSL*/
 
@@ -115,6 +117,11 @@ namespace ceph {
       public:
         SHA256 () : NSSDigest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
       };
+
+      class SHA512 : public NSSDigest {
+      public:
+        SHA512 () : NSSDigest(SEC_OID_SHA512, CEPH_CRYPTO_SHA512_DIGESTSIZE) { }
+      };
     }
   }
 }
@@ -149,6 +156,11 @@ namespace ceph {
       class SHA256 : public OpenSSLDigest {
       public:
         SHA256 () : OpenSSLDigest(EVP_sha256()) { }
+      };
+
+      class SHA512 : public OpenSSLDigest {
+      public:
+        SHA512 () : OpenSSLDigest(EVP_sha512()) { }
       };
     }
   }
@@ -337,6 +349,7 @@ namespace ceph {
     using ceph::crypto::ssl::SHA256;
     using ceph::crypto::ssl::MD5;
     using ceph::crypto::ssl::SHA1;
+    using ceph::crypto::ssl::SHA512;
 
     using ceph::crypto::ssl::HMACSHA256;
     using ceph::crypto::ssl::HMACSHA1;
@@ -348,6 +361,7 @@ namespace ceph {
     using ceph::crypto::nss::SHA256;
     using ceph::crypto::nss::MD5;
     using ceph::crypto::nss::SHA1;
+    using ceph::crypto::nss::SHA512;
 
     using ceph::crypto::nss::HMACSHA256;
     using ceph::crypto::nss::HMACSHA1;

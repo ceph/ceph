@@ -1455,12 +1455,18 @@ public:
   typedef enum {
     TYPE_FINGERPRINT_NONE = 0,
     TYPE_FINGERPRINT_SHA1 = 1,     
+    TYPE_FINGERPRINT_SHA256 = 2,     
+    TYPE_FINGERPRINT_SHA512 = 3,     
   } fingerprint_t;
   static fingerprint_t get_fingerprint_from_str(const std::string& s) {
     if (s == "none")
       return TYPE_FINGERPRINT_NONE;
     if (s == "sha1")
       return TYPE_FINGERPRINT_SHA1;
+    if (s == "sha256")
+      return TYPE_FINGERPRINT_SHA256;
+    if (s == "sha512")
+      return TYPE_FINGERPRINT_SHA512;
     return (fingerprint_t)-1;
   }
   const fingerprint_t get_fingerprint_type() const {
@@ -1479,6 +1485,8 @@ public:
     switch (m) {
     case TYPE_FINGERPRINT_NONE: return "none";
     case TYPE_FINGERPRINT_SHA1: return "sha1";
+    case TYPE_FINGERPRINT_SHA256: return "sha256";
+    case TYPE_FINGERPRINT_SHA512: return "sha512";
     default: return "unknown";
     }
   }
