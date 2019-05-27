@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import * as _ from 'lodash';
 import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -257,14 +258,34 @@ describe('PoolListComponent', () => {
     });
   });
 
+  describe('custom row comparators', () => {
+    const expectCorrectComparator = (statsAttribute: string) => {
+      const mockPool = (v) => ({ stats: { [statsAttribute]: { latest: v } } });
+      const columnDefinition = _.find(
+        component.columns,
+        (column) => column.prop === `stats.${statsAttribute}.rates`
+      );
+      expect(columnDefinition.comparator(undefined, undefined, mockPool(2), mockPool(1))).toBe(1);
+      expect(columnDefinition.comparator(undefined, undefined, mockPool(1), mockPool(2))).toBe(-1);
+    };
+
+    it('compares read bytes correctly', () => {
+      expectCorrectComparator('rd_bytes');
+    });
+
+    it('compares write bytes correctly', () => {
+      expectCorrectComparator('wr_bytes');
+    });
+  });
+
   describe('transformPoolsData', () => {
     it('transforms pools data correctly', () => {
       const pools = [
         {
           stats: {
-            bytes_used: { latest: 5, rate: 0, series: [] },
-            max_avail: { latest: 15, rate: 0, series: [] },
-            rd_bytes: { latest: 6, rate: 4, series: [[0, 2], [1, 6]] }
+            bytes_used: { latest: 5, rate: 0, rates: [] },
+            max_avail: { latest: 15, rate: 0, rates: [] },
+            rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
           },
           pg_status: { 'active+clean': 8, down: 2 }
         }
@@ -274,12 +295,12 @@ describe('PoolListComponent', () => {
           cdIsBinary: true,
           pg_status: '8 active+clean, 2 down',
           stats: {
-            bytes_used: { latest: 5, rate: 0, series: [] },
-            max_avail: { latest: 15, rate: 0, series: [] },
-            rd: { latest: 0, rate: 0, series: [] },
-            rd_bytes: { latest: 6, rate: 4, series: [2, 6] },
-            wr: { latest: 0, rate: 0, series: [] },
-            wr_bytes: { latest: 0, rate: 0, series: [] }
+            bytes_used: { latest: 5, rate: 0, rates: [] },
+            max_avail: { latest: 15, rate: 0, rates: [] },
+            rd: { latest: 0, rate: 0, rates: [] },
+            rd_bytes: { latest: 6, rate: 4, rates: [2, 6] },
+            wr: { latest: 0, rate: 0, rates: [] },
+            wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
           usage: 0.25
         }
@@ -294,12 +315,12 @@ describe('PoolListComponent', () => {
           cdIsBinary: true,
           pg_status: '',
           stats: {
-            bytes_used: { latest: 0, rate: 0, series: [] },
-            max_avail: { latest: 0, rate: 0, series: [] },
-            rd: { latest: 0, rate: 0, series: [] },
-            rd_bytes: { latest: 0, rate: 0, series: [] },
-            wr: { latest: 0, rate: 0, series: [] },
-            wr_bytes: { latest: 0, rate: 0, series: [] }
+            bytes_used: { latest: 0, rate: 0, rates: [] },
+            max_avail: { latest: 0, rate: 0, rates: [] },
+            rd: { latest: 0, rate: 0, rates: [] },
+            rd_bytes: { latest: 0, rate: 0, rates: [] },
+            wr: { latest: 0, rate: 0, rates: [] },
+            wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
           usage: 0
         }

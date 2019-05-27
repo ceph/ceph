@@ -1,7 +1,7 @@
 export class PoolStat {
   latest: number;
   rate: number;
-  series: number[];
+  rates: number[];
 }
 
 export class PoolStats {
