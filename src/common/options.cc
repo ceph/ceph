@@ -6695,6 +6695,24 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Time in seconds between attempts to trim sync logs."),
 
+    Option("rgw_sync_work_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1 * 60) /* 1 minute */
+    .set_default(10 * 60) /* 10 minutes */
+    .set_description("Sync work period length")
+    .set_long_description("Time in seconds a shard sync process will work before giving up lock."),
+
+    Option("rgw_sync_poll_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(15) /* 15 seconds */
+    .set_default(1 * 60) /* 1 minutes */
+    .set_description("Interval between polls to take shard sync lock")
+    .set_long_description("Time in seconds between polling attemps for the shard lock bids."),
+
+    Option("rgw_sync_bid_shuffle_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1 * 60) /* 1 minute */
+    .set_default(3 * 60) /* 3 minutes */
+    .set_description("Lock bid shuffle interval")
+    .set_long_description("Time in seconds between shuffles of the shard lock bids."),
+
     Option("rgw_sync_log_trim_max_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(16)
     .set_description("Maximum number of buckets to trim per interval")

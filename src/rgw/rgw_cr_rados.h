@@ -10,8 +10,10 @@
 #include "rgw_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
+#include "cls/lock/cls_lock_client.h"
 
 #include <atomic>
+#include <functional>
 
 #include "services/svc_sys_obj.h"
 
@@ -280,13 +282,18 @@ class RGWAsyncLockSystemObj : public RGWAsyncRadosRequest {
   string lock_name;
   string cookie;
   uint32_t duration_secs;
+  int32_t bid_amount;
+  uint32_t bid_duration_secs;
 
 protected:
   int _send_request() override;
 public:
-  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-		        const string& _name, const string& _cookie, uint32_t _duration_secs);
+  RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+			RGWRados *_store, RGWObjVersionTracker *_objv_tracker,
+			const rgw_raw_obj& _obj, const string& _name,
+			const string& _cookie, uint32_t _duration_secs,
+			int32_t _bid_amount_secs = -1,
+			uint32_t _bid_duration_secs = 0);
 };
 
 class RGWAsyncUnlockSystemObj : public RGWAsyncRadosRequest {
@@ -581,22 +588,26 @@ public:
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
+
+protected:
+
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   string lock_name;
   string cookie;
-  uint32_t duration;
+  uint32_t duration_secs;
 
   rgw_raw_obj obj;
 
   RGWAsyncLockSystemObj *req;
 
 public:
+
   RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-		      const rgw_raw_obj& _obj,
-                      const string& _lock_name,
-		      const string& _cookie,
-		      uint32_t _duration);
+		       const rgw_raw_obj& _obj,
+		       const string& _lock_name,
+		       const string& _cookie,
+		       uint32_t _duration_secs);
   ~RGWSimpleRadosLockCR() override {
     request_cleanup();
   }
@@ -611,9 +622,48 @@ public:
     gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
     return buf;
   }
+}; // class RGWSimpleRadosLockCR
+
+
+struct RGWLockBid {
+  int32_t amount;
+  uint32_t duration_secs;
+
+  RGWLockBid(int32_t _amount, utime_t _duration) :
+    amount(_amount),
+    duration_secs(_duration.sec())
+  {}
+
+  RGWLockBid(int32_t _amount, uint32_t _duration_secs) :
+    amount(_amount),
+    duration_secs(_duration_secs)
+  {}
 };
 
+
+using RGWGetBidFunc = std::function<RGWLockBid()>;
+
+
+class RGWBiddedRadosLockCR : public RGWSimpleRadosLockCR {
+
+  RGWGetBidFunc get_bid_func;
+
+public:
+
+  RGWBiddedRadosLockCR(RGWAsyncRadosProcessor *_async_rados,
+		       RGWRados *_store,
+		       const rgw_raw_obj& _obj,
+		       const string& _lock_name,
+		       const string& _cookie,
+		       uint32_t _duration_secs,
+		       RGWGetBidFunc _get_bid_func);
+
+  int send_request() override;
+}; // class RGWBiddedRadosLockCR
+
+
 class RGWSimpleRadosUnlockCR : public RGWSimpleCoroutine {
+
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
   string lock_name;
@@ -1198,6 +1248,9 @@ public:
 };
 
 class RGWContinuousLeaseCR : public RGWCoroutine {
+
+protected:
+
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
 
@@ -1206,9 +1259,9 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   const string lock_name;
   const string cookie;
 
-  int interval;
+  int lock_duration_secs;
 
-  Mutex lock;
+  Mutex mtx;
   std::atomic<bool> going_down = { false };
   bool locked{false};
 
@@ -1216,25 +1269,35 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
 
   bool aborted{false};
 
-public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                        const rgw_raw_obj& _obj,
-                       const string& _lock_name, int _interval, RGWCoroutine *_caller)
+                       const string& _lock_name, int _lock_duration,
+		       RGWCoroutine *_caller, const char* mutex_name)
     : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-    obj(_obj), lock_name(_lock_name),
-    cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
-    interval(_interval), lock("RGWContinuousLeaseCR"), caller(_caller)
+      obj(_obj), lock_name(_lock_name),
+      cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
+      lock_duration_secs(_lock_duration), mtx(mutex_name), caller(_caller)
+  {}
+
+public:
+
+  RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                       const rgw_raw_obj& _obj,
+                       const string& _lock_name, int _lock_duration,
+		       RGWCoroutine *_caller)
+    : RGWContinuousLeaseCR(_async_rados, _store, _obj, _lock_name,
+			   _lock_duration, _caller, "RGWContinuousLeaseCR")
   {}
 
   int operate() override;
 
   bool is_locked() {
-    Mutex::Locker l(lock);
+    Mutex::Locker l(mtx);
     return locked;
   }
 
   void set_locked(bool status) {
-    Mutex::Locker l(lock);
+    Mutex::Locker l(mtx);
     locked = status;
   }
 
@@ -1246,7 +1309,76 @@ public:
   void abort() {
     aborted = true;
   }
+}; // class RGWContinuousLeaseCR
+
+
+class RGWRebiddableLeaseCR : public RGWContinuousLeaseCR {
+
+protected:
+
+  std::atomic<bool> releasing_lock = { false };
+  RGWGetBidFunc get_bid_func;
+  uint32_t polling_interval_secs;
+
+public:
+
+  RGWRebiddableLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                       const rgw_raw_obj& _obj,
+                       const string& _lock_name, int _lock_duration,
+		       RGWCoroutine *_caller,
+		       uint32_t _polling_interval_secs,
+		       RGWGetBidFunc _get_bid_func) :
+    RGWContinuousLeaseCR(_async_rados, _store, _obj,
+			 _lock_name, _lock_duration, _caller,
+			 "RGWRebiddableLeaseCR"),
+    get_bid_func(_get_bid_func),
+    polling_interval_secs(_polling_interval_secs)
+  {}
+
+  int operate() override;
+
+  void release_lock() {
+    releasing_lock = true;
+    wakeup();
+  }
+}; // class RGWRebiddableLeaseCR
+
+
+class RGWBidManagerCR : public RGWCoroutine {
+  int shard_count;
+  int recalc_interval_secs;
+  rados::cls::lock::BidSet<uint32_t> bids;
+
+  std::atomic<bool> going_down = { false };
+  bool aborted{false};
+
+public:
+
+  RGWBidManagerCR(RGWRados *_store,
+		  int _shard_count,
+		  int _recalc_interval_secs)
+    : RGWCoroutine(_store->ctx()),
+      shard_count(_shard_count),
+      recalc_interval_secs(_recalc_interval_secs),
+      bids(shard_count, 1)
+  {}
+
+  int operate() override;
+
+  uint32_t get_bid(uint32_t shard_id) const {
+    return bids.get_bid(shard_id);
+  }
+
+  void go_down() {
+    going_down = true;
+    wakeup();
+  }
+
+  void abort() {
+    aborted = true;
+  }
 };
+
 
 class RGWRadosTimelogAddCR : public RGWSimpleCoroutine {
   RGWRados *store;
