@@ -2542,6 +2542,16 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
+
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket.name 
+	                 << "returned err=" << op_ret << dendl;
+      return;
+    }
+  }
   op_ret = retry_raced_bucket_write(store, s, [this] {
       s->bucket_info.has_website = false;
       s->bucket_info.website_conf = RGWBucketWebsiteConf();
