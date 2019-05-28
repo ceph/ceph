@@ -206,7 +206,8 @@ class Module(MgrModule):
             data['[{0},rd_ops]'.format(pool['name'])] = pool['stats']['rd']
             data['[{0},wr_ops]'.format(pool['name'])] = pool['stats']['wr']
             data['[{0},bytes_used]'.format(pool['name'])] = pool['stats']['bytes_used']
-            data['[{0},raw_bytes_used]'.format(pool['name'])] = pool['stats']['raw_bytes_used']
+            data['[{0},stored_raw]'.format(pool['name'])] = pool['stats']['stored_raw']
+            data['[{0},percent_used]'.format(pool['name'])] = pool['stats']['percent_used']
 
         data['wr_ops'] = wr_ops
         data['rd_ops'] = rd_ops
