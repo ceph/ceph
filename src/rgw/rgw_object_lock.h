@@ -189,6 +189,8 @@ class RGWObjectLegalHold
 protected:
   string status;
 public:
+  RGWObjectLegalHold() {}
+  RGWObjectLegalHold(string _status): status(_status) {}
   void set_status(string _status) {
     status = _status;
   }
