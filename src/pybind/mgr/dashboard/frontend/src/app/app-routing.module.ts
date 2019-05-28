@@ -23,6 +23,7 @@ import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
+import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
@@ -90,7 +91,7 @@ const routes: Routes = [
       {
         path: 'edit/:name',
         component: ConfigurationFormComponent,
-        data: { breadcrumbs: 'Edit' }
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },
@@ -206,11 +207,15 @@ const routes: Routes = [
     },
     children: [
       { path: '', component: NfsListComponent },
-      { path: 'add', component: NfsFormComponent, data: { breadcrumbs: 'Add' } },
       {
-        path: 'edit/:cluster_id/:export_id',
+        path: URLVerbs.CREATE,
         component: NfsFormComponent,
-        data: { breadcrumbs: 'Edit' }
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },
