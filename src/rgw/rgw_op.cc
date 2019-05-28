@@ -5242,6 +5242,14 @@ void RGWPutLC::execute()
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
