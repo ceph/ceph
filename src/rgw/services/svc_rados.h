@@ -9,6 +9,7 @@
 #include "common/async/yield_context.h"
 #include "common/RWLock.h"
 
+#include "common/optional_ref_default.h"
 
 class RGWAccessListFilter {
 public:
@@ -31,8 +32,25 @@ class RGWSI_RADOS : public RGWServiceInstance
 
   int do_start() override;
 
+public:
+  struct OpenParams {
+    bool create{true};
+    bool mostly_omap{false};
+
+    OpenParams& set_create(bool _create) {
+      create = _create;
+      return *this;
+    }
+    OpenParams& set_mostly_omap(bool _mostly_omap) {
+      mostly_omap = _mostly_omap;
+      return *this;
+    }
+  };
+
+private:
   librados::Rados* get_rados_handle();
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx);
+  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx,
+                    ceph::optional_ref_default<OpenParams> params = std::nullopt);
   int pool_iterate(librados::IoCtx& ioctx,
                    librados::NObjectIterator& iter,
                    uint32_t num, vector<rgw_bucket_dir_entry>& objs,
@@ -71,7 +89,7 @@ public:
     int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
-    int open();
+    int open(ceph::optional_ref_default<RGWSI_RADOS::OpenParams> params = std::nullopt);
 
     librados::IoCtx& ioctx() {
       return state.ioctx;

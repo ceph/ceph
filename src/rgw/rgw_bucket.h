@@ -185,7 +185,8 @@ public:
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc);
+  static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
+                                   RGWSI_Bucket *bucket_svc);
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
@@ -196,7 +197,8 @@ public:
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc);
+  static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
+                                   RGWSI_Bucket *bucket_svc);
 };
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
