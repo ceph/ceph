@@ -1,5 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import * as _ from 'lodash';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -12,6 +13,8 @@ import { NfsDetailsComponent } from './nfs-details.component';
 describe('NfsDetailsComponent', () => {
   let component: NfsDetailsComponent;
   let fixture: ComponentFixture<NfsDetailsComponent>;
+
+  const elem = (css) => fixture.debugElement.query(By.css(css));
 
   configureTestBed({
     declarations: [NfsDetailsComponent],
@@ -37,25 +40,27 @@ describe('NfsDetailsComponent', () => {
         squash: 'no_root_squash',
         protocols: [3, 4],
         transports: ['TCP', 'UDP'],
-        clients: [],
+        clients: [
+          {
+            addresses: ['192.168.0.10', '192.168.1.0/8'],
+            access_type: 'RW',
+            squash: 'root_id_squash'
+          }
+        ],
         id: 'cluster1:1',
         state: 'LOADING'
       }
     ];
     component.selection.update();
-
+    component.ngOnChanges();
     fixture.detectChanges();
   });
 
-  beforeEach(() => {});
-
   it('should create', () => {
-    component.ngOnChanges();
     expect(component.data).toBeTruthy();
   });
 
   it('should prepare data', () => {
-    component.ngOnChanges();
     expect(component.data).toEqual({
       'Access Type': 'RW',
       'CephFS Filesystem': 1,
@@ -94,5 +99,16 @@ describe('NfsDetailsComponent', () => {
       'Storage Backend': 'Object Gateway',
       Transport: ['TCP', 'UDP']
     });
+  });
+
+  it('should have 1 client', () => {
+    expect(elem('li.nav-item:nth-of-type(2) span').nativeElement.textContent).toBe('Clients (1)');
+    expect(component.clients).toEqual([
+      {
+        access_type: 'RW',
+        addresses: ['192.168.0.10', '192.168.1.0/8'],
+        squash: 'root_id_squash'
+      }
+    ]);
   });
 });
