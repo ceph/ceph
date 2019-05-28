@@ -3045,6 +3045,7 @@ void RGWCreateBucket::execute()
     creation_time = master_info.creation_time;
     pmaster_num_shards = &master_info.num_shards;
     pobjv = &objv;
+    obj_lock_enabled = master_info.obj_lock_enabled();
   } else {
     pmaster_bucket = NULL;
     pmaster_num_shards = NULL;
@@ -3906,6 +3907,16 @@ void RGWPutObj::execute()
     slo_userindicator_bl.append("True", 4);
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
+  if (obj_legal_hold) {
+    bufferlist obj_legal_hold_bl;
+    obj_legal_hold->encode(obj_legal_hold_bl);
+    emplace_attr(RGW_ATTR_OBJECT_LEGAL_HOLD, std::move(obj_legal_hold_bl));
+  }
+  if (obj_retention) {
+    bufferlist obj_retention_bl;
+    obj_retention->encode(obj_retention_bl);
+    emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
+  }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
@@ -4513,13 +4524,13 @@ int RGWDeleteObj::verify_permission()
     if (s->bucket_info.obj_lock_enabled() && bypass_governance_mode) {
       auto r = eval_user_policies(s->iam_user_policies, s->env, boost::none,
                                                rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket, s->object.name));
-      if (r == Effect::Allow) {
-        bypass_perm = true;
+      if (r == Effect::Deny) {
+        bypass_perm = false;
       } else if (r == Effect::Pass && s->iam_policy) {
         r = s->iam_policy->eval(s->env, *s->auth.identity, rgw::IAM::s3BypassGovernanceRetention,
                                      ARN(s->bucket, s->object.name));
-        if (r == Effect::Allow) {
-          bypass_perm = true;
+        if (r == Effect::Deny) {
+          bypass_perm = false;
         }
       }
     }
@@ -4581,7 +4592,7 @@ void RGWDeleteObj::execute()
   bool check_obj_lock = obj.key.have_instance() && s->bucket_info.obj_lock_enabled();
 
   if (!s->object.empty()) {
-    if (need_object_expiration() || multipart_delete || check_obj_lock) {
+    if (need_object_expiration() || multipart_delete) {
       /* check if obj exists, read orig attrs */
       op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
@@ -4590,10 +4601,25 @@ void RGWDeleteObj::execute()
     }
 
     if (check_obj_lock) {
+      /* check if obj exists, read orig attrs */
+      op_ret = get_obj_attrs(store, s, obj, attrs);
+      if (op_ret < 0) {
+        /* object maybe delete_marker, skip check_obj_lock*/
+        check_obj_lock = false;
+      }
+    }
+
+    if (check_obj_lock) {
       auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
       if (aiter != attrs.end()) {
         RGWObjectRetention obj_retention;
-        decode(obj_retention, aiter->second);
+        try {
+          decode(obj_retention, aiter->second);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+          op_ret = -EIO;
+          return;
+        }
         if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) > ceph_clock_now()) {
           if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
             op_ret = -EACCES;
@@ -4604,7 +4630,13 @@ void RGWDeleteObj::execute()
       aiter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
       if (aiter != attrs.end()) {
         RGWObjectLegalHold obj_legal_hold;
-        decode(obj_legal_hold, aiter->second);
+        try {
+          decode(obj_legal_hold, aiter->second);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+          op_ret = -EIO;
+          return;
+        }
         if (obj_legal_hold.is_enabled()) {
           op_ret = -EACCES;
           return;
@@ -7497,10 +7529,6 @@ void RGWPutBucketObjectLock::execute()
     return;
   }
 
-  op_ret = get_params();
-  if (op_ret < 0)
-    return;
-
   if (!parser.parse(data.c_str(), data.length(), 1)) {
     op_ret = -ERR_MALFORMED_XML;
     return;
@@ -7515,7 +7543,7 @@ void RGWPutBucketObjectLock::execute()
   }
   if (obj_lock.has_rule() && !obj_lock.retention_period_valid()) {
     ldpp_dout(this, 0) << "ERROR: retention period must be a positive integer value" << dendl;
-    op_ret = -EINVAL;
+    op_ret = -ERR_INVALID_RETENTION_PERIOD;
     return;
   }
 
@@ -7605,6 +7633,12 @@ void RGWPutObjRetention::execute()
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
+
+  if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph_clock_now()) {
+    ldpp_dout(this, 0) << "ERROR: the retain until date must be in the future" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
   bufferlist bl;
   obj_retention.encode(bl);
   rgw_obj obj(s->bucket, s->object);
@@ -7619,16 +7653,23 @@ void RGWPutObjRetention::execute()
   auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
   if (aiter != attrs.end()) {
     RGWObjectRetention old_obj_retention;
-    decode(old_obj_retention, aiter->second);
-    if (obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
-      op_ret = -EACCES;
+    try {
+      decode(old_obj_retention, aiter->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+      op_ret = -EIO;
       return;
+    }
+    if (ceph::real_clock::to_time_t(obj_retention.get_retain_until_date()) < ceph::real_clock::to_time_t(old_obj_retention.get_retain_until_date())) {
+      if (old_obj_retention.get_mode().compare("GOVERNANCE") != 0 || !bypass_perm || !bypass_governance_mode) {
+        op_ret = -EACCES;
+        return;
+      }
     }
   }
 
-  store->set_atomic(s->obj_ctx, obj);
-  attrs[RGW_ATTR_OBJECT_RETENTION] = bl;
-  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, NULL);
+  op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_OBJECT_RETENTION, bl);
+
   return;
 }
 
@@ -7723,7 +7764,6 @@ void RGWPutObjLegalHold::execute() {
   bufferlist bl;
   obj_legal_hold.encode(bl);
   rgw_obj obj(s->bucket, s->object);
-  store->set_atomic(s->obj_ctx, obj);
   //if instance is empty, we should modify the latest object
   op_ret = modify_obj_attr(store, s, obj, RGW_ATTR_OBJECT_LEGAL_HOLD, bl);
   return;

@@ -171,6 +171,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3RestoreObject:
   case s3PutObjectRetention:
   case s3PutObjectLegalHold:
+  case s3BypassGovernanceRetention:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:

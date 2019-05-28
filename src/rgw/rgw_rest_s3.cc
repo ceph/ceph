@@ -331,9 +331,21 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
         dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
       } else if (iter->first.compare(RGW_ATTR_OBJECT_RETENTION) == 0 && get_retention){
         RGWObjectRetention retention;
-        decode(retention, iter->second);
-        dump_header(s, "x-amz-object-lock-mode", retention.get_mode());
-        dump_time_header(s, "x-amz-object-lock-retain-until-date", retention.get_retain_until_date());
+        try {
+          decode(retention, iter->second);
+          dump_header(s, "x-amz-object-lock-mode", retention.get_mode());
+          dump_time_header(s, "x-amz-object-lock-retain-until-date", retention.get_retain_until_date());
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+        }
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_LEGAL_HOLD) == 0 && get_legal_hold) {
+        RGWObjectLegalHold legal_hold;
+        try {
+          decode(legal_hold, iter->second);
+          dump_header(s, "x-amz-object-lock-legal-hold",legal_hold.get_status());
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+        }
       }
     }
   }
@@ -1452,6 +1464,41 @@ int RGWPutObj_ObjStore_S3::get_params()
     }
   }
 
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
+        return ret;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
+        return ret;
+    }
+    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
+    ret = -EINVAL;
+    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
+    return ret;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
+        return ret;
+    }
+    obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
+  }
+  if (!s->bucket_info.obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
+    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
+    ret = -ERR_INVALID_REQUEST;
+    return ret;
+  }
   multipart_upload_id = s->info.args.get("uploadId");
   multipart_part_str = s->info.args.get("partNumber");
   if (!multipart_part_str.empty()) {
@@ -2175,7 +2222,7 @@ int RGWDeleteObj_ObjStore_S3::get_params()
   const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
   if (bypass_gov_header) {
     std::string bypass_gov_decoded = url_decode(bypass_gov_header);
-    bypass_governance_mode = bypass_gov_decoded.compare("true") == 0;
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
   return 0;
@@ -3110,7 +3157,7 @@ int RGWPutObjRetention_ObjStore_S3::get_params()
   const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
   if (bypass_gov_header) {
     std::string bypass_gov_decoded = url_decode(bypass_gov_header);
-    bypass_governance_mode = bypass_gov_decoded.compare("true") == 0;
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;

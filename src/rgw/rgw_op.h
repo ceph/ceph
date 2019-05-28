@@ -1065,6 +1065,10 @@ protected:
   uint64_t position;
   uint64_t cur_accounted_size;
 
+  //object lock
+  RGWObjectRetention *obj_retention;
+  RGWObjectLegalHold *obj_legal_hold;
+
 public:
   RGWPutObj() : ofs(0),
                 supplied_md5_b64(NULL),
@@ -1080,10 +1084,14 @@ public:
                 olh_epoch(0),
                 append(false),
                 position(0),
-                cur_accounted_size(0) {}
+                cur_accounted_size(0),
+                obj_retention(nullptr),
+                obj_legal_hold(nullptr) {}
 
   ~RGWPutObj() override {
     delete slo_info;
+    delete obj_retention;
+    delete obj_legal_hold;
   }
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
@@ -1296,7 +1304,7 @@ public:
       multipart_delete(false),
       no_precondition_error(false),
       deleter(nullptr),
-      bypass_perm(false),
+      bypass_perm(true),
       bypass_governance_mode(false) {
   }
 
@@ -2187,6 +2195,7 @@ protected:
   bool bypass_perm;
   bool bypass_governance_mode;
 public:
+  RGWPutObjRetention():bypass_perm(true), bypass_governance_mode(false) {}
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
