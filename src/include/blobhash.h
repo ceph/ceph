@@ -38,7 +38,6 @@ public:
       [[fallthrough]];
     case 1:
       acc ^= buf[0];
-      [[fallthrough]];
     }
     return H(acc);
   }
