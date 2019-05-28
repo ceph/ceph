@@ -5456,6 +5456,15 @@ void RGWSetRequestPayment::pre_exec()
 
 void RGWSetRequestPayment::execute()
 {
+
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = get_params();
 
   if (op_ret < 0)
