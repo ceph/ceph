@@ -588,7 +588,7 @@
 # while using aes-128-gcm with AES-NI enabled. Not observed while running
 # with `OPENSSL_ia32cap="~0x200000200000000"`.
 {
-   <insert_a_suppression_name_here>
+   uninitialised gcm.Xi in aes-128-gcm with AES-NI for msgr, part 1
    Memcheck:Cond
    ...
    fun:EVP_DecryptFinal_ex
@@ -602,7 +602,7 @@
 }
 
 {
-   <insert_a_suppression_name_here>
+   uninitialised gcm.Xi in aes-128-gcm with AES-NI for msgr, part 2
    Memcheck:Cond
    fun:_ZN4ceph6crypto6onwire25AES128GCM_OnWireRxHandler34authenticated_decrypt_update_finalEONS_6buffer7v14_2_04listEj
    fun:_ZN10ProtocolV231handle_read_frame_epilogue_mainEOSt10unique_ptrIN4ceph6buffer7v14_2_08ptr_nodeENS4_8disposerEEi
