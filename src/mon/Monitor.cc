@@ -3023,7 +3023,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	ss << "    " << i.second.message << "\n";
 	ss << "      [";
 	unsigned j;
-	for (j=0; j < i.second.progress * 30; ++j) {
+	for (j = 0; j < (unsigned)(i.second.progress * 30.0); ++j) {
 	  ss << '=';
 	}
 	for (; j < 30; ++j) {
