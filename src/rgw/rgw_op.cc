@@ -5243,6 +5243,15 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
+  if (!store->is_meta_master()) {
+    bufferlist data;
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = retry_raced_bucket_write(store, s, [this] {
       op_ret = read_bucket_cors();
       if (op_ret < 0)
