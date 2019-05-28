@@ -2602,6 +2602,8 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
     return r;
   }
 
+  in_data.append(data);
+
   RGWSetRequestPaymentParser parser;
 
   if (!parser.init()) {
