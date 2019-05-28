@@ -42,66 +42,12 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     updated = true;
   }
 
-  if (map->require_osd_release >= ceph_release_t::mimic) {
-    // mimic tracks removed_snaps_queue in the OSDmap and purged_snaps
-    // in the pg_info_t, with deltas for both in each OSDMap.  we don't
-    // need to (and can't) track it here.
-    cached_removed_snaps.clear();
-    newly_removed_snaps.clear();
-  } else {
-    // legacy (<= luminous) removed_snaps tracking
-    if (updated) {
-      if (pi->maybe_updated_removed_snaps(cached_removed_snaps)) {
-	pi->build_removed_snaps(newly_removed_snaps);
-	if (cached_removed_snaps.subset_of(newly_removed_snaps)) {
-          interval_set<snapid_t> removed_snaps = newly_removed_snaps;
-          newly_removed_snaps.subtract(cached_removed_snaps);
-          cached_removed_snaps.swap(removed_snaps);
-	} else {
-          lgeneric_subdout(cct, osd, 0) << __func__
-		<< " cached_removed_snaps shrank from " << cached_removed_snaps
-		<< " to " << newly_removed_snaps << dendl;
-          cached_removed_snaps.swap(newly_removed_snaps);
-          newly_removed_snaps.clear();
-	}
-      } else {
-	newly_removed_snaps.clear();
-      }
-    } else {
-      /* 1) map->get_epoch() == cached_epoch + 1 &&
-       * 2) pi->get_snap_epoch() != map->get_epoch()
-       *
-       * From the if branch, 1 && 2 must be true.  From 2, we know that
-       * this map didn't change the set of removed snaps.  From 1, we
-       * know that our cached_removed_snaps matches the previous map.
-       * Thus, from 1 && 2, cached_removed snaps matches the current
-       * set of removed snaps and all we have to do is clear
-       * newly_removed_snaps.
-       */
-      newly_removed_snaps.clear();
-    }
-    lgeneric_subdout(cct, osd, 20)
-      << "PGPool::update cached_removed_snaps "
-      << cached_removed_snaps
-      << " newly_removed_snaps "
-      << newly_removed_snaps
-      << " snapc " << snapc
-      << (updated ? " (updated)":" (no change)")
-      << dendl;
-    if (cct->_conf->osd_debug_verify_cached_snaps) {
-      interval_set<snapid_t> actual_removed_snaps;
-      pi->build_removed_snaps(actual_removed_snaps);
-      if (!(actual_removed_snaps == cached_removed_snaps)) {
-	lgeneric_derr(cct) << __func__
-		   << ": mismatch between the actual removed snaps "
-		   << actual_removed_snaps
-		   << " and pool.cached_removed_snaps "
-		   << " pool.cached_removed_snaps " << cached_removed_snaps
-		   << dendl;
-      }
-      ceph_assert(actual_removed_snaps == cached_removed_snaps);
-    }
-  }
+  assert(map->require_osd_release >= ceph_release_t::mimic);
+  // mimic tracks removed_snaps_queue in the OSDmap and purged_snaps
+  // in the pg_info_t, with deltas for both in each OSDMap.  we don't
+  // need to (and can't) track it here.
+  cached_removed_snaps.clear();
+  newly_removed_snaps.clear();
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
