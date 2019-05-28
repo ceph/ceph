@@ -59,3 +59,9 @@
   bucket reshard in earlier versions of RGW. One subcommand lists such
   objects and the other deletes them. Read the troubleshooting section
   of the dynamic resharding docs for details.
+
+* In the Zabbix Mgr Module there was a typo in the key being send
+  to Zabbix for PGs in backfill_wait state. The key that was sent
+  was 'wait_backfill' and the correct name is 'backfill_wait'.
+  Update your Zabbix template accordingly so that it accepts the
+  new key being send to Zabbix.
