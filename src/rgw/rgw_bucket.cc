@@ -2506,11 +2506,14 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler_GenericMetaBE
 
 public:
   struct Svc {
+    RGWSI_Zone *zone{nullptr};
     RGWSI_Bucket *bucket{nullptr};
   } svc;
 
-  RGWBucketInstanceMetadataHandler(RGWSI_Bucket *bucket_svc) : RGWMetadataHandler_GenericMetaBE(bucket_svc->ctx(),
+  RGWBucketInstanceMetadataHandler(RGWSI_Zone *zone_svc,
+                                   RGWSI_Bucket *bucket_svc) : RGWMetadataHandler_GenericMetaBE(bucket_svc->ctx(),
                                                                                                 bucket_svc->get_bi_be_handler()) {
+    svc.zone = zone_svc;
     svc.bucket = bucket_svc;
   }
 
@@ -2681,7 +2684,8 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 public:
-  RGWArchiveBucketInstanceMetadataHandler(RGWSI_Bucket *bucket_svc) : RGWBucketInstanceMetadataHandler(bucket_svc) {}
+  RGWArchiveBucketInstanceMetadataHandler(RGWSI_Zone *zone_svc,
+                                          RGWSI_Bucket *bucket_svc) : RGWBucketInstanceMetadataHandler(zone_svc, bucket_svc) {}
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) override {
     ldout(cct, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
@@ -2920,7 +2924,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,
 
   ret = ctl.user->add_bucket(user_id, bucket, creation_time);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: error adding bucket to user directory: user=" << user
+    ldout(cct, 0) << "ERROR: error adding bucket to user directory: user=" << user_id
                   << " bucket=" << bucket << " err=" << cpp_strerror(-ret) << dendl;
     goto done_err;
   }
@@ -3000,8 +3004,9 @@ RGWMetadataHandler *RGWBucketMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_sv
   return new RGWBucketMetadataHandler(bucket_svc, bucket_ctl);
 }
 
-RGWMetadataHandler *RGWBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_svc) {
-  return new RGWBucketInstanceMetadataHandler(bucket_svc);
+RGWMetadataHandler *RGWBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
+                                                                 RGWSI_Bucket *bucket_svc) {
+  return new RGWBucketInstanceMetadataHandler(zone_svc, bucket_svc);
 }
 
 RGWMetadataHandler *RGWArchiveBucketMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_svc,
@@ -3009,7 +3014,8 @@ RGWMetadataHandler *RGWArchiveBucketMetaHandlerAllocator::alloc(RGWSI_Bucket *bu
   return new RGWArchiveBucketMetadataHandler(bucket_svc, bucket_ctl);
 }
 
-RGWMetadataHandler *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_svc) {
-  return new RGWArchiveBucketInstanceMetadataHandler(bucket_svc);
+RGWMetadataHandler *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
+                                                                        RGWSI_Bucket *bucket_svc) {
+  return new RGWArchiveBucketInstanceMetadataHandler(zone_svc, bucket_svc);
 }
 

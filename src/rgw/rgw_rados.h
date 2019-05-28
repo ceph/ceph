@@ -54,40 +54,6 @@ class RGWSysObjectCtx;
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
 
-#define RGW_NO_SHARD -1
-
-#define RGW_SHARDS_PRIME_0 7877
-#define RGW_SHARDS_PRIME_1 65521
-
-// only called by rgw_shard_id and rgw_bucket_shard_index
-static inline int rgw_shards_mod(unsigned hval, int max_shards)
-{
-  if (max_shards <= RGW_SHARDS_PRIME_0) {
-    return hval % RGW_SHARDS_PRIME_0 % max_shards;
-  }
-  return hval % RGW_SHARDS_PRIME_1 % max_shards;
-}
-
-// used for logging and tagging
-static inline int rgw_shard_id(const string& key, int max_shards)
-{
-  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
-			max_shards);
-}
-
-// used for bucket indices
-static inline uint32_t rgw_bucket_shard_index(const std::string& key,
-					      int num_shards) {
-  uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
-  uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
-  return rgw_shards_mod(sid2, num_shards);
-}
-
-static inline int rgw_shards_max()
-{
-  return RGW_SHARDS_PRIME_1;
-}
-
 static inline void prepend_bucket_marker(const rgw_bucket& bucket, const string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
@@ -421,24 +387,9 @@ class RGWRados
   int open_reshard_pool_ctx();
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
-  int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
-  int open_bucket_index(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx, string& bucket_oid);
-  int open_bucket_index_base(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx,
-      string& bucket_oid_base);
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx,
-      const string& obj_key, string *bucket_obj, int *shard_id);
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx,
-                              int shard_id, string *bucket_obj);
-  int open_bucket_index(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx,
-      map<int, string>& bucket_objs, int shard_id = -1, map<int, string> *bucket_instance_ids = NULL);
-  template<typename T>
-  int open_bucket_index(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx,
-                        map<int, string>& oids, map<int, T>& bucket_objs,
-                        int shard_id = -1, map<int, string> *bucket_instance_ids = NULL);
+
   void build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
       string *marker);
-
-  void get_bucket_instance_ids(const RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
   std::atomic<int64_t> max_req_id = { 0 };
   Mutex lock;
@@ -1509,35 +1460,6 @@ public:
                      list<librados::AioCompletion *>& handles, bool keep_index_consistent);
 
  private:
-  /**
-   * This is a helper method, it generates a list of bucket index objects with the given
-   * bucket base oid and number of shards.
-   *
-   * bucket_oid_base [in] - base name of the bucket index object;
-   * num_shards [in] - number of bucket index object shards.
-   * bucket_objs [out] - filled by this method, a list of bucket index objects.
-   */
-  void get_bucket_index_objects(const string& bucket_oid_base, uint32_t num_shards,
-      map<int, string>& bucket_objs, int shard_id = -1);
-
-  /**
-   * Get the bucket index object with the given base bucket index object and object key,
-   * and the number of bucket index shards.
-   *
-   * bucket_oid_base [in] - bucket object base name.
-   * obj_key [in] - object key.
-   * num_shards [in] - number of bucket index shards.
-   * hash_type [in] - type of hash to find the shard ID.
-   * bucket_obj [out] - the bucket index object for the given object.
-   *
-   * Return 0 on success, a failure code otherwise.
-   */
-  int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
-      uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type, string *bucket_obj, int *shard);
-
-  void get_bucket_index_object(const string& bucket_oid_base, uint32_t num_shards,
-                               int shard_id, string *bucket_obj);
-
   /**
    * Check the actual on-disk state of the object specified
    * by list_state, and fill in the time and size of object.

@@ -66,9 +66,12 @@ class RGWSI_User_RADOS : public RGWSI_User
   int remove_email_index(RGWSI_MetaBackend::Context *ctx, const string& email);
   int remove_swift_name_index(RGWSI_MetaBackend::Context *ctx, const string& swift_name);
 
+  /* admin management */
   int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
+
+  /* bucket stats */
 
   int do_start() override;
 public:
