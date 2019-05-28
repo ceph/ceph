@@ -5094,6 +5094,14 @@ void RGWPutLC::execute()
     *_dout << dendl;
   }
   
+  if (!store->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   new_config.encode(bl);
   map<string, bufferlist> attrs;
   attrs = s->bucket_attrs;
