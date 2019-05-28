@@ -1,1 +1,1 @@
-ceph_cm: salt
+.qa/deepsea/boilerplate/ceph_cm_salt.yaml
