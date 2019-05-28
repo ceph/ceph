@@ -65,3 +65,8 @@
   was 'wait_backfill' and the correct name is 'backfill_wait'.
   Update your Zabbix template accordingly so that it accepts the
   new key being send to Zabbix.
+
+* zabbix plugin for ceph manager now includes osd and pool
+  discovery. Update of zabbix_template.xml is needed
+  to receive per-pool (read/write throughput, diskspace usage)
+  and per-osd (latency, status, pgs) statistics
