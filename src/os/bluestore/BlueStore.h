@@ -1097,6 +1097,8 @@ public:
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
 
+    std::array<std::pair<ghobject_t, mono_clock::time_point>, 64> dumped_onodes;
+
     static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
     Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
