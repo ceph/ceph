@@ -46,9 +46,6 @@ struct PGPool {
       name(name),
       info(info) {
     snapc = info.get_snap_context();
-    if (map->require_osd_release < ceph_release_t::mimic) {
-      info.build_removed_snaps(cached_removed_snaps);
-    }
   }
 
   void update(CephContext *cct, OSDMapRef map);
