@@ -598,11 +598,7 @@
    ...
    fun:_ZN15AsyncConnection7processEv
    fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
-   fun:operator()
-   fun:_ZNSt17_Function_handlerIFvvEZN12NetworkStack10add_threadEjEUlvE_E9_M_invokeERKSt9_Any_data
-   fun:execute_native_thread_routine
-   fun:start_thread
-   fun:clone
+   ...
 }
 
 {
@@ -613,9 +609,5 @@
    fun:_ZN10ProtocolV216run_continuationER2CtIS_E
    ...
    fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
-   fun:operator()
-   fun:_ZNSt17_Function_handlerIFvvEZN12NetworkStack10add_threadEjEUlvE_E9_M_invokeERKSt9_Any_data
-   fun:execute_native_thread_routine
-   fun:start_thread
-   fun:clone
+   ...
 }
