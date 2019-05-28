@@ -1,4 +1,5 @@
 include(GetGitRevisionDescription)
+include(CheckCXXCompilerFlag)
 
 include(GNUInstallDirs)
 # for erasure and compressor plugins
@@ -36,6 +37,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
+CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
+if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpessimizing-move")
+endif()
+CHECK_CXX_COMPILER_FLAG("-Wredundant-move" COMPILER_SUPPORTS_REDUNDANT_MOVE)
+if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-move")
+endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
@@ -106,7 +115,6 @@ endif()
 
 # require c++17
 if(CMAKE_VERSION VERSION_LESS "3.8")
-  include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
   if(NOT COMPILER_SUPPORTS_CXX17)
     message(FATAL_ERROR
