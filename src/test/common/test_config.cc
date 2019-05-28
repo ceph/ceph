@@ -131,6 +131,25 @@ TEST_F(test_config_proxy, expand_meta)
   test_expand_meta();
 }
 
+TEST(md_config_t, parse_env)
+{
+  {
+    ConfigProxy conf{false};
+    setenv("POD_MEMORY_REQUEST", "1", 1);
+    conf.parse_env(CEPH_ENTITY_TYPE_OSD);
+  }
+  {
+    ConfigProxy conf{false};
+    setenv("POD_MEMORY_REQUEST", "0", 1);
+    conf.parse_env(CEPH_ENTITY_TYPE_OSD);
+  }
+  {
+    ConfigProxy conf{false};
+    setenv("CEPH_KEYRING", "", 1);
+    conf.parse_env(CEPH_ENTITY_TYPE_OSD);
+  }
+}
+
 TEST(md_config_t, set_val)
 {
   int buf_size = 1024;
