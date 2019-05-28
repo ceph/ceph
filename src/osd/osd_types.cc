@@ -2145,8 +2145,11 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
-  out << p.get_type_name()
-      << " size " << p.get_size()
+  out << p.get_type_name();
+  if (p.get_type_name() == "erasure") {
+    out << " profile " << p.erasure_code_profile;
+  }
+  out  << " size " << p.get_size()
       << " min_size " << p.get_min_size()
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
