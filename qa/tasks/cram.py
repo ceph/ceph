@@ -69,7 +69,7 @@ def task(ctx, config):
                 args=[
                     'mkdir', '--', client_dir,
                     run.Raw('&&'),
-                    'virtualenv', '{tdir}/virtualenv'.format(tdir=testdir),
+                    'virtualenv', '--python=python3', '{tdir}/virtualenv'.format(tdir=testdir),
                     run.Raw('&&'),
                     '{tdir}/virtualenv/bin/pip'.format(tdir=testdir),
                     'install', 'cram==0.6',
@@ -139,6 +139,7 @@ def _run_tests(ctx, role):
         args=[
             run.Raw('CEPH_REF={ref}'.format(ref=ceph_ref)),
             run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+            run.Raw('PYTHON="/usr/bin/python3"'),
             run.Raw('PATH=$PATH:/usr/sbin'),
             'adjust-ulimits',
             'ceph-coverage',
