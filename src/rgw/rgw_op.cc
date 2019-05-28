@@ -5142,6 +5142,14 @@ void RGWPutLC::execute()
 
 void RGWDeleteLC::execute()
 {
+  if (!store->is_meta_master()) {
+    bufferlist data;
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
   map<string, bufferlist> attrs = s->bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
