@@ -105,7 +105,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        pg_shard_t peer,
        const hobject_t oid) = 0;
 
-     virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void failed_push(const list<pg_shard_t> &from,
+                              const hobject_t &soid,
+                              const eversion_t &need = eversion_t()) = 0;
      virtual void finish_degraded_object(const hobject_t& oid) = 0;
      virtual void primary_failed(const hobject_t &soid) = 0;
      virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
