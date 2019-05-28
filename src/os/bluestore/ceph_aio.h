@@ -59,20 +59,24 @@ struct aio_t {
     }
 #endif
   }
-  void pread(uint64_t _offset, uint64_t len) {
+
+  void preadv(uint64_t _offset, uint64_t len) {
     offset = _offset;
     length = len;
-    bufferptr p = buffer::create_small_page_aligned(length);
 #if defined(HAVE_LIBAIO)
-    io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+    io_prep_preadv(&iocb, fd, &iov[0], iov.size(), offset);
 #elif defined(HAVE_POSIXAIO)
-    n_aiocb = 1;
-    aio.aiocb.aio_fildes = fd;
-    aio.aiocb.aio_buf = p.c_str();
-    aio.aiocb.aio_nbytes = length;
-    aio.aiocb.aio_offset = offset;
+    n_aiocb = iov.size();
+    aio.aiocbp = (struct aiocb*)calloc(iov.size(), sizeof(struct aiocb));
+    for (size_t i = 0; i < iov.size(); i++) {
+      aio.aiocbp[i].aio_fildes = fd;
+      aio.aiocbp[i].aio_buf = iov[i].iov_base;
+      aio.aiocbp[i].aio_nbytes = iov[i].iov_len;
+      aio.aiocbp[i].aio_offset = offset;
+      aio.aiocbp[i].aio_lio_opcode = LIO_READ;
+      offset += iov[i].iov_len;
+    }
 #endif
-    bl.append(std::move(p));
   }
 
   long get_return_value() {
