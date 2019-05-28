@@ -21,6 +21,7 @@ endfunction()
 
 set(librgw_common_srcs
   services/svc_finisher.cc
+  services/svc_bi_rados.cc
   services/svc_bucket.cc
   services/svc_cls.cc
   services/svc_mdlog.cc
@@ -34,6 +35,7 @@ set(librgw_common_srcs
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
+  services/svc_tier_rados.cc
   services/svc_user.cc
   services/svc_user_rados.cc
   services/svc_zone.cc

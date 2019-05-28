@@ -20,7 +20,7 @@
 
 #include "svc_rados.h"
 
-#define MP_META_SUFFIX ".meta"
+extern const std::string MP_META_SUFFIX;
 
 class RGWMPObj {
   string oid;
@@ -108,23 +108,7 @@ public:
    * @return true if the name provided is in the form of a multipart meta
    *         object, false otherwise
    */
-  bool filter(string& name, string& key) override {
-    int len = name.size();
-    if (len < 6)
-      return false;
-
-    size_t pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos == string::npos)
-      return false;
-
-    pos = name.rfind('.', pos - 1);
-    if (pos == string::npos)
-      return false;
-
-    key = name.substr(0, pos);
-
-    return true;
-  }
+  bool filter(string& name, string& key) override;
 };
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance
