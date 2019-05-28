@@ -7,6 +7,7 @@ import json
 import mgr_util
 import threading
 import uuid
+from six import itervalues, iteritems
 from collections import defaultdict
 from prettytable import PrettyTable
 
@@ -192,7 +193,7 @@ class PgAutoscaler(MgrModule):
 
             # do we intersect an existing root?
             s = None
-            for prev in result.itervalues():
+            for prev in itervalues(result):
                 if osds & prev.osds:
                     s = prev
                     break
@@ -251,7 +252,7 @@ class PgAutoscaler(MgrModule):
         ret = []
 
         # iterate over all pools to determine how they should be sized
-        for pool_name, p in pools.iteritems():
+        for pool_name, p in iteritems(pools):
             pool_id = p['pool']
 
             # FIXME: we assume there is only one take per pool, but that
@@ -341,13 +342,13 @@ class PgAutoscaler(MgrModule):
         too_many = []
         health_checks = {}
 
-        total_ratio = dict([(r, 0.0) for r in root_map.iterkeys()])
-        total_target_ratio = dict([(r, 0.0) for r in root_map.iterkeys()])
-        target_ratio_pools = dict([(r, []) for r in root_map.iterkeys()])
+        total_ratio = dict([(r, 0.0) for r in iter(root_map)])
+        total_target_ratio = dict([(r, 0.0) for r in iter(root_map)])
+        target_ratio_pools = dict([(r, []) for r in iter(root_map)])
 
-        total_bytes = dict([(r, 0) for r in root_map.iterkeys()])
-        total_target_bytes = dict([(r, 0.0) for r in root_map.iterkeys()])
-        target_bytes_pools = dict([(r, []) for r in root_map.iterkeys()])
+        total_bytes = dict([(r, 0) for r in iter(root_map)])
+        total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
+        target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
             total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
@@ -410,7 +411,7 @@ class PgAutoscaler(MgrModule):
             }
 
         too_much_target_ratio = []
-        for root_id, total in total_ratio.iteritems():
+        for root_id, total in iteritems(total_ratio):
             total_target = total_target_ratio[root_id]
             if total > 1.0:
                 too_much_target_ratio.append(
@@ -437,7 +438,7 @@ class PgAutoscaler(MgrModule):
             }
 
         too_much_target_bytes = []
-        for root_id, total in total_bytes.iteritems():
+        for root_id, total in iteritems(total_bytes):
             total_target = total_target_bytes[root_id]
             if total > root_map[root_id].capacity:
                 too_much_target_bytes.append(
