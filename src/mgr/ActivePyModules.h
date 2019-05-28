@@ -47,6 +47,9 @@ class ActivePyModules
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
+public:
+  Finisher cmd_finisher;
+private:
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
 
