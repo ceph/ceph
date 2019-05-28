@@ -5,6 +5,7 @@ import unittest
 
 from mock import MagicMock, Mock
 
+import orchestrator
 from . import KVStoreMockMixin
 from .. import mgr
 from ..settings import Settings
@@ -127,7 +128,9 @@ EXPORT
 
         mgr.rados = MagicMock()
         mgr.rados.open_ioctx.return_value = ioctx_mock
-        mgr.remote.return_value = False, None
+
+        # pylint: disable=protected-access
+        mgr._select_orchestrator.side_effect = orchestrator.NoOrchestrator()
 
         ganesha.CephX = MagicMock()
         ganesha.CephX.list_clients.return_value = ['ganesha']
