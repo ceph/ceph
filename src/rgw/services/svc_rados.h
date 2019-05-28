@@ -23,11 +23,6 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
   }
 };
 
-struct rgw_rados_ref {
-  rgw_raw_obj obj;
-  librados::IoCtx ioctx;
-};
-
 class RGWSI_RADOS : public RGWServiceInstance
 {
   std::vector<librados::Rados> rados;
@@ -55,59 +50,18 @@ public:
 
   class Handle;
 
-  class Obj {
-    friend class RGWSI_RADOS;
-    friend class Handle;
-
-    RGWSI_RADOS *rados_svc{nullptr};
-    int rados_handle{-1};
-    rgw_rados_ref ref;
-
-    void init(const rgw_raw_obj& obj);
-
-    Obj(RGWSI_RADOS *_rados_svc, const rgw_raw_obj& _obj, int _rados_handle) : rados_svc(_rados_svc), rados_handle(_rados_handle) {
-      init(_obj);
-    }
-
-  public:
-    Obj() {}
-
-    int open();
-
-    int operate(librados::ObjectWriteOperation *op, optional_yield y);
-    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
-                optional_yield y);
-    int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
-    int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
-                    bufferlist *pbl);
-
-    int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
-    int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
-    int unwatch(uint64_t handle);
-    int notify(bufferlist& bl,
-               uint64_t timeout_ms,
-               bufferlist *pbl);
-    void notify_ack(uint64_t notify_id,
-                    uint64_t cookie,
-                    bufferlist& bl);
-
-    uint64_t get_last_version();
-
-    rgw_rados_ref& get_ref() { return ref; }
-    const rgw_rados_ref& get_ref() const { return ref; }
-
-    const rgw_raw_obj& get_raw_obj() const {
-      return ref.obj;
-    }
-  };
-
   class Pool {
     friend class RGWSI_RADOS;
     friend class Handle;
+    friend class Obj;
 
     RGWSI_RADOS *rados_svc{nullptr};
     int rados_handle{-1};
     rgw_pool pool;
+
+    struct State {
+      librados::IoCtx ioctx;
+    } state;
 
     Pool(RGWSI_RADOS *_rados_svc,
          const rgw_pool& _pool,
@@ -122,6 +76,11 @@ public:
     int create();
     int create(const std::vector<rgw_pool>& pools, std::vector<int> *retcodes);
     int lookup();
+    int open();
+
+    librados::IoCtx& ioctx() {
+      return state.ioctx;
+    }
 
     struct List {
       Pool *pool{nullptr};
@@ -151,6 +110,60 @@ public:
     friend class List;
   };
 
+
+  struct rados_ref {
+    RGWSI_RADOS::Pool pool;
+    rgw_raw_obj obj;
+  };
+
+  class Obj {
+    friend class RGWSI_RADOS;
+    friend class Handle;
+
+    RGWSI_RADOS *rados_svc{nullptr};
+    int rados_handle{-1};
+    rados_ref ref;
+
+    void init(const rgw_raw_obj& obj);
+
+    Obj(RGWSI_RADOS *_rados_svc, const rgw_raw_obj& _obj, int _rados_handle) : rados_svc(_rados_svc), rados_handle(_rados_handle) {
+      init(_obj);
+    }
+
+    Obj(Pool& pool, const rgw_raw_obj& obj);
+
+  public:
+    Obj() {}
+
+    int open();
+
+    int operate(librados::ObjectWriteOperation *op, optional_yield y);
+    int operate(librados::ObjectReadOperation *op, bufferlist *pbl,
+                optional_yield y);
+    int aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op);
+    int aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
+                    bufferlist *pbl);
+
+    int watch(uint64_t *handle, librados::WatchCtx2 *ctx);
+    int aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx);
+    int unwatch(uint64_t handle);
+    int notify(bufferlist& bl,
+               uint64_t timeout_ms,
+               bufferlist *pbl);
+    void notify_ack(uint64_t notify_id,
+                    uint64_t cookie,
+                    bufferlist& bl);
+
+    uint64_t get_last_version();
+
+    rados_ref& get_ref() { return ref; }
+    const rados_ref& get_ref() const { return ref; }
+
+    const rgw_raw_obj& get_raw_obj() const {
+      return ref.obj;
+    }
+  };
+
   class Handle {
     friend class RGWSI_RADOS;
 
@@ -160,9 +173,7 @@ public:
     Handle(RGWSI_RADOS *_rados_svc, int _rados_handle) : rados_svc(_rados_svc),
                                                          rados_handle(_rados_handle) {}
   public:
-    Obj obj(const rgw_raw_obj& o) {
-      return Obj(rados_svc, o, rados_handle);
-    }
+    Obj obj(const rgw_raw_obj& o);
 
     Pool pool(const rgw_pool& p) {
       return Pool(rados_svc, p, rados_handle);
@@ -179,6 +190,10 @@ public:
     return Obj(this, o, -1);
   }
 
+  Obj obj(Pool& pool, const rgw_raw_obj& o) {
+    return Obj(pool, o);
+  }
+
   Pool pool() {
     return Pool(this);
   }
@@ -191,6 +206,8 @@ public:
   friend class Pool;
   friend class Pool::List;
 };
+
+using rgw_rados_ref = RGWSI_RADOS::rados_ref;
 
 inline ostream& operator<<(ostream& out, const RGWSI_RADOS::Obj& obj) {
   return out << obj.get_raw_obj();

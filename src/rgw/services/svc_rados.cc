@@ -134,19 +134,26 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
   return objs.size();
 }
 
+RGWSI_RADOS::Obj::Obj(Pool& pool, const rgw_raw_obj& obj) : rados_svc(pool.rados_svc), rados_handle(pool.rados_handle)
+{
+  ref.pool = pool;
+  ref.obj = obj;
+}
+
 void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
 {
+  ref.pool = RGWSI_RADOS::Pool(rados_svc, ref.obj.pool, rados_handle);
   ref.obj = obj;
 }
 
 int RGWSI_RADOS::Obj::open()
 {
-  int r = rados_svc->open_pool_ctx(ref.obj.pool, ref.ioctx, rados_handle);
+  int r = ref.pool.open();
   if (r < 0) {
     return r;
   }
 
-  ref.ioctx.locator_set_key(ref.obj.loc);
+  ref.pool.ioctx().locator_set_key(ref.obj.loc);
 
   return 0;
 }
@@ -154,58 +161,58 @@ int RGWSI_RADOS::Obj::open()
 int RGWSI_RADOS::Obj::operate(librados::ObjectWriteOperation *op,
                               optional_yield y)
 {
-  return rgw_rados_operate(ref.ioctx, ref.obj.oid, op, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, y);
 }
 
 int RGWSI_RADOS::Obj::operate(librados::ObjectReadOperation *op, bufferlist *pbl,
                               optional_yield y)
 {
-  return rgw_rados_operate(ref.ioctx, ref.obj.oid, op, pbl, y);
+  return rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, op, pbl, y);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectWriteOperation *op)
 {
-  return ref.ioctx.aio_operate(ref.obj.oid, c, op);
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op);
 }
 
 int RGWSI_RADOS::Obj::aio_operate(librados::AioCompletion *c, librados::ObjectReadOperation *op,
                                   bufferlist *pbl)
 {
-  return ref.ioctx.aio_operate(ref.obj.oid, c, op, pbl);
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, c, op, pbl);
 }
 
 int RGWSI_RADOS::Obj::watch(uint64_t *handle, librados::WatchCtx2 *ctx)
 {
-  return ref.ioctx.watch2(ref.obj.oid, handle, ctx);
+  return ref.pool.ioctx().watch2(ref.obj.oid, handle, ctx);
 }
 
 int RGWSI_RADOS::Obj::aio_watch(librados::AioCompletion *c, uint64_t *handle, librados::WatchCtx2 *ctx)
 {
-  return ref.ioctx.aio_watch(ref.obj.oid, c, handle, ctx);
+  return ref.pool.ioctx().aio_watch(ref.obj.oid, c, handle, ctx);
 }
 
 int RGWSI_RADOS::Obj::unwatch(uint64_t handle)
 {
-  return ref.ioctx.unwatch2(handle);
+  return ref.pool.ioctx().unwatch2(handle);
 }
 
 int RGWSI_RADOS::Obj::notify(bufferlist& bl,
                              uint64_t timeout_ms,
                              bufferlist *pbl)
 {
-  return ref.ioctx.notify2(ref.obj.oid, bl, timeout_ms, pbl);
+  return ref.pool.ioctx().notify2(ref.obj.oid, bl, timeout_ms, pbl);
 }
 
 void RGWSI_RADOS::Obj::notify_ack(uint64_t notify_id,
                                  uint64_t cookie,
                                  bufferlist& bl)
 {
-  ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, bl);
+  ref.pool.ioctx().notify_ack(ref.obj.oid, notify_id, cookie, bl);
 }
 
 uint64_t RGWSI_RADOS::Obj::get_last_version()
 {
-  return ref.ioctx.get_last_version();
+  return ref.pool.ioctx().get_last_version();
 }
 
 int RGWSI_RADOS::Pool::create()
@@ -320,6 +327,11 @@ int RGWSI_RADOS::Pool::lookup()
   return 0;
 }
 
+int RGWSI_RADOS::Pool::open()
+{
+  return rados_svc->open_pool_ctx(pool, state.ioctx, rados_handle);
+}
+
 int RGWSI_RADOS::Pool::List::init(const string& marker, RGWAccessListFilter *filter)
 {
   if (ctx.initialized) {
@@ -372,6 +384,10 @@ int RGWSI_RADOS::Pool::List::get_next(int max,
   return oids->size();
 }
 
+RGWSI_RADOS::Obj RGWSI_RADOS::Handle::obj(const rgw_raw_obj& o)
+{
+  return RGWSI_RADOS::Obj(rados_svc, o, rados_handle);
+}
 int RGWSI_RADOS::Handle::watch_flush()
 {
   librados::Rados *rad = rados_svc->get_rados_handle(rados_handle);
@@ -387,3 +403,4 @@ int RGWSI_RADOS::Pool::List::get_marker(string *marker)
   *marker = ctx.iter.get_cursor().to_str();
   return 0;
 }
+
