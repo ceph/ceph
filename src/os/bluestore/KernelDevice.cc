@@ -855,7 +855,10 @@ int KernelDevice::aio_write(
       ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
-      aio.pread(off, len);
+      bufferptr p = buffer::create_small_page_aligned(len);
+      aio.bl.append(std::move(p));
+      aio.bl.prepare_iov(&aio.iov);
+      aio.preadv(off, len);
       ++injecting_crash;
     } else {
       if (bl.length() <= RW_IO_MAX) {
@@ -981,7 +984,10 @@ int KernelDevice::aio_read(
     ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
-    aio.pread(off, len);
+    bufferptr p = buffer::create_small_page_aligned(len);
+    aio.bl.append(std::move(p));
+    aio.bl.prepare_iov(&aio.iov);
+    aio.preadv(off, len);
     dout(30) << aio << dendl;
     pbl->append(aio.bl);
     dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
