@@ -226,7 +226,6 @@ export class IscsiTargetFormComponent implements OnInit {
 
     _.forEach(res.groups, (group) => {
       const fg = this.addGroup();
-      console.log(group);
       group.disks = _.map(group.disks, (disk) => `${disk.pool}/${disk.image}`);
       fg.patchValue(group);
       _.forEach(group.members, (member) => {
@@ -494,7 +493,7 @@ export class IscsiTargetFormComponent implements OnInit {
 
     const initiators = _.map(
       this.initiators.value,
-      (initiator) => new SelectOption(false, initiator.client_iqn, '')
+      (initiator) => new SelectOption(false, initiator.client_iqn, '', !initiator.cdIsInGroup)
     );
     this.groupMembersSelections.push(initiators);
 
@@ -509,11 +508,19 @@ export class IscsiTargetFormComponent implements OnInit {
   onGroupMemberSelection($event) {
     const option = $event.option;
 
-    this.initiators.controls.forEach((element) => {
+    let initiator_index: number;
+    this.initiators.controls.forEach((element, index) => {
       if (element.value.client_iqn === option.name) {
         element.patchValue({ luns: [] });
         element.get('cdIsInGroup').setValue(option.selected);
+        initiator_index = index;
       }
+    });
+
+    // Members can only be at one group at a time, so when a member is selected
+    // in one group we need to disable its selection in other groups
+    _.forEach(this.groupMembersSelections, (group) => {
+      group[initiator_index].enabled = !option.selected;
     });
   }
 

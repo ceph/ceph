@@ -219,7 +219,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target already exists',
                                      code='target_already_exists',
                                      component='iscsi')
-        IscsiTarget._validate(target_iqn, portals, disks)
+        IscsiTarget._validate(target_iqn, portals, disks, groups)
         IscsiTarget._create(target_iqn, target_controls, acl_enabled, portals, disks, clients,
                             groups, 0, 100, config)
 
@@ -241,7 +241,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
-        IscsiTarget._validate(new_target_iqn, portals, disks)
+        IscsiTarget._validate(new_target_iqn, portals, disks, groups)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
         IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, portals, disks, clients,
@@ -398,7 +398,7 @@ class IscsiTarget(RESTController):
         return False
 
     @staticmethod
-    def _validate(target_iqn, portals, disks):
+    def _validate(target_iqn, portals, disks, groups):
         if not target_iqn:
             raise DashboardException(msg='Target IQN is required',
                                      code='target_iqn_required',
@@ -434,6 +434,14 @@ class IscsiTarget(RESTController):
             unsupported_rbd_features = settings['unsupported_rbd_features'][backstore]
             IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
                                         unsupported_rbd_features)
+
+        initiators = []
+        for group in groups:
+            initiators = initiators + group['members']
+        if len(initiators) != len(set(initiators)):
+            raise DashboardException(msg='Each initiator can only be part of 1 group at a time',
+                                     code='initiator_in_multiple_groups',
+                                     component='iscsi')
 
     @staticmethod
     def _validate_image(pool, image, backstore, required_rbd_features, unsupported_rbd_features):
