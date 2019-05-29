@@ -1962,7 +1962,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
-    if (client_inst.name.is_client()) {
+    if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
     perf_gather_op_latency(req, lat);
@@ -1978,7 +1978,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
-  if (!(client_inst.name.is_mds() || !session)) {
+  if (session && !client_inst.name.is_mds()) {
     // send reply.
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) {
