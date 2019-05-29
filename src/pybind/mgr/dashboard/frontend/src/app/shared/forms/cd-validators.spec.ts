@@ -475,4 +475,55 @@ describe('CdValidators', () => {
       formHelper.expectError('x', 'notUnique');
     }));
   });
+
+  describe('composeIf', () => {
+    beforeEach(() => {
+      form = new CdFormGroup({
+        x: new FormControl(true),
+        y: new FormControl('abc'),
+        z: new FormControl('')
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should not error because all conditions are fulfilled', () => {
+      formHelper.setValue('z', 'zyx');
+      const validatorFn = CdValidators.composeIf(
+        {
+          x: true,
+          y: 'abc'
+        },
+        [Validators.required]
+      );
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should not error because of unmet prerequisites', () => {
+      // Define prereqs that do not match the current values of the form fields.
+      const validatorFn = CdValidators.composeIf(
+        {
+          x: false,
+          y: 'xyz'
+        },
+        [Validators.required]
+      );
+      // The validator must succeed because the prereqs do not match, so the
+      // validation of the 'z' control will be skipped.
+      expect(validatorFn(form.get('z'))).toBeNull();
+    });
+
+    it('should error because of an empty value', () => {
+      // Define prereqs that force the validator to validate the value of
+      // the 'z' control.
+      const validatorFn = CdValidators.composeIf(
+        {
+          x: true,
+          y: 'abc'
+        },
+        [Validators.required]
+      );
+      // The validator must fail because the value of control 'z' is empty.
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
+    });
+  });
 });
