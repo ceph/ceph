@@ -248,7 +248,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         www/npm \
         www/fcgi \
         security/nss \
-        security/kbr5 \
+        security/krb5 \
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
