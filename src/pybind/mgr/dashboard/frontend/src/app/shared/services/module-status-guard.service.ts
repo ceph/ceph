@@ -5,8 +5,6 @@ import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
-import { ServicesModule } from './services.module';
-
 /**
  * This service checks if a route can be activated by executing a
  * REST API call to '/api/<apiPath>/status'. If the returned response
@@ -33,7 +31,7 @@ import { ServicesModule } from './services.module';
  * ...
  */
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   // TODO: Hotfix - remove WHITELIST'ing when a generic ErrorComponent is implemented
