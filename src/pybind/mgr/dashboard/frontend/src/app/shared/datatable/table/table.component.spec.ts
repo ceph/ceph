@@ -79,6 +79,13 @@ describe('TableComponent', () => {
     expect(component.userConfig.limit).toBe(1);
   });
 
+  it('should prevent propagation of mouseenter event', (done) => {
+    fixture.detectChanges();
+    const mouseEvent = new MouseEvent('mouseenter');
+    mouseEvent.stopPropagation = () => done();
+    fixture.debugElement.nativeElement.dispatchEvent(mouseEvent);
+  });
+
   describe('test search', () => {
     const expectSearch = (keyword: string, expectedResult: object[]) => {
       component.search = keyword;
