@@ -203,6 +203,10 @@ int Resetter::_write_reset_event(Journaler *journaler)
 
   cout << "writing EResetJournal entry" << std::endl;
   journaler->append_entry(bl);
+  if (NULL != le){
+  delete le;
+  le = NULL;
+  }
 
   int ret;
   {
