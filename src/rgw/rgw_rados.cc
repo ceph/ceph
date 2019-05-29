@@ -4347,11 +4347,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   string etag;
   real_time set_mtime;
 
+  //need to get src size
+  RGWObjState *src_state = NULL;
+
   RGWObjState *dest_state = NULL;
 
   const real_time *pmod = mod_ptr;
 
   obj_time_weight dest_mtime_weight;
+
+  ret = get_obj_state(&obj_ctx, src_bucket_info, src_obj, &src_state, false);
+  if (ret < 0)
+    goto set_err_state;
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
@@ -4388,6 +4395,12 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     goto set_err_state;
   }
+  if (cb.get_data_len() != src_state->size) {
+    ret = -EINVAL;
+    ldout(cct, 0) << "ERROR: object trucated during fetching, src_size " << src_state->size 
+                  << ", we got "<< cb.get_data_len() << dendl;
+    goto set_err_state;
+  } 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
