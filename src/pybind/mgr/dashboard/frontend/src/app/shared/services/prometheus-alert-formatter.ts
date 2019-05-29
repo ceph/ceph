@@ -10,10 +10,9 @@ import {
   PrometheusNotificationAlert
 } from '../models/prometheus-alerts';
 import { NotificationService } from './notification.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class PrometheusAlertFormatter {
   constructor(private notificationService: NotificationService) {}

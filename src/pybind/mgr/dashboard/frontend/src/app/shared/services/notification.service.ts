@@ -8,11 +8,10 @@ import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
-import { ServicesModule } from './services.module';
 import { TaskMessageService } from './task-message.service';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class NotificationService {
   private hideToasties = false;

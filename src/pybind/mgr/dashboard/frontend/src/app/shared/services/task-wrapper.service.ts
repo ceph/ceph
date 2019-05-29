@@ -6,13 +6,12 @@ import { NotificationType } from '../enum/notification-type.enum';
 import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
-import { ServicesModule } from './services.module';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 import { TaskMessageService } from './task-message.service';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class TaskWrapperService {
   constructor(

@@ -2,9 +2,8 @@ import { Injectable, OnDestroy } from '@angular/core';
 
 import { BehaviorSubject, interval, Subscription } from 'rxjs';
 
-import { ServicesModule } from './services.module';
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class RefreshIntervalService implements OnDestroy {
   private intervalTime: number;
