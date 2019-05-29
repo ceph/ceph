@@ -65,7 +65,7 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD1(was_throttled, bool(uint64_t));
   MOCK_CONST_METHOD0(were_all_throttled, bool());
   MOCK_CONST_METHOD1(set_throttled, void(uint64_t));
-  MOCK_CONST_METHOD1(tokens_requested, uint64_t(uint64_t));
+  MOCK_CONST_METHOD2(tokens_requested, bool(uint64_t, uint64_t *));
 
   ImageDispatchSpec() {
     s_instance = this;
@@ -104,7 +104,8 @@ struct ThreadPool::PointerWQ<librbd::io::ImageDispatchSpec<librbd::MockTestImage
   MOCK_METHOD0(process_finish, void());
 
   MOCK_METHOD0(front, ImageDispatchSpec*());
-  MOCK_METHOD1(requeue, void(ImageDispatchSpec*));
+  MOCK_METHOD1(requeue_front, void(ImageDispatchSpec*));
+  MOCK_METHOD1(requeue_back, void(ImageDispatchSpec*));
 
   MOCK_METHOD0(dequeue, void*());
   MOCK_METHOD1(queue, void(ImageDispatchSpec*));
@@ -170,8 +171,8 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
     EXPECT_CALL(image_request_wq, queue(_));
   }
 
-  void expect_requeue(MockImageRequestWQ &image_request_wq) {
-    EXPECT_CALL(image_request_wq, requeue(_));
+  void expect_requeue_back(MockImageRequestWQ &image_request_wq) {
+    EXPECT_CALL(image_request_wq, requeue_back(_));
   }
 
   void expect_front(MockImageRequestWQ &image_request_wq,
@@ -236,8 +237,13 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
     EXPECT_CALL(mock_image_request, was_throttled(_)).Times(6).WillRepeatedly(Return(value));
   }
 
-  void expect_tokens_requested(MockImageDispatchSpec &mock_image_request, uint64_t value) {
-    EXPECT_CALL(mock_image_request, tokens_requested(_)).WillOnce(Return(value));
+  void expect_tokens_requested(MockImageDispatchSpec &mock_image_request,
+                               uint64_t tokens, bool r) {
+    EXPECT_CALL(mock_image_request, tokens_requested(_, _))
+      .WillOnce(WithArg<1>(Invoke([tokens, r](uint64_t *t) {
+                         *t = tokens;
+                         return r;
+                       })));
   }
 
   void expect_all_throttled(MockImageDispatchSpec &mock_image_request, bool value) {
@@ -417,10 +423,10 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosNoBurst) {
   mock_image_request_wq.apply_qos_limit(RBD_QOS_BPS_THROTTLE, 1, 0);
 
   expect_front(mock_image_request_wq, &mock_queued_image_request);
-  expect_tokens_requested(mock_queued_image_request, 2);
+  expect_tokens_requested(mock_queued_image_request, 2, true);
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
-  expect_requeue(mock_image_request_wq);
+  expect_requeue_back(mock_image_request_wq);
   expect_signal(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
@@ -441,10 +447,10 @@ TEST_F(TestMockIoImageRequestWQ, BPSQosWithBurst) {
   mock_image_request_wq.apply_qos_limit(RBD_QOS_BPS_THROTTLE, 1, 1);
 
   expect_front(mock_image_request_wq, &mock_queued_image_request);
-  expect_tokens_requested(mock_queued_image_request, 2);
+  expect_tokens_requested(mock_queued_image_request, 2, true);
   expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
   expect_all_throttled(mock_queued_image_request, true);
-  expect_requeue(mock_image_request_wq);
+  expect_requeue_back(mock_image_request_wq);
   expect_signal(mock_image_request_wq);
   ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }

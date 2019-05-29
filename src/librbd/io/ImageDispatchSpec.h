@@ -129,7 +129,7 @@ public:
 
   void start_op();
 
-  uint64_t tokens_requested(uint64_t flag);
+  bool tokens_requested(uint64_t flag, uint64_t *tokens);
 
   bool was_throttled(uint64_t flag) {
     return m_throttled_flag & flag;
