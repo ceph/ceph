@@ -35,6 +35,7 @@ void RefreshImagesRequest<I>::mirror_image_list() {
   librados::ObjectReadOperation op;
   librbd::cls_client::mirror_image_list_start(&op, m_start_after, MAX_RETURN);
 
+  m_out_bl.clear();
   librados::AioCompletion *aio_comp = create_rados_callback<
     RefreshImagesRequest<I>,
     &RefreshImagesRequest<I>::handle_mirror_image_list>(this);
