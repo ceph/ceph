@@ -5,6 +5,7 @@ meta:
    restart : osd.0,1,2,3
 tasks:
 - install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
     osd.0:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
