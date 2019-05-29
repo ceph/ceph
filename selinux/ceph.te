@@ -19,6 +19,7 @@ require {
 	class file { create getattr open read rename unlink write };
 	class blk_file { getattr ioctl open read write };
 	class capability2 block_suspend;
+	class process2 { nnp_transition nosuid_transition };
 }
 
 ########################################
@@ -29,6 +30,7 @@ require {
 type ceph_t;
 type ceph_exec_t;
 init_daemon_domain(ceph_t, ceph_exec_t)
+ceph_exec(ceph_t)
 
 permissive ceph_t;
 
@@ -52,7 +54,7 @@ files_pid_file(ceph_var_run_t)
 allow ceph_t self:process { signal_perms };
 allow ceph_t self:fifo_file rw_fifo_file_perms;
 allow ceph_t self:unix_stream_socket create_stream_socket_perms;
-allow ceph_t self:capability { setuid setgid dac_override };
+allow ceph_t self:capability { setuid setgid dac_override dac_read_search };
 allow ceph_t self:capability2 block_suspend;
 
 manage_dirs_pattern(ceph_t, ceph_log_t, ceph_log_t)
@@ -119,6 +121,12 @@ nis_use_ypbind_uncond(ceph_t)
 storage_raw_rw_fixed_disk(ceph_t)
 files_manage_generic_locks(ceph_t)
 libs_exec_ldconfig(ceph_t)
+fs_list_hugetlbfs(ceph_t)
+fs_list_tmpfs(ceph_t)
+fs_read_cgroup_files(ceph_t)
+fs_read_tmpfs_symlinks(ceph_t)
+fs_search_cgroup_dirs(ceph_t)
+ceph_read_lib_files(init_t)
 
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };
@@ -134,6 +142,8 @@ allow ceph_t urandom_device_t:chr_file getattr;
 allow ceph_t self:process setpgid;
 allow ceph_t var_run_t:dir { write create add_name };
 allow ceph_t var_run_t:file { read write create open getattr };
+allow ceph_t init_var_run_t:file getattr;
+allow init_t ceph_t:process2 { nnp_transition nosuid_transition };
 
 fsadm_manage_pid(ceph_t)
 
