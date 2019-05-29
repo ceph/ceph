@@ -1,5 +1,5 @@
-import { ConfigFormModel } from './configuration-form.model';
-import { ConfigOptionTypes } from './configuration-form.types';
+import { ConfigFormModel } from './config-option.model';
+import { ConfigOptionTypes } from './config-option.types';
 
 describe('ConfigOptionTypes', () => {
   describe('getType', () => {
@@ -211,5 +211,62 @@ describe('ConfigOptionTypes', () => {
         });
       }
     );
+  });
+
+  describe('getTypeStep', () => {
+    it('should return the correct step for type uint and value 0', () => {
+      const ret = ConfigOptionTypes.getTypeStep('uint', 0);
+      expect(ret).toBe(1);
+    });
+
+    it('should return the correct step for type int and value 1', () => {
+      const ret = ConfigOptionTypes.getTypeStep('int', 1);
+      expect(ret).toBe(1);
+    });
+
+    it('should return the correct step for type int and value null', () => {
+      const ret = ConfigOptionTypes.getTypeStep('int', null);
+      expect(ret).toBe(1);
+    });
+
+    it('should return the correct step for type size and value 2', () => {
+      const ret = ConfigOptionTypes.getTypeStep('size', 2);
+      expect(ret).toBe(1);
+    });
+
+    it('should return the correct step for type secs and value 3', () => {
+      const ret = ConfigOptionTypes.getTypeStep('secs', 3);
+      expect(ret).toBe(1);
+    });
+
+    it('should return the correct step for type float and value 1', () => {
+      const ret = ConfigOptionTypes.getTypeStep('float', 1);
+      expect(ret).toBe(0.1);
+    });
+
+    it('should return the correct step for type float and value 0.1', () => {
+      const ret = ConfigOptionTypes.getTypeStep('float', 0.1);
+      expect(ret).toBe(0.1);
+    });
+
+    it('should return the correct step for type float and value 0.02', () => {
+      const ret = ConfigOptionTypes.getTypeStep('float', 0.02);
+      expect(ret).toBe(0.01);
+    });
+
+    it('should return the correct step for type float and value 0.003', () => {
+      const ret = ConfigOptionTypes.getTypeStep('float', 0.003);
+      expect(ret).toBe(0.001);
+    });
+
+    it('should return the correct step for type float and value null', () => {
+      const ret = ConfigOptionTypes.getTypeStep('float', null);
+      expect(ret).toBe(0.1);
+    });
+
+    it('should return undefined for unknown type', () => {
+      const ret = ConfigOptionTypes.getTypeStep('unknown', 1);
+      expect(ret).toBeUndefined();
+    });
   });
 });

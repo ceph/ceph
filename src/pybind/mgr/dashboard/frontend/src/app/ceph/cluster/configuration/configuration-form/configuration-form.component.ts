@@ -6,12 +6,12 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
+import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';
+import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { ConfigFormCreateRequestModel } from './configuration-form-create-request.model';
-import { ConfigFormModel } from './configuration-form.model';
-import { ConfigOptionTypes } from './configuration-form.types';
 
 @Component({
   selector: 'cd-configuration-form',
@@ -84,26 +84,7 @@ export class ConfigurationFormComponent implements OnInit {
   }
 
   getStep(type: string, value: number): number | undefined {
-    const numberTypes = ['uint', 'int', 'size', 'secs'];
-
-    if (numberTypes.includes(type)) {
-      return 1;
-    }
-
-    if (type === 'float') {
-      if (value !== null) {
-        const stringVal = value.toString();
-        if (stringVal.indexOf('.') !== -1) {
-          // Value type float and contains decimal characters
-          const decimal = value.toString().split('.');
-          return Math.pow(10, -decimal[1].length);
-        }
-      }
-
-      return 0.1;
-    }
-
-    return undefined;
+    return ConfigOptionTypes.getTypeStep(type, value);
   }
 
   setResponse(response: ConfigFormModel) {

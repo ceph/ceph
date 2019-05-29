@@ -1,8 +1,9 @@
 import { Validators } from '@angular/forms';
-import { CdValidators } from '../../../../shared/forms/cd-validators';
-import { ConfigFormModel } from './configuration-form.model';
 
 import * as _ from 'lodash';
+
+import { CdValidators } from '../../forms/cd-validators';
+import { ConfigFormModel } from './config-option.model';
 
 export class ConfigOptionTypes {
   // TODO: I18N
@@ -116,5 +117,28 @@ export class ConfigOptionTypes {
     }
 
     return typeValidators;
+  }
+
+  public static getTypeStep(type: string, value: number): number | undefined {
+    const numberTypes = ['uint', 'int', 'size', 'secs'];
+
+    if (numberTypes.includes(type)) {
+      return 1;
+    }
+
+    if (type === 'float') {
+      if (value !== null) {
+        const stringVal = value.toString();
+        if (stringVal.indexOf('.') !== -1) {
+          // Value type float and contains decimal characters
+          const decimal = value.toString().split('.');
+          return Math.pow(10, -decimal[1].length);
+        }
+      }
+
+      return 0.1;
+    }
+
+    return undefined;
   }
 }
