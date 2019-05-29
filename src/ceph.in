@@ -129,6 +129,9 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         pythonlib_path = os.path.join(lib_path,
                                       "cython_modules",
                                       get_pythonlib_dir())
+        if asan_lib_path is None:
+            asan_lib_path = "NOTFOUND"
+
         if asan_lib_path.endswith('NOTFOUND'):
             with_asan = False
         elif with_seastar and build_type == 'Debug':
