@@ -431,12 +431,12 @@ class IscsiTarget(RESTController):
             image = disk['image']
             backstore = disk['backstore']
             required_rbd_features = settings['required_rbd_features'][backstore]
-            supported_rbd_features = settings['supported_rbd_features'][backstore]
+            unsupported_rbd_features = settings['unsupported_rbd_features'][backstore]
             IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
-                                        supported_rbd_features)
+                                        unsupported_rbd_features)
 
     @staticmethod
-    def _validate_image(pool, image, backstore, required_rbd_features, supported_rbd_features):
+    def _validate_image(pool, image, backstore, required_rbd_features, unsupported_rbd_features):
         try:
             ioctx = mgr.rados.open_ioctx(pool)
             try:
@@ -451,14 +451,14 @@ class IscsiTarget(RESTController):
                                                                       required_rbd_features)),
                                                  code='image_missing_required_features',
                                                  component='iscsi')
-                    if img.features() & supported_rbd_features != img.features():
+                    if img.features() & unsupported_rbd_features != 0:
                         raise DashboardException(msg='Image {} cannot be exported using {} '
                                                      'backstore because it contains unsupported '
-                                                     'features (supported features are '
+                                                     'features ('
                                                      '{})'.format(image,
                                                                   backstore,
                                                                   format_bitmask(
-                                                                      supported_rbd_features)),
+                                                                      unsupported_rbd_features)),
                                                  code='image_contains_unsupported_features',
                                                  component='iscsi')
 
