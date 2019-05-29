@@ -570,10 +570,10 @@ export class IscsiTargetFormComponent implements OnInit {
 
     // Portals
     formValue.portals.forEach((portal) => {
-      const portalSplit = portal.split(':');
+      const index = portal.indexOf(':');
       request.portals.push({
-        host: portalSplit[0],
-        ip: portalSplit[1]
+        host: portal.substring(0, index),
+        ip: portal.substring(index + 1)
       });
     });
 
