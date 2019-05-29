@@ -200,6 +200,8 @@ int Resetter::_write_reset_event(Journaler *journaler)
 
   bufferlist bl;
   le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+  delete le;
+  le = NULL;
 
   cout << "writing EResetJournal entry" << std::endl;
   journaler->append_entry(bl);
