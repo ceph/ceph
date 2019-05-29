@@ -113,7 +113,7 @@ export class CdValidators {
         isWatched = true;
       }
 
-      // Check if all prerequisites matches.
+      // Check if all prerequisites met.
       if (
         !Object.keys(prerequisites).every((key) => {
           return control.parent && control.parent.get(key).value === prerequisites[key];
@@ -125,6 +125,47 @@ export class CdValidators {
         ? condition.call(condition, control.value)
         : isEmptyInputValue(control.value);
       return success ? { required: true } : null;
+    };
+  }
+
+  /**
+   * Compose multiple validators into a single function that returns the union of
+   * the individual error maps for the provided control when the given prerequisites
+   * are fulfilled.
+   *
+   * @param {Object} prerequisites An object containing the prerequisites as
+   *   key/value pairs.
+   *   ### Example
+   *   ```typescript
+   *   {
+   *     'generate_key': true,
+   *     'username': 'Max Mustermann'
+   *   }
+   *   ```
+   * @param {ValidatorFn[]} validators List of validators that should be taken
+   *   into action when the prerequisites are met.
+   * @return {ValidatorFn} Returns the validator function.
+   */
+  static composeIf(prerequisites: Object, validators: ValidatorFn[]): ValidatorFn {
+    let isWatched = false;
+    return (control: AbstractControl): ValidationErrors | null => {
+      if (!isWatched && control.parent) {
+        Object.keys(prerequisites).forEach((key) => {
+          control.parent.get(key).valueChanges.subscribe(() => {
+            control.updateValueAndValidity({ emitEvent: false });
+          });
+        });
+        isWatched = true;
+      }
+      // Check if all prerequisites are met.
+      if (
+        !Object.keys(prerequisites).every((key) => {
+          return control.parent && control.parent.get(key).value === prerequisites[key];
+        })
+      ) {
+        return null;
+      }
+      return Validators.compose(validators)(control);
     };
   }
 
