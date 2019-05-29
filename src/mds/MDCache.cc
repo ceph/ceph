@@ -2104,9 +2104,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	dout(10) << "predirty_journal_parents updating size on " << *parent << dendl;
 	if (in->is_dir()) {
 	  pf->fragstat.nsubdirs += linkunlink;
+	  if (pf->fragstat.nsubdirs < 0)
+            pf->fragstat.nsubdirs = 0;
 	  //pf->rstat.rsubdirs += linkunlink;
 	} else {
  	  pf->fragstat.nfiles += linkunlink;
+	  if (pf->fragstat.nfiles < 0)
+              pf->fragstat.nfiles = 0;
  	  //pf->rstat.rfiles += linkunlink;
 	}
       }
