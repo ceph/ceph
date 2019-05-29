@@ -1,3 +1,4 @@
+import time
 import json
 import logging
 from unittest import case
@@ -280,3 +281,20 @@ class CephFSTestCase(CephTestCase):
             ])
         else:
             log.info("No core_pattern directory set, nothing to clear (internal.coredump not enabled?)")
+
+    def _wait_subtrees(self, status, rank, test):
+        timeout = 30
+        pause = 2
+        test = sorted(test)
+        for i in range(timeout/pause):
+            subtrees = self.fs.mds_asok(["get", "subtrees"], mds_id=status.get_rank(self.fs.id, rank)['name'])
+            subtrees = filter(lambda s: s['dir']['path'].startswith('/'), subtrees)
+            filtered = sorted([(s['dir']['path'], s['auth_first']) for s in subtrees])
+            log.info("%s =?= %s", filtered, test)
+            if filtered == test:
+                # Confirm export_pin in output is correct:
+                for s in subtrees:
+                    self.assertTrue(s['export_pin'] == s['auth_first'])
+                return subtrees
+            time.sleep(pause)
+        raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
