@@ -9,13 +9,13 @@ import socket
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from mgr_util import get_default_addr
 from rbd import RBD
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 # for Prometheus exporter port registry
 
-DEFAULT_ADDR = '::'
 DEFAULT_PORT = 9283
 
 # When the CherryPy server in 3.2.2 (and later) starts it attempts to verify
@@ -999,7 +999,7 @@ class Module(MgrModule):
             'scrape_interval', 5.0)
 
         server_addr = self.get_localized_module_option(
-            'server_addr', DEFAULT_ADDR)
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info(
@@ -1041,7 +1041,8 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self):
-        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_addr = self.get_localized_module_option(
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info("server_addr: %s server_port: %s" %
