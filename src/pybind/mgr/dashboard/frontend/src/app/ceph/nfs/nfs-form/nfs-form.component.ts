@@ -546,6 +546,14 @@ export class NfsFormComponent implements OnInit {
       } else {
         client.addresses = [];
       }
+
+      if (!client.squash) {
+        client.squash = requestModel.squash;
+      }
+
+      if (!client.access_type) {
+        client.access_type = requestModel.access_type;
+      }
     });
 
     if (requestModel.security_label === false || requestModel.fsal.name === 'RGW') {
