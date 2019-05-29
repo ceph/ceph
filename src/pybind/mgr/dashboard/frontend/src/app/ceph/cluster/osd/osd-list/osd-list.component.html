@@ -15,32 +15,33 @@
         </cd-table-actions>
 
         <div class="btn-group"
-             dropdown>
+             dropdown
+             *ngIf="advancedTableActions.length > 0">
           <button type="button"
                   class="btn btn-sm btn-default btn-label tc_configureCluster"
-                  (click)="configureClusterAction()">
-            <i class="fa fa-fw fa-cog"
-               aria-hidden="true">
-            </i>
-            <ng-container i18n>Set Cluster-wide Flags</ng-container>
+                  (click)="advancedTableActions[0].click()">
+            <i class="fa fa-fw {{ advancedTableActions[0].icon }}"></i><span>{{ advancedTableActions[0].name }}</span>
           </button>
           <button type="button"
                   dropdownToggle
-                  class="btn btn-sm btn-default dropdown-toggle dropdown-toggle-split">
+                  class="btn btn-sm btn-default dropdown-toggle dropdown-toggle-split"
+                  *ngIf="advancedTableActions.length > 1">
             <span class="caret caret-black"></span>
           </button>
           <ul *dropdownMenu
               class="dropdown-menu"
               role="menu">
-            <li role="menuitem">
-              <a class="dropdown-item"
-                 (click)="configureQosParamsAction()">
-                <i class="fa fa-fw fa-cog"
-                   aria-hidden="true">
-                </i>
-                <ng-container i18n>Set Cluster-wide Recovery Priority</ng-container>
-              </a>
-            </li>
+            <ng-container *ngFor="let action of advancedTableActions | slice:1">
+              <li role="menuitem">
+                <a class="dropdown-item"
+                   (click)="action.click()">
+                  <i class="fa fa-fw {{ action.icon }}"
+                     aria-hidden="true">
+                  </i>
+                  <ng-container>{{ action.name }}</ng-container>
+                </a>
+              </li>
+            </ng-container>
           </ul>
         </div>
       </div>
