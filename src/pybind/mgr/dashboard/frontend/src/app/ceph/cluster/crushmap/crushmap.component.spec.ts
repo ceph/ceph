@@ -2,10 +2,9 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { DebugElement } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { of } from 'rxjs';
-
 import { TreeModule } from 'ng2-tree';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { of } from 'rxjs';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { HealthService } from '../../../shared/api/health.service';
@@ -64,24 +63,88 @@ describe('CrushmapComponent', () => {
           { children: [1, 0, 2], type: 'host', name: 'my-host', id: -2 },
           { status: 'up', type: 'osd', name: 'osd.0', id: 0 },
           { status: 'down', type: 'osd', name: 'osd.1', id: 1 },
-          { status: 'up', type: 'osd', name: 'osd.2', id: 2 }
+          { status: 'up', type: 'osd', name: 'osd.2', id: 2 },
+          { children: [-4], type: 'root', name: 'default-2', id: -3 },
+          { children: [4], type: 'host', name: 'my-host-2', id: -4 },
+          { status: 'up', type: 'osd', name: 'osd.0-2', id: 4 }
         ]);
       });
 
-      it('should have tree structure derived from a root', () => {
-        expect(component.tree.value).toBe('default (root)');
-      });
-
-      it('should have one host child with 3 osd children', () => {
-        expect(component.tree.children.length).toBe(1);
-        expect(component.tree.children[0].value).toBe('my-host (host)');
-        expect(component.tree.children[0].children.length).toBe(3);
-      });
-
-      it('should have 3 osds in orderd', () => {
-        expect(component.tree.children[0].children[0].value).toBe('osd.0 (osd)');
-        expect(component.tree.children[0].children[1].value).toBe('osd.1 (osd)');
-        expect(component.tree.children[0].children[2].value).toBe('osd.2 (osd)');
+      it('should have two root nodes', () => {
+        expect(component.tree.children).toEqual([
+          {
+            children: [
+              {
+                children: [
+                  {
+                    id: 4,
+                    settings: {
+                      static: true
+                    },
+                    status: 'up',
+                    value: 'osd.0-2 (osd)'
+                  }
+                ],
+                id: -4,
+                settings: {
+                  static: true
+                },
+                status: undefined,
+                value: 'my-host-2 (host)'
+              }
+            ],
+            id: -3,
+            settings: {
+              static: true
+            },
+            status: undefined,
+            value: 'default-2 (root)'
+          },
+          {
+            children: [
+              {
+                children: [
+                  {
+                    id: 0,
+                    settings: {
+                      static: true
+                    },
+                    status: 'up',
+                    value: 'osd.0 (osd)'
+                  },
+                  {
+                    id: 1,
+                    settings: {
+                      static: true
+                    },
+                    status: 'down',
+                    value: 'osd.1 (osd)'
+                  },
+                  {
+                    id: 2,
+                    settings: {
+                      static: true
+                    },
+                    status: 'up',
+                    value: 'osd.2 (osd)'
+                  }
+                ],
+                id: -2,
+                settings: {
+                  static: true
+                },
+                status: undefined,
+                value: 'my-host (host)'
+              }
+            ],
+            id: -1,
+            settings: {
+              static: true
+            },
+            status: undefined,
+            value: 'default (root)'
+          }
+        ]);
       });
     });
   });
