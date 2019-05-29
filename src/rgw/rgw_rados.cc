@@ -4379,6 +4379,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   string etag;
   real_time set_mtime;
+  uint64_t expected_size = 0;
 
   RGWObjState *dest_state = NULL;
 
@@ -4413,12 +4414,19 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
-  ret = conn->complete_request(in_stream_req, &etag, &set_mtime, nullptr, nullptr, nullptr);
+  ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
+                               &expected_size, nullptr, nullptr);
   if (ret < 0) {
     goto set_err_state;
   }
   ret = cb.flush();
   if (ret < 0) {
+    goto set_err_state;
+  }
+  if (cb.get_data_len() != expected_size) {
+    ret = -EIO;
+    ldout(cct, 0) << "ERROR: object truncated during fetching, expected "
+        << expected_size << " bytes but received " << cb.get_data_len() << dendl;
     goto set_err_state;
   }
   if (compressor && compressor->is_compressed()) {
