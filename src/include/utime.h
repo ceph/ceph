@@ -241,14 +241,14 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       gmtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
 	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
+	  << 'T'
 	  << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
@@ -270,14 +270,14 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       gmtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
 	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
+	  << 'T'
 	  << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
@@ -299,7 +299,6 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       gmtime_r(&tt, &bdt);
@@ -325,50 +324,32 @@ public:
       out << (long)sec() << "." << std::setw(6) << usec();
     } else {
       // this looks like an absolute time.
-      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      //  conform to http://en.wikipedia.org/wiki/ISO_8601
       struct tm bdt;
       time_t tt = sec();
       localtime_r(&tt, &bdt);
       out << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
 	  << '-' << std::setw(2) << (bdt.tm_mon+1)
 	  << '-' << std::setw(2) << bdt.tm_mday
-	  << ' '
+	  << 'T'
 	  << std::setw(2) << bdt.tm_hour
 	  << ':' << std::setw(2) << bdt.tm_min
 	  << ':' << std::setw(2) << bdt.tm_sec;
       out << "." << std::setw(6) << usec();
-      //out << '_' << bdt.tm_zone;
+      char buf[32] = { 0 };
+      strftime(buf, sizeof(buf), "%z", &bdt);
+      out << buf;
     }
     out.fill(oldfill);
     out.unsetf(std::ios::right);
     return out;
   }
 
-  int sprintf(char *out, int outlen) const {
-    struct tm bdt;
-    time_t tt = sec();
-    localtime_r(&tt, &bdt);
-
-    return ::snprintf(out, outlen,
-		    "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
-		    bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-		    bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec());
-  }
-
-  static int snprintf(char *out, int outlen, time_t tt) {
-    struct tm bdt;
-    localtime_r(&tt, &bdt);
-
-    return ::snprintf(out, outlen,
-        "%04d-%02d-%02d %02d:%02d:%02d",
-        bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
-        bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
-  }
-
   static int invoke_date(const std::string& date_str, utime_t *result) {
      char buf[256];
 
-     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::KEEP);
+     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE,
+			 SubProcess::KEEP);
      bin_date.add_cmd_args("-d", date_str.c_str(), "+%s %N", NULL);
 
      int r = bin_date.spawn();
@@ -402,17 +383,45 @@ public:
 
     const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
     if (p) {
-      if (*p == ' ') {
+      if (*p == ' ' || *p == 'T') {
 	p++;
-	p = strptime(p, " %H:%M:%S", &tm);
-	if (!p)
+	// strptime doesn't understand fractional/decimal seconds, and
+	// it also only takes format chars or literals, so we have to
+	// get creative.
+	char fmt[32] = {0};
+	strncpy(fmt, p, sizeof(fmt) - 1);
+	fmt[0] = '%';
+	fmt[1] = 'H';
+	fmt[2] = ':';
+	fmt[3] = '%';
+	fmt[4] = 'M';
+	fmt[6] = '%';
+	fmt[7] = 'S';
+	const char *subsec = 0;
+	char *q = fmt + 8;
+	if (*q == '.') {
+	  ++q;
+	  subsec = p + 9;
+	  q = fmt + 9;
+	  while (*q && isdigit(*q)) {
+	    ++q;
+	  }
+	}
+	// look for tz...
+	if (*q == '-' || *q == '+') {
+	  *q = '%';
+	  *(q+1) = 'z';
+	  *(q+2) = 0;
+	}
+	p = strptime(p, fmt, &tm);
+	if (!p) {
 	  return -EINVAL;
-        if (nsec && *p == '.') {
-          ++p;
+	}
+        if (nsec && subsec) {
           unsigned i;
           char buf[10]; /* 9 digit + null termination */
-          for (i = 0; (i < sizeof(buf) - 1) && isdigit(*p); ++i, ++p) {
-            buf[i] = *p;
+          for (i = 0; (i < sizeof(buf) - 1) && isdigit(*subsec); ++i, ++subsec) {
+            buf[i] = *subsec;
           }
           for (; i < sizeof(buf) - 1; ++i) {
             buf[i] = '0';
@@ -439,9 +448,18 @@ public:
         *nsec = (uint64_t)usec * 1000;
       }
     }
+
+    // apply the tm_gmtoff manually below, since none of mktime,
+    // gmtime, and localtime seem to do it.  zero it out here just in
+    // case some other libc *does* apply it.  :(
+    auto gmtoff = tm.tm_gmtoff;
+    tm.tm_gmtoff = 0;
+
     time_t t = internal_timegm(&tm);
     if (epoch)
       *epoch = (uint64_t)t;
+
+    *epoch -= gmtoff;
 
     if (out_date) {
       char buf[32];

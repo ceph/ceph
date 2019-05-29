@@ -18,7 +18,7 @@ except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
 
-DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
@@ -183,8 +183,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @staticmethod
     def time_from_string(timestr):
-        # drop the 'Z' timezone indication, it's always UTC
-        timestr = timestr.rstrip('Z')
         return datetime.datetime.strptime(timestr, DATEFMT)
 
     def _get_cluster_fsid(self):

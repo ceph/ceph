@@ -6,7 +6,8 @@ import six
 from collections import defaultdict
 
 
-DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
+OLD_DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 class Module(MgrModule):
@@ -36,7 +37,10 @@ class Module(MgrModule):
     def time_from_string(timestr):
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
-        return datetime.datetime.strptime(timestr, DATEFMT)
+        try:
+            return datetime.datetime.strptime(timestr, DATEFMT)
+        except ValueError:
+            return datetime.datetime.strptime(timestr, OLD_DATEFMT)
 
     def timestamp_filter(self, f):
         """
@@ -171,10 +175,14 @@ class Module(MgrModule):
 
     def self_test(self):
         # test time conversion
-        timestr = '2018-06-22 20:35:38.058818Z'
+        timestr = '2018-06-22T20:35:38.058818Z'
+        old_timestr = '2018-06-22 20:35:38.058818Z'
         dt = self.time_from_string(timestr)
         if dt != datetime.datetime(2018, 6, 22, 20, 35, 38, 58818):
             raise RuntimeError('time_from_string() failed')
+        dt = self.time_from_string(old_timestr)
+        if dt != datetime.datetime(2018, 6, 22, 20, 35, 38, 58818):
+            raise RuntimeError('time_from_string() (old) failed')
 
     COMMANDS = [
         {

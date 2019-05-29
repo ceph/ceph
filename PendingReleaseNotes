@@ -70,3 +70,19 @@
   discovery. Update of zabbix_template.xml is needed
   to receive per-pool (read/write throughput, diskspace usage)
   and per-osd (latency, status, pgs) statistics
+
+* The format of all date + time stamps has been modified to fully
+  conform to ISO 8601.  The old format (``YYYY-MM-DD
+  HH:MM:SS.ssssss``) excluded the ``T`` separator between the date and
+  time and was rendered using the local time zone without any explicit
+  indication.  The new format includes the separator as well as a
+  ``+nnnn`` or ``-nnnn`` suffix to indicate the time zone, or a ``Z``
+  suffix if the time is UTC.  For example,
+  ``2019-04-26T18:40:06.225953+0100``.
+
+  Any code or scripts that was previously parsing date and/or time
+  values from the JSON or XML structure CLI output should be checked
+  to ensure it can handle ISO 8601 conformant values.  Any code
+  parsing date or time values from the unstructured human-readable
+  output should be modified to parse the structured output instead, as
+  the human-readable output may change without notice.
