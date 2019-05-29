@@ -1213,6 +1213,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
           emit_blacklist_events(*osdmap, *new_osdmap);
 
+	  delete osdmap;
           osdmap = new_osdmap;
 
 	  logger->inc(l_osdc_map_full);
