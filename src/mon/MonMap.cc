@@ -331,8 +331,8 @@ void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);
   f->dump_stream("fsid") <<  fsid;
-  f->dump_stream("modified") << last_changed;
-  f->dump_stream("created") << created;
+  last_changed.gmtime(f->dump_stream("modified"));
+  created.gmtime(f->dump_stream("created"));
   f->dump_unsigned("min_mon_release", ceph::to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
   f->open_object_section("features");

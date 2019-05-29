@@ -1291,7 +1291,9 @@ def osd_scrub_pgs(ctx, config):
         loop = False
         thiscnt = 0
         for (pgid, tmval) in timez:
-            pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
+            t = tmval[0:tmval.find('.')]
+            t.replace(' ', 'T')
+            pgtm = time.strptime(t, '%Y-%m-%dT%H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1
             else:
