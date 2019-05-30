@@ -117,14 +117,14 @@ public:
   void discard_drain() override;
 
   int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
-  int get_devname(std::string *s) override {
+  int get_devname(std::string *s) const override {
     if (devname.empty()) {
       return -ENOENT;
     }
     *s = devname;
     return 0;
   }
-  int get_devices(std::set<std::string> *ls) override;
+  int get_devices(std::set<std::string> *ls) const override;
 
   bool get_thin_utilization(uint64_t *total, uint64_t *avail) const override;
 
