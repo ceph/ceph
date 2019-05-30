@@ -129,13 +129,13 @@ CyanStore::list_objects(CollectionRef c,
     std::move(objects), next);
 }
 
-CyanStore::CollectionRef CyanStore::create_new_collection(const coll_t& cid)
+CollectionRef CyanStore::create_new_collection(const coll_t& cid)
 {
   auto c = new Collection{cid};
   return new_coll_map[cid] = c;
 }
 
-CyanStore::CollectionRef CyanStore::open_collection(const coll_t& cid)
+CollectionRef CyanStore::open_collection(const coll_t& cid)
 {
   auto cp = coll_map.find(cid);
   if (cp == coll_map.end())

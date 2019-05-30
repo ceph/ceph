@@ -11,6 +11,7 @@
 
 #include <seastar/core/future.hh>
 
+#include "crimson/os/cyan_collection.h"
 #include "osd/osd_types.h"
 #include "include/uuid.h"
 
@@ -21,7 +22,6 @@ class Transaction;
 
 // a just-enough store for reading/writing the superblock
 class CyanStore {
-  using CollectionRef = boost::intrusive_ptr<Collection>;
   const std::string path;
   std::unordered_map<coll_t, CollectionRef> coll_map;
   std::map<coll_t,CollectionRef> new_coll_map;

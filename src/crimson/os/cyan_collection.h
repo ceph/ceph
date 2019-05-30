@@ -52,4 +52,6 @@ struct Collection : public boost::intrusive_ref_counter<
   void decode(bufferlist::const_iterator& p);
 };
 
+using CollectionRef = boost::intrusive_ptr<Collection>;
+
 }
