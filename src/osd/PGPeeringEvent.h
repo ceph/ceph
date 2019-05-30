@@ -67,6 +67,7 @@ public:
   }
 };
 typedef std::shared_ptr<PGPeeringEvent> PGPeeringEventRef;
+typedef std::unique_ptr<PGPeeringEvent> PGPeeringEventURef;
 
 struct MInfoRec : boost::statechart::event< MInfoRec > {
   pg_shard_t from;
@@ -82,8 +83,7 @@ struct MInfoRec : boost::statechart::event< MInfoRec > {
 struct MLogRec : boost::statechart::event< MLogRec > {
   pg_shard_t from;
   boost::intrusive_ptr<MOSDPGLog> msg;
-  MLogRec(pg_shard_t from, MOSDPGLog *msg) :
-    from(from), msg(msg) {}
+  MLogRec(pg_shard_t from, MOSDPGLog *msg);
   void print(std::ostream *out) const {
     *out << "MLogRec from " << from;
   }
