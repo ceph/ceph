@@ -386,6 +386,14 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
     logger().error("{}", str.str());
     ceph_assert(r == 0);
   }
+  for (auto i : {
+      t.get_on_applied(),
+      t.get_on_commit(),
+      t.get_on_applied_sync()}) {
+    if (i) {
+      i->complete(0);
+    }
+  }
   return seastar::now();
 }
 
