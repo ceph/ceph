@@ -644,7 +644,7 @@ void PGLog::write_log_and_missing(
       dirty_to_dups,
       dirty_from_dups,
       write_from_dups,
-      &rebuilt_missing_with_deletes,
+      &may_include_deletes_in_missing_dirty,
       (pg_log_debug ? &log_keys_debug : nullptr));
     undirty();
   } else {
@@ -678,7 +678,7 @@ void PGLog::write_log_and_missing(
     const ghobject_t &log_oid,
     const pg_missing_tracker_t &missing,
     bool require_rollback,
-    bool *rebuilt_missing_with_deletes)
+    bool *may_include_deletes_in_missing_dirty)
 {
   _write_log_and_missing(
     t, km, log, coll, log_oid,
@@ -692,7 +692,7 @@ void PGLog::write_log_and_missing(
     eversion_t::max(),
     eversion_t(),
     eversion_t(),
-    rebuilt_missing_with_deletes, nullptr);
+    may_include_deletes_in_missing_dirty, nullptr);
 }
 
 // static
@@ -828,7 +828,7 @@ void PGLog::_write_log_and_missing(
   eversion_t dirty_to_dups,
   eversion_t dirty_from_dups,
   eversion_t write_from_dups,
-  bool *rebuilt_missing_with_deletes, // in/out param
+  bool *may_include_deletes_in_missing_dirty, // in/out param
   set<string> *log_keys_debug
   ) {
   set<string> to_remove;
@@ -931,9 +931,9 @@ void PGLog::_write_log_and_missing(
   }
   // since we encode individual missing items instead of a whole
   // missing set, we need another key to store this bit of state
-  if (*rebuilt_missing_with_deletes) {
+  if (*may_include_deletes_in_missing_dirty) {
     (*km)["may_include_deletes_in_missing"] = bufferlist();
-    *rebuilt_missing_with_deletes = false;
+    *may_include_deletes_in_missing_dirty = false;
   }
   missing.get_changed(
     [&](const hobject_t &obj) {
@@ -975,7 +975,6 @@ void PGLog::rebuild_missing_set_with_deletes(
     }
   }
   missing.clear();
-  missing.may_include_deletes = true;
 
   // go through the log and add items that are not present or older
   // versions on disk, just as if we were reading the log + metadata
@@ -1014,5 +1013,6 @@ void PGLog::rebuild_missing_set_with_deletes(
   for (const auto& p : extra_missing) {
     missing.add(p.first, p.second.need, p.second.have, p.second.is_delete());
   }
-  rebuilt_missing_with_deletes = true;
+
+  set_missing_may_contain_deletes();
 }
