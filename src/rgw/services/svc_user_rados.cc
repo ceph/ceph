@@ -666,6 +666,52 @@ int RGWSI_User_RADOS::remove_bucket(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
+int RGWSI_User_RADOS::cls_user_flush_bucket_stats(rgw_raw_obj& user_obj,
+                                                  const RGWBucketEnt& ent)
+{
+  cls_user_bucket_entry entry;
+  ent.convert(&entry);
+
+  list<cls_user_bucket_entry> entries;
+  entries.push_back(entry);
+
+  int r = cls_user_update_buckets(user_obj, entries, false);
+  if (r < 0) {
+    ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWSI_User_RADOS::cls_user_list_buckets(rgw_raw_obj& obj,
+                                            const string& in_marker,
+                                            const string& end_marker,
+                                            const int max_entries,
+                                            list<cls_user_bucket_entry>& entries,
+                                            string * const out_marker,
+                                            bool * const truncated)
+{
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+  int rc;
+
+  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
+  bufferlist ibl;
+  r = rados_obj.operate(&op, &ibl, null_yield);
+  if (r < 0)
+    return r;
+  if (rc < 0)
+    return rc;
+
+  return 0;
+}
+
 int RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
                                  const rgw_user& user,
                                  const string& marker,
@@ -709,3 +755,13 @@ int RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
 
   return 0;
 }
+
+int RGWSI_User_RADOS::flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                                         const rgw_user& user,
+                                         const RGWBucketEnt& ent)
+{
+  rgw_raw_obj obj = get_buckets_obj(user);
+
+  return cls_user_flush_bucket_stats(obj, ent);
+}
+

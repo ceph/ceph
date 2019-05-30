@@ -59,9 +59,15 @@ class RGWSI_Bucket : public RGWServiceInstance
                                    map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
                                    boost::optional<obj_version> refresh_version);
+
+  int read_bucket_stats(const RGWBucketInfo& bucket_info,
+                        RGWBucketEnt *ent,
+                        optional_yield y);
+
 public:
   struct Svc {
     RGWSI_Bucket *bucket{nullptr};
+    RGWSI_BucketIndex *bi{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
@@ -84,8 +90,11 @@ public:
     return bi_be_handler;
   }
 
-  void init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
+  void init(RGWSI_Zone *_zone_svc,
+            RGWSI_SysObj *_sysobj_svc,
+	    RGWSI_SysObj_Cache *_cache_svc,
+            RGWSI_BucketIndex *_bi,
+            RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
@@ -144,7 +153,13 @@ public:
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y);
 
+  int read_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                        const rgw_bucket& bucket,
+                        RGWBucketEnt *ent,
+                        optional_yield y);
+
   int read_buckets_stats(RGWSI_MetaBackend::Context *ctx,
-                         map<string, RGWBucketEnt>& m);
+                         map<string, RGWBucketEnt>& m,
+                         optional_yield y);
 };
 

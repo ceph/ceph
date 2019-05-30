@@ -4,6 +4,7 @@
 #include "rgw_service.h"
 
 #include "services/svc_finisher.h"
+#include "services/svc_bi_rados.h"
 #include "services/svc_bucket.h"
 #include "services/svc_cls.h"
 #include "services/svc_mdlog.h"
@@ -44,6 +45,7 @@ int RGWServices_Def::init(CephContext *cct,
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket = std::make_unique<RGWSI_Bucket>(cct);
+  bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct);
   meta = std::make_unique<RGWSI_Meta>(cct);
@@ -66,7 +68,9 @@ int RGWServices_Def::init(CephContext *cct,
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
   finisher->init();
-  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(), meta.get(), sync_modules.get());
+  bi_rados->init(zone.get(), rados.get());
+  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(),
+               bi_rados.get(), meta.get(), sync_modules.get());
   cls->init(zone.get(), rados.get());
   mdlog->init(zone.get(), sysobj.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -233,6 +237,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   }
 
   finisher = _svc.finisher.get();
+  bi = _svc.bi_rados.get();
   bucket = _svc.bucket.get();
   cls = _svc.cls.get();
   mdlog = _svc.mdlog.get();
@@ -296,7 +301,7 @@ int RGWCtlDef::init(RGWServices& svc)
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc(svc.zone, svc.meta_be_otp));
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
-  bucket.reset(new RGWBucketCtl(svc.zone, svc.bucket,
+  bucket.reset(new RGWBucketCtl(svc.zone, svc.bucket, svc.bi,
                                 (RGWBucketMetadataHandler *)meta.bucket.get()),
                                 (RGWBucketInstanceMetadataHandler *)meta.bucket_instance.get());
 

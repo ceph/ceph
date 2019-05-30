@@ -79,7 +79,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = rgw_bucket_sync_user_stats(store, user_id, bucket_info);
+      ret = store->ctl.bucket->sync_user_stats(user_id, bucket_info);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
@@ -123,12 +123,14 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
       marker = i.first;
 
       const RGWBucketEnt& bucket_ent = i.second;
-      cls_user_bucket_entry entry;
-      ret = store->cls_user_get_bucket_stats(bucket_ent.bucket, entry);
+      RGWBucketEnt stats;
+      ret = store->ctl.bucket->read_bucket_stats(bucket_ent.bucket, &stats, null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
       }
+      cls_user_bucket_entry entry;
+      stats.convert(&entry);
       buckets_usage_map.emplace(bucket_ent.bucket.name, entry);
     }
     done = (buckets.size() < max_entries);
@@ -2692,13 +2694,21 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
     }
     if (need_stats) {
       map<string, RGWBucketEnt>& m = buckets->get_buckets();
-      ret = ctl.bucket->read_buckets_stats(m);
+      ret = ctl.bucket->read_buckets_stats(m, null_yield);
       if (ret < 0 && ret != -ENOENT) {
         ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
         return ret;
       }
     }
     return 0;
+  });
+}
+
+int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
+                                   const RGWBucketEnt& ent)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->flush_bucket_stats(op->ctx(), user, ent);
   });
 }
 
