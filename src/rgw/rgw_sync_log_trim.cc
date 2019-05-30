@@ -354,9 +354,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
                     std::vector<std::string> *status)
 {
   status->clear();
-  // The initialisation below is required to silence a false positive
-  // -Wmaybe-uninitialized warning
-  boost::optional<uint64_t> num_shards = boost::make_optional(false, uint64_t());
+  std::optional<uint64_t> num_shards;
   for (auto peer = first; peer != last; ++peer) {
     const size_t peer_shards = peer->size();
     if (!num_shards) {
@@ -440,7 +438,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
       http(http), observer(observer),
       bucket_instance(bucket_instance),
       zone_id(store->svc.zone->get_zone().id),
-      peer_status(store->svc.zone->get_zone_conn_map().size())
+      peer_status(store->svc.zone->get_zone_data_notify_to_map().size())
   {}
 
   int operate() override;
@@ -464,7 +462,7 @@ int BucketTrimInstanceCR::operate()
       };
 
       auto p = peer_status.begin();
-      for (auto& c : store->svc.zone->get_zone_conn_map()) {
+      for (auto& c : store->svc.zone->get_zone_data_notify_to_map()) {
         using StatusCR = RGWReadRESTResourceCR<StatusShards>;
         spawn(new StatusCR(cct, c.second, http, "/admin/log/", params, &*p),
               false);
