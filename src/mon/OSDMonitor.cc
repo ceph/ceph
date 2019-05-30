@@ -340,14 +340,8 @@ void OSDMonitor::create_initial()
   // new cluster should require latest by default
   if (g_conf().get_val<bool>("mon_debug_no_require_octopus")) {
     if (g_conf().get_val<bool>("mon_debug_no_require_nautilus")) {
-      if (g_conf()->mon_debug_no_require_mimic) {
-	derr << __func__ << " mon_debug_no_require_octopus, nautilus, and mimic=true"
-	     << dendl;
-	newmap.require_osd_release = ceph_release_t::luminous;
-      } else {
-	derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
-	newmap.require_osd_release = ceph_release_t::mimic;
-      }
+      derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
+      newmap.require_osd_release = ceph_release_t::mimic;
     } else {
       derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
       newmap.require_osd_release = ceph_release_t::nautilus;
