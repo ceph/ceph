@@ -86,6 +86,7 @@ static const actpair actpairs[] =
  { "s3:GetBucketVersioning", s3GetBucketVersioning },
  { "s3:GetBucketWebsite", s3GetBucketWebsite },
  { "s3:GetLifecycleConfiguration", s3GetLifecycleConfiguration },
+ { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration },
  { "s3:GetObjectAcl", s3GetObjectAcl },
  { "s3:GetObject", s3GetObject },
  { "s3:GetObjectTorrent", s3GetObjectTorrent },
@@ -94,8 +95,9 @@ static const actpair actpairs[] =
  { "s3:GetObjectVersionTorrent", s3GetObjectVersionTorrent },
  { "s3:GetObjectTagging", s3GetObjectTagging },
  { "s3:GetObjectVersionTagging", s3GetObjectVersionTagging},
+ { "s3:GetObjectRetention", s3GetObjectRetention},
+ { "s3:GetObjectLegalHold", s3GetObjectLegalHold},
  { "s3:GetReplicationConfiguration", s3GetReplicationConfiguration },
- { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration},
  { "s3:ListAllMyBuckets", s3ListAllMyBuckets },
  { "s3:ListBucketMultipartUploads", s3ListBucketMultipartUploads },
  { "s3:ListBucket", s3ListBucket },
@@ -112,13 +114,16 @@ static const actpair actpairs[] =
  { "s3:PutBucketVersioning", s3PutBucketVersioning },
  { "s3:PutBucketWebsite", s3PutBucketWebsite },
  { "s3:PutLifecycleConfiguration", s3PutLifecycleConfiguration },
+ { "s3:PutBucketObjectLockConfiguration", s3PutBucketObjectLockConfiguration },
  { "s3:PutObjectAcl",  s3PutObjectAcl },
  { "s3:PutObject", s3PutObject },
  { "s3:PutObjectVersionAcl", s3PutObjectVersionAcl },
  { "s3:PutObjectTagging", s3PutObjectTagging },
  { "s3:PutObjectVersionTagging", s3PutObjectVersionTagging },
+ { "s3:PutObjectRetention", s3PutObjectRetention },
+ { "s3:PutObjectLegalHold", s3PutObjectLegalHold },
+ { "s3:BypassGovernanceRetention", s3BypassGovernanceRetention },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
- { "s3:PutBucketObjectLockConfiguration", s3PutBucketObjectLockConfiguration},
  { "s3:RestoreObject", s3RestoreObject },
  { "iam:PutUserPolicy", iamPutUserPolicy },
  { "iam:GetUserPolicy", iamGetUserPolicy },
@@ -1188,6 +1193,21 @@ const char* action_bit_string(uint64_t action) {
 
   case s3GetBucketObjectLockConfiguration:
     return "s3:GetBucketObjectLockConfiguration";
+
+  case s3PutObjectRetention:
+    return "s3:PutObjectRetention";
+
+  case s3GetObjectRetention:
+    return "s3:GetObjectRetention";
+
+  case s3PutObjectLegalHold:
+    return "s3:PutObjectLegalHold";
+
+  case s3GetObjectLegalHold:
+    return "s3:GetObjectLegalHold";
+
+  case s3BypassGovernanceRetention:
+    return "s3:BypassGovernanceRetention";
 
   case iamPutUserPolicy:
     return "iam:PutUserPolicy";
