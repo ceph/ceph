@@ -515,6 +515,10 @@ BlueStore_DB_Hash::BlueStore_DB_Hash(RocksDBStore* db, const ShardingSchema& sha
 BlueStore_DB_Hash::~BlueStore_DB_Hash() {
   delete db;
 }
+void BlueStore_DB_Hash::unlink_db() {
+  db = nullptr;
+}
+
 
 int BlueStore_DB_Hash::open_shards() {
   for (auto& s_it: sharding_schema) {

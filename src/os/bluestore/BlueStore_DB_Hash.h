@@ -25,6 +25,7 @@ private:
 public:
   BlueStore_DB_Hash(RocksDBStore* db, const ShardingSchema& sharding_schema);
   virtual ~BlueStore_DB_Hash();
+  void unlink_db();
 
 private:
   int open_shards();
