@@ -64,6 +64,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/Mutex.cc
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
@@ -102,14 +103,21 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+set(crimson_common_deps
+  Boost::iostreams
+  Boost::random)
+
+if(NOT WITH_SYSTEM_BOOST)
+  list(APPEND crimson_common_deps ${ZLIB_LIBRARIES})
+endif()
+
 target_link_libraries(crimson-common
   PUBLIC
     json_spirit
   PRIVATE
     crc32
     crimson::cflags
-    Boost::iostreams
-    Boost::random
+    ${crimson_common_deps}
     ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
 set(crimson_auth_srcs
