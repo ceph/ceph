@@ -222,6 +222,7 @@ class Salt(Task):
         log.debug("beginning of end method")
         self.sm.gather_logs('salt')
         self.sm.gather_logs('zypp')
+        self.sm.gather_logs('rbd-target-api')
         self.sm.gather_logfile('zypper.log')
         self.sm.gather_logfile('journalctl.log')
         log.debug("end of end method")
