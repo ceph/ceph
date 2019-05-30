@@ -206,7 +206,7 @@ describe('RbdSnapshotListComponent', () => {
     it('should display suggested snapshot name', () => {
       component.openCreateSnapshotModal();
       expect(component.modalRef.content.snapName).toMatch(
-        RegExp(`^${component.rbdName}-\\d+T\\d+Z\$`)
+        RegExp(`^${component.rbdName}_[\\d-]+T[\\d.:]+\\+[\\d:]+\$`)
       );
     });
   });
