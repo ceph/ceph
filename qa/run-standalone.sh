@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-if [ ! -e Makefile -o ! -d bin ]; then
+if [ ! -e CMakeCache.txt -o ! -d bin ]; then
     echo 'run this from the build dir'
     exit 1
 fi
