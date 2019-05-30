@@ -161,8 +161,10 @@ int64_t BlkDev::get_string_property(blkdev_prop_t prop,
   } else {
     dev = devname.c_str();
   }
-  snprintf(filename, sizeof(filename),
-	   "%s/block/%s/%s", sysfsdir(), dev, propstr);
+  if (snprintf(filename, sizeof(filename), "%s/block/%s/%s", sysfsdir(), dev,
+	       propstr) >= static_cast<int>(sizeof(filename))) {
+    return -ERANGE;
+  }
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
