@@ -813,19 +813,16 @@ seastar::future<> ProtocolV1::read_message()
 
       if (unlikely(!conn.update_rx_seq(msg->get_seq()))) {
         // skip this message
-        return;
+        return seastar::now();
       }
 
-      // start dispatch, ignoring exceptions from the application layer
-      seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-          logger().debug("{} <= {}@{} === {}", messenger,
-                msg->get_source(), conn.peer_addr, *msg);
-          return dispatcher.ms_dispatch(&conn, std::move(msg))
-            .handle_exception([this] (std::exception_ptr eptr) {
-              logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-              ceph_assert(false);
-            });
-        });
+      logger().debug("{} <= {}@{} === {}", messenger,
+	  msg->get_source(), conn.peer_addr, *msg);
+      return dispatcher.ms_dispatch(&conn, std::move(msg))
+	.handle_exception([this] (std::exception_ptr eptr) {
+	  logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+	  ceph_assert(false);
+	});
     });
 }
 

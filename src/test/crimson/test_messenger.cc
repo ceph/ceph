@@ -294,7 +294,7 @@ static seastar::future<> test_echo(unsigned rounds,
     });
 }
 
-static seastar::future<> test_concurrent_dispatch(bool v2)
+static seastar::future<> test_sequential_dispatch(bool v2)
 {
   struct test_state {
     struct Server final
@@ -302,24 +302,24 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
         public seastar::peering_sharded_service<Server> {
       ceph::net::Messenger *msgr = nullptr;
       int count = 0;
-      seastar::promise<> on_second; // satisfied on second dispatch
-      seastar::promise<> on_done; // satisfied when first dispatch unblocks
+      bool blocked = false;
+      seastar::promise<> on_done; // satisfied when the second dispatch done
       ceph::auth::DummyAuthClientServer dummy_auth;
 
       seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
         switch (++count) {
-        case 1:
-          // block on the first request until we reenter with the second
-          return on_second.get_future()
-            .then([this] {
-              return container().invoke_on_all([](Server& server) {
-                  server.on_done.set_value();
-                });
-            });
+	case 1: {
+	  blocked = true;
+	  return seastar::sleep(500ms).then([this] {
+	    blocked = false;
+	  });
+	}
         case 2:
-          on_second.set_value();
-          return seastar::now();
+	  ceph_assert(!blocked && "2nd message is not dispatched in sequence!");
+	  return container().invoke_on_all([](Server& server) {
+	    server.on_done.set_value();
+	  });
         default:
           throw std::runtime_error("unexpected count");
         }
@@ -385,7 +385,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
     };
   };
 
-  logger().info("test_concurrent_dispatch(v2={}):", v2);
+  logger().info("test_sequential_dispatch(v2={}):", v2);
   return seastar::when_all_succeed(
       ceph::net::create_sharded<test_state::Server>(),
       ceph::net::create_sharded<test_state::Client>())
@@ -418,7 +418,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
           logger().info("server shutdown...");
           return server->msgr->shutdown();
         }).finally([] {
-          logger().info("test_concurrent_dispatch() done!\n");
+          logger().info("test_sequential_dispatch() done!\n");
         });
     });
 }
@@ -444,9 +444,9 @@ int main(int argc, char** argv)
     .then([rounds, keepalive_ratio] {
       return test_echo(rounds, keepalive_ratio, true);
     }).then([] {
-      return test_concurrent_dispatch(false);
+      return test_sequential_dispatch(false);
     }).then([] {
-      return test_concurrent_dispatch(true);
+      return test_sequential_dispatch(true);
     }).then([] {
       std::cout << "All tests succeeded" << std::endl;
     }).handle_exception([] (auto eptr) {

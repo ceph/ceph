@@ -1461,7 +1461,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
           conf.ms_die_on_old_message) {
         ceph_assert(0 == "old msgs despite reconnect_seq feature");
       }
-      return;
+      return seastar::now();
     } else if (message->get_seq() > cur_seq + 1) {
       logger().error("{} missed message? skipped from seq {} to {}",
                      conn, cur_seq, message->get_seq());
@@ -1483,12 +1483,10 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-      return dispatcher.ms_dispatch(&conn, std::move(msg))
-	.handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-        ceph_assert(false);
-      });
+    return dispatcher.ms_dispatch(&conn, std::move(msg_ref))
+      .handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+      ceph_assert(false);
     });
   });
 }
