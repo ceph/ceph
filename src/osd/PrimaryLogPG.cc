@@ -10949,14 +10949,9 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
     return 0;
   }
 
-  hobject_t head = oid.get_head();
-
   // we want a snap
-  if (!map_snapid_to_clone && pool.info.is_removed_snap(oid.snap)) {
-    dout(10) << __func__ << " snap " << oid.snap << " is removed" << dendl;
-    return -ENOENT;
-  }
 
+  hobject_t head = oid.get_head();
   SnapSetContext *ssc = get_snapset_context(oid, can_create);
   if (!ssc || !(ssc->exists || can_create)) {
     dout(20) << __func__ << " " << oid << " no snapset" << dendl;
@@ -11107,18 +11102,21 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
     ceph_assert(!cct->_conf->osd_debug_verify_snaps);
     return -ENOENT;
   }
-  first = p->second.back();
-  last = p->second.front();
-  if (first <= oid.snap) {
-    dout(20) << __func__ << " " << soid << " [" << first << "," << last
-	     << "] contains " << oid.snap << " -- HIT " << obc->obs << dendl;
-    *pobc = obc;
-    return 0;
-  } else {
-    dout(20) << __func__ << " " << soid << " [" << first << "," << last
-	     << "] does not contain " << oid.snap << " -- DNE" << dendl;
+  if (std::find(p->second.begin(), p->second.end(), oid.snap) ==
+      p->second.end()) {
+    dout(20) << __func__ << " " << soid << " clone_snaps " << p->second
+	     << " does not contain " << oid.snap << " -- DNE" << dendl;
     return -ENOENT;
   }
+  if (get_osdmap()->in_removed_snaps_queue(info.pgid.pgid.pool(), oid.snap)) {
+    dout(20) << __func__ << " " << soid << " snap " << oid.snap
+	     << " in removed_snaps_queue" << " -- DNE" << dendl;
+    return -ENOENT;
+  }
+  dout(20) << __func__ << " " << soid << " clone_snaps " << p->second
+	   << " contains " << oid.snap << " -- HIT " << obc->obs << dendl;
+  *pobc = obc;
+  return 0;
 }
 
 void PrimaryLogPG::object_context_destructor_callback(ObjectContext *obc)
