@@ -1,6 +1,6 @@
 add_library(crimson::cflags INTERFACE IMPORTED)
 set_target_properties(crimson::cflags PROPERTIES
-  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR=1;BOOST_SP_DISABLE_THREADS"
+  INTERFACE_COMPILE_DEFINITIONS "WITH_SEASTAR=1"
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
