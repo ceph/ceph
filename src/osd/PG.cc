@@ -1682,9 +1682,6 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 	       << ", now " << recovery_state.get_info().purged_snaps << dendl;
       ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
     }
-  } else if (!pool.newly_removed_snaps.empty()) {
-    snap_trimq.union_of(pool.newly_removed_snaps);
-    dout(10) << " snap_trimq now " << snap_trimq << dendl;
   }
 }
 
