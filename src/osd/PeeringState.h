@@ -1503,15 +1503,16 @@ public:
 
   /// Init pg instance from disk state
   template <typename F>
-  void init_from_disk_state(
+  auto init_from_disk_state(
     pg_info_t &&info_from_disk,
     PastIntervals &&past_intervals_from_disk,
     F &&pg_log_init) {
     info = std::move(info_from_disk);
     last_written_info = info;
     past_intervals = std::move(past_intervals_from_disk);
-    pg_log_init(pg_log);
+    auto ret = pg_log_init(pg_log);
     log_weirdness();
+    return ret;
   }
 
   /// Set initial primary/acting
