@@ -265,7 +265,7 @@ void RGWOp_Set_Bucket_Quota::execute()
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-    http_ret = store->get_bucket_info(obj_ctx, uid.tenant, bucket, bucket_info, NULL, &attrs);
+    http_ret = store->get_bucket_info(obj_ctx, uid.tenant, bucket, bucket_info, NULL, s->yield, &attrs);
     if (http_ret < 0) {
       return;
     }

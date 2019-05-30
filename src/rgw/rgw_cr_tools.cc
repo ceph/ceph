@@ -95,7 +95,7 @@ int RGWGetBucketInfoCR::Request::_send_request()
 {
   RGWSysObjectCtx obj_ctx(store->svc.sysobj->init_obj_ctx());
   return store->get_bucket_info(obj_ctx, params.tenant, params.bucket_name,
-                                result->bucket_info, &result->mtime, &result->attrs);
+                                result->bucket_info, &result->mtime, null_yield, &result->attrs);
 }
 
 template<>
@@ -125,7 +125,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   map<string, bufferlist> bucket_attrs;
 
   int ret = store->get_bucket_info(sysobj_ctx, user.tenant, bucket_name,
-				  bucket_info, nullptr, &bucket_attrs);
+				  bucket_info, nullptr, null_yield, &bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return ret;
   bool bucket_exists = (ret != -ENOENT);

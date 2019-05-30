@@ -515,7 +515,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::list_events(const string& marker, i
   RGWBucketInfo bucket_info;
   string tenant;
   RGWSysObjectCtx obj_ctx(store->svc.sysobj->init_obj_ctx());
-  ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
   if (ret == -ENOENT) {
     list.is_truncated = false;
     return 0;
@@ -581,7 +581,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id
   RGWBucketInfo bucket_info;
   string tenant;
   RGWSysObjectCtx sysobj_ctx(store->svc.sysobj->init_obj_ctx());
-  ret = store->get_bucket_info(sysobj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  ret = store->get_bucket_info(sysobj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
