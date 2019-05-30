@@ -116,6 +116,7 @@ standby=0
 debug=0
 ip=""
 nodaemon=0
+redirect=0
 smallmds=0
 short=0
 ec=0
@@ -170,6 +171,7 @@ usage=$usage"\t-n, --new\n"
 usage=$usage"\t-N, --not-new: reuse existing cluster config (default)\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
+usage=$usage"\t--redirect-output: only useful with nodaemon, directs output to log file\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
@@ -285,6 +287,9 @@ case $1 in
 	    ;;
     --nodaemon )
 	    nodaemon=1
+	    ;;
+    --redirect-output)
+	    redirect=1
 	    ;;
     --smallmds )
 	    smallmds=1
@@ -462,6 +467,8 @@ prun() {
 run() {
     type=$1
     shift
+    num=$1
+    shift
     eval "valg=\$valgrind_$type"
     [ -z "$valg" ] && valg="$valgrind"
 
@@ -471,8 +478,10 @@ run() {
     else
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
-        else
+        elif [ "$redirect" -eq 0 ]; then
             prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
+        else
+            ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
         fi
     fi
 }
@@ -754,7 +763,7 @@ EOF
 	# start monitors
 	for f in $MONS
 	do
-		run 'mon' $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
+		run 'mon' $f $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
 	done
 }
 
@@ -808,7 +817,7 @@ EOF
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd.$osd
-        run 'osd' $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
+        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
     done
 }
 
@@ -859,7 +868,7 @@ EOF
         fi
 
         echo "Starting mgr.${name}"
-        run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
+        run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
     # use tell mgr here because the first mgr might not have activated yet
@@ -919,7 +928,7 @@ EOF
 	        fi
 	    fi
 
-	    run 'mds' $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
+	    run 'mds' $name $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
 	    if [ "$standby" -eq 1 ]; then
 	        run 'mds' $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
 	    fi
