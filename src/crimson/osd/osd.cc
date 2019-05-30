@@ -99,15 +99,21 @@ CompatSet get_osd_initial_compat_set()
 }
 }
 
-seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
+seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
 {
   return store->mkfs().then([this] {
     return store->mount();
-  }).then([cluster_fsid, this] {
+  }).then([cluster_fsid, osd_uuid, this] {
     superblock.cluster_fsid = cluster_fsid;
-    superblock.osd_fsid = store->get_fsid();
+    superblock.osd_fsid = osd_uuid;
     superblock.whoami = whoami;
     superblock.compat_features = get_osd_initial_compat_set();
+
+    logger().info(
+      "{} writing superblock cluster_fsid {} osd_fsid {}",
+      __func__,
+      cluster_fsid,
+      superblock.osd_fsid);
 
     meta_coll = make_unique<OSDMeta>(
       store->create_new_collection(coll_t::meta()), store.get());
