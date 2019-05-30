@@ -24,10 +24,10 @@ namespace {
 
 std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
                                              const pg_pool_t& pool,
+					     ceph::os::CollectionRef coll,
                                              ceph::os::CyanStore* store,
                                              const ec_profile_t& ec_profile)
 {
-  auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);

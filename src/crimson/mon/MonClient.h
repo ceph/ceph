@@ -90,10 +90,6 @@ public:
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
 
-  MonMap &get_monmap_ref() {
-    return monmap;
-  }
-
 private:
   // AuthServer methods
   std::pair<std::vector<uint32_t>, std::vector<uint32_t>>

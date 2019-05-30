@@ -8,16 +8,13 @@
 #include <string>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
+#include "crimson/os/cyan_store.h"
 #include "crimson/common/shared_lru.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
-namespace ceph::os {
-  class Collection;
-  class CyanStore;
-}
 
 class PGBackend
 {
@@ -30,6 +27,7 @@ public:
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(const spg_t pgid,
 					   const pg_pool_t& pool,
+					   ceph::os::CollectionRef coll,
 					   ceph::os::CyanStore* store,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
