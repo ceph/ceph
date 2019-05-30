@@ -1700,7 +1700,7 @@ protected:
     epoch_t advance_to,
     PG *pg,
     ThreadPool::TPHandle &handle,
-    PG::PeeringCtx &rctx);
+    PeeringCtx &rctx);
   void consume_map();
   void activate_map();
 
@@ -1793,7 +1793,7 @@ protected:
     const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
-    PG::PeeringCtx &rctx);
+    PeeringCtx &rctx);
   void _finish_splits(set<PGRef>& pgs);
 
   // == monitor interaction ==
@@ -1855,12 +1855,12 @@ protected:
   }
 
   // -- generic pg peering --
-  PG::PeeringCtx create_context();
-  void dispatch_context(PG::PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
+  PeeringCtx create_context();
+  void dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                         ThreadPool::TPHandle *handle = NULL);
-  void dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
+  void dispatch_context_transaction(PeeringCtx &ctx, PG *pg,
                                     ThreadPool::TPHandle *handle = NULL);
-  void discard_context(PG::PeeringCtx &ctx);
+  void discard_context(PeeringCtx &ctx);
   void do_notifies(map<int,
 		       vector<pair<pg_notify_t, PastIntervals> > >&
 		       notify_list,

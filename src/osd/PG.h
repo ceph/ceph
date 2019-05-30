@@ -176,8 +176,6 @@ public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
-  using PeeringCtx = PeeringState::PeeringCtx;
-
 public:
   // -- members --
   const coll_t coll;

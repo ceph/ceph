@@ -1162,7 +1162,7 @@ void PG::read_state(ObjectStore *store)
       recovery_state.set_role(-1);
   }
 
-  PG::PeeringCtx rctx;
+  PeeringCtx rctx;
   handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.

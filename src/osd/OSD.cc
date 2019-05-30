@@ -4049,7 +4049,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     return nullptr;
   }
 
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
 
   OSDMapRef startmap = get_map(info->epoch);
 
@@ -8008,7 +8008,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
   dout(10) << __func__ << " " << pgs << dendl;
   if (is_stopping())
     return;
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
   for (set<PGRef>::iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
@@ -8045,7 +8045,7 @@ bool OSD::advance_pg(
   epoch_t osd_epoch,
   PG *pg,
   ThreadPool::TPHandle &handle,
-  PG::PeeringCtx &rctx)
+  PeeringCtx &rctx)
 {
   if (osd_epoch <= pg->get_osdmap_epoch()) {
     return true;
@@ -8481,7 +8481,7 @@ void OSD::split_pgs(
   const set<spg_t> &childpgids, set<PGRef> *out_pgs,
   OSDMapRef curmap,
   OSDMapRef nextmap,
-  PG::PeeringCtx &rctx)
+  PeeringCtx &rctx)
 {
   unsigned pg_num = nextmap->get_pg_num(parent->pg_id.pool());
   parent->update_snap_mapper_bits(parent->get_pgid().get_split_bits(pg_num));
@@ -8629,12 +8629,12 @@ void OSD::handle_pg_create(OpRequestRef op)
 // ----------------------------------------
 // peering and recovery
 
-PG::PeeringCtx OSD::create_context()
+PeeringCtx OSD::create_context()
 {
-  return PG::PeeringCtx();
+  return PeeringCtx();
 }
 
-void OSD::dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
+void OSD::dispatch_context_transaction(PeeringCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction.empty() || ctx.transaction.has_contexts()) {
@@ -8646,7 +8646,7 @@ void OSD::dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
   }
 }
 
-void OSD::dispatch_context(PG::PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
+void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                            ThreadPool::TPHandle *handle)
 {
   if (!service.get_osdmap()->is_up(whoami)) {
@@ -9132,7 +9132,7 @@ void OSD::do_recovery(
 	     << " on " << *pg << dendl;
 
     if (do_unfound) {
-      PG::PeeringCtx rctx = create_context();
+      PeeringCtx rctx = create_context();
       rctx.handle = &handle;
       pg->find_unfound(queued, rctx);
       dispatch_context(rctx, pg, pg->get_osdmap());
@@ -9308,7 +9308,7 @@ void OSD::dequeue_peering_evt(
   PGPeeringEventRef evt,
   ThreadPool::TPHandle& handle)
 {
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
   auto curmap = sdata->get_osdmap();
   bool need_up_thru = false;
   epoch_t same_interval_since = 0;
