@@ -4084,8 +4084,9 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 		 << "the pool allows ec overwrites but is not stored in "
 		 << "bluestore, so deep scrubbing will not detect bitrot";
   }
-  PG::_create(rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-  PG::_init(rctx.transaction, pgid, pp);
+  create_pg_collection(
+    rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
+  init_pg_ondisk(rctx.transaction, pgid, pp);
 
   int role = startmap->calc_pg_role(whoami, acting, acting.size());
   if (!pp->is_replicated() && role != pgid.shard) {
