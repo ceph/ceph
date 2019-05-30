@@ -43,11 +43,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
   }
 
   assert(map->require_osd_release >= ceph_release_t::mimic);
-  // mimic tracks removed_snaps_queue in the OSDmap and purged_snaps
-  // in the pg_info_t, with deltas for both in each OSDMap.  we don't
-  // need to (and can't) track it here.
-  cached_removed_snaps.clear();
-  newly_removed_snaps.clear();
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
@@ -2108,21 +2103,14 @@ void PeeringState::activate(
   if (is_primary()) {
     // initialize snap_trimq
     interval_set<snapid_t> to_trim;
-    if (get_osdmap()->require_osd_release < ceph_release_t::mimic) {
-      psdout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " cached_removed_snaps " << pool.cached_removed_snaps
-		 << dendl;
-      to_trim = pool.cached_removed_snaps;
-    } else {
-      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
-      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
-      if (p != removed_snaps_queue.end()) {
-	dout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " removed_snaps " << p->second
-		 << dendl;
-	for (auto q : p->second) {
-	  to_trim.insert(q.first, q.second);
-	}
+    auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
+    auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
+    if (p != removed_snaps_queue.end()) {
+      dout(20) << "activate - purged_snaps " << info.purged_snaps
+	       << " removed_snaps " << p->second
+	       << dendl;
+      for (auto q : p->second) {
+	to_trim.insert(q.first, q.second);
       }
     }
     interval_set<snapid_t> purged;
