@@ -1123,6 +1123,7 @@ PG::Scrubber::Scrubber()
    active(false),
    shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
+   need_auto(false),
    auto_repair(false),
    check_repair(false),
    deep_scrub_on_error(false),
@@ -2359,6 +2360,12 @@ bool PG::queue_scrub()
   }
   // An interrupted recovery repair could leave this set.
   state_clear(PG_STATE_REPAIR);
+  if (scrubber.need_auto) {
+    scrubber.must_scrub = true;
+    scrubber.must_deep_scrub = true;
+    scrubber.auto_repair = true;
+    scrubber.need_auto = false;
+  }
   scrubber.priority = scrubber.must_scrub ?
          cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
@@ -4405,7 +4412,10 @@ bool PG::sched_scrub()
   // the scheduling of the scrub/repair (e.g. request reservation)
   scrubber.deep_scrub_on_error = false;
   scrubber.auto_repair = false;
-  if (cct->_conf->osd_scrub_auto_repair
+  if (scrubber.need_auto) {
+    dout(20) << __func__ << ": need repair after scrub errors" << dendl;
+    time_for_deep = true;
+  } else if (cct->_conf->osd_scrub_auto_repair
       && get_pgbackend()->auto_repair_supported()
       // respect the command from user, and not do auto-repair
       && !scrubber.must_repair
@@ -4486,7 +4496,7 @@ void PG::reg_next_scrub()
 
   utime_t reg_stamp;
   bool must = false;
-  if (scrubber.must_scrub) {
+  if (scrubber.must_scrub || scrubber.need_auto) {
     // Set the smallest time that isn't utime_t()
     reg_stamp = Scrubber::scrub_must_stamp();
     must = true;
@@ -4525,12 +4535,18 @@ void PG::on_info_history_change()
   reg_next_scrub();
 }
 
-void PG::scrub_requested(bool deep, bool repair)
+void PG::scrub_requested(bool deep, bool repair, bool need_auto)
 {
   unreg_next_scrub();
-  scrubber.must_scrub = true;
-  scrubber.must_deep_scrub = deep || repair;
-  scrubber.must_repair = repair;
+  if (need_auto) {
+    scrubber.need_auto = true;
+  } else {
+    scrubber.must_scrub = true;
+    scrubber.must_deep_scrub = deep || repair;
+    scrubber.must_repair = repair;
+    // User might intervene, so clear this
+    scrubber.need_auto = false;
+  }
   reg_next_scrub();
 }
 
@@ -5842,7 +5858,7 @@ void PG::scrub_finish()
 {
   dout(20) << __func__ << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
-  bool do_deep_scrub = false;
+  bool do_auto_scrub = false;
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (repair && scrubber.auto_repair
@@ -5855,12 +5871,13 @@ void PG::scrub_finish()
 
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair.
   if (scrubber.deep_scrub_on_error
+      && scrubber.authoritative.size()
       && scrubber.authoritative.size() <= cct->_conf->osd_scrub_auto_repair_num_errors) {
     ceph_assert(!deep_scrub);
-    scrubber.deep_scrub_on_error = false;
-    do_deep_scrub = true;
+    do_auto_scrub = true;
     dout(20) << __func__ << " Try to auto repair after scrub errors" << dendl;
   }
+  scrubber.deep_scrub_on_error = false;
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
@@ -5944,14 +5961,6 @@ void PG::scrub_finish()
     }
   }
   publish_stats_to_osd();
-  if (do_deep_scrub) {
-    // XXX: Auto scrub won't activate if must_scrub is set, but
-    // setting the scrub stamps affects what users see.
-    utime_t stamp = utime_t(0,1);
-    set_last_scrub_stamp(stamp);
-    set_last_deep_scrub_stamp(stamp);
-  }
-  reg_next_scrub();
 
   {
     ObjectStore::Transaction t;
@@ -5973,6 +5982,12 @@ void PG::scrub_finish()
 
   scrub_clear_state(has_error);
   scrub_unreserve_replicas();
+
+  if (do_auto_scrub) {
+    scrub_requested(false, false, true);
+  } else {
+    reg_next_scrub();
+  }
 
   if (is_active() && is_primary()) {
     share_pg_info();
@@ -6618,6 +6633,8 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
+  if (pg.scrubber.need_auto)
+    out << " NEED_AUTO";
 
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
   if (pg.pg_log.get_missing().num_missing()) {

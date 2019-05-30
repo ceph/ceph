@@ -425,7 +425,7 @@ public:
 
   void on_info_history_change();
 
-  void scrub_requested(bool deep, bool repair);
+  void scrub_requested(bool deep, bool repair, bool need_auto = false);
 
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
@@ -1715,7 +1715,7 @@ public:
     utime_t sleep_start;
 
     // flags to indicate explicitly requested scrubs (by admin)
-    bool must_scrub, must_deep_scrub, must_repair;
+    bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
     // Priority to use for scrub scheduling
     unsigned priority = 0;
@@ -1838,6 +1838,7 @@ public:
       must_scrub = false;
       must_deep_scrub = false;
       must_repair = false;
+      need_auto = false;
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;
