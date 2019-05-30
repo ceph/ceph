@@ -2183,8 +2183,8 @@ public:
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
 
-  // Returns true on successful refresh. Returns false if there was an
-  // error or the version stored on the OSD is the same as that
+  // Returns 0 on successful refresh. Returns error code if there was
+  // an error or the version stored on the OSD is the same as that
   // presented in the BucketInfo structure.
   //
   int try_refresh_bucket_info(RGWBucketInfo& info,

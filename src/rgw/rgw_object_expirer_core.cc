@@ -218,7 +218,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
     string shard;
     store->objexp_get_shard(i, shard);
 
-    ldout(store->ctx(), 20) << "proceeding shard = " << shard << dendl;
+    ldout(store->ctx(), 20) << "processing shard = " << shard << dendl;
 
     if (! process_single_shard(shard, last_run, round_start)) {
       all_done = false;

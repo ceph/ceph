@@ -1079,7 +1079,7 @@ int RGWReshard::process_all_logshards()
     string logshard;
     get_logshard_oid(i, &logshard);
 
-    ldout(store->ctx(), 20) << "proceeding logshard = " << logshard << dendl;
+    ldout(store->ctx(), 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i);
     if (ret <0) {
