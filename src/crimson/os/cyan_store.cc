@@ -272,6 +272,9 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
 	coll_t cid = i.get_cid(op->cid);
 	ghobject_t oid = i.get_oid(op->oid);
 	r = _remove(cid, oid);
+	if (r == -ENOENT) {
+	  r = 0;
+	}
       }
       break;
       case Transaction::OP_TOUCH:
