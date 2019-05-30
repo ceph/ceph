@@ -101,5 +101,9 @@ public:
                            uint64_t max,
                            RGWUserBuckets *buckets,
                            bool *is_truncated) = 0;
+
+  virtual int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                                 const rgw_user& user,
+                                 const RGWBucketEnt& ent) = 0;
 };
 

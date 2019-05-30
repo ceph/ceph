@@ -935,6 +935,9 @@ public:
                    RGWUserBuckets *buckets,
                    bool *is_truncated,
                    uint64_t default_max);
+
+  int flush_bucket_stats(const rgw_user& user,
+                         const RGWBucketEnt& ent);
 };
 
 class RGWUserMetaHandlerAllocator {

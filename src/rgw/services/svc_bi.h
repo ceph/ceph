@@ -19,11 +19,20 @@
 
 #include "rgw/rgw_service.h"
 
+class RGWBucketInfo;
+struct RGWBucketEnt;
+
 
 class RGWSI_BucketIndex : public RGWServiceInstance
 {
 public:
   RGWSI_BucketIndex(CephContext *cct) : RGWServiceInstance(cct) {}
   virtual ~RGWSI_BucketIndex() {}
+
+  virtual int init_index(RGWBucketInfo& bucket_info) = 0;
+  virtual int clean_index(RGWBucketInfo& bucket_info) = 0;
+
+  virtual int read_stats(const RGWBucketInfo& bucket_info,
+                         RGWBucketEnt *stats) = 0;
 };
 
