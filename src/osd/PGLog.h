@@ -580,7 +580,7 @@ protected:
   bool touched_log;
   bool dirty_log;
   bool clear_divergent_priors;
-  bool rebuilt_missing_with_deletes = false;
+  bool may_include_deletes_in_missing_dirty = false;
 
   void mark_dirty_to(eversion_t to) {
     if (to > dirty_to)
@@ -618,7 +618,7 @@ public:
       (dirty_to_dups != eversion_t()) ||
       (dirty_from_dups != eversion_t::max()) ||
       (write_from_dups != eversion_t::max()) ||
-      rebuilt_missing_with_deletes;
+      may_include_deletes_in_missing_dirty;
   }
 
   void mark_log_for_rewrite() {
@@ -628,8 +628,8 @@ public:
     mark_dirty_from_dups(eversion_t());
     touched_log = false;
   }
-  bool get_rebuilt_missing_with_deletes() const {
-    return rebuilt_missing_with_deletes;
+  bool get_may_include_deletes_in_missing_dirty() const {
+    return may_include_deletes_in_missing_dirty;
   }
 protected:
 
@@ -776,8 +776,9 @@ public:
     opg_log->mark_dirty_to_dups(eversion_t::max());
     mark_dirty_to(eversion_t::max());
     mark_dirty_to_dups(eversion_t::max());
-    if (missing.may_include_deletes)
-      opg_log->rebuilt_missing_with_deletes = true;
+    if (missing.may_include_deletes) {
+      opg_log->set_missing_may_contain_deletes();
+    }
   }
 
   void merge_from(
@@ -851,6 +852,11 @@ public:
   void proc_replica_log(pg_info_t &oinfo,
 			const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from) const;
+
+  void set_missing_may_contain_deletes() {
+    missing.may_include_deletes = true;
+    may_include_deletes_in_missing_dirty = true;
+  }
 
   void rebuild_missing_set_with_deletes(ObjectStore *store,
 					ObjectStore::CollectionHandle& ch,
@@ -1315,7 +1321,7 @@ public:
     eversion_t dirty_to_dups,
     eversion_t dirty_from_dups,
     eversion_t write_from_dups,
-    bool *rebuilt_missing_with_deletes,
+    bool *may_include_deletes_in_missing_dirty,
     set<string> *log_keys_debug
     );
 
