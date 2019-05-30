@@ -1538,34 +1538,32 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata_rm.clear();
 
   // removed_snaps
-  if (tmp.require_osd_release >= ceph_release_t::mimic) {
-    for (auto& i : pending_inc.new_removed_snaps) {
-      {
-	// all snaps removed this epoch
-	string k = make_snap_epoch_key(i.first, pending_inc.epoch);
-	bufferlist v;
-	encode(i.second, v);
-	t->put(OSD_SNAP_PREFIX, k, v);
-      }
-      for (auto q = i.second.begin();
-	   q != i.second.end();
-	   ++q) {
-	bufferlist v;
-	string k = make_snap_key_value(i.first, q.get_start(),
-				       q.get_len(), pending_inc.epoch, &v);
-	t->put(OSD_SNAP_PREFIX, k, v);
-      }
+  for (auto& i : pending_inc.new_removed_snaps) {
+    {
+      // all snaps removed this epoch
+      string k = make_snap_epoch_key(i.first, pending_inc.epoch);
+      bufferlist v;
+      encode(i.second, v);
+      t->put(OSD_SNAP_PREFIX, k, v);
     }
-    for (auto& i : pending_inc.new_purged_snaps) {
-      for (auto q = i.second.begin();
-	   q != i.second.end();
-	   ++q) {
-	bufferlist v;
-	string k = make_snap_purged_key_value(i.first, q.get_start(),
-					      q.get_len(), pending_inc.epoch,
-					      &v);
-	t->put(OSD_SNAP_PREFIX, k, v);
-      }
+    for (auto q = i.second.begin();
+	 q != i.second.end();
+	 ++q) {
+      bufferlist v;
+      string k = make_snap_key_value(i.first, q.get_start(),
+				     q.get_len(), pending_inc.epoch, &v);
+      t->put(OSD_SNAP_PREFIX, k, v);
+    }
+  }
+  for (auto& i : pending_inc.new_purged_snaps) {
+    for (auto q = i.second.begin();
+	 q != i.second.end();
+	 ++q) {
+      bufferlist v;
+      string k = make_snap_purged_key_value(i.first, q.get_start(),
+					    q.get_len(), pending_inc.epoch,
+					    &v);
+      t->put(OSD_SNAP_PREFIX, k, v);
     }
   }
 
@@ -6233,9 +6231,6 @@ int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
 bool OSDMonitor::try_prune_purged_snaps()
 {
   if (!mon->mgrstatmon()->is_readable()) {
-    return false;
-  }
-  if (osdmap.require_osd_release < ceph_release_t::mimic) {
     return false;
   }
   if (!pending_inc.new_purged_snaps.empty()) {
