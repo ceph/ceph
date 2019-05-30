@@ -4239,11 +4239,13 @@ int PrimaryLogPG::trim_object(
   }
 
   set<snapid_t> new_snaps;
+  const OSDMapRef& osdmap = get_osdmap();
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
        ++i) {
-    if (!pool.info.is_removed_snap(*i))
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i)) {
       new_snaps.insert(*i);
+    }
   }
 
   vector<snapid_t>::iterator p = snapset.clones.end();
