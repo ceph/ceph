@@ -4,6 +4,7 @@
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
+#include "svc_bi.h"
 #include "svc_meta.h"
 #include "svc_meta_be_sobj.h"
 #include "svc_sync_modules.h"
@@ -138,13 +139,15 @@ RGWSI_Bucket::~RGWSI_Bucket() {
 }
 
 void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-                        RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
-                        RGWSI_MetaBackend *_meta_be_svc, RGWSI_SyncModules *_sync_modules_svc)
+                        RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
+                        RGWSI_Meta *_meta_svc, RGWSI_MetaBackend *_meta_be_svc,
+                        RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.bucket = this;
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
+  svc.bi = _bi;
   svc.meta = _meta_svc;
   svc.meta_be = _meta_be_svc;
   svc.sync_modules = _sync_modules_svc;
@@ -483,45 +486,49 @@ int RGWSI_Bucket::remove_bucket_instance_info(RGWSI_MetaBackend::Context *ctx,
   return svc.meta_be->remove_entry(ctx, key, params, objv_tracker);
 }
 
+int RGWSI_Bucket::read_bucket_stats(const RGWBucketInfo& bucket_info,
+                                    RGWBucketEnt *ent)
+{
+  ent->count = 0;
+  ent->size = 0;
+  ent->size_rounded = 0;
+
+  vector<rgw_bucket_dir_header> headers;
+
+  int r = svc.bi->read_stats(bucket_info, ent);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): read_stats returned r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWSI_Bucket::read_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                                    const rgw_bucket& bucket,
+                                    RGWBucketEnt *ent)
+{
+  RGWBucketInfo bucket_info;
+  int ret = read_bucket_instance_info(ctx, get_bi_meta_key(bucket),
+                                      &bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return read_bucket_stats(bucket_info, ent);
+}
+
 int RGWSI_Bucket::read_buckets_stats(RGWSI_MetaBackend::Context *ctx,
                                      map<string, RGWBucketEnt>& m)
 {
   map<string, RGWBucketEnt>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     RGWBucketEnt& ent = iter->second;
-    rgw_bucket& bucket = ent.bucket;
-    ent.count = 0;
-    ent.size = 0;
-    ent.size_rounded = 0;
-
-    vector<rgw_bucket_dir_header> headers;
-
-    RGWBucketInfo bucket_info;
-    int ret = read_bucket_instance_info(ctx, get_bi_meta_key(bucket),
-                                        &bucket_info, nullptr, nullptr);
-    if (ret < 0) {
-      return ret;
-    }
-
-    int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
-    if (r < 0)
+    int r = read_bucket_stats(ctx, ent.bucket, &ent);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): read_bucket_stats returned r=" << r << dendl;
       return r;
-
-    auto hiter = headers.begin();
-    for (; hiter != headers.end(); ++hiter) {
-      RGWObjCategory category = main_category;
-      auto iter = (hiter->stats).find(category);
-      if (iter != hiter->stats.end()) {
-        struct rgw_bucket_category_stats& stats = iter->second;
-        ent.count += stats.num_entries;
-        ent.size += stats.total_size;
-        ent.size_rounded += stats.total_size_rounded;
-      }
     }
-
-    // fill in placement_rule from the bucket instance for use in swift's
-    // per-storage policy statistics
-    ent.placement_rule = std::move(bucket_info.placement_rule);
   }
 
   return m.size();

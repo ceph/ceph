@@ -6683,7 +6683,13 @@ next:
 
     if (sync_stats) {
       if (!bucket_name.empty()) {
-        int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
+        RGWBucketInfo bucket_info;
+        int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+        if (ret < 0) {
+          cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        int ret = store->ctl.bucket->sync_user_stats(user_id, bucket_info);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
           return -ret;

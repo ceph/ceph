@@ -10,9 +10,13 @@
 
 static string dir_oid_prefix = ".dir.";
 
-RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct,
-                                                 RGWSI_Zone *zone_svc,
-                                                 RGWSI_RADOS *rados_svc) : RGWSI_BucketIndex(cct) {
+RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_BucketIndex(cct)
+{
+}
+
+void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
+                                   RGWSI_RADOS *rados_svc)
+{
   svc.zone = zone_svc;
   svc.rados = rados_svc;
 }
@@ -271,7 +275,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
 }
 
 
-int RGWSI_BucketIndex_RADOS::init_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
+int RGWSI_BucketIndex_RADOS::init_index(RGWBucketInfo& bucket_info)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -284,14 +288,14 @@ int RGWSI_BucketIndex_RADOS::init_bucket_index(RGWBucketInfo& bucket_info, int n
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   map<int, string> bucket_objs;
-  get_bucket_index_objects(dir_oid, num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, bucket_info.num_shards, &bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
 				    bucket_objs,
 				    cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWSI_BucketIndex_RADOS::clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
+int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info)
 {
   RGWSI_RADOS::Pool index_pool;
 
@@ -304,10 +308,38 @@ int RGWSI_BucketIndex_RADOS::clean_bucket_index(RGWBucketInfo& bucket_info, int 
   dir_oid.append(bucket_info.bucket.bucket_id);
 
   std::map<int, std::string> bucket_objs;
-  get_bucket_index_objects(dir_oid, num_shards, &bucket_objs);
+  get_bucket_index_objects(dir_oid, bucket_info.num_shards, &bucket_objs);
 
   return CLSRGWIssueBucketIndexClean(index_pool.ioctx(),
 				     bucket_objs,
 				     cct->_conf->rgw_bucket_index_max_aio)();
+}
+
+int RGWSI_BucketIndex_RADOS::read_stats(const RGWBucketInfo& bucket_info,
+                                        RGWBucketEnt *result)
+{
+  vector<rgw_bucket_dir_header> headers;
+
+  result->bucket = bucket_info.bucket;
+  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, &headers, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  auto hiter = headers.begin();
+  for (; hiter != headers.end(); ++hiter) {
+    RGWObjCategory category = RGWObjCategory::Main;
+    auto iter = (hiter->stats).find(category);
+    if (iter != hiter->stats.end()) {
+      struct rgw_bucket_category_stats& stats = iter->second;
+      result->count += stats.num_entries;
+      result->size += stats.total_size;
+      result->size_rounded += stats.total_size_rounded;
+    }
+  }
+
+  result->placement_rule = std::move(bucket_info.placement_rule);
+
+  return 0;
 }
 

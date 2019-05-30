@@ -71,7 +71,16 @@ class RGWSI_User_RADOS : public RGWSI_User
   int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
 
-  /* bucket stats */
+  /* quota stats */
+  int cls_user_flush_bucket_stats(rgw_raw_obj& user_obj,
+                                  const RGWBucketEnt& ent);
+  int cls_user_list_buckets(rgw_raw_obj& obj,
+                            const string& in_marker,
+                            const string& end_marker,
+                            const int max_entries,
+                            list<cls_user_bucket_entry>& entries,
+                            string * const out_marker,
+                            bool * const truncated);
 
   int do_start() override;
 public:
@@ -146,5 +155,10 @@ public:
                    uint64_t max,
                    RGWUserBuckets *buckets,
                    bool *is_truncated) override;
+
+  /* quota related */
+  int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                         const rgw_user& user,
+                         const RGWBucketEnt& ent) override;
 };
 

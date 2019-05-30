@@ -26,6 +26,7 @@
 #include "rgw_service.h"
 
 #include "services/svc_rados.h"
+#include "services/svc_bi_rados.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -575,7 +576,7 @@ public:
   int get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size, uint64_t *palignment = nullptr);
 
   uint32_t get_max_bucket_shards() {
-    return rgw_shards_max();
+    return RGWSI_BucketIndex_RADOS::shards_max();
   }
 
 
@@ -1429,19 +1430,8 @@ public:
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_reset_stats(const string& user_id);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
-  int cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketInfo& bucket_info);
-  int cls_user_list_buckets(rgw_raw_obj& obj,
-                            const string& in_marker,
-                            const string& end_marker,
-                            int max_entries,
-                            list<cls_user_bucket_entry>& entries,
-                            string *out_marker,
-                            bool *truncated);
-  int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_raw_obj& obj);
   int complete_sync_user_stats(const rgw_user& user_id);
-  int cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket);
-  int cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size, bool check_size_only = false);

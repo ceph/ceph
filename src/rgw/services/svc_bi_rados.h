@@ -85,9 +85,10 @@ public:
     RGWSI_RADOS *rados{nullptr};
   } svc;
 
-  RGWSI_BucketIndex_RADOS(CephContext *cct,
-                          RGWSI_Zone *zone_svc,
-                          RGWSI_RADOS *rados_svc);
+  RGWSI_BucketIndex_RADOS(CephContext *cct);
+
+  void init(RGWSI_Zone *zone_svc,
+            RGWSI_RADOS *rados_svc);
 
   static int shards_max() {
     return RGW_SHARDS_PRIME_1;
@@ -105,8 +106,11 @@ public:
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
-  int clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
+  int init_index(RGWBucketInfo& bucket_info);
+  int clean_index(RGWBucketInfo& bucket_info);
+
+  int read_stats(const RGWBucketInfo& bucket_info,
+                 RGWBucketEnt *stats) override;
 };
 
 

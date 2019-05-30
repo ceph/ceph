@@ -35,9 +35,6 @@ extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
 extern void rgw_bucket_instance_key_to_oid(string& key);
 extern void rgw_bucket_instance_oid_to_key(string& oid);
 
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, const RGWBucketInfo& bucket_info);
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
-
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 static inline void rgw_make_bucket_entry_name(const string& tenant_name,
@@ -186,7 +183,8 @@ public:
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
   static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
-                                   RGWSI_Bucket *bucket_svc);
+                                   RGWSI_Bucket *bucket_svc,
+                                   RGWSI_BucketIndex *bi_svc);
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
@@ -198,7 +196,8 @@ public:
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
   static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
-                                   RGWSI_Bucket *bucket_svc);
+                                   RGWSI_Bucket *bucket_svc,
+                                   RGWSI_BucketIndex *bi_svc);
 };
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
@@ -572,6 +571,7 @@ class RGWBucketCtl
   struct Svc {
     RGWSI_Zone *zone{nullptr};
     RGWSI_Bucket *bucket{nullptr};
+    RGWSI_BucketIndex *bi{nullptr};
   } svc;
 
   struct Ctl {
@@ -587,6 +587,7 @@ class RGWBucketCtl
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
+               RGWSI_BucketIndex *bi_svc,
                RGWBucketMetadataHandler *_bm_handler,
                RGWBucketInstanceMetadataHandler *_bmi_handler);
 
@@ -773,6 +774,12 @@ public:
 
   int read_buckets_stats(map<string, RGWBucketEnt>& m);
 
+  int read_bucket_stats(const rgw_bucket& bucket,
+                        RGWBucketEnt *result);
+
+  /* quota related */
+  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info);
+
 private:
   int convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
                               const rgw_bucket& bucket);
@@ -792,6 +799,7 @@ private:
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
                        bool update_entrypoint);
+
 };
 
 
