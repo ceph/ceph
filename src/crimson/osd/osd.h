@@ -107,7 +107,7 @@ public:
       ceph::net::Messenger& hb_back_msgr);
   ~OSD() override;
 
-  seastar::future<> mkfs(uuid_d fsid);
+  seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);
 
   seastar::future<> start();
   seastar::future<> stop();
