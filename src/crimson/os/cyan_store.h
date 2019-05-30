@@ -9,6 +9,7 @@
 #include <typeinfo>
 #include <vector>
 
+#include <optional>
 #include <seastar/core/future.hh>
 
 #include "crimson/os/cyan_collection.h"
@@ -22,6 +23,8 @@ class Transaction;
 
 // a just-enough store for reading/writing the superblock
 class CyanStore {
+  constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
+
   const std::string path;
   std::unordered_map<coll_t, CollectionRef> coll_map;
   std::map<coll_t,CollectionRef> new_coll_map;
@@ -63,7 +66,7 @@ public:
   seastar::future<> umount();
 
   seastar::future<> mkfs();
-  seastar::future<bufferlist> read(CollectionRef c,
+  seastar::future<ceph::bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
 				   uint64_t offset,
 				   size_t len,
@@ -73,16 +76,26 @@ public:
 					    std::string_view name);
   using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
   seastar::future<attrs_t> get_attrs(CollectionRef c, const ghobject_t& oid);
-  using omap_values_t = std::map<std::string,bufferlist, std::less<>>;
+
+  using omap_values_t = std::map<std::string,ceph::bufferlist, std::less<>>;
   seastar::future<omap_values_t> omap_get_values(
     CollectionRef c,
     const ghobject_t& oid,
     std::vector<std::string>&& keys);
+
   seastar::future<std::vector<ghobject_t>, ghobject_t> list_objects(
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit);
+
+  /// Retrieves paged set of values > start (if present)
+  seastar::future<bool, omap_values_t> omap_get_values(
+    CollectionRef c,           ///< [in] collection
+    const ghobject_t &oid,     ///< [in] oid
+    const std::optional<std::string> &start ///< [in] start, empty for begin
+    ); ///< @return <done, values> values.empty() iff done
+
   CollectionRef create_new_collection(const coll_t& cid);
   CollectionRef open_collection(const coll_t& cid);
   std::vector<coll_t> list_collections();
@@ -99,11 +112,28 @@ private:
   int _remove(const coll_t& cid, const ghobject_t& oid);
   int _touch(const coll_t& cid, const ghobject_t& oid);
   int _write(const coll_t& cid, const ghobject_t& oid,
-	     uint64_t offset, size_t len, const bufferlist& bl,
+	     uint64_t offset, size_t len, const ceph::bufferlist& bl,
 	     uint32_t fadvise_flags);
+  int _omap_set_values(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    std::map<std::string, ceph::bufferlist> &&aset);
+  int _omap_set_header(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    const ceph::bufferlist &header);
+  int _omap_rmkeys(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    const std::set<std::string> &aset);
+  int _omap_rmkeyrange(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    const std::string &first,
+    const std::string &last);
   int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size);
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
-                map<string,bufferptr>& aset);
+                std::map<std::string,bufferptr>& aset);
   int _create_collection(const coll_t& cid, int bits);
 };
 
