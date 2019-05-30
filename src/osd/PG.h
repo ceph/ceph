@@ -400,7 +400,7 @@ public:
 
   void on_info_history_change() override;
 
-  void scrub_requested(bool deep, bool repair) override;
+  void scrub_requested(bool deep, bool repair, bool need_auto = false) override;
 
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();
@@ -1113,7 +1113,7 @@ public:
     utime_t sleep_start;
 
     // flags to indicate explicitly requested scrubs (by admin)
-    bool must_scrub, must_deep_scrub, must_repair;
+    bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
     // Priority to use for scrub scheduling
     unsigned priority = 0;
@@ -1236,6 +1236,7 @@ public:
       must_scrub = false;
       must_deep_scrub = false;
       must_repair = false;
+      need_auto = false;
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;
