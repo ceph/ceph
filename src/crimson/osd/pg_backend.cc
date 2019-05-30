@@ -282,6 +282,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
   txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   os.oi.size = 0;
   os.oi.new_object();
+  os.exists = false;
   // todo: update watchers
   if (os.oi.is_whiteout()) {
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
