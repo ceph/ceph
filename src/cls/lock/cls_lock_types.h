@@ -85,6 +85,11 @@ namespace rados {
           return false;
         }
         void dump(Formatter *f) const;
+	friend std::ostream& operator<<(std::ostream& out,
+					const locker_id_t& data) {
+	  out << data.locker;
+	  return out;
+	}
         static void generate_test_instances(list<locker_id_t*>& o);
       };
       WRITE_CLASS_ENCODER(locker_id_t)
@@ -114,6 +119,19 @@ namespace rados {
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
+	friend std::ostream& operator<<(std::ostream& out,
+					const locker_info_t& data) {
+	  out << "{addr:" << data.addr << ", exp:";
+
+	  const auto& exp = data.expiration;
+	  if (exp.is_zero()) {
+	    out << "never}";
+	  } else {
+	    out << exp.to_real_time() << "}";
+	  }
+
+	  return out;
+	}
         static void generate_test_instances(list<locker_info_t *>& o);
       };
       WRITE_CLASS_ENCODER_FEATURES(locker_info_t)

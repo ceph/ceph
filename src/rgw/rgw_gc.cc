@@ -250,27 +250,9 @@ public:
     index_io.type = IO::IndexIO;
     index_io.index = index;
 
-    // use lambda to assemble list, so it will only get executed if
-    // we're at the appropirate logging level
-    auto lister = [&rt]() -> std::string {
-      std::stringstream out;
-      bool first = true;
-
-      for (const auto& s : rt) {
-	if (first) {
-	  first = false;
-	} else {
-	  out << ", ";
-	}
-	out << s;
-      }
-
-      return out.str();
-    };
-
     ldpp_dout(dpp, 20) << __func__ <<
       " removing entries from gc log shard index=" << index << ", size=" <<
-      rt.size() << ", entries=[" << lister() << "]" << dendl;
+      rt.size() << ", entries=" << rt << dendl;
 
     int ret = gc->remove(index, rt, &index_io.c);
     rt.clear();
