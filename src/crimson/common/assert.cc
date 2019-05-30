@@ -1,4 +1,5 @@
 #include <cstdarg>
+#include <iostream>
 
 #include <seastar/util/backtrace.hh>
 #include <seastar/core/reactor.hh>
@@ -22,6 +23,7 @@ namespace ceph {
                  "{}",
                  file, line, func, assertion,
                  seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
   [[gnu::cold]] void __ceph_assertf_fail(const char *assertion,
@@ -40,6 +42,7 @@ namespace ceph {
                  "{}",
                  file, line, func, assertion,
                  seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
 
@@ -51,6 +54,7 @@ namespace ceph {
                  "{}",
                  file, line, func, msg,
                  seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
 }
