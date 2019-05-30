@@ -1433,69 +1433,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       pending_inc.new_require_min_compat_client = mv;
     }
 
-    // upgrade to mimic?
-    if (osdmap.require_osd_release < ceph_release_t::mimic &&
-	tmp.require_osd_release >= ceph_release_t::mimic) {
-      dout(10) << __func__ << " first mimic+ epoch" << dendl;
-      // record this epoch as the deletion for all legacy removed_snaps
-      for (auto& p : tmp.get_pools()) {
-	// update every pool
-	if (pending_inc.new_pools.count(p.first) == 0) {
-	  pending_inc.new_pools[p.first] = p.second;
-	}
-	auto& pi = pending_inc.new_pools[p.first];
-	if (pi.snap_seq == 0) {
-	  // no snaps on this pool
-	  continue;
-	}
-	if ((pi.flags & (pg_pool_t::FLAG_SELFMANAGED_SNAPS |
-			 pg_pool_t::FLAG_POOL_SNAPS)) == 0) {
-	  if (!pi.removed_snaps.empty()) {
-	    pi.flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
-	  } else {
-	    pi.flags |= pg_pool_t::FLAG_POOL_SNAPS;
-	  }
-	}
-
-	// Make all previously removed snaps appear to be removed in this
-	// epoch.  this populates removed_snaps_queue.  The OSD will subtract
-	// off its purged_snaps, as before, and this set will shrink over the
-	// following epochs as the purged snaps are reported back through the
-	// mgr.
-	OSDMap::snap_interval_set_t removed;
-	if (!p.second.removed_snaps.empty()) {
-	  // different flavor of interval_set :(
-	  for (auto q = p.second.removed_snaps.begin();
-	       q != p.second.removed_snaps.end();
-	       ++q) {
-	    removed.insert(q.get_start(), q.get_len());
-	  }
-	} else {
-	  for (snapid_t s = 1; s <= pi.get_snap_seq(); s = s + 1) {
-	    if (pi.snaps.count(s) == 0) {
-	      removed.insert(s);
-	    }
-	  }
-	}
-	pending_inc.new_removed_snaps[p.first].union_of(removed);
-
-	dout(10) << __func__ << " converting pool " << p.first
-		 << " with " << p.second.removed_snaps.size()
-		 << " legacy removed_snaps" << dendl;
-	string k = make_snap_epoch_key(p.first, pending_inc.epoch);
-	bufferlist v;
-	encode(p.second.removed_snaps, v);
-	t->put(OSD_SNAP_PREFIX, k, v);
-	for (auto q = p.second.removed_snaps.begin();
-	     q != p.second.removed_snaps.end();
-	     ++q) {
-	  bufferlist v;
-	  string k = make_snap_key_value(p.first, q.get_start(),
-					 q.get_len(), pending_inc.epoch, &v);
-	  t->put(OSD_SNAP_PREFIX, k, v);
-	}
-      }
-    }
     if (osdmap.require_osd_release < ceph_release_t::nautilus &&
 	tmp.require_osd_release >= ceph_release_t::nautilus) {
       dout(10) << __func__ << " first nautilus+ epoch" << dendl;
