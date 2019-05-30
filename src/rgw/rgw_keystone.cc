@@ -437,8 +437,8 @@ int TokenEnvelope::parse(CephContext* const cct,
     } else {
       return -ENOTSUP;
     }
-  } catch (JSONDecoder::err& err) {
-    ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
+  } catch (const JSONDecoder::err& err) {
+    ldout(cct, 0) << "Keystone token parse error: " << err.what() << dendl;
     return -EINVAL;
   }
 

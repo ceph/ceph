@@ -5,6 +5,7 @@
 #define CEPH_RGW_XML_H
 
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <iosfwd>
 #include <include/types.h>
@@ -145,10 +146,8 @@ public:
 };
 
 namespace RGWXMLDecoder {
-  struct err {
-    std::string message;
-
-    explicit err(const std::string& m) : message(m) {}
+  struct err : std::runtime_error {
+    using runtime_error::runtime_error;
   };
 
   typedef RGWXMLParser XMLParser;
@@ -168,7 +167,7 @@ namespace RGWXMLDecoder {
 
 static inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
 {
-  return out << err.message;
+  return out << err.what();
 }
 
 template<class T>
@@ -224,9 +223,9 @@ bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool manda
 
   try {
     decode_xml_obj(val, o);
-  } catch (err& e) {
+  } catch (const err& e) {
     string s = string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 
@@ -253,9 +252,9 @@ bool RGWXMLDecoder::decode_xml(const char *name, std::vector<T>& v, XMLObj *obj,
     T val;
     try {
       decode_xml_obj(val, o);
-    } catch (err& e) {
+    } catch (const err& e) {
       string s = string(name) + ": ";
-      s.append(e.message);
+      s.append(e.what());
       throw err(s);
     }
     v.push_back(val);
@@ -280,9 +279,9 @@ bool RGWXMLDecoder::decode_xml(const char *name, C& container, void (*cb)(C&, XM
 
   try {
     decode_xml_obj(container, cb, o);
-  } catch (err& e) {
+  } catch (const err& e) {
     string s = string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 
@@ -301,10 +300,10 @@ void RGWXMLDecoder::decode_xml(const char *name, T& val, T& default_val, XMLObj 
 
   try {
     decode_xml_obj(val, o);
-  } catch (err& e) {
+  } catch (const err& e) {
     val = default_val;
     string s = string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 }

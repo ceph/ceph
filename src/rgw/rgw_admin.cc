@@ -1255,8 +1255,8 @@ static int read_decode_json(const string& infile, T& t)
 
   try {
     decode_json_obj(t, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   return 0;
@@ -1279,8 +1279,8 @@ static int read_decode_json(const string& infile, T& t, K *k)
 
   try {
     t.decode_json(&p, k);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   return 0;
@@ -1856,8 +1856,8 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   // decode the response and store it back
   try {
     decode_json_obj(period, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   if (period.get_id().empty()) {
@@ -1982,8 +1982,8 @@ static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
   }
   try {
     decode_json_obj(*period, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   ret = period->store_info(false);
@@ -3907,8 +3907,8 @@ int main(int argc, const char **argv)
         realm.init(g_ceph_context, store->svc.sysobj, false);
         try {
           decode_json_obj(realm, &p);
-        } catch (JSONDecoder::err& e) {
-          cerr << "failed to decode JSON response: " << e.message << std::endl;
+        } catch (const JSONDecoder::err& e) {
+          cerr << "failed to decode JSON response: " << e.what() << std::endl;
           return EINVAL;
         }
         RGWPeriod period;
