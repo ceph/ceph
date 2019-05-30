@@ -8613,12 +8613,6 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   return r;
 }
 
-int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
-{
-  std::lock_guard lock(client_lock);
-  return _lookup_parent(ino, perms, parent);
-}
-
 /**
  * Populate the parent dentry for `ino`, provided it is
  * a child of `parent`.
