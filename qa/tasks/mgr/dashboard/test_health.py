@@ -7,6 +7,18 @@ from .helper import DashboardTestCase, JAny, JLeaf, JList, JObj
 class HealthTest(DashboardTestCase):
     CEPHFS = True
 
+    __pg_info_schema = JObj({
+        'object_stats': JObj({
+            'num_objects': int,
+            'num_object_copies': int,
+            'num_objects_degraded': int,
+            'num_objects_misplaced': int,
+            'num_objects_unfound': int
+        }),
+        'pgs_per_osd': float,
+        'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
+    })
+
     def test_minimal_health(self):
         data = self._get('/api/health/minimal')
         self.assertStatus(200)
@@ -22,7 +34,6 @@ class HealthTest(DashboardTestCase):
                 'stats': JObj({
                     'total_avail_bytes': int,
                     'total_bytes': int,
-                    'total_objects': int,
                     'total_used_raw_bytes': int,
                 })
             }),
@@ -65,10 +76,7 @@ class HealthTest(DashboardTestCase):
                         'up': int,
                     })),
             }),
-            'pg_info': JObj({
-                'pgs_per_osd': float,
-                'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
-            }),
+            'pg_info': self.__pg_info_schema,
             'pools': JList(JLeaf(dict)),
             'rgw': int,
             'scrub_status': str
@@ -134,7 +142,6 @@ class HealthTest(DashboardTestCase):
                 'stats': JObj({
                     'total_avail_bytes': int,
                     'total_bytes': int,
-                    'total_objects': int,
                     'total_used_bytes': int,
                     'total_used_raw_bytes': int,
                     'total_used_raw_ratio': float
@@ -243,10 +250,7 @@ class HealthTest(DashboardTestCase):
                         'up': int,
                     }, allow_unknown=True)),
             }, allow_unknown=True),
-            'pg_info': JObj({
-                'pgs_per_osd': float,
-                'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
-            }),
+            'pg_info': self.__pg_info_schema,
             'pools': JList(JLeaf(dict)),
             'rgw': int,
             'scrub_status': str

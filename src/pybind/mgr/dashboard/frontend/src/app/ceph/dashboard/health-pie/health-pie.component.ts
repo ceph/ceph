@@ -14,6 +14,7 @@ import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { HealthPieColor } from './health-pie-color.enum';
 
 @Component({
@@ -30,11 +31,9 @@ export class HealthPieComponent implements OnChanges, OnInit {
   @Input()
   data: any;
   @Input()
-  chartType: string;
+  config = {};
   @Input()
   isBytesData = false;
-  @Input()
-  displayLegend = false;
   @Input()
   tooltipFn: any;
   @Input()
@@ -43,6 +42,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
   prepareFn = new EventEmitter();
 
   chartConfig: any = {
+    chartType: 'pie',
     dataset: [
       {
         label: null,
@@ -51,7 +51,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
     ],
     options: {
       legend: {
-        display: false,
+        display: true,
         position: 'right',
         labels: { usePointStyle: true },
         onClick: (event, legendItem) => {
@@ -59,15 +59,17 @@ export class HealthPieComponent implements OnChanges, OnInit {
         }
       },
       animation: { duration: 0 },
-
       tooltips: {
         enabled: false
+      },
+      title: {
+        display: false
       }
     }
   };
   private hiddenSlices = [];
 
-  constructor(private dimlessBinary: DimlessBinaryPipe) {}
+  constructor(private dimlessBinary: DimlessBinaryPipe, private dimless: DimlessPipe) {}
 
   ngOnInit() {
     // An extension to Chart.js to enable rendering some
@@ -121,10 +123,6 @@ export class HealthPieComponent implements OnChanges, OnInit {
       chartTooltip.customTooltips(tooltip);
     };
 
-    this.setChartType();
-
-    this.chartConfig.options.legend.display = this.displayLegend;
-
     this.chartConfig.colors = [
       {
         backgroundColor: [
@@ -136,6 +134,8 @@ export class HealthPieComponent implements OnChanges, OnInit {
         ]
       }
     ];
+
+    _.merge(this.chartConfig, this.config);
 
     this.prepareFn.emit([this.chartConfig, this.data]);
   }
@@ -153,22 +153,11 @@ export class HealthPieComponent implements OnChanges, OnInit {
       return bodySplit[0];
     }
 
-    if (this.isBytesData) {
-      bodySplit[1] = this.dimlessBinary.transform(bodySplit[1]);
-    }
+    bodySplit[1] = this.isBytesData
+      ? this.dimlessBinary.transform(bodySplit[1])
+      : this.dimless.transform(bodySplit[1]);
 
     return bodySplit.join(': ');
-  }
-
-  private setChartType() {
-    const chartTypes = ['doughnut', 'pie'];
-    const selectedChartType = chartTypes.find((chartType) => chartType === this.chartType);
-
-    if (selectedChartType !== undefined) {
-      this.chartConfig.chartType = selectedChartType;
-    } else {
-      this.chartConfig.chartType = chartTypes[0];
-    }
   }
 
   private setChartSliceBorderWidth() {
