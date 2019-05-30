@@ -21,6 +21,7 @@
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
+#include "rgw_sync_counters.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
 
@@ -258,6 +259,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   bool *truncated;
 
   read_remote_data_log_response response;
+  std::optional<PerfGuard> timer;
 
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncEnv *_sync_env, int _shard_id,
@@ -291,18 +293,28 @@ public:
 
         init_new_io(http_op);
 
+        if (sync_env->counters) {
+          timer.emplace(sync_env->counters, sync_counters::l_poll);
+        }
         int ret = http_op->aio_read();
         if (ret < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          if (sync_env->counters) {
+            sync_env->counters->inc(sync_counters::l_poll_err);
+          }
           return set_cr_error(ret);
         }
 
         return io_block(0);
       }
       yield {
+        timer.reset();
         int ret = http_op->wait(&response);
         if (ret < 0) {
+          if (sync_env->counters && ret != -ENOENT) {
+            sync_env->counters->inc(sync_counters::l_poll_err);
+          }
           return set_cr_error(ret);
         }
         entries->clear();
@@ -594,10 +606,11 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
 }
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
-                           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module)
+                           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module,
+                           PerfCounters* counters)
 {
   sync_env.init(dpp, store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
-                _sync_tracer, _source_zone, _sync_module);
+                _sync_tracer, _source_zone, _sync_module, counters);
 
   if (initialized) {
     return 0;
@@ -1678,7 +1691,7 @@ RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RG
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
 				 std::nullopt,
                                  key, std::nullopt, versioned_epoch,
-                                 true, zones_trace);
+                                 true, zones_trace, sync_env->counters);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
@@ -1755,7 +1768,7 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RG
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
                                  bucket_info, std::nullopt,
                                  key, dest_key, versioned_epoch,
-                                 true, zones_trace);
+                                 true, zones_trace, nullptr);
 }
 
 RGWCoroutine *RGWArchiveDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
@@ -1872,7 +1885,8 @@ int RGWDataSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  int r = source_log.init(source_zone, conn, error_logger, store->get_sync_tracer(), sync_module);
+  int r = source_log.init(source_zone, conn, error_logger, store->get_sync_tracer(),
+                          sync_module, counters);
   if (r < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
@@ -1941,7 +1955,7 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
   bs.shard_id = shard_id;
 
   sync_env.init(dpp, store->ctx(), store, conn, async_rados, http_manager,
-                _error_logger, _sync_tracer, source_zone, _sync_module);
+                _error_logger, _sync_tracer, source_zone, _sync_module, nullptr);
 
   return 0;
 }
@@ -2438,6 +2452,7 @@ class RGWListBucketIndexLogCR: public RGWCoroutine {
   string marker;
 
   list<rgw_bi_log_entry> *result;
+  std::optional<PerfGuard> timer;
 
 public:
   RGWListBucketIndexLogCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs,
@@ -2447,6 +2462,9 @@ public:
 
   int operate() override {
     reenter(this) {
+      if (sync_env->counters) {
+        timer.emplace(sync_env->counters, sync_counters::l_poll);
+      }
       yield {
         rgw_http_param_pair pairs[] = { { "bucket-instance", instance_key.c_str() },
 					{ "format" , "json" },
@@ -2456,7 +2474,11 @@ public:
 
         call(new RGWReadRESTResourceCR<list<rgw_bi_log_entry> >(sync_env->cct, sync_env->conn, sync_env->http_manager, "/admin/log", pairs, result));
       }
+      timer.reset();
       if (retcode < 0) {
+        if (sync_env->counters) {
+          sync_env->counters->inc(sync_counters::l_poll_err);
+        }
         return set_cr_error(retcode);
       }
       return set_cr_done();
@@ -3475,7 +3497,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
   env.init(dpp, store->ctx(), store, nullptr, store->get_async_rados(),
-           nullptr, nullptr, nullptr, source_zone, module);
+           nullptr, nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, num_shards,
