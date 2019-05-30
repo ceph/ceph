@@ -600,7 +600,7 @@ int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker 
                                obj.pool, obj.oid,
                                bl,
                                objv_tracker,
-                               nullptr, nullptr, nullptr);
+                               nullptr, null_yield, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }
