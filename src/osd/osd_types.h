@@ -6013,6 +6013,14 @@ static const string_view biginfo_key = "_biginfo"sv;
 static const string_view epoch_key = "_epoch"sv;
 static const string_view fastinfo_key = "_fastinfo"sv;
 
+static const __u8 pg_latest_struct_v = 10;
+// v10 is the new past_intervals encoding
+// v9 was fastinfo_key addition
+// v8 was the move to a per-pg pgmeta object
+// v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
+// (first appeared in cuttlefish).
+static const __u8 pg_compat_struct_v = 10;
+
 int prepare_info_keymap(
   CephContext* cct,
   map<string,bufferlist> *km,
@@ -6025,6 +6033,16 @@ int prepare_info_keymap(
   bool try_fast_info,
   PerfCounters *logger = nullptr,
   DoutPrefixProvider *dpp = nullptr);
+
+namespace ceph::os {
+  class Transaction;
+};
+
+void create_pg_collection(
+  ceph::os::Transaction& t, spg_t pgid, int bits);
+
+void init_pg_ondisk(
+  ceph::os::Transaction& t, spg_t pgid, const pg_pool_t *pool);
 
 // omap specific stats
 struct omap_stat_t {
