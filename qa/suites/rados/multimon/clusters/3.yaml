@@ -1,6 +1,6 @@
 roles:
-- [mon.a, mon.c, osd.0]
-- [mon.b, mgr.x, osd.1]
+- [mon.a, mon.c]
+- [mon.b, mgr.x]
 openstack:
 - volumes: # attached to each instance
     count: 2
