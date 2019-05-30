@@ -137,9 +137,13 @@ int main(int argc, char* argv[])
                                            hb_back_msgr.stop());
         });
         if (config.count("mkfs")) {
-          osd.invoke_on(0, &OSD::mkfs,
-                        local_conf().get_val<uuid_d>("fsid"))
-            .then([] { seastar::engine().exit(0); }).get();
+          osd.invoke_on(
+	    0,
+	    &OSD::mkfs,
+	    local_conf().get_val<uuid_d>("osd_uuid"),
+	    local_conf().get_val<uuid_d>("fsid")).then([] {
+	      seastar::engine().exit(0);
+	    }).get();
         } else {
           osd.invoke_on(0, &OSD::start).get();
         }
