@@ -20,6 +20,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "Messenger.h"
 #include "SocketConnection.h"
@@ -44,6 +45,9 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
                            seastar::socket_address paddr);
 
   void do_bind(const entity_addrvec_t& addr);
+
+  bool started = false;
+  seastar::shared_promise<> accepting_complete;
   seastar::future<> do_start(Dispatcher *disp);
   seastar::foreign_ptr<ConnectionRef> do_connect(const entity_addr_t& peer_addr,
                                                  const entity_type_t& peer_type);
