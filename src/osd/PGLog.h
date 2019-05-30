@@ -22,6 +22,12 @@
 #include "os/ObjectStore.h"
 #include <list>
 
+#ifdef WITH_SEASTAR
+#include <seastar/core/future.hh>
+#include "crimson/os/cyan_store.h"
+#include "crimson/os/cyan_collection.h"
+#endif
+
 constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
 constexpr auto PGLOG_INDEXED_CALLER_OPS       = 1 << 1;
 constexpr auto PGLOG_INDEXED_EXTRA_CALLER_OPS = 1 << 2;
@@ -1570,4 +1576,133 @@ public:
     }
     ldpp_dout(dpp, 10) << "read_log_and_missing done" << dendl;
   } // static read_log_and_missing
+
+#ifdef WITH_SEASTAR
+  seastar::future<> read_log_and_missing_crimson(
+    ceph::os::CyanStore &store,
+    ceph::os::CollectionRef ch,
+    const pg_info_t &info,
+    ghobject_t pgmeta_oid
+    ) {
+    return read_log_and_missing_crimson(
+      store, ch, info,
+      log, missing, pgmeta_oid,
+      this);
+  }
+
+  template <typename missing_type>
+  struct CyanStoreLogReader {
+    ceph::os::CyanStore &store;
+    ceph::os::CollectionRef ch;
+    const pg_info_t &info;
+    IndexedLog &log;
+    missing_type &missing;
+    ghobject_t pgmeta_oid;
+    const DoutPrefixProvider *dpp;
+
+    eversion_t on_disk_can_rollback_to;
+    eversion_t on_disk_rollback_info_trimmed_to;
+
+    std::map<eversion_t, hobject_t> divergent_priors;
+    bool must_rebuild = false;
+    std::list<pg_log_entry_t> entries;
+    std::list<pg_log_dup_t> dups;
+
+    std::optional<std::string> next;
+
+    void process_entry(const std::pair<std::string, ceph::bufferlist> &p) {
+      if (p.first[0] == '_')
+	return;
+      ceph::bufferlist bl = p.second;//Copy bufferlist before creating iterator
+      auto bp = bl.cbegin();
+      if (p.first == "divergent_priors") {
+	decode(divergent_priors, bp);
+	ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
+			   << " divergent_priors" << dendl;
+	ceph_assert("crimson shouldn't have had divergent_priors" == 0);
+      } else if (p.first == "can_rollback_to") {
+	decode(on_disk_can_rollback_to, bp);
+      } else if (p.first == "rollback_info_trimmed_to") {
+	decode(on_disk_rollback_info_trimmed_to, bp);
+      } else if (p.first == "may_include_deletes_in_missing") {
+	missing.may_include_deletes = true;
+      } else if (p.first.substr(0, 7) == string("missing")) {
+	hobject_t oid;
+	pg_missing_item item;
+	decode(oid, bp);
+	decode(item, bp);
+	if (item.is_delete()) {
+	  ceph_assert(missing.may_include_deletes);
+	}
+	missing.add(oid, item.need, item.have, item.is_delete());
+      } else if (p.first.substr(0, 4) == string("dup_")) {
+	pg_log_dup_t dup;
+	decode(dup, bp);
+	if (!dups.empty()) {
+	  ceph_assert(dups.back().version < dup.version);
+	}
+	dups.push_back(dup);
+      } else {
+	pg_log_entry_t e;
+	e.decode_with_checksum(bp);
+	ldpp_dout(dpp, 20) << "read_log_and_missing " << e << dendl;
+	if (!entries.empty()) {
+	  pg_log_entry_t last_e(entries.back());
+	  ceph_assert(last_e.version.version < e.version.version);
+	  ceph_assert(last_e.version.epoch <= e.version.epoch);
+	}
+	entries.push_back(e);
+      }
+    }
+
+
+    seastar::future<> start() {
+      // will get overridden if recorded
+      on_disk_can_rollback_to = info.last_update;
+      missing.may_include_deletes = false;
+
+      auto reader = std::unique_ptr<CyanStoreLogReader>(this);
+      return seastar::repeat(
+	[this]() {
+	  return store.omap_get_values(ch, pgmeta_oid, next).then(
+	    [this](
+	      bool done, ceph::os::CyanStore::omap_values_t values) {
+	      for (auto &&p : values) {
+		process_entry(p);
+	      }
+	      return done ? seastar::stop_iteration::yes
+		: seastar::stop_iteration::no;
+	    });
+	}).then([this, reader{std::move(reader)}]() {
+          log = IndexedLog(
+	     info.last_update,
+	     info.log_tail,
+	     on_disk_can_rollback_to,
+	     on_disk_rollback_info_trimmed_to,
+	     std::move(entries),
+	     std::move(dups));
+          return seastar::now();
+        });
+    }
+  };
+
+  template <typename missing_type>
+  static seastar::future<> read_log_and_missing_crimson(
+    ceph::os::CyanStore &store,
+    ceph::os::CollectionRef ch,
+    const pg_info_t &info,
+    IndexedLog &log,
+    missing_type &missing,
+    ghobject_t pgmeta_oid,
+    const DoutPrefixProvider *dpp = nullptr
+    ) {
+    ldpp_dout(dpp, 20) << "read_log_and_missing coll "
+		       << ch->cid
+		       << " " << pgmeta_oid << dendl;
+    return (new CyanStoreLogReader<missing_type>{
+      store, ch, info, log, missing, pgmeta_oid, dpp})->start();
+  }
+
+#endif
+
 }; // struct PGLog
