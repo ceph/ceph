@@ -501,6 +501,8 @@ private:
   void clear_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
 
+  bool _is_removed_snap(int64_t pool_id, snapid_t snapid);
+
   string make_snap_epoch_key(int64_t pool, epoch_t epoch);
   string make_snap_key(int64_t pool, snapid_t snap);
   string make_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
