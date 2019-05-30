@@ -136,7 +136,7 @@ public:
     // Not needed yet -- mainly for scrub scheduling
   }
 
-  void scrub_requested(bool deep, bool repair) final {
+  void scrub_requested(bool deep, bool repair, bool need_auto = false) final {
     ceph_assert(0 == "Not implemented");
   }
 
