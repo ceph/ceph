@@ -50,9 +50,8 @@ class Client : public ceph::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
-  seastar::promise<MessageRef> reply;
   std::unique_ptr<Connection> active_con;
-  std::vector<Connection> pending_conns;
+  std::vector<std::unique_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
   seastar::gate tick_gate;
 
@@ -90,6 +89,10 @@ public:
   void sub_unwant(const std::string& what);
   bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
   seastar::future<> renew_subs();
+
+  MonMap &get_monmap_ref() {
+    return monmap;
+  }
 
 private:
   // AuthServer methods
