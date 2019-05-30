@@ -727,9 +727,7 @@ inline namespace v14_2_0 {
 	//return off == bl->length();
       }
 
-      void advance(int o) = delete;
       void advance(unsigned o);
-      void advance(size_t o) { advance(static_cast<unsigned>(o)); }
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
