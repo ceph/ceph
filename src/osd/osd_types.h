@@ -27,6 +27,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/variant.hpp>
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
@@ -3014,6 +3015,11 @@ class OSDMap;
  * the might_have_unfound set
  */
 class PastIntervals {
+#ifdef WITH_SEASTAR
+  using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#else
+  using OSDMapRef = std::shared_ptr<const OSDMap>;
+#endif
 public:
   struct pg_interval_t {
     std::vector<int32_t> up, acting;
@@ -3192,8 +3198,8 @@ public:
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
-    std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
+    OSDMapRef osdmap,      ///< [in] current map
+    OSDMapRef lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
