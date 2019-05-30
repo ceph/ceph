@@ -75,33 +75,21 @@ struct PeeringCtx {
   }
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
-    for (map<int, map<spg_t, pg_query_t> >::iterator i = m.query_map.begin();
-	 i != m.query_map.end();
-	 ++i) {
-      map<spg_t, pg_query_t> &omap = query_map[i->first];
-      for (map<spg_t, pg_query_t>::iterator j = i->second.begin();
-	   j != i->second.end();
-	   ++j) {
-	omap[j->first] = j->second;
+    for (auto &[target, qmap] : m.query_map) {
+      auto &omap = query_map[target];
+      for (auto &[pg, query] : qmap) {
+	omap[pg] = query;
       }
     }
-    for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
-	   = m.info_map.begin();
-	 i != m.info_map.end();
-	 ++i) {
-      vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	info_map[i->first];
-      ovec.reserve(ovec.size() + i->second.size());
-      ovec.insert(ovec.end(), i->second.begin(), i->second.end());
+    for (auto &[target, ivec] : m.info_map) {
+      auto &ovec = info_map[target];
+      ovec.reserve(ovec.size() + ivec.size());
+      ovec.insert(ovec.end(), ivec.begin(), ivec.end());
     }
-    for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
-	   = m.notify_list.begin();
-	 i != m.notify_list.end();
-	 ++i) {
-      vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	notify_list[i->first];
-      ovec.reserve(ovec.size() + i->second.size());
-      ovec.insert(ovec.end(), i->second.begin(), i->second.end());
+    for (auto &[target, nlist] : m.notify_list) {
+      auto &ovec = notify_list[target];
+      ovec.reserve(ovec.size() + nlist.size());
+      ovec.insert(ovec.end(), nlist.begin(), nlist.end());
     }
   }
 };
