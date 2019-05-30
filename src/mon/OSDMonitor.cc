@@ -13388,7 +13388,7 @@ void OSDMonitor::convert_pool_priorities(void)
     const auto &pool = i.second;
 
     if (pool.opts.is_set(key)) {
-      int64_t prio;
+      int64_t prio = 0;
       pool.opts.get(key, &prio);
       if (prio > max_prio)
 	max_prio = prio;
