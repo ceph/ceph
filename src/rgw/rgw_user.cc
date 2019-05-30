@@ -1789,9 +1789,11 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     found = (rgw_get_user_info_by_uid(store, user_id, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }
-  if (!user_email.empty() && !found) {
-    found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
-    op_state.found_by_email = found;
+  if (store->ctx()->_conf->get_val<bool>("rgw_user_unique_email")) {
+    if (!user_email.empty() && !found) {
+      found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
+      op_state.found_by_email = found;
+    }
   }
   if (!swift_user.empty() && !found) {
     found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
