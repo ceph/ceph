@@ -13,7 +13,7 @@
 #include "rgw_xml.h"
 #include "rgw_acl.h"
 
-class RGWRados;
+class RGWUserCtl;
 
 class ACLPermission_S3 : public ACLPermission, public XMLObj
 {
@@ -83,7 +83,7 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest);
+  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
@@ -92,7 +92,7 @@ public:
     owner = _owner;
     return ret;
   }
-  int create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner);
+  int create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**
