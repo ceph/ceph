@@ -8,6 +8,7 @@ import sys
 import time
 import logging
 from ceph_volume import log, process
+from ceph_volume.api.lvm import Volumes
 from ceph_volume.exceptions import SuffixParsingError
 
 
@@ -48,6 +49,31 @@ def parse_osd_uuid(string):
     if not osd_uuid:
         raise SuffixParsingError('OSD uuid', string)
     return osd_uuid
+
+
+def get_block_volume(string):
+    volumes = Volumes()
+    osd_id = string.split('-', 1)[0]
+    osd_fsid = string.split('-', 1)[1]
+    tags={'ceph.type':'block', 'ceph.osd_id':osd_id, 'ceph.osd_fsid':osd_fsid}
+    block_volume = volumes.get(lv_tags=tags).as_dict()
+    return block_volume
+
+
+def get_wal_volume(block_volume):
+    volumes = Volumes()
+    wal_device = block_volume['tags']['ceph.wal_device']
+    tags={'ceph.type':'wal', 'ceph.wal_device':wal_device}
+    wal_volume = volumes.get(lv_tags=tags)
+    return wal_volume
+
+
+def get_db_volume(block_volume):
+    volumes = Volumes()
+    db_device = block_volume['tags']['ceph.db_device']
+    tags={'ceph.type':'db', 'ceph.db_device':db_device}
+    db_volume = volumes.get(lv_tags=tags)
+    return db_volume
 
 
 def main(args=None):
@@ -106,3 +132,37 @@ def main(args=None):
             logger.warning('failed activating OSD, retries left: %s', tries)
             tries -= 1
             time.sleep(interval)
+
+    block_volume = get_block_volume(extra_data)
+    wal_device = block_volume['tags']['ceph.wal_device']
+    db_device = block_volume['tags']['ceph.db_device']
+
+    tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
+    interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
+    if wal_device:
+        while tries > 0:
+            block_volume = get_block_volume(extra_data)
+            wal_volume = get_wal_volume(block_volume)
+            if wal_volume:
+                logger.info('successfully found wal volume')
+                break
+            else:
+                logger.warning('failed to find wal volume, retries left: %s',
+                               tries)
+                tries -= 1
+                time.sleep(interval)
+
+    tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
+    interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
+    if db_device:
+        while tries > 0:
+            block_volume = get_block_volume(extra_data)
+            db_volume = get_db_volume(block_volume)
+            if db_volume:
+                logger.info('successfully found db volume')
+                break
+            else:
+                logger.warning('failed to find db volume, retries left: %s',
+                               tries)
+                tries -= 1
+                time.sleep(interval)
