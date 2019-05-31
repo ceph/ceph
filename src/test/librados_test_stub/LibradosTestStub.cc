@@ -1503,3 +1503,7 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
   return -ENOTSUP;
 }
+
+uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
+  return 0;
+}

@@ -796,3 +796,9 @@ bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
 
   return false;
 }
+
+uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+
+  return ctx->pg->get_min_alloc_size();
+}
