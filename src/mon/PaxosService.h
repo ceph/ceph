@@ -124,6 +124,20 @@ public:
     }
   };
 
+  class C_ReplyOp : public C_MonOp {
+    Monitor *mon;
+    MonOpRequestRef op;
+    MessageRef reply;
+  public:
+    C_ReplyOp(PaxosService *s, MonOpRequestRef o, MessageRef r) :
+      C_MonOp(o), mon(s->mon), op(o), reply(r) { }
+    void _finish(int r) override {
+      if (r >= 0) {
+	mon->send_reply(op, reply.detach());
+      }
+    }
+  };
+
   /**
    * @}
    */
