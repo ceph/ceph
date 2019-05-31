@@ -18,6 +18,8 @@
 #include "MDSTableServer.h"
 #include "snap.h"
 
+#include "messages/MRemoveSnaps.h"
+
 class MDSRank;
 class MonClient;
 
@@ -90,6 +92,9 @@ protected:
   void _server_update(bufferlist& bl) override;
   bool _notify_prep(version_t tid) override;
   void handle_query(const cref_t<MMDSTableRequest> &m) override;
+
+public:
+  void handle_remove_snaps(const cref_t<MRemoveSnaps> &m);
 
 public:
   SnapServer(MDSRank *m, MonClient *monc)

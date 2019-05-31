@@ -360,6 +360,36 @@ void SnapServer::check_osd_map(bool force)
   last_checked_osdmap = version;
 }
 
+void SnapServer::handle_remove_snaps(const cref_t<MRemoveSnaps> &m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+
+  map<int32_t, vector<snapid_t> > all_purged;
+  int num = 0;
+
+  for (const auto& [id, snaps] : need_to_purge) {
+    auto i = m->snaps.find(id);
+    if (i == m->snaps.end()) {
+      continue;
+    }
+    for (const auto& q : snaps) {
+      if (std::find(i->second.begin(), i->second.end(), q) != i->second.end()) {
+	dout(10) << " mon reports " << q << " is removed" << dendl;
+	all_purged[id].push_back(q);
+	++num;
+      }
+    }
+  }
+
+  dout(10) << __func__ << " " << num << " now removed" << dendl;
+  if (num) {
+    bufferlist bl;
+    using ceph::encode;
+    encode(all_purged, bl);
+    do_server_update(bl);
+  }
+}
+
 
 void SnapServer::dump(Formatter *f) const
 {
