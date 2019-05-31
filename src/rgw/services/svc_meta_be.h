@@ -44,25 +44,27 @@ protected:
                      const std::string& key,
                      const ceph::real_time& mtime,
                      RGWObjVersionTracker *objv_tracker,
-                     RGWMDLogSyncType sync_mode);
+                     optional_yield y);
 
   virtual int mutate(Context *ctx,
                      const std::string& key,
                      const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
                      RGWMDLogStatus op_type,
-                     RGWMDLogSyncType sync_mode,
                      std::function<int()> f,
-                     bool generic_prepare);
+                     bool generic_prepare,
+                     optional_yield y);
 
   virtual int pre_modify(Context *ctx,
                          const std::string& key,
                          RGWMetadataLogData& log_data,
                          RGWObjVersionTracker *objv_tracker,
-                         RGWMDLogStatus op_type);
+                         RGWMDLogStatus op_type,
+                         optional_yield y);
   virtual int post_modify(Context *ctx,
                           const std::string& key,
                           RGWMetadataLogData& log_data,
-                          RGWObjVersionTracker *objv_tracker, int ret);
+                          RGWObjVersionTracker *objv_tracker, int ret,
+                          optional_yield y);
 public:
   class Module {
     /*
@@ -70,14 +72,6 @@ public:
      */
   public:
     virtual ~Module() = 0;
-
-    /*
-     * return key used for hashing specific section and key. Needed for determining where
-     * to store mdlog entries, e.g., bucket.index entries will be stored without using
-     * the bucket id, to ensure that bucket and bucket.instance of the same Bucket go to the
-     * same place.
-     */
-    virtual std::string get_hash_key(const std::string& section, const std::string& key) = 0;
   };
 
   using ModuleRef = std::shared_ptr<Module>;
@@ -166,16 +160,13 @@ public:
                   const std::string& key,
                   PutParams& params,
                   RGWObjVersionTracker *objv_tracker,
-                  optional_yield y,
-                  RGWMDLogSyncType sync_mode);
+                  optional_yield y);
 
   virtual int remove(Context *ctx,
                      const std::string& key,
                      RemoveParams& params,
                      RGWObjVersionTracker *objv_tracker,
-                     optional_yield y,
-                     RGWMDLogSyncType sync_mode);
-
+                     optional_yield y);
 };
 
 class RGWSI_MetaBackend_Handler {
@@ -204,16 +195,14 @@ public:
 
     int put(const std::string& key,
             RGWSI_MetaBackend::PutParams& params,
-            RGWObjVersionTracker *objv_tracker,
-            RGWMDLogSyncType sync_mode) {
-      return be->put(be_ctx, key, params, objv_tracker, sync_mode);
+            RGWObjVersionTracker *objv_tracker) {
+      return be->put(be_ctx, key, params, objv_tracker);
     }
 
     int remove(const std::string& key,
                RGWSI_MetaBackend::RemoveParams& params,
-               RGWObjVersionTracker *objv_tracker,
-               RGWMDLogSyncType sync_mode) {
-      return be->remove(be_ctx, key, params, objv_tracker, sync_mode);
+               RGWObjVersionTracker *objv_tracker) {
+      return be->remove(be_ctx, key, params, objv_tracker);
     }
 
     int list_init(const string& marker) {

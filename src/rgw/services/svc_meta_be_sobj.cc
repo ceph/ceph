@@ -1,5 +1,6 @@
 
 #include "svc_meta_be_sobj.h"
+#include "svc_mdlog.h"
 
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_metadata.h"
@@ -21,7 +22,67 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
 
 RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
 {
-  return new ctx(sysobj_svc);
+  return new Context_SObj(sysobj_svc);
+}
+
+int RGWSI_MetaBackend_SObj::pre_modify(RGWSI_MetaBackend::Context *_ctx,
+                                       const string& key,
+                                       RGWMetadataLogData& log_data,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMDLogStatus op_type,
+                                       optional_yield y)
+{
+  auto ctx = static_cast<Context_SObj *>(_ctx);
+  int ret = RGWSI_MetaBackend::pre_modify(ctx, key, log_data,
+                                          objv_tracker, op_type,
+                                          y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* if write version has not been set, and there's a read version, set it so that we can
+   * log it
+   */
+  if (objv_tracker) {
+    log_data.read_version = objv_tracker->read_version;
+    log_data.write_version = objv_tracker->write_version;
+  }
+
+  log_data.status = op_type;
+
+  bufferlist logbl;
+  encode(log_data, logbl);
+
+  ret = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWSI_MetaBackend_SObj::post_modify(RGWSI_MetaBackend::Context *_ctx,
+                                        const string& key,
+                                        RGWMetadataLogData& log_data,
+                                        RGWObjVersionTracker *objv_tracker, int ret,
+                                        optional_yield y)
+{
+  auto ctx = static_cast<Context_SObj *>(_ctx);
+  if (ret >= 0)
+    log_data.status = MDLOG_STATUS_COMPLETE;
+  else 
+    log_data.status = MDLOG_STATUS_ABORT;
+
+  bufferlist logbl;
+  encode(log_data, logbl);
+
+  int r = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
+  if (ret < 0)
+    return ret;
+
+  if (r < 0)
+    return r;
+
+  return RGWSI_MetaBackend::post_modify(ctx, key, log_data, objv_tracker, ret, y);
 }
 
 int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
@@ -49,7 +110,8 @@ RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_SObj::alloc_default_get_params(c
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
                                       const string& key,
                                       GetParams& _params,
-                                      RGWObjVersionTracker *objv_tracker)
+                                      RGWObjVersionTracker *objv_tracker,
+                                      optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   RGWSI_MBSObj_GetParams& params = static_cast<RGWSI_MBSObj_GetParams&>(_params);
@@ -60,7 +122,7 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
 
   return rgw_get_system_obj(*ctx->obj_ctx, pool, oid, *params.pbl,
                             objv_tracker, params.pmtime,
-                            params.y,
+                            y,
                             params.pattrs, params.cache_info,
                             params.refresh_version);
 }
@@ -68,7 +130,8 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
 int RGWSI_MetaBackend_SObj::put_entry(RGWSI_MetaBackend::Context *_ctx,
                                       const string& key,
                                       PutParams& _params,
-                                      RGWObjVersionTracker *objv_tracker)
+                                      RGWObjVersionTracker *objv_tracker,
+                                      optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   RGWSI_MBSObj_PutParams& params = static_cast<RGWSI_MBSObj_PutParams&>(_params);
@@ -78,13 +141,14 @@ int RGWSI_MetaBackend_SObj::put_entry(RGWSI_MetaBackend::Context *_ctx,
   ctx->module->get_pool_and_oid(key, &pool, &oid);
 
   return rgw_put_system_obj(*ctx->obj_ctx, pool, oid, params.bl, params.exclusive,
-                            objv_tracker, params.mtime, params.y, params.pattrs);
+                            objv_tracker, params.mtime, y, params.pattrs);
 }
 
 int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
                                          const string& key,
                                          RemoveParams& params,
-                                         RGWObjVersionTracker *objv_tracker)
+                                         RGWObjVersionTracker *objv_tracker,
+                                         optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
@@ -96,7 +160,7 @@ int RGWSI_MetaBackend_SObj::remove_entry(RGWSI_MetaBackend::Context *_ctx,
   auto sysobj = ctx->obj_ctx->get_obj(k);
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
-               .remove(params.y);
+               .remove(y);
 }
 
 int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
@@ -112,7 +176,7 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
   ctx->list.pool = sysobj_svc->get_pool(pool);
   ctx->list.op.emplace(ctx->list.pool->op());
 
-  string prefix = ctx->module->get_prefix();
+  string prefix = ctx->module->get_oid_prefix();
   ctx->list.op->init(marker, prefix);
 
   return 0;

@@ -64,16 +64,18 @@ public:
     cls_svc = _cls_svc;
   }
 
-  void init_ctx(RGWSI_MetaBackend_Handle handle, RGWSI_MetaBackend::Context *ctx) override;
-
   RGWSI_MetaBackend::GetParams *alloc_default_get_params(ceph::real_time *pmtime) override;
 
   int get_entry(RGWSI_MetaBackend::Context *ctx,
+                const string& key,
                 RGWSI_MetaBackend::GetParams& _params,
-                RGWObjVersionTracker *objv_tracker);
+                RGWObjVersionTracker *objv_tracker,
+                optional_yield y);
   int put_entry(RGWSI_MetaBackend::Context *ctx,
+                const string& key,
                 RGWSI_MetaBackend::PutParams& _params,
-                RGWObjVersionTracker *objv_tracker);
+                RGWObjVersionTracker *objv_tracker,
+                optional_yield y);
 };
 
 

@@ -37,12 +37,13 @@ RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_OTP::alloc_default_get_params(ce
 
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
                                       RGWSI_MetaBackend::GetParams& _params,
-                                      RGWObjVersionTracker *objv_tracker)
+                                      RGWObjVersionTracker *objv_tracker,
+                                      optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_OTP *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_OTP *>(_ctx);
   RGWSI_MBOTP_GetParams& params = static_cast<RGWSI_MBOTP_GetParams&>(_params);
 
-  int r = svc.cls->mfa.list_mfa(ctx->key, params.pdevices, objv_tracker, params.pmtime, null_yield);
+  int r = svc.cls->mfa.list_mfa(ctx->key, params.pdevices, objv_tracker, params.pmtime, y);
   if (r < 0) {
     return r;
   }
@@ -52,11 +53,12 @@ int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
 
 int RGWSI_MetaBackend_SObj::put_entry(RGWSI_MetaBackend::Context *_ctx,
                                       RGWSI_MetaBackend::PutParams& _params,
-                                      RGWObjVersionTracker *objv_tracker)
+                                      RGWObjVersionTracker *objv_tracker,
+                                      optional_yield y)
 {
   RGWSI_MetaBackend_OTP::Context_OTP *ctx = static_cast<RGWSI_MetaBackend_OTP::Context_OTP *>(_ctx);
   RGWSI_MBOTP_PutParams& params = static_cast<RGWSI_MBOTP_PutParams&>(_params);
 
-  return svc.cls->mfa.set_mfa(ctx->key, params.devices, true, &objv_tracker, mtime, null_yield);
+  return svc.cls->mfa.set_mfa(ctx->key, params.devices, true, &objv_tracker, mtime, y);
 }
 

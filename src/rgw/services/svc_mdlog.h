@@ -97,7 +97,7 @@ public:
                     RGWObjVersionTracker *objv_tracker,
                     bool exclusive = false);
 
-  int add_entry(RGWSI_MetaBackend::Module *module, const string& section, const string& key, bufferlist& bl);
+  int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();

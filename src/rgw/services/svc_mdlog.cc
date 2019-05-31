@@ -353,8 +353,8 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   return &insert.first->second;
 }
 
-int RGWSI_MDLog::add_entry(RGWSI_MetaBackend::Module *module, const string& section, const string& key, bufferlist& bl)
+int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->add_entry(module->get_hash_key(secrion, key), section, key, bl);
+  return current_log->add_entry(hash_key, section, key, bl);
 }

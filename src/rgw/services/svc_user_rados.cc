@@ -26,7 +26,8 @@ class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
 
   const string prefix;
 public:
-  RGWSI_User_Module(RGWSI_User_RADOS::Svc& _svc) : svc(_svc) {}
+  RGWSI_User_Module(RGWSI_User_RADOS::Svc& _svc) : RGWSI_MBSObj_Handler_Module("user"),
+                                                   svc(_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
     if (pool) {

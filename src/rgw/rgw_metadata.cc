@@ -448,7 +448,7 @@ int RGWMetadataHandlerPut_SObj::put_checked()
 
   encode_obj(&params.bl);
 
-  int ret = op->put(entry, params, &objv_tracker, y, apply_type);
+  int ret = op->put(entry, params, &objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
