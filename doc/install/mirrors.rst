@@ -22,6 +22,7 @@ These mirrors are available on the following locations:
 - **FR: France**: http://fr.ceph.com/
 - **UK: UK**: http://uk.ceph.com
 - **US-East: US East Coast**: http://us-east.ceph.com/
+- **US-Mid-West: Chicago**: http://mirrors.gigenet.com/ceph/
 - **US-West: US West Coast**: http://us-west.ceph.com/
 - **CN: China**: http://mirrors.ustc.edu.cn/ceph/
 
