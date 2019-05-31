@@ -565,6 +565,8 @@ public:
   virtual void get_dynamic_perf_stats(DynamicPerfStats *stats) {
   }
 
+  uint64_t get_min_alloc_size() const;
+
   // reference counting
 #ifdef PG_DEBUG_REFS
   uint64_t get_with_id();

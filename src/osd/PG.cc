@@ -3860,3 +3860,7 @@ void PG::with_heartbeat_peers(std::function<void(int)> f)
   }
   heartbeat_peer_lock.Unlock();
 }
+
+uint64_t PG::get_min_alloc_size() const {
+  return osd->store->get_min_alloc_size();
+}
