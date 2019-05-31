@@ -70,6 +70,14 @@ public:
      */
   public:
     virtual ~Module() = 0;
+
+    /*
+     * return key used for hashing specific section and key. Needed for determining where
+     * to store mdlog entries, e.g., bucket.index entries will be stored without using
+     * the bucket id, to ensure that bucket and bucket.instance of the same Bucket go to the
+     * same place.
+     */
+    virtual std::string get_hash_key(const std::string& section, const std::string& key) = 0;
   };
 
   using ModuleRef = std::shared_ptr<Module>;

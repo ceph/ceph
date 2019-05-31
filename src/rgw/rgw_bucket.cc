@@ -2191,7 +2191,7 @@ public:
     obj->get_ep().encode(*bl);
   }
 
-  int put_checked(RGWMetadataObject *_old_obj) override;
+  int put_checked() override;
   int put_post() override;
 };
 
@@ -2204,11 +2204,13 @@ int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& 
   return do_put_operate(&put_op);
 }
 
-int RGWMetadataHandlerPut_Bucket::put_checked(RGWMetadataObject *_old_obj)
+int RGWMetadataHandlerPut_Bucket::put_checked()
 {
-  RGWBucketEntryMetadataObject *old_obj = static_cast<RGWBucketEntryMetadataObject *>(_old_obj);
+  RGWBucketEntryMetadataObject *orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
 
-  obj->set_pattrs(&old_obj->get_attrs());
+  if (orig_obj) {
+    obj->set_pattrs(&orig_obj->get_attrs());
+  }
 
   auto& be = obj->get_ep();
   auto mtime = obj->get_mtime();
@@ -2558,7 +2560,7 @@ public:
     obj->get_bucket_info().encode(*bl);
   }
 
-  int put_pre() override;
+  int put_check() override;
   int put_post() override;
 };
 
@@ -2573,17 +2575,17 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
   return do_put_operate(&put_op);
 }
 
-int RGWMetadataHandlerPut_BucketInstance::put_pre()
+int RGWMetadataHandlerPut_BucketInstance::put_check()
 {
   int ret;
 
   RGWBucketCompleteInfo& bci = obj->get_bci();
 
-  RGWBucketInstanceMetadataObject *old_obj = static_cast<RGWBucketInstanceMetadataObject *>(_old_obj);
+  RGWBucketInstanceMetadataObject *orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
 
-  RGWBucketCompleteInfo *old_bci = (old_obj ? &old_obj->get_bci() : nullptr);
+  RGWBucketCompleteInfo *old_bci = (orig_obj ? &orig_obj->get_bci() : nullptr);
 
-  bool exists = (!!old_obj);
+  bool exists = (!!orig_obj);
 
   if (!exists || old_bci->info.bucket.bucket_id != bci.info.bucket.bucket_id) {
     /* a new bucket, we need to select a new bucket placement for it */
