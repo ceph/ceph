@@ -3605,37 +3605,34 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
   MRemoveSnaps *m = static_cast<MRemoveSnaps*>(op->get_req());
   dout(7) << "prepare_remove_snaps " << *m << dendl;
 
-  for (map<int, vector<snapid_t> >::iterator p = m->snaps.begin();
-       p != m->snaps.end();
-       ++p) {
-
-    if (!osdmap.have_pg_pool(p->first)) {
-      dout(10) << " ignoring removed_snaps " << p->second << " on non-existent pool " << p->first << dendl;
+  for (auto& [pool, snaps] : m->snaps) {
+    if (!osdmap.have_pg_pool(pool)) {
+      dout(10) << " ignoring removed_snaps " << snaps
+	       << " on non-existent pool " << pool << dendl;
       continue;
     }
 
-    pg_pool_t& pi = osdmap.pools[p->first];
-    for (vector<snapid_t>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      if (!_is_removed_snap(p->first, *q) &&
-	  (!pending_inc.new_pools.count(p->first) ||
-	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
-	pg_pool_t *newpi = pending_inc.get_new_pool(p->first, &pi);
+    pg_pool_t& pi = osdmap.pools[pool];
+    for (auto s : snaps) {
+      if (!_is_removed_snap(pool, s) &&
+	  (!pending_inc.new_pools.count(pool) ||
+	   !pending_inc.new_pools[pool].removed_snaps.contains(s))) {
+	pg_pool_t *newpi = pending_inc.get_new_pool(pool, &pi);
 	if (osdmap.require_osd_release < ceph_release_t::octopus) {
-	  newpi->removed_snaps.insert(*q);
-	  dout(10) << " pool " << p->first << " removed_snaps added " << *q
+	  newpi->removed_snaps.insert(s);
+	  dout(10) << " pool " << pool << " removed_snaps added " << s
 		   << " (now " << newpi->removed_snaps << ")" << dendl;
 	}
 	newpi->flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
-	if (*q > newpi->get_snap_seq()) {
-	  dout(10) << " pool " << p->first << " snap_seq "
-		   << newpi->get_snap_seq() << " -> " << *q << dendl;
-	  newpi->set_snap_seq(*q);
+	if (s > newpi->get_snap_seq()) {
+	  dout(10) << " pool " << pool << " snap_seq "
+		   << newpi->get_snap_seq() << " -> " << s << dendl;
+	  newpi->set_snap_seq(s);
 	}
 	newpi->set_snap_epoch(pending_inc.epoch);
-	dout(10) << " added pool " << p->first << "snap " << *q << " to removed_snaps queue" << dendl;
-	pending_inc.new_removed_snaps[p->first].insert(*q);
+	dout(10) << " added pool " << pool << " snap " << s
+		 << " to removed_snaps queue" << dendl;
+	pending_inc.new_removed_snaps[pool].insert(s);
       }
     }
   }
