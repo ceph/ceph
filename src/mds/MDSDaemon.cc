@@ -1179,6 +1179,11 @@ bool MDSDaemon::handle_core_message(const cref_t<Message> &m)
     handle_mds_map(ref_cast<MMDSMap>(m));
     break;
 
+  case MSG_REMOVE_SNAPS:
+    ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON);
+    mds_rank->snapserver->handle_remove_snaps(ref_cast<MRemoveSnaps>(m));
+    break;
+
     // OSD
   case MSG_COMMAND:
     handle_command(ref_cast<MCommand>(m));
