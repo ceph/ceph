@@ -1,5 +1,6 @@
 tasks:
 - install.upgrade:
+    exclude_packages: ['python3-cephfs','python3-rados']
     osd.4:
     client.0:
 - ceph.restart:

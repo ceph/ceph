@@ -3,7 +3,7 @@ meta:
 tasks:
 - install:
     tag: v13.2.4
-    exclude_packages: ['librados3']
+    exclude_packages: ['librados3','python3-cephfs','python3-rados']
     extra_packages: ['librados2']
 - print: "**** done install mimic latest"
 - ceph:

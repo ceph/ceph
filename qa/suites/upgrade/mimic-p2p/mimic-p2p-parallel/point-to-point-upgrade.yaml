@@ -74,7 +74,7 @@ tasks:
 - install:
     tag: v13.2.0
     # line below can be removed its from jewel test
-    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
+    exclude_packages: ['python3-cephfs','python3-rados']
 - print: "**** done v13.2.0 install"
 - ceph:
    fs: xfs
@@ -86,7 +86,7 @@ tasks:
 
 #######  upgrade to v13.2.1
 - install.upgrade:
-    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    exclude_packages: ['python3-cephfs','python3-rados']
     mon.a:
       tag: v13.2.1
     mon.b:
@@ -103,7 +103,7 @@ tasks:
 
 #######  upgrade to v13.2.2
 - install.upgrade:
-    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    exclude_packages: ['python3-cephfs','python3-rados']
     mon.a:
       tag: v13.2.2
     mon.b:
@@ -121,7 +121,7 @@ tasks:
 
 #######  upgrade to v13.2.x TO BE ADDED for future point releases
 ### - install.upgrade:
-###    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+###    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-cephfs','python34-rados']
 ###    mon.a:
 ###      tag: v13.2.x
 ###    mon.b:
@@ -139,7 +139,7 @@ tasks:
 
 ####  upgrade to latest mimic
 - install.upgrade:
-    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    exclude_packages: ['python3-cephfs','python3-rados']
     mon.a:
     mon.b:
     # Note that client.a IS NOT upgraded at this point
