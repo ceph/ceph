@@ -59,7 +59,7 @@ int RGWSI_Cls::MFA::check_mfa(const rgw_user& user, const string& otp_id, const 
 
   rados::cls::otp::otp_check_t result;
 
-  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.obj.oid, otp_id, pin, &result);
+  r = rados::cls::otp::OTP::check(cct, ref.pool.ioctx(), ref.obj.oid, otp_id, pin, &result);
   if (r < 0)
     return r;
 
@@ -146,7 +146,7 @@ int RGWSI_Cls::MFA::get_mfa(const rgw_user& user, const string& id, rados::cls::
     return r;
   }
 
-  r = rados::cls::otp::OTP::get(nullptr, ref.ioctx, ref.obj.oid, id, result);
+  r = rados::cls::otp::OTP::get(nullptr, ref.pool.ioctx(), ref.obj.oid, id, result);
   if (r < 0) {
     return r;
   }
@@ -164,7 +164,7 @@ int RGWSI_Cls::MFA::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_inf
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_all(nullptr, ref.ioctx, ref.obj.oid, result);
+  r = rados::cls::otp::OTP::get_all(nullptr, ref.pool.ioctx(), ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
@@ -182,7 +182,7 @@ int RGWSI_Cls::MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.obj.oid, result);
+  r = rados::cls::otp::OTP::get_current_time(ref.pool.ioctx(), ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
@@ -237,7 +237,7 @@ int RGWSI_Cls::MFA::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t
     op.stat2(nullptr, &mtime_ts, nullptr);
   }
   objv_tracker->prepare_op_for_read(&op);
-  r = rados::cls::otp::OTP::get_all(&op, ref.ioctx, ref.obj.oid, result);
+  r = rados::cls::otp::OTP::get_all(&op, ref.pool.ioctx(), ref.obj.oid, result);
   if (r < 0) {
     return r;
   }
