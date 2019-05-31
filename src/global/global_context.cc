@@ -57,10 +57,12 @@ int note_io_error_event(
 {
   g_eio = true;
   if (devname) {
-    strncpy(g_eio_devname, devname, sizeof(g_eio_devname));
+    strncpy(g_eio_devname, devname, sizeof(g_eio_devname) - 1);
+    g_eio_devname[sizeof(g_eio_devname) - 1] = '\0';
   }
   if (path) {
-    strncpy(g_eio_path, path, sizeof(g_eio_path));
+    strncpy(g_eio_path, path, sizeof(g_eio_path) - 1);
+    g_eio_path[sizeof(g_eio_path) - 1] = '\0';
   }
   g_eio_error = error;
   g_eio_iotype = iotype;
