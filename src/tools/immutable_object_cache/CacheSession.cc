@@ -59,7 +59,7 @@ void CacheSession::handle_request_header(const boost::system::error_code& err,
                                          size_t bytes_transferred) {
   ldout(m_cct, 20) << dendl;
   if (err || bytes_transferred != get_header_size()) {
-    fault();
+    fault(err);
     return;
   }
 
@@ -83,7 +83,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
                                       size_t bytes_transferred) {
   ldout(m_cct, 20) << dendl;
   if (err || bytes_transferred != data_len) {
-    fault();
+    fault(err);
     return;
   }
 
@@ -93,6 +93,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
   bl_data.append(std::move(bp));
 
   ObjectCacheRequest* req = decode_object_cache_request(bl_data);
+
   process(req);
   delete req;
   read_request_header();
@@ -116,15 +117,14 @@ void CacheSession::send(ObjectCacheRequest* reply) {
           size_t bytes_transferred) {
           delete reply;
           if (err || bytes_transferred != bl.length()) {
-            fault();
+            fault(err);
             return;
           }
         });
 }
 
-void CacheSession::fault() {
-  ldout(m_cct, 20) << dendl;
-  // TODO(dehao)
+void CacheSession::fault(const boost::system::error_code& ec) {
+  ldout(m_cct, 20) << "session fault : " << ec.message() << dendl;
 }
 
 }  // namespace immutable_obj_cache

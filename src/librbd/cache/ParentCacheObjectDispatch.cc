@@ -27,7 +27,7 @@ namespace cache {
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialized(false), m_object_store(nullptr) {
+    m_initialized(false), m_object_store(nullptr), m_re_connecting(false) {
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
@@ -39,7 +39,6 @@ ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
     delete m_cache_client;
 }
 
-// TODO if connect fails, init will return error to high layer.
 template <typename I>
 void ParentCacheObjectDispatch<I>::init() {
   auto cct = m_image_ctx->cct;
@@ -50,33 +49,16 @@ void ParentCacheObjectDispatch<I>::init() {
     return;
   }
 
-  ldout(cct, 5) << "parent image: setup SRO cache client" << dendl;
+  C_SaferCond* cond = new C_SaferCond();
+  Context* create_session_ctx = new FunctionContext([cond](int ret) {
+    cond->complete(0);
+  });
 
-  m_cache_client->run();
+  create_cache_session(create_session_ctx, false);
+  cond->wait();
 
-  int ret = m_cache_client->connect();
-  if (ret < 0) {
-    ldout(cct, 5) << "SRO cache client fail to connect with local controller: "
-                  << "please start ceph-immutable-object-cache daemon"
-		  << dendl;
-  } else {
-    ldout(cct, 5) << "SRO cache client to register volume "
-                  << "name = " << m_image_ctx->id
-                  << " on ceph-immutable-object-cache daemon"
-                  << dendl;
-
-    auto ctx = new FunctionContext([this](bool reg) {
-      handle_register_client(reg);
-    });
-
-    ret = m_cache_client->register_client(ctx);
-
-    if (ret >= 0) {
-      // add ourself to the IO object dispatcher chain
-      m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
-      m_initialized = true;
-    }
-  }
+  m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
+  m_initialized = true;
 }
 
 template <typename I>
@@ -90,13 +72,26 @@ bool ParentCacheObjectDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
+  ceph_assert(m_initialized);
 
-  // if any failse, reads will go to rados
-  if(m_cache_client == nullptr || !m_cache_client->is_session_work() ||
-     m_object_store == nullptr || !m_initialized) {
-    ldout(cct, 5) << "SRO cache client session failed " << dendl;
+  /* if RO daemon still don't startup, or RO daemon crash,
+   * or session have any error, try to re-connect daemon.*/
+  if (!m_cache_client->is_session_work()) {
+    if(!m_re_connecting.load()) {
+      ldout(cct, 20) << "try to re-connct RO daemon. " << dendl;
+      m_re_connecting.store(true);
+
+      Context* on_finish = new FunctionContext([this](int ret) {
+        m_re_connecting.store(false);
+      });
+      create_cache_session(on_finish, true);
+    }
+
+    ldout(cct, 5) << "session don't work, dispatch current request to lower object layer " << dendl;
     return false;
   }
+
+  ceph_assert(m_cache_client->is_session_work());
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
                                      std::function<void(ObjectCacheRequest*)>>
@@ -149,9 +144,56 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
   ldout(cct, 20) << dendl;
 
   if (reg) {
-    ldout(cct, 20) << "SRO cache client open cache handler" << dendl;
+    ldout(cct, 20) << "Parent cache open cache handler" << dendl;
     m_object_store = new SharedPersistentObjectCacher<I>(m_image_ctx, m_image_ctx->shared_cache_path);
   }
+  return 0;
+}
+
+template <typename I>
+int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool is_reconnect) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+
+  Context* register_ctx = new FunctionContext([this, cct, on_finish](int ret) {
+    if (ret < 0) {
+      ldout(cct, 20) << "Parent cache fail to register client." << dendl;
+      handle_register_client(false);
+      on_finish->complete(-1);
+      return;
+    }
+    ceph_assert(m_cache_client->is_session_work());
+
+    handle_register_client(true);
+    on_finish->complete(0);
+  });
+
+  Context* connect_ctx = new FunctionContext(
+    [this, cct, register_ctx](int ret) {
+    if (ret < 0) {
+      ldout(cct, 20) << "Parent cache fail to connect RO daeomn." << dendl;
+      register_ctx->complete(-1);
+      return;
+    }
+
+    ldout(cct, 20) << "Parent cache connected to RO daemon." << dendl;
+
+    m_cache_client->register_client(register_ctx);
+  });
+
+  if (m_cache_client != nullptr && is_reconnect) {
+    // CacheClient's destruction will cleanup all details on old session.
+    delete m_cache_client;
+
+    // create new CacheClient to connect RO daemon.
+    std::string controller_path =
+      ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
+    m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
+  }
+
+  m_cache_client->run();
+
+  m_cache_client->connect(connect_ctx);
   return 0;
 }
 
