@@ -71,6 +71,10 @@ export class CephfsChartComponent implements OnChanges, OnInit {
         }
       ],
       options: {
+        title: {
+          text: this.mdsCounter.name,
+          display: true
+        },
         responsive: true,
         maintainAspectRatio: false,
         legend: {
