@@ -1482,6 +1482,10 @@ ceph_release_t cls_get_required_osd_release(cls_handle_t hclass) {
   return ceph_release_t::nautilus;
 }
 
+ceph_release_t cls_get_min_compatible_client(cls_handle_t hclass) {
+  return ceph_release_t::nautilus;
+}
+
 // stubs to silence TestClassHandler::open_class()
 PGLSFilter::~PGLSFilter()
 {}
