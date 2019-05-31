@@ -216,22 +216,26 @@ public:
 
   void get_sections(list<string>& sections);
 
-  int get_log_shard_id(const string& hash_key, int *shard_id);
-
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 };
 
 class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler_GenericMetaBE::Put
 {
+protected:
+  std::unique_ptr<RGWMetadataObject> oo;
+  RGWMetadataObject *old_obj{nullptr};
+  bool exists{false};
+
 public:
   RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                              string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-                             RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, type) {}
-  ~RGWMetadataHandlerPut_SObj() {}
+                             RGWMDLogSyncType type);
+  ~RGWMetadataHandlerPut_SObj();
 
+  int put_pre() override;
   int put() override;
-
-  virtual int put_checked(RGWMetadataObject *_old_obj);
+  virtual int put_check();
+  virtual int put_checked();
   virtual void encode_obj(bufferlist *bl) {}
 };
 

@@ -392,23 +392,35 @@ RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_ha
 {
 }
 
-int RGWMetadataHandlerPut_SObj::put()
+RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
+                                                       string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+                                                       RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, type) {
+}
+
+RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
+}
+
+int RGWMetadataHandlerPut_SObj::put_pre()
 {
-  RGWMetadataObject *old_obj{nullptr};
 #warning what about attrs?
   map<string, bufferlist> attrs;
-  int ret = get(&old_obj);
+  int ret = get(entry, &old_obj);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
+  exists = (ret != -ENOENT);
 
-  std::unique_ptr<RGWMetadataObject> oo(old_obj);
+  oo.reset(old_obj);
 
+  return 0;
+}
+
+int RGWMetadataHandlerPut_SObj::put_check()
+{
   auto old_ver = (!old_obj ? obj_version() : old_obj->get_version());
   auto old_mtime = (!old_obj ? ceph::real_time() : old_obj->get_mtime());
 
   // are we actually going to perform this put, or is it too old?
-  bool exists = (ret != -ENOENT);
   if (!handler->check_versions(exists, old_ver, old_mtime,
                                objv_tracker.write_version, obj->get_mtime(),
                                apply_type)) {
@@ -417,10 +429,20 @@ int RGWMetadataHandlerPut_SObj::put()
 
   objv_tracker.read_version = old_ver; /* maintain the obj version we just read */
 
-  return put_checked(old_obj);
+  return 0;
 }
 
-int RGWMetadataHandlerPut_SObj::put_checked(RGWMetadataObject *_old_obj)
+int RGWMetadataHandlerPut_SObj::put()
+{
+  int ret = put_check();
+  if (ret != 0) {
+    return ret;
+  }
+
+  return put_checked();
+}
+
+int RGWMetadataHandlerPut_SObj::put_checked()
 {
   RGWSI_MBSObj_PutParams params(obj->get_pattrs(), obj->get_mtime());
 
@@ -773,9 +795,3 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   }
 }
 
-int RGWMetadataManager::get_log_shard_id(const string& hash_key,
-                                         int *shard_id)
-{
-  *shard_id = rgw_shard_id(hash_key, cct->_conf->rgw_md_log_max_shards);
-  return 0;
-}
