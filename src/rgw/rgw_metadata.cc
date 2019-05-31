@@ -400,7 +400,7 @@ int RGWMetadataHandlerPut_SObj::put_pre()
 {
 #warning what about attrs?
   map<string, bufferlist> attrs;
-  int ret = get(entry, &old_obj);
+  int ret = get(&old_obj);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -408,11 +408,6 @@ int RGWMetadataHandlerPut_SObj::put_pre()
 
   oo.reset(old_obj);
 
-  return 0;
-}
-
-int RGWMetadataHandlerPut_SObj::put_check()
-{
   auto old_ver = (!old_obj ? obj_version() : old_obj->get_version());
   auto old_mtime = (!old_obj ? ceph::real_time() : old_obj->get_mtime());
 

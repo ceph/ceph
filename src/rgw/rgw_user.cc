@@ -2388,8 +2388,8 @@ public:
     RGWSI_User *user{nullptr};
   } svc;
 
-  RGWUserMetadataHandler(RGWSI_User *user_svc)  : RGWMetadataHandler_GenericMetaBE(user_svc->ctx(),
-                                                                                   user_svc->get_be_handler()) {
+  RGWUserMetadataHandler(RGWSI_User *user_svc) {
+    base_init(user_svc->ctx(), user_svc->get_be_handler());
     svc.user = user_svc;
   }
 
@@ -2459,7 +2459,7 @@ public:
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }
 
-  int put_checked(RGWMetadataObject *_old_obj) override;
+  int put_checked() override;
 };
 
 int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
@@ -2471,9 +2471,9 @@ int RGWUserMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& en
   return do_put_operate(&put_op);
 }
 
-int RGWMetadataHandlerPut_User::put_checked(RGWMetadataObject *_old_obj)
+int RGWMetadataHandlerPut_User::put_checked()
 {
-  RGWUserMetadataObject *old_obj = static_cast<RGWUserMetadataObject *>(_old_obj);
+  RGWUserMetadataObject *orig_obj = static_cast<RGWUserMetadataObject *>(old_obj);
   RGWUserCompleteInfo& uci = uobj->get_uci();
 
   map<string, bufferlist> *pattrs{nullptr};
@@ -2481,7 +2481,7 @@ int RGWMetadataHandlerPut_User::put_checked(RGWMetadataObject *_old_obj)
     pattrs = &uci.attrs;
   }
 
-  RGWUserInfo *pold_info = (old_obj ? &old_obj->get_uci().info : nullptr);
+  RGWUserInfo *pold_info = (orig_obj ? &orig_obj->get_uci().info : nullptr);
 
   auto mtime = obj->get_mtime();
 

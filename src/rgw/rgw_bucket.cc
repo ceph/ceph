@@ -2089,7 +2089,7 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("attrs", attrs, obj);
 }
 
-class RGWBucketMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
+class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   struct Svc {
@@ -2100,12 +2100,14 @@ public:
     RGWBucketCtl *bucket{nullptr};
   } ctl;
 
-  RGWBucketMetadataHandler(RGWSI_Bucket *bucket_svc,
-                           RGWBucketCtl *bucket_ctl) : RGWMetadataHandler_GenericMetaBE(bucket_svc->ctx(),
-                                                                                        bucket_svc->get_ep_be_handler()) {
+  RGWBucketMetadataHandler() {}
+
+  void init(RGWSI_Bucket *bucket_svc,
+            RGWBucketCtl *bucket_ctl) override {
+    base_init(bucket_svc->ctx(),
+              bucket_svc->get_ep_be_handler());
     svc.bucket = bucket_svc;
     ctl.bucket = bucket_ctl;
-    be_handler = svc.bucket->get_ep_be_handler();
   }
 
   string get_type() override { return "bucket"; }
@@ -2303,9 +2305,7 @@ WRITE_CLASS_ENCODER(archive_meta_info)
 
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
-  RGWArchiveBucketMetadataHandler(RGWSI_Bucket *bucket_svc,
-                                  RGWBucketCtl *bucket_ctl) : RGWBucketMetadataHandler(bucket_svc,
-                                                                                       bucket_ctl) {}
+  RGWArchiveBucketMetadataHandler() {}
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) override {
     auto cct = svc.bucket->ctx();
@@ -2456,7 +2456,7 @@ public:
 
 };
 
-class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
+class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
 
   int read_bucket_instance_entry(RGWSI_MetaBackend_Handler::Op *op,
@@ -2485,10 +2485,13 @@ public:
     RGWSI_BucketIndex *bi{nullptr};
   } svc;
 
-  RGWBucketInstanceMetadataHandler(RGWSI_Zone *zone_svc,
-                                   RGWSI_Bucket *bucket_svc,
-                                   RGWSI_BucketIndex *bi_svc) : RGWMetadataHandler_GenericMetaBE(bucket_svc->ctx(),
-                                                                                                 bucket_svc->get_bi_be_handler()) {
+  RGWBucketInstanceMetadataHandler() {}
+
+  void init(RGWSI_Zone *zone_svc,
+           RGWSI_Bucket *bucket_svc,
+           RGWSI_BucketIndex *bi_svc) {
+    base_init(bucket_svc->ctx(),
+              bucket_svc->get_bi_be_handler());
     svc.zone = zone_svc;
     svc.bucket = bucket_svc;
     svc.bi = bi_svc;
@@ -2661,9 +2664,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
 
 class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 public:
-  RGWArchiveBucketInstanceMetadataHandler(RGWSI_Zone *zone_svc,
-                                          RGWSI_Bucket *bucket_svc,
-                                          RGWSI_BucketIndex *bi_svc) : RGWBucketInstanceMetadataHandler(zone_svc, bucket_svc, bi_svc) {}
+  RGWArchiveBucketInstanceMetadataHandler() {}
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) override {
     ldout(cct, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
@@ -2671,18 +2672,25 @@ public:
   }
 };
 
+
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
-                           RGWSI_BucketIndex *bi_svc,
-                           RGWBucketMetadataHandler *_bm_handler,
-                           RGWBucketInstanceMetadataHandler *_bmi_handler) : cct(zone_svc->ctx()),
-                                                                             bm_handler(_bm_handler),
-                                                                             bmi_handler(_bmi_handler)
-                          
+                           RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
   svc.bi = bi_svc;
+}
+
+void RGWBucketCtl::init(RGWUserCtl *user_ctl,
+                        RGWBucketMetadataHandler *_bm_handler,
+                        RGWBucketInstanceMetadataHandler *_bmi_handler)
+{
+  ctl.user = user_ctl;
+
+  bm_handler = _bm_handler;
+  bmi_handler = _bmi_handler;
+
   bucket_be_handler = bm_handler->get_be_handler();
   bi_be_handler = bmi_handler->get_be_handler();
 }
@@ -2999,25 +3007,23 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& 
   return ctl.user->flush_bucket_stats(user_id, ent);
 }
 
-RGWMetadataHandler *RGWBucketMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_svc,
-                                                         RGWBucketCtl *bucket_ctl) {
-  return new RGWBucketMetadataHandler(bucket_svc, bucket_ctl);
+RGWBucketMetadataHandlerBase *RGWBucketMetaHandlerAllocator::alloc()
+{
+  return new RGWBucketMetadataHandler();
 }
 
-RGWMetadataHandler *RGWBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
-                                                                 RGWSI_Bucket *bucket_svc,
-                                                                 RGWSI_BucketIndex *bi_svc) {
-  return new RGWBucketInstanceMetadataHandler(zone_svc, bucket_svc, bi_svc);
+RGWBucketInstanceMetadataHandlerBase *RGWBucketInstanceMetaHandlerAllocator::alloc()
+{
+  return new RGWBucketInstanceMetadataHandler();
 }
 
-RGWMetadataHandler *RGWArchiveBucketMetaHandlerAllocator::alloc(RGWSI_Bucket *bucket_svc,
-                                                                RGWBucketCtl *bucket_ctl) {
-  return new RGWArchiveBucketMetadataHandler(bucket_svc, bucket_ctl);
+RGWBucketMetadataHandlerBase *RGWArchiveBucketMetaHandlerAllocator::alloc()
+{
+  return new RGWArchiveBucketMetadataHandler();
 }
 
-RGWMetadataHandler *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
-                                                                        RGWSI_Bucket *bucket_svc,
-                                                                        RGWSI_BucketIndex *bi_svc) {
-  return new RGWArchiveBucketInstanceMetadataHandler(zone_svc, bucket_svc, bi_svc);
+RGWBucketInstanceMetadataHandlerBase *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc()
+{
+  return new RGWArchiveBucketInstanceMetadataHandler();
 }
 

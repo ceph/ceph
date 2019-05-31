@@ -171,33 +171,41 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
-class RGWMetadataManager;
-class RGWMetadataHandler;
+class RGWBucketMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
+public:
+  virtual ~RGWBucketMetadataHandlerBase() {}
+  virtual void init(RGWSI_Bucket *bucket_svc,
+                    RGWBucketCtl *bucket_ctl) = 0;
+
+};
+
+class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
+public:
+  virtual ~RGWBucketInstanceMetadataHandlerBase() {}
+  virtual void init(RGWSI_Zone *zone_svc,
+                    RGWSI_Bucket *bucket_svc,
+                    RGWSI_BucketIndex *bi_svc) = 0;
+
+};
 
 class RGWBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc,
-                                   RGWBucketCtl *bucket_ctl);
+  static RGWBucketMetadataHandlerBase *alloc();
 };
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
-                                   RGWSI_Bucket *bucket_svc,
-                                   RGWSI_BucketIndex *bi_svc);
+  static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
 class RGWArchiveBucketMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Bucket *bucket_svc,
-                                   RGWBucketCtl *bucket_ctl);
+  static RGWBucketMetadataHandlerBase *alloc();
 };
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
-  static RGWMetadataHandler *alloc(RGWSI_Zone *zone_svc,
-                                   RGWSI_Bucket *bucket_svc,
-                                   RGWSI_BucketIndex *bi_svc);
+  static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
 extern void rgw_bucket_init(RGWMetadataManager *mm);
@@ -587,13 +595,11 @@ class RGWBucketCtl
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
-               RGWSI_BucketIndex *bi_svc,
-               RGWBucketMetadataHandler *_bm_handler,
-               RGWBucketInstanceMetadataHandler *_bmi_handler);
+               RGWSI_BucketIndex *bi_svc);
 
-  void init(RGWUserCtl *user_ctl) {
-    ctl.user = user_ctl;
-  }
+  void init(RGWUserCtl *user_ctl,
+            RGWBucketMetadataHandler *_bm_handler,
+            RGWBucketInstanceMetadataHandler *_bmi_handler);
 
   struct Bucket {
     struct GetParams {

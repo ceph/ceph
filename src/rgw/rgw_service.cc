@@ -70,7 +70,8 @@ int RGWServices_Def::init(CephContext *cct,
   finisher->init();
   bi_rados->init(zone.get(), rados.get());
   bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(),
-               bi_rados.get(), meta.get(), sync_modules.get());
+               bi_rados.get(), meta.get(), meta_be_sobj.get(),
+               sync_modules.get());
   cls->init(zone.get(), rados.get());
   mdlog->init(zone.get(), sysobj.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -301,12 +302,20 @@ int RGWCtlDef::init(RGWServices& svc)
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc(svc.zone, svc.meta_be_otp));
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
-  bucket.reset(new RGWBucketCtl(svc.zone, svc.bucket, svc.bi,
-                                (RGWBucketMetadataHandler *)meta.bucket.get()),
-                                (RGWBucketInstanceMetadataHandler *)meta.bucket_instance.get());
+  bucket.reset(new RGWBucketCtl(svc.zone,
+                                svc.bucket,
+                                svc.bi));
+
+  RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
+  RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
+
+  bucket_meta_handler->init(svc.bucket, bucket.get());
+  bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
 
   user->init(bucket.get());
-  bucket->init(user.get());
+  bucket->init(user.get(),
+               (RGWBucketMetadataHandler *)bucket_meta_handler,
+               (RGWBucketInstanceMetadataHandler *)bi_meta_handler);
 
   return 0;
 }
@@ -327,25 +336,25 @@ int RGWCtl::init(RGWServices& svc)
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
 
-  r = meta.user->init(meta.mgr);
+  r = meta.user->attach(meta.mgr);
   if (r < 0) {
     ldout(svc.cct, 0) << "ERROR: failed to start init meta.user ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = meta.bucket->init(meta.mgr);
+  r = meta.bucket->attach(meta.mgr);
   if (r < 0) {
     ldout(svc.cct, 0) << "ERROR: failed to start init meta.bucket ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = meta.bucket_instance->init(meta.mgr);
+  r = meta.bucket_instance->attach(meta.mgr);
   if (r < 0) {
     ldout(svc.cct, 0) << "ERROR: failed to start init meta.bucket_instance ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
-  r = meta.otp->init(meta.mgr);
+  r = meta.otp->attach(meta.mgr);
   if (r < 0) {
     ldout(svc.cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
     return r;

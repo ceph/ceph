@@ -59,9 +59,13 @@ protected:
   CephContext *cct;
 
 public:
-  RGWMetadataHandler(CephContext *_cct) : cct(_cct) {}
+  RGWMetadataHandler() {}
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
+
+  void base_init(CephContext *_cct) {
+    cct = _cct;
+  }
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
@@ -75,7 +79,7 @@ public:
 
   virtual string get_marker(void *handle) = 0;
 
-  virtual int init(RGWMetadataManager *manager);
+  virtual int attach(RGWMetadataManager *manager);
 };
 
 class RGWMetadataHandler_GenericMetaBE : public RGWMetadataHandler {
@@ -96,9 +100,13 @@ protected:
   virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
 public:
-  RGWMetadataHandler_GenericMetaBE(CephContext *_cct,
-                                   RGWSI_MetaBackend_Handler *_be_handler) : RGWMetadataHandler(_cct),
-                                                                             be_handler(_be_handler) {}
+  RGWMetadataHandler_GenericMetaBE() {}
+
+  void base_init(CephContext *_cct,
+            RGWSI_MetaBackend_Handler *_be_handler) {
+    RGWMetadataHandler::base_init(_cct);
+    be_handler = _be_handler;
+  }
 
   RGWSI_MetaBackend_Handler *get_be_handler() {
     return be_handler;
@@ -232,7 +240,9 @@ public:
 
   int put_pre() override;
   int put() override;
-  virtual int put_check();
+  virtual int put_check() {
+    return 0;
+  }
   virtual int put_checked();
   virtual void encode_obj(bufferlist *bl) {}
 };
