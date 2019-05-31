@@ -135,7 +135,8 @@ namespace rgw {
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWRequest(0), cct(_cct), user(_user)
+      :  RGWRequest(rgwlib.get_store()->get_new_req_id()), cct(_cct),
+	 user(_user)
       {}
 
     RGWUserInfo* get_user() { return user; }
