@@ -943,6 +943,12 @@ void Infiniband::init()
     ldout(cct, 0) << __func__ << " using the max allowed send buffers: " << tx_queue_len << dendl;
   }
 
+  //check for the memory region size misconfiguration
+  if ((uint64_t)cct->_conf->ms_async_rdma_buffer_size * tx_queue_len > device->device_attr.max_mr_size) {
+    lderr(cct) << __func__ << " Out of max memory region size " << dendl;
+    ceph_abort();
+  }
+
   ldout(cct, 1) << __func__ << " device allow " << device->device_attr.max_cqe
                 << " completion entries" << dendl;
 
