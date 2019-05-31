@@ -212,7 +212,7 @@ void PreReleaseRequest<I>::handle_flush_notifies(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_close_journal() {
   {
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     std::swap(m_journal, m_image_ctx.journal);
   }
 
@@ -248,7 +248,7 @@ void PreReleaseRequest<I>::handle_close_journal(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_close_object_map() {
   {
-    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker image_locker(m_image_ctx.image_lock);
     std::swap(m_object_map, m_image_ctx.object_map);
   }
 

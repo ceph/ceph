@@ -27,6 +27,7 @@ import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
 import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogram/osd-performance-histogram.component';
+import { OsdPgScrubModalComponent } from './osd/osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
@@ -38,7 +39,8 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
     OsdRecvSpeedModalComponent,
-    OsdReweightModalComponent
+    OsdReweightModalComponent,
+    OsdPgScrubModalComponent
   ],
   imports: [
     CommonModule,
@@ -73,7 +75,8 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     CrushmapComponent,
     LogsComponent,
     PrometheusListComponent,
-    OsdRecvSpeedModalComponent
+    OsdRecvSpeedModalComponent,
+    OsdPgScrubModalComponent
   ]
 })
 export class ClusterModule {}

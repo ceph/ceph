@@ -175,13 +175,14 @@ function rados_put_get_data() {
         ceph osd in ${last_osd} || return 1
         run_osd $dir ${last_osd} || return 1
         wait_for_clean || return 1
+        # Won't check for eio on get here -- recovery above might have fixed it
+    else
+        shard_id=$(expr $shard_id + 1)
+        inject_$inject ec data $poolname $objname $dir $shard_id || return 1
+        rados_get $dir $poolname $objname fail || return 1
+        rm $dir/ORIGINAL
     fi
 
-    shard_id=$(expr $shard_id + 1)
-    inject_$inject ec data $poolname $objname $dir $shard_id || return 1
-    # Now 2 out of 3 shards get an error, so should fail
-    rados_get $dir $poolname $objname fail || return 1
-    rm $dir/ORIGINAL
 }
 
 # Change the size of speificied shard

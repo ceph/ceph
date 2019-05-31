@@ -113,7 +113,7 @@ template <class Key, class Value, bool Ordered>
 void SimpleLRU<Key,Value,Ordered>::erase(const Key& key)
 {
   if (auto found = cache.find(key); found != cache.end()) {
-    lru.erase(found->second->second);
+    lru.erase(found->second.second);
     cache.erase(found);
   }
 }

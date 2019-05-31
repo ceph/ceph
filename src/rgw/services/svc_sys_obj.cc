@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core.h"
 #include "svc_rados.h"

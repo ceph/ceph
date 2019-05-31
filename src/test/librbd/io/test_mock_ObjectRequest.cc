@@ -43,8 +43,7 @@ template <>
 struct CopyupRequest<librbd::MockTestImageCtx> : public CopyupRequest<librbd::MockImageCtx> {
   static CopyupRequest* s_instance;
   static CopyupRequest* create(librbd::MockTestImageCtx *ictx,
-                               const std::string &oid, uint64_t objectno,
-                               Extents &&image_extents,
+                               uint64_t objectno, Extents &&image_extents,
                                const ZTracer::Trace &parent_trace) {
     return s_instance;
   }
@@ -273,7 +272,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   }
 
   void expect_create(MockTestImageCtx &mock_image_ctx, bool exclusive) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, exclusive))
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, exclusive, _))
       .Times(1);
   }
 
@@ -331,8 +330,7 @@ TEST_F(TestMockIoObjectRequest, Read) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
-    &bl, &extent_map, &ctx);
+    &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -360,9 +358,8 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    ictx->sparse_read_threshold_bytes, CEPH_NOSNAP, 0, {}, &bl, &extent_map,
-    &ctx);
+    &mock_image_ctx, 0, 0, ictx->sparse_read_threshold_bytes, CEPH_NOSNAP, 0,
+    {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -388,8 +385,7 @@ TEST_F(TestMockIoObjectRequest, ReadError) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
-    &bl, &extent_map, &ctx);
+    &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -436,8 +432,7 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
-    &bl, &extent_map, &ctx);
+    &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -484,8 +479,7 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
-    &bl, &extent_map, &ctx);
+    &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -537,8 +531,7 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
-    &bl, &extent_map, &ctx);
+    &mock_image_ctx, 0, 0, 4096, CEPH_NOSNAP, 0, {}, &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -572,8 +565,7 @@ TEST_F(TestMockIoObjectRequest, Write) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -607,8 +599,7 @@ TEST_F(TestMockIoObjectRequest, WriteFull) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -641,8 +632,7 @@ TEST_F(TestMockIoObjectRequest, WriteObjectMap) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -663,8 +653,7 @@ TEST_F(TestMockIoObjectRequest, WriteError) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -717,8 +706,7 @@ TEST_F(TestMockIoObjectRequest, Copyup) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -773,8 +761,7 @@ TEST_F(TestMockIoObjectRequest, CopyupRestart) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -821,8 +808,7 @@ TEST_F(TestMockIoObjectRequest, CopyupOptimization) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -862,8 +848,7 @@ TEST_F(TestMockIoObjectRequest, CopyupError) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -896,8 +881,8 @@ TEST_F(TestMockIoObjectRequest, DiscardRemove) {
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    mock_image_ctx.get_object_size(), mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, mock_image_ctx.get_object_size(),
+    mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -946,9 +931,8 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
-    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
+    &mock_image_ctx, 0, 0, mock_image_ctx.get_object_size(),
+    mock_image_ctx.snapc, OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -998,13 +982,13 @@ TEST_F(TestMockIoObjectRequest, DiscardTruncateAssertExists) {
   expect_assert_exists(mock_image_ctx, 0);
   expect_truncate(mock_image_ctx, 0, 0);
 
-  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _)).Times(0);
+  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _, _))
+    .Times(0);
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
-    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
+    &mock_image_ctx, 0, 0, mock_image_ctx.get_object_size(),
+    mock_image_ctx.snapc, OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1033,12 +1017,13 @@ TEST_F(TestMockIoObjectRequest, DiscardTruncate) {
   expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
   expect_truncate(mock_image_ctx, 1, 0);
 
-  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _)).Times(0);
+  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _, _))
+    .Times(0);
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 1,
-    mock_image_ctx.get_object_size() - 1, mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 1, mock_image_ctx.get_object_size() - 1,
+    mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1069,8 +1054,7 @@ TEST_F(TestMockIoObjectRequest, DiscardZero) {
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 1, 1, mock_image_ctx.snapc,
-    0, {}, &ctx);
+    &mock_image_ctx, 0, 1, 1, mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1098,8 +1082,8 @@ TEST_F(TestMockIoObjectRequest, DiscardDisableObjectMapUpdate) {
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
+    &mock_image_ctx, 0, 0, mock_image_ctx.get_object_size(),
+    mock_image_ctx.snapc,
     OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE |
       OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, {}, &ctx);
   req->send();
@@ -1129,8 +1113,8 @@ TEST_F(TestMockIoObjectRequest, DiscardNoOp) {
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
+    &mock_image_ctx, 0, 0, mock_image_ctx.get_object_size(),
+    mock_image_ctx.snapc,
     OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE |
       OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, {},
     &ctx);
@@ -1167,8 +1151,7 @@ TEST_F(TestMockIoObjectRequest, WriteSame) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteSameRequest::create_write_same(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, 4096, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1207,8 +1190,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWrite) {
   C_SaferCond ctx;
   uint64_t mismatch_offset;
   auto req = MockObjectWriteSameRequest::create_compare_and_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(cmp_bl),
-    std::move(bl), mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(cmp_bl), std::move(bl),
+    mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1247,8 +1230,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteFull) {
   C_SaferCond ctx;
   uint64_t mismatch_offset;
   auto req = MockObjectWriteSameRequest::create_compare_and_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(cmp_bl),
-    std::move(bl), mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(cmp_bl), std::move(bl),
+    mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1309,8 +1292,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteCopyup) {
   C_SaferCond ctx;
   uint64_t mismatch_offset;
   auto req = MockObjectWriteSameRequest::create_compare_and_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(cmp_bl),
-    std::move(bl), mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(cmp_bl), std::move(bl),
+    mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -1348,8 +1331,8 @@ TEST_F(TestMockIoObjectRequest, CompareAndWriteMismatch) {
   C_SaferCond ctx;
   uint64_t mismatch_offset;
   auto req = MockObjectWriteSameRequest::create_compare_and_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(cmp_bl),
-    std::move(bl), mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(cmp_bl), std::move(bl),
+    mock_image_ctx.snapc, &mismatch_offset, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-EILSEQ, ctx.wait());
   ASSERT_EQ(1ULL, mismatch_offset);
@@ -1383,8 +1366,7 @@ TEST_F(TestMockIoObjectRequest, ObjectMapError) {
 
   C_SaferCond ctx;
   auto req = MockObjectWriteRequest::create_write(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, std::move(bl),
-    mock_image_ctx.snapc, 0, {}, &ctx);
+    &mock_image_ctx, 0, 0, std::move(bl), mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();
   ASSERT_EQ(-EBLACKLISTED, ctx.wait());
 }

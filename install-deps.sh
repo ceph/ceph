@@ -70,7 +70,7 @@ function ensure_decent_gcc_on_ubuntu {
     local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
-    if dpkg --compare-versions $old ge 7.0; then
+    if dpkg --compare-versions $old ge ${new}.0; then
 	return
     fi
 
@@ -97,7 +97,7 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
     case $codename in
@@ -165,6 +165,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost-random1.67-dev \
 	ceph-libboost-regex1.67-dev \
 	ceph-libboost-system1.67-dev \
+	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
 }
@@ -247,7 +248,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         www/npm \
         www/fcgi \
         security/nss \
-        security/kbr5 \
+        security/krb5 \
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
@@ -274,14 +275,14 @@ else
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*)
-                ensure_decent_gcc_on_ubuntu 7 trusty
+                ensure_decent_gcc_on_ubuntu 8 trusty
                 ;;
             *Xenial*)
-                ensure_decent_gcc_on_ubuntu 7 xenial
-                install_boost_on_ubuntu xenial
+                ensure_decent_gcc_on_ubuntu 8 xenial
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
-                install_boost_on_ubuntu bionic
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc

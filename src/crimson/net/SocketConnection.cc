@@ -81,8 +81,8 @@ void SocketConnection::requeue_sent()
   out_seq -= sent.size();
   while (!sent.empty()) {
     auto m = sent.front();
-    sent.pop();
-    out_q.push(std::move(m));
+    sent.pop_front();
+    out_q.push_back(std::move(m));
   }
 }
 

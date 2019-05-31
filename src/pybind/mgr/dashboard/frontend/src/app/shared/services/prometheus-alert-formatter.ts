@@ -10,18 +10,15 @@ import {
   PrometheusNotificationAlert
 } from '../models/prometheus-alerts';
 import { NotificationService } from './notification.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class PrometheusAlertFormatter {
   constructor(private notificationService: NotificationService) {}
 
   sendNotifications(notifications: CdNotificationConfig[]) {
-    if (notifications.length > 0) {
-      this.notificationService.queueNotifications(notifications);
-    }
+    notifications.forEach((n) => this.notificationService.show(n));
   }
 
   convertToCustomAlerts(

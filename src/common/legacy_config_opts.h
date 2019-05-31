@@ -735,6 +735,7 @@ OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32) // make this < map_cache_size!
 OPTION(osd_min_pg_log_entries, OPT_U32)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32) // max entries, say when degraded, before we trim
 OPTION(osd_pg_log_dups_tracked, OPT_U32) // how many versions back to track combined in both pglog's regular + dup logs
+OPTION(osd_object_clean_region_max_num_intervals, OPT_INT) // number of intervals in clean_offsets
 OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT) // max entries factor before force recovery
 OPTION(osd_pg_log_trim_min, OPT_U32)
 OPTION(osd_pg_log_trim_max, OPT_U32)
@@ -1043,6 +1044,7 @@ OPTION(bluestore_default_buffered_write, OPT_BOOL)
 OPTION(bluestore_debug_misc, OPT_BOOL)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL)
 OPTION(bluestore_debug_small_allocations, OPT_INT)
+OPTION(bluestore_debug_too_many_blobs_threshold, OPT_INT)
 OPTION(bluestore_debug_freelist, OPT_BOOL)
 OPTION(bluestore_debug_prefill, OPT_FLOAT)
 OPTION(bluestore_debug_prefragment_max, OPT_INT)
@@ -1536,3 +1538,6 @@ OPTION(fake_statfs_for_testing, OPT_INT) // Set a value for kb and compute kb_us
 OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web tokens
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
+OPTION(debug_allow_any_pool_priority, OPT_BOOL)
+
+OPTION(crimson_debug_pg_always_active, OPT_BOOL)

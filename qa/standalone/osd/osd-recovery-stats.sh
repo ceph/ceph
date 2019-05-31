@@ -56,9 +56,9 @@ function above_margin() {
     return $(( $check >= $target && $check <= $target + $margin ? 0 : 1 ))
 }
 
-FIND_UPACT='grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
-FIND_FIRST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
-FIND_LAST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_UPACT='grep "pg[[]${PG}.*recovering.*update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
+FIND_FIRST='grep "pg[[]${PG}.*recovering.*update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_LAST='grep "pg[[]${PG}.*recovering.*update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
 
 function check() {
     local dir=$1
@@ -284,12 +284,12 @@ function TEST_recovery_sizedown() {
     local log=$dir/osd.${primary}.log
     check $dir $PG $primary replicated 0 0 $misplaced 0 || return 1
 
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
+    UPACT=$(grep "pg[[]${PG}.*recovering.*update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
 
     # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    FIRST=$(grep "pg[[]${PG}.*recovering.*update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
     below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(grep "pg[[]${PG}.*recovering.*update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
     above_margin $LAST 0 || return 1
 
     delete_pool $poolname

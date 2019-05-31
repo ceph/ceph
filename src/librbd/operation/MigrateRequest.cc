@@ -101,7 +101,7 @@ private:
 
   bool is_within_overlap_bounds() {
     I &image_ctx = this->m_image_ctx;
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
 
     auto overlap = std::min(image_ctx.size, image_ctx.migration_info.overlap);
     return overlap > 0 &&
@@ -118,8 +118,7 @@ private:
 
     if (is_within_overlap_bounds()) {
       bufferlist bl;
-      string oid = image_ctx.get_object_name(m_object_no);
-      auto req = new io::ObjectWriteRequest<I>(&image_ctx, oid, m_object_no, 0,
+      auto req = new io::ObjectWriteRequest<I>(&image_ctx, m_object_no, 0,
                                                std::move(bl), m_snapc, 0, {},
                                                ctx);
 
@@ -220,8 +219,7 @@ uint64_t MigrateRequest<I>::get_num_overlap_objects() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  RWLock::RLocker parent_locker(image_ctx.parent_lock);
+  RWLock::RLocker image_locker(image_ctx.image_lock);
 
   auto overlap = image_ctx.migration_info.overlap;
 

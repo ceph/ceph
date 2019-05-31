@@ -3,7 +3,6 @@
 from __future__ import absolute_import
 
 from .helper import DashboardTestCase, JList, JObj, JAny
-from pprint import pformat
 
 
 class SettingsTest(DashboardTestCase):

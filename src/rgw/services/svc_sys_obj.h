@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_SYS_OBJ_H
-#define CEPH_RGW_SERVICES_SYS_OBJ_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -269,6 +270,3 @@ public:
     return sysobj_svc->get_obj(*this, obj);
   }
 };
-
-#endif
-

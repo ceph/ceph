@@ -148,6 +148,8 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     } else if (op.add) {
       // bucket id may have changed (ie reshard)
       entry.bucket.bucket_id = update_entry.bucket.bucket_id;
+      // creation date may have changed (ie delete/recreate bucket)
+      entry.creation_time = update_entry.creation_time;
     }
 
     if (ret < 0) {

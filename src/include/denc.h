@@ -86,7 +86,7 @@ template<typename T>
 class DencDumper {
 public:
   DencDumper(const char* name,
-	     ceph::bufferlist::contiguous_appender& appender)
+	     const ceph::bufferlist::contiguous_appender& appender)
     : name{name},
       appender{appender},
       bl_offset{appender.bl.length()},
@@ -109,10 +109,10 @@ private:
       t &= t - 1;
     return bits <= 2;
   }
-  size_t space_size() {
+  size_t space_size() const {
     return appender.get_logical_offset() - appender.get_out_of_band_offset();
   }
-  void dump() {
+  void dump() const {
     char fn[PATH_MAX];
     ::snprintf(fn, sizeof(fn),
 	       ENCODE_STRINGIFY(ENCODE_DUMP_PATH) "/%s__%d.%x", name,
@@ -134,7 +134,7 @@ private:
     }
   }
   const char* name;
-  ceph::bufferlist::contiguous_appender& appender;
+  const ceph::bufferlist::contiguous_appender& appender;
   const size_t bl_offset;
   const size_t space_offset;
   const char* start;

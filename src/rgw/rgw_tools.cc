@@ -67,7 +67,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_autoscale_bias\": \"" +
+	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
 	stringify(bias) + "\"}",
 	inbl, NULL, NULL);
       if (r < 0) {
@@ -78,7 +78,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
       int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
       r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
-	pool.name + "\", \"var\": \"pg_num_min\": \"" +
+	pool.name + "\", \"var\": \"pg_num_min\", \"val\": \"" +
 	stringify(min) + "\"}",
 	inbl, NULL, NULL);
      if (r < 0) {
@@ -130,7 +130,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
 }
 
 int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
 {
   bufferlist::iterator iter;
@@ -149,13 +149,13 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_p
     int ret = rop.set_attrs(pattrs)
                  .set_last_mod(pmtime)
                  .set_objv_tracker(objv_tracker)
-                 .stat(null_yield);
+                 .stat(y);
     if (ret < 0)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
              .set_refresh_version(refresh_version)
-             .read(&bl, null_yield);
+             .read(&bl, y);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {
@@ -394,6 +394,7 @@ int RGWDataAccess::Bucket::init()
 				       tenant, name,
 				       bucket_info,
 				       &mtime,
+                                       null_yield,
 				       &attrs);
   if (ret < 0) {
     return ret;

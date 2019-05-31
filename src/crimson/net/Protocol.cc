@@ -72,7 +72,7 @@ seastar::future<> Protocol::close()
 seastar::future<> Protocol::send(MessageRef msg)
 {
   if (write_state != write_state_t::drop) {
-    conn.out_q.push(std::move(msg));
+    conn.out_q.push_back(std::move(msg));
     write_event();
   }
   return seastar::now();
@@ -87,57 +87,61 @@ seastar::future<> Protocol::keepalive()
   return seastar::now();
 }
 
-void Protocol::notify_keepalive_ack()
+void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
 {
-  if (!need_keepalive_ack) {
-    need_keepalive_ack = true;
-    write_event();
-  }
+  logger().debug("{} got keepalive ack {}", conn, _keepalive_ack);
+  keepalive_ack = _keepalive_ack;
+  write_event();
 }
 
 seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
 {
   switch (write_state) {
-   case write_state_t::open:
-    return seastar::futurize_apply([this] {
-      if (need_keepalive) {
-        return do_keepalive()
-        .then([this] { need_keepalive = false; });
+   case write_state_t::open: {
+    size_t num_msgs = conn.out_q.size();
+    // we must have something to write...
+    ceph_assert(num_msgs || need_keepalive || keepalive_ack.has_value());
+    Message* msg_ptr = nullptr;
+    if (likely(num_msgs)) {
+      msg_ptr = conn.out_q.front().get();
+    }
+    // sweep all pending writes with the concrete Protocol
+    return socket->write(do_sweep_messages(
+        conn.out_q, num_msgs, need_keepalive, keepalive_ack))
+    .then([this, msg_ptr, num_msgs, prv_keepalive_ack=keepalive_ack] {
+      need_keepalive = false;
+      if (keepalive_ack == prv_keepalive_ack) {
+        keepalive_ack = std::nullopt;
       }
-      return seastar::now();
-    }).then([this] {
-      if (need_keepalive_ack) {
-        return do_keepalive_ack()
-        .then([this] { need_keepalive_ack = false; });
+      if (likely(num_msgs && msg_ptr == conn.out_q.front().get())) {
+        // we have sent some messages successfully
+        // and the out_q was not reset during socket write
+        conn.out_q.erase(conn.out_q.begin(), conn.out_q.begin()+num_msgs);
       }
-      return seastar::now();
-    }).then([this] {
-      if (!conn.out_q.empty()){
-        MessageRef msg = conn.out_q.front();
-        return write_message(msg)
-        .then([this, msg] {
-          if (msg == conn.out_q.front()) {
-            conn.out_q.pop();
-          }
-          return stop_t::no;
-        });
-      } else {
+      if (conn.out_q.empty() && !keepalive_ack.has_value()) {
+        // good, we have nothing pending to send now.
         return socket->flush().then([this] {
-          if (!conn.out_q.empty()) {
-            return stop_t::no;
-          } else {
-            // the dispatching can only stop when out_q is empty
+          if (conn.out_q.empty() && !need_keepalive && !keepalive_ack.has_value()) {
+            // still nothing pending to send after flush,
+            // the dispatching can ONLY stop now
             ceph_assert(write_dispatching);
             write_dispatching = false;
-            return stop_t::yes;
+            return seastar::make_ready_future<stop_t>(stop_t::yes);
+          } else {
+            // something is pending to send during flushing
+            return seastar::make_ready_future<stop_t>(stop_t::no);
           }
         });
+      } else {
+        // messages were enqueued during socket write
+        return seastar::make_ready_future<stop_t>(stop_t::no);
       }
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().warn("{} do_write_dispatch_sweep() fault: {}", conn, eptr);
       close();
-      return stop_t::no;
+      return seastar::make_ready_future<stop_t>(stop_t::no);
     });
+   }
    case write_state_t::delay: {
     // delay dispatching writes until open
     return state_changed.get_shared_future()

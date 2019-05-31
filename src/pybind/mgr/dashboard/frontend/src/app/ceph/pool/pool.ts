@@ -1,5 +1,5 @@
 import { ExecutingTask } from '../../shared/models/executing-task';
-import { PoolStat } from './pool-stat';
+import { PoolStats } from './pool-stat';
 
 export class Pool {
   cache_target_full_ratio_micro: number;
@@ -58,14 +58,7 @@ export class Pool {
   min_write_recency_for_promote: number;
   read_tier: number;
   pg_status: string;
-  stats?: {
-    bytes_used?: PoolStat;
-    max_avail?: PoolStat;
-    rd_bytes?: PoolStat;
-    wr_bytes?: PoolStat;
-    rd?: PoolStat;
-    wr?: PoolStat;
-  };
+  stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
 

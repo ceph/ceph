@@ -18,7 +18,7 @@ export class PerformanceCounterComponent {
       this.fromLink = params.fromLink || PerformanceCounterComponent.defaultFromLink;
     });
     this.route.params.subscribe((params: { type: string; id: string }) => {
-      this.serviceId = params.id;
+      this.serviceId = decodeURIComponent(params.id);
       this.serviceType = params.type;
     });
   }

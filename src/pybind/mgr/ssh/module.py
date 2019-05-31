@@ -18,7 +18,7 @@ except ImportError as e:
     remoto = None
     remoto_import_error = str(e)
 
-DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
+DATEFMT = '%Y-%m-%dT%H:%M:%S.%f%z'
 
 # high-level TODO:
 #  - bring over some of the protections from ceph-deploy that guard against
@@ -54,6 +54,7 @@ class SSHReadCompletionReady(SSHReadCompletion):
 
 class SSHWriteCompletion(orchestrator.WriteCompletion):
     def __init__(self, result):
+        super(SSHWriteCompletion, self).__init__()
         if isinstance(result, multiprocessing.pool.AsyncResult):
             self._result = [result]
         else:
@@ -83,6 +84,7 @@ class SSHWriteCompletion(orchestrator.WriteCompletion):
 
 class SSHWriteCompletionReady(SSHWriteCompletion):
     def __init__(self, result):
+        orchestrator.WriteCompletion.__init__(self)
         self._result = result
 
     @property
@@ -181,8 +183,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @staticmethod
     def time_from_string(timestr):
-        # drop the 'Z' timezone indication, it's always UTC
-        timestr = timestr.rstrip('Z')
         return datetime.datetime.strptime(timestr, DATEFMT)
 
     def _get_cluster_fsid(self):

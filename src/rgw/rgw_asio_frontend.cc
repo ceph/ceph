@@ -36,19 +36,22 @@ template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
+  boost::asio::yield_context yield;
   boost::beast::flat_buffer& buffer;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
+           boost::asio::yield_context yield,
            boost::beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), buffer(buffer)
+        cct(cct), stream(stream), yield(yield), buffer(buffer)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
-    auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
+                                          yield[ec]);
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       throw rgw::io::Exception(ec.value(), std::system_category());
@@ -64,7 +67,7 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
-      http::read_some(stream, buffer, parser, ec);
+      http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == http::error::partial_message ||
           ec == http::error::need_buffer) {
         break;
@@ -81,7 +84,8 @@ class StreamIO : public rgw::asio::ClientIO {
 using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
 
 template <typename Stream>
-void handle_connection(RGWProcessEnv& env, Stream& stream,
+void handle_connection(boost::asio::io_context& context,
+                       RGWProcessEnv& env, Stream& stream,
                        boost::beast::flat_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        rgw::dmclock::Scheduler *scheduler,
@@ -142,7 +146,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
-      StreamIO real_client{cct, stream, parser, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
                            socket.local_endpoint(),
                            socket.remote_endpoint()};
 
@@ -152,7 +156,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      auto y = optional_yield{socket.get_io_context(), yield};
+      auto y = optional_yield{context, yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y, scheduler);
     }
@@ -397,6 +401,9 @@ int AsioFrontend::init()
     }
     listeners.emplace_back(context);
     listeners.back().endpoint.port(port);
+
+    listeners.emplace_back(context);
+    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
   }
 
   auto endpoints = config.equal_range("endpoint");
@@ -417,13 +424,31 @@ int AsioFrontend::init()
     }
   }
   
+
+  bool socket_bound = false;
   // start listeners
   for (auto& l : listeners) {
     l.acceptor.open(l.endpoint.protocol(), ec);
     if (ec) {
+      if (ec == boost::asio::error::address_family_not_supported) {
+	ldout(ctx(), 0) << "WARNING: cannot open socket for endpoint=" << l.endpoint
+			<< ", " << ec.message() << dendl;
+	continue;
+      }
+
       lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
       return -ec.value();
     }
+
+    if (l.endpoint.protocol() == tcp::v6()) {
+      l.acceptor.set_option(boost::asio::ip::v6_only(true), ec);
+      if (ec) {
+        lderr(ctx()) << "failed to set v6_only socket option: "
+		     << ec.message() << dendl;
+	return -ec.value();
+      }
+    }
+
     l.acceptor.set_option(tcp::acceptor::reuse_address(true));
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
@@ -431,6 +456,7 @@ int AsioFrontend::init()
           << ": " << ec.message() << dendl;
       return -ec.value();
     }
+
     l.acceptor.listen(boost::asio::socket_base::max_connections);
     l.acceptor.async_accept(l.socket,
                             [this, &l] (boost::system::error_code ec) {
@@ -438,7 +464,13 @@ int AsioFrontend::init()
                             });
 
     ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
+    socket_bound = true;
   }
+  if (!socket_bound) {
+    lderr(ctx()) << "Unable to listen at any endpoints" << dendl;
+    return -EINVAL;
+  }
+
   return drop_privileges(ctx());
 }
 
@@ -503,6 +535,10 @@ int AsioFrontend::init_ssl()
     listeners.emplace_back(context);
     listeners.back().endpoint.port(port);
     listeners.back().use_ssl = true;
+
+    listeners.emplace_back(context);
+    listeners.back().endpoint = tcp::endpoint(tcp::v6(), port);
+    listeners.back().use_ssl = true;
   }
 
   auto endpoints = config.equal_range("ssl_endpoint");
@@ -560,7 +596,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           return;
         }
         buffer.consume(bytes);
-        handle_connection(env, stream, buffer, true, pause_mutex,
+        handle_connection(context, env, stream, buffer, true, pause_mutex,
                           scheduler.get(), ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
@@ -578,7 +614,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(conn);
         boost::beast::flat_buffer buffer;
         boost::system::error_code ec;
-        handle_connection(env, s, buffer, false, pause_mutex,
+        handle_connection(context, env, s, buffer, false, pause_mutex,
                           scheduler.get(), ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });

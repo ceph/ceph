@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
+#include "librbd/io/Types.h"
 #include <map>
 
 class ObjectExtent;
@@ -14,7 +15,7 @@ namespace librbd {
 namespace io {
 namespace util {
 
-bool assemble_write_same_extent(const ObjectExtent &object_extent,
+bool assemble_write_same_extent(const LightweightObjectExtent &object_extent,
                                 const ceph::bufferlist& data,
                                 ceph::bufferlist *ws_data,
                                 bool force_write);

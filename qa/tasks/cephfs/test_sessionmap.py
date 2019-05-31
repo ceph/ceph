@@ -1,7 +1,6 @@
 from StringIO import StringIO
 import json
 import logging
-from unittest import SkipTest
 
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
@@ -193,7 +192,7 @@ class TestSessionMap(CephFSTestCase):
 
     def test_session_reject(self):
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Requires FUSE client to inject client metadata")
+            self.skipTest("Requires FUSE client to inject client metadata")
 
         self.mount_a.run_shell(["mkdir", "foo"])
         self.mount_a.run_shell(["mkdir", "foo/bar"])

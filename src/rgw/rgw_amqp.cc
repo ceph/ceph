@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "rgw_amqp.h"
 #include <atomic>
 #include <amqp.h>
@@ -797,7 +798,7 @@ public:
       // when a new connection is added.
       connections.max_load_factor(10.0);
       // give the runner thread a name for easier debugging
-      const auto rc = pthread_setname_np(runner.native_handle(), "amqp_manager");
+      const auto rc = ceph_pthread_setname(runner.native_handle(), "amqp_manager");
       ceph_assert(rc==0);
   }
 

@@ -12,6 +12,7 @@ import * as _ from 'lodash';
 
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
+import { CdDatePipe } from '../../pipes/cd-date.pipe';
 import { TableComponent } from '../table/table.component';
 
 class Item {
@@ -61,7 +62,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   @Output()
   fetchData = new EventEmitter();
 
-  constructor() {}
+  constructor(private datePipe: CdDatePipe) {}
 
   ngOnInit() {
     this.columns = [
@@ -188,6 +189,21 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     } else if (isEmpty && !this.hideEmpty && v.value !== '') {
       v.value = '';
     }
+    if (!isEmpty && _.isString(v.value)) {
+      v.value = this.convertString(v.value);
+    }
     return v;
+  }
+
+  private convertString(s: string) {
+    const date = this.isDate(s) && this.datePipe.transform(s);
+    return date || s;
+  }
+
+  private isDate(s) {
+    const sep = '[ -:.TZ]';
+    const n = '\\d{2}' + sep;
+    //                            year     -    m - d - h : m : s . someRest  Z (if UTC)
+    return s.match(new RegExp('^\\d{4}' + sep + n + n + n + n + n + '\\d*' + 'Z?$'));
   }
 }

@@ -158,7 +158,6 @@ public:
       .WillOnce(Invoke([&mock_image_ctx, &mock_io_image_dispatch_spec, r]() {
                   auto aio_comp = mock_io_image_dispatch_spec.s_instance->aio_comp;
                   auto ctx = new FunctionContext([aio_comp](int r) {
-                    aio_comp->get();
                     aio_comp->fail(r);
                   });
                   mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);

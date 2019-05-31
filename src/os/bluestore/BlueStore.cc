@@ -585,6 +585,74 @@ static int get_key_pool_stat(const string& key, uint64_t* pool_id)
   return 0;
 }
 
+template <int LogLevelV>
+void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
+{
+  uint64_t pos = 0;
+  for (auto& s : em.shards) {
+    dout(LogLevelV) << __func__ << "  shard " << *s.shard_info
+		    << (s.loaded ? " (loaded)" : "")
+		    << (s.dirty ? " (dirty)" : "")
+		    << dendl;
+  }
+  for (auto& e : em.extent_map) {
+    dout(LogLevelV) << __func__ << "  " << e << dendl;
+    ceph_assert(e.logical_offset >= pos);
+    pos = e.logical_offset + e.length;
+    const bluestore_blob_t& blob = e.blob->get_blob();
+    if (blob.has_csum()) {
+      vector<uint64_t> v;
+      unsigned n = blob.get_csum_count();
+      for (unsigned i = 0; i < n; ++i)
+	v.push_back(blob.get_csum_item(i));
+      dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
+		      << dendl;
+    }
+    std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
+    for (auto& i : e.blob->shared_blob->bc.buffer_map) {
+      dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
+		      << "~" << i.second->length << std::dec
+		      << " " << *i.second << dendl;
+    }
+  }
+}
+
+template <int LogLevelV>
+void _dump_onode(CephContext *cct, const BlueStore::Onode& o)
+{
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
+    return;
+  dout(LogLevelV) << __func__ << " " << &o << " " << o.oid
+		  << " nid " << o.onode.nid
+		  << " size 0x" << std::hex << o.onode.size
+		  << " (" << std::dec << o.onode.size << ")"
+		  << " expected_object_size " << o.onode.expected_object_size
+		  << " expected_write_size " << o.onode.expected_write_size
+		  << " in " << o.onode.extent_map_shards.size() << " shards"
+		  << ", " << o.extent_map.spanning_blob_map.size()
+		  << " spanning blobs"
+		  << dendl;
+  for (auto p = o.onode.attrs.begin();
+       p != o.onode.attrs.end();
+       ++p) {
+    dout(LogLevelV) << __func__ << "  attr " << p->first
+		    << " len " << p->second.length() << dendl;
+  }
+  _dump_extent_map<LogLevelV>(cct, o.extent_map);
+}
+
+template <int LogLevelV>
+void _dump_transaction(CephContext *cct, ObjectStore::Transaction *t)
+{
+  dout(LogLevelV) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  f.open_object_section("transaction");
+  t->dump(&f);
+  f.close_section();
+  f.flush(*_dout);
+  *_dout << dendl;
+}
+
 // merge operators
 
 struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
@@ -1628,6 +1696,16 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
 
+void BlueStore::SharedBlob::dump(Formatter* f) const
+{
+  f->dump_bool("loaded", loaded);
+  if (loaded) {
+    persistent->dump(f);
+  } else {
+    f->dump_unsigned("sbid_unloaded", sbid_unloaded);
+  }
+}
+
 ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 {
   out << "SharedBlob(" << &sb;
@@ -1730,6 +1808,17 @@ void BlueStore::SharedBlobSet::dump(CephContext *cct)
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+
+void BlueStore::Blob::dump(Formatter* f) const
+{
+  if (is_spanning()) {
+    f->dump_unsigned("spanning_id ", id);
+  }
+  blob.dump(f);
+  if (shared_blob) {
+    f->dump_object("shared", *shared_blob);
+  }
+}
 
 ostream& operator<<(ostream& out, const BlueStore::Blob& b)
 {
@@ -1970,6 +2059,14 @@ void BlueStore::Blob::decode(
 
 // Extent
 
+void BlueStore::Extent::dump(Formatter* f) const
+{
+  f->dump_unsigned("logical_offset", logical_offset);
+  f->dump_unsigned("length", length);
+  f->dump_unsigned("blob_offset", blob_offset);
+  f->dump_object("blob", *blob);
+}
+
 ostream& operator<<(ostream& out, const BlueStore::Extent& e)
 {
   return out << std::hex << "0x" << e.logical_offset << "~" << e.length
@@ -1998,6 +2095,16 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
   : onode(o),
     inline_bl(
       o->c->store->cct->_conf->bluestore_extent_map_inline_shard_prealloc_size) {
+}
+
+void BlueStore::ExtentMap::dump(Formatter* f) const
+{
+  f->open_array_section("extents");
+
+  for (auto& e : extent_map) {
+      f->dump_object("extent", e);
+  }
+  f->close_section();
 }
 
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
@@ -2234,6 +2341,8 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
       if (bid < 0) bid = 0;
     }
   } while (bid != begin_bid);
+  auto cct = onode->c->store->cct; // used by dout
+  _dump_onode<0>(cct, *onode);
   ceph_abort_msg("no available blob id");
 }
 
@@ -2432,6 +2541,14 @@ void BlueStore::ExtentMap::reshard(
       shard_end = sp->offset;
     }
     Extent dummy(needs_reshard_begin);
+
+    bool was_too_many_blobs_check = false;
+    auto too_many_blobs_threshold =
+      g_conf()->bluestore_debug_too_many_blobs_threshold;
+    auto& dumped_onodes = onode->c->cache->dumped_onodes;
+    decltype(onode->c->cache->dumped_onodes)::value_type* oid_slot = nullptr;
+    decltype(onode->c->cache->dumped_onodes)::value_type* oldest_slot = nullptr;
+
     for (auto e = extent_map.lower_bound(dummy); e != extent_map.end(); ++e) {
       if (e->logical_offset >= needs_reshard_end) {
 	break;
@@ -2449,6 +2566,7 @@ void BlueStore::ExtentMap::reshard(
 	dout(30) << __func__ << "  shard 0x" << std::hex << shard_start
 		 << " to 0x" << shard_end << std::dec << dendl;
       }
+
       if (e->blob_escapes_range(shard_start, shard_end - shard_start)) {
 	if (!e->blob->is_spanning()) {
 	  // We have two options: (1) split the blob into pieces at the
@@ -2488,6 +2606,22 @@ void BlueStore::ExtentMap::reshard(
             b->id = bid;
 	    spanning_blob_map[b->id] = b;
 	    dout(20) << __func__ << "    adding spanning " << *b << dendl;
+	    if (!was_too_many_blobs_check &&
+	      too_many_blobs_threshold &&
+	      spanning_blob_map.size() >= size_t(too_many_blobs_threshold)) {
+
+	      was_too_many_blobs_check = true;
+	      for (size_t i = 0; i < dumped_onodes.size(); ++i) {
+		if (dumped_onodes[i].first == onode->oid) {
+		  oid_slot = &dumped_onodes[i];
+		  break;
+		}
+		if (!oldest_slot || (oldest_slot &&
+		    dumped_onodes[i].second < oldest_slot->second)) {
+		  oldest_slot = &dumped_onodes[i];
+		}
+	      }
+	    }
 	  }
 	}
       } else {
@@ -2496,6 +2630,23 @@ void BlueStore::ExtentMap::reshard(
 	  e->blob->id = -1;
 	  dout(30) << __func__ << "    un-spanning " << *e->blob << dendl;
 	}
+      }
+    }
+    bool do_dump = (!oid_slot && was_too_many_blobs_check) ||
+      (oid_slot &&
+	(mono_clock::now() - oid_slot->second >= make_timespan(5 * 60)));
+    if (do_dump) {
+      dout(0) << __func__
+	      << " spanning blob count exceeds threshold, "
+	      << spanning_blob_map.size() << " spanning blobs"
+	      << dendl;
+      _dump_onode<0>(cct, *onode);
+      if (oid_slot) {
+	oid_slot->second = mono_clock::now();
+      } else {
+	ceph_assert(oldest_slot);
+	oldest_slot->first = onode->oid;
+	oldest_slot->second = mono_clock::now();
       }
     }
   }
@@ -3093,6 +3244,12 @@ void BlueStore::Onode::flush()
     }
   }
   ldout(c->store->cct, 20) << __func__ << " done" << dendl;
+}
+
+void BlueStore::Onode::dump(Formatter* f) const
+{
+  onode.dump(f);
+  extent_map.dump(f);
 }
 
 // =======================================================
@@ -4356,13 +4513,6 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 int BlueStore::_open_path()
 {
   // sanity check(s)
-  auto osd_max_object_size =
-    cct->_conf.get_val<Option::size_t>("osd_max_object_size");
-  if (osd_max_object_size >= (size_t)OBJECT_MAX_SIZE) {
-    derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
-      << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
-    return -EINVAL;
-  }
   ceph_assert(path_fd < 0);
   path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY|O_CLOEXEC));
   if (path_fd < 0) {
@@ -7044,7 +7194,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-      _dump_onode(o);
+      _dump_onode<30>(cct, *o);
       // shards
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
@@ -7398,7 +7548,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    if (misref_extents.intersects(e.offset, e.length)) {
 	      if (first_dump) {
 		first_dump = false;
-		_dump_onode<10>(o);
+		_dump_onode<10>(cct, *o);
 	      }
 	      broken_blob = true;
 	      break;
@@ -8397,7 +8547,7 @@ int BlueStore::_do_read(
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
   LOG_LATENCY(logger, cct, l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
-  _dump_onode(o);
+  _dump_onode<30>(cct, *o);
 
   ready_regions_t ready_regions;
 
@@ -8798,7 +8948,7 @@ int BlueStore::_fiemap(
     if (!o || !o->exists) {
       return -ENOENT;
     }
-    _dump_onode(o);
+    _dump_onode<30>(cct, *o);
 
     dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	     << " size 0x" << o->onode.size << std::dec << dendl;
@@ -8877,6 +9027,42 @@ int BlueStore::fiemap(
   if (r >= 0) {
     m.move_into(destmap);
   }
+  return r;
+}
+
+int BlueStore::dump_onode(CollectionHandle &c_,
+  const ghobject_t& oid,
+  const string& section_name,
+  Formatter *f)
+{
+  Collection *c = static_cast<Collection *>(c_.get());
+  dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
+  if (!c->exists)
+    return -ENOENT;
+
+  int r;
+  {
+    RWLock::RLocker l(c->lock);
+
+    OnodeRef o = c->get_onode(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+    // FIXME minor: actually the next line isn't enough to
+    // load shared blobs. Leaving as is for now..
+    //
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+
+    _dump_onode<0>(cct, *o);
+    f->open_object_section(section_name.c_str());
+    o->dump(f);
+    f->close_section();
+    r = 0;
+  }
+ out:
+  dout(10) << __func__ << " " << c->cid << " " << oid
+	   << " = " << r << dendl;
   return r;
 }
 
@@ -10450,7 +10636,20 @@ void BlueStore::_kv_sync_thread()
 	if (!bluefs_extents_reclaiming.empty()) {
 	  dout(0) << __func__ << " releasing old bluefs 0x" << std::hex
 		   << bluefs_extents_reclaiming << std::dec << dendl;
+	  int r = 0;
+	  if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+	    r = bdev->queue_discard(bluefs_extents_reclaiming);
+	    if (r == 0) {
+	      goto clear;
+	    }
+	  } else if (cct->_conf->bdev_enable_discard) {
+	    for (auto p = bluefs_extents_reclaiming.begin(); p != bluefs_extents_reclaiming.end(); ++p) {
+	      bdev->discard(p.get_start(), p.get_len());
+	    }
+	  }
+
 	  alloc->release(bluefs_extents_reclaiming);
+clear:
 	  bluefs_extents_reclaiming.clear();
 	}
       }
@@ -10867,7 +11066,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
 
-  _dump_transaction(t);
+  _dump_transaction<30>(cct, t);
 
   vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
@@ -10980,7 +11179,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       derr << __func__ << " error " << cpp_strerror(r)
            << " not handled on operation " << op->op
            << " (op " << pos << ", counting from 0)" << dendl;
-      _dump_transaction<0>(t);
+      _dump_transaction<0>(cct, t);
       ceph_abort_msg("unexpected error");
     }
 
@@ -11224,7 +11423,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
              << " (op " << pos << ", counting from 0)"
              << dendl;
         derr << msg << dendl;
-        _dump_transaction<0>(t);
+        _dump_transaction<0>(cct, t);
 	ceph_abort_msg("unexpected error");
       }
     }
@@ -11246,74 +11445,6 @@ int BlueStore::_touch(TransContext *txc,
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
-}
-
-template <int LogLevelV>
-void BlueStore::_dump_onode(const OnodeRef& o)
-{
-  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
-    return;
-  dout(LogLevelV) << __func__ << " " << o << " " << o->oid
-		  << " nid " << o->onode.nid
-		  << " size 0x" << std::hex << o->onode.size
-		  << " (" << std::dec << o->onode.size << ")"
-		  << " expected_object_size " << o->onode.expected_object_size
-		  << " expected_write_size " << o->onode.expected_write_size
-		  << " in " << o->onode.extent_map_shards.size() << " shards"
-		  << ", " << o->extent_map.spanning_blob_map.size()
-		  << " spanning blobs"
-		  << dendl;
-  for (auto p = o->onode.attrs.begin();
-       p != o->onode.attrs.end();
-       ++p) {
-    dout(LogLevelV) << __func__ << "  attr " << p->first
-		    << " len " << p->second.length() << dendl;
-  }
-  _dump_extent_map<LogLevelV>(o->extent_map);
-}
-
-template <int LogLevelV>
-void BlueStore::_dump_extent_map(ExtentMap &em)
-{
-  uint64_t pos = 0;
-  for (auto& s : em.shards) {
-    dout(LogLevelV) << __func__ << "  shard " << *s.shard_info
-		    << (s.loaded ? " (loaded)" : "")
-		    << (s.dirty ? " (dirty)" : "")
-		    << dendl;
-  }
-  for (auto& e : em.extent_map) {
-    dout(LogLevelV) << __func__ << "  " << e << dendl;
-    ceph_assert(e.logical_offset >= pos);
-    pos = e.logical_offset + e.length;
-    const bluestore_blob_t& blob = e.blob->get_blob();
-    if (blob.has_csum()) {
-      vector<uint64_t> v;
-      unsigned n = blob.get_csum_count();
-      for (unsigned i = 0; i < n; ++i)
-	v.push_back(blob.get_csum_item(i));
-      dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
-		      << dendl;
-    }
-    std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
-    for (auto& i : e.blob->shared_blob->bc.buffer_map) {
-      dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
-		      << "~" << i.second->length << std::dec
-		      << " " << *i.second << dendl;
-    }
-  }
-}
-
-template <int LogLevelV>
-void BlueStore::_dump_transaction(Transaction *t)
-{
-  dout(LogLevelV) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  f.open_object_section("transaction");
-  t->dump(&f);
-  f.close_section();
-  f.flush(*_dout);
-  *_dout << dendl;
 }
 
 void BlueStore::_pad_zeros(
@@ -11685,14 +11816,12 @@ void BlueStore::_do_write_small(
   } while (any_change);
 
   // new blob.
-  
   BlobRef b = c->new_blob();
   uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
   wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length, true, true);
-  logger->inc(l_bluestore_write_small_new);
 
   return;
 }
@@ -12064,12 +12193,14 @@ int BlueStore::_do_alloc_write(
 	  });
         ceph_assert(r == 0);
 	op->data = *l;
+	logger->inc(l_bluestore_write_small_deferred);
       } else {
 	b->get_blob().map_bl(
 	  b_off, *l,
 	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t, &txc->ioc, false);
 	  });
+	logger->inc(l_bluestore_write_small_new);
       }
     }
   }
@@ -12367,7 +12498,7 @@ int BlueStore::_do_write(
 	   << " bytes"
 	   << " fadvise_flags 0x" << std::hex << fadvise_flags << std::dec
 	   << dendl;
-  _dump_onode(o);
+  _dump_onode<30>(cct, *o);
 
   if (length == 0) {
     return 0;
@@ -12484,7 +12615,7 @@ int BlueStore::_do_zero(TransContext *txc,
 	   << dendl;
   int r = 0;
 
-  _dump_onode(o);
+  _dump_onode<30>(cct, *o);
 
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
@@ -12512,7 +12643,7 @@ void BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
-  _dump_onode(o);
+  _dump_onode<30>(cct, *o);
 
   if (offset == o->onode.size)
     return;
@@ -13056,12 +13187,12 @@ int BlueStore::_do_clone_range(
 	   << " 0x" << dstoff << "~" << length << std::dec << dendl;
   oldo->extent_map.fault_range(db, srcoff, length);
   newo->extent_map.fault_range(db, dstoff, length);
-  _dump_onode(oldo);
-  _dump_onode(newo);
+  _dump_onode<30>(cct, *oldo);
+  _dump_onode<30>(cct, *newo);
 
   oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
-  _dump_onode(oldo);
-  _dump_onode(newo);
+  _dump_onode<30>(cct, *oldo);
+  _dump_onode<30>(cct, *newo);
   return 0;
 }
 
@@ -13221,8 +13352,8 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     ceph_assert((*c)->exists);
     if ((*c)->onode_map.map_any([&](OnodeRef o) {
         if (o->exists) {
-          dout(10) << __func__ << " " << o->oid << " " << o
-                   << " exists in onode_map" << dendl;
+          dout(1) << __func__ << " " << o->oid << " " << o
+		  << " exists in onode_map" << dendl;
           return true;
         }
         ++nonexistent_count;
@@ -13248,10 +13379,10 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         auto onode = (*c)->onode_map.lookup(*it);
         exists = !onode || onode->exists;
         if (exists) {
-          dout(10) << __func__ << " " << *it
-		   << " exists in db, "
-		   << (!onode ? "not present in ram" : "present in ram")
-		   << dendl;
+          dout(1) << __func__ << " " << *it
+		  << " exists in db, "
+		  << (!onode ? "not present in ram" : "present in ram")
+		  << dendl;
         }
       }
       if (!exists) {

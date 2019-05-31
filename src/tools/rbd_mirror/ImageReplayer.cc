@@ -556,7 +556,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
   ceph_assert(m_local_journal == nullptr);
   {
-    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
     if (m_local_image_ctx->journal != nullptr) {
       m_local_journal = m_local_image_ctx->journal;
       m_local_journal->add_listener(m_journal_listener);
@@ -965,14 +965,13 @@ void ImageReplayer<I>::handle_replay_complete(int r, const std::string &error_de
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "replay encountered an error: " << cpp_strerror(r) << dendl;
-    set_state_description(r, error_desc);
   }
 
   {
     Mutex::Locker locker(m_lock);
     m_stop_requested = true;
   }
-  on_replay_interrupted();
+  on_stop_journal_replay(r, error_desc);
 }
 
 template <typename I>
@@ -1229,7 +1228,7 @@ void ImageReplayer<I>::handle_process_entry_ready(int r) {
 
   bool update_status = false;
   {
-    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
     if (m_local_image_name != m_local_image_ctx->name) {
       m_local_image_name = m_local_image_ctx->name;
       update_status = true;

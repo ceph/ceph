@@ -727,9 +727,7 @@ inline namespace v14_2_0 {
 	//return off == bl->length();
       }
 
-      void advance(int o) = delete;
       void advance(unsigned o);
-      void advance(size_t o) { advance(static_cast<unsigned>(o)); }
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
@@ -829,7 +827,7 @@ inline namespace v14_2_0 {
 	pos += len;
 	return r;
       }
-      char *get_pos() {
+      char *get_pos() const {
 	return pos;
       }
 
@@ -860,7 +858,7 @@ inline namespace v14_2_0 {
 	}
       }
 
-      size_t get_logical_offset() {
+      size_t get_logical_offset() const {
 	return out_of_band_offset + (pos - space.bp_data);
       }
     };

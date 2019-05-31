@@ -1098,7 +1098,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
-                                        "rbd-mirror", "rgw")):
+                                        "rbd-mirror", "rgw", "tcmu-runner")):
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.

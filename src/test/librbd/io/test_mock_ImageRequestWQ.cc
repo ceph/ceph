@@ -217,7 +217,6 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
   void expect_fail(MockImageDispatchSpec &mock_image_request, int r) {
     EXPECT_CALL(mock_image_request, fail(r))
       .WillOnce(Invoke([&mock_image_request](int r) {
-                    mock_image_request.aio_comp->get();
                     mock_image_request.aio_comp->fail(r);
                   }));
   }

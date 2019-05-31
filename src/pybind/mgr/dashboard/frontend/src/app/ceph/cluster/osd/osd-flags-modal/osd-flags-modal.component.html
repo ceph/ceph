@@ -29,7 +29,8 @@
 
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submitAction()"
+          <cd-submit-button *ngIf="permissions.osd.update"
+                            (submitAction)="submitAction()"
                             [form]="osdFlagsForm"
                             i18n>Submit</cd-submit-button>
           <cd-back-button [back]="bsModalRef.hide"

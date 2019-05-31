@@ -18,8 +18,6 @@
 #include <boost/random/uniform_int.hpp>
 typedef boost::mt11213b gen_type;
 
-#if GTEST_HAS_PARAM_TEST
-
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
 public:
@@ -328,12 +326,7 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   EXPECT_EQ(1u, tmp.size());
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));
-
-#else
-
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-#endif

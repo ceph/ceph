@@ -175,6 +175,13 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
     }
 
     m_features &= ~image_ctx.features;
+
+    // interlock object-map and fast-diff together
+    if (((m_features & RBD_FEATURE_OBJECT_MAP) != 0) ||
+        ((m_features & RBD_FEATURE_FAST_DIFF) != 0)) {
+      m_features |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_FAST_DIFF);
+    }
+
     m_new_features = image_ctx.features | m_features;
     m_features_mask = m_features;
 
@@ -186,12 +193,13 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 	break;
       }
       m_enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
-      m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+      m_features_mask |= (RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_FAST_DIFF);
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
       m_enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
-      m_features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
+      m_features_mask |= (RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
     }
+
     if ((m_features & RBD_FEATURE_JOURNALING) != 0) {
       if ((m_new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
 	lderr(cct) << "cannot enable journaling. exclusive-lock must be "

@@ -6,10 +6,9 @@ import * as _ from 'lodash';
 import { BehaviorSubject, Subscription } from 'rxjs';
 
 import { ExecutingTask } from '../models/executing-task';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class SummaryService {
   // Observable sources

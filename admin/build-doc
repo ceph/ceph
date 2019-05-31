@@ -50,7 +50,7 @@ fi
 # for availability of commands
 set -e
 
-cat $TOPDIR/src/osd/PG.h $TOPDIR/src/osd/PG.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
+cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
 
 cd build-doc
 

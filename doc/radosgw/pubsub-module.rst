@@ -136,6 +136,9 @@ This will create a new topic. Topic creation is needed both for both flavors of 
 Optionally the topic could be provided with push endpoint parameters that would be used later
 when an S3-compatible notification is created.
 Upon successful request, the response will include the topic ARN that could be later used to reference this topic in an S3-compatible notification request. 
+To update a topic, use the same command used for topic creation, with the topic name of an existing topic and different endpoint values.
+
+.. tip:: Any S3-compatible notification already associated with the topic needs to be re-created for the topic update to take effect 
 
 ::
 
@@ -157,13 +160,11 @@ Request parameters:
  - "none" - message is considered "delivered" if sent to broker
  - "broker" message is considered "delivered" if acked by broker
 
-Response:
-The ARN will have one of the following format (depending with whether a push-endpoint was defined):
+The topic ARN in the response will have the following format:
 
 ::
 
    arn:aws:sns:<zone-group>:<tenant>:<topic>
-   arn:aws:sns:<zone-group>:<tenant>:<webhook|amqp>:<push-endpoint-url>:<topic>
 
 Get Topic Information
 `````````````````````
@@ -522,7 +523,7 @@ the events will have an S3-compatible record format (JSON):
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
 
-In case that the subscription was not created via an S3-compatible notification, 
+In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):
 
 ::
@@ -549,7 +550,7 @@ the events will have the following event format (JSON):
        }
    ]}
 
-- id: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
+- id: unique ID of the event, that could be used for acking
 - event: either ``OBJECT_CREATE``, or ``OBJECT_DELETE``
 - timestamp: timestamp indicating when the event was sent
 - info.attrs.mtime: timestamp indicating when the event was triggered

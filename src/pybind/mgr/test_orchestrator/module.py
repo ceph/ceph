@@ -23,6 +23,7 @@ class TestCompletionMixin(object):
         self._complete = False
 
         self.message = message
+        self.id = str(uuid.uuid4())
 
         TestCompletionMixin.all_completions.append(self)
 
@@ -52,7 +53,6 @@ class TestReadCompletion(TestCompletionMixin, orchestrator.ReadCompletion):
 class TestWriteCompletion(TestCompletionMixin, orchestrator.WriteCompletion):
     def __init__(self, cb, message):
         super(TestWriteCompletion, self).__init__(cb, message)
-        self.id = str(uuid.uuid4())
 
     @property
     def is_persistent(self):
@@ -95,18 +95,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     The implementation is similar to the Rook orchestrator, but simpler.
     """
-    def _progress(self, *args, **kwargs):
-        try:
-            self.remote("progress", *args, **kwargs)
-        except ImportError:
-            # If the progress module is disabled that's fine,
-            # they just won't see the output.
-            pass
 
     def wait(self, completions):
         self.log.info("wait: completions={0}".format(completions))
-
-        incomplete = False
 
         # Our `wait` implementation is very simple because everything's
         # just an API call.
@@ -121,9 +112,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             if c.is_complete:
                 continue
 
-            if not c.is_read:
-                self._progress("update", c.id, c.message, 0.5)
-
             try:
                 c.execute()
             except Exception as e:
@@ -132,17 +120,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ))
                 c.exception = e
                 c._complete = True
-                if not c.is_read:
-                    self._progress("complete", c.id)
-            else:
-                if c.is_complete:
-                    if not c.is_read:
-                        self._progress("complete", c.id)
 
-            if not c.is_complete:
-                incomplete = True
-
-        return not incomplete
+        return all(c.is_complete for c in completions)
 
     def available(self):
         return True, ""

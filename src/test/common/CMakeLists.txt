@@ -128,7 +128,7 @@ add_executable(unittest_util
   ${CMAKE_SOURCE_DIR}/src/common/util.cc
   )
 add_ceph_unittest(unittest_util)
-target_link_libraries(unittest_util global)
+target_link_libraries(unittest_util global StdFilesystem::filesystem)
 
 # unittest_random
 add_executable(unittest_random
@@ -296,7 +296,6 @@ target_link_libraries(unittest_iso_8601 ceph-common)
 add_ceph_unittest(unittest_iso_8601)
 
 add_executable(unittest_convenience test_convenience.cc)
-target_link_libraries(unittest_convenience ceph-common)
 add_ceph_unittest(unittest_convenience)
 
 add_executable(unittest_bounded_key_counter

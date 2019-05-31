@@ -343,20 +343,20 @@ void OSDMonitor::create_initial()
       if (g_conf()->mon_debug_no_require_mimic) {
 	derr << __func__ << " mon_debug_no_require_octopus, nautilus, and mimic=true"
 	     << dendl;
-	newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+	newmap.require_osd_release = ceph_release_t::luminous;
       } else {
 	derr << __func__ << " mon_debug_no_require_octopus and nautilus=true" << dendl;
-	newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+	newmap.require_osd_release = ceph_release_t::mimic;
       }
     } else {
       derr << __func__ << " mon_debug_no_require_octopus=true" << dendl;
-      newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
+      newmap.require_osd_release = ceph_release_t::nautilus;
     }
   } else {
-    newmap.require_osd_release = CEPH_RELEASE_OCTOPUS;
-    int r = ceph_release_from_name(
-      g_conf()->mon_osd_initial_require_min_compat_client.c_str());
-    if (r <= 0) {
+    newmap.require_osd_release = ceph_release_t::octopus;
+    ceph_release_t r = ceph_release_from_name(
+      g_conf()->mon_osd_initial_require_min_compat_client);
+    if (!r) {
       ceph_abort_msg("mon_osd_initial_require_min_compat_client is not valid");
     }
     newmap.require_min_compat_client = r;
@@ -652,6 +652,11 @@ void OSDMonitor::on_active()
 
   if (mon->is_leader()) {
     mon->clog->debug() << "osdmap " << osdmap;
+    if (!priority_convert) {
+      // Only do this once at start-up
+      convert_pool_priorities();
+      priority_convert = true;
+    }
   } else {
     list<MonOpRequestRef> ls;
     take_all_failures(ls);
@@ -862,7 +867,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
   dout(10) << __func__ << " queue remaining: " << pending_creatings.queue.size()
 	   << " pools" << dendl;
 
-  if (mon->monmap->min_mon_release >= CEPH_RELEASE_OCTOPUS) {
+  if (mon->monmap->min_mon_release >= ceph_release_t::octopus) {
     // walk creating pgs' history and past_intervals forward
     for (auto& i : pending_creatings.pgs) {
       // this mirrors PG::start_peering_interval()
@@ -909,7 +914,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
 	      &nextmap,
 	      &osdmap,
 	      pgid,
-	      &min_size_predicate,
+	      min_size_predicate,
 	      &i.second.past_intervals,
 	      &debug)) {
 	  epoch_t e = inc.epoch;
@@ -1188,7 +1193,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     auto pending_creatings = update_pending_pgs(pending_inc, tmp);
     bufferlist creatings_bl;
     uint64_t features = CEPH_FEATURES_ALL;
-    if (mon->monmap->min_mon_release < CEPH_RELEASE_OCTOPUS) {
+    if (mon->monmap->min_mon_release < ceph_release_t::octopus) {
       dout(20) << __func__ << " encoding pending pgs without octopus features"
 	       << dendl;
       features &= ~CEPH_FEATURE_SERVER_OCTOPUS;
@@ -1198,7 +1203,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
     // remove any old (or incompat) POOL_CREATING flags
     for (auto& i : tmp.get_pools()) {
-      if (tmp.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+      if (tmp.require_osd_release < ceph_release_t::nautilus) {
 	// pre-nautilus OSDMaps shouldn't get this flag.
 	if (pending_inc.new_pools.count(i.first)) {
 	  pending_inc.new_pools[i.first].flags &= ~pg_pool_t::FLAG_CREATING;
@@ -1402,18 +1407,18 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
 
     // min_compat_client?
-    if (tmp.require_min_compat_client == 0) {
+    if (!tmp.require_min_compat_client) {
       auto mv = tmp.get_min_compat_client();
       dout(1) << __func__ << " setting require_min_compat_client to currently "
-	      << "required " << ceph_release_name(mv) << dendl;
+	      << "required " << mv << dendl;
       mon->clog->info() << "setting require_min_compat_client to currently "
-			<< "required " << ceph_release_name(mv);
+			<< "required " << mv;
       pending_inc.new_require_min_compat_client = mv;
     }
 
     // upgrade to mimic?
-    if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC &&
-	tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
+    if (osdmap.require_osd_release < ceph_release_t::mimic &&
+	tmp.require_osd_release >= ceph_release_t::mimic) {
       dout(10) << __func__ << " first mimic+ epoch" << dendl;
       // record this epoch as the deletion for all legacy removed_snaps
       for (auto& p : tmp.get_pools()) {
@@ -1474,8 +1479,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	}
       }
     }
-    if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS &&
-	tmp.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    if (osdmap.require_osd_release < ceph_release_t::nautilus &&
+	tmp.require_osd_release >= ceph_release_t::nautilus) {
       dout(10) << __func__ << " first nautilus+ epoch" << dendl;
       // add creating flags?
       for (auto& i : tmp.get_pools()) {
@@ -1538,7 +1543,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     // determine appropriate features
     features = tmp.get_encoding_features();
     dout(10) << __func__ << " encoding full map with "
-	     << ceph_release_name(tmp.require_osd_release)
+	     << tmp.require_osd_release
 	     << " features " << features << dendl;
 
     // the features should be a subset of the mon quorum's features!
@@ -1579,7 +1584,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata_rm.clear();
 
   // removed_snaps
-  if (tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
+  if (tmp.require_osd_release >= ceph_release_t::mimic) {
     for (auto& i : pending_inc.new_removed_snaps) {
       {
 	// all snaps removed this epoch
@@ -2949,7 +2954,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // make sure osd versions do not span more than 3 releases
   if (HAVE_FEATURE(m->osd_features, SERVER_OCTOPUS) &&
-      osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+      osdmap.require_osd_release < ceph_release_t::mimic) {
     mon->clog->info() << "disallowing boot of octopus+ OSD "
 		      << m->get_orig_source_inst()
 		      << " because require_osd_release < mimic";
@@ -2958,7 +2963,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // The release check here is required because for OSD_PGLOG_HARDLIMIT,
   // we are reusing a jewel feature bit that was retired in luminous.
-  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+  if (osdmap.require_osd_release >= ceph_release_t::luminous &&
       osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
       !(m->osd_features & CEPH_FEATURE_OSD_PGLOG_HARDLIMIT)) {
     mon->clog->info() << "disallowing boot of OSD "
@@ -4160,7 +4165,7 @@ epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
 {
   dout(10) << "blacklist " << av << " until " << until << dendl;
   for (auto a : av.v) {
-    if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
       a.set_type(entity_addr_t::TYPE_ANY);
     } else {
       a.set_type(entity_addr_t::TYPE_LEGACY);
@@ -4172,7 +4177,7 @@ epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
 
 epoch_t OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 {
-  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+  if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
     a.set_type(entity_addr_t::TYPE_ANY);
   } else {
     a.set_type(entity_addr_t::TYPE_LEGACY);
@@ -4258,7 +4263,7 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
   dout(20) << __func__ << ": pool_id=" << pool_id << ", app_name=" << app_name
            << dendl;
 
-  ceph_assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+  ceph_assert(osdmap.require_osd_release >= ceph_release_t::luminous);
 
   auto pp = osdmap.get_pg_pool(pool_id);
   ceph_assert(pp != nullptr);
@@ -4384,7 +4389,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   MOSDPGCreate *oldm = nullptr; // for pre-mimic OSD compat
   MOSDPGCreate2 *m = nullptr;
 
-  bool old = osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS;
+  bool old = osdmap.require_osd_release < ceph_release_t::nautilus;
 
   epoch_t last = 0;
   for (auto epoch_pgs = creating_pgs_by_epoch->second.lower_bound(next);
@@ -5799,13 +5804,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       goto reply;
     }
     const pg_pool_t *p = osdmap.get_pg_pool(poolid);
-
+    const pool_stat_t* pstat = mon->mgrstatmon()->get_pool_stat(poolid);
+    const object_stat_sum_t& sum = pstat->stats.sum;
     if (f) {
       f->open_object_section("pool_quotas");
       f->dump_string("pool_name", pool_name);
       f->dump_unsigned("pool_id", poolid);
       f->dump_unsigned("quota_max_objects", p->quota_max_objects);
+      f->dump_int("current_num_objects", sum.num_objects);
       f->dump_unsigned("quota_max_bytes", p->quota_max_bytes);
+      f->dump_int("current_num_bytes", sum.num_bytes);
       f->close_section();
       f->flush(rdata);
     } else {
@@ -5814,14 +5822,18 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
          << "  max objects: ";
       if (p->quota_max_objects == 0)
         rs << "N/A";
-      else
+      else {
         rs << si_u_t(p->quota_max_objects) << " objects";
+        rs << "  (current num objects: " << sum.num_objects << " objects)";
+      }
       rs << "\n"
          << "  max bytes  : ";
       if (p->quota_max_bytes == 0)
         rs << "N/A";
-      else
+      else {
         rs << byte_u_t(p->quota_max_bytes);
+        rs << "  (current num bytes: " << sum.num_bytes << " bytes)";
+      }
       rdata.append(rs.str());
     }
     rdata.append("\n");
@@ -6197,7 +6209,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ss.str("");
     }
   } else if (prefix == "osd get-require-min-compat-client") {
-    ss << ceph_release_name(osdmap.require_min_compat_client) << std::endl;
+    ss << osdmap.require_min_compat_client << std::endl;
     rdata.append(ss.str());
     ss.str("");
     goto reply;
@@ -6320,7 +6332,7 @@ bool OSDMonitor::try_prune_purged_snaps()
   if (!mon->mgrstatmon()->is_readable()) {
     return false;
   }
-  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+  if (osdmap.require_osd_release < ceph_release_t::mimic) {
     return false;
   }
   if (!pending_inc.new_purged_snaps.empty()) {
@@ -6698,12 +6710,12 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   newmap.apply_incremental(new_pending);
 
   // client compat
-  if (newmap.require_min_compat_client > 0) {
+  if (newmap.require_min_compat_client != ceph_release_t::unknown) {
     auto mv = newmap.get_min_compat_client();
     if (mv > newmap.require_min_compat_client) {
-      ss << "new crush map requires client version " << ceph_release_name(mv)
+      ss << "new crush map requires client version " << mv
 	 << " but require_min_compat_client is "
-	 << ceph_release_name(newmap.require_min_compat_client);
+	 << newmap.require_min_compat_client;
       return false;
     }
   }
@@ -7149,7 +7161,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
   pi->set_pgp_num_target(pgp_num);
-  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+  if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       pg_num_min) {
     pi->opts.set(pool_opts_t::PG_NUM_MIN, static_cast<int64_t>(pg_num_min));
   }
@@ -7164,14 +7176,14 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
   pi->stripe_width = stripe_width;
 
-  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+  if (osdmap.require_osd_release >= ceph_release_t::nautilus &&
       target_size_bytes) {
     // only store for nautilus+ because TARGET_SIZE_BYTES may be
     // larger than int32_t max.
     pi->opts.set(pool_opts_t::TARGET_SIZE_BYTES, static_cast<int64_t>(target_size_bytes));
   }
   if (target_size_ratio > 0.0 &&
-    osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      osdmap.require_osd_release >= ceph_release_t::nautilus) {
     // only store for nautilus+, just to be consistent and tidy.
     pi->opts.set(pool_opts_t::TARGET_SIZE_RATIO, target_size_ratio);
   }
@@ -7344,7 +7356,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
       p.set_pg_num(n);
     } else {
-      if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+      if (osdmap.require_osd_release < ceph_release_t::nautilus) {
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
 	return -EPERM;
       }
@@ -7396,19 +7408,31 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     } else {
-      if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+      if (osdmap.require_osd_release < ceph_release_t::nautilus) {
 	ss << "nautilus OSDs are required to decrease pg_num";
 	return -EPERM;
       }
     }
-    // set targets; mgr will adjust pg_num_actual and pgp_num later.
-    // make pgp_num track pg_num if it already matches.  if it is set
-    // differently, leave it different and let the user control it
-    // manually.
-    if (p.get_pg_num_target() == p.get_pgp_num_target()) {
-      p.set_pgp_num_target(n);
+    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+      // pre-nautilus osdmap format; increase pg_num directly
+      assert(n > (int)p.get_pg_num());
+      // force pre-nautilus clients to resend their ops, since they
+      // don't understand pg_num_target changes form a new interval
+      p.last_force_op_resend_prenautilus = pending_inc.epoch;
+      // force pre-luminous clients to resend their ops, since they
+      // don't understand that split PGs now form a new interval.
+      p.last_force_op_resend_preluminous = pending_inc.epoch;
+      p.set_pg_num(n);
+    } else {
+      // set targets; mgr will adjust pg_num_actual and pgp_num later.
+      // make pgp_num track pg_num if it already matches.  if it is set
+      // differently, leave it different and let the user control it
+      // manually.
+      if (p.get_pg_num_target() == p.get_pgp_num_target()) {
+	p.set_pgp_num_target(n);
+      }
+      p.set_pg_num_target(n);
     }
-    p.set_pg_num_target(n);
   } else if (var == "pgp_num_actual") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
@@ -7449,11 +7473,20 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num_target();
       return -EINVAL;
     }
-    p.set_pgp_num_target(n);
+    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+      // pre-nautilus osdmap format; increase pgp_num directly
+      p.set_pgp_num(n);
+    } else {
+      p.set_pgp_num_target(n);
+    }
   } else if (var == "pg_autoscale_mode") {
     n = pg_pool_t::get_pg_autoscale_mode_by_name(val);
     if (n < 0) {
       ss << "specified invalid mode " << val;
+      return -EINVAL;
+    }
+    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+      ss << "must set require_osd_release to nautilus or later before setting pg_autoscale_mode";
       return -EINVAL;
     }
     p.pg_autoscale_mode = n;
@@ -7749,13 +7782,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         ss << "error parsing int value '" << val << "': " << interr;
         return -EINVAL;
       }
-      if (n < 0) {
-        ss << "pool recovery_priority can not be negative";
-        return -EINVAL;
-      } else if (n >= 30) {
-        ss << "pool recovery_priority should be less than 30 due to "
-           << "Ceph internal implementation restrictions";
-        return -EINVAL;
+      if (!g_conf()->debug_allow_any_pool_priority) {
+        if (n > OSD_POOL_PRIORITY_MAX || n < OSD_POOL_PRIORITY_MIN) {
+          ss << "pool recovery_priority must be between " << OSD_POOL_PRIORITY_MIN
+	     << " and " << OSD_POOL_PRIORITY_MAX;
+          return -EINVAL;
+        }
       }
     } else if (var == "pg_autoscale_bias") {
       if (f < 0.0 || f > 1000.0) {
@@ -9054,7 +9086,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL; // no value!
       goto reply;
     }
-    if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    if (osdmap.require_osd_release < ceph_release_t::luminous) {
       ss << "you must complete the upgrade and 'ceph osd require-osd-release "
          << "luminous' before using crush device classes";
       err = -EPERM;
@@ -9083,7 +9115,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
        err = -EINVAL; // no value!
        goto reply;
      }
-     if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    if (osdmap.require_osd_release < ceph_release_t::luminous) {
        ss << "you must complete the upgrade and 'ceph osd require-osd-release "
          << "luminous' before using crush device classes";
        err = -EPERM;
@@ -9291,10 +9323,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (prefix == "osd crush weight-set create") {
-      if (osdmap.require_min_compat_client > 0 &&
-	  osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+      if (osdmap.require_min_compat_client != ceph_release_t::unknown &&
+	  osdmap.require_min_compat_client < ceph_release_t::luminous) {
 	ss << "require_min_compat_client "
-	   << ceph_release_name(osdmap.require_min_compat_client)
+	   << osdmap.require_min_compat_client
 	   << " < luminous, which is required for per-pool weight-sets. "
            << "Try 'ceph osd set-require-min-compat-client luminous' "
            << "before using the new interface";
@@ -10294,8 +10326,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd set-require-min-compat-client") {
     string v;
     cmd_getval(cct, cmdmap, "version", v);
-    int vno = ceph_release_from_name(v.c_str());
-    if (vno <= 0) {
+    ceph_release_t vno = ceph_release_from_name(v);
+    if (!vno) {
       ss << "version " << v << " is not recognized";
       err = -EINVAL;
       goto reply;
@@ -10306,10 +10338,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newmap.require_min_compat_client = vno;
     auto mvno = newmap.get_min_compat_client();
     if (vno < mvno) {
-      ss << "osdmap current utilizes features that require "
-	 << ceph_release_name(mvno)
-	 << "; cannot set require_min_compat_client below that to "
-	 << ceph_release_name(vno);
+      ss << "osdmap current utilizes features that require " << mvno
+	 << "; cannot set require_min_compat_client below that to " << vno;
       err = -EPERM;
       goto reply;
     }
@@ -10318,7 +10348,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!sure) {
       FeatureMap m;
       mon->get_combined_feature_map(&m);
-      uint64_t features = ceph_release_features(vno);
+      uint64_t features = ceph_release_features(ceph::to_integer<int>(vno));
       bool first = true;
       bool ok = true;
       for (int type : {
@@ -10352,7 +10382,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     }
-    ss << "set require_min_compat_client to " << ceph_release_name(vno);
+    ss << "set require_min_compat_client to " << vno;
     pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -10405,7 +10435,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       // The release check here is required because for OSD_PGLOG_HARDLIMIT,
       // we are reusing a jewel feature bit that was retired in luminous.
-      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      if (osdmap.require_osd_release >= ceph_release_t::luminous &&
          (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_PGLOG_HARDLIMIT)
           || sure)) {
 	return prepare_set_flag(op, CEPH_OSDMAP_PGLOG_HARDLIMIT);
@@ -10458,8 +10488,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cct, cmdmap, "release", release);
     bool sure = false;
     cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
-    int rel = ceph_release_from_name(release.c_str());
-    if (rel <= 0) {
+    ceph_release_t rel = ceph_release_from_name(release.c_str());
+    if (!rel) {
       ss << "unrecognized release " << release;
       err = -EINVAL;
       goto reply;
@@ -10469,14 +10499,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    ceph_assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+    ceph_assert(osdmap.require_osd_release >= ceph_release_t::luminous);
     if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
       err = -EPERM;
       goto reply;
     }
-    if (rel == CEPH_RELEASE_MIMIC) {
+    if (rel == ceph_release_t::mimic) {
       if (!mon->monmap->get_required_features().contains_all(
 	    ceph::features::mon::FEATURE_MIMIC)) {
 	ss << "not all mons are mimic";
@@ -10489,7 +10519,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply;
       }
-    } else if (rel == CEPH_RELEASE_NAUTILUS) {
+    } else if (rel == ceph_release_t::nautilus) {
       if (!mon->monmap->get_required_features().contains_all(
 	    ceph::features::mon::FEATURE_NAUTILUS)) {
 	ss << "not all mons are nautilus";
@@ -10502,7 +10532,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply;
       }
-    } else if (rel == CEPH_RELEASE_OCTOPUS) {
+    } else if (rel == ceph_release_t::octopus) {
       if (!mon->monmap->get_required_features().contains_all(
 	    ceph::features::mon::FEATURE_OCTOPUS)) {
 	ss << "not all mons are octopus";
@@ -11080,10 +11110,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (osdmap.require_min_compat_client > 0 &&
-	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+    if (osdmap.require_min_compat_client != ceph_release_t::unknown &&
+	osdmap.require_min_compat_client < ceph_release_t::firefly) {
       ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
+	 << osdmap.require_min_compat_client
 	 << " < firefly, which is required for primary-temp";
       err = -EPERM;
       goto reply;
@@ -11141,9 +11171,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd rm-pg-upmap" ||
              prefix == "osd pg-upmap-items" ||
              prefix == "osd rm-pg-upmap-items") {
-    if (osdmap.require_min_compat_client < CEPH_RELEASE_LUMINOUS) {
+    if (osdmap.require_min_compat_client < ceph_release_t::luminous) {
       ss << "min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
+	 << osdmap.require_min_compat_client
 	 << " < luminous, which is required for pg-upmap. "
          << "Try 'ceph osd set-require-min-compat-client luminous' "
          << "before using the new interface";
@@ -11392,10 +11422,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
-    if (osdmap.require_min_compat_client > 0 &&
-	osdmap.require_min_compat_client < CEPH_RELEASE_FIREFLY) {
+    if (osdmap.require_min_compat_client != ceph_release_t::unknown &&
+	osdmap.require_min_compat_client < ceph_release_t::firefly) {
       ss << "require_min_compat_client "
-	 << ceph_release_name(osdmap.require_min_compat_client)
+	 << osdmap.require_min_compat_client
 	 << " < firefly, which is required for primary-affinity";
       err = -EPERM;
       goto reply;
@@ -11734,7 +11764,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
-      if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      if (osdmap.require_osd_release >= ceph_release_t::nautilus) {
 	// always blacklist type ANY
 	addr.set_type(entity_addr_t::TYPE_ANY);
       } else {
@@ -13347,4 +13377,56 @@ void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 ret, epoch, get_last_committed(), blp);
   mon->send_reply(op, reply);
+}
+
+void OSDMonitor::convert_pool_priorities(void)
+{
+  pool_opts_t::key_t key = pool_opts_t::get_opt_desc("recovery_priority").key;
+  int64_t max_prio = 0;
+  int64_t min_prio = 0;
+  for (const auto &i : osdmap.get_pools()) {
+    const auto &pool = i.second;
+
+    if (pool.opts.is_set(key)) {
+      int64_t prio = 0;
+      pool.opts.get(key, &prio);
+      if (prio > max_prio)
+	max_prio = prio;
+      if (prio < min_prio)
+	min_prio = prio;
+    }
+  }
+  if (max_prio <= OSD_POOL_PRIORITY_MAX && min_prio >= OSD_POOL_PRIORITY_MIN) {
+    dout(20) << __func__ << " nothing to fix" << dendl;
+    return;
+  }
+  // Current pool priorities exceeds new maximum
+  for (const auto &i : osdmap.get_pools()) {
+    const auto pool_id = i.first;
+    pg_pool_t pool = i.second;
+
+    int64_t prio = 0;
+    pool.opts.get(key, &prio);
+    int64_t n;
+
+    if (prio > 0 && max_prio > OSD_POOL_PRIORITY_MAX) { // Likely scenario
+      // Scaled priority range 0 to OSD_POOL_PRIORITY_MAX
+      n = (float)prio / max_prio * OSD_POOL_PRIORITY_MAX;
+    } else if (prio < 0 && min_prio < OSD_POOL_PRIORITY_MIN) {
+      // Scaled  priority range OSD_POOL_PRIORITY_MIN to 0
+      n = (float)prio / min_prio * OSD_POOL_PRIORITY_MIN;
+    } else {
+      continue;
+    }
+    if (n == 0) {
+      pool.opts.unset(key);
+    } else {
+      pool.opts.set(key, static_cast<int64_t>(n));
+    }
+    dout(10) << __func__ << " pool " << pool_id
+	     << " recovery_priority adjusted "
+	     << prio << " to " << n << dendl;
+    pool.last_change = pending_inc.epoch;
+    pending_inc.new_pools[pool_id] = pool;
+  }
 }

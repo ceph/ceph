@@ -1332,7 +1332,7 @@ TEST_F(TestMockJournal, AppendDisabled) {
   };
 
   InSequence seq;
-  RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
+  RWLock::RLocker image_locker(mock_image_ctx.image_lock);
   EXPECT_CALL(mock_image_ctx, get_journal_policy()).WillOnce(
     Return(ictx->get_journal_policy()));
   ASSERT_TRUE(mock_journal.is_journal_appending());

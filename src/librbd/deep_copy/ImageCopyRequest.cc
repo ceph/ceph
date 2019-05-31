@@ -68,7 +68,7 @@ void ImageCopyRequest<I>::send_object_copies() {
 
   uint64_t size;
   {
-    RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
+    RWLock::RLocker image_locker(m_src_image_ctx->image_lock);
     size =  m_src_image_ctx->get_image_size(CEPH_NOSNAP);
     for (auto snap_id : m_src_image_ctx->snaps) {
       size = std::max(size, m_src_image_ctx->get_image_size(snap_id));

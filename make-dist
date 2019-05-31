@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash -e
 
 if [ ! -d .git ]; then
     echo "no .git present.  run this from the base dir of the git checkout."
@@ -6,9 +6,16 @@ if [ ! -d .git ]; then
 fi
 
 version=$1
-[ -z "$version" ] && version=`git describe --match 'v*' | sed 's/^v//'`
-outfile="ceph-$version"
+[ -z "$version" ] && version=$(git describe --long --match 'v*' | sed 's/^v//')
+if expr index $version '-' > /dev/null; then
+    rpm_version=$(echo $version | cut -d - -f 1-1)
+    rpm_release=$(echo $version | cut -d - -f 2- | sed 's/-/./')
+else
+    rpm_version=$version
+    rpm_release=0
+fi
 
+outfile="ceph-$version"
 echo "version $version"
 
 # update submodules
@@ -105,20 +112,7 @@ bin/git-archive-all.sh --prefix ceph-$version/ \
 # populate files with version strings
 echo "including src/.git_version, ceph.spec"
 
-(git rev-parse HEAD ; git describe) 2> /dev/null > src/.git_version
-
-# if the version has '-' in it, it has a 'release' part,
-# like vX.Y.Z-N-g<shortsha1>.  If it doesn't, it's just
-# vX.Y.Z.  Handle both, and translate - to . for rpm
-# naming rules (the - separates version and release).
-
-if expr index $version '-' > /dev/null; then
-	rpm_version=`echo $version | cut -d - -f 1-1`
-	rpm_release=`echo $version | cut -d - -f 2- | sed 's/-/./'`
-else
-	rpm_version=$version
-	rpm_release=0
-fi
+(git rev-parse HEAD ; echo $version) 2> /dev/null > src/.git_version
 
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |

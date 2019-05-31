@@ -600,7 +600,7 @@ public:
       fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else if (var == "min_compat_client") {
       auto vno = ceph_release_from_name(val.c_str());
-      if (vno <= 0) {
+      if (!vno) {
 	ss << "version " << val << " is not recognized";
 	return -EINVAL;
       }

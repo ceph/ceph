@@ -1,5 +1,6 @@
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
@@ -16,32 +17,32 @@ export class RbdSnapshotActionsModel {
   deleteSnap: CdTableAction;
   ordering: CdTableAction[];
 
-  constructor(i18n: I18n) {
+  constructor(i18n: I18n, actionLabels: ActionLabelsI18n) {
     this.i18n = i18n;
 
     this.create = {
       permission: 'create',
       icon: 'fa-plus',
-      name: this.i18n('Create')
+      name: actionLabels.CREATE
     };
     this.rename = {
       permission: 'update',
       icon: 'fa-pencil',
-      name: this.i18n('Rename')
+      name: actionLabels.RENAME
     };
     this.protect = {
       permission: 'update',
       icon: 'fa-lock',
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && !selection.first().is_protected,
-      name: this.i18n('Protect')
+      name: actionLabels.PROTECT
     };
     this.unprotect = {
       permission: 'update',
       icon: 'fa-unlock',
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && selection.first().is_protected,
-      name: this.i18n('Unprotect')
+      name: actionLabels.UNPROTECT
     };
     this.clone = {
       permission: 'create',
@@ -49,7 +50,7 @@ export class RbdSnapshotActionsModel {
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-clone',
-      name: this.i18n('Clone')
+      name: actionLabels.CLONE
     };
     this.copy = {
       permission: 'create',
@@ -57,12 +58,12 @@ export class RbdSnapshotActionsModel {
       disable: (selection: CdTableSelection) =>
         !selection.hasSingleSelection || selection.first().cdExecuting,
       icon: 'fa-copy',
-      name: this.i18n('Copy')
+      name: actionLabels.COPY
     };
     this.rollback = {
       permission: 'update',
       icon: 'fa-undo',
-      name: this.i18n('Rollback')
+      name: actionLabels.ROLLBACK
     };
     this.deleteSnap = {
       permission: 'delete',
@@ -71,7 +72,7 @@ export class RbdSnapshotActionsModel {
         const first = selection.first();
         return !selection.hasSingleSelection || first.cdExecuting || first.is_protected;
       },
-      name: this.i18n('Delete')
+      name: actionLabels.DELETE
     };
 
     this.ordering = [

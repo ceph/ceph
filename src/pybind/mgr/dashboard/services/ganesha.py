@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import re
 
+from orchestrator import OrchestratorError
 from .cephfs import CephFS
 from .cephx import CephX
 from .orchestrator import OrchClient
@@ -65,11 +66,18 @@ class Ganesha(object):
     def get_ganesha_clusters(cls):
         return [cluster_id for cluster_id in cls._get_clusters_locations()]
 
+    @staticmethod
+    def _get_orch_nfs_instances():
+        try:
+            return OrchClient().list_service_info("nfs")
+        except (RuntimeError, OrchestratorError, ImportError):
+            return []
+
     @classmethod
     def get_daemons_status(cls):
-        if not OrchClient.instance().available():
+        instances = cls._get_orch_nfs_instances()
+        if not instances:
             return None
-        instances = OrchClient.instance().list_service_info("nfs")
 
         result = {}
         for instance in instances:
@@ -105,14 +113,13 @@ class Ganesha(object):
 
     @classmethod
     def get_pool_and_namespace(cls, cluster_id):
-        if OrchClient.instance().available():
-            instances = OrchClient.instance().list_service_info("nfs")
-            # we assume that every instance stores there configuration in the
-            # same RADOS pool/namespace
-            if instances:
-                location = instances[0].rados_config_location
-                pool, ns, _ = cls.parse_rados_url(location)
-                return pool, ns
+        instances = cls._get_orch_nfs_instances()
+        # we assume that every instance stores there configuration in the
+        # same RADOS pool/namespace
+        if instances:
+            location = instances[0].rados_config_location
+            pool, ns, _ = cls.parse_rados_url(location)
+            return pool, ns
         locations = cls._get_clusters_locations()
         if cluster_id not in locations:
             raise NFSException("Cluster not found: cluster_id={}"
@@ -122,7 +129,7 @@ class Ganesha(object):
     @classmethod
     def reload_daemons(cls, cluster_id, daemons_id):
         logger.debug("[NFS] issued reload of daemons: %s", daemons_id)
-        if not OrchClient.instance().available():
+        if not OrchClient().available():
             logger.debug("[NFS] orchestrator not available")
             return
         reload_list = []
@@ -135,7 +142,7 @@ class Ganesha(object):
                 continue
             if daemons[cluster_id][daemon_id] == 1:
                 reload_list.append((cluster_id, daemon_id))
-        OrchClient.instance().reload_service("nfs", reload_list)
+        OrchClient().reload_service("nfs", reload_list)
 
     @classmethod
     def fsals_available(cls):

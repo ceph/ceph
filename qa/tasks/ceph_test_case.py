@@ -1,6 +1,5 @@
 
 import unittest
-from unittest import case
 import time
 import logging
 
@@ -40,7 +39,7 @@ class CephTestCase(unittest.TestCase):
             if objectstore != "memstore":
                 # You certainly *could* run this on a real OSD, but you don't want to sit
                 # here for hours waiting for the test to fill up a 1TB drive!
-                raise case.SkipTest("Require `memstore` OSD backend (test " \
+                raise self.skipTest("Require `memstore` OSD backend (test " \
                         "would take too long on full sized OSDs")
 
 

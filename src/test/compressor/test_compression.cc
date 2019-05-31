@@ -323,7 +323,7 @@ TEST_P(CompressorTest, decompress_16384)
 }
 
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Compressor,
   CompressorTest,
   ::testing::Values(

@@ -38,7 +38,7 @@ like this:
    :align: center
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
-Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/2/html/ceph_object_gateway_for_production/>`__.
+Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
 
 Functional Changes from Infernalis
 ==================================

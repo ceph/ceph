@@ -73,7 +73,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       RGWBucketInfo bucket_info;
 
       ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
-                                   bucket_info, nullptr, nullptr);
+                                   bucket_info, nullptr, null_yield, nullptr);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
@@ -280,7 +280,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
   RGWUID uid;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime, null_yield);
   if (ret < 0)
     return ret;
 
@@ -326,7 +326,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   string oid = uid.to_str();
-  int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, pattrs, cache_info);
+  int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, null_yield, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }

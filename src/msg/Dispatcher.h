@@ -218,16 +218,8 @@ public:
    * @} //Authentication
    */
 
-  void ms_set_require_authorizer(bool b) {
-    require_authorizer = b;
-  }
 protected:
   CephContext *cct;
-public:
-  // allow unauthenticated connections.  This is needed for
-  // compatibility with pre-nautilus OSDs, which do not authenticate
-  // the heartbeat sessions.
-  bool require_authorizer = true;
 private:
   explicit Dispatcher(const Dispatcher &rhs);
   Dispatcher& operator=(const Dispatcher &rhs);

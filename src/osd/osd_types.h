@@ -47,6 +47,7 @@
 #include "include/cmp.h"
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
+#include "osd_perf_counters.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -68,6 +69,10 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
 
 
+/// pool priority range set by user
+#define OSD_POOL_PRIORITY_MAX 10
+#define OSD_POOL_PRIORITY_MIN -OSD_POOL_PRIORITY_MAX
+
 /// min recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MIN 0
 
@@ -82,6 +87,9 @@
 
 /// base backfill priority for MBackfillReserve (inactive PG)
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
+
+/// base recovery priority for MRecoveryReserve (inactive PG)
+#define OSD_RECOVERY_INACTIVE_PRIORITY_BASE 220
 
 /// max manually/automatically set recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MAX 253
@@ -101,6 +109,13 @@
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
 
+static std::map<int, int> max_prio_map = {
+	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
+	{OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
+	{OSD_RECOVERY_PRIORITY_BASE, OSD_BACKFILL_INACTIVE_PRIORITY_BASE - 1},
+	{OSD_RECOVERY_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX},
+	{OSD_BACKFILL_INACTIVE_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_MAX}
+};
 
 typedef hobject_t collection_list_handle_t;
 
@@ -425,12 +440,12 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
-  bool contains(int bits, const ghobject_t& oid) {
+  bool contains(int bits, const ghobject_t& oid) const {
     return
       (int64_t)m_pool == oid.hobj.get_logical_pool() &&
       oid.match(bits, ps());
   }
-  bool contains(int bits, const hobject_t& oid) {
+  bool contains(int bits, const hobject_t& oid) const {
     return
       (int64_t)m_pool == oid.get_logical_pool() &&
       oid.match(bits, ps());
@@ -965,7 +980,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
-boost::optional<uint64_t> pg_string_state(const std::string& state);
+std::optional<uint64_t> pg_string_state(const std::string& state);
 
 
 /*
@@ -2076,6 +2091,8 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
 
   std::vector<int32_t> up, acting;
+  std::vector<pg_shard_t> avail_no_missing;
+  std::map< std::set<pg_shard_t>, int32_t > object_location_counts;
   epoch_t mapping_epoch;
 
   std::vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
@@ -3160,7 +3177,7 @@ public:
     const OSDMap *osdmap,      ///< [in] current map
     const OSDMap *lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     );
@@ -3178,7 +3195,7 @@ public:
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
+    const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     std::ostream *out = 0                            ///< [out] debug ostream
     ) {
@@ -3276,7 +3293,7 @@ public:
     std::map<int, epoch_t> blocked_by;  ///< current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
     bool pg_down = false;   ///< some down osds are included in @a cur; the DOWN pg state bit should be set.
-    std::unique_ptr<IsPGRecoverablePredicate> pcontdec;
+    const IsPGRecoverablePredicate* pcontdec = nullptr;
 
     PriorSet() = default;
     PriorSet(PriorSet &&) = default;
@@ -3304,7 +3321,7 @@ public:
       std::set<int> down,
       std::map<int, epoch_t> blocked_by,
       bool pg_down,
-      IsPGRecoverablePredicate *pcontdec)
+      const IsPGRecoverablePredicate *pcontdec)
       : ec_pool(ec_pool), probe(probe), down(down), blocked_by(blocked_by),
 	pg_down(pg_down), pcontdec(pcontdec) {}
 
@@ -3314,7 +3331,7 @@ public:
       const PastIntervals &past_intervals,
       bool ec_pool,
       epoch_t last_epoch_started,
-      IsPGRecoverablePredicate *c,
+      const IsPGRecoverablePredicate *c,
       F f,
       const std::vector<int> &up,
       const std::vector<int> &acting,
@@ -3339,7 +3356,7 @@ PastIntervals::PriorSet::PriorSet(
   const PastIntervals &past_intervals,
   bool ec_pool,
   epoch_t last_epoch_started,
-  IsPGRecoverablePredicate *c,
+  const IsPGRecoverablePredicate *c,
   F f,
   const std::vector<int> &up,
   const std::vector<int> &acting,
@@ -3570,7 +3587,7 @@ public:
   class Visitor {
   public:
     virtual void append(uint64_t old_offset) {}
-    virtual void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &attrs) {}
+    virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -3639,7 +3656,7 @@ public:
     encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
-  void setattrs(std::map<std::string, boost::optional<ceph::buffer::list>> &old_attrs) {
+  void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &old_attrs) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
@@ -3728,6 +3745,50 @@ public:
 };
 WRITE_CLASS_ENCODER(ObjectModDesc)
 
+class ObjectCleanRegions {
+private:
+  bool new_object;
+  bool clean_omap;
+  interval_set<uint64_t> clean_offsets;
+  static std::atomic<int32_t> max_num_intervals;
+
+  /**
+   * trim the number of intervals if clean_offsets.num_intervals()
+   * exceeds the given upbound max_num_intervals
+   * etc. max_num_intervals=2, clean_offsets:{[5~10], [20~5]}
+   * then new interval [30~10] will evict out the shortest one [20~5]
+   * finally, clean_offsets becomes {[5~10], [30~10]}
+   */
+  void trim();
+  friend ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
+public:
+  ObjectCleanRegions() : new_object(false), clean_omap(true) {
+    clean_offsets.insert(0, (uint64_t)-1);
+  }
+  ObjectCleanRegions(uint64_t offset, uint64_t len, bool co)
+    : new_object(false), clean_omap(co) {
+    clean_offsets.insert(offset, len);
+  }
+  bool operator==(const ObjectCleanRegions &orc) const {
+    return new_object == orc.new_object && clean_omap == orc.clean_omap && clean_offsets == orc.clean_offsets;
+  }
+  static void set_max_num_intervals(int32_t num);
+  void merge(const ObjectCleanRegions &other);
+  void mark_data_region_dirty(uint64_t offset, uint64_t len);
+  void mark_omap_dirty();
+  void mark_object_new();
+  void mark_fully_dirty();
+  interval_set<uint64_t> get_dirty_regions() const;
+  bool omap_is_dirty() const;
+  bool object_is_exist() const;
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::const_iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ObjectCleanRegions*>& o);
+};
+WRITE_CLASS_ENCODER(ObjectCleanRegions)
+ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr);
 
 /**
  * pg_log_entry_t - single entry/event in pg log
@@ -3792,6 +3853,7 @@ struct pg_log_entry_t {
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
+  ObjectCleanRegions clean_regions;
 
   pg_log_entry_t()
    : user_version(0), return_code(0), op(0),
@@ -4094,16 +4156,7 @@ public:
    * @param other pg_log_t to copy from
    * @param from copy entries after this version
    */
-  void copy_after(const pg_log_t &other, eversion_t from);
-
-  /**
-   * copy a range of entries from another pg_log_t
-   *
-   * @param other pg_log_t to copy from
-   * @param from copy entries after this version
-   * @param to up to and including this version
-   */
-  void copy_range(const pg_log_t &other, eversion_t from, eversion_t to);
+  void copy_after(CephContext* cct, const pg_log_t &other, eversion_t from);
 
   /**
    * copy up to N entries
@@ -4111,7 +4164,7 @@ public:
    * @param other source log
    * @param max max number of entries to copy
    */
-  void copy_up_to(const pg_log_t &other, int max);
+  void copy_up_to(CephContext* cct, const pg_log_t &other, int max);
 
   std::ostream& print(std::ostream& out) const;
 
@@ -4138,48 +4191,61 @@ inline std::ostream& operator<<(std::ostream& out, const pg_log_t& log)
  */
 struct pg_missing_item {
   eversion_t need, have;
+  ObjectCleanRegions clean_regions;
   enum missing_flags_t {
     FLAG_NONE = 0,
     FLAG_DELETE = 1,
   } flags;
   pg_missing_item() : flags(FLAG_NONE) {}
   explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false) : need(n), have(h) {
+  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false,bool new_object = false) :
+    need(n), have(h) {
+    if (old_style)
+      clean_regions.mark_fully_dirty();
+    if (new_object)
+      clean_regions.mark_object_new();
     set_delete(is_delete);
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
-    if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
-      // encoding a zeroed eversion_t to differentiate between this and
-      // legacy unversioned encoding - a need value of 0'0 is not
+    if (HAVE_FEATURE(features, SERVER_OCTOPUS)) {
+      // encoding a zeroed eversion_t to differentiate between OSD_RECOVERY_DELETES、
+      // SERVER_OCTOPUS and legacy unversioned encoding - a need value of 0'0 is not
       // possible. This can be replaced with the legacy encoding
-      // macros post-luminous.
-      eversion_t e;
-      encode(e, bl);
+      encode(eversion_t(), bl);
+      encode(eversion_t(-1, -1), bl);
+      encode(need, bl);
+      encode(have, bl);   
+      encode(static_cast<uint8_t>(flags), bl);
+      encode(clean_regions, bl);
+    } else {
+      encode(eversion_t(), bl);
       encode(need, bl);
       encode(have, bl);
       encode(static_cast<uint8_t>(flags), bl);
-    } else {
-      // legacy unversioned encoding
-      encode(need, bl);
-      encode(have, bl);
     }
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
-    eversion_t e;
+    eversion_t e, l;
     decode(e, bl);
-    if (e != eversion_t()) {
-      // legacy encoding, this is the need value
-      need = e;
-      decode(have, bl);
-    } else {
+    decode(l, bl);
+    if(l == eversion_t(-1, -1)) {
+      // support all
       decode(need, bl);
       decode(have, bl);
       uint8_t f;
       decode(f, bl);
       flags = static_cast<missing_flags_t>(f);
+      decode(clean_regions, bl);
+     } else {
+      // support OSD_RECOVERY_DELETES
+      need = l;
+      decode(have, bl);
+      uint8_t f;
+      decode(f, bl);
+      flags = static_cast<missing_flags_t>(f); 
     }
   }
 
@@ -4203,6 +4269,7 @@ struct pg_missing_item {
     f->dump_stream("need") << need;
     f->dump_stream("have") << have;
     f->dump_stream("flags") << flag_str();
+    f->dump_stream("clean_regions") << clean_regions;
   }
   static void generate_test_instances(std::list<pg_missing_item*>& o) {
     o.push_back(new pg_missing_item);
@@ -4212,6 +4279,8 @@ struct pg_missing_item {
     o.push_back(new pg_missing_item);
     o.back()->need = eversion_t(3, 5);
     o.back()->have = eversion_t(3, 4);
+    o.back()->clean_regions.mark_data_region_dirty(4096, 8192);
+    o.back()->clean_regions.mark_omap_dirty();
     o.back()->flags = FLAG_DELETE;
   }
   bool operator==(const pg_missing_item &rhs) const {
@@ -4306,6 +4375,11 @@ public:
   bool have_missing() const override {
     return !missing.empty();
   }
+  void merge(const pg_log_entry_t& e) {
+    auto miter = missing.find(e.soid);
+    if (miter != missing.end() && miter->second.have != eversion_t() && e.version > miter->second.have)
+      miter->second.clean_regions.merge(e.clean_regions);
+  }
   bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const override {
     auto iter = missing.find(oid);
     if (iter == missing.end())
@@ -4350,31 +4424,42 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-	rmissing.erase((missing_it->second).need.version);
-	missing_it->second = item(e.version, eversion_t(), e.is_delete());  // .have = nil
-      } else  // create new element in missing map
-	missing[e.soid] = item(e.version, eversion_t(), e.is_delete());     // .have = nil
+        rmissing.erase((missing_it->second).need.version);
+        // .have = nil
+        missing_it->second = item(e.version, eversion_t(), e.is_delete());
+        missing_it->second.clean_regions.mark_fully_dirty();
+      } else {
+         // create new element in missing map
+         // .have = nil
+        missing[e.soid] = item(e.version, eversion_t(), e.is_delete());
+        missing[e.soid].clean_regions.mark_fully_dirty();
+      }
     } else if (is_missing_divergent_item) {
       // already missing (prior).
       rmissing.erase((missing_it->second).need.version);
       (missing_it->second).need = e.version;  // leave .have unchanged.
-      missing_it->second.set_delete(e.is_delete());
+      (missing_it->second).set_delete(e.is_delete());
+      (missing_it->second).clean_regions.merge(e.clean_regions);
     } else {
       // not missing, we must have prior_version (if any)
       ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
+      missing[e.soid].clean_regions = e.clean_regions;
     }
     rmissing[e.version.version] = e.soid;
     tracker.changed(e.soid);
   }
 
   void revise_need(hobject_t oid, eversion_t need, bool is_delete) {
-    if (missing.count(oid)) {
-      rmissing.erase(missing[oid].need.version);
-      missing[oid].need = need;            // no not adjust .have
-      missing[oid].set_delete(is_delete);
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
+      rmissing.erase((p->second).need.version);
+      (p->second).need = need;          // no not adjust .have
+      (p->second).set_delete(is_delete);
+      (p->second).clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t(), is_delete);
+      missing[oid].clean_regions.mark_fully_dirty();
     }
     rmissing[need.version] = oid;
 
@@ -4382,15 +4467,17 @@ public:
   }
 
   void revise_have(hobject_t oid, eversion_t have) {
-    if (missing.count(oid)) {
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
       tracker.changed(oid);
-      missing[oid].have = have;
+      (p->second).have = have;
     }
   }
 
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
-	   bool is_delete) {
-    missing[oid] = item(need, have, is_delete);
+	   bool is_delete, bool make_dirty = true) {
+    //if have== eversion_t() means that the object does not exist, we transfer new_object = true
+    missing[oid] = item(need, have, is_delete, make_dirty, have == eversion_t());
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }
@@ -4446,16 +4533,16 @@ public:
     rmissing.clear();
   }
 
-  void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(4, 2, bl);
-    encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
+  void encode(ceph::buffer::list &bl, uint64_t features) const {
+    ENCODE_START(5, 2, bl)
+    encode(missing, bl, features);
     encode(may_include_deletes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(ceph::buffer::list::const_iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
-    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
     decode(missing, bl);
     if (struct_v >= 4) {
       decode(may_include_deletes, bl);
@@ -4513,10 +4600,12 @@ public:
   }
   static void generate_test_instances(std::list<pg_missing_set*>& o) {
     o.push_back(new pg_missing_set);
+    o.back()->may_include_deletes = true;
     o.push_back(new pg_missing_set);
     o.back()->add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
       eversion_t(5, 6), eversion_t(5, 1), false);
+    o.back()->may_include_deletes = true;
     o.push_back(new pg_missing_set);
     o.back()->add(
       hobject_t(object_t("foo"), "foo", 123, 456, 0, ""),
@@ -4580,7 +4669,7 @@ template <bool TrackChanges>
 void encode(
   const pg_missing_set<TrackChanges> &c, ceph::buffer::list &bl, uint64_t features=0) {
   ENCODE_DUMP_PRE();
-  c.encode(bl);
+  c.encode(bl, features);
   ENCODE_DUMP_POST(cl);
 }
 template <bool TrackChanges>
@@ -5307,8 +5396,9 @@ struct ObjectRecoveryInfo {
   SnapSet ss;   // only populated if soid is_snap()
   interval_set<uint64_t> copy_subset;
   std::map<hobject_t, interval_set<uint64_t>> clone_subset;
+  bool object_exist;
 
-  ObjectRecoveryInfo() : size(0) { }
+  ObjectRecoveryInfo() : size(0), object_exist(true) { }
 
   static void generate_test_instances(std::list<ObjectRecoveryInfo*>& o);
   void encode(ceph::buffer::list &bl, uint64_t features) const;
@@ -5608,6 +5698,30 @@ struct watch_item_t {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("watcher") << name;
+    f->dump_int("cookie", cookie);
+    f->dump_int("timeout", timeout_seconds);
+    f->open_object_section("addr");
+    addr.dump(f);
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<watch_item_t*>& o) {
+    entity_addr_t ea;
+    ea.set_type(entity_addr_t::TYPE_LEGACY);
+    ea.set_nonce(1000);
+    ea.set_family(AF_INET);
+    ea.set_in4_quad(0, 127);
+    ea.set_in4_quad(1, 0);
+    ea.set_in4_quad(2, 0);
+    ea.set_in4_quad(3, 1);
+    ea.set_port(1024);
+    o.push_back(new watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30, ea));
+    ea.set_nonce(1001);
+    ea.set_in4_quad(3, 2);
+    ea.set_port(1025);
+    o.push_back(new watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(watch_item_t)
 
@@ -5637,12 +5751,7 @@ struct obj_list_watch_response_t {
     f->open_array_section("entries");
     for (std::list<watch_item_t>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
       f->open_object_section("watch");
-      f->dump_stream("watcher") << p->name;
-      f->dump_int("cookie", p->cookie);
-      f->dump_int("timeout", p->timeout_seconds);
-      f->open_object_section("addr");
-      p->addr.dump(f);
-      f->close_section();
+      p->dump(f);
       f->close_section();
     }
     f->close_section();
@@ -5651,19 +5760,12 @@ struct obj_list_watch_response_t {
     entity_addr_t ea;
     o.push_back(new obj_list_watch_response_t);
     o.push_back(new obj_list_watch_response_t);
-    ea.set_type(entity_addr_t::TYPE_LEGACY);
-    ea.set_nonce(1000);
-    ea.set_family(AF_INET);
-    ea.set_in4_quad(0, 127);
-    ea.set_in4_quad(1, 0);
-    ea.set_in4_quad(2, 0);
-    ea.set_in4_quad(3, 1);
-    ea.set_port(1024);
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 1), 10, 30, ea));
-    ea.set_nonce(1001);
-    ea.set_in4_quad(3, 2);
-    ea.set_port(1025);
-    o.back()->entries.push_back(watch_item_t(entity_name_t(entity_name_t::TYPE_CLIENT, 2), 20, 60, ea));
+    std::list<watch_item_t*> test_watchers;
+    watch_item_t::generate_test_instances(test_watchers);
+    for (auto &e : test_watchers) {
+      o.back()->entries.push_back(*e);
+      delete e;
+    }
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(obj_list_watch_response_t)
@@ -5896,6 +5998,27 @@ struct pool_pg_num_history_t {
   }
 };
 WRITE_CLASS_ENCODER(pool_pg_num_history_t)
+
+// prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
+// easily skip them
+static const string_view infover_key = "_infover"sv;
+static const string_view info_key = "_info"sv;
+static const string_view biginfo_key = "_biginfo"sv;
+static const string_view epoch_key = "_epoch"sv;
+static const string_view fastinfo_key = "_fastinfo"sv;
+
+int prepare_info_keymap(
+  CephContext* cct,
+  map<string,bufferlist> *km,
+  epoch_t epoch,
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  bool dirty_big_info,
+  bool dirty_epoch,
+  bool try_fast_info,
+  PerfCounters *logger = nullptr,
+  DoutPrefixProvider *dpp = nullptr);
 
 // omap specific stats
 struct omap_stat_t {

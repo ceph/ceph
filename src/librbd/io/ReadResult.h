@@ -40,13 +40,14 @@ public:
     AioCompletion *aio_completion;
     uint64_t object_off;
     uint64_t object_len;
-    Extents buffer_extents;
+    LightweightBufferExtents buffer_extents;
 
     bufferlist bl;
     ExtentMap extent_map;
 
     C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
-                        uint64_t object_len, Extents&& buffer_extents);
+                        uint64_t object_len,
+                        LightweightBufferExtents&& buffer_extents);
 
     void finish(int r) override;
   };
@@ -55,6 +56,7 @@ public:
   ReadResult(char *buf, size_t buf_len);
   ReadResult(const struct iovec *iov, int iov_count);
   ReadResult(ceph::bufferlist *bl);
+  ReadResult(std::map<uint64_t, uint64_t> *extent_map, ceph::bufferlist *bl);
 
   void set_clip_length(size_t length);
   void assemble_result(CephContext *cct);
@@ -87,10 +89,21 @@ private:
     }
   };
 
+  struct SparseBufferlist {
+    std::map<uint64_t, uint64_t> *extent_map;
+    ceph::bufferlist *bl;
+
+    SparseBufferlist(std::map<uint64_t, uint64_t> *extent_map,
+                     ceph::bufferlist *bl)
+      : extent_map(extent_map), bl(bl) {
+    }
+  };
+
   typedef boost::variant<Empty,
                          Linear,
                          Vector,
-                         Bufferlist> Buffer;
+                         Bufferlist,
+                         SparseBufferlist> Buffer;
   struct SetClipLengthVisitor;
   struct AssembleResultVisitor;
 

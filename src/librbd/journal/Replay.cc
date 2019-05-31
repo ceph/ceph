@@ -1143,9 +1143,9 @@ template <typename I>
 bool Replay<I>::clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp) {
   CephContext *cct = m_image_ctx.cct;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   size_t image_size = m_image_ctx.size;
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
 
   if (image_offset >= image_size) {
     // rbd-mirror image sync might race an IO event w/ associated resize between

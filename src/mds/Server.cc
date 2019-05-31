@@ -1366,18 +1366,18 @@ void Server::update_required_client_features()
   /* If this blows up on you, you added a release without adding a new release bit to cephfs_features.h */
   static_assert(CEPHFS_CURRENT_RELEASE == CEPH_RELEASE_MAX-1);
 
-  int min_compat = mds->mdsmap->get_min_compat_client();
-  if (min_compat >= CEPH_RELEASE_OCTOPUS)
+  ceph_release_t min_compat = mds->mdsmap->get_min_compat_client();
+  if (min_compat >= ceph_release_t::octopus)
     bits.push_back(CEPHFS_FEATURE_OCTOPUS);
-  else if (min_compat >= CEPH_RELEASE_NAUTILUS)
+  else if (min_compat >= ceph_release_t::nautilus)
     bits.push_back(CEPHFS_FEATURE_NAUTILUS);
-  else if (min_compat >= CEPH_RELEASE_MIMIC)
+  else if (min_compat >= ceph_release_t::mimic)
     bits.push_back(CEPHFS_FEATURE_MIMIC);
-  else if (min_compat >= CEPH_RELEASE_LUMINOUS)
+  else if (min_compat >= ceph_release_t::luminous)
     bits.push_back(CEPHFS_FEATURE_LUMINOUS);
-  else if (min_compat >= CEPH_RELEASE_KRAKEN)
+  else if (min_compat >= ceph_release_t::kraken)
     bits.push_back(CEPHFS_FEATURE_KRAKEN);
-  else if (min_compat >= CEPH_RELEASE_JEWEL)
+  else if (min_compat >= ceph_release_t::jewel)
     bits.push_back(CEPHFS_FEATURE_JEWEL);
 
   std::sort(bits.begin(), bits.end());
@@ -5832,6 +5832,11 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   le->metablob.add_opened_ino(newi->ino());
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
+
+  // We hit_dir (via hit_inode) in our finish callback, but by then we might
+  // have overshot the split size (multiple mkdir in flight), so here is
+  // an early chance to split the dir if this mkdir makes it oversized.
+  mds->balancer->maybe_fragment(dir, false);
 }
 
 

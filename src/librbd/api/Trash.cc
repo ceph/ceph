@@ -137,7 +137,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
 
   if (r == 0) {
     if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      RWLock::WLocker snap_locker(ictx->snap_lock);
+      RWLock::WLocker image_locker(ictx->image_lock);
       ictx->set_journal_policy(new journal::DisabledPolicy());
     }
 
@@ -155,14 +155,14 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
     }
     ictx->owner_lock.put_read();
 
-    ictx->snap_lock.get_read();
+    ictx->image_lock.get_read();
     if (!ictx->migration_info.empty()) {
       lderr(cct) << "cannot move migrating image to trash" << dendl;
-      ictx->snap_lock.put_read();
+      ictx->image_lock.put_read();
       ictx->state->close();
       return -EBUSY;
     }
-    ictx->snap_lock.put_read();
+    ictx->image_lock.put_read();
 
     r = disable_mirroring<I>(ictx);
     if (r < 0) {

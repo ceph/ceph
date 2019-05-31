@@ -7,8 +7,6 @@ PUT Bucket
 Creates a new bucket. To create a bucket, you must have a user ID and a valid AWS Access Key ID to authenticate requests. You may not
 create buckets as an anonymous user.
 
-.. note:: We do not support request entities for ``PUT /{bucket}`` in this release.
-
 Constraints
 ~~~~~~~~~~~
 In general, bucket names should follow domain name constraints.
@@ -37,6 +35,16 @@ Parameters
 | ``x-amz-acl`` | Canned ACLs.         | ``private``, ``public-read``, ``public-read-write``, ``authenticated-read`` | No         |
 +---------------+----------------------+-----------------------------------------------------------------------------+------------+
 
+Request Entities
+~~~~~~~~~~~~~~~~
+
++-------------------------------+-----------+----------------------------------------------------------------+
+| Name                          | Type      | Description                                                    |
++===============================+===========+================================================================+
+| ``CreateBucketConfiguration`` | Container | A container for the bucket configuration.                      |
++-------------------------------+-----------+----------------------------------------------------------------+
+| ``LocationConstraint``        | String    | A zonegroup api name, with optional :ref:`s3_bucket_placement` |
++-------------------------------+-----------+----------------------------------------------------------------+
 
 
 HTTP Response

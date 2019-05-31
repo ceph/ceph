@@ -565,7 +565,7 @@ namespace std {
 template<> struct hash<entity_addr_t> {
   size_t operator()( const entity_addr_t& x ) const {
     static blobhash H;
-    return H((const char*)&x, sizeof(x));
+    return H(&x, sizeof(x));
   }
 };
 } // namespace std

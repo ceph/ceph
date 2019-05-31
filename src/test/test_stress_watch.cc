@@ -62,7 +62,7 @@ struct WatcherUnwatcher : public Thread {
 
 typedef RadosTestParamPP WatchStress;
 
-INSTANTIATE_TEST_CASE_P(WatchStressTests, WatchStress,
+INSTANTIATE_TEST_SUITE_P(WatchStressTests, WatchStress,
 			::testing::Values("", "cache"));
 
 TEST_P(WatchStress, Stress1) {

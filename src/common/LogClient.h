@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include "common/LogEntry.h"
+#include "common/ostream_temp.h"
 #include "common/ceph_mutex.h"
 #include "include/health.h"
 
@@ -48,25 +49,6 @@ int parse_log_client_options(CephContext *cct,
 			     uuid_d &fsid,
 			     std::string &host);
 
-class LogClientTemp
-{
-public:
-  LogClientTemp(clog_type type_, LogChannel &parent_);
-  LogClientTemp(const LogClientTemp &rhs);
-  ~LogClientTemp();
-
-  template<typename T>
-  std::ostream& operator<<(const T& rhs)
-  {
-    return ss << rhs;
-  }
-
-private:
-  clog_type type;
-  LogChannel &parent;
-  std::stringstream ss;
-};
-
 /** Manage where we output to and at which priority
  *
  * Not to be confused with the LogClient, which is the almighty coordinator
@@ -76,7 +58,7 @@ private:
  * Past queueing the LogEntry, the LogChannel is done with the whole thing.
  * LogClient will deal with sending and handling of LogEntries.
  */
-class LogChannel
+class LogChannel : public OstreamTemp::OstreamTempSink
 {
 public:
 
@@ -86,8 +68,8 @@ public:
              const std::string &facility,
              const std::string &prio);
 
-  LogClientTemp debug() {
-    return LogClientTemp(CLOG_DEBUG, *this);
+  OstreamTemp debug() {
+    return OstreamTemp(CLOG_DEBUG, this);
   }
   void debug(std::stringstream &s) {
     do_log(CLOG_DEBUG, s);
@@ -96,7 +78,7 @@ public:
    * Convenience function mapping health status to
    * the appropriate cluster log severity.
    */
-  LogClientTemp health(health_status_t health) {
+  OstreamTemp health(health_status_t health) {
     switch(health) {
       case HEALTH_OK:
         return info();
@@ -109,26 +91,26 @@ public:
         ceph_abort();
     }
   }
-  LogClientTemp info() {
-    return LogClientTemp(CLOG_INFO, *this);
+  OstreamTemp info() {
+    return OstreamTemp(CLOG_INFO, this);
   }
   void info(std::stringstream &s) {
     do_log(CLOG_INFO, s);
   }
-  LogClientTemp warn() {
-    return LogClientTemp(CLOG_WARN, *this);
+  OstreamTemp warn() {
+    return OstreamTemp(CLOG_WARN, this);
   }
   void warn(std::stringstream &s) {
     do_log(CLOG_WARN, s);
   }
-  LogClientTemp error() {
-    return LogClientTemp(CLOG_ERROR, *this);
+  OstreamTemp error() {
+    return OstreamTemp(CLOG_ERROR, this);
   }
   void error(std::stringstream &s) {
     do_log(CLOG_ERROR, s);
   }
-  LogClientTemp sec() {
-    return LogClientTemp(CLOG_SEC, *this);
+  OstreamTemp sec() {
+    return OstreamTemp(CLOG_SEC, this);
   }
   void sec(std::stringstream &s) {
     do_log(CLOG_SEC, s);
@@ -200,8 +182,6 @@ private:
   bool log_to_monitors;
   std::shared_ptr<ceph::logging::Graylog> graylog;
 
-
-  friend class LogClientTemp;
 };
 
 typedef LogChannel::Ref LogChannelRef;

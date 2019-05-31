@@ -35,7 +35,9 @@ class Socket
     : sid{seastar::engine().cpu_id()},
       socket(std::move(_socket)),
       in(socket.input()),
-      out(socket.output()) {}
+      // the default buffer size 8192 is too small that may impact our write
+      // performance. see seastar::net::connected_socket::output()
+      out(socket.output(65536)) {}
 
   Socket(Socket&& o) = delete;
 

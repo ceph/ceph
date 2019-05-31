@@ -851,7 +851,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
 			       bucket_name, bucket_info, nullptr,
-			       &bucket_attrs);
+			       s->yield, &bucket_attrs);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -2109,7 +2109,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   RGWBucketInfo bucket_info;
   int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
-                                   bucket_info, nullptr);
+                                   bucket_info, nullptr, s->yield);
   if (ret < 0) {
     throw ret;
   }

@@ -571,17 +571,10 @@ int main(int argc, const char **argv)
     string val;
     int r = store->read_meta("min_mon_release", &val);
     if (r >= 0 && val.size()) {
-      int min = atoi(val.c_str());
-      if (min &&
-	  min + 2 < (int)ceph_release()) {
-	derr << "recorded min_mon_release is " << min
-	     << " (" << ceph_release_name(min)
-	     << ") which is >2 releases older than installed "
-	     << ceph_release() << " (" << ceph_release_name(ceph_release())
-	     << "); you can only upgrade 2 releases at a time" << dendl;
-	derr << "you should first upgrade to "
-	     << (min + 1) << " (" << ceph_release_name(min + 1) << ") or "
-	     << (min + 2) << " (" << ceph_release_name(min + 2) << ")" << dendl;
+      ceph_release_t from_release = ceph_release_from_name(val);
+      ostringstream err;
+      if (!can_upgrade_from(from_release, "min_mon_release", err)) {
+	derr << err.str() << dendl;
 	prefork.exit(1);
       }
     }

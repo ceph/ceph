@@ -23,6 +23,7 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { Pool } from '../pool';
+import { PoolStats } from '../pool-stat';
 
 const BASE_URL = 'pool';
 
@@ -138,7 +139,12 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('Crush Ruleset'),
         flexGrow: 3
       },
-      { name: this.i18n('Usage'), cellTemplate: this.poolUsageTpl, flexGrow: 3 },
+      {
+        name: this.i18n('Usage'),
+        prop: 'usage',
+        cellTemplate: this.poolUsageTpl,
+        flexGrow: 3
+      },
       {
         prop: 'stats.rd_bytes.series',
         name: this.i18n('Read bytes'),
@@ -213,11 +219,13 @@ export class PoolListComponent implements OnInit {
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
-      const stats = {};
+      const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
         stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
+      const avail = stats.bytes_used.latest + stats.max_avail.latest;
+      pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         pool.stats[stat].series = pool.stats[stat].series.map((point) => point[1]);

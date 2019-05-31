@@ -12,7 +12,7 @@ class PG;
 
 namespace recovery {
 
-// RecoveryMachine::handle_event() could send multiple notifications to a
+// PeeringMachine::handle_event() could send multiple notifications to a
 // certain peer OSD before it reaches the last state. for better performance,
 // we send them in batch. the pending messages are collected in RecoveryCtx
 // before being dispatched upon returning of handle_event().

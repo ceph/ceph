@@ -253,6 +253,7 @@ static seastar::future<> run(
             .then([&client] (ceph::net::Messenger *messenger) {
               client.msgr = messenger;
               client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+              client.msgr->set_require_authorizer(false);
               client.msgr->set_auth_client(&client.dummy_auth);
               client.msgr->set_auth_server(&client.dummy_auth);
               return client.msgr->start(&client);

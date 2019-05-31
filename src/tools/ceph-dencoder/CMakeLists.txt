@@ -10,6 +10,8 @@ endif()
 
 set(dencoder_srcs
   ceph_dencoder.cc
+  ../../include/uuid.cc
+  ../../include/utime.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 if(WITH_RADOSGW)
   list(APPEND dencoder_srcs

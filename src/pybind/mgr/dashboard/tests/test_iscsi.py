@@ -17,7 +17,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
 
     @classmethod
     def setup_server(cls):
-        OrchClient.instance().available = lambda: False
+        OrchClient().available = lambda: False
         mgr.rados.side_effect = None
         # pylint: disable=protected-access
         Iscsi._cp_config['tools.authenticate.on'] = False
@@ -503,9 +503,9 @@ class IscsiClientMock(object):
                 "rbd": 0,
                 "user:rbd": 4,
             },
-            "supported_rbd_features": {
-                "rbd": 135,
-                "user:rbd": 61,
+            "unsupported_rbd_features": {
+                "rbd": 88,
+                "user:rbd": 0,
             },
             "disk_default_controls": {
                 "user:rbd": {
@@ -552,6 +552,12 @@ class IscsiClientMock(object):
         target_config['portals'][gateway_name] = {
             "portal_ip_address": ip_address[0]
         }
+
+    def delete_gateway(self, target_iqn, gateway_name):
+        target_config = self.config['targets'][target_iqn]
+        portal_config = target_config['portals'][gateway_name]
+        target_config['ip_list'].remove(portal_config['portal_ip_address'])
+        target_config['portals'].pop(gateway_name)
 
     def create_disk(self, pool, image, backstore):
         image_id = '{}/{}'.format(pool, image)

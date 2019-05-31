@@ -1349,18 +1349,46 @@ bool DaemonServer::_handle_command(
 	    safe_to_destroy.insert(osd);
 	    continue;  // clearly safe to destroy
 	  }
+          set<int64_t> pools;
+          osdmap.get_pool_ids_by_osd(g_ceph_context, osd, &pools);
+          if (pools.empty()) {
+            // osd does not belong to any pools yet
+            safe_to_destroy.insert(osd);
+            continue;
+          }
+          if (osdmap.is_down(osd) && osdmap.is_out(osd)) {
+            // if osd is down&out and all relevant pools are active+clean,
+            // then should be safe to destroy
+            bool all_osd_pools_active_clean = true;
+            for (auto &ps: pg_map.pg_stat) {
+              auto& pg = ps.first;
+              auto state = ps.second.state;
+              if (!pools.count(pg.pool()))
+                continue;
+              if ((state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
+                           (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
+                all_osd_pools_active_clean = false;
+                break;
+              }
+            }
+            if (all_osd_pools_active_clean) {
+              safe_to_destroy.insert(osd);
+              continue;
+            }
+          }
 	  auto q = pg_map.num_pg_by_osd.find(osd);
 	  if (q != pg_map.num_pg_by_osd.end()) {
-	    if (q->second.acting > 0 || q->second.up > 0) {
+	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
 	      active_osds.insert(osd);
-	      affected_pgs += q->second.acting + q->second.up;
+	      // XXX: For overlapping PGs, this counts them again
+	      affected_pgs += q->second.acting + q->second.up_not_acting;
 	      continue;
 	    }
 	  }
 	  if (num_active_clean < pg_map.num_pg) {
 	    // all pgs aren't active+clean; we need to be careful.
 	    auto p = pg_map.osd_stat.find(osd);
-	    if (p == pg_map.osd_stat.end()) {
+	    if (p == pg_map.osd_stat.end() || !osdmap.is_up(osd)) {
 	      missing_stats.insert(osd);
 	      continue;
 	    } else if (p->second.num_pgs > 0) {
@@ -1405,7 +1433,6 @@ bool DaemonServer::_handle_command(
       if (!r) {
         ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
            << " durability.";
-        safe_to_destroy.swap(osds);
       }
       if (f) {
         f->open_object_section("osd_status");
@@ -1477,7 +1504,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(r, ss);
       return true;
     }
-    map<pg_t,int> pg_delta;  // pgid -> net acting set size change
+    int touched_pgs = 0;
     int dangerous_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
 	if (pg_map.num_pg_unknown > 0) {
@@ -1486,35 +1513,40 @@ bool DaemonServer::_handle_command(
 	  r = -EAGAIN;
 	  return;
 	}
-	for (auto osd : osds) {
-	  auto p = pg_map.pg_by_osd.find(osd);
-	  if (p != pg_map.pg_by_osd.end()) {
-	    for (auto& pgid : p->second) {
-	      --pg_delta[pgid];
+	for (const auto& q : pg_map.pg_stat) {
+          set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+	  bool found = false;
+	  if (q.second.state & PG_STATE_DEGRADED) {
+	    for (auto& anm : q.second.avail_no_missing) {
+	      if (osds.count(anm.osd)) {
+		found = true;
+		continue;
+	      }
+	      pg_acting.insert(anm.osd);
+	    }
+	  } else {
+	    for (auto& a : q.second.acting) {
+	      if (osds.count(a)) {
+		found = true;
+		continue;
+	      }
+	      pg_acting.insert(a);
 	    }
 	  }
-	}
-	for (auto& p : pg_delta) {
-	  auto q = pg_map.pg_stat.find(p.first);
-	  if (q == pg_map.pg_stat.end()) {
-	    ss << "missing information about " << p.first << "; cannot draw"
-	       << " any conclusions";
-	    r = -EAGAIN;
-	    return;
+	  if (!found) {
+	    continue;
 	  }
-	  if (!(q->second.state & PG_STATE_ACTIVE) ||
-	      (q->second.state & PG_STATE_DEGRADED)) {
-	    // we don't currently have a good way to tell *how* degraded
-	    // a degraded PG is, so we have to assume we cannot remove
-	    // any more replicas/shards.
+	  touched_pgs++;
+	  if (!(q.second.state & PG_STATE_ACTIVE) ||
+	      (q.second.state & PG_STATE_DEGRADED)) {
 	    ++dangerous_pgs;
 	    continue;
 	  }
-	  const pg_pool_t *pi = osdmap.get_pg_pool(p.first.pool());
+	  const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
 	  if (!pi) {
 	    ++dangerous_pgs; // pool is creating or deleting
 	  } else {
-	    if (q->second.acting.size() + p.second < pi->min_size) {
+	    if (pg_acting.size() < pi->min_size) {
 	      ++dangerous_pgs;
 	    }
 	  }
@@ -1525,14 +1557,15 @@ bool DaemonServer::_handle_command(
       return true;
     }
     if (dangerous_pgs) {
-      ss << dangerous_pgs << " PGs are already degraded or might become "
-	 << "unavailable";
+      ss << dangerous_pgs << " PGs are already too degraded, would become"
+	 << " too degraded or might become unavailable";
       cmdctx->reply(-EBUSY, ss);
       return true;
     }
     ss << "OSD(s) " << osds << " are ok to stop without reducing"
-       << " availability, provided there are no other concurrent failures"
-       << " or interventions. " << pg_delta.size() << " PGs are likely to be"
+       << " availability or risking data, provided there are no other concurrent failures"
+       << " or interventions." << std::endl;
+    ss << touched_pgs << " PGs are likely to be"
        << " degraded (but remain available) as a result.";
     cmdctx->reply(0, ss);
     return true;
@@ -2311,7 +2344,7 @@ void DaemonServer::send_report()
 	  jf.dump_object("health_checks", m->health_checks);
 	  jf.flush(*_dout);
 	  *_dout << dendl;
-          if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+          if (osdmap.require_osd_release >= ceph_release_t::luminous) {
               clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
           }
 	});
@@ -2552,24 +2585,28 @@ void DaemonServer::adjust_pgs()
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
 	    int next;
-	    if (aggro) {
+	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
+	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
+	    if (aggro ||
+		// pool is (virtually) empty; just jump to final pgp_num?
+		(p.get_pgp_num_target() > p.get_pgp_num() &&
+		 s.stats.sum.num_objects <= (MAX_NUM_OBJECTS_PER_PG_FOR_LEAP *
+					     p.get_pgp_num_target()))) {
 	      next = target;
 	    } else {
 	      double room =
 		std::min<double>(max_misplaced - misplaced_ratio,
-				 misplaced_ratio / 2.0);
+				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
-	      int delta = target - p.get_pgp_num();
-	      next = p.get_pgp_num();
-	      if (delta < 0) {
-		next += std::max<int>(-estmax, delta);
-	      } else {
-		next += std::min<int>(estmax, delta);
-	      }
+	      next = std::clamp(target,
+				p.get_pgp_num() - estmax,
+				p.get_pgp_num() + estmax);
 	      dout(20) << " room " << room << " estmax " << estmax
-		       << " delta " << delta << " next " << next << dendl;
-	      if (p.get_pgp_num_target() == p.get_pg_num_target()) {
+		       << " delta " << (target-p.get_pgp_num())
+		       << " next " << next << dendl;
+	      if (p.get_pgp_num_target() == p.get_pg_num_target() &&
+		  p.get_pgp_num_target() < p.get_pg_num()) {
 		// since pgp_num is tracking pg_num, ceph is handling
 		// pgp_num.  so, be responsible: don't let pgp_num get
 		// too far out ahead of merges (if we are merging).

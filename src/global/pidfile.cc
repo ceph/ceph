@@ -42,7 +42,7 @@
 
 struct pidfh {
   int pf_fd;
-  char pf_path[PATH_MAX + 1];
+  string pf_path;
   dev_t pf_dev;
   ino_t pf_ino;
 
@@ -53,18 +53,18 @@ struct pidfh {
     remove();
   }
 
-  bool is_open() {
-    return pf_path[0] != '\0' && pf_fd != -1;
+  bool is_open() const {
+    return !pf_path.empty() && pf_fd != -1;
   }
   void reset() {
     pf_fd = -1;
-    memset(pf_path, 0, sizeof(pf_path));
+    pf_path.clear();
     pf_dev = 0;
     pf_ino = 0;
   }
   int verify();
   int remove();
-  int open(const ConfigProxy& conf);
+  int open(std::string_view pid_file);
   int write();
 };
 
@@ -75,7 +75,7 @@ int pidfh::verify() {
   if (pf_fd == -1)
     return -EINVAL;
   struct stat st;
-  if (stat(pf_path, &st) == -1)
+  if (stat(pf_path.c_str(), &st) == -1)
     return -errno;
   if (st.st_dev != pf_dev || st.st_ino != pf_ino)
     return -ESTALE;
@@ -84,7 +84,7 @@ int pidfh::verify() {
 
 int pidfh::remove()
 {
-  if (!pf_path[0])
+  if (pf_path.empty())
     return 0;
 
   int ret;
@@ -122,9 +122,9 @@ int pidfh::remove()
 	      << getpid() << std::endl;
     return -EDOM;
   }
-  ret = ::unlink(pf_path);
+  ret = ::unlink(pf_path.c_str());
   if (ret < 0) {
-    std::cerr << __func__ << " unlink " << pf_path << " failed "
+    std::cerr << __func__ << " unlink " << pf_path.c_str() << " failed "
 	      << cpp_strerror(errno) << std::endl;
     return -errno;
   }
@@ -132,16 +132,12 @@ int pidfh::remove()
   return 0;
 }
 
-int pidfh::open(const ConfigProxy& conf)
+int pidfh::open(std::string_view pid_file)
 {
-  int len = snprintf(pf_path, sizeof(pf_path),
-		    "%s", conf->pid_file.c_str());
-
-  if (len >= (int)sizeof(pf_path))
-    return -ENAMETOOLONG;
+  pf_path = pid_file;
 
   int fd;
-  fd = ::open(pf_path, O_CREAT|O_RDWR|O_CLOEXEC, 0644);
+  fd = ::open(pf_path.c_str(), O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (fd < 0) {
     int err = errno;
     derr << __func__ << ": failed to open pid file '"
@@ -215,9 +211,9 @@ void pidfile_remove()
   pfh = nullptr;
 }
 
-int pidfile_write(const ConfigProxy& conf)
+int pidfile_write(std::string_view pid_file)
 {
-  if (conf->pid_file.empty()) {
+  if (pid_file.empty()) {
     dout(0) << __func__ << ": ignore empty --pid-file" << dendl;
     return 0;
   }
@@ -231,7 +227,7 @@ int pidfile_write(const ConfigProxy& conf)
     return -EINVAL;
   }
 
-  int r = pfh->open(conf);
+  int r = pfh->open(pid_file);
   if (r != 0) {
     pidfile_remove();
     return r;

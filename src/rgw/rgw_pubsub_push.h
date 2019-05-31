@@ -25,8 +25,6 @@ public:
 
   typedef std::unique_ptr<RGWPubSubEndpoint> Ptr;
 
-  static const std::string& get_schema(const std::string& endpoint);
-
   // factory method for the actual notification endpoint
   // derived class specific arguments are passed in http args format
   // may throw a configuration_error if creation fails

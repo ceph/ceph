@@ -14,32 +14,38 @@
 #ifndef CEPH_BLOBHASH_H
 #define CEPH_BLOBHASH_H
 
+#include <cstdint>
 #include "hash.h"
-
-/*
-- this is to make some of the STL types work with 64 bit values, string hash keys, etc.
-- added when i was using an old STL.. maybe try taking these out and see if things 
-  compile now?
-*/
 
 class blobhash {
 public:
-  uint32_t operator()(const char *p, unsigned len) {
-    static rjhash<uint32_t> H;
-    uint32_t acc = 0;
+  uint32_t operator()(const void* p, size_t len) {
+    static rjhash<std::uint32_t> H;
+    std::uint32_t acc = 0;
+    auto buf = static_cast<const unsigned char*>(p);
     while (len >= sizeof(acc)) {
-      acc ^= *(uint32_t*)p;
-      p += sizeof(uint32_t);
-      len -= sizeof(uint32_t);
+      acc ^= unaligned_load(buf);
+      buf += sizeof(std::uint32_t);
+      len -= sizeof(std::uint32_t);
     }
-    int sh = 0;
-    while (len) {
-      acc ^= (uint32_t)*p << sh;
-      sh += 8;
-      len--;
-      p++;
+    // handle the last few bytes of p[-(len % 4):]
+    switch (len) {
+    case 3:
+      acc ^= buf[2] << 16;
+      [[fallthrough]];
+    case 2:
+      acc ^= buf[1] << 8;
+      [[fallthrough]];
+    case 1:
+      acc ^= buf[0];
     }
     return H(acc);
+  }
+private:
+  static inline std::uint32_t unaligned_load(const unsigned char* p) {
+    std::uint32_t result;
+    __builtin_memcpy(&result, p, sizeof(result));
+    return result;
   }
 };
 

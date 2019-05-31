@@ -7,6 +7,12 @@ Please see the ceph-mgr module developer's guide for more information.
 import sys
 import time
 import fnmatch
+import uuid
+
+import six
+
+from mgr_module import MgrModule
+from mgr_util import format_bytes
 
 try:
     from typing import TypeVar, Generic, List, Optional, Union, Tuple
@@ -14,10 +20,6 @@ try:
     G = Generic[T]
 except ImportError:
     T, G = object, object
-
-import six
-
-from mgr_util import format_bytes
 
 
 class OrchestratorError(Exception):
@@ -150,7 +152,17 @@ class WriteCompletion(_Completion):
     """
 
     def __init__(self):
-        pass
+        self.progress_id = str(uuid.uuid4())
+
+        #: if a orchestrator module can provide a more detailed
+        #: progress information, it needs to also call ``progress.update()``.
+        self.progress = 0.5
+
+    def __str__(self):
+        """
+        ``__str__()`` is used for determining the message for progress events.
+        """
+        return super(WriteCompletion, self).__str__()
 
     @property
     def is_persistent(self):
@@ -219,7 +231,7 @@ class Orchestrator(object):
         return True
 
     def available(self):
-        # type: () -> Tuple[Optional[bool], Optional[str]]
+        # type: () -> Tuple[bool, str]
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -231,13 +243,16 @@ class Orchestrator(object):
         (e.g. based on a periodic background ping of the orchestrator)
         if that's necessary to make this method fast.
 
-        Do not override this method if you don't have a meaningful
-        status to return: the default None, None return value is used
-        to indicate that a module is unable to indicate its availability.
+        ..note:: `True` doesn't mean that the desired functionality
+            is actually available in the orchestrator. I.e. this
+            won't work as expected::
+
+                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
         """
-        return None, None
+        raise NotImplementedError()
 
     def wait(self, completions):
         """
@@ -294,7 +309,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def describe_service(self, service_type=None, service_id=None, node_name=None):
-        # type: (str, str, str) -> ReadCompletion[List[ServiceDescription]]
+        # type: (Optional[str], Optional[str], Optional[str]) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -437,7 +452,6 @@ class Orchestrator(object):
         :return: List of strings
         """
         raise NotImplementedError()
-
 
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
@@ -601,7 +615,7 @@ class DriveGroupSpec(object):
     def __init__(self, host_pattern, data_devices=None, db_devices=None, wal_devices=None, journal_devices=None,
                  data_directories=None, osds_per_device=None, objectstore='bluestore', encrypted=False,
                  db_slots=None, wal_slots=None):
-        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> ()
+        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> None
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -836,7 +850,9 @@ def _mk_orch_methods(cls):
     # Otherwise meth is always bound to last key
     def shim(method_name):
         def inner(self, *args, **kwargs):
-            return self._oremote(method_name, args, kwargs)
+            completion = self._oremote(method_name, args, kwargs)
+            self._update_completion_progress(completion, 0)
+            return completion
         return inner
 
     for meth in Orchestrator.__dict__:
@@ -861,24 +877,54 @@ class OrchestratorClientMixin(Orchestrator):
     ...        self.log.debug(completion.result)
 
     """
+
+    def set_mgr(self, mgr):
+        # type: (MgrModule) -> None
+        """
+        Useable in the Dashbord that uses a global ``mgr``
+        """
+
+        self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
 
         :raises RuntimeError: If the remote method failed.
-        :raises NoOrchestrator:
+        :raises OrchestratorError: orchestrator failed to perform
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         try:
-            o = self._select_orchestrator()
+            mgr = self.__mgr
         except AttributeError:
-            o = self.remote('orchestrator_cli', '_select_orchestrator')
+            mgr = self
+        try:
+            o = mgr._select_orchestrator()
+        except AttributeError:
+            o = mgr.remote('orchestrator_cli', '_select_orchestrator')
 
         if o is None:
             raise NoOrchestrator()
 
-        self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
-        return self.remote(o, meth, *args, **kwargs)
+        mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
+        return mgr.remote(o, meth, *args, **kwargs)
+
+    def _update_completion_progress(self, completion, force_progress=None):
+        # type: (WriteCompletion, Optional[float]) -> None
+        try:
+            progress = force_progress if force_progress is not None else completion.progress
+            if completion.is_complete:
+                self.remote("progress", "complete", completion.progress_id)
+            else:
+                self.remote("progress", "update", completion.progress_id, str(completion), progress,
+                            ["orchestrator"])
+        except AttributeError:
+            # No WriteCompletion. Ignore.
+            pass
+        except ImportError:
+            # If the progress module is disabled that's fine,
+            # they just won't see the output.
+            pass
 
     def _orchestrator_wait(self, completions):
         # type: (List[_Completion]) -> None
@@ -892,8 +938,12 @@ class OrchestratorClientMixin(Orchestrator):
         :raises NoOrchestrator:
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
+        for c in completions:
+            self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
                 time.sleep(5)
             else:
                 break
+        for c in completions:
+            self._update_completion_progress(c)

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/Cond.h"
 #include "common/errno.h"
 
 #include "librbd/ExclusiveLock.h"
@@ -37,7 +38,7 @@ namespace {
 template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
-  ceph_assert(ictx->snap_lock.is_locked());
+  ceph_assert(ictx->image_lock.is_locked());
   auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
   if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
     return it->second;
@@ -260,10 +261,10 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     on_finishes[i] = new C_SaferCond;
 
     std::string snap_name;
-    ictx->snap_lock.get_read();
+    ictx->image_lock.get_read();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->snap_lock.put_read();
+    ictx->image_lock.put_read();
 
     if (r >= 0) {
       ldout(cct, 20) << "removing individual snapshot from image " << ictx->name
@@ -399,10 +400,10 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
     std::string snap_name;
-    ictx->snap_lock.get_read();
+    ictx->image_lock.get_read();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->snap_lock.put_read();
+    ictx->image_lock.put_read();
 
     if (r >= 0) {
       ldout(cct, 20) << "rolling back to individual snapshot for image " << ictx->name
@@ -979,9 +980,9 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
       ret_code = r;
     } else {
       ImageCtx *ictx = ictxs[i];
-      ictx->snap_lock.get_read();
+      ictx->image_lock.get_read();
       snap_t snap_id = get_group_snap_id(ictx, ne);
-      ictx->snap_lock.put_read();
+      ictx->image_lock.put_read();
       if (snap_id == CEPH_NOSNAP) {
 	ldout(cct, 20) << "Couldn't find created snapshot with namespace: "
                        << ne << dendl;
@@ -1017,10 +1018,10 @@ remove_image_snaps:
 
     on_finishes[i] = new C_SaferCond;
     std::string snap_name;
-    ictx->snap_lock.get_read();
+    ictx->image_lock.get_read();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->snap_lock.put_read();
+    ictx->image_lock.put_read();
     if (r >= 0) {
       ictx->operations->snap_remove(ne, snap_name.c_str(), on_finishes[i]);
     } else {

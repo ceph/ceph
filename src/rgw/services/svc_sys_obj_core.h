@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_SYS_OBJ_CORE_H
-#define CEPH_RGW_SERVICES_SYS_OBJ_CORE_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -84,7 +85,7 @@ public:
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
-  void invalidate(rgw_raw_obj& obj) {
+  void invalidate(const rgw_raw_obj& obj) {
     RWLock::WLocker wl(lock);
     auto iter = objs_state.find(obj);
     if (iter == objs_state.end()) {
@@ -217,5 +218,3 @@ public:
     return zone_svc;
   }
 };
-
-#endif

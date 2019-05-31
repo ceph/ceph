@@ -360,7 +360,7 @@ Journal<I>::~Journal() {
 
 template <typename I>
 bool Journal<I>::is_journal_supported(I &image_ctx) {
-  ceph_assert(image_ctx.snap_lock.is_locked());
+  ceph_assert(image_ctx.image_lock.is_locked());
   return ((image_ctx.features & RBD_FEATURE_JOURNALING) &&
           !image_ctx.read_only && image_ctx.snap_id == CEPH_NOSNAP);
 }
@@ -541,7 +541,7 @@ bool Journal<I>::is_journal_replaying(const Mutex &) const {
 
 template <typename I>
 bool Journal<I>::is_journal_appending() const {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
   Mutex::Locker locker(m_lock);
   return (m_state == STATE_READY &&
           !m_image_ctx.get_journal_policy()->append_disabled());

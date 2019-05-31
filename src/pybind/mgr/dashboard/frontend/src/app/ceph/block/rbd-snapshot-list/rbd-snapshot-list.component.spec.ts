@@ -16,6 +16,7 @@ import {
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -23,7 +24,6 @@ import { Permissions } from '../../../shared/models/permissions';
 import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ServicesModule } from '../../../shared/services/services.module';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
@@ -49,7 +49,6 @@ describe('RbdSnapshotListComponent', () => {
       DataTableModule,
       ComponentsModule,
       ToastModule.forRoot(),
-      ServicesModule,
       ApiModule,
       HttpClientTestingModule,
       RouterTestingModule,
@@ -82,6 +81,7 @@ describe('RbdSnapshotListComponent', () => {
     beforeEach(() => {
       fixture.detectChanges();
       const i18n = TestBed.get(I18n);
+      const actionLabelsI18n = TestBed.get(ActionLabelsI18n);
       called = false;
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
@@ -97,7 +97,8 @@ describe('RbdSnapshotListComponent', () => {
         notificationService,
         null,
         null,
-        i18n
+        i18n,
+        actionLabelsI18n
       );
       spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
@@ -206,7 +207,7 @@ describe('RbdSnapshotListComponent', () => {
     it('should display suggested snapshot name', () => {
       component.openCreateSnapshotModal();
       expect(component.modalRef.content.snapName).toMatch(
-        RegExp(`^${component.rbdName}-\\d+T\\d+Z\$`)
+        RegExp(`^${component.rbdName}_[\\d-]+T[\\d.:]+\\+[\\d:]+\$`)
       );
     });
   });

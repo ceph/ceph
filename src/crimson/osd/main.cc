@@ -13,6 +13,7 @@
 #include "common/ceph_argparse.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/SocketMessenger.h"
+#include "global/pidfile.h"
 
 #include "osd.h"
 
@@ -96,9 +97,16 @@ int main(int argc, char* argv[])
       auto& config = app.configuration();
       return seastar::async([&] {
         sharded_conf().start(init_params.name, cluster_name).get();
+        seastar::engine().at_exit([] {
+          return sharded_conf().stop();
+        });
         sharded_perf_coll().start().get();
+        seastar::engine().at_exit([] {
+          return sharded_perf_coll().stop();
+        });
         local_conf().parse_config_files(conf_file_list).get();
         local_conf().parse_argv(ceph_args).get();
+        pidfile_write(local_conf()->pid_file);
         const int whoami = std::stoi(local_conf()->name.get_id());
         const auto nonce = static_cast<uint32_t>(getpid());
         for (auto [msgr, name] : {make_pair(std::ref(cluster_msgr), "cluster"s),
@@ -128,13 +136,6 @@ int main(int argc, char* argv[])
                                            hb_front_msgr.stop(),
                                            hb_back_msgr.stop());
         });
-        seastar::engine().at_exit([] {
-          return sharded_perf_coll().stop();
-        });
-        seastar::engine().at_exit([] {
-          return sharded_conf().stop();
-        });
-
         if (config.count("mkfs")) {
           osd.invoke_on(0, &OSD::mkfs,
                         local_conf().get_val<uuid_d>("fsid"))

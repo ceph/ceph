@@ -8,12 +8,6 @@
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
 
-static const string_view infover_key = "_infover"sv;
-static const string_view info_key = "_info"sv;
-static const string_view biginfo_key = "_biginfo"sv;
-static const string_view epoch_key = "_epoch"sv;
-static const string_view fastinfo_key = "_fastinfo"sv;
-
 using ceph::os::CyanStore;
 
 PGMeta::PGMeta(CyanStore* store, spg_t pgid)
