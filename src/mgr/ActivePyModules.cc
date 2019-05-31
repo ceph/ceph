@@ -346,7 +346,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "osd_pool_stats") {
     int64_t poolid = -ENOENT;
-    string pool_name;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
         PyEval_RestoreThread(tstate);
