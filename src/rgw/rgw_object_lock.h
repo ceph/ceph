@@ -5,7 +5,6 @@
 #include "common/ceph_time.h"
 #include "common/iso_8601.h"
 #include "rgw_xml.h"
-using namespace std;
 
 class DefaultRetention
 {
