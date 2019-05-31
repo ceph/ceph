@@ -948,6 +948,9 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
+	    # wait for volume module to load
+	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
