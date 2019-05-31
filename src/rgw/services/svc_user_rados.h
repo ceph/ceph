@@ -20,7 +20,7 @@
 #include "rgw/rgw_service.h"
 
 #include "svc_meta_be.h"
-#include "svc_user_rados.h"
+#include "svc_user.h"
 
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -31,6 +31,8 @@ class RGWSI_SyncModules;
 class RGWSI_MetaBackend_Handler;
 
 struct rgw_cache_entry_info;
+
+class RGWUserBuckets;
 
 template <class T>
 class RGWChainedCacheImpl;
