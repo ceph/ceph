@@ -4665,8 +4665,12 @@ void RGWDeleteObj::execute()
       /* check if obj exists, read orig attrs */
       op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
-        /* object maybe delete_marker, skip check_obj_lock*/
-        check_obj_lock = false;
+        if (op_ret == -ENOENT) {
+          /* object maybe delete_marker, skip check_obj_lock*/
+          check_obj_lock = false;
+        } else {
+          return;
+        }
       }
     }
 
