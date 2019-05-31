@@ -317,8 +317,8 @@ void SnapServer::check_osd_map(bool force)
   }
   dout(10) << "check_osd_map need_to_purge=" << need_to_purge << dendl;
 
-  map<int, vector<snapid_t> > all_purge;
-  map<int, vector<snapid_t> > all_purged;
+  map<int32_t, vector<snapid_t> > all_purge;
+  map<int32_t, vector<snapid_t> > all_purged;
 
   mds->objecter->with_osdmap(
     [this, &all_purged, &all_purge](const OSDMap& osdmap) {
