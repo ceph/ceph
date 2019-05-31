@@ -18,6 +18,8 @@ remain conservative about creating very large directories, as they still
 have a resource cost in situations such as a CephFS client listing
 the directory, where all the fragments must be loaded at once.
 
+.. tip:: The root directory cannot be fragmented.
+
 All directories are initially created as a single fragment.  This fragment
 may be *split* to divide up the directory into more fragments, and these
 fragments may be *merged* to reduce the number of fragments in the directory.
