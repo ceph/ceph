@@ -2812,7 +2812,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
       case PG::Scrubber::WAIT_REPLICAS:
         if (!scrubber.waiting_on_whom.empty()) {
-          // will be requeued by sub_op_scrub_map
+          // will be requeued by do_replica_scrub_map
           dout(10) << "wait for replicas to build scrub map" << dendl;
           done = true;
 	  break;
