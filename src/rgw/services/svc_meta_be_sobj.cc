@@ -1,5 +1,6 @@
 
 #include "svc_meta_be_sobj.h"
+#include "svc_mdlog.h"
 
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_metadata.h"
@@ -21,7 +22,64 @@ RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_SObj::alloc_be_handler()
 
 RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
 {
-  return new ctx(sysobj_svc);
+  return new Context_SObj(sysobj_svc);
+}
+
+int RGWSI_MetaBackend_SObj::pre_modify(RGWSI_MetaBackend::Context *_ctx,
+                                       const string& key,
+                                       RGWMetadataLogData& log_data,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMDLogStatus op_type)
+{
+  auto ctx = static_cast<Context_SObj *>(_ctx);
+  int ret = RGWSI_MetaBackend::pre_modify(ctx, key, log_data,
+                                          objv_tracker, op_type);
+  if (ret < 0) {
+    return ret;
+  }
+
+  /* if write version has not been set, and there's a read version, set it so that we can
+   * log it
+   */
+  if (objv_tracker) {
+    log_data.read_version = objv_tracker->read_version;
+    log_data.write_version = objv_tracker->write_version;
+  }
+
+  log_data.status = op_type;
+
+  bufferlist logbl;
+  encode(log_data, logbl);
+
+  ret = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWSI_MetaBackend_SObj::post_modify(RGWSI_MetaBackend::Context *_ctx,
+                                        const string& key,
+                                        RGWMetadataLogData& log_data,
+                                        RGWObjVersionTracker *objv_tracker, int ret)
+{
+  auto ctx = static_cast<Context_SObj *>(_ctx);
+  if (ret >= 0)
+    log_data.status = MDLOG_STATUS_COMPLETE;
+  else 
+    log_data.status = MDLOG_STATUS_ABORT;
+
+  bufferlist logbl;
+  encode(log_data, logbl);
+
+  int r = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
+  if (ret < 0)
+    return ret;
+
+  if (r < 0)
+    return r;
+
+  return RGWSI_MetaBackend::post_modify(ctx, key, log_data, objv_tracker, ret);
 }
 
 int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
@@ -111,7 +169,7 @@ int RGWSI_MetaBackend_SObj::list_init(RGWSI_MetaBackend::Context *_ctx,
   ctx->list.pool = sysobj_svc->get_pool(pool);
   ctx->list.op.emplace(ctx->list.pool->op());
 
-  string prefix = ctx->module->get_prefix();
+  string prefix = ctx->module->get_oid_prefix();
   ctx->list.op->init(marker, prefix);
 
   return 0;

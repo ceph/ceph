@@ -22,7 +22,8 @@ class RGWSI_Bucket_Module : public RGWSI_MBSObj_Handler_Module {
 
   const string prefix;
 public:
-  RGWSI_Bucket_Module(RGWSI_Bucket::Svc& _svc) : svc(_svc) {}
+  RGWSI_Bucket_Module(RGWSI_Bucket::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket"),
+                                                 svc(_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
     if (pool) {
@@ -57,7 +58,8 @@ class RGWSI_BucketInstance_Module : public RGWSI_MBSObj_Handler_Module {
 
   const string prefix;
 public:
-  RGWSI_BucketInstance_Module(RGWSI_Bucket::Svc& _svc) : svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
+  RGWSI_BucketInstance_Module(RGWSI_Bucket::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket.instance"),
+                                                         svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
     if (pool) {
@@ -120,7 +122,7 @@ public:
    * point, so that the log entries end up at the same log shard, so that we process them
    * in order
    */
-  string get_hash_key(const string& section, const string& key) override {
+  string get_hash_key(const string& key) override {
     string k = "bucket:";
     int pos = key.find(':');
     if (pos < 0)

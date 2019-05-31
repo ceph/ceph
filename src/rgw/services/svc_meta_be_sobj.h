@@ -25,15 +25,22 @@
 
 
 class RGWSI_MBSObj_Handler_Module : public RGWSI_MetaBackend::Module {
+protected:
+  string section;
 public:
+  RGWSI_MBSObj_Handler_Module(const string& _section) : section(_section) {}
   virtual void get_pool_and_oid(const std::string& key, rgw_pool *pool, std::string *oid) = 0;
   virtual const std::string& get_oid_prefix() = 0;
   virtual std::string key_to_oid(const std::string& key) = 0;
   virtual bool is_valid_oid(const std::string& oid) = 0;
   virtual std::string oid_to_key(const std::string& oid) = 0;
 
+  const std::string& get_section() {
+    return section;
+  }
+
   /* key to use for hashing entries for log shard placement */
-  virtual std::string get_hash_key(const std::string& section, const std::string& key) {
+  virtual std::string get_hash_key(const std::string& key) {
     return section + ":" + key;
   }
 };
@@ -123,6 +130,16 @@ public:
 
 
   RGWSI_MetaBackend::GetParams *alloc_default_get_params(ceph::real_time *pmtime) override;
+
+  int pre_modify(RGWSI_MetaBackend::Context *ctx,
+                 const string& key,
+                 RGWMetadataLogData& log_data,
+                 RGWObjVersionTracker *objv_tracker,
+                 RGWMDLogStatus op_type);
+  int post_modify(RGWSI_MetaBackend::Context *ctx,
+                  const string& key,
+                  RGWMetadataLogData& log_data,
+                  RGWObjVersionTracker *objv_tracker, int ret);
 
   int get_entry(RGWSI_MetaBackend::Context *ctx,
                 const string& key,
