@@ -67,8 +67,8 @@ export class RgwUserS3KeyModalComponent {
    * @param {boolean} viewing
    */
   setViewing(viewing: boolean = true) {
-    this.action = this.actionLabels.SHOW;
     this.viewing = viewing;
+    this.action = this.viewing ? this.actionLabels.SHOW : this.actionLabels.CREATE;
   }
 
   /**
