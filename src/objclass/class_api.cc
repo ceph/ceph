@@ -336,6 +336,16 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inb
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
+int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+  ops[0].op.extent.offset = ofs;
+  ops[0].op.extent.length = 0;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
 int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl)
 {
