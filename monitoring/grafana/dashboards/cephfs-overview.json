@@ -1,10 +1,11 @@
 {
+  "__inputs": [],
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "5.0.0"
+      "version": "5.3.2"
     },
     {
       "type": "panel",
@@ -30,7 +31,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1534386614546,
+  "iteration": 1557392920097,
   "links": [],
   "panels": [
     {
@@ -52,7 +53,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -77,7 +78,12 @@
       "pointradius": 5,
       "points": false,
       "renderer": "flot",
-      "seriesOverrides": [],
+      "seriesOverrides": [
+        {
+          "alias": "/.*Reads/",
+          "transform": "negative-Y"
+        }
+      ],
       "spaceLength": 10,
       "stack": true,
       "steppedLine": false,
@@ -86,14 +92,14 @@
           "expr": "sum(ceph_objecter_op_r{ceph_daemon=~\"($mds_servers).*\"})",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "MDS Reads",
+          "legendFormat": "Read Ops",
           "refId": "A"
         },
         {
           "expr": "sum(ceph_objecter_op_w{ceph_daemon=~\"($mds_servers).*\"})",
           "format": "time_series",
           "intervalFactor": 1,
-          "legendFormat": "MDS Writes",
+          "legendFormat": "Write Ops",
           "refId": "B"
         }
       ],
@@ -117,7 +123,7 @@
       "yaxes": [
         {
           "format": "none",
-          "label": null,
+          "label": "Reads(-) / Writes (+)",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -131,7 +137,11 @@
           "min": null,
           "show": true
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     },
     {
       "aliasColors": {},
@@ -139,7 +149,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
-      "fill": 1,
+      "fill": 0,
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -197,7 +207,7 @@
       "yaxes": [
         {
           "format": "none",
-          "label": null,
+          "label": "Client Requests",
           "logBase": 1,
           "max": null,
           "min": "0",
@@ -211,7 +221,11 @@
           "min": null,
           "show": false
         }
-      ]
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
   "refresh": "15s",
@@ -222,7 +236,6 @@
     "list": [
       {
         "current": {
-          "tags": [],
           "text": "default",
           "value": "default"
         },
@@ -233,6 +246,7 @@
         "query": "prometheus",
         "refresh": 1,
         "regex": "",
+        "skipUrlSync": false,
         "type": "datasource"
       },
       {
@@ -248,6 +262,7 @@
         "query": "label_values(ceph_mds_inodes, ceph_daemon)",
         "refresh": 1,
         "regex": "",
+        "skipUrlSync": false,
         "sort": 0,
         "tagValuesQuery": "",
         "tags": [],
@@ -289,6 +304,6 @@
   },
   "timezone": "",
   "title": "MDS Performance",
-  "uid": "rRfFzWtik",
+  "uid": "tbO9LAiZz",
   "version": 2
 }
