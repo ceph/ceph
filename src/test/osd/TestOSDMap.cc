@@ -714,12 +714,9 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
     }
     {
-      // confirm *maybe_remove_pg_upmaps* won't do anything bad
+      // confirm *clean_pg_upmaps* won't do anything bad
       OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
-      OSDMap nextmap;
-      nextmap.deepish_copy_from(tmpmap);
-      nextmap.maybe_remove_pg_upmaps(g_ceph_context, tmpmap,
-        nextmap, &pending_inc);
+      tmpmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
       tmpmap.apply_incremental(pending_inc);
       ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
     }
@@ -767,12 +764,9 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
     }
     {
-      // *maybe_remove_pg_upmaps* should be able to remove the above *bad* mapping
+      // *clean_pg_upmaps* should be able to remove the above *bad* mapping
       OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
-      OSDMap nextmap;
-      nextmap.deepish_copy_from(tmpmap);
-      nextmap.maybe_remove_pg_upmaps(g_ceph_context, tmpmap,
-        nextmap, &pending_inc);
+      tmpmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
       tmpmap.apply_incremental(pending_inc);
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(ec_pgid));
     }
@@ -894,12 +888,9 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
       ASSERT_TRUE(tmp.have_pg_upmaps(ec_pgid));
     }
     {
-      // *maybe_remove_pg_upmaps* should not remove the above upmap_item
+      // *clean_pg_upmaps* should not remove the above upmap_item
       OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
-      OSDMap nextmap;
-      nextmap.deepish_copy_from(tmp);
-      nextmap.maybe_remove_pg_upmaps(g_ceph_context, tmp,
-        nextmap, &pending_inc);
+      tmp.clean_pg_upmaps(g_ceph_context, &pending_inc);
       tmp.apply_incremental(pending_inc);
       ASSERT_TRUE(tmp.have_pg_upmaps(ec_pgid));
     }
@@ -964,10 +955,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-2: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      OSDMap tmpmap;
-      tmpmap.deepish_copy_from(osdmap);
-      tmpmap.apply_incremental(pending_inc);
-      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap, &pending_inc);
+      osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap is gone (reverted)
@@ -1101,11 +1089,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-4: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      OSDMap tmpmap;
-      tmpmap.deepish_copy_from(osdmap);
-      tmpmap.apply_incremental(pending_inc);
-      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap,
-				    &pending_inc);
+      osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap_items is gone (reverted)
@@ -1388,14 +1372,10 @@ TEST_F(OSDMapTest, BUG_40104) {
   }
   {
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-    OSDMap tmpmap;
-    tmpmap.deepish_copy_from(osdmap);
-    tmpmap.apply_incremental(pending_inc);
     auto start = mono_clock::now();
-    osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap,
-                                  &pending_inc);
+    osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
     auto latency = mono_clock::now() - start;
-    std::cout << "maybe_remove_pg_upmaps (~" << big_pg_num
+    std::cout << "clean_pg_upmaps (~" << big_pg_num
               << " pg_upmap_items) latency:" << timespan_str(latency)
               << std::endl;
   }
