@@ -997,6 +997,17 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
+  void get_upmap_pgs(vector<pg_t> *upmap_pgs) const;
+  bool check_pg_upmaps(
+    CephContext *cct,
+    const vector<pg_t>& to_check,
+    vector<pg_t> *to_cancel,
+    map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const;
+  void clean_pg_upmaps(
+    CephContext *cct,
+    Incremental *pending_inc,
+    const vector<pg_t>& to_cancel,
+    const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const;
   bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
   int apply_incremental(const Incremental &inc);

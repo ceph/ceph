@@ -1612,25 +1612,27 @@ void OSDMap::clean_temps(CephContext *cct,
   }
 }
 
-bool OSDMap::clean_pg_upmaps(CephContext *cct,
-                             Incremental *pending_inc) const
+void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  ldout(cct, 10) << __func__ << dendl;
-  set<pg_t> to_check;
-  set<pg_t> to_cancel;
-  map<int, map<int, float>> rule_weight_map;
-  bool any_change = false;
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  for (auto& p : pg_upmap)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+}
 
-  for (auto& p : pg_upmap) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : pg_upmap_items) {
-    to_check.insert(p.first);
-  }
+bool OSDMap::check_pg_upmaps(
+  CephContext *cct,
+  const vector<pg_t>& to_check,
+  vector<pg_t> *to_cancel,
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
+{
+  bool any_change = false;
+  map<int, map<int, float>> rule_weight_map;
   for (auto& pg : to_check) {
     if (!pg_exists(pg)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     vector<int> raw, up;
@@ -1640,7 +1642,7 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
       ldout(cct, 10) << " removing redundant pg_upmap "
                      << i->first << " " << i->second
                      << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     auto j = pg_upmap_items.find(pg);
@@ -1662,14 +1664,14 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
         ldout(cct, 10) << " removing no-op pg_upmap_items "
                        << j->first << " " << j->second
                        << dendl;
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         continue;
       } else if (newmap != j->second) {
         ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
                        << j->first << " " << j->second
                        << " -> " << newmap
                        << dendl;
-        pending_inc->new_pg_upmap_items[pg] = newmap;
+        to_remap->insert({pg, newmap});
         any_change = true;
         continue;
       }
@@ -1683,7 +1685,7 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
       ldout(cct, 0) << __func__ << " verify_upmap of pg " << pg
                     << " returning " << r
                     << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     // below we check against crush-topology changing..
@@ -1693,7 +1695,8 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
       auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
-                   << "crush_rule " << crush_rule << dendl;
+                   << "crush_rule " << crush_rule
+                   << dendl;
         continue;
       }
       rule_weight_map[crush_rule] = weight_map;
@@ -1707,17 +1710,27 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
       auto it = weight_map.find(osd);
       if (it == weight_map.end()) {
         // osd is gone or has been moved out of the specific crush-tree
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
       auto adjusted_weight = get_weightf(it->first) * it->second;
       if (adjusted_weight == 0) {
         // osd is out/crush-out
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
     }
   }
+  any_change = any_change || !to_cancel->empty();
+  return any_change;
+}
+
+void OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc,
+  const vector<pg_t>& to_cancel,
+  const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
+{
   for (auto &pg: to_cancel) {
     auto i = pending_inc->new_pg_upmap.find(pg);
     if (i != pending_inc->new_pg_upmap.end()) {
@@ -1751,7 +1764,22 @@ bool OSDMap::clean_pg_upmaps(CephContext *cct,
       pending_inc->old_pg_upmap_items.insert(pg);
     }
   }
-  any_change = any_change || !to_cancel.empty();
+  for (auto& i : to_remap)
+    pending_inc->new_pg_upmap_items[i.first] = i.second;
+}
+
+bool OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc) const
+{
+  ldout(cct, 10) << __func__ << dendl;
+  vector<pg_t> to_check;
+  vector<pg_t> to_cancel;
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
+
+  get_upmap_pgs(&to_check);
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
   return any_change;
 }
 
