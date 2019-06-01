@@ -1165,7 +1165,8 @@ public:
    * raw and primary must be non-NULL
    */
   void pg_to_raw_osds(pg_t pg, std::vector<int> *raw, int *primary) const;
-  void pg_to_raw_upmap(pg_t pg, std::vector<int> *raw_upmap) const;
+  void pg_to_raw_upmap(pg_t pg, std::vector<int> *raw,
+                       std::vector<int> *raw_upmap) const;
   /// map a pg to its acting set. @return acting set size
   void pg_to_acting_osds(const pg_t& pg, std::vector<int> *acting,
                         int *acting_primary) const {
