@@ -1186,7 +1186,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     OSDMap::clean_temps(cct, osdmap, tmp, &pending_inc);
 
     // clean inappropriate pg_upmap/pg_upmap_items (if any)
-    osdmap.maybe_remove_pg_upmaps(cct, osdmap, tmp, &pending_inc);
+    tmp.clean_pg_upmaps(cct, &pending_inc);
 
     // update creating pgs first so that we can remove the created pgid and
     // process the pool flag removal below in the same osdmap epoch.
