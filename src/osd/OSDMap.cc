@@ -1642,8 +1642,46 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       to_cancel.insert(pg);
       continue;
     }
-    vector<int> up;
-    tmpmap.pg_to_raw_upmap(pg, &up);
+    vector<int> raw, up;
+    tmpmap.pg_to_raw_upmap(pg, &raw, &up);
+    auto i = tmpmap.pg_upmap.find(pg);
+    if (i != tmpmap.pg_upmap.end() && raw == i->second) {
+      ldout(cct, 10) << " removing redundant pg_upmap "
+                     << i->first << " " << i->second
+                     << dendl;
+      to_cancel.insert(pg);
+      continue;
+    }
+    auto j = tmpmap.pg_upmap_items.find(pg);
+    if (j != tmpmap.pg_upmap_items.end()) {
+      mempool::osdmap::vector<pair<int,int>> newmap;
+      for (auto& p : j->second) {
+        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
+          // cancel mapping if source osd does not exist anymore
+          continue;
+        }
+        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
+            p.second >= 0 && osd_weight[p.second] == 0) {
+          // cancel mapping if target osd is out
+          continue;
+        }
+        newmap.push_back(p);
+      }
+      if (newmap.empty()) {
+        ldout(cct, 10) << " removing no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << dendl;
+        to_cancel.insert(pg);
+        continue;
+      } else if (newmap != j->second) {
+        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << " -> " << newmap
+                       << dendl;
+        pending_inc->new_pg_upmap_items[pg] = newmap;
+        continue;
+      }
+    }
     auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     auto r = tmpmap.crush->verify_upmap(cct,
                                         crush_rule,
@@ -1725,7 +1763,6 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       }
     }
   }
-  tmpmap.clean_pg_upmaps(cct, pending_inc);
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -2244,14 +2281,16 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
     *primary = _pick_primary(*raw);
 }
 
-void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int> *raw_upmap) const
+void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int>*raw,
+                             vector<int> *raw_upmap) const
 {
   auto pool = get_pg_pool(pg.pool());
   if (!pool) {
     raw_upmap->clear();
     return;
   }
-  _pg_to_raw_osds(*pool, pg, raw_upmap, NULL);
+  _pg_to_raw_osds(*pool, pg, raw, NULL);
+  *raw_upmap = *raw;
   _apply_upmap(*pool, pg, raw_upmap);
 }
 
@@ -4263,8 +4302,8 @@ int OSDMap::calc_pg_upmaps(
           // to see if we can append more remapping pairs
         }
 	ldout(cct, 10) << " trying " << pg << dendl;
-	vector<int> orig, out;
-        tmp.pg_to_raw_upmap(pg, &orig); // including existing upmaps too
+        vector<int> raw, orig, out;
+        tmp.pg_to_raw_upmap(pg, &raw, &orig); // including existing upmaps too
 	if (!try_pg_upmap(cct, pg, overfull, underfull, &orig, &out)) {
 	  continue;
 	}
