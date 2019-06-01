@@ -1642,17 +1642,8 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       to_cancel.insert(pg);
       continue;
     }
-    vector<int> raw_up;
-    int primary;
-    tmpmap.pg_to_raw_up(pg, &raw_up, &primary);
     vector<int> up;
-    up.reserve(raw_up.size());
-    for (auto osd : raw_up) {
-      // skip non-existent/down osd for erasure-coded PGs
-      if (osd == CRUSH_ITEM_NONE)
-        continue;
-      up.push_back(osd);
-    }
+    tmpmap.pg_to_raw_upmap(pg, &up);
     auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     auto r = tmpmap.crush->verify_upmap(cct,
                                         crush_rule,
