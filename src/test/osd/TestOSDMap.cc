@@ -1293,6 +1293,66 @@ TEST_F(OSDMapTest, BUG_38897) {
   }
 }
 
+TEST_F(OSDMapTest, BUG_40104) {
+  // http://tracker.ceph.com/issues/40104
+  int big_osd_num = 5000;
+  int big_pg_num = 10000;
+  set_up_map(big_osd_num, true);
+  int pool_id;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pool_id = ++pending_inc.new_pool_max;
+    pg_pool_t empty;
+    auto p = pending_inc.get_new_pool(pool_id, &empty);
+    p->size = 3;
+    p->min_size = 1;
+    p->set_pg_num(big_pg_num);
+    p->set_pgp_num(big_pg_num);
+    p->type = pg_pool_t::TYPE_REPLICATED;
+    p->crush_rule = 0;
+    p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    pending_inc.new_pool_names[pool_id] = "big_pool";
+    osdmap.apply_incremental(pending_inc);
+    ASSERT_TRUE(osdmap.have_pg_pool(pool_id));
+    ASSERT_TRUE(osdmap.get_pool_name(pool_id) == "big_pool");
+  }
+  {
+    // generate pg_upmap_items for each pg
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    for (int i = 0; i < big_pg_num; i++) {
+      pg_t rawpg(i, pool_id);
+      pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+      vector<int> up;
+      int up_primary;
+      osdmap.pg_to_raw_up(pgid, &up, &up_primary);
+      ASSERT_TRUE(up.size() == 3);
+      int victim = up[0];
+      int replaced_by = random() % big_osd_num;
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      // note that it might or might not be valid, we don't care
+      new_pg_upmap_items.push_back(make_pair(victim, replaced_by));
+      pending_inc.new_pg_upmap_items[pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+          new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+    }
+    osdmap.apply_incremental(pending_inc);
+  }
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    OSDMap tmpmap;
+    tmpmap.deepish_copy_from(osdmap);
+    tmpmap.apply_incremental(pending_inc);
+    auto start = mono_clock::now();
+    osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, tmpmap,
+                                  &pending_inc);
+    auto latency = mono_clock::now() - start;
+    std::cout << "maybe_remove_pg_upmaps (~" << big_pg_num
+              << " pg_upmap_items) latency:" << timespan_str(latency)
+              << std::endl;
+  }
+}
+
 TEST(PGTempMap, basic)
 {
   PGTempMap m;
