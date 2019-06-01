@@ -2985,6 +2985,16 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 		 << " to recover" << dendl;
 	// retry request when peer recovers
 	mdr->more()->waiting_on_slave.erase(who);
+        auto it = mdr->more()->mds_queried_dirs_map.find(who);
+        if (it != mdr->more()->mds_queried_dirs_map.end()) {
+          for (auto d_it = it->second.begin();
+              d_it != it->second.end();
+              d_it++) {
+            mdr->more()->queried_for_rstat_propagation.erase(*d_it);
+          }
+          it->second.clear();
+          mdr->more()->mds_queried_dirs_map.erase(it);
+        }
 	if (mdr->more()->waiting_on_slave.empty())
 	  mds->wait_for_active_peer(who, new C_MDS_RetryRequest(this, mdr));
       }
@@ -12959,7 +12969,13 @@ bool MDCache::propagate_subtree_rstats(MDRequestRef& mdr) {
       dout(20) << " I'm not auth for " << *dir->get_inode() << ", skipping" << dendl;
       continue;
     }
-    
+
+    if (!mds->mdsmap->is_up(dir->get_dir_auth().first)) {
+      mds->wait_for_active_peer(dir->get_dir_auth().first, new C_MDS_RetryRequest(this, mdr));
+      went_wait = true;
+      continue;
+    }
+
     dout(20) << __func__ << " found replica for: " << *dir << ", quering" << dendl;
     MDRequestRef internal_mdr = request_start_internal(CEPH_MDS_OP_PROPAGATE_RSTAT);
     internal_mdr->parent_mdr = mdr;
