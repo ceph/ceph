@@ -12,4 +12,5 @@ overrides:
     log-whitelist:
     - failed to encode map
     - CACHE_POOL_NO_HIT_SET
+    - POOL_APP_NOT_ENABLED
     fs: xfs
