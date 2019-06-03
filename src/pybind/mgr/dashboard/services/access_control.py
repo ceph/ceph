@@ -181,13 +181,26 @@ class User(object):
             self.refreshLastUpdate()
         else:
             self.lastUpdate = lastUpdate
+        self.needChangePassword = needChangePassword
 
     def refreshLastUpdate(self):
         self.lastUpdate = int(time.time())
 
     def set_password(self, password):
+        if bcrypt.checkpw(password.encode('utf8'), self.password.encode('utf8')):
+            raise DashboardException(msg='New password is the same as the current one.',
+                                 code='same-password',
+                                 component='Update User')
         self.password = password_hash(password)
         self.refreshLastUpdate()
+        if self.needChangePassword:
+            self.update_needChangePassword()
+            
+    def update_needChangePassword(self):
+        self.needChangePassword = not self.needChangePassword
+        self.refreshLastUpdate()
+
+    def set_roles(self, roles):
 
     def set_roles(self, roles):
         self.roles = set(roles)
@@ -229,14 +242,15 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
-            'lastUpdate': self.lastUpdate
+            'lastUpdate': self.lastUpdate,
+            'needChangePassword' : self.needChangePassword
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
-                    u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['email'], set([roles[r] for r in u_dict['roles']]),
+                    u_dict['lastUpdate'], u_dict['needChangePassword'])
 
 
 class AccessControlDB(object):
@@ -281,7 +295,7 @@ class AccessControlDB(object):
         with self.lock:
             if username in self.users:
                 raise UserAlreadyExists(username)
-            user = User(username, password_hash(password), name, email)
+            user = User(username, password_hash(password), name, email, needChangePassword=True)
             self.users[username] = user
             return user
 
@@ -660,3 +674,11 @@ class LocalAuthenticator(object):
     def authorize(self, username, scope, permissions):
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         return user.authorize(scope, permissions)
+    
+    def check_need_change_password(self, username):
+        try:
+            user = ACCESS_CTRL_DB.get_user(username)
+            return user.needChangePassword
+        except UserDoesNotExist:
+            logger.debug("User '%s' does not exist", username)
+        return False
