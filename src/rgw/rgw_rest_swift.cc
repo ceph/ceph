@@ -851,7 +851,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     r = store->get_bucket_info(obj_ctx, s->user->user_id.tenant,
 			       bucket_name, bucket_info, nullptr,
-			       &bucket_attrs);
+			       s->yield, &bucket_attrs);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -2109,7 +2109,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   RGWBucketInfo bucket_info;
   int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
-                                   bucket_info, nullptr);
+                                   bucket_info, nullptr, s->yield);
   if (ret < 0) {
     throw ret;
   }
@@ -3021,8 +3021,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
 
   s->dialect = "swift";
 
-  std::string copy_source =
-    url_decode(s->info.env->get("HTTP_X_COPY_FROM", ""));
+  std::string copy_source = s->info.env->get("HTTP_X_COPY_FROM", "");
   if (! copy_source.empty()) {
     bool result = RGWCopyObj::parse_copy_location(copy_source, t->src_bucket,
 						  s->src_object);
@@ -3031,8 +3030,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados* store, struct req_state* s,
   }
 
   if (s->op == OP_COPY) {
-    std::string req_dest =
-      url_decode(s->info.env->get("HTTP_DESTINATION", ""));
+    std::string req_dest = s->info.env->get("HTTP_DESTINATION", "");
     if (req_dest.empty())
       return -ERR_BAD_URL;
 

@@ -122,10 +122,6 @@ class Module(MgrModule):
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    @staticmethod
-    def parse_timestamp(timestamp):
-        return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
-
     def load(self):
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:
@@ -205,7 +201,7 @@ class Module(MgrModule):
         df = self.get('df')
 
         report['report_id'] = self.report_id
-        report['created'] = self.parse_timestamp(mon_map['created']).isoformat()
+        report['created'] = mon_map['created']
 
         report['mon'] = {
             'count': len(mon_map['mons']),

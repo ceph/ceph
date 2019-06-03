@@ -67,17 +67,15 @@ private:
    *    v
    * STATE_APPEND_OP_EVENT (skip if journaling
    *    |                   disabled)
-   *    | (unblock writes)
-   *    |
    *    |
    *    | (grow)
    *    |\--------> STATE_GROW_OBJECT_MAP (skip if object map
    *    |                 |                disabled)
    *    |                 v
-   *    |           STATE_POST_BLOCK_WRITES
-   *    |                 |
-   *    |                 v
    *    |           STATE_UPDATE_HEADER ----------------------------\
+   *    |                                 (unblock writes)          |
+   *    |                                                           |
+   *    | (unblock writes)                                          |
    *    |                                                           |
    *    | (shrink)                                                  |
    *    |\--------> STATE_FLUSH_CACHE                               |

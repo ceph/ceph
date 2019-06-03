@@ -1475,3 +1475,21 @@ int cls_register_cxx_filter(cls_handle_t hclass,
 ceph_release_t cls_get_required_osd_release(cls_handle_t hclass) {
   return ceph_release_t::nautilus;
 }
+
+// stubs to silence TestClassHandler::open_class()
+PGLSFilter::~PGLSFilter()
+{}
+
+int cls_gen_rand_base64(char *, int) {
+  return -ENOTSUP;
+}
+
+int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
+				int, bufferlist *,
+				uint32_t, bufferlist *, int) {
+  return -ENOTSUP;
+}
+
+int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
+  return -ENOTSUP;
+}

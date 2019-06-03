@@ -143,7 +143,7 @@ seastar::future<Socket::tmp_buf> ProtocolV2::read_exactly(size_t bytes)
     return socket->read_exactly(bytes)
     .then([this] (auto bl) {
       rxbuf.append(buffer::create(bl.share()));
-      return std::move(bl);
+      return bl;
     });
   } else {
     return socket->read_exactly(bytes);
@@ -156,7 +156,7 @@ seastar::future<bufferlist> ProtocolV2::read(size_t bytes)
     return socket->read(bytes)
     .then([this] (auto buf) {
       rxbuf.append(buf);
-      return std::move(buf);
+      return buf;
     });
   } else {
     return socket->read(bytes);
