@@ -19,12 +19,12 @@ export class NotificationService {
 
   // Observable sources
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  private queuedNotifications: CdNotificationConfig[] = [];
 
   // Observable streams
   data$ = this.dataSource.asObservable();
 
-  private queueTimeoutId: number;
+  private queued: CdNotificationConfig[] = [];
+  private queuedTimeoutId: number;
   KEY = 'cdNotifications';
 
   constructor(
@@ -68,21 +68,6 @@ export class NotificationService {
     localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
 
-  queueNotifications(notifications: CdNotificationConfig[]) {
-    this.queuedNotifications = this.queuedNotifications.concat(notifications);
-    this.cancel(this.queueTimeoutId);
-    this.queueTimeoutId = window.setTimeout(() => {
-      this.sendQueuedNotifications();
-    }, 500);
-  }
-
-  private sendQueuedNotifications() {
-    _.uniqWith(this.queuedNotifications, _.isEqual).forEach((notification) => {
-      this.show(notification);
-    });
-    this.queuedNotifications = [];
-  }
-
   /**
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
@@ -123,10 +108,48 @@ export class NotificationService {
           application
         );
       }
+      this.queueToShow(config);
+    }, 10);
+  }
+
+  private queueToShow(config: CdNotificationConfig) {
+    this.cancel(this.queuedTimeoutId);
+    if (!this.queued.find((c) => _.isEqual(c, config))) {
+      this.queued.push(config);
+    }
+    this.queuedTimeoutId = window.setTimeout(() => {
+      this.showQueued();
+    }, 500);
+  }
+
+  private showQueued() {
+    this.getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
       this.save(notification);
       this.showToasty(notification);
-    }, 10);
+    });
+  }
+
+  private getUnifiedTitleQueue(): CdNotificationConfig[] {
+    return Object.values(this.queueShiftByTitle()).map((configs) => {
+      const config = configs[0];
+      if (configs.length > 1) {
+        config.message = '<ul>' + configs.map((c) => `<li>${c.message}</li>`).join('') + '</ul>';
+      }
+      return config;
+    });
+  }
+
+  private queueShiftByTitle(): { [key: string]: CdNotificationConfig[] } {
+    const byTitle: { [key: string]: CdNotificationConfig[] } = {};
+    let config: CdNotificationConfig;
+    while ((config = this.queued.shift())) {
+      if (!byTitle[config.title]) {
+        byTitle[config.title] = [];
+      }
+      byTitle[config.title].push(config);
+    }
+    return byTitle;
   }
 
   private showToasty(notification: CdNotification) {
