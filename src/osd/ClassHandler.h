@@ -118,10 +118,8 @@ public:
   explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
 
   int open_all_classes();
-
-  void add_embedded_class(const std::string& cname);
   int open_class(const std::string& cname, ClassData **pcls);
-  
+
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
 
