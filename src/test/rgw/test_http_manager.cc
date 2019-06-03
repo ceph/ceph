@@ -13,10 +13,46 @@
  */
 #include "rgw/rgw_rados.h"
 #include "rgw/rgw_http_client.h"
+#include "rgw/rgw_http_client_curl.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <curl/curl.h>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/write.hpp>
+#include <thread>
 #include <gtest/gtest.h>
+
+TEST(HTTPManager, ReadTruncated)
+{
+  using tcp = boost::asio::ip::tcp;
+  tcp::endpoint endpoint(tcp::v4(), 0);
+  boost::asio::io_context ioctx;
+  tcp::acceptor acceptor(ioctx);
+  acceptor.open(endpoint.protocol());
+  acceptor.bind(endpoint);
+  acceptor.listen();
+
+  std::thread server{[&] {
+    tcp::socket socket{ioctx};
+    acceptor.accept(socket);
+    std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 1024\r\n"
+        "\r\n"
+        "short body";
+    boost::asio::write(socket, boost::asio::buffer(response));
+  }};
+  const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
+
+  rgw::curl::setup_curl(boost::none);
+
+  RGWHTTPClient client{g_ceph_context};
+  EXPECT_EQ(-EINVAL, client.process("GET", url.c_str()));
+
+  server.join();
+
+  rgw::curl::cleanup_curl();
+}
 
 TEST(HTTPManager, SignalThread)
 {
