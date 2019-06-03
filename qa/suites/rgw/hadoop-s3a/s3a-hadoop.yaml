@@ -1,35 +1,11 @@
-machine_type: ovh
-openstack:
-- volumes: # attached to each instance
-    count: 3
-    size: 20 # GB
-overrides:
-    ceph_ansible:
-      vars:
-        ceph_conf_overrides:
-          global:
-            osd default pool size: 2
-            osd pool default pg num: 8
-            osd pool default pgp num: 8
-            debug rgw: 20
-            debug ms: 1
-        ceph_test: true
-        journal_collocation: true
-        osd_auto_discovery: false
-        journal_size: 1024
-        ceph_stable_release: luminous
-        osd_scenario: collocated
-        ceph_origin: repository
-        ceph_repository: dev
-roles:
-- [mon.a, osd.0, osd.1, osd.2]
-- [osd.3, osd.4, osd.5]
-- [osd.6, osd.7, osd.8]
-- [mon.b, mgr.x, rgw.0]
-
 tasks:
+- install:
+- ceph:
 - ssh-keys:
-- ceph-ansible:
 - dnsmasq:
-    rgw.0: [s3.ceph.com]
+    client.0: [s3.]
+- rgw:
+    client.0:
+      dns-name: s3.
 - s3a-hadoop:
+    role: client.0
