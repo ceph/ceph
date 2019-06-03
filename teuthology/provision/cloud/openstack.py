@@ -130,6 +130,12 @@ class OpenStackProvider(Provider):
         return self._networks
 
     @property
+    def default_userdata(self):
+        if not hasattr(self, '_default_userdata'):
+            self._default_userdata = self.conf.get('userdata', dict())
+        return self._default_userdata
+
+    @property
     def security_groups(self):
         if not hasattr(self, '_security_groups'):
             try:
@@ -372,23 +378,33 @@ class OpenStackProvisioner(base.Provisioner):
 
     @property
     def userdata(self):
+        spec="{t}-{v}".format(t=self.os_type,
+                              v=self.os_version)
         base_config = dict(
-            user=self.user,
-            manage_etc_hosts=True,
-            hostname=self.hostname,
             packages=[
                 'git',
                 'wget',
                 'python',
                 'ntp',
             ],
-            runcmd=[
-                # Remove the user's password so that console logins are
-                # possible
-                ['passwd', '-d', self.user],
-                ['touch', self._sentinel_path]
-            ],
         )
+        runcmd=[
+            # Remove the user's password so that console logins are
+            # possible
+            ['passwd', '-d', self.user],
+            ['touch', self._sentinel_path]
+        ]
+        if spec in self.provider.default_userdata:
+            base_config = deepcopy(
+                    self.provider.default_userdata.get(spec, dict()))
+        base_config.update(user=self.user)
+        if 'manage_etc_hosts' not in base_config:
+            base_config.update(
+                manage_etc_hosts=True,
+                hostname=self.hostname,
+            )
+        base_config['runcmd'] = base_config.get('runcmd', list())
+        base_config['runcmd'].extend(runcmd)
         ssh_pubkey = util.get_user_ssh_pubkey()
         if ssh_pubkey:
             authorized_keys = base_config.get('ssh_authorized_keys', list())

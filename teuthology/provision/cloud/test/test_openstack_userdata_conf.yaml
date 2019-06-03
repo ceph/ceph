@@ -1,0 +1,24 @@
+libcloud:
+  providers:
+    my_provider:
+      allow_networks:
+        - sesci
+      userdata:
+        'ubuntu-16.04':
+            bootcmd:
+              - 'SuSEfirewall2 stop || true'
+              - 'service firewalld stop || true'
+            runcmd:
+              - 'uptime'
+              - 'date'
+              - 'zypper in -y lsb-release make gcc gcc-c++ chrony || true'
+              - 'systemctl enable chronyd.service || true'
+              - 'systemctl start chronyd.service || true'
+            ssh_authorized_keys:
+              - user_public_key1
+              - user_public_key2
+      driver: openstack
+      driver_args:
+          username: user
+          password: password
+          ex_force_auth_url: 'http://127.0.0.1:9999/v2.0/tokens'
