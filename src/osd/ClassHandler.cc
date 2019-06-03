@@ -232,12 +232,8 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
     return NULL;
   }
   ldout(handler->cct, 10) << "register_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
-  ClassMethod& method = methods_map[mname];
-  method.func = func;
-  method.name = mname;
-  method.flags = flags;
-  method.cls = this;
-  return &method;
+  [[maybe_unused]] auto [method, added] = methods_map.try_emplace(mname, mname, func, flags, this);
+  return &method->second;
 }
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const char *mname,
@@ -246,12 +242,8 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const ch
 {
   /* no need for locking, called under the class_init mutex */
   ldout(handler->cct, 10) << "register_cxx_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
-  ClassMethod& method = methods_map[mname];
-  method.cxx_func = func;
-  method.name = mname;
-  method.flags = flags;
-  method.cls = this;
-  return &method;
+  [[maybe_unused]] auto [method, added] = methods_map.try_emplace(mname, mname, func, flags, this);
+  return &method->second;
 }
 
 ClassHandler::ClassFilter *ClassHandler::ClassData::register_cxx_filter(
@@ -312,21 +304,26 @@ void ClassHandler::ClassFilter::unregister()
 
 int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata)
 {
-  int ret;
-  if (cxx_func) {
-    // C++ call version
-    ret = cxx_func(ctx, &indata, &outdata);
-  } else {
-    // C version
-    char *out = NULL;
-    int olen = 0;
-    ret = func(ctx, indata.c_str(), indata.length(), &out, &olen);
-    if (out) {
-      // assume *out was allocated via cls_alloc (which calls malloc!)
-      buffer::ptr bp = buffer::claim_malloc(olen, out);
-      outdata.push_back(bp);
+  int ret = 0;
+  std::visit([&](auto method) {
+    using method_t = decltype(method);
+    if constexpr (std::is_same_v<method_t, cls_method_cxx_call_t>) {
+      // C++ call version
+      ret = method(ctx, &indata, &outdata);
+    } else if constexpr (std::is_same_v<method_t, cls_method_call_t>) {
+      // C version
+      char *out = nullptr;
+      int olen = 0;
+      ret = method(ctx, indata.c_str(), indata.length(), &out, &olen);
+      if (out) {
+        // assume *out was allocated via cls_alloc (which calls malloc!)
+        buffer::ptr bp = buffer::claim_malloc(olen, out);
+        outdata.push_back(bp);
+      }
+    } else {
+      static_assert(std::is_same_v<method_t, void>);
     }
-  }
+  }, func);
   return ret;
 }
 
