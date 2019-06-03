@@ -18,7 +18,7 @@ public:
   struct ClassData;
 
   struct ClassMethod {
-    struct ClassHandler::ClassData *cls;
+    ClassData *cls = nullptr;
     std::string name;
     int flags;
     cls_method_call_t func;
@@ -34,11 +34,11 @@ public:
       return flags;
     }
 
-    ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
+    ClassMethod() : flags(0), func(0), cxx_func(0) {}
   };
 
   struct ClassFilter {
-    struct ClassHandler::ClassData *cls = nullptr;
+    ClassData *cls = nullptr;
     std::string name;
     cls_cxx_filter_factory_t fn;
 
