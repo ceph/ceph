@@ -203,7 +203,7 @@ int ClassHandler::_load_class(ClassData *cls)
 
 ClassHandler::ClassData *ClassHandler::register_class(const char *cname)
 {
-  ceph_assert(mutex.is_locked());
+  ceph_assert(ceph_mutex_is_locked(mutex));
 
   ClassData *cls = _get_class(cname, false);
   ldout(cct, 10) << "register_class " << cname << " status " << cls->status << dendl;
