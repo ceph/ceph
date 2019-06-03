@@ -1,1 +1,1 @@
-d /run/ceph 0770 ceph ceph -
+dz /run/ceph 0770 ceph ceph -
