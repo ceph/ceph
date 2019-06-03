@@ -2,6 +2,7 @@
 #include "gtest/gtest.h"
 #include "osd/OSDMap.h"
 #include "osd/OSDMapMapping.h"
+#include "mon/OSDMonitor.h"
 
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -183,6 +184,21 @@ public:
     cout << "any: " << *any << std::endl;;
     cout << "first: " << *first << std::endl;;
     cout << "primary: " << *primary << std::endl;;
+  }
+  void clean_pg_upmaps(CephContext *cct,
+                       const OSDMap& om,
+                       OSDMap::Incremental& pending_inc) {
+    int cpu_num = 8;
+    int pgs_per_chunk = 256;
+    ThreadPool tp(cct, "BUG_40104::clean_upmap_tp", "clean_upmap_tp", cpu_num);
+    tp.start();
+    ParallelPGMapper mapper(cct, &tp);
+    vector<pg_t> pgs_to_check;
+    om.get_upmap_pgs(&pgs_to_check);
+    OSDMonitor::CleanUpmapJob job(cct, om, pending_inc);
+    mapper.queue(&job, pgs_per_chunk, pgs_to_check);
+    job.wait();
+    tp.stop();
   }
 };
 
@@ -631,7 +647,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     nextmap.apply_incremental(pending_inc);
     ASSERT_TRUE(nextmap.have_pg_upmaps(pgid));
     OSDMap::Incremental new_pending_inc(nextmap.get_epoch() + 1);
-    nextmap.clean_pg_upmaps(g_ceph_context, &new_pending_inc);
+    clean_pg_upmaps(g_ceph_context, nextmap, new_pending_inc);
     nextmap.apply_incremental(new_pending_inc);
     ASSERT_TRUE(!nextmap.have_pg_upmaps(pgid));
   }
@@ -680,7 +696,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // confirm *clean_pg_upmaps* won't do anything bad
       OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
-      tmpmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
+      clean_pg_upmaps(g_ceph_context, tmpmap, pending_inc);
       tmpmap.apply_incremental(pending_inc);
       ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
     }
@@ -730,7 +746,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // *clean_pg_upmaps* should be able to remove the above *bad* mapping
       OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
-      tmpmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
+      clean_pg_upmaps(g_ceph_context, tmpmap, pending_inc);
       tmpmap.apply_incremental(pending_inc);
       ASSERT_TRUE(!tmpmap.have_pg_upmaps(ec_pgid));
     }
@@ -854,7 +870,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // *clean_pg_upmaps* should not remove the above upmap_item
       OSDMap::Incremental pending_inc(tmp.get_epoch() + 1);
-      tmp.clean_pg_upmaps(g_ceph_context, &pending_inc);
+      clean_pg_upmaps(g_ceph_context, tmp, pending_inc);
       tmp.apply_incremental(pending_inc);
       ASSERT_TRUE(tmp.have_pg_upmaps(ec_pgid));
     }
@@ -919,7 +935,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-2: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
+      clean_pg_upmaps(g_ceph_context, osdmap, pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap is gone (reverted)
@@ -1053,7 +1069,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     {
       // STEP-4: apply cure
       OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
-      osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
+      clean_pg_upmaps(g_ceph_context, osdmap, pending_inc);
       osdmap.apply_incremental(pending_inc);
       {
         // validate pg_upmap_items is gone (reverted)
@@ -1337,9 +1353,9 @@ TEST_F(OSDMapTest, BUG_40104) {
   {
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
     auto start = ceph_clock_now();
-    osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
+    clean_pg_upmaps(g_ceph_context, osdmap, pending_inc);
     auto latency = ceph_clock_now() - start;
-    std::cout << "maybe_remove_pg_upmaps (~" << big_pg_num
+    std::cout << "clean_pg_upmaps (~" << big_pg_num
               << " pg_upmap_items) latency:" << latency
               << std::endl;
   }
