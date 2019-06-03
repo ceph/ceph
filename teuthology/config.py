@@ -29,7 +29,13 @@ class YamlConfig(collections.MutableMapping):
         else:
             self._conf = dict()
 
-    def load(self):
+    def load(self, conf=None):
+        if conf:
+            if isinstance(conf, dict):
+                self._conf = conf
+            else:
+                self._conf = yaml.safe_load(conf)
+            return
         if os.path.exists(self.yaml_path):
             self._conf = yaml.safe_load(file(self.yaml_path))
         else:
