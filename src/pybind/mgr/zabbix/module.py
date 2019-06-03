@@ -6,6 +6,7 @@ server using the zabbix_sender executable.
 """
 import json
 import errno
+import re
 from subprocess import Popen, PIPE
 from threading import Event
 from mgr_module import MgrModule
@@ -51,6 +52,7 @@ class Module(MgrModule):
     run = False
     config = dict()
     ceph_health_mapping = {'HEALTH_OK': 0, 'HEALTH_WARN': 1, 'HEALTH_ERR': 2}
+    _zabbix_hosts = list()
 
     @property
     def config_keys(self):
@@ -122,6 +124,9 @@ class Module(MgrModule):
         for key, default in self.config_keys.items():
             self.set_config_option(key, self.get_module_option(key, default))
 
+        if self.config['zabbix_host']:
+            self._parse_zabbix_hosts()
+
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
             raise RuntimeError('{0} is a unknown configuration '
@@ -147,6 +152,20 @@ class Module(MgrModule):
                        value)
         self.config[option] = value
         return True
+
+    def _parse_zabbix_hosts(self):
+        self._zabbix_hosts = list()
+        servers = self.config['zabbix_host'].split(",")
+        for server in servers:
+            uri = re.match("(?:(?:\[?)([a-z0-9-\.]+|[a-f0-9:\.]+)(?:\]?))(?:((?::))([0-9]{1,5}))?$", server)
+            if uri:
+                zabbix_host, sep, zabbix_port = uri.groups()
+                zabbix_port = zabbix_port if sep == ':' else self.config['zabbix_port']
+                self._zabbix_hosts.append({'zabbix_host': zabbix_host, 'zabbix_port': zabbix_port})
+            else:
+                self.log.error('Zabbix host "%s" is not valid', server)
+
+        self.log.error('Parsed Zabbix hosts: %s', self._zabbix_hosts)
 
     def get_pg_stats(self):
         stats = dict()
@@ -290,7 +309,7 @@ class Module(MgrModule):
         if identifier is None or len(identifier) == 0:
             identifier = 'ceph-{0}'.format(self.fsid)
 
-        if not self.config['zabbix_host']:
+        if not self.config['zabbix_host'] or not self._zabbix_hosts:
             self.log.error('Zabbix server not set, please configure using: '
                            'ceph zabbix config-set zabbix_host <zabbix_host>')
             self.set_health_checks({
@@ -302,30 +321,32 @@ class Module(MgrModule):
             })
             return
 
-        try:
+        result = True
+
+        for server in self._zabbix_hosts:
             self.log.info(
-                'Sending data to Zabbix server %s as host/identifier %s',
-                self.config['zabbix_host'], identifier)
+                'Sending data to Zabbix server %s, port %s as host/identifier %s',
+                server['zabbix_host'], server['zabbix_port'], identifier)
             self.log.debug(data)
 
-            zabbix = ZabbixSender(self.config['zabbix_sender'],
-                                  self.config['zabbix_host'],
-                                  self.config['zabbix_port'], self.log)
+            try:
+                zabbix = ZabbixSender(self.config['zabbix_sender'],
+                                      server['zabbix_host'],
+                                      server['zabbix_port'], self.log)
+                zabbix.send(identifier, data)
+            except Exception as exc:
+                self.log.exception('Failed to send.')
+                self.set_health_checks({
+                    'MGR_ZABBIX_SEND_FAILED': {
+                        'severity': 'warning',
+                        'summary': 'Failed to send data to Zabbix',
+                        'detail': [str(exc)]
+                    }
+                })
+                result = False
 
-            zabbix.send(identifier, data)
-            self.set_health_checks(dict())
-            return True
-        except Exception as exc:
-            self.log.error('Exception when sending: %s', exc)
-            self.set_health_checks({
-                'MGR_ZABBIX_SEND_FAILED': {
-                    'severity': 'warning',
-                    'summary': 'Failed to send data to Zabbix',
-                    'detail': [str(exc)]
-                }
-            })
-
-        return False
+        self.set_health_checks(dict())
+        return result
 
     def discovery(self):
         osd_map = self.get('osd_map')
@@ -393,6 +414,8 @@ class Module(MgrModule):
             self.log.debug('Setting configuration option %s to %s', key, value)
             if self.set_config_option(key, value):
                 self.set_module_option(key, value)
+                if key == 'zabbix_host' or key == 'zabbix_port':
+                    self._parse_zabbix_hosts()
                 return 0, 'Configuration option {0} updated'.format(key), ''
 
             return 1,\
