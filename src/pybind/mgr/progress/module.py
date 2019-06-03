@@ -229,6 +229,9 @@ class PgRecoveryEvent(Event):
                 # The PG is gone!  Probably a pool was deleted. Drop it.
                 complete.add(pg)
                 continue
+            #Only checks the state of each PGs when it's epoch >= the OSDMap's epoch
+            if int(info['reported_epoch']) < int(latest_osd_map_epoch):
+                continue
 
             state = info['state']
 
