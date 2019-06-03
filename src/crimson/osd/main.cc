@@ -71,7 +71,8 @@ int main(int argc, char* argv[])
 {
   seastar::app_template app;
   app.add_options()
-    ("mkfs", "create a [new] data directory");
+    ("mkfs", "create a [new] data directory")
+    ("debug", "enable debug output on all loggers");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
   if (ceph_argparse_need_usage(ceph_args)) {
@@ -96,6 +97,11 @@ int main(int argc, char* argv[])
     return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()), [&] {
       auto& config = app.configuration();
       return seastar::async([&] {
+	if (config.count("debug")) {
+	    seastar::global_logger_registry().set_all_loggers_level(
+	      seastar::log_level::debug
+	    );
+	}
         sharded_conf().start(init_params.name, cluster_name).get();
         seastar::engine().at_exit([] {
           return sharded_conf().stop();
@@ -137,9 +143,13 @@ int main(int argc, char* argv[])
                                            hb_back_msgr.stop());
         });
         if (config.count("mkfs")) {
-          osd.invoke_on(0, &OSD::mkfs,
-                        local_conf().get_val<uuid_d>("fsid"))
-            .then([] { seastar::engine().exit(0); }).get();
+          osd.invoke_on(
+	    0,
+	    &OSD::mkfs,
+	    local_conf().get_val<uuid_d>("osd_uuid"),
+	    local_conf().get_val<uuid_d>("fsid")).then([] {
+	      seastar::engine().exit(0);
+	    }).get();
         } else {
           osd.invoke_on(0, &OSD::start).get();
         }

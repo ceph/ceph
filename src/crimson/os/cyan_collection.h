@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#pragma once
+
 #include <string>
 #include <unordered_map>
 #include <boost/intrusive_ptr.hpp>
@@ -51,5 +53,7 @@ struct Collection : public boost::intrusive_ref_counter<
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
 };
+
+using CollectionRef = boost::intrusive_ptr<Collection>;
 
 }

@@ -1552,13 +1552,13 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction &t) override {
     coll_t target = coll_t(child);
-    PG::_create(t, child, split_bits);
+    create_pg_collection(t, child, split_bits);
     t.split_collection(
       coll,
       split_bits,
       seed,
       target);
-    PG::_init(t, child, pool);
+    init_pg_ondisk(t, child, pool);
   }
 private:
 

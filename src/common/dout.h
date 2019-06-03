@@ -134,7 +134,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
         _logger.warn(_s.c_str());               \
       } else if (_lv < 5) {                     \
         _logger.info(_s.c_str());               \
-      } else if (_lv < 10) {                    \
+      } else if (_lv <= 20) {                    \
         _logger.debug(_s.c_str());              \
       } else {                                  \
         _logger.trace(_s.c_str());              \

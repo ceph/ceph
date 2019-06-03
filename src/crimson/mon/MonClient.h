@@ -50,9 +50,8 @@ class Client : public ceph::net::Dispatcher,
   const uint32_t want_keys;
 
   MonMap monmap;
-  seastar::promise<MessageRef> reply;
   std::unique_ptr<Connection> active_con;
-  std::vector<Connection> pending_conns;
+  std::vector<std::unique_ptr<Connection>> pending_conns;
   seastar::timer<seastar::lowres_clock> timer;
   seastar::gate tick_gate;
 

@@ -1759,10 +1759,10 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       if (!dry_run) {
 	ObjectStore::Transaction t;
 	ch = store->create_new_collection(coll);
-	PG::_create(
+	create_pg_collection(
 	  t, pgid,
 	  pgid.get_split_bits(ms.osdmap.get_pg_pool(pgid.pool())->get_pg_num()));
-	PG::_init(t, pgid, NULL);
+	init_pg_ondisk(t, pgid, NULL);
 
 	// mark this coll for removal until we're done
 	map<string,bufferlist> values;

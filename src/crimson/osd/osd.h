@@ -4,7 +4,10 @@
 #pragma once
 
 #include <map>
+#include <tuple>
+#include <optional>
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/shared_future.hh>
@@ -18,15 +21,18 @@
 #include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
+#include "crimson/osd/shard_services.h"
 
+#include "osd/PeeringState.h"
 #include "osd/osd_types.h"
+#include "osd/osd_perf_counters.h"
+#include "osd/PGPeeringEvent.h"
 
 class MOSDMap;
 class MOSDOp;
 class OSDMap;
 class OSDMeta;
 class PG;
-class PGPeeringEvent;
 class Heartbeat;
 
 namespace ceph::mon {
@@ -71,7 +77,6 @@ class OSD : public ceph::net::Dispatcher,
   std::unique_ptr<ceph::os::CyanStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
 
-  std::unordered_map<spg_t, Ref<PG>> pgs;
   OSDState state;
 
   /// _first_ epoch we were marked up (after this process started)
@@ -99,6 +104,9 @@ class OSD : public ceph::net::Dispatcher,
 			     uint64_t global_id,
 			     const AuthCapsInfo& caps) final;
 
+  ceph::osd::ShardServices shard_services;
+  std::unordered_map<spg_t, Ref<PG>> pgs;
+
 public:
   OSD(int id, uint32_t nonce,
       ceph::net::Messenger& cluster_msgr,
@@ -107,7 +115,7 @@ public:
       ceph::net::Messenger& hb_back_msgr);
   ~OSD() override;
 
-  seastar::future<> mkfs(uuid_d fsid);
+  seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);
 
   seastar::future<> start();
   seastar::future<> stop();
@@ -117,11 +125,12 @@ private:
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
 
+  seastar::future<Ref<PG>> make_pg(cached_map_t create_map, spg_t pgid);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
   epoch_t up_thru_wanted = 0;
-  seastar::future<> _send_alive(epoch_t want);
+  seastar::future<> _send_alive();
 
   // OSDMapService methods
   seastar::future<cached_map_t> get_map(epoch_t e) override;
@@ -137,6 +146,61 @@ private:
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
+  bool require_mon_peer(ceph::net::Connection *conn, Ref<Message> m);
+
+  seastar::future<Ref<PG>> handle_pg_create_info(
+    std::unique_ptr<PGCreateInfo> info);
+
+  template <typename C, typename F, typename G>
+  seastar::future<> handle_batch_pg_message_with_missing_handler(
+    const C &c,
+    F &&f,
+    G &&on_missing_pg) {
+    using mapped_type = const typename C::value_type &;
+    using event_type = std::optional<std::tuple<
+      spg_t,
+      std::unique_ptr<PGPeeringEvent>>>;
+    return seastar::do_with(
+      PeeringCtx{},
+      std::move(f),
+      std::move(on_missing_pg),
+      [this, &c] (auto &rctx, auto &f, auto &on_missing_pg) {
+	return seastar::parallel_for_each(
+	  c,
+	  [this, &rctx, &f, &on_missing_pg](mapped_type m) {
+	    event_type result = f(m);
+	    if (result) {
+	      auto [pgid, event] = std::move(*result);
+	      return do_peering_event_and_dispatch_transaction(
+		pgid,
+		std::move(event),
+		rctx).then([m, &on_missing_pg, &rctx] (bool found) {
+		  if (!found) {
+		    on_missing_pg(m, rctx);
+		  }
+		  return seastar::now();
+		});
+	    } else {
+	      return seastar::now();
+	    }
+	  }).then([this, &rctx] {
+              return shard_services.dispatch_context(std::move(rctx));
+	  });
+      });
+  }
+
+  template <typename C, typename F>
+  seastar::future<> handle_batch_pg_message(
+    const C &c,
+    F &&f) {
+    return handle_batch_pg_message_with_missing_handler(
+      c,
+      std::move(f),
+      [](const typename C::value_type &, PeeringCtx &){});
+  }
+
+  seastar::future<> handle_pg_create(ceph::net::Connection *conn,
+				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_map(ceph::net::Connection* conn,
                                    Ref<MOSDMap> m);
   seastar::future<> handle_osd_op(ceph::net::Connection* conn,
@@ -163,10 +227,26 @@ private:
   // wait for an osdmap whose epoch is greater or equal to given epoch
   seastar::future<epoch_t> wait_for_map(epoch_t epoch);
   seastar::future<> consume_map(epoch_t epoch);
-  seastar::future<> do_peering_event(spg_t pgid,
-				     std::unique_ptr<PGPeeringEvent> evt);
-  seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
 
+  std::map<spg_t, seastar::shared_future<Ref<PG>>> pgs_creating;
+  seastar::future<Ref<PG>> get_pg(
+    spg_t pgid,
+    epoch_t epoch,
+    std::unique_ptr<PGCreateInfo> info);
+
+  seastar::future<Ref<PG>> do_peering_event(
+    spg_t pgid,
+    std::unique_ptr<PGPeeringEvent> evt,
+    PeeringCtx &rctx);
+  seastar::future<> do_peering_event_and_dispatch(
+    spg_t pgid,
+    std::unique_ptr<PGPeeringEvent> evt);
+  seastar::future<bool> do_peering_event_and_dispatch_transaction(
+    spg_t pgid,
+    std::unique_ptr<PGPeeringEvent> evt,
+    PeeringCtx &rctx);
+
+  seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();

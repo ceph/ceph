@@ -44,6 +44,14 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
   virtual int get_peer_type() const = 0;
 
+  bool peer_is_mon() const { return get_peer_type() == CEPH_ENTITY_TYPE_MON; }
+  bool peer_is_mgr() const { return get_peer_type() == CEPH_ENTITY_TYPE_MGR; }
+  bool peer_is_mds() const { return get_peer_type() == CEPH_ENTITY_TYPE_MDS; }
+  bool peer_is_osd() const { return get_peer_type() == CEPH_ENTITY_TYPE_OSD; }
+  bool peer_is_client() const {
+    return get_peer_type() == CEPH_ENTITY_TYPE_CLIENT;
+  }
+
   /// true if the handshake has completed and no errors have been encountered
   virtual seastar::future<bool> is_connected() = 0;
 
