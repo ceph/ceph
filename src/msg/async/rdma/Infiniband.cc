@@ -915,8 +915,10 @@ void Infiniband::init()
   ceph_assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
   support_srq = cct->_conf->ms_async_rdma_support_srq;
-  if (support_srq)
+  if (support_srq) {
+    ceph_assert(device->device_attr.max_srq);
     rx_queue_len = device->device_attr.max_srq_wr;
+  }
   else
     rx_queue_len = device->device_attr.max_qp_wr;
   if (rx_queue_len > cct->_conf->ms_async_rdma_receive_queue_len) {
