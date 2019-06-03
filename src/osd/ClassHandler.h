@@ -3,6 +3,8 @@
 #ifndef CEPH_CLASSHANDLER_H
 #define CEPH_CLASSHANDLER_H
 
+#include <variant>
+
 #include "include/types.h"
 #include "common/ceph_mutex.h"
 #include "objclass/objclass.h"
@@ -18,11 +20,11 @@ public:
   struct ClassData;
 
   struct ClassMethod {
+    const std::string name;
+    using func_t = std::variant<cls_method_cxx_call_t, cls_method_call_t>;
+    func_t func;
+    int flags = 0;
     ClassData *cls = nullptr;
-    std::string name;
-    int flags;
-    cls_method_call_t func;
-    cls_method_cxx_call_t cxx_func;
 
     int exec(cls_method_context_t ctx,
 	     ceph::bufferlist& indata,
@@ -33,8 +35,9 @@ public:
       std::lock_guard l(cls->handler->mutex);
       return flags;
     }
-
-    ClassMethod() : flags(0), func(0), cxx_func(0) {}
+    ClassMethod(const char* name, func_t call, int flags, ClassData* cls)
+      : name{name}, func{call}, flags{flags}, cls{cls}
+    {}
   };
 
   struct ClassFilter {
