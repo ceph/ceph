@@ -5643,17 +5643,26 @@ int BlueStore::allocate_bluefs_freespace(
   return 0;
 }
 
-int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total)
+int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_freexxx, uint64_t bluefs_totalxxx)
 {
-  float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
+
+  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
+  bluefs->get_usage(&bluefs_usage);
+  uint64_t bluefs_free =  0;
+  uint64_t bluefs_total = 0;
+  for (auto& i:bluefs_usage) {
+    bluefs_free += i.first;
+    bluefs_total += i.second;
+  }
 
   uint64_t my_free = alloc->get_free();
   uint64_t total = bdev->get_size();
   float my_free_ratio = (float)my_free / (float)total;
 
   uint64_t total_free = bluefs_free + my_free;
-
   float bluefs_ratio = (float)bluefs_free / (float)total_free;
+
+  float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
 
   dout(10) << __func__
 	   << " bluefs " << byte_u_t(bluefs_free)
