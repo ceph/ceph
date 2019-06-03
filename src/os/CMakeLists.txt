@@ -71,8 +71,7 @@ if(WITH_SPDK)
     bluestore/NVMEDevice.cc)
 endif()
 
-add_library(os STATIC ${libos_srcs}
-  $<TARGET_OBJECTS:common_prioritycache_obj>)
+add_library(os STATIC ${libos_srcs})
 
 target_link_libraries(os heap_profiler kv)
 
