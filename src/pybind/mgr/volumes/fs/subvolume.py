@@ -138,7 +138,7 @@ class SubvolumeClient(object):
         self._mkdir_p(path, mode)
 
         if size is not None:
-            self.fs.setxattr(path, 'ceph.quota.max_bytes', size.encode('utf-8'), 0)
+            self.fs.setxattr(path, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
 
         # enforce security isolation, use separate namespace for this subvolume
         if namespace_isolated:
