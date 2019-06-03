@@ -19,12 +19,14 @@ public:
 
   struct ClassMethod {
     struct ClassHandler::ClassData *cls;
-    string name;
+    std::string name;
     int flags;
     cls_method_call_t func;
     cls_method_cxx_call_t cxx_func;
 
-    int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
+    int exec(cls_method_context_t ctx,
+	     ceph::bufferlist& indata,
+	     ceph::bufferlist& outdata);
     void unregister();
 
     int get_flags() {
@@ -55,17 +57,17 @@ public:
       CLASS_OPEN,            // initialized, usable
     } status;
 
-    string name;
+    std::string name;
     ClassHandler *handler;
     void *handle;
 
     bool whitelisted = false;
 
-    map<string, ClassMethod> methods_map;
-    map<string, ClassFilter> filters_map;
+    std::map<std::string, ClassMethod> methods_map;
+    std::map<std::string, ClassFilter> filters_map;
 
-    set<ClassData *> dependencies;         /* our dependencies */
-    set<ClassData *> missing_dependencies; /* only missing dependencies */
+    std::set<ClassData *> dependencies;         /* our dependencies */
+    std::set<ClassData *> missing_dependencies; /* only missing dependencies */
 
     ClassMethod *_get_method(const char *mname);
 
@@ -102,9 +104,9 @@ public:
   };
 
 private:
-  map<string, ClassData> classes;
+  std::map<std::string, ClassData> classes;
 
-  ClassData *_get_class(const string& cname, bool check_allowed);
+  ClassData *_get_class(const std::string& cname, bool check_allowed);
   int _load_class(ClassData *cls);
 
   static bool in_class_list(const std::string& cname,
@@ -117,8 +119,8 @@ public:
 
   int open_all_classes();
 
-  void add_embedded_class(const string& cname);
-  int open_class(const string& cname, ClassData **pcls);
+  void add_embedded_class(const std::string& cname);
+  int open_class(const std::string& cname, ClassData **pcls);
   
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
