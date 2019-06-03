@@ -58,7 +58,7 @@ class CephContext;
 class Port {
   struct ibv_context* ctxt;
   int port_num;
-  struct ibv_port_attr* port_attr;
+  struct ibv_port_attr port_attr;
   uint16_t lid;
   int gid_idx = 0;
   union ibv_gid gid;
@@ -68,7 +68,7 @@ class Port {
   uint16_t get_lid() { return lid; }
   ibv_gid  get_gid() { return gid; }
   int get_port_num() { return port_num; }
-  ibv_port_attr* get_port_attr() { return port_attr; }
+  ibv_port_attr* get_port_attr() { return &port_attr; }
   int get_gid_idx() { return gid_idx; }
 };
 
