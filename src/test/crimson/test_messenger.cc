@@ -167,7 +167,17 @@ static seastar::future<> test_echo(unsigned rounds,
         return msgr->shutdown();
       }
 
-      seastar::future<> dispatch_pingpong(const entity_addr_t& peer_addr, bool foreign_dispatch=true) {
+      // Note: currently we don't support foreign dispatch a message because:
+      // 1. it is not effecient because each ref-count modification needs
+      //    a cross-core jump, so it should be discouraged.
+      // 2. messenger needs to be modified to hold a wrapper for the sending
+      //    message because it can be a nested seastar smart ptr or not.
+      // 3. in 1:1 mapping OSD, there is no need to do foreign dispatch.
+      seastar::future<> dispatch_pingpong(const entity_addr_t& peer_addr,
+					  bool foreign_dispatch) {
+#ifndef CRIMSON_MSGR_SEND_FOREIGN
+	ceph_assert(!foreign_dispatch);
+#endif
         mono_time start_time = mono_clock::now();
         return msgr->connect(peer_addr, entity_name_t::TYPE_OSD)
           .then([this, foreign_dispatch, start_time](auto conn) {
@@ -269,12 +279,15 @@ static seastar::future<> test_echo(unsigned rounds,
       // dispatch pingpoing
         .then([client1, client2, server1, server2] {
           return seastar::when_all_succeed(
-              // test connecting in parallel, accepting in parallel,
-              // and operating the connection reference from a foreign/local core
-              client1->dispatch_pingpong(server1->msgr->get_myaddr(), true),
+              // test connecting in parallel, accepting in parallel
+#ifdef CRIMSON_MSGR_SEND_FOREIGN
+	      // operate the connection reference from a foreign core
+	      client1->dispatch_pingpong(server1->msgr->get_myaddr(), true),
+	      client2->dispatch_pingpong(server2->msgr->get_myaddr(), true),
+#endif
+	      // operate the connection reference from a local core
               client1->dispatch_pingpong(server2->msgr->get_myaddr(), false),
-              client2->dispatch_pingpong(server1->msgr->get_myaddr(), false),
-              client2->dispatch_pingpong(server2->msgr->get_myaddr(), true));
+              client2->dispatch_pingpong(server1->msgr->get_myaddr(), false));
       // shutdown
         }).finally([client1] {
           logger().info("client1 shutdown...");
@@ -331,7 +344,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        return ceph::net::Messenger::create(name, lname, nonce)
+        return ceph::net::Messenger::create(name, lname, nonce, 0)
           .then([this, addr](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& server) {
                 server.msgr = messenger->get_local_shard();
@@ -363,7 +376,7 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce)
+        return ceph::net::Messenger::create(name, lname, nonce, 0)
           .then([this](ceph::net::Messenger *messenger) {
             return container().invoke_on_all([messenger](auto& client) {
                 client.msgr = messenger->get_local_shard();
