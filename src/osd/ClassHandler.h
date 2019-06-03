@@ -4,8 +4,8 @@
 #define CEPH_CLASSHANDLER_H
 
 #include "include/types.h"
+#include "common/ceph_mutex.h"
 #include "objclass/objclass.h"
-#include "common/Mutex.h"
 
 //forward declaration
 class CephContext;
@@ -113,9 +113,9 @@ private:
       const std::string& list);
 
 public:
-  Mutex mutex;
+  ceph::mutex mutex = ceph::make_mutex("ClassHandler");
 
-  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  explicit ClassHandler(CephContext *cct_) : cct(cct_) {}
 
   int open_all_classes();
   int open_class(const std::string& cname, ClassData **pcls);
