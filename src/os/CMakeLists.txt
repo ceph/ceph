@@ -72,10 +72,9 @@ if(WITH_SPDK)
 endif()
 
 add_library(os STATIC ${libos_srcs}
-  $<TARGET_OBJECTS:kv_objs>
   $<TARGET_OBJECTS:common_prioritycache_obj>)
 
-target_link_libraries(os heap_profiler)
+target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
