@@ -11,11 +11,13 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_future.hh>
 
+#include "common/dout.h"
 #include "crimson/net/Fwd.h"
 #include "os/Transaction.h"
+#include "crimson/osd/shard_services.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
-#include "recovery_state.h"
+#include "osd/PeeringState.h"
 
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 class OSDMap;
@@ -36,99 +38,378 @@ namespace ceph::os {
 
 class PG : public boost::intrusive_ref_counter<
   PG,
-  boost::thread_unsafe_counter>
+  boost::thread_unsafe_counter>,
+  PeeringState::PeeringListener,
+  DoutPrefixProvider
 {
   using ec_profile_t = std::map<std::string,std::string>;
-  using cached_map_t = boost::local_shared_ptr<OSDMap>;
+  using cached_map_t = boost::local_shared_ptr<const OSDMap>;
 
+  spg_t pgid;
+  pg_shard_t pg_whoami;
+  coll_t coll;
+  ceph::os::CollectionRef coll_ref;
+  ghobject_t pgmeta_oid;
 public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
      pg_pool_t&& pool,
      std::string&& name,
-     std::unique_ptr<PGBackend> backend,
      cached_map_t osdmap,
-     ceph::net::Messenger& msgr);
+     ceph::osd::ShardServices &shard_services,
+     ec_profile_t profile);
 
-  epoch_t get_osdmap_epoch() const;
-  const pg_info_t& get_info() const;
-  const pg_stat_t& get_stats() const;
-  void clear_state(uint64_t mask);
-  bool test_state(uint64_t mask) const;
-  void set_state(uint64_t mask);
-  const PastIntervals& get_past_intervals() const;
-  pg_shard_t get_primary() const;
-  bool is_primary() const;
-  bool is_acting(pg_shard_t pg_shard) const;
-  bool is_up(pg_shard_t pg_shard) const;
-  pg_shard_t get_whoami() const;
-  epoch_t get_last_peering_reset() const;
-  void update_last_peering_reset();
-  epoch_t get_need_up_thru() const;
-  void update_need_up_thru(const OSDMap* o = nullptr);
+  // EpochSource
+  epoch_t get_osdmap_epoch() const final {
+    return peering_state.get_osdmap_epoch();
+  }
 
-  bool proc_replica_info(pg_shard_t from,
-			 const pg_info_t& pg_info,
-			 epoch_t send_epoch);
-  void proc_replica_log(pg_shard_t from,
-			const pg_info_t& pg_info,
-			const pg_log_t& pg_log,
-			const pg_missing_t& pg_missing);
+  // DoutPrefixProvider
+  std::ostream& gen_prefix(std::ostream& out) const final {
+    return out << *this;
+  }
+  CephContext *get_cct() const final {
+    return shard_services.get_cct();
+  }
+  unsigned get_subsys() const final {
+    return ceph_subsys_osd;
+  }
 
-  using peer_info_t = std::map<pg_shard_t, pg_info_t>;
-  pg_shard_t find_best_info(const PG::peer_info_t& infos) const;
-  enum class choose_acting_t {
-    dont_change,
-    should_change,
-    pg_incomplete,
+  ceph::os::CollectionRef get_collection_ref() {
+    return coll_ref;
+  }
+
+  // PeeringListener
+  void prepare_write(
+    pg_info_t &info,
+    pg_info_t &last_written_info,
+    PastIntervals &past_intervals,
+    PGLog &pglog,
+    bool dirty_info,
+    bool dirty_big_info,
+    bool need_write_epoch,
+    ObjectStore::Transaction &t) final {
+    std::map<string,bufferlist> km;
+    if (dirty_big_info || dirty_info) {
+      int ret = prepare_info_keymap(
+	shard_services.get_cct(),
+	&km,
+	peering_state.get_osdmap()->get_epoch(),
+	info,
+	last_written_info,
+	past_intervals,
+	dirty_big_info,
+	need_write_epoch,
+	true,
+	nullptr,
+	this);
+      ceph_assert(ret == 0);
+    }
+    pglog.write_log_and_missing(
+      t, &km, coll, pgmeta_oid,
+      peering_state.get_pool().info.require_rollback());
+    if (!km.empty())
+      t.omap_setkeys(coll, pgmeta_oid, km);
+  }
+
+  void on_info_history_change() final {
+    // Not needed yet -- mainly for scrub scheduling
+  }
+
+  void scrub_requested(bool deep, bool repair) final {
+    ceph_assert(0 == "Not implemented");
+  }
+
+  uint64_t get_snap_trimq_size() const final {
+    return 0;
+  }
+
+  void send_cluster_message(
+    int osd, Message *m,
+    epoch_t epoch, bool share_map_update=false) final {
+    shard_services.send_to_osd(osd, m, epoch);
+  }
+
+  void send_pg_created(pg_t pgid) final {
+    shard_services.send_pg_created(pgid);
+  }
+
+  bool try_flush_or_schedule_async() final;
+
+  void start_flush_on_transaction(
+    ObjectStore::Transaction &t) final {
+    t.register_on_commit(
+      new LambdaContext([this](){
+	peering_state.complete_flush();
+    }));
+  }
+
+  void on_flushed() final {
+    // will be needed for unblocking IO operations/peering
+  }
+
+  void schedule_event_after(
+    PGPeeringEventRef event,
+    float delay) final {
+    ceph_assert(0 == "Not implemented yet");
+  }
+
+  void request_local_background_io_reservation(
+    unsigned priority,
+    PGPeeringEventRef on_grant,
+    PGPeeringEventRef on_preempt) final {
+    ceph_assert(0 == "Not implemented yet");
+  }
+
+  void update_local_background_io_priority(
+    unsigned priority) final {
+    ceph_assert(0 == "Not implemented yet");
+  }
+
+  void cancel_local_background_io_reservation() final {
+    // Not implemented yet, but gets called on exit() from some states
+  }
+
+  void request_remote_recovery_reservation(
+    unsigned priority,
+    PGPeeringEventRef on_grant,
+    PGPeeringEventRef on_preempt) final {
+    ceph_assert(0 == "Not implemented yet");
+  }
+
+  void cancel_remote_recovery_reservation() final {
+    // Not implemented yet, but gets called on exit() from some states
+  }
+
+  void schedule_event_on_commit(
+    ObjectStore::Transaction &t,
+    PGPeeringEventRef on_commit) final {
+    t.register_on_commit(
+      new LambdaContext([this, on_commit](){
+	PeeringCtx rctx;
+        do_peering_event(on_commit, rctx);
+	shard_services.dispatch_context(std::move(rctx));
+    }));
+  }
+
+  void update_heartbeat_peers(set<int> peers) final {
+    // Not needed yet
+  }
+  void set_probe_targets(const set<pg_shard_t> &probe_set) final {
+    // Not needed yet
+  }
+  void clear_probe_targets() final {
+    // Not needed yet
+  }
+  void queue_want_pg_temp(const std::vector<int> &wanted) final {
+    shard_services.queue_want_pg_temp(pgid.pgid, wanted);
+  }
+  void clear_want_pg_temp() final {
+    shard_services.remove_want_pg_temp(pgid.pgid);
+  }
+  void publish_stats_to_osd() final {
+    // Not needed yet
+  }
+  void clear_publish_stats() final {
+    // Not needed yet
+  }
+  void check_recovery_sources(const OSDMapRef& newmap) final {
+    // Not needed yet
+  }
+  void check_blacklisted_watchers() final {
+    // Not needed yet
+  }
+  void clear_primary_state() final {
+    // Not needed yet
+  }
+
+
+  void on_pool_change() final {
+    // Not needed yet
+  }
+  void on_role_change() final {
+    // Not needed yet
+  }
+  void on_change(ObjectStore::Transaction &t) final {
+    // Not needed yet
+  }
+  void on_activate(interval_set<snapid_t> to_trim) final {
+    // Not needed yet (will be needed for IO unblocking)
+  }
+  void on_activate_complete() final {
+    active_promise.set_value();
+    active_promise = {};
+  }
+  void on_new_interval() final {
+    // Not needed yet
+  }
+  Context *on_clean() final {
+    // Not needed yet (will be needed for IO unblocking)
+    return nullptr;
+  }
+  void on_activate_committed() final {
+    // Not needed yet (will be needed for IO unblocking)
+  }
+  void on_active_exit() final {
+    // Not needed yet
+  }
+
+  void on_removal(ObjectStore::Transaction &t) final {
+    // TODO
+  }
+  void do_delete_work(ObjectStore::Transaction &t) final {
+    // TODO
+  }
+
+  // merge/split not ready
+  void clear_ready_to_merge() final {}
+  void set_not_ready_to_merge_target(pg_t pgid, pg_t src) final {}
+  void set_not_ready_to_merge_source(pg_t pgid) final {}
+  void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
+  void set_ready_to_merge_source(eversion_t lu) final {}
+
+  void on_active_actmap() final {
+    // Not needed yet
+  }
+  void on_active_advmap(const OSDMapRef &osdmap) final {
+    // Not needed yet
+  }
+  epoch_t oldest_stored_osdmap() final {
+    // TODO
+    return 0;
+  }
+
+
+  void on_backfill_reserved() final {
+    ceph_assert(0 == "Not implemented");
+  }
+  void on_backfill_canceled() final {
+    ceph_assert(0 == "Not implemented");
+  }
+  void on_recovery_reserved() final {
+    ceph_assert(0 == "Not implemented");
+  }
+
+
+  bool try_reserve_recovery_space(
+    int64_t primary_num_bytes, int64_t local_num_bytes) final {
+    return true;
+  }
+  void unreserve_recovery_space() final {}
+
+  struct PGLogEntryHandler : public PGLog::LogEntryHandler {
+    PG *pg;
+    ObjectStore::Transaction *t;
+    PGLogEntryHandler(PG *pg, ObjectStore::Transaction *t) : pg(pg), t(t) {}
+
+    // LogEntryHandler
+    void remove(const hobject_t &hoid) override {
+      // TODO
+    }
+    void try_stash(const hobject_t &hoid, version_t v) override {
+      // TODO
+    }
+    void rollback(const pg_log_entry_t &entry) override {
+      // TODO
+    }
+    void rollforward(const pg_log_entry_t &entry) override {
+      // TODO
+    }
+    void trim(const pg_log_entry_t &entry) override {
+      // TODO
+    }
   };
-  std::vector<int>
-  calc_acting(pg_shard_t auth_shard,
-	      const vector<int>& acting,
-	      const map<pg_shard_t, pg_info_t>& all_info) const;
-  std::pair<choose_acting_t, pg_shard_t> choose_acting();
+  PGLog::LogEntryHandlerRef get_log_handler(
+    ObjectStore::Transaction &t) final {
+    return std::make_unique<PG::PGLogEntryHandler>(this, &t);
+  }
+
+  void rebuild_missing_set_with_deletes(PGLog &pglog) final {
+    ceph_assert(0 == "Impossible for crimson");
+  }
+
+  PerfCounters &get_peering_perf() final {
+    return shard_services.get_recoverystate_perf_logger();
+  }
+  PerfCounters &get_perf_logger() final {
+    return shard_services.get_perf_logger();
+  }
+
+  void log_state_enter(const char *state) final;
+  void log_state_exit(
+    const char *state_name, utime_t enter_time,
+    uint64_t events, utime_t event_dur) final;
+
+  void dump_recovery_info(Formatter *f) const final {
+  }
+
+  OstreamTemp get_clog_info() final {
+    // not needed yet: replace with not a stub (needs to be wired up to monc)
+    return OstreamTemp(CLOG_INFO, nullptr);
+  }
+  OstreamTemp get_clog_debug() final {
+    // not needed yet: replace with not a stub (needs to be wired up to monc)
+    return OstreamTemp(CLOG_DEBUG, nullptr);
+  }
+  OstreamTemp get_clog_error() final {
+    // not needed yet: replace with not a stub (needs to be wired up to monc)
+    return OstreamTemp(CLOG_ERROR, nullptr);
+  }
+
+  // Utility
+  bool is_primary() const {
+    return peering_state.is_primary();
+  }
+  pg_stat_t get_stats() {
+    auto stats = peering_state.prepare_stats_for_publish(
+      false,
+      pg_stat_t(),
+      object_stat_collection_t());
+    ceph_assert(stats);
+    return *stats;
+  }
+  bool get_need_up_thru() const {
+    return peering_state.get_need_up_thru();
+  }
+
+  /// initialize created PG
+  void init(
+    ceph::os::CollectionRef coll_ref,
+    int role,
+    const std::vector<int>& up,
+    int up_primary,
+    const std::vector<int>& acting,
+    int acting_primary,
+    const pg_history_t& history,
+    const PastIntervals& pim,
+    bool backfill,
+    ObjectStore::Transaction &t);
+
   seastar::future<> read_state(ceph::os::CyanStore* store);
 
-  // peering/recovery
-  bool should_send_notify() const;
-  pg_notify_t get_notify(epoch_t query_epoch) const;
-  bool is_last_activated_peer(pg_shard_t peer);
-  void clear_primary_state();
+  void do_peering_event(
+    const boost::statechart::event_base &evt,
+    PeeringCtx &rctx);
+  void do_peering_event(
+    PGPeeringEvent& evt, PeeringCtx &rctx);
+  void do_peering_event(
+    std::unique_ptr<PGPeeringEvent> evt,
+    PeeringCtx &rctx) {
+    return do_peering_event(*evt, rctx);
+  }
+  void do_peering_event(
+    PGPeeringEventRef evt,
+    PeeringCtx &rctx) {
+    return do_peering_event(*evt, rctx);
+  }
 
-  bool should_restart_peering(int new_up_primary,
-			      int new_acting_primary,
-			      const std::vector<int>& new_up,
-			      const std::vector<int>& new_acting,
-			      cached_map_t last_map,
-			      cached_map_t osd_map) const;
-  void start_peering_interval(int new_up_primary,
-			      int new_acting_primary,
-			      const std::vector<int>& new_up,
-			      const std::vector<int>& new_acting,
-			      cached_map_t last_map);
-  void activate(epoch_t activation_epoch);
-  void on_activated();
-  void maybe_mark_clean();
-
-  seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
-  seastar::future<> dispatch_context(recovery::Context&& ctx);
-  seastar::future<> handle_advance_map(cached_map_t next_map);
-  seastar::future<> handle_activate_map();
-  seastar::future<> share_pg_info();
-  void reply_pg_query(const MQuery& query, recovery::Context* ctx);
+  void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
+  void handle_activate_map(PeeringCtx &rctx);
+  void handle_initialize(PeeringCtx &rctx);
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
   void print(ostream& os) const;
 private:
-  seastar::future<> activate_peer(pg_shard_t peer);
-  void reply_pg_query_for_info(const MQuery& query, recovery::Context* ctx);
-  void reply_pg_query_for_log(const MQuery& query, bool full);
-  seastar::future<> send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch);
-
-  void update_primary_state(const std::vector<int>& new_up,
-			    int new_up_primary,
-			    const std::vector<int>& new_acting,
-			    int new_acting_primary);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
@@ -139,39 +420,17 @@ private:
 					     uint64_t limit);
 
 private:
-  const spg_t pgid;
-  pg_shard_t whoami;
-  pg_pool_t pool;
-
-  epoch_t last_peering_reset = 0;
-  epoch_t need_up_thru = 0;
-  recovery::State recovery_state;
-
-  bool should_notify_primary = false;
-
-  using pg_shard_set_t = std::set<pg_shard_t>;
-  // peer_info    -- projected (updates _before_ replicas ack)
-  peer_info_t peer_info; //< info from peers (stray or prior)
-  pg_shard_set_t peer_activated;
-
-  //< pg state
-  pg_info_t info;
-  //< last written info, for fast info persistence
-  pg_info_t last_written_info;
-  PastIntervals past_intervals;
-  // primary state
-  pg_shard_t primary, up_primary;
-  std::vector<int> acting, up;
-  pg_shard_set_t actingset, upset;
-  pg_shard_set_t acting_recovery_backfill;
-  std::vector<int> want_acting;
-
-  seastar::future<> wait_for_active();
-  std::optional<seastar::shared_promise<>> active_promise;
-  std::unique_ptr<PGBackend> backend;
+  ceph::osd::ShardServices &shard_services;
 
   cached_map_t osdmap;
-  ceph::net::Messenger& msgr;
+  std::unique_ptr<PGBackend> backend;
+
+  PeeringState peering_state;
+
+  seastar::shared_promise<> active_promise;
+  seastar::future<> wait_for_active();
+
+  friend std::ostream& operator<<(std::ostream&, const PG& pg);
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);

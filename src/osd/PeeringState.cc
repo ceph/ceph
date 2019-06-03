@@ -728,12 +728,12 @@ void PeeringState::on_new_interval()
 	     << get_pg_log().get_missing() << dendl;
 
   if (!pg_log.get_missing().may_include_deletes &&
-    get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+      !perform_deletes_during_peering()) {
     pl->rebuild_missing_set_with_deletes(pg_log);
   }
   ceph_assert(
-    pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(
-      CEPH_OSDMAP_RECOVERY_DELETES));
+    pg_log.get_missing().may_include_deletes ==
+    !perform_deletes_during_peering());
 
   pl->on_new_interval();
 }
@@ -3353,6 +3353,10 @@ void PeeringState::init(
   info.stats.acting = acting;
   info.stats.acting_primary = new_acting_primary;
   info.stats.mapping_epoch = info.history.same_interval_since;
+
+  if (!perform_deletes_during_peering()) {
+    pg_log.set_missing_may_contain_deletes();
+  }
 
   if (backfill) {
     psdout(10) << __func__ << ": Setting backfill" << dendl;

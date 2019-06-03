@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
 #include "include/types.h"
 #include "common/ceph_releases.h"
@@ -1504,7 +1505,12 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-typedef std::shared_ptr<const OSDMap> OSDMapRef;
+#ifdef WITH_SEASTAR
+using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#else
+using OSDMapRef = std::shared_ptr<const OSDMap>;
+#endif
+
 
 inline std::ostream& operator<<(std::ostream& out, const OSDMap& m) {
   m.print_oneline_summary(out);

@@ -24,10 +24,10 @@ namespace {
 
 std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
                                              const pg_pool_t& pool,
+					     ceph::os::CollectionRef coll,
                                              ceph::os::CyanStore* store,
                                              const ec_profile_t& ec_profile)
 {
-  auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
@@ -282,6 +282,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
   txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   os.oi.size = 0;
   os.oi.new_object();
+  os.exists = false;
   // todo: update watchers
   if (os.oi.is_whiteout()) {
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);

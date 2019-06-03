@@ -455,7 +455,6 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
   } else {
     reply_tag = CEPH_MSGR_TAG_READY;
   }
-  messenger.unregister_conn(existing);
   if (!existing->is_lossy()) {
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -464,6 +463,11 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     existing->requeue_sent();
     std::tie(conn.out_seq, conn.out_q) = existing->get_out_queue();
   }
+  seastar::do_with(
+    std::move(existing),
+    [](auto existing) {
+      return existing->close();
+    });
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
