@@ -1091,7 +1091,21 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     // clean inappropriate pg_upmap/pg_upmap_items (if any)
-    tmp.clean_pg_upmaps(cct, &pending_inc);
+    {
+      // check every upmapped pg for now
+      // until we could reliably identify certain cases to ignore,
+      // which is obviously the hard part TBD..
+      vector<pg_t> pgs_to_check;
+      tmp.get_upmap_pgs(&pgs_to_check);
+      if (pgs_to_check.size() < g_conf->mon_clean_pg_upmaps_per_chunk * 2) {
+        // not enough pgs, do it inline
+        tmp.clean_pg_upmaps(cct, &pending_inc);
+      } else {
+        CleanUpmapJob job(cct, tmp, pending_inc);
+        mapper.queue(&job, g_conf->mon_clean_pg_upmaps_per_chunk, pgs_to_check);
+        job.wait();
+      }
+    }
 
     if (tmp.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // remove any legacy osdmap nearfull/full flags
