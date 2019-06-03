@@ -103,6 +103,7 @@ export class UserFormComponent implements OnInit {
     }
   }
 
+  //Change password only after the first log
   initEdit() {
     this.disableForEdit();
     this.route.params.subscribe((params: { username: string }) => {
@@ -110,6 +111,12 @@ export class UserFormComponent implements OnInit {
       this.userService.get(username).subscribe((userFormModel: UserFormModel) => {
         this.response = _.cloneDeep(userFormModel);
         this.setResponse(userFormModel);
+        if (this.authStorageService.ForceChangingPasswordAfterFirstLog()) {
+          this.notificationService.show(
+          NotificationType.success,
+          this.i18n('You need to change password after first login')
+          );
+        }
       });
     });
   }

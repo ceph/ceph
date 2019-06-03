@@ -48,6 +48,11 @@ class User(RESTController):
             raise DashboardException(msg='Username is required',
                                      code='username_required',
                                      component='user')
+        if not password:
+            raise DashboardException(msg='Password is required',
+                                     code='password_required',
+                                     component='user')
+
         user_roles = None
         if roles:
             user_roles = User._get_user_roles(roles)
@@ -79,6 +84,10 @@ class User(RESTController):
             user = mgr.ACCESS_CTRL_DB.get_user(username)
         except UserDoesNotExist:
             raise cherrypy.HTTPError(404)
+        if not password and not name and not email and (user.to_dict())['roles'] == roles:
+            raise DashboardException(msg='All fields are empty, cannot update the user',
+                                     code='cannot_update_user',
+                                     component='user')
         user_roles = []
         if roles:
             user_roles = User._get_user_roles(roles)

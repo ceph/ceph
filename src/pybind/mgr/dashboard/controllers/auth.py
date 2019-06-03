@@ -28,7 +28,8 @@ class Auth(RESTController):
             return {
                 'token': token,
                 'username': username,
-                'permissions': user_perms
+                'permissions': user_perms,
+                'need_to_change_pass': AuthManager.check_need_change_password(username), 
             }
 
         logger.debug('Login failed')
@@ -81,3 +82,13 @@ class Auth(RESTController):
         return {
             'login_url': self._get_login_url()
         }
+
+    @RESTController.Collection('POST')
+    def getNeedChangePassword(self, username):
+        if username:
+            return {
+                'need_to_change_pass' : AuthManager.check_need_change_password(username)
+                }
+        raise DashboardException(msg='No username',
+                                 code='no_username',
+                                 component='auth')

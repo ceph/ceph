@@ -21,15 +21,23 @@ export class AuthService {
     return this.http.post('api/auth/check', { token: token });
   }
 
-  login(credentials: Credentials) {
+  getNeedChangePassword(username: string) {
+    return this.http
+      .post('api/auth/getNeedChangePassword', {username: username})
+      .toPromise()
+      .then((resp: any) => {
+      return resp.need_to_change_pass
+     })
+  }
+  
+  login(credentials: Credentials) { 
     return this.http
       .post('api/auth', credentials)
       .toPromise()
       .then((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions);
+       this.authStorageService.set(resp.username, resp.token, resp.permissions, resp.need_to_change_pass); 
       });
   }
-
   logout(callback: Function = null) {
     return this.http.post('api/auth/logout', null).subscribe((resp: any) => {
       this.router.navigate(['/logout'], { skipLocationChange: true });

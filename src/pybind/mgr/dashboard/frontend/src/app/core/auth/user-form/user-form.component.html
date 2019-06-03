@@ -39,7 +39,10 @@
              [ngClass]="{'has-error': userForm.showError('password', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">Password</label>
+                 for="name">Password
+                 <span class="required"
+                 *ngIf="mode !== userFormMode.editing"></span>
+          </label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -65,10 +68,12 @@
         <!-- Confirm password -->
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('confirmpassword', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Confirm password</label>
-          <div class="col-sm-9">
+             <label i18n
+                  class="control-label col-sm-3"
+                  for="name">Confirm password
+                  <span class="required"
+                        *ngIf="mode !== userFormMode.editing"></span>
+            </label> 
             <div class="input-group">
               <input class="form-control"
                      type="password"
