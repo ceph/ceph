@@ -16,7 +16,38 @@
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include <curl/curl.h>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/write.hpp>
+#include <thread>
 #include <gtest/gtest.h>
+
+TEST(HTTPManager, ReadTruncated)
+{
+  using tcp = boost::asio::ip::tcp;
+  tcp::endpoint endpoint(tcp::v4(), 0);
+  boost::asio::io_context ioctx;
+  tcp::acceptor acceptor(ioctx);
+  acceptor.open(endpoint.protocol());
+  acceptor.bind(endpoint);
+  acceptor.listen();
+
+  std::thread server{[&] {
+    tcp::socket socket{ioctx};
+    acceptor.accept(socket);
+    std::string_view response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Length: 1024\r\n"
+        "\r\n"
+        "short body";
+    boost::asio::write(socket, boost::asio::buffer(response));
+  }};
+  const auto url = std::string{"http://127.0.0.1:"} + std::to_string(acceptor.local_endpoint().port());
+
+  RGWHTTPClient client{g_ceph_context, "GET", url};
+  EXPECT_EQ(-EAGAIN, RGWHTTP::process(&client, null_yield));
+
+  server.join();
+}
 
 TEST(HTTPManager, SignalThread)
 {
