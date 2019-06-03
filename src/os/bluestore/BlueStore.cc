@@ -5643,9 +5643,8 @@ int BlueStore::allocate_bluefs_freespace(
   return 0;
 }
 
-int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_freexxx, uint64_t bluefs_totalxxx)
+int64_t BlueStore::_get_bluefs_size_delta()
 {
-
   vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
   bluefs->get_usage(&bluefs_usage);
   uint64_t bluefs_free =  0;
@@ -5743,9 +5742,7 @@ int BlueStore::_balance_bluefs_freespace()
   }
 
   // fixme: look at primary bdev only for now
-  int64_t delta = _get_bluefs_size_delta(
-    bluefs_usage[bluefs_shared_bdev].first,
-    bluefs_usage[bluefs_shared_bdev].second);
+  int64_t delta = _get_bluefs_size_delta();
 
   // reclaim from bluefs?
   if (delta < 0) {

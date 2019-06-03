@@ -2470,8 +2470,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
     ceph_assert(id <= (int)alloc.size() && alloc[id]);
     auto min_need = round_up_to(need, min_alloc_size);
     need = std::max(need,
-      slow_dev_expander->get_recommended_expansion_delta(
-        alloc[id]->get_free(), block_all[id].size()));
+      slow_dev_expander->get_recommended_expansion_delta());
 
     need = round_up_to(need, min_alloc_size);
     dout(10) << __func__ << " expanding slow device by 0x"

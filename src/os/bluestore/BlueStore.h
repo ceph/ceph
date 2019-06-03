@@ -2250,7 +2250,7 @@ private:
 
   void _dump_alloc_on_failure();
 
-  int64_t _get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total);
+  int64_t _get_bluefs_size_delta();
   int _balance_bluefs_freespace();
 
   CollectionRef _get_collection(const coll_t& cid);
@@ -3013,9 +3013,8 @@ private:
   std::atomic<uint64_t> out_of_sync_fm = {0};
   // --------------------------------------------------------
   // BlueFSDeviceExpander implementation
-  uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
-    uint64_t bluefs_total) override {
-    auto delta = _get_bluefs_size_delta(bluefs_free, bluefs_total);
+  uint64_t get_recommended_expansion_delta() override {
+    auto delta = _get_bluefs_size_delta();
     return delta > 0 ? delta : 0;
   }
   int allocate_freespace(
