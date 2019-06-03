@@ -9,7 +9,14 @@
 
 namespace ceph::net {
 
-class ProtocolV2 final : public Protocol {
+class ProtocolV2 final : public Protocol,
+                         public seastar::net::input_buffer_factory {
+  // TODO: the ibf is basically a thing living at the Socket level.
+  // Likely the protocols should use an interface to tell it about
+  // frame structure (xor just next read size + alignment).
+  seastar::temporary_buffer<char>
+  create(seastar::compat::polymorphic_allocator<char>* const allocator) override;
+
  public:
   ProtocolV2(Dispatcher& dispatcher,
              SocketConnection& conn,

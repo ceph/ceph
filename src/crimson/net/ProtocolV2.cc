@@ -4,6 +4,7 @@
 #include "ProtocolV2.h"
 
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/polymorphic_temporary_buffer.hh>
 #include <fmt/format.h>
 #if __has_include(<fmt/chrono.h>)
 #include <fmt/chrono.h>
@@ -122,6 +123,7 @@ void ProtocolV2::start_accept(SocketFRef&& sock,
   ceph_assert(!socket);
   conn.target_addr = _peer_addr;
   socket = std::move(sock);
+  socket->set_input_buffer_factory(this);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   execute_accepting();
@@ -179,6 +181,32 @@ seastar::future<> ProtocolV2::write_flush(bufferlist&& buf)
   return socket->write_flush(std::move(buf));
 }
 
+seastar::temporary_buffer<char>
+ProtocolV2::create(seastar::compat::polymorphic_allocator<char>* const allocator)
+{
+#if 0
+  // space for segments_n, epilogue_n and preable_n+1
+  return seastar::make_temporary_buffer<char>(allocator, 8192);
+#else
+  if (rx_segments_desc.empty()) {
+    // space just for preamble_n
+    return seastar::make_temporary_buffer<char>(allocator, FRAME_PREAMBLE_SIZE);
+  } else {
+    // space for segments_n, epilogue_n and preable_n+1
+    size_t segment_size_sum = 0;
+    for (const auto& segment : rx_segments_desc) {
+      segment_size_sum += segment.length;
+    }
+    return seastar::make_temporary_buffer<char>(allocator,
+      segment_size_sum + FRAME_PLAIN_EPILOGUE_SIZE + FRAME_PREAMBLE_SIZE);
+  }
+
+  // TODO: implement prefetching for very small (under 4K) chunk sizes to not
+  // hurt RADOS' reads while the POSIX stack is being used (and till it lacks
+  // io_uring support).
+#endif
+}
+
 size_t ProtocolV2::get_current_msg_size() const
 {
   ceph_assert(!rx_segments_desc.empty());
@@ -192,6 +220,8 @@ size_t ProtocolV2::get_current_msg_size() const
 
 seastar::future<Tag> ProtocolV2::read_main_preamble()
 {
+  rx_segments_desc.clear();
+  rx_segments_data.clear();
   return read_exactly(FRAME_PREAMBLE_SIZE)
     .then([this] (auto bl) {
       if (session_stream_handlers.rx) {
@@ -230,9 +260,6 @@ seastar::future<Tag> ProtocolV2::read_main_preamble()
                        conn, main_preamble.num_segments);
         abort_in_fault();
       }
-
-      rx_segments_desc.clear();
-      rx_segments_data.clear();
 
       for (std::uint8_t idx = 0; idx < main_preamble.num_segments; idx++) {
         logger().debug("{} got new segment: len={} align={}",
@@ -775,6 +802,7 @@ void ProtocolV2::execute_connecting()
       return Socket::connect(conn.peer_addr)
         .then([this](SocketFRef sock) {
           socket = std::move(sock);
+          socket->set_input_buffer_factory(this);
           if (state == state_t::CLOSING) {
             return socket->close().then([this] {
               logger().info("{} is closed during Socket::connect()", conn);

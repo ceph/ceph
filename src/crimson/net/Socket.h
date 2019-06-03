@@ -15,10 +15,11 @@ namespace ceph::net {
 class Socket;
 using SocketFRef = seastar::foreign_ptr<std::unique_ptr<Socket>>;
 
-class Socket
+class Socket : private seastar::net::input_buffer_factory
 {
   const seastar::shard_id sid;
   seastar::connected_socket socket;
+  seastar::net::input_buffer_factory* ibf = nullptr;
   seastar::input_stream<char> in;
   seastar::output_stream<char> out;
 
@@ -30,11 +31,20 @@ class Socket
 
   struct construct_tag {};
 
+  // input_buffer_factory
+  seastar::temporary_buffer<char>
+  create(seastar::compat::polymorphic_allocator<char>* const allocator) override {
+    ceph_assert(ibf);
+    // XXX: we'll have deep, multi-stage delegation. CPU's front-end might not
+    // be supper happy. Profile and refactor if necessary.
+    return ibf->create(allocator);
+  }
+
  public:
   Socket(seastar::connected_socket&& _socket, construct_tag)
     : sid{seastar::engine().cpu_id()},
       socket(std::move(_socket)),
-      in(socket.input()),
+      in(socket.input(this)),
       // the default buffer size 8192 is too small that may impact our write
       // performance. see seastar::net::connected_socket::output()
       out(socket.output(65536)) {}
@@ -61,6 +71,14 @@ class Socket
 							 construct_tag{})),
 	  peer_addr);
       });
+  }
+
+  // HACK: this is a makeshift solution for evaluating the input buffer
+  // factory concept. We need this because a Socket can (theoretically)
+  // live on different core than SocketConnection that makes use of it.
+  // See: the accept loop in SocketMessenger::do_start();
+  void set_input_buffer_factory(seastar::net::input_buffer_factory* const ibf) {
+    this->ibf = ibf;
   }
 
   /// read the requested number of bytes into a bufferlist
