@@ -757,11 +757,14 @@ public:
   /* bucket entrypoint */
   int read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                   RGWBucketEntryPoint *info,
+                                  optional_yield y,
                                   ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> params);
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
+                                   optional_yield y,
                                    ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> params);
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                    optional_yield y,
                                     ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> params);
 
   /* bucket instance */
@@ -770,14 +773,17 @@ public:
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params);
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                    RGWBucketInfo& info,
+                                   optional_yield y,
                                    ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
+                                  optional_yield y,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params);
 
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
-                                RGWObjVersionTracker *objv_tracker);
+                                RGWObjVersionTracker *objv_tracker,
+                                optional_yield y);
 
   /* user/bucket */
   int link_bucket(const rgw_user& user_id,
@@ -801,11 +807,13 @@ public:
 
 private:
   int convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
-                              const rgw_bucket& bucket);
+                              const rgw_bucket& bucket,
+                              optional_yield y);
 
   int do_store_bucket_instance_info(RGWSI_MetaBackend_Handler::Op *op,
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
+                                    optional_yield y,
                                     ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
 
   int do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,

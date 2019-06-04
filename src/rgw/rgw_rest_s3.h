@@ -1059,7 +1059,7 @@ public:
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
     return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+      new rgw::auth::RemoteApplier(cct, store->ctl.user, std::move(acl_alg), info,
                                    cct->_conf->rgw_keystone_implicit_tenants));
   }
 

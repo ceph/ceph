@@ -729,9 +729,8 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
       "RGWRados::clean_bucket_index returned " << ret << dendl;
   }
 
-  ret = rgw_bucket_instance_remove_entry(store->svc.meta,
-					 bucket_info.bucket.get_key(),
-					 nullptr);
+  ret = store->ctl.bucket->remove_bucket_instance_info(bucket_info.bucket,
+                                                       bucket_info);
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean old bucket info object \"" <<

@@ -111,9 +111,9 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
   return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, vector<string> *result)
+int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
 {
-  return core_svc->pool_list_prefixed_objs(pool, prefix, result);
+  return core_svc->pool_list_prefixed_objs(pool, prefix, cb);
 }
 
 int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix)

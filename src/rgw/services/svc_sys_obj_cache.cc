@@ -104,7 +104,7 @@ int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
 }
 
 int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
-                             GetObjState& read_state,
+                             RGWSI_SysObj_Obj_GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker,
                              const rgw_raw_obj& obj,
                              bufferlist *obl, off_t ofs, off_t end,
