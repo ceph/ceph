@@ -57,6 +57,8 @@ seastar::future<bool> SocketConnection::is_connected()
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
   logger().debug("{} --> {} === {}", messenger, get_peer_addr(), *msg);
+  // Cannot send msg from another core now, its ref counter can be contaminated!
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
   return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
     return protocol->send(std::move(msg));
   });
