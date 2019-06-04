@@ -108,6 +108,7 @@ private:
   bufferlist in_data;
   size_t chunk_ofs{0};
   size_t ofs{0};
+  size_t extra_len{0};
   uint64_t write_ofs{0};
   bool read_paused{false};
   bool send_paused{false};

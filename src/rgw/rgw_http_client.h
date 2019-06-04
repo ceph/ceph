@@ -76,6 +76,7 @@ class RGWHTTPClient : public RGWIOProvider
   bufferlist send_bl;
   bufferlist::iterator send_iter;
   bool has_send_len;
+  bool has_receive_len;
   long http_status;
   bool send_data_hint{false};
   size_t receive_pause_skip{0}; /* how many bytes to skip next time receive_data is called
@@ -96,13 +97,18 @@ protected:
   string method;
   string url;
 
+  int retry_num{0};
+
   size_t send_len{0};
+  size_t receive_len{0};
 
   param_vec_t headers;
 
   RGWHTTPManager *get_manager();
 
   int init_request(rgw_http_req_data *req_data);
+
+  bool resume();
 
   virtual int receive_header(void *ptr, size_t len) {
     return 0;
@@ -150,6 +156,7 @@ public:
                          const string& _method,
                          const string& _url)
     : has_send_len(false),
+      has_receive_len(false),
       http_status(HTTP_STATUS_NOSTATUS),
       req_data(nullptr),
       verify_ssl(cct->_conf->rgw_verify_ssl),
@@ -169,6 +176,11 @@ public:
 
   void set_send_data_hint(bool hint) {
     send_data_hint = hint;
+  }
+
+  void set_receive_length(size_t len) {
+    receive_len = len;
+    has_receive_len = true;
   }
 
   long get_http_status() const {
