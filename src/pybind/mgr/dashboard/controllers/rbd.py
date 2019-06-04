@@ -5,21 +5,127 @@ from __future__ import absolute_import
 
 import math
 from functools import partial
+from itertools import islice
 from datetime import datetime
+from collections import OrderedDict
 
+import cProfile
 import cherrypy
 
 import rbd
 
 from . import ApiController, RESTController, Task, UpdatePermission, \
               DeletePermission, CreatePermission, ReadPermission
-from .. import mgr
+from .. import mgr, logger
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rbd import RbdConfiguration, format_bitmask, format_features
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
                                  serialize_dashboard_exception
+
+from ..helpers.ttl_cache import ttl_cache
+
+from .resource import Resource
+from .attribute import Attribute, StaticAttribute, PrivateAttribute
+
+TTL_IMG = 30
+TTL_STAT = 5
+TTL_POOL = 30
+TTL_SNAP = 30
+
+def try_except(func, exc, exc_func=None):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (exc) as e:
+            if exc_func:
+                return exc_func(e, *args, **kwargs)
+            else:
+                pass
+    return wrapper
+
+
+class RbdImage(Resource):
+    name = StaticAttribute(key=True)
+    pool_name = StaticAttribute(key=True)
+
+    _img = PrivateAttribute(lambda s: rbd.Image(s.get_ioctx(s.pool_name), s.name), cache_ttl=TTL_IMG)
+
+    id = Attribute(lambda s: s._img.id())
+
+    _stat = PrivateAttribute(lambda s: s._img.stat(), cache_ttl=TTL_STAT)
+    size = Attribute(lambda s: s._stat['size'])
+    num_objs = Attribute(lambda s: s._stat['num_objs'])
+    obj_size = Attribute(lambda s: s._stat['obj_size'])
+
+    features_name = Attribute(lambda s: format_bitmask(s._img.features()))
+    timestamp = Attribute(lambda s: "{}Z".format(s._img.create_timestamp().isoformat()))
+
+    stripe_count =  Attribute(lambda s: s._img.stripe_count())
+    stripe_unit =  Attribute(lambda s: s._img.stripe_unit())
+    data_pool_name = Attribute(lambda s: mgr.rados.pool_reverse_lookup(s._img.data_pool_id()))
+
+    _parent_info = PrivateAttribute(try_except(lambda s: s._img.parent_info(), rbd.ImageNotFound),
+                                    cache_ttl=TTL_IMG)
+    parent_pool_name = Attribute(try_except(lambda s: s._parent_info[0], TypeError))
+    parent_image_name = Attribute(try_except(lambda s: s._parent_info[1], TypeError))
+    parent_snap_name = Attribute(try_except(lambda s: s._parent_info[2], TypeError))
+
+    snapshots = Attribute(lambda s: s.get_snapshots(), cache_ttl=TTL_SNAP)
+
+    total_disk_usage = Attribute(lambda s: s.get_disk_usage()[0])
+    disk_usage = Attribute(lambda s: s.get_disk_usage()[1])
+
+
+    @ttl_cache(ttl=TTL_IMG)
+    def get_disk_usage(self):
+        img_flags = self._img.flags()
+        if 'fast-diff' in self.features_name and not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags:
+            snaps = [(s['id'], s['size'], s['name']) for s in self.snapshots]
+            snaps.sort(key=lambda s: s[0])
+            snaps += [(snaps[-1][0]+1 if snaps else 0, self.size, None)]
+            total_prov_bytes, snaps_prov_bytes = Rbd._rbd_disk_usage(self._img, snaps, True)
+            total_disk_usage = total_prov_bytes
+            for snap, prov_bytes in snaps_prov_bytes.items():
+                if snap is None:
+                    disk_usage = prov_bytes
+                    continue
+                for ss in self.snapshots:
+                    if ss['name'] == snap:
+                        disk_usage = prov_bytes
+                        break
+        else:
+            total_disk_usage = None
+            disk_usage = None
+        return (total_disk_usage, disk_usage)
+
+
+    def get_snapshot_children(self, snap):
+        self._img.set_snap(snap['name'])
+        return [dict(
+            pool_name=pool_name,
+            image_name=image_name,
+        ) for pool_name, image_name in self._img.list_children()]
+
+    def get_snapshots(self):
+        return [dict(
+            id=snap['id'],
+            size=snap['size'],
+            name=snap['name'],
+            namespace=snap['namespace'],
+            timestamp="{}Z".format(
+                self._img.get_snap_timestamp(snap['id']).isoformat()),
+            is_protected=self._img.is_protected_snap(snap['name']),
+            used_bytes=None,
+            children=self.get_snapshot_children(snap),
+        ) for snap in self._img.list_snaps()]
+
+
+    @classmethod
+    @ttl_cache(ttl=TTL_POOL)
+    def get_ioctx(cls, pool_name):
+        return mgr.rados.open_ioctx(pool_name)
 
 
 # pylint: disable=not-callable
@@ -75,6 +181,10 @@ class Rbd(RESTController):
     # set of image features that can be disabled on existing images
     ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
                               "journaling"}
+
+    def __init__(self):
+        super(Rbd, self).__init__()
+        self.rbd_inst = rbd.RBD()
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps, whole_object=True):
@@ -181,41 +291,62 @@ class Rbd(RESTController):
 
             return stat
 
-    @classmethod
-    @ViewCache()
-    def _rbd_pool_list(cls, pool_name):
-        rbd_inst = rbd.RBD()
+    def _rbd_pool_list(self, pool_name):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
-            names = rbd_inst.list(ioctx)
-            result = []
-            for name in names:
-                try:
-                    stat = cls._rbd_image(ioctx, pool_name, name)
-                except rbd.ImageNotFound:
-                    # may have been removed in the meanwhile
-                    continue
-                result.append(stat)
-            return result
+            return [self._rbd_image_basic_2(ioctx, pool_name, name) for name in
+                    self.rbd_inst.list(ioctx)]
 
-    def _rbd_list(self, pool_name=None):
-        if pool_name:
-            pools = [pool_name]
-        else:
-            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+    def get_images_from_pool(self, pool_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            return self.rbd_inst.list(ioctx)
 
-        result = []
-        for pool in pools:
-            # pylint: disable=unbalanced-tuple-unpacking
-            status, value = self._rbd_pool_list(pool)
-            for i, image in enumerate(value):
-                value[i]['configuration'] = RbdConfiguration(pool, image['name']).list()
-            result.append({'status': status, 'value': value, 'pool_name': pool})
-        return result
+    def get_images(self, pools):
+        return [(pool, img) for pool in pools for img in
+                self.get_images_from_pool(pool)]
+
+    @staticmethod
+    @ttl_cache(ttl=TTL_POOL, maxsize=1)
+    def get_pools():
+        return [p['pool_name'] for p in CephService.get_pool_list('rbd')]
 
     @handle_rbd_error()
     @handle_rados_error('pool')
-    def list(self, pool_name=None):
-        return self._rbd_list(pool_name)
+    def list(self, pool_name=None,
+             limit="10", offset="0",
+             fields=None,
+             sort=None,
+             filter=None):
+        pr = cProfile.Profile()
+        pr.enable()
+
+        limit = int(limit)
+        offset = int(offset)
+        if fields:
+            fields = fields.split(",")
+
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = self.get_pools()
+
+        images = self.get_images(pools)
+
+        if sort:
+            images = sorted(
+                [(pool, img, RbdImage(name=img, pool_name=pool)[sort]) for (pool, img) in images],
+                key=lambda x: x[2]
+            )
+
+        ret = list(islice(
+            (RbdImage(name=img[1], pool_name=img[0]).to_dict(fields) for img in images),
+            offset* + limit,
+            (offset + 1)*limit
+        ))
+
+        pr.disable()
+        pr.dump_stats('/ceph/build/profile.stats')
+
+        return ret
 
     @handle_rbd_error()
     @handle_rados_error('pool')

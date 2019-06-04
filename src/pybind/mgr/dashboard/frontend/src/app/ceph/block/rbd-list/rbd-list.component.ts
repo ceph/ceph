@@ -204,7 +204,7 @@ export class RbdListComponent implements OnInit {
 
     this.taskListService.init(
       () => this.rbdService.list(),
-      (resp) => this.prepareResponse(resp),
+      null,
       (images) => (this.images = images),
       () => this.onFetchError(),
       this.taskFilter,

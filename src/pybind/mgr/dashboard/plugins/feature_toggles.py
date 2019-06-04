@@ -7,7 +7,7 @@ from mgr_module import CLICommand, Option
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I
-from .ttl_cache import ttl_cache
+from ..helpers.ttl_cache import ttl_cache
 
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
 from ..controllers.rbd_mirroring import (

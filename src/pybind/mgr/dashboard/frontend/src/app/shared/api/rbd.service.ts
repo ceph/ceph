@@ -6,7 +6,7 @@ import { map } from 'rxjs/operators';
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
 import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { ApiModule } from './api.module';
-import { RbdPool } from './rbd.model';
+import { RbdImage } from './rbd.model';
 
 @cdEncode
 @Injectable({
@@ -32,22 +32,7 @@ export class RbdService {
   }
 
   list() {
-    return this.http.get<RbdPool[]>('api/block/image').pipe(
-      map((pools) =>
-        pools.map((pool) => {
-          pool.value.map((image) => {
-            if (!image.configuration) {
-              return image;
-            }
-            image.configuration.map((option) =>
-              Object.assign(option, this.rbdConfigurationService.getOptionByName(option.name))
-            );
-            return image;
-          });
-          return pool;
-        })
-      )
-    );
+    return this.http.get<RbdImage[]>('api/block/image');
   }
 
   copy(poolName, rbdName, rbd) {
