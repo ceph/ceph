@@ -176,8 +176,6 @@ public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
-  using PeeringCtx = PeeringState::PeeringCtx;
-
 public:
   // -- members --
   const coll_t coll;
@@ -353,10 +351,10 @@ public:
   static int peek_map_epoch(ObjectStore *store, spg_t pgid, epoch_t *pepoch);
 
   static int get_latest_struct_v() {
-    return latest_struct_v;
+    return pg_latest_struct_v;
   }
   static int get_compat_struct_v() {
-    return compat_struct_v;
+    return pg_compat_struct_v;
   }
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
@@ -648,13 +646,6 @@ protected:
 
 protected:
   __u8 info_struct_v = 0;
-  static const __u8 latest_struct_v = 10;
-  // v10 is the new past_intervals encoding
-  // v9 was fastinfo_key addition
-  // v8 was the move to a per-pg pgmeta object
-  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
-  // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 10;
   void upgrade(ObjectStore *store);
 
 protected:
@@ -1407,10 +1398,6 @@ protected:
   void do_pending_flush();
 
 public:
-  static void _create(ObjectStore::Transaction& t, spg_t pgid, int bits);
-  static void _init(ObjectStore::Transaction& t,
-		    spg_t pgid, const pg_pool_t *pool);
-
   virtual void prepare_write(
     pg_info_t &info,
     pg_info_t &last_written_info,

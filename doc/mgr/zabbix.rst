@@ -101,6 +101,22 @@ A `template <https://raw.githubusercontent.com/ceph/ceph/9c54334b615362e0a60442c
 
 This template contains all items and a few triggers. You can customize the triggers afterwards to fit your needs.
 
+
+Multiple Zabbix servers
+^^^^^^^^^^^^^^^^^^^^^^^
+It is possible to instruct zabbix module to send data to multiple Zabbix servers.
+
+Parameter *zabbix_host* can be set with multiple hostnames separated by commas.
+Hosnames (or IP adderesses) can be followed by colon and port number. If a port
+number is not present module will use the port number defined in *zabbix_port*.
+
+For example:
+
+::
+
+    ceph zabbix config-set zabbix_host "zabbix1,zabbix2:2222,zabbix3:3333"
+
+
 Manually sending data
 ---------------------
 If needed the module can be asked to send data immediately instead of waiting for

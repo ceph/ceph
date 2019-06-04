@@ -142,6 +142,7 @@ void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
 seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
 {
   dispatcher = disp;
+  started = true;
 
   // start listening if bind() was called
   if (listener) {
@@ -164,9 +165,10 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
         if (e.code() != error::connection_aborted) {
           logger().error("{} unexpected error during accept: {}", *this, e);
         }
-      });
+      }).then([this] () { return accepting_complete.set_value(); });
+  } else {
+    accepting_complete.set_value();
   }
-
   return seastar::now();
 }
 
@@ -184,6 +186,10 @@ SocketMessenger::do_connect(const entity_addr_t& peer_addr, const entity_type_t&
 
 seastar::future<> SocketMessenger::do_shutdown()
 {
+  if (!started) {
+    return seastar::now();
+  }
+
   if (listener) {
     listener->abort_accept();
   }
@@ -195,6 +201,8 @@ seastar::future<> SocketMessenger::do_shutdown()
       return seastar::parallel_for_each(connections, [] (auto conn) {
           return conn.second->close();
         });
+    }).then([this] {
+      return accepting_complete.get_shared_future();
     }).finally([this] {
       ceph_assert(connections.empty());
     });

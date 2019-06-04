@@ -157,6 +157,15 @@ public:
 	if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
 	}
+
+        if (context.oid_in_use.count(oid.str())) {
+          /* previous write is not finished */
+          op = NULL;
+          m_op--;
+          cout << m_op << " wait for completion of write op! " << std::endl;
+          return true;
+        }
+
 	int _oid2 = m_op - m_objects + 1;
 	if (_oid2 > copy_manifest_end - m_objects) {
 	  _oid2 -= (copy_manifest_end - m_objects);
@@ -584,7 +593,7 @@ int main(int argc, char **argv)
 
   if (set_redirect || set_chunk) {
     if (low_tier_pool_name == "") {
-      cerr << "low_tier_pool_name is needed" << std::endl;
+      cerr << "low_tier_pool is needed" << std::endl;
       exit(1);
     }
   }

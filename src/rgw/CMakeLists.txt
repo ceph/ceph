@@ -210,14 +210,14 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND rgw_libs RabbitMQ::RabbitMQ)
 endif()
 
+set(rgw_schedulers_srcs
+  rgw_dmclock_scheduler_ctx.cc
+  rgw_dmclock_sync_scheduler.cc)
 set(radosgw_srcs
   rgw_loadgen_process.cc
   rgw_civetweb.cc
   rgw_civetweb_frontend.cc
-  rgw_civetweb_log.cc
-  rgw_dmclock_scheduler_ctx.cc
-  rgw_dmclock_sync_scheduler.cc)
-
+  rgw_civetweb_log.cc)
 if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
@@ -225,13 +225,19 @@ endif()
 if(WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
-    rgw_asio_frontend.cc
+    rgw_asio_frontend.cc)
+  list(APPEND rgw_schedulers_srcs
     rgw_dmclock_async_scheduler.cc)
 endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a PRIVATE ${rgw_libs})
+add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
+target_link_libraries(rgw_schedulers
+  PUBLIC dmclock::dmclock)
+target_link_libraries(radosgw_a
+  PRIVATE ${rgw_libs} rgw_schedulers
+  PUBLIC dmclock::dmclock)
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
@@ -242,7 +248,7 @@ target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global dmclock::dmclock
+  global
   ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
