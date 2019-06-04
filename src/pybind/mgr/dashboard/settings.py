@@ -39,6 +39,7 @@ class Options(object):
     GRAFANA_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
+    GRAFANA_UPDATE_DASHBOARDS = (False, bool)
 
     # NFS Ganesha settings
     GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ('', str)
