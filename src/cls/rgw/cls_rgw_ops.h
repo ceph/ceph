@@ -869,7 +869,7 @@ struct cls_rgw_gc_list_ret {
 WRITE_CLASS_ENCODER(cls_rgw_gc_list_ret)
 
 struct cls_rgw_gc_remove_op {
-  list<string> tags;
+  vector<string> tags;
 
   cls_rgw_gc_remove_op() {}
 
