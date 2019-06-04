@@ -33,7 +33,7 @@ namespace ceph::net {
 }
 
 namespace ceph::os {
-  class CyanStore;
+  class FuturizedStore;
 }
 
 class PG : public boost::intrusive_ref_counter<
@@ -385,7 +385,7 @@ public:
     bool backfill,
     ObjectStore::Transaction &t);
 
-  seastar::future<> read_state(ceph::os::CyanStore* store);
+  seastar::future<> read_state(ceph::os::FuturizedStore* store);
 
   void do_peering_event(
     const boost::statechart::event_base &evt,

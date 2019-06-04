@@ -24,7 +24,7 @@
 
 #ifdef WITH_SEASTAR
 #include <seastar/core/future.hh>
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 #include "crimson/os/cyan_collection.h"
 #endif
 
@@ -1598,7 +1598,7 @@ public:
 
 #ifdef WITH_SEASTAR
   seastar::future<> read_log_and_missing_crimson(
-    ceph::os::CyanStore &store,
+    ceph::os::FuturizedStore &store,
     ceph::os::CollectionRef ch,
     const pg_info_t &info,
     ghobject_t pgmeta_oid
@@ -1610,8 +1610,8 @@ public:
   }
 
   template <typename missing_type>
-  struct CyanStoreLogReader {
-    ceph::os::CyanStore &store;
+  struct FuturizedStoreLogReader {
+    ceph::os::FuturizedStore &store;
     ceph::os::CollectionRef ch;
     const pg_info_t &info;
     IndexedLog &log;
@@ -1680,12 +1680,12 @@ public:
       on_disk_can_rollback_to = info.last_update;
       missing.may_include_deletes = false;
 
-      auto reader = std::unique_ptr<CyanStoreLogReader>(this);
+      auto reader = std::unique_ptr<FuturizedStoreLogReader>(this);
       return seastar::repeat(
 	[this]() {
 	  return store.omap_get_values(ch, pgmeta_oid, next).then(
 	    [this](
-	      bool done, ceph::os::CyanStore::omap_values_t values) {
+	      bool done, ceph::os::FuturizedStore::omap_values_t values) {
 	      for (auto &&p : values) {
 		process_entry(p);
 	      }
@@ -1707,7 +1707,7 @@ public:
 
   template <typename missing_type>
   static seastar::future<> read_log_and_missing_crimson(
-    ceph::os::CyanStore &store,
+    ceph::os::FuturizedStore &store,
     ceph::os::CollectionRef ch,
     const pg_info_t &info,
     IndexedLog &log,
@@ -1718,7 +1718,7 @@ public:
     ldpp_dout(dpp, 20) << "read_log_and_missing coll "
 		       << ch->cid
 		       << " " << pgmeta_oid << dendl;
-    return (new CyanStoreLogReader<missing_type>{
+    return (new FuturizedStoreLogReader<missing_type>{
       store, ch, info, log, missing, pgmeta_oid, dpp})->start();
   }
 
