@@ -1143,6 +1143,92 @@ void RGWDeleteObjTags::execute()
   op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattr);
 }
 
+int RGWGetBucketTags::verify_permission()
+{
+
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketTagging)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetBucketTags::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketTags::execute() 
+{
+  auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
+  if (iter != s->bucket_attrs.end()) {
+    has_tags = true;
+    tags_bl.append(iter->second);
+  } else {
+    op_ret = -ERR_NO_SUCH_TAG_SET;
+  }
+  send_response_data(tags_bl);
+}
+
+int RGWPutBucketTags::verify_permission() {
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+}
+
+void RGWPutBucketTags::execute() {
+
+  op_ret = get_params();
+  if (op_ret < 0) 
+    return;
+
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+    map<string, bufferlist> attrs = s->bucket_attrs;
+    attrs[RGW_ATTR_TAGS] = tags_bl;
+    return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  });
+
+}
+
+void RGWDeleteBucketTags::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+int RGWDeleteBucketTags::verify_permission()
+{
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+}
+
+void RGWDeleteBucketTags::execute()
+{
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+    map<string, bufferlist> attrs = s->bucket_attrs;
+    attrs.erase(RGW_ATTR_TAGS);
+    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
+			 << s->bucket.name
+			 << " returned err= " << op_ret << dendl;
+    }
+    return op_ret;
+  });
+}
+
 int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;

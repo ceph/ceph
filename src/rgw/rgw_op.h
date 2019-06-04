@@ -418,6 +418,47 @@ class RGWDeleteObjTags: public RGWOp {
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
 };
 
+class RGWGetBucketTags : public RGWOp {
+protected:
+  bufferlist tags_bl;
+  bool has_tags{false};
+public:
+  int verify_permission() override;
+  void execute() override;
+  void pre_exec() override;
+
+  virtual void send_response_data(bufferlist& bl) = 0;
+  const char* name() const override { return "get_bucket_tags"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_TAGGING; }
+};
+
+class RGWPutBucketTags : public RGWOp {
+protected:
+  bufferlist tags_bl;
+  bufferlist in_data;
+public:
+  int verify_permission() override;
+  void execute() override;
+
+  virtual void send_response() override = 0;
+  virtual int get_params() = 0;
+  const char* name() const override { return "put_bucket_tags"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_TAGGING; }
+};
+
+class RGWDeleteBucketTags : public RGWOp {
+public:
+  void pre_exec() override;
+  int verify_permission() override;
+  void execute() override;
+
+  const char* name() const override { return "delete_bucket_tags"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_TAGGING;}
+};
+
 class RGWBulkDelete : public RGWOp {
 public:
   struct acct_path_t {
