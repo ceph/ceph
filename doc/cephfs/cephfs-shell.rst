@@ -312,10 +312,10 @@ Usage :
 
 * Call without arguments for a list of settable parameters with their values.
 
- Options :
- -h     show this help message and exit
- -a     display read-only settings as well
- -l     describe function of parameter
+Options :
+  -h     show this help message and exit
+  -a     display read-only settings as well
+  -l     describe function of parameter
 
 edit
 ----
@@ -356,9 +356,21 @@ locate
 Find an item in Filesystem
 
 Usage:
+
      locate [options] <name>
 
 Options :
   -c       Count number of items found
   -i       Ignore case 
 
+stat
+------
+
+Display file status.
+
+Usage :
+
+     stat [-h] <file_name> [file_name ...]
+
+Options :
+  -h     Shows the help message
