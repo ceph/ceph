@@ -27,7 +27,7 @@ cmd2==0.7.0               # via cliff
 configobj==5.0.6
 configparser==3.5.0
 contextlib2==0.5.4        # via raven
-cryptography==2.1.4       # via ansible, paramiko, pyopenssl
+cryptography==2.7
 debtcollector==1.13.0     # via oslo.config, oslo.utils, python-keystoneclient, python-neutronclient
 deprecation==1.0          # via openstacksdk
 docopt==0.6.2
@@ -40,7 +40,7 @@ futures==3.2.0            # via s3transfer
 gevent==1.2.1
 greenlet==0.4.12          # via gevent
 httplib2==0.10.3
-idna==2.5                 # via cryptography, requests
+idna==2.5                 # via requests
 ipaddress==1.0.18         # via cryptography
 iso8601==0.1.11           # via keystoneauth1, oslo.utils, python-neutronclient, python-novaclient
 jinja2==2.10.1            # via ansible
