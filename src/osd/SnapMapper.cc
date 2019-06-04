@@ -24,6 +24,29 @@ using std::string;
 const string SnapMapper::MAPPING_PREFIX = "MAP_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
+/*
+
+  We have a bidirectional mapping, (1) from each snap+obj to object,
+  sorted by snapshot, such that we can enumerate to identify all clones
+  mapped to a particular snapshot, and (2) from object to snaps, so we
+  can identify which reverse mappings exist for any given object (and,
+  e.g., clean up on deletion).
+
+  "MAP_"
+  + ("%016x" % snapid)
+  + "_"
+  + (".%x" % shard_id)
+  + "_"
+  + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
+  -> SnapMapping::Mapping { snap, hoid }
+
+  "OBJ_" +
+  + (".%x" % shard_id)
+  + hobject_t::to_str()
+   -> SnapMapper::object_snaps { oid, set<snapid_t> }
+
+  */
+
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *out)
