@@ -41,7 +41,7 @@ httplib2==0.10.3
 idna==2.5                 # via cryptography
 ipaddress==1.0.18         # via cryptography
 iso8601==0.1.11           # via keystoneauth1, oslo.utils, python-neutronclient, python-novaclient
-jinja2==2.10.1
+jinja2==2.10.1            # via ansible
 jmespath==0.9.4           # via boto3, botocore
 jsonpatch==1.15           # via warlock
 jsonpointer==1.10         # via jsonpatch
@@ -88,7 +88,7 @@ python-neutronclient==6.2.0
 python-novaclient==8.0.0
 python-openstackclient==3.9.0
 pytz==2017.2              # via babel, oslo.serialization, oslo.utils
-pyyaml==3.12
+pyyaml==5.1
 raven==6.0.0
 requests==2.12.5
 requestsexceptions==1.2.0  # via os-client-config
