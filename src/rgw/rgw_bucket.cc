@@ -2290,7 +2290,6 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
 }
 
 class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   struct Svc {
     RGWSI_Bucket *bucket{nullptr};
@@ -2662,8 +2661,6 @@ public:
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
-
   int read_bucket_instance_entry(RGWSI_MetaBackend_Handler::Op *op,
                                  const string& entry,
                                  RGWBucketCompleteInfo *bi,
@@ -2907,6 +2904,7 @@ void RGWBucketCtl::init(RGWUserCtl *user_ctl,
 
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                               RGWBucketEntryPoint *info,
+                                              optional_yield y,
                                               ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> _params)
 {
   auto& params = *_params;
@@ -2918,12 +2916,14 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                    params.mtime,
                                                    params.attrs,
                                                    params.cache_info,
-                                                   params.refresh_version);
+                                                   params.refresh_version,
+                                                   y);
   });
 }
 
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
+                                               optional_yield y,
                                                ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> _params)
 {
   auto& params = *_params;
@@ -2934,11 +2934,13 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                     params.exclusive,
                                                     params.mtime,
                                                     params.attrs,
-                                                    params.objv_tracker);
+                                                    params.objv_tracker,
+                                                    y);
   });
 }
 
 int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
+                                                optional_yield y,
                                                 ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> _params)
 {
   auto& params = *_params;
@@ -2961,7 +2963,8 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
                                                  params.mtime,
                                                  params.attrs,
                                                  params.cache_info,
-                                                 params.refresh_version);
+                                                 params.refresh_version,
+                                                 y);
   });
 
   if (ret < 0) {
@@ -2978,6 +2981,7 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
 int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_MetaBackend_Handler::Op *op,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
+                                                optional_yield y,
                                                 ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> _params)
 {
   auto& params = *_params;
@@ -2990,20 +2994,23 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_MetaBackend_Handler::Op *o
                                                 info,
                                                 params.exclusive,
                                                 params.mtime,
-                                                params.attrs);
+                                                params.attrs,
+                                                y);
 }
 
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
+                                            optional_yield y,
                                             ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> _params)
 {
   return bi_be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return do_store_bucket_instance_info(op, bucket, info, _params);
+    return do_store_bucket_instance_info(op, bucket, info, _params, y);
   });
 }
 
 int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
                                               RGWBucketInfo& info,
+                                              optional_yield y,
                                               ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> _params)
 {
   auto& params = *_params;
@@ -3014,12 +3021,14 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
   return bi_be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.bucket->remove_bucket_instance_info(op->ctx(),
                                                    RGWSI_Bucket::get_bi_meta_key(bucket),
-                                                   &info.objv_tracker);
+                                                   &info.objv_tracker,
+                                                   y);
   });
 }
 
 int RGWBucketCtl::convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
-                                          const rgw_bucket& bucket)
+                                          const rgw_bucket& bucket,
+                                          optional_yield y)
 {
   RGWBucketEntryPoint entry_point;
   real_time ep_mtime;
@@ -3032,7 +3041,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
 
   int ret = svc.bucket->read_bucket_entrypoint_info(op->ctx(),
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
-                                                    &entry_point, &ot, &ep_mtime, &attrs);
+                                                    &entry_point, &ot, &ep_mtime, &attrs, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: get_bucket_entrypoint_info() returned " << ret << " bucket=" << bucket << dendl;
     return ret;
@@ -3049,7 +3058,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
 
   ot.generate_new_write_ver(cct);
 
-  ret = svc.bucket->store_linked_bucket_info(op->ctx(), info, false, ep_mtime, &ot.write_version, &attrs, true);
+  ret = svc.bucket->store_linked_bucket_info(op->ctx(), info, false, ep_mtime, &ot.write_version, &attrs, true, y);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
     return ret;
@@ -3060,14 +3069,15 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
 
 int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                             map<string, bufferlist>& attrs,
-                                            RGWObjVersionTracker *objv_tracker)
+                                            RGWObjVersionTracker *objv_tracker,
+                                            optional_yield y)
 {
   return bi_be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     rgw_bucket& bucket = bucket_info.bucket;
 
     if (!bucket_info.has_instance_obj) {
       /* an old bucket object, need to convert it */
-        int ret = convert_old_bucket_info(op, bucket);
+        int ret = convert_old_bucket_info(op, bucket, y);
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
           return ret;
@@ -3077,6 +3087,7 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
     return do_store_bucket_instance_info(op,
                                          bucket,
                                          bucket_info,
+                                         y,
                                          BucketInstance::PutParams().set_attrs(&attrs)
                                                                     .set_objv_tracker(objv_tracker));
     });

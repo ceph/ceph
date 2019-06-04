@@ -204,7 +204,7 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
           *shard_id = -1;
         }
       } else {
-        uint32_t sid = rgw_bucket_shard_index(obj_key, num_shards);
+        uint32_t sid = bucket_shard_index(obj_key, num_shards);
         char buf[bucket_oid_base.size() + 32];
         snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
         (*bucket_obj) = buf;

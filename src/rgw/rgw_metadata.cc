@@ -292,8 +292,8 @@ class RGWMetadataTopHandler : public RGWMetadataHandler {
 
 public:
   RGWMetadataTopHandler(RGWSI_Meta *meta_svc,
-                        RGWMetadataManager *_mgr) : RGWMetadataHandler(meta_svc->ctx()),
-                                                    mgr(_mgr) {
+                        RGWMetadataManager *_mgr) : mgr(_mgr) {
+    base_init(meta_svc->ctx());
     svc.meta = meta_svc;
   }
 
@@ -373,7 +373,7 @@ RGWMetadataManager::~RGWMetadataManager()
   handlers.clear();
 }
 
-int RGWMetadataHandler::init(RGWMetadataManager *manager)
+int RGWMetadataHandler::attach(RGWMetadataManager *manager)
 {
   return manager->register_handler(this);
 }
