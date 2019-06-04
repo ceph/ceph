@@ -3001,6 +3001,10 @@ void PGMap::get_health_checks(
 	summary = "BlueFS spillover detected";
       } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
 	summary = "BlueStore compression broken";
+      } else if (asum.first == "BLUESTORE_LEGACY_STATFS") {
+	summary = "Legacy BlueStore stats reporting detected";
+      } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
+	summary = "BlueStore has dangerous mismatch between block device and free list sizes";
       }
       summary += " on ";
       summary += stringify(asum.second.first);

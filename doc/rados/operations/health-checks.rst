@@ -302,6 +302,73 @@ You can either raise the pool quota with::
 
 or delete some existing data to reduce utilization.
 
+BLUEFS_SPILLOVER
+________________
+
+One or more OSDs that use the BlueStore backend have been allocated
+`db` partitions (storage space for metadata, normally on a faster
+device) but that space has filled, such that metadata has "spilled
+over" onto the normal slow device.  This isn't necessarily an error
+condition or even unexpected, but if the administrator's expectation
+was that all metadata would fit on the faster device, it indicates
+that not enough space was provided.
+
+This warning can be disabled on all OSDs with::
+
+  ceph config set osd bluestore_warn_on_bluefs_spillover false
+
+Alternatively, it can be disabled on a specific OSD with::
+
+  ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
+
+To provide more metadata space, the OSD in question could be destroyed and
+reprovisioned.  This will involve data migration and recovery.
+
+It may also be possible to expand the LVM logical volume backing the
+`db` storage.  If the underlying LV has been expanded, the OSD daemon
+needs to be stopped and BlueFS informed of the device size change with::
+
+  ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
+
+BLUESTORE_LEGACY_STATFS
+_______________________
+
+In the Nautilus release, BlueStore tracks its internal usage
+statistics on a per-pool granular basis, and one or more OSDs have
+BlueStore volumes that were created prior to Nautilus.  If *all* OSDs
+are older than Nautilus, this just means that the per-pool metrics are
+not available.  However, if there is a mix of pre-Nautilus and
+post-Nautilus OSDs, the cluster usage statistics reported by ``ceph
+df`` will not be accurate.
+
+The old OSDs can be updated to use the new usage tracking scheme by stopping each OSD, running a repair operation, and the restarting it.  For example, if ``osd.123`` needed to be updated,::
+
+  systemctl stop ceph-osd@123
+  ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
+  systemctl start ceph-osd@123
+
+This warning can be disabled with::
+
+  ceph config set global bluestore_warn_on_legacy_statfs false
+
+
+BLUESTORE_DISK_SIZE_MISMATCH
+____________________________
+
+One or more OSDs using BlueStore has an internal inconsistency between the size
+of the physical device and the metadata tracking its size.  This can lead to
+the OSD crashing in the future.
+
+The OSDs in question should be destroyed and reprovisioned.  Care should be
+taken to do this one OSD at a time, and in a way that doesn't put any data at
+risk.  For example, if osd ``$N`` has the error,::
+
+  ceph osd out osd.$N
+  while ! ceph osd safe-to-destroy osd.$N ; do sleep 1m ; done
+  ceph osd destroy osd.$N
+  ceph-volume lvm zap /path/to/device
+  ceph-volume lvm create --osd-id $N --data /path/to/device
+
 
 Device health
 -------------

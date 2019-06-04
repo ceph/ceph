@@ -4751,6 +4751,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable health indication on bluefs slow device usage"),
 
+    Option("bluestore_warn_on_legacy_statfs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable health indication on lack of per-pool statfs reporting from bluestore"),
+
     Option("bluestore_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("log operation if it's slower than this age (seconds)"),
