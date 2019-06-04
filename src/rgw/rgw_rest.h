@@ -183,6 +183,18 @@ public:
   ~RGWPutObjTags_ObjStore() {};
 };
 
+class RGWGetBucketTags_ObjStore : public RGWGetBucketTags {
+public:
+  RGWGetBucketTags_ObjStore() = default;
+  virtual ~RGWGetBucketTags_ObjStore() = default; 
+};
+
+class RGWPutBucketTags_ObjStore: public RGWPutBucketTags {
+public:
+  RGWPutBucketTags_ObjStore() = default;
+  virtual ~RGWPutBucketTags_ObjStore() = default; 
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}

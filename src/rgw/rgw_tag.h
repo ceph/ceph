@@ -15,9 +15,15 @@ class RGWObjTags
  protected:
   using tag_map_t = boost::container::flat_map <std::string, std::string>;
   tag_map_t tag_map;
+
+  uint32_t max_obj_tags{10};
+  static constexpr uint32_t max_tag_key_size{128};
+  static constexpr uint32_t max_tag_val_size{256};
+
  public:
-  RGWObjTags() {}
-  ~RGWObjTags() {}
+  RGWObjTags() = default;
+  RGWObjTags(uint32_t max_obj_tags):max_obj_tags(max_obj_tags) {}
+
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);

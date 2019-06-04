@@ -74,7 +74,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Object Tagging**              | Supported       | See :ref:`tag_policy` for Policy verbs |
 +---------------------------------+-----------------+----------------------------------------+
-| **Bucket Tagging**              | Not Supported   |                                        |
+| **Bucket Tagging**              | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Storage Class**               | Supported       | See :ref:`storage_classes`             |
 +---------------------------------+-----------------+----------------------------------------+

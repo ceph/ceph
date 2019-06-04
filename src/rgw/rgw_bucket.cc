@@ -17,6 +17,7 @@
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
+#include "rgw_tag_s3.h"
 
 #include "include/types.h"
 #include "rgw_bucket.h"
@@ -1422,10 +1423,11 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
 {
   RGWBucketInfo bucket_info;
   map<RGWObjCategory, RGWStorageStats> stats;
+  map<string, bufferlist> attrs;
 
   real_time mtime;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime, null_yield);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime, null_yield, &attrs);
   if (r < 0)
     return r;
 
@@ -1457,6 +1459,22 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
+
+  // bucket tags
+  auto iter = attrs.find(RGW_ATTR_TAGS);
+  if (iter != attrs.end()) {
+    RGWObjTagSet_S3 tagset;
+    bufferlist::const_iterator piter{&iter->second};
+    try {
+      tagset.decode(piter);
+      tagset.dump(formatter); 
+    } catch (buffer::error& err) {
+      cerr << "ERROR: caught buffer:error, couldn't decode TagSet" << std::endl;
+    }
+  }
+
+  // TODO: bucket CORS
+  // TODO: bucket LC
   formatter->close_section();
 
   return 0;

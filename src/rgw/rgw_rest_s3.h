@@ -82,6 +82,26 @@ public:
   void send_response() override;
 };
 
+class RGWGetBucketTags_ObjStore_S3 : public RGWGetBucketTags_ObjStore
+{
+  bufferlist tags_bl;
+public:
+  void send_response_data(bufferlist &bl) override;
+};
+
+class RGWPutBucketTags_ObjStore_S3 : public RGWPutBucketTags_ObjStore
+{
+public:
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteBucketTags_ObjStore_S3 : public RGWDeleteBucketTags
+{
+public:
+  void send_response() override;
+};
+
 class RGWListBuckets_ObjStore_S3 : public RGWListBuckets_ObjStore {
 public:
   RGWListBuckets_ObjStore_S3() {}
@@ -549,6 +569,11 @@ protected:
   bool is_obj_update_op() override {
     return is_acl_op() || is_cors_op();
   }
+
+  bool is_tagging_op() {
+    return s->info.args.exists("tagging");
+  }
+ 
   bool is_request_payment_op() {
     return s->info.args.exists("requestPayment");
   }
