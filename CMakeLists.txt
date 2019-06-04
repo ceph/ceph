@@ -210,6 +210,9 @@ endif()
 
 find_package(Backtrace)
 
+# remote block storage
+option(WITH_RBD "Remote block storage is here" ON)
+
 if(LINUX)
   find_package(udev REQUIRED)
   set(HAVE_UDEV ${UDEV_FOUND})
@@ -310,9 +313,6 @@ option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
-
-# remote block storage
-option(WITH_RBD "Remote block storage is here" ON)
 
 # KERNEL remote block storage
 option(WITH_KRBD "Kernel Remote block storage is here" ON)
