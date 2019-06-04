@@ -95,7 +95,7 @@ class SubvolumeClient(object):
         log.debug("CephFS initializing...")
         self.fs.init()
         log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=self.fs_name)
+        self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
         log.debug("Connection to cephfs complete")
 
     def disconnect(self):
