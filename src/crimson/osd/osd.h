@@ -44,7 +44,7 @@ namespace ceph::net {
 }
 
 namespace ceph::os {
-  class CyanStore;
+  class FuturizedStore;
   struct Collection;
   class Transaction;
 }
@@ -74,7 +74,7 @@ class OSD : public ceph::net::Dispatcher,
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<ceph::os::CyanStore> store;
+  std::unique_ptr<ceph::os::FuturizedStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
 
   OSDState state;

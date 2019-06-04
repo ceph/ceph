@@ -31,7 +31,7 @@ ShardServices::ShardServices(
   ceph::net::Messenger &public_msgr,
   ceph::mon::Client &monc,
   ceph::mgr::Client &mgrc,
-  ceph::os::CyanStore &store)
+  ceph::os::FuturizedStore &store)
     : cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
       monc(monc),
