@@ -30,6 +30,5 @@ if(HAVE_GSSAPI)
 endif()
 
 add_library(mon STATIC
-  ${lib_mon_srcs}
-  $<TARGET_OBJECTS:kv_objs>)
-target_link_libraries(mon heap_profiler)
+  ${lib_mon_srcs})
+target_link_libraries(mon kv heap_profiler)

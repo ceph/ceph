@@ -49,11 +49,13 @@ function(build_rocksdb)
   include(ExternalProject)
   set(rocksdb_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rocksdb")
   set(rocksdb_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/rocksdb")
+  set(rocksdb_LIBRARY "${rocksdb_BINARY_DIR}/librocksdb.a")
   ExternalProject_Add(rocksdb_ext
     SOURCE_DIR "${rocksdb_SOURCE_DIR}"
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb
+    BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND "true")
   # force rocksdb make to be called on each time
   ExternalProject_Add_Step(rocksdb_ext forcebuild
@@ -65,7 +67,6 @@ function(build_rocksdb)
   add_library(RocksDB::RocksDB STATIC IMPORTED)
   add_dependencies(RocksDB::RocksDB rocksdb_ext)
   set(rocksdb_INCLUDE_DIR "${rocksdb_SOURCE_DIR}/include")
-  set(rocksdb_LIBRARY "${rocksdb_BINARY_DIR}/librocksdb.a")
   foreach(ver "MAJOR" "MINOR" "PATCH")
     file(STRINGS "${rocksdb_INCLUDE_DIR}/rocksdb/version.h" ROCKSDB_VER_${ver}_LINE
       REGEX "^#define[ \t]+ROCKSDB_${ver}[ \t]+[0-9]+$")
