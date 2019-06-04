@@ -113,6 +113,7 @@ private:
   } pre_auth;
 
   bool keepalive;
+  bool write_in_progress = false;
 
   ostream &_conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *pcontinuation);
