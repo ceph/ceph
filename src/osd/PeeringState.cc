@@ -2117,13 +2117,11 @@ void PeeringState::activate(
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-      // adjust purged_snaps: PG may have been inactive while snaps were pruned
-      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
-      // reflect only those snaps that we thought were pruned and were still in
-      // the queue.
-      info.purged_snaps.swap(purged);
-    }
+    // adjust purged_snaps: PG may have been inactive while snaps were pruned
+    // from the removed_snaps_queue in the osdmap.  update local purged_snaps
+    // reflect only those snaps that we thought were pruned and were still in
+    // the queue.
+    info.purged_snaps.swap(purged);
 
     // start up replicas
 
@@ -3224,20 +3222,18 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
 
-  if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-    // share (some of) our purged_snaps via the pg_stats. limit # of intervals
-    // because we don't want to make the pg_stat_t structures too expensive.
-    unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
-    unsigned num = 0;
-    auto i = info.purged_snaps.begin();
-    while (num < max && i != info.purged_snaps.end()) {
-      pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
-      ++num;
-      ++i;
-    }
-    psdout(20) << __func__ << " reporting purged_snaps "
-	       << pre_publish.purged_snaps << dendl;
+  // share (some of) our purged_snaps via the pg_stats. limit # of intervals
+  // because we don't want to make the pg_stat_t structures too expensive.
+  unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
+  unsigned num = 0;
+  auto i = info.purged_snaps.begin();
+  while (num < max && i != info.purged_snaps.end()) {
+    pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
+    ++num;
+    ++i;
   }
+  psdout(20) << __func__ << " reporting purged_snaps "
+	     << pre_publish.purged_snaps << dendl;
 
   if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
