@@ -13,4 +13,5 @@ overrides:
     - failed to encode map
     - CACHE_POOL_NO_HIT_SET
     - POOL_APP_NOT_ENABLED
+    - application not enabled
     fs: xfs
