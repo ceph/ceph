@@ -24,7 +24,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
@@ -42,7 +42,7 @@ namespace {
 }
 
 using ceph::common::local_conf;
-using ceph::os::CyanStore;
+using ceph::os::FuturizedStore;
 
 OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& cluster_msgr,
@@ -58,7 +58,8 @@ OSD::OSD(int id, uint32_t nonce,
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
     heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
-    store{std::make_unique<ceph::os::CyanStore>(
+    store{ceph::os::FuturizedStore::create(
+      local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
     shard_services{cluster_msgr, public_msgr, *monc, *mgrc, *store}
 {

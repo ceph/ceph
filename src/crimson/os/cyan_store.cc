@@ -215,7 +215,7 @@ seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
 seastar::future<CyanStore::omap_values_t>
 CyanStore::omap_get_values(CollectionRef c,
                            const ghobject_t& oid,
-                           std::vector<std::string>&& keys)
+                           const omap_keys_t& keys)
 {
   logger().debug("{} {} {}",
                 __func__, c->cid, oid);
@@ -344,7 +344,7 @@ seastar::future<> CyanStore::do_transaction(CollectionRef ch,
       {
 	const coll_t &cid = i.get_cid(op->cid);
 	const ghobject_t &oid = i.get_oid(op->oid);
-	std::set<std::string> keys;
+	omap_keys_t keys;
 	i.decode_keyset(keys);
 	r = _omap_rmkeys(cid, oid, keys);
       }
@@ -492,7 +492,7 @@ int CyanStore::_omap_set_header(
 int CyanStore::_omap_rmkeys(
   const coll_t& cid,
   const ghobject_t& oid,
-  const std::set<std::string> &aset)
+  const omap_keys_t& aset)
 {
   logger().debug(
     "{} {} {} {} keys",

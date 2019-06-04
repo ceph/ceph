@@ -27,7 +27,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
@@ -150,7 +150,7 @@ void PG::init(
     new_acting_primary, history, pi, backfill, t);
 }
 
-seastar::future<> PG::read_state(ceph::os::CyanStore* store)
+seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
 {
   coll_ref = store->open_collection(coll_t(pgid));
   return PGMeta{store, pgid}.load().then(
