@@ -135,6 +135,8 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
+        self._start_epoch = _module.get_osdmap().get_epoch() 
+
         self.id = str(uuid.uuid4())
         self._refresh()
 
@@ -142,7 +144,7 @@ class PgRecoveryEvent(Event):
     def evacuating_osds(self):
         return self. _evacuate_osds
 
-    def pg_update(self, pg_dump, log, start_epoch):
+    def pg_update(self, pg_dump, log):
         # FIXME: O(pg_num) in python
         # FIXME: far more fields getting pythonized than we really care about
         pg_to_state = dict([(p['pgid'], p) for p in pg_dump['pg_stats']])
@@ -181,7 +183,7 @@ class PgRecoveryEvent(Event):
                 complete.add(pg)
                 continue
             # Only checks the state of each PGs when it's epoch >= the OSDMap's epoch
-            if int(info['reported_epoch']) < int(start_epoch):
+            if int(info['reported_epoch']) < int(self._start_epoch):
                 continue
 
             state = info['state']
@@ -363,7 +365,7 @@ class Module(MgrModule):
             which_pgs=affected_pgs,
             evacuate_osds=[osd_id]
         )
-        ev.pg_update(self.get("pg_dump"), self.log, self.get_osdmap().get_epoch())
+        ev.pg_update(self.get("pg_dump"), self.log)
         self._events[ev.id] = ev
 
     def _osd_in(self, osd_id):
@@ -411,7 +413,7 @@ class Module(MgrModule):
             data = self.get("pg_dump")
             for ev_id, ev in self._events.items():
                 if isinstance(ev, PgRecoveryEvent):
-                    ev.pg_update(data, self.log, self.get_osdmap().get_epoch())
+                    ev.pg_update(data, self.log)
                     self.maybe_complete(ev)
 
     def maybe_complete(self, event):
