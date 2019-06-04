@@ -18,6 +18,7 @@
 #pragma once
 
 #include "rgw/rgw_service.h"
+#include "rgw/rgw_tools.h"
 
 #include "svc_bi.h"
 #include "svc_rados.h"
@@ -71,13 +72,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                       vector<rgw_bucket_dir_header> *headers,
                       map<int, string> *bucket_instance_ids);
 
-  static int rgw_shards_mod(unsigned hval, int max_shards) {
-    if (max_shards <= RGW_SHARDS_PRIME_0) {
-      return hval % RGW_SHARDS_PRIME_0 % max_shards;
-    }
-    return hval % RGW_SHARDS_PRIME_1 % max_shards;
-  }
-
 public:
 
   struct Svc {
@@ -95,12 +89,11 @@ public:
   }
 
   static int shard_id(const string& key, int max_shards) {
-    return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
-                          max_shards);
+    return rgw_shard_id(key, max_shards);
   }
 
-  static uint32_t rgw_bucket_shard_index(const std::string& key,
-                                         int num_shards) {
+  static uint32_t bucket_shard_index(const std::string& key,
+                                     int num_shards) {
     uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
     uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
     return rgw_shards_mod(sid2, num_shards);

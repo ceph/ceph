@@ -36,7 +36,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::RoleApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWRados* const store;
+  RGWUserCtl* const user_ctl;
 
   STSEngine  sts_engine;
 
@@ -45,8 +45,8 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, user_ctl, s,
+      rgw::auth::RemoteApplier(cct, user_ctl, std::move(acl_alg), info,
                                cct->_conf->rgw_keystone_implicit_tenants));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -56,7 +56,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
+    auto apl = rgw::auth::add_sysreq(cct, user_ctl, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -66,17 +66,17 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             const string& role_name,
                             const rgw_user& user_id,
                             const vector<std::string>& role_policies) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
+    auto apl = rgw::auth::add_sysreq(cct, user_ctl, s,
       rgw::auth::RoleApplier(cct, role_name, user_id, role_policies));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   STSAuthStrategy(CephContext* const cct,
-                       RGWRados* const store,
+                       RGWUserCtl* const user_ctl,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : store(store),
-      sts_engine(cct, store, *ver_abstractor,
+    : user_ctl(user_ctl),
+      sts_engine(cct, user_ctl, *ver_abstractor,
                   static_cast<rgw::auth::LocalApplier::Factory*>(this),
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                   static_cast<rgw::auth::RoleApplier::Factory*>(this)) {
@@ -93,7 +93,7 @@ public:
 class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWRados* const store;
+  RGWUserCtl* const user_ctl;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
@@ -107,8 +107,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+    auto apl = rgw::auth::add_sysreq(cct, user_ctl, s,
+      rgw::auth::RemoteApplier(cct, user_ctl, std::move(acl_alg), info,
                                cct->_conf->rgw_keystone_implicit_tenants));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -116,10 +116,10 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 
 public:
   ExternalAuthStrategy(CephContext* const cct,
-                       RGWRados* const store,
+                       RGWUserCtl* const user_ctl,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
-    : store(store),
-      ldap_engine(cct, store, *ver_abstractor,
+    : user_ctl(user_ctl),
+      ldap_engine(cct, user_ctl, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
     if (cct->_conf->rgw_s3_auth_use_keystone &&
@@ -154,7 +154,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                                 AbstractorT>::value,
                 "AbstractorT must be a subclass of rgw::auth::s3::VersionAbstractor");
 
-  RGWRados* const store;
+  RGWUserCtl* const user_ctl;
   AbstractorT ver_abstractor;
 
   S3AnonymousEngine anonymous_engine;
@@ -167,7 +167,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
+    auto apl = rgw::auth::add_sysreq(cct, user_ctl, s,
       rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -211,14 +211,14 @@ public:
   }
 
   AWSAuthStrategy(CephContext* const cct,
-                  RGWRados* const store)
-    : store(store),
+                  RGWUserCtl* const user_ctl)
+    : user_ctl(user_ctl),
       ver_abstractor(cct),
       anonymous_engine(cct,
                        static_cast<rgw::auth::LocalApplier::Factory*>(this)),
-      external_engines(cct, store, &ver_abstractor),
-      sts_engine(cct, store, &ver_abstractor),
-      local_engine(cct, store, ver_abstractor,
+      external_engines(cct, user_ctl, &ver_abstractor),
+      sts_engine(cct, user_ctl, &ver_abstractor),
+      local_engine(cct, user_ctl, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     /* The anonymous auth. */
     if (AllowAnonAccessT) {

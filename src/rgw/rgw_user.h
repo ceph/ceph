@@ -916,7 +916,7 @@ public:
                    bool need_stats,
                    RGWUserBuckets *buckets,
                    bool *is_truncated,
-                   uint64_t default_max);
+                   uint64_t default_max = 1000);
 
   int flush_bucket_stats(const rgw_user& user,
                          const RGWBucketEnt& ent);

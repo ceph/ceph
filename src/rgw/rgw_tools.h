@@ -7,7 +7,10 @@
 #include <string>
 
 #include "include/types.h"
+#include "include/ceph_hash.h"
+
 #include "common/ceph_time.h"
+
 #include "rgw_common.h"
 
 class RGWRados;
@@ -16,6 +19,34 @@ struct RGWObjVersionTracker;
 class optional_yield;
 
 struct obj_version;
+
+#define RGW_NO_SHARD -1
+
+#define RGW_SHARDS_PRIME_0 7877
+#define RGW_SHARDS_PRIME_1 65521
+
+extern const std::string MP_META_SUFFIX;
+
+static inline int rgw_shards_max()
+{
+  return RGW_SHARDS_PRIME_1;
+}
+
+// only called by rgw_shard_id and rgw_bucket_shard_index
+static inline int rgw_shards_mod(unsigned hval, int max_shards)
+{
+  if (max_shards <= RGW_SHARDS_PRIME_0) {
+    return hval % RGW_SHARDS_PRIME_0 % max_shards;
+  }
+  return hval % RGW_SHARDS_PRIME_1 % max_shards;
+}
+
+// used for logging and tagging
+static inline int rgw_shard_id(const string& key, int max_shards)
+{
+  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
+			max_shards);
+}
 
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);

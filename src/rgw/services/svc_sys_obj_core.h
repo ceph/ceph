@@ -86,8 +86,8 @@ protected:
 		     bufferlist *pbl);
 
   virtual int pool_list_prefixed_objs(const rgw_pool& pool,
-                                      const std::string& prefix,
-                                      std::vector<string> *result);
+                                      const string& prefix,
+                                      std::function<void(const string&)> cb);
 
   virtual int pool_list_objects_init(const rgw_pool& pool,
                                      const std::string& marker,

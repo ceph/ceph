@@ -2090,7 +2090,6 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
 }
 
 class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
 public:
   struct Svc {
     RGWSI_Bucket *bucket{nullptr};
@@ -2457,8 +2456,6 @@ public:
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandlerBase {
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
-
   int read_bucket_instance_entry(RGWSI_MetaBackend_Handler::Op *op,
                                  const string& entry,
                                  RGWBucketCompleteInfo *bi,

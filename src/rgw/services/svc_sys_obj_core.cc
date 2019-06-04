@@ -596,7 +596,7 @@ int RGWSI_SysObj_Core::write_data(const rgw_raw_obj& obj,
 }
 
 int RGWSI_SysObj_Core::pool_list_prefixed_objs(const rgw_pool& pool, const string& prefix,
-                                               vector<string> *result)
+                                               std::function<void(const string&)> cb)
 {
   bool is_truncated;
 
@@ -620,7 +620,7 @@ int RGWSI_SysObj_Core::pool_list_prefixed_objs(const rgw_pool& pool, const strin
     }
     for (auto& val : oids) {
       if (val.size() > prefix.size()) {
-        result->push_back(val.substr(prefix.size()));
+        cb(val.substr(prefix.size()));
       }
     }
   } while (is_truncated);

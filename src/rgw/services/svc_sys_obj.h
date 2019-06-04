@@ -235,7 +235,15 @@ public:
       int get_marker(string *marker);
     };
 
-    int list_prefixed_objs(const std::string& prefix, std::vector<std::string> *result);
+    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+
+    template <typename Container>
+    int list_prefixed_objs(const string& prefix,
+                           Container *result) {
+      return list_prefixed_objs(prefix, [&](const string& val) {
+        result->push_back(val.substr(prefix.size()));
+      });
+    }
 
     Op op() {
       return Op(*this);

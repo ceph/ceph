@@ -357,8 +357,12 @@ int RGWSI_Bucket::read_bucket_info(RGWSI_MetaBackend::Context *ctx,
   string bucket_entry = get_entrypoint_meta_key(bucket);
 
   if (auto e = binfo_cache->find(bucket_entry)) {
-    if (refresh_version &&
-        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+    bool found_version = (bucket.bucket_id.empty() ||
+                          bucket.bucket_id == e->info.bucket.bucket_id);
+
+    if (!found_version ||
+        (refresh_version &&
+         e->info.objv_tracker.read_version.compare(&(*refresh_version)))) {
       lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
@@ -511,8 +515,7 @@ int RGWSI_Bucket::read_bucket_stats(RGWSI_MetaBackend::Context *ctx,
                                     RGWBucketEnt *ent)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_instance_info(ctx, get_bi_meta_key(bucket),
-                                      &bucket_info, nullptr, nullptr);
+  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr);
   if (ret < 0) {
     return ret;
   }

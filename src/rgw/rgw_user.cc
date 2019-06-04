@@ -58,8 +58,12 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 
   do {
     RGWUserBuckets user_buckets;
-    ret = rgw_read_user_buckets(store, user_id, user_buckets, marker,
-				string(), max_entries, false, &is_truncated);
+    ret = store->ctl.user->list_buckets(user_id,
+                                        marker, string(),
+                                        max_entries,
+                                        false,
+                                        &user_buckets,
+                                        &is_truncated);
     if (ret < 0) {
       ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
@@ -72,6 +76,10 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 
       RGWBucketEnt& bucket_ent = i->second;
       RGWBucketInfo bucket_info;
+
+      rgw_bucket bucket;
+      bucket.tenant = user_id.tenant;
+      bucket.name = bucket_ent.bucket.name;
 
       ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
                                    bucket_info, nullptr, nullptr);
