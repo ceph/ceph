@@ -521,7 +521,11 @@ void KernelDevice::_aio_thread()
 		devname.c_str(),
 		path.c_str(),
 		r,
-		aio[i]->iocb.aio_lio_opcode,
+#if defined(HAVE_POSIXAIO)
+                aio[i]->aio.aiocb.aio_lio_opcode,
+#else
+                aio[i]->iocb.aio_lio_opcode,
+#endif
 		aio[i]->offset,
 		aio[i]->length);
 	      ceph_abort_msg(
