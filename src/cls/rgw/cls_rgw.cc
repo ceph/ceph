@@ -176,7 +176,7 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   if (num_entries == (int)pkeys->size() || !(*pmore))
     return 0;
 
-  if (pkeys->rbegin()->first > new_start) {
+  if (pkeys->size() && new_start < pkeys->rbegin()->first) {
     new_start = pkeys->rbegin()->first;
   }
 
