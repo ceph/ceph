@@ -11789,7 +11789,7 @@ size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
 }
 size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%ld.09%ld", (long)in->rstat.rctime.sec(),
+  return snprintf(val, size, "%ld.%09ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
 bool Client::_vxattrcb_dir_pin_exists(Inode *in)
@@ -11808,7 +11808,7 @@ bool Client::_vxattrcb_snap_btime_exists(Inode *in)
 
 size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%llu.09%lu",
+  return snprintf(val, size, "%llu.%09lu",
       (long long unsigned)in->snap_btime.sec(),
       (long unsigned)in->snap_btime.nsec());
 }
