@@ -1,8 +1,8 @@
 meta:
-- desc: install ceph/nautilus v14.2.0
+- desc: install ceph/nautilus v14.2.1
 tasks:
 - install:
-    tag: v14.2.0
+    tag: v14.2.1
     exclude_packages: ['librados3']
     extra_packages: ['librados2']
 - print: "**** done install nautilus v14.2.0"
