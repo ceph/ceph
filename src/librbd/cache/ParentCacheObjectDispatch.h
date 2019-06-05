@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
 
 #include "common/Mutex.h"
-#include "SharedPersistentObjectCacher.h"
+//#include "SharedPersistentObjectCacher.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "librbd/cache/TypeTraits.h"
@@ -120,6 +120,20 @@ public:
   }
 
 private:
+
+  class SharedPersistentObjectCacher {
+  public:
+
+    SharedPersistentObjectCacher(ImageCtxT *image_ctx, std::string cache_path);
+    ~SharedPersistentObjectCacher();
+
+    int read_object(std::string file_path, ceph::bufferlist* read_data,
+                    uint64_t offset, uint64_t length, Context *on_finish);
+
+  private:
+    ImageCtxT *m_image_ctx;
+  };
+
   void handle_read_cache(
          ceph::immutable_obj_cache::ObjectCacheRequest* ack,
          uint64_t read_off, uint64_t read_len,
@@ -131,7 +145,7 @@ private:
 
   CacheClient *m_cache_client = nullptr;
   ImageCtxT* m_image_ctx;
-  SharedPersistentObjectCacher<ImageCtxT> *m_object_store = nullptr;
+  SharedPersistentObjectCacher *m_object_store = nullptr;
   bool m_initialized;
   std::atomic<bool> m_re_connecting;
 };
