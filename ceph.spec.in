@@ -1062,6 +1062,9 @@ This package provides Ceph’s default alerts for Prometheus.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
+# LTO can be enabled as soon as the following GCC bug is fixed:
+# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200
+%define _lto_cflags %{nil}
 
 %if 0%{?rhel} == 7
 . /opt/rh/devtoolset-7/enable
