@@ -667,7 +667,13 @@ int HttpL2Request::submit_http_request () {
   string range = std::to_string(req->ofs + req->read_ofs)+ "-"+ std::to_string(req->ofs + req->read_ofs + req->len - 1);
   struct curl_slist *header = NULL;
   get_obj_data *d = (get_obj_data *)req->op_data;
-  struct req_state *s;
+  
+  string req_uri;
+  string uri,dest;
+  ((RGWGetObj_CB *)(d->client_cb))->get_req_info(dest, req_uri, auth_token);
+  uri = "http://" + req->dest + req_uri;
+
+  /*struct req_state *s;
   ((RGWGetObj_CB *)(d->client_cb))->get_req_info(req->dest, s->info.request_uri, auth_token);
 
   if (s->dialect == "s3") {
@@ -694,7 +700,9 @@ int HttpL2Request::submit_http_request () {
     }
    RGWAccessKey& key = iter->second;
    sign_request(key, env, info);
-  } else if (s->dialect == "swift") {
+  } 
+  else if (s->dialect == "swift")*/
+  if(true) {
     header = curl_slist_append(header, auth_token.c_str());
   } else {
     ldout(cct, 10) << "Engage1: curl_easy_perform() failed " << dendl;
@@ -705,7 +713,7 @@ int HttpL2Request::submit_http_request () {
   if(curl_handle) {
     curl_easy_setopt(curl_handle, CURLOPT_RANGE, range.c_str());
     curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, header); 
-    curl_easy_setopt(curl_handle, CURLOPT_URL, s->info.request_uri.c_str());
+    curl_easy_setopt(curl_handle, CURLOPT_URL, uri.c_str());
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L); 
     curl_easy_setopt(curl_handle, CURLOPT_VERBOSE, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, _l2_response_cb);

@@ -2150,7 +2150,8 @@ struct get_obj_data : public RefCountedObject {
   char *tmp_data;
 
   get_obj_data(CephContext *_cct);
-  ~get_obj_data(); 
+  ~get_obj_data();
+  void add_pending_oid(std::string oid); 
   void set_cancelled(int r);
   bool is_cancelled();
   int get_err_code();

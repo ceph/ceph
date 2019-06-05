@@ -10349,7 +10349,7 @@ vector<string> split(const string &s, const char * delim) {
 }
 
 bool get_obj_data::deterministic_hash_is_local(string oid) {
-  return !(deterministic_hash(oid).compare(cct->_conf->rgw_host)==0);
+	return (deterministic_hash(oid).compare(cct->_conf->rgw_host)==0);
 }
 
 string get_obj_data::deterministic_hash(string oid) {
@@ -10365,6 +10365,10 @@ string get_obj_data::deterministic_hash(string oid) {
   return tokens[hash%mod];
 }
 
+void get_obj_data::add_pending_oid(std::string oid)
+{
+  pending_oid_list.push_back(oid);
+}
 
 string get_obj_data::get_pending_oid()
 {
