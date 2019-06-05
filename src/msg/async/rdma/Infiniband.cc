@@ -994,49 +994,56 @@ Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, Completio
   return qp;
 }
 
-int Infiniband::post_chunks_to_rq(int num, ibv_qp *qp)
+int Infiniband::post_chunks_to_rq(int rq_wr_num, ibv_qp *qp)
 {
-  int ret, i = 0;
-  ibv_sge isge[num];
-  Chunk *chunk;
-  ibv_recv_wr rx_work_request[num];
+  int ret = 0;
+  Chunk *chunk = nullptr;
 
-  while (i < num) {
+  ibv_recv_wr *rx_work_request = static_cast<ibv_recv_wr*>(::calloc(rq_wr_num, sizeof(ibv_recv_wr)));
+  ibv_sge *isge = static_cast<ibv_sge*>(::calloc(rq_wr_num, sizeof(ibv_sge)));
+  ceph_assert(rx_work_request);
+  ceph_assert(isge);
+
+  int i = 0;
+  while (i < rq_wr_num) {
     chunk = get_memory_manager()->get_rx_buffer();
-    if (chunk == NULL) {
-      lderr(cct) << __func__ << " WARNING: out of memory. Requested " << num <<
-        " rx buffers. Got " << i << dendl;
-      if (i == 0)
+    if (chunk == nullptr) {
+      lderr(cct) << __func__ << " WARNING: out of memory. Request " << rq_wr_num <<
+                 " rx buffers. Only get " << i << " rx buffers." << dendl;
+      if (i == 0) {
+        ::free(rx_work_request);
+        ::free(isge);
         return 0;
-      // if we got some buffers post them and hope for the best
-      rx_work_request[i-1].next = 0;
-      break;
+      }
+      break; //get some buffers, so we need post them to recevie queue
     }
 
     isge[i].addr = reinterpret_cast<uint64_t>(chunk->data);
     isge[i].length = chunk->bytes;
     isge[i].lkey = chunk->lkey;
 
-    memset(&rx_work_request[i], 0, sizeof(rx_work_request[i]));
-    rx_work_request[i].wr_id = reinterpret_cast<uint64_t>(chunk);// stash descriptor ptr
-    if (i == num - 1) {
-      rx_work_request[i].next = 0;
-    } else {
-      rx_work_request[i].next = &rx_work_request[i+1];
+    rx_work_request[i].wr_id = reinterpret_cast<uint64_t>(chunk);// assign chunk address as work request id
+
+    if (i != 0) {
+      rx_work_request[i - 1].next = &rx_work_request[i];
     }
     rx_work_request[i].sg_list = &isge[i];
     rx_work_request[i].num_sge = 1;
+
     i++;
   }
-  ibv_recv_wr *badworkrequest;
+
+  ibv_recv_wr *badworkrequest = nullptr;
   if (support_srq) {
-    ret = ibv_post_srq_recv(srq, &rx_work_request[0], &badworkrequest);
-    ceph_assert(ret == 0);
+    ret = ibv_post_srq_recv(srq, rx_work_request, &badworkrequest);
   } else {
     ceph_assert(qp);
-    ret = ibv_post_recv(qp, &rx_work_request[0], &badworkrequest);
-    ceph_assert(ret == 0);
+    ret = ibv_post_recv(qp, rx_work_request, &badworkrequest);
   }
+
+  ::free(rx_work_request);
+  ::free(isge);
+  ceph_assert(badworkrequest == nullptr && ret == 0);
   return i;
 }
 
