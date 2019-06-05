@@ -388,9 +388,6 @@ public:
   seastar::future<> read_state(ceph::os::FuturizedStore* store);
 
   void do_peering_event(
-    const boost::statechart::event_base &evt,
-    PeeringCtx &rctx);
-  void do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
   void do_peering_event(
     std::unique_ptr<PGPeeringEvent> evt,
@@ -409,7 +406,11 @@ public:
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
   void print(ostream& os) const;
+
 private:
+  void do_peering_event(
+    const boost::statechart::event_base &evt,
+    PeeringCtx &rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
