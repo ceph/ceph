@@ -7,8 +7,13 @@
 #include "common/errno.h"
 #include "osd/osd_types.h"
 #include "rgw/rgw_tools.h"
+#include "rgw/rgw_cr_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+RGWSI_RADOS::~RGWSI_RADOS()
+{
+}
 
 int RGWSI_RADOS::do_start()
 {
@@ -20,7 +25,18 @@ int RGWSI_RADOS::do_start()
   if (ret < 0) {
     return ret;
   }
+
+  async_processor.reset(new RGWAsyncRadosProcessor(cct, cct->_conf->rgw_num_async_rados_threads));
+  async_processor->start();
+
   return 0;
+}
+
+void RGWSI_RADOS::shutdown()
+{
+  if (async_processor) {
+    async_processor->stop();
+  }
 }
 
 librados::Rados* RGWSI_RADOS::get_rados_handle()

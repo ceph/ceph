@@ -1024,9 +1024,6 @@ void RGWRados::finalize()
       sync_log_trimmer->stop();
     }
   }
-  if (async_rados) {
-    async_rados->stop();
-  }
   if (run_sync_thread) {
     delete meta_sync_processor_thread;
     meta_sync_processor_thread = NULL;
@@ -1050,9 +1047,6 @@ void RGWRados::finalize()
   }
   delete data_log;
   delete sync_tracer;
-  if (async_rados) {
-    delete async_rados;
-  }
   
   delete lc;
   lc = NULL; 
@@ -1208,9 +1202,6 @@ int RGWRados::init_complete()
     ctl.meta.mgr->init_oldest_log_period();
   }
 
-  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
-  async_rados->start();
-
   ret = ctl.meta.mgr->init(current_period.get_id());
   if (ret < 0) {
     lderr(cct) << "ERROR: failed to initialize metadata log: "
@@ -1240,6 +1231,7 @@ int RGWRados::init_complete()
                       << pt.second.name << " present in zonegroup" << dendl;
       }
     }
+    auto async_processor = svc.rados->get_async_processor();
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this, async_rados);
     ret = meta_sync_processor_thread->init();

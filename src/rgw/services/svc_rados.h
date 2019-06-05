@@ -11,6 +11,8 @@
 
 #include "common/optional_ref_default.h"
 
+class RGWAsyncRadosProcessor;
+
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}
@@ -29,8 +31,10 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
 class RGWSI_RADOS : public RGWServiceInstance
 {
   librados::Rados rados;
+  std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   int do_start() override;
+  void shutdown() override;
 
 public:
   struct OpenParams {
@@ -59,10 +63,15 @@ private:
 
 public:
   RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct) {}
+  ~RGWSI_RADOS();
 
   void init() {}
 
   uint64_t instance_id();
+
+  RGWAsyncRadosProcessor *get_async_processor() {
+    return async_processor.get();
+  }
 
   class Handle;
 
