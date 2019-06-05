@@ -41,6 +41,9 @@
 #define ALIGN_TO_PAGE_SIZE(x) \
   (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
 
+#define PSN_LEN 24
+#define PSN_MSK ((1 << PSN_LEN) - 1)
+
 struct IBSYNMsg {
   uint16_t lid;
   uint32_t qpn;

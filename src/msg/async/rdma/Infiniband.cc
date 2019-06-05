@@ -174,7 +174,7 @@ Infiniband::QueuePair::QueuePair(
   q_key(q_key),
   dead(false)
 {
-  initial_psn = lrand48() & 0xffffff;
+  initial_psn = lrand48() & PSN_MSK;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
     lderr(cct) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
     ceph_abort();
