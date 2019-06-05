@@ -549,7 +549,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     return 0, "", ""
                 else:
                     return -errno.ENOENT, "", \
-                           "Subvolume group snapshot '{0}' not found, cannot remove it".format(sub_name)
+                           "Subvolume group snapshot '{0}' not found, cannot remove it".format(snap_name)
 
         return 0, "", ""
 
