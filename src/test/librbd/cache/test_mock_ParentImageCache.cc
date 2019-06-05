@@ -10,7 +10,6 @@
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "test/immutable_object_cache/MockCacheDaemon.h"
 #include "librbd/cache/ParentCacheObjectDispatch.h"
-#include "librbd/cache/SharedPersistentObjectCacher.h"
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/mock/MockImageCtx.h"
 
@@ -43,9 +42,7 @@ struct TypeTraits<MockParentImageCacheImageCtx> {
 }; // namespace librbd
 
 #include "librbd/cache/ParentCacheObjectDispatch.cc"
-#include "librbd/cache/SharedPersistentObjectCacher.cc"
 template class librbd::cache::ParentCacheObjectDispatch<librbd::MockParentImageCacheImageCtx>;
-template class librbd::cache::SharedPersistentObjectCacher<librbd::MockParentImageCacheImageCtx>;
 
 namespace librbd {
 

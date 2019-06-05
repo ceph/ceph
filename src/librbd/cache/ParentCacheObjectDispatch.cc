@@ -145,7 +145,7 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
 
   if (reg) {
     ldout(cct, 20) << "Parent cache open cache handler" << dendl;
-    m_object_store = new SharedPersistentObjectCacher<I>(m_image_ctx, m_image_ctx->shared_cache_path);
+    m_object_store = new SharedPersistentObjectCacher(m_image_ctx, m_image_ctx->shared_cache_path);
   }
   return 0;
 }
@@ -195,6 +195,37 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
 
   m_cache_client->connect(connect_ctx);
   return 0;
+}
+
+template <typename I>
+ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::SharedPersistentObjectCacher (
+   I *image_ctx, std::string cache_path)
+  : m_image_ctx(image_ctx) {
+  auto *cct = m_image_ctx->cct;
+  ldout(cct, 20) << dendl;
+}
+
+template <typename I>
+ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::~SharedPersistentObjectCacher() {
+}
+
+template <typename I>
+int ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::read_object(
+        std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
+        uint64_t length, Context *on_finish) {
+
+  auto *cct = m_image_ctx->cct;
+  ldout(cct, 20) << "file path: " << file_path << dendl;
+
+  std::string error;
+  int ret = read_data->pread_file(file_path.c_str(), offset, length, &error);
+  if (ret < 0) {
+    ldout(cct, 5) << "read from file return error: " << error
+                  << "file path= " << file_path
+                  << dendl;
+    return ret;
+  }
+  return read_data->length();
 }
 
 } // namespace cache
