@@ -23,6 +23,8 @@
 
 #include "rgw_formats.h"
 
+#include "services/svc_bucket_types.h"
+
 class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
@@ -589,8 +591,10 @@ class RGWBucketCtl
   RGWBucketMetadataHandler *bm_handler;
   RGWBucketInstanceMetadataHandler *bmi_handler;
 
-  RGWSI_MetaBackend_Handler *bucket_be_handler; /* bucket backend handler */
-  RGWSI_MetaBackend_Handler *bi_be_handler; /* bucket instance backend handler */
+  RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
+  RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
+
+  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
   
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -746,23 +750,23 @@ public:
   /* bucket entrypoint */
   int read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                   RGWBucketEntryPoint *info,
-                                  ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> params);
+                                  ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> params = std::nullopt);
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
-                                   ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> params);
+                                   ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> params = std::nullopt);
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
-                                    ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> params);
+                                    ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> params = std::nullopt);
 
   /* bucket instance */
   int read_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo *info,
-                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params);
+                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params = std::nullopt);
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                    RGWBucketInfo& info,
-                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
+                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
-                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params);
+                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params = std::nullopt);
 
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
@@ -787,21 +791,21 @@ public:
   int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info);
 
 private:
-  int convert_old_bucket_info(RGWSI_MetaBackend_Handler::Op *op,
+  int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                               const rgw_bucket& bucket);
 
-  int do_store_bucket_instance_info(RGWSI_MetaBackend_Handler::Op *op,
+  int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
 
-  int do_link_bucket(RGWSI_MetaBackend_Handler::Op *op,
+  int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                      const rgw_user& user,
                      const rgw_bucket& bucket,
                      ceph::real_time creation_time,
                      bool update_entrypoint);
 
-  int do_unlink_bucket(RGWSI_MetaBackend_Handler::Op *op,
+  int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                        const rgw_user& user_id,
                        const rgw_bucket& bucket,
                        bool update_entrypoint);
