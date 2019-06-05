@@ -132,7 +132,7 @@ class Module(MgrModule):
                 start = time.time()
                 client = self.get_influx_client()
                 client.write_points(points, time_precision='ms')
-                client.close()
+                del client
                 runtime = time.time() - start
                 self.log.debug('Writing points %d to Influx took %.3f seconds',
                                len(points), runtime)
@@ -374,7 +374,8 @@ class Module(MgrModule):
                                                replication='1',
                                                default=True,
                                                database=self.config['database'])
-            client.close()
+
+            del client
 
             self.log.debug('Gathering statistics')
             points = self.gather_statistics()
