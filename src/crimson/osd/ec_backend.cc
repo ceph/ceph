@@ -3,7 +3,7 @@
 
 ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
-                     ceph::os::CyanStore* store,
+                     ceph::os::FuturizedStore* store,
                      const ec_profile_t&,
                      uint64_t)
   : PGBackend{shard, coll, store}

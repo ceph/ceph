@@ -3,21 +3,20 @@
 #include <string_view>
 
 #include "crimson/os/cyan_collection.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
+using ceph::os::FuturizedStore;
 
-using ceph::os::CyanStore;
-
-PGMeta::PGMeta(CyanStore* store, spg_t pgid)
+PGMeta::PGMeta(FuturizedStore* store, spg_t pgid)
   : store{store},
     pgid{pgid}
 {}
 
 namespace {
   template<typename T>
-  std::optional<T> find_value(const CyanStore::omap_values_t& values,
+  std::optional<T> find_value(const FuturizedStore::omap_values_t& values,
                               string_view key)
   {
     auto found = values.find(key);
@@ -33,10 +32,11 @@ namespace {
 seastar::future<epoch_t> PGMeta::get_epoch()
 {
   auto ch = store->open_collection(coll_t{pgid});
+  std::set<std::string> keys{infover_key.data(), 
+                             epoch_key.data()};
   return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
-                                {string{infover_key},
-                                 string{epoch_key}}).then(
+                                keys).then(
     [](auto&& values) {
       {
         // sanity check
@@ -57,12 +57,13 @@ seastar::future<epoch_t> PGMeta::get_epoch()
 seastar::future<pg_info_t, PastIntervals> PGMeta::load()
 {
   auto ch = store->open_collection(coll_t{pgid});
+  std::set<std::string> keys{infover_key.data(),
+                             info_key.data(),
+                             biginfo_key.data(),
+                             fastinfo_key.data()};
   return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
-                                {string{infover_key},
-                                 string{info_key},
-                                 string{biginfo_key},
-                                 string{fastinfo_key}}).then(
+                                keys).then(
     [this](auto&& values) {
       {
         // sanity check

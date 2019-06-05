@@ -2,11 +2,11 @@
 
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 
 ReplicatedBackend::ReplicatedBackend(shard_id_t shard,
                                      ReplicatedBackend::CollectionRef coll,
-                                     ceph::os::CyanStore* store)
+                                     ceph::os::FuturizedStore* store)
   : PGBackend{shard, coll, store}
 {}
 

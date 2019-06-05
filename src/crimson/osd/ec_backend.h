@@ -13,7 +13,7 @@ class ECBackend : public PGBackend
 {
 public:
   ECBackend(shard_id_t shard,
-	    CollectionRef, ceph::os::CyanStore*,
+	    CollectionRef, ceph::os::FuturizedStore*,
 	    const ec_profile_t& ec_profile,
 	    uint64_t stripe_width);
 private:
@@ -22,5 +22,5 @@ private:
 					  uint64_t len,
 					  uint32_t flags) override;
   CollectionRef coll;
-  ceph::os::CyanStore* store;
+  ceph::os::FuturizedStore* store;
 };
