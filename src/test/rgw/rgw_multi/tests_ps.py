@@ -8,7 +8,6 @@ import subprocess
 import socket
 # import os
 import time
-import pika
 from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
@@ -88,6 +87,7 @@ def create_http_thread(host, port):
 class AMQPReceiver(object):
     """class for receiving and storing messages on a topic from the AMQP broker"""
     def __init__(self, exchange, topic):
+        import pika
         hostname = socket.gethostname()
         connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname))
         self.channel = connection.channel()
