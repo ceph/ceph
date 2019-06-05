@@ -85,7 +85,7 @@ public:
  *
  * We accomplish this using two sets of keys:
  *  1) OBJECT_PREFIX + obj.str() -> encoding of object_snaps
- *  2) MAPPING_PREFIX + snapid_t + obj.str() -> encoding of pair<snapid_t, obj>
+ *  2) MAPPING_PREFIX + poolid + snapid_t + obj.str() -> encoding of pair<snapid_t, obj>
  *
  * The on disk strings and encodings are implemented in to_raw, to_raw_key,
  * from_raw, to_object_key.
@@ -114,10 +114,12 @@ public:
 private:
   MapCacher::MapCacher<std::string, bufferlist> backend;
 
+  static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
 
-  static std::string get_prefix(snapid_t snap);
+  static std::string get_legacy_prefix(snapid_t snap);
+  static std::string get_prefix(int64_t pool, snapid_t snap);
 
   std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map);
