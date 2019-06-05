@@ -149,6 +149,7 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("oid_prefix", oid_prefix, f);
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
+  encode_json("arn_topic", arn_topic, f);
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const

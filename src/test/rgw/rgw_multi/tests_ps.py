@@ -68,6 +68,7 @@ class HTTPPostHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 def http_thread_runner(httpd):
     """main thread function for the http server"""
     try:
+        log.info('HTTP Server started')
         httpd.serve_forever()
         log.info('HTTP Server ended')
     except:
@@ -119,6 +120,7 @@ class AMQPReceiver(object):
 def amqp_receiver_thread_runner(receiver):
     """main thread function for the amqp receiver"""
     try:
+        log.info('AMQP receiver started')
         receiver.channel.start_consuming()
         log.info('AMQP receiver ended')
     except:
@@ -224,10 +226,13 @@ def init_rabbitmq():
     #       'RABBITMQ_MNESIA_BASE': data_dir,
     #       'RABBITMQ_LOG_BASE': log_dir}
     # TODO: support multiple brokers per host using env
-    # print('starting rabbitmq server on: ' + 'amqp://' + hostname + ':' + port)
     env = None
-    proc = subprocess.Popen('/usr/sbin/rabbitmq-server', env=env)
-    return proc #, data_dir, log_dir
+    try:
+        proc = subprocess.Popen('rabbitmq-server', env=env)
+    except:
+        log.info('failed to execute rabbitmq-server')
+        return None
+    return proc #, port, data_dir, log_dir
 
 
 def clean_rabbitmq(proc): #, data_dir, log_dir)
@@ -237,11 +242,12 @@ def clean_rabbitmq(proc): #, data_dir, log_dir)
         proc.terminate()
     except:
         log.info('rabbitmq server already terminated')
+    # TODO: add directory cleanup once multiple brokers are supported
     #try:
     #    os.rmdir(data_dir)
     #    os.rmdir(log_dir)
     #except:
-    #    print('rabbitmq directories already removed')
+    #    log.info('rabbitmq directories already removed')
 
 
 def init_env():
@@ -1202,6 +1208,8 @@ def test_ps_push_amqp():
     """ test pushing to amqp endpoint """
     hostname = socket.gethostname()
     proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
     # TODO add rabbitmq checkpoint instead of sleep
     time.sleep(5)
     zones, ps_zones = init_env()
@@ -1262,7 +1270,9 @@ def test_ps_s3_push_amqp():
     """ test pushing to amqp endpoint s3 record format"""
     hostname = socket.gethostname()
     proc = init_rabbitmq()
-    # TODO add rabbitmq checkpoint
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    # TODO add rabbitmq checkpoint instead of sleep
     time.sleep(5)
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
@@ -1288,7 +1298,7 @@ def test_ps_s3_push_amqp():
     topic_conf_list = [{'Id': notification_name,
                         'TopicArn': topic_arn,
                         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
-                      }]
+                       }]
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
@@ -1300,9 +1310,8 @@ def test_ps_s3_push_amqp():
     # wait for sync
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
     # check amqp receiver
-    # TODO: this is currently a product bug with amqp and S3 API
-    # keys = list(bucket.list())
-    # receiver.verify_s3_events(keys)
+    keys = list(bucket.list())
+    receiver.verify_s3_events(keys)
 
     # delete objects from the bucket
     for key in bucket.list():
@@ -1311,8 +1320,7 @@ def test_ps_s3_push_amqp():
     zone_meta_checkpoint(ps_zones[0].zone)
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
     # check amqp receiver
-    # TODO: this is currently a product bug with amqp and S3 API
-    #receiver.verify_s3_events(keys, deletions=True)
+    receiver.verify_s3_events(keys, deletions=True)
 
     # cleanup
     s3_notification_conf.del_config()
@@ -1406,12 +1414,12 @@ def test_ps_missing_topic():
     topic_conf_list = [{'Id': notification_name,
                         'TopicArn': topic_arn,
                         'Events': ['s3:ObjectCreated:*']
-                        }]
+                       }]
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
     try:
         s3_notification_conf.set_config()
     except:
-        print('missing topic is expected')
+        log.info('missing topic is expected')
     else:
         assert 'missing topic is expected'
 
@@ -1421,28 +1429,39 @@ def test_ps_missing_topic():
 
 def test_ps_s3_topic_update():
     """ test updating topic associated with a notification"""
-    return SkipTest("PubSub push tests are only manual")
+    rabbit_proc = init_rabbitmq()
+    if rabbit_proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    # TODO add rabbitmq checkpoint instead of sleep
+    time.sleep(5)
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name+TOPIC_SUFFIX
 
-    # create topic
-    dest_endpoint1 = 'amqp://localhost'
-    dest_args1 = 'amqp-exchange=ex1&amqp-ack-level=none'
-    dest_endpoint2 = 'http://localhost:9001'
+    # create amqp topic
+    hostname = socket.gethostname()
+    exchange = 'ex1'
+    amqp_task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    amqp_task.start()
     topic_conf = PSTopic(ps_zones[0].conn, topic_name,
-                         endpoint=dest_endpoint1,
-                         endpoint_args=dest_args1)
+                          endpoint='amqp://' + hostname,
+                          endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     result, status = topic_conf.set_config()
+    assert_equal(status/100, 2)
     parsed_result = json.loads(result)
     topic_arn = parsed_result['arn']
-    assert_equal(status/100, 2)
     # get topic
     result, _ = topic_conf.get_config()
     # verify topic content
     parsed_result = json.loads(result)
     assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint1)
+    assert_equal(parsed_result['topic']['dest']['push_endpoint'], topic_conf.parameters['push-endpoint'])
+    
+    # create http server
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    http_task, httpd, = create_http_thread(hostname, port)
+    http_task.start()
 
     # create bucket on the first of the rados zones
     bucket = zones[0].create_bucket(bucket_name)
@@ -1465,11 +1484,13 @@ def test_ps_s3_topic_update():
     # wait for sync
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
 
-    # TODO: check update to amqp
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    receiver.verify_s3_events(keys)
 
-    # update the same topic
+    # update the same topic with new endpoint
     topic_conf = PSTopic(ps_zones[0].conn, topic_name,
-                         endpoint=dest_endpoint2)
+                         endpoint='http://'+ hostname + ':' + str(port))
     _, status = topic_conf.set_config()
     assert_equal(status/100, 2)
     # get topic
@@ -1477,17 +1498,22 @@ def test_ps_s3_topic_update():
     # verify topic content
     parsed_result = json.loads(result)
     assert_equal(parsed_result['topic']['name'], topic_name)
-    assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint2)
+    assert_equal(parsed_result['topic']['dest']['push_endpoint'], topic_conf.parameters['push-endpoint'])
 
-    # create more objects in the bucket
-    number_of_objects = 10
+    # delete current objects and create new objects in the bucket
+    for key in bucket.list():
+        key.delete()
     for i in range(number_of_objects):
         key = bucket.new_key(str(i+100))
         key.set_contents_from_string('bar')
     # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
 
-    # TODO: check it is still updating amqp
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    # verify that notifications are still sent to amqp
+    receiver.verify_s3_events(keys)
 
     # update notification to update the endpoint from the topic
     topic_conf_list = [{'Id': notification_name,
@@ -1497,15 +1523,21 @@ def test_ps_s3_topic_update():
     s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
     _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
-    # create even more objects in the bucket
-    number_of_objects = 10
+    
+    # delete current objects and create new objects in the bucket
+    for key in bucket.list():
+        key.delete()
     for i in range(number_of_objects):
         key = bucket.new_key(str(i+200))
         key.set_contents_from_string('bar')
     # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
     zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
 
-    # TODO: check that updates switched to http
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    # check that updates switched to http
+    httpd.verify_s3_events(keys)
 
     # cleanup
     # delete objects from the bucket
@@ -1514,93 +1546,17 @@ def test_ps_s3_topic_update():
     s3_notification_conf.del_config()
     topic_conf.del_config()
     zones[0].delete_bucket(bucket_name)
+    httpd.server_close()
+    http_task.join()
+    clean_rabbitmq(rabbit_proc)
 
 
 def test_ps_s3_notification_update():
     """ test updating the topic of a notification"""
-    return SkipTest("PubSub push tests are only manual")
-    zones, ps_zones = init_env()
-    bucket_name = gen_bucket_name()
-    topic_name1 = bucket_name+'amqp'+TOPIC_SUFFIX
-
-    # create first topic
-    dest_endpoint1 = 'amqp://localhost'
-    dest_args1 = 'amqp-exchange=ex1&amqp-ack-level=none'
-    topic_conf1 = PSTopic(ps_zones[0].conn, topic_name1,
-                          endpoint=dest_endpoint1,
-                          endpoint_args=dest_args1)
-    result, status = topic_conf1.set_config()
-    parsed_result = json.loads(result)
-    topic_arn1 = parsed_result['arn']
-    assert_equal(status/100, 2)
-
-    # create bucket on the first of the rados zones
-    bucket = zones[0].create_bucket(bucket_name)
-    # wait for sync
-    zone_meta_checkpoint(ps_zones[0].zone)
-    # create s3 notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn1,
-                        'Events': ['s3:ObjectCreated:*']
-                       }]
-    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
-    _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-    # create objects in the bucket
-    number_of_objects = 10
-    for i in range(number_of_objects):
-        key = bucket.new_key(str(i))
-        key.set_contents_from_string('bar')
-    # wait for sync
-    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
-    result, _ = s3_notification_conf.get_config()
-
-    # TODO: check updates to amqp
-
-    # create another topic
-    topic_name2 = bucket_name+'http'+TOPIC_SUFFIX
-    dest_endpoint2 = 'http://localhost:9001'
-    topic_conf2 = PSTopic(ps_zones[0].conn, topic_name2,
-                          endpoint=dest_endpoint2)
-    result, status = topic_conf2.set_config()
-    parsed_result = json.loads(result)
-    topic_arn2 = parsed_result['arn']
-    assert_equal(status/100, 2)
-
-    # update notification to the new topic
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn2,
-                        'Events': ['s3:ObjectCreated:*']
-                       }]
-    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
-    _, status = s3_notification_conf.set_config()
-    assert_equal(status/100, 2)
-    # create more objects in the bucket
-    number_of_objects = 10
-    for i in range(number_of_objects):
-        key = bucket.new_key(str(i+200))
-        key.set_contents_from_string('bar')
-    # wait for sync
-    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
-
-    # TODO: check uodate to http
-    result, _ = s3_notification_conf.get_config()
-
-    # cleanup
-    # delete objects from the bucket
-    for key in bucket.list():
-        key.delete()
-    s3_notification_conf.del_config()
-    topic_conf1.del_config()
-    topic_conf2.del_config()
-    zones[0].delete_bucket(bucket_name)
-
-
-def test_ps_s3_multiple_topics_notification():
-    """ test notification creation with multiple topics"""
     hostname = socket.gethostname()
     rabbit_proc = init_rabbitmq()
+    if rabbit_proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
     # TODO add rabbitmq checkpoint instead of sleep
     time.sleep(5)
 
@@ -1619,12 +1575,120 @@ def test_ps_s3_multiple_topics_notification():
     http_task.start()
     amqp_task.start()
 
-    topic_conf1 = PSTopic(ps_zones[0].conn, topic_name1)
+    topic_conf1 = PSTopic(ps_zones[0].conn, topic_name1,
+                          endpoint='amqp://' + hostname,
+                          endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     result, status = topic_conf1.set_config()
     parsed_result = json.loads(result)
     topic_arn1 = parsed_result['arn']
     assert_equal(status/100, 2)
-    topic_conf2 = PSTopic(ps_zones[0].conn, topic_name2)
+    topic_conf2 = PSTopic(ps_zones[0].conn, topic_name2,
+                          endpoint='http://'+hostname+':'+str(http_port))
+    result, status = topic_conf2.set_config()
+    parsed_result = json.loads(result)
+    topic_arn2 = parsed_result['arn']
+    assert_equal(status/100, 2)
+    
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create s3 notification with topic1
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn1,
+                        'Events': ['s3:ObjectCreated:*']
+                       }]
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    receiver.verify_s3_events(keys)
+
+    # update notification to use topic2
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn2,
+                        'Events': ['s3:ObjectCreated:*']
+                       }]
+    s3_notification_conf = PSNotificationS3(ps_zones[0].conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # delete current objects and create new objects in the bucket
+    for key in bucket.list():
+        key.delete()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i+100))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    zone_bucket_checkpoint(ps_zones[0].zone, zones[0].zone, bucket_name)
+
+    keys = list(bucket.list())
+    # TODO: set exact_match to true
+    # check that updates switched to http
+    httpd.verify_s3_events(keys)
+
+    # cleanup
+    # delete objects from the bucket
+    for key in bucket.list():
+        key.delete()
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    zones[0].delete_bucket(bucket_name)
+    httpd.server_close()
+    http_task.join()
+    clean_rabbitmq(rabbit_proc)
+    if rabbit_proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name1 = bucket_name+'amqp'+TOPIC_SUFFIX
+
+
+def test_ps_s3_multiple_topics_notification():
+    """ test notification creation with multiple topics"""
+    hostname = socket.gethostname()
+    rabbit_proc = init_rabbitmq()
+    if rabbit_proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    # TODO add rabbitmq checkpoint instead of sleep
+    time.sleep(5)
+
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name1 = bucket_name+'amqp'+TOPIC_SUFFIX
+    topic_name2 = bucket_name+'http'+TOPIC_SUFFIX
+
+    # create topics
+    # create random port for the http server
+    http_port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    http_task, httpd, = create_http_thread(hostname, http_port)
+    exchange = 'ex1'
+    amqp_task, receiver = create_amqp_receiver_thread(exchange, topic_name1)
+    http_task.start()
+    amqp_task.start()
+
+    topic_conf1 = PSTopic(ps_zones[0].conn, topic_name1,
+                          endpoint='amqp://' + hostname,
+                          endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
+    result, status = topic_conf1.set_config()
+    parsed_result = json.loads(result)
+    topic_arn1 = parsed_result['arn']
+    assert_equal(status/100, 2)
+    topic_conf2 = PSTopic(ps_zones[0].conn, topic_name2,
+                          endpoint='http://'+hostname+':'+str(http_port))
     result, status = topic_conf2.set_config()
     parsed_result = json.loads(result)
     topic_arn2 = parsed_result['arn']
@@ -1682,8 +1746,7 @@ def test_ps_s3_multiple_topics_notification():
     keys = list(bucket.list())
     # TODO: set exact_match to true
     verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
-    # TODO: this is currently a product bug with amqp and S3 API
-    #receiver.verify_s3_events(keys)
+    receiver.verify_s3_events(keys)
 
     result, _ = sub_conf2.get_events()
     parsed_result = json.loads(result)
@@ -1691,7 +1754,7 @@ def test_ps_s3_multiple_topics_notification():
         log.debug(record)
     # TODO: set exact_match to true
     verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
-    #httpd.verify_s3_events(keys)
+    httpd.verify_s3_events(keys)
 
     # cleanup
     s3_notification_conf.del_config()

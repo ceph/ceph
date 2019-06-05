@@ -67,6 +67,7 @@ public:
     // bucket to store events/records will be set only when subscription is created
     dest.bucket_name = "";
     dest.oid_prefix = "";
+    dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
         store->svc.zone->get_zonegroup().get_name(),
@@ -354,6 +355,7 @@ public:
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
     dest.push_endpoint_args = s->info.args.get_str();
+    dest.arn_topic = topic_name;
 
     return 0;
   }
@@ -909,7 +911,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     // (1) topics cannot be shared between different S3 notifications because they hold the filter information
     // (2) make topic clneaup easier, when notification is removed
     const auto unique_topic_name = topic_to_unique(topic_name, sub_name);
-    // generate the internal topic, no need to store destination info
+    // generate the internal topic, no need to store destination info in the unique topic
     // ARN is cached to make the "GET" method faster
     op_ret = ups->create_topic(unique_topic_name, rgw_pubsub_sub_dest(), topic_info.topic.arn);
     if (op_ret < 0) {
@@ -928,7 +930,8 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       ups->remove_topic(unique_topic_name);
       return;
     }
-    
+   
+    // generate the subscription with destination information from the original topic
     rgw_pubsub_sub_dest dest = topic_info.topic.dest;
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + unique_topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
