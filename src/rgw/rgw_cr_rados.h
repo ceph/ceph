@@ -69,7 +69,7 @@ class RGWAsyncRadosProcessor {
   deque<RGWAsyncRadosRequest *> m_req_queue;
   std::atomic<bool> going_down = { false };
 protected:
-  RGWRados *store;
+  CephContext *cct;
   ThreadPool m_tp;
   Throttle req_throttle;
 
@@ -93,7 +93,7 @@ protected:
   } req_wq;
 
 public:
-  RGWAsyncRadosProcessor(RGWRados *_store, int num_threads);
+  RGWAsyncRadosProcessor(CephContext *_cct, int num_threads);
   ~RGWAsyncRadosProcessor() {}
   void start();
   void stop();
