@@ -161,6 +161,7 @@ BuildRequires:	libxml2-devel
 BuildRequires:	libuuid-devel
 BuildRequires:	make
 BuildRequires:	parted
+BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
