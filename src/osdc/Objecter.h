@@ -1228,7 +1228,7 @@ public:
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
 private:
-  OSDMap    *osdmap;
+  std::unique_ptr<OSDMap> osdmap;
 public:
   using Dispatcher::cct;
   std::multimap<std::string,std::string> crush_location;
@@ -2041,7 +2041,7 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
-    osdmap(new OSDMap),
+    osdmap{std::make_unique<OSDMap>()},
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
     blacklist_events_enabled(false),

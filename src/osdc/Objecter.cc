@@ -1208,13 +1208,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	else if (m->maps.count(e)) {
 	  ldout(cct, 3) << "handle_osd_map decoding full epoch " << e << dendl;
-          OSDMap *new_osdmap = new OSDMap();
+          auto new_osdmap = std::make_unique<OSDMap>();
           new_osdmap->decode(m->maps[e]);
 
           emit_blacklist_events(*osdmap, *new_osdmap);
-
-	  delete osdmap;
-          osdmap = new_osdmap;
+          osdmap = std::move(new_osdmap);
 
 	  logger->inc(l_osdc_map_full);
 	}
@@ -4959,8 +4957,6 @@ Objecter::OSDSession::~OSDSession()
 
 Objecter::~Objecter()
 {
-  delete osdmap;
-
   ceph_assert(homeless_session->get_nref() == 1);
   ceph_assert(num_homeless_ops == 0);
   homeless_session->put();
