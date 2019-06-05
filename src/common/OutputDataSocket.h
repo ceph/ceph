@@ -55,13 +55,13 @@ protected:
   bool going_down;
 
   uint64_t data_size;
+  uint32_t skipped;
 
-  std::list<bufferlist> data;
+  std::vector<buffer::list> data;
 
   ceph::mutex m_lock = ceph::make_mutex("OutputDataSocket::m_lock");
   ceph::condition_variable cond;
-
-  bufferlist delim;
+  buffer::list delim;
 };
 
 #endif
