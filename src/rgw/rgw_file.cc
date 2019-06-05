@@ -816,6 +816,15 @@ namespace rgw {
     rele();
   } /* RGWLibFS::close */
 
+  inline std::ostream& operator<<(std::ostream &os, fh_key const &fhk) {
+    os << "<fh_key: bucket=";
+    os << fhk.fh_hk.bucket;
+    os << "; object=";
+    os << fhk.fh_hk.object;
+    os << ">";
+    return os;
+  }
+
   inline std::ostream& operator<<(std::ostream &os, struct timespec const &ts) {
       os << "<timespec: tv_sec=";
       os << ts.tv_sec;
