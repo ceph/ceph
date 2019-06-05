@@ -109,18 +109,20 @@ namespace rgw {
       fh_hk.object = ok;
     }
 
-    fh_key(const uint64_t bk, const char *_o)
+    fh_key(const uint64_t bk, const char *_o, const std::string& _t)
       : version(0) {
       fh_hk.bucket = bk;
-      fh_hk.object = XXH64(_o, ::strlen(_o), seed);
+      std::string to = _t + ":" + _o;
+      fh_hk.object = XXH64(to.c_str(), to.length(), seed);
     }
 
     fh_key(const std::string& _b, const std::string& _o,
 	   const std::string& _t /* tenant */)
       : version(0) {
       std::string tb = _t + ":" + _b;
-      fh_hk.bucket = XXH64(tb.c_str(), _o.length(), seed);
-      fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
+      std::string to = _t + ":" + _o;
+      fh_hk.bucket = XXH64(tb.c_str(), tb.length(), seed);
+      fh_hk.object = XXH64(to.c_str(), to.length(), seed);
     }
 
     void encode(buffer::list& bl) const {

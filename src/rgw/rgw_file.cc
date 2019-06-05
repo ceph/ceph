@@ -983,13 +983,13 @@ namespace rgw {
 
   fh_key RGWFileHandle::make_fhk(const std::string& name)
   {
-    if (depth <= 1) {
-      std::string tenanted_name =
-	get_fs()->get_user()->user_id.to_str() + ":" + name;
-      return fh_key(fhk.fh_hk.object, tenanted_name.c_str());
+    std::string tenant = get_fs()->get_user()->user_id.to_str();
+    if (depth == 0) {
+      /* S3 bucket -- assert mount-at-bucket case reaches here */
+      return fh_key(name, name, tenant);
     } else {
       std::string key_name = make_key_name(name.c_str());
-      return fh_key(fhk.fh_hk.bucket, key_name.c_str());
+      return fh_key(fhk.fh_hk.bucket, key_name.c_str(), tenant);
     }
   }
 
