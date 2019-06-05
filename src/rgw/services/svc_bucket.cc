@@ -534,7 +534,7 @@ int RGWSI_Bucket::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
                                     optional_yield y)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr, y);
+  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr, boost::none, y);
   if (ret < 0) {
     return ret;
   }

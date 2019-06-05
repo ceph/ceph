@@ -19,6 +19,8 @@
 #include "rgw_metadata.h"
 #include "rgw_mdlog_types.h"
 
+#include "services/svc_rados.h"
+
 #define META_LOG_OBJ_PREFIX "meta.log."
 
 struct RGWMetadataLogInfo {
@@ -36,7 +38,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   using info_callback_t = std::function<void(int, const cls_log_header&)>;
  private:
   cls_log_header header;
-  librados::IoCtx io_ctx;
+  RGWSI_RADOS::Obj io_obj;
   librados::AioCompletion *completion;
   std::mutex mutex; //< protects callback between cancel/complete
   boost::optional<info_callback_t> callback; //< cleared on cancel
@@ -44,7 +46,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   explicit RGWMetadataLogInfoCompletion(info_callback_t callback);
   ~RGWMetadataLogInfoCompletion() override;
 
-  librados::IoCtx& get_io_ctx() { return io_ctx; }
+  RGWSI_RADOS::Obj& get_io_obj() { return io_obj; }
   cls_log_header& get_header() { return header; }
   librados::AioCompletion* get_completion() { return completion; }
 
