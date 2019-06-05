@@ -930,7 +930,7 @@ EOF
 
         run 'mds' $name $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
         if [ "$standby" -eq 1 ]; then
-            run 'mds' $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
+            run 'mds' $name $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
         fi
 
         #valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
