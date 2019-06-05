@@ -140,6 +140,9 @@ namespace rgw {
       }
       DECODE_FINISH(bl);
     }
+
+    friend std::ostream& operator<<(std::ostream &os, fh_key const &fhk);
+
   }; /* fh_key */
 
   WRITE_CLASS_ENCODER(fh_key);
@@ -1058,14 +1061,14 @@ namespace rgw {
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
+      fh_key fhk = parent->make_fhk(obj_name);
 
       lsubdout(get_context(), rgw, 10)
 	<< __func__ << " lookup called on "
 	<< parent->object_name() << " for " << key_name
 	<< " (" << obj_name << ")"
+	<< " -> " << fhk
 	<< dendl;
-
-      fh_key fhk = parent->make_fhk(obj_name);
 
     retry:
       RGWFileHandle* fh =
