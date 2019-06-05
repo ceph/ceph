@@ -38,11 +38,6 @@ public:
   void notify_unlink(CInode *in);
   bool is_any_dirty() const { return !dirty_items.empty(); }
 
-  void _fetch_file_finish(inodeno_t ino, int r);
-  void _open_ino_finish(inodeno_t ino, int r);
-  void _prefetch_inodes();
-  void _prefetch_dirfrags();
-
   void commit(MDSContext *c, uint64_t log_seq, int op_prio);
   uint64_t get_committed_log_seq() const { return committed_log_seq; }
   uint64_t get_committing_log_seq() const { return committing_log_seq; }
@@ -144,6 +139,7 @@ protected:
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
   void _prefetch_dirfrags();
+  void _fetch_file_finish(inodeno_t ino, int r);
 
   MDSRank *mds;
 

@@ -5329,16 +5329,12 @@ bool MDCache::process_imported_caps()
 {
   dout(10) << "process_imported_caps" << dendl;
 
-  if (!open_file_table.is_prefetched() &&
-      open_file_table.prefetch_inodes()) {
-    open_file_table.wait_for_prefetch(
-	new MDSInternalContextWrapper(mds,
-	  new LambdaContext([this](int r) {
-	    ceph_assert(rejoin_gather.count(mds->get_nodeid()));
-	    process_imported_caps();
-	    })
-	  )
-	);
+  if (!open_file_table.is_loaded()) {
+    open_file_table.wait_for_load(new MDSInternalContextWrapper(mds,
+          new LambdaContext([this](int r) {
+            ceph_assert(rejoin_gather.count(mds->get_nodeid()));
+            process_imported_caps();
+            })));
     return true;
   }
 
