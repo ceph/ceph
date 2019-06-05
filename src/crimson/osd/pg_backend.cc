@@ -11,7 +11,7 @@
 
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 #include "replicated_backend.h"
 #include "ec_backend.h"
 #include "exceptions.h"
@@ -25,7 +25,7 @@ namespace {
 std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
                                              const pg_pool_t& pool,
 					     ceph::os::CollectionRef coll,
-                                             ceph::os::CyanStore* store,
+                                             ceph::os::FuturizedStore* store,
                                              const ec_profile_t& ec_profile)
 {
   switch (pool.type) {
@@ -43,7 +43,7 @@ std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     ceph::os::CyanStore* store)
+                     ceph::os::FuturizedStore* store)
   : shard{shard},
     coll{coll},
     store{store}
@@ -109,7 +109,7 @@ PGBackend::_load_os(const hobject_t& oid)
                          OI_ATTR).then_wrapped([oid, this](auto fut) {
     if (fut.failed()) {
       auto ep = std::move(fut).get_exception();
-      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+      if (!ceph::os::FuturizedStore::EnoentException::is_class_of(ep)) {
         std::rethrow_exception(ep);
       }
       return seastar::make_ready_future<cached_os_t>(
@@ -138,7 +138,7 @@ PGBackend::_load_ss(const hobject_t& oid)
     std::unique_ptr<SnapSet> snapset;
     if (fut.failed()) {
       auto ep = std::move(fut).get_exception();
-      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+      if (!ceph::os::FuturizedStore::EnoentException::is_class_of(ep)) {
         std::rethrow_exception(ep);
       } else {
         snapset = std::make_unique<SnapSet>();

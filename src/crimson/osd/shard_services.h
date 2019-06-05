@@ -22,7 +22,7 @@ namespace ceph::mon {
 }
 
 namespace ceph::os {
-  class CyanStore;
+  class FuturizedStore;
 }
 
 class PerfCounters;
@@ -40,7 +40,7 @@ class ShardServices {
   ceph::net::Messenger &public_msgr;
   ceph::mon::Client &monc;
   ceph::mgr::Client &mgrc;
-  ceph::os::CyanStore &store;
+  ceph::os::FuturizedStore &store;
 
   CephContext cct;
 
@@ -53,14 +53,14 @@ public:
     ceph::net::Messenger &public_msgr,
     ceph::mon::Client &monc,
     ceph::mgr::Client &mgrc,
-    ceph::os::CyanStore &store);
+    ceph::os::FuturizedStore &store);
 
   seastar::future<> send_to_osd(
     int peer,
     MessageRef m,
     epoch_t from_epoch);
 
-  ceph::os::CyanStore &get_store() {
+  ceph::os::FuturizedStore &get_store() {
     return store;
   }
 
