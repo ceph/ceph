@@ -53,13 +53,13 @@ protected:
   bool going_down;
 
   uint64_t data_size;
+  uint32_t skipped;
 
-  std::list<bufferlist> data;
+  std::vector<buffer::list> data;
 
   Mutex m_lock;
   Cond cond;
-
-  bufferlist delim;
+  buffer::list delim;
 };
 
 #endif
