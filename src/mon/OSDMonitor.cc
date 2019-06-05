@@ -91,6 +91,27 @@ static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
 static const string OSD_SNAP_PREFIX("osd_snap");
 
+/*
+
+  OSD snapshot metadata
+  ---------------------
+
+  "removed_epoch_%llu_%08lx" % (pool, epoch)
+   -> interval_set<snapid_t>
+
+  "removed_snap_%llu_%016llx" % (pool, last_snap)
+   -> { first_snap, end_snap, epoch }   (last_snap = end_snap - 1)
+
+  "purged_snap_%llu_%016llx" % (pool, last_snap)
+   -> { first_snap, end_snap, epoch }   (last_snap = end_snap - 1)
+
+  - note that the {removed,purged}_snap put the last snap in they key so
+    that we can use forward iteration only to search for an epoch in an
+    interval.  e.g., to test if epoch N is removed/purged, we'll find a key
+    >= N that either does or doesn't contain the given snap.
+
+  */
+
 namespace {
 
 const uint32_t MAX_POOL_APPLICATIONS = 4;
