@@ -2,7 +2,7 @@ tasks:
 - install:
 - exec:
     mon.b:
-    - date -u -s @$(expr $(date -u +%s) + 10)
+    - date -u -s @$(expr $(date -u +%s) + 2)
 - ceph:
     wait-for-healthy: false
     log-whitelist:
