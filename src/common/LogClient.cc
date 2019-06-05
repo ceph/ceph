@@ -35,50 +35,57 @@ int parse_log_client_options(CephContext *cct,
 {
   ostringstream oss;
 
-  int r = get_conf_str_map_helper(cct->_conf->clog_to_monitors, oss,
-                                  &log_to_monitors, CLOG_CONFIG_DEFAULT_KEY);
+  int r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_monitors"), oss,
+    &log_to_monitors, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_monitors'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog, oss,
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_syslog"), oss,
                               &log_to_syslog, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_facility, oss,
-                              &log_channels, CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_syslog_facility"), oss,
+    &log_channels, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_level, oss,
-                              &log_prios, CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_syslog_level"), oss,
+    &log_prios, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog, oss,
-                              &log_to_graylog, CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_graylog"), oss,
+    &log_to_graylog, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_host, oss,
-                              &log_to_graylog_host, CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_graylog_host"), oss,
+    &log_to_graylog_host, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog_host'" << dendl;
     return r;
   }
 
-  r = get_conf_str_map_helper(cct->_conf->clog_to_graylog_port, oss,
-                              &log_to_graylog_port, CLOG_CONFIG_DEFAULT_KEY);
+  r = get_conf_str_map_helper(
+    cct->_conf.get_val<string>("clog_to_graylog_port"), oss,
+    &log_to_graylog_port, CLOG_CONFIG_DEFAULT_KEY);
   if (r < 0) {
     lderr(cct) << __func__ << " error parsing 'clog_to_graylog_port'" << dendl;
     return r;
