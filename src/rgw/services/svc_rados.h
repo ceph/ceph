@@ -8,6 +8,8 @@
 #include "common/RWLock.h"
 
 
+class RGWAsyncRadosProcessor;
+
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}
@@ -29,8 +31,10 @@ class RGWSI_RADOS : public RGWServiceInstance
   uint32_t next_rados_handle{0};
   RWLock handle_lock;
   std::map<pthread_t, int> rados_map;
+  std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   int do_start() override;
+  void shutdown() override;
 
   librados::Rados* get_rados_handle(int rados_handle);
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx, int rados_handle);
@@ -41,12 +45,16 @@ class RGWSI_RADOS : public RGWServiceInstance
                    bool *is_truncated);
 
 public:
-  RGWSI_RADOS(CephContext *cct): RGWServiceInstance(cct),
-                                 handle_lock("rados_handle_lock") {}
+  RGWSI_RADOS(CephContext *cct);
+  ~RGWSI_RADOS();
 
   void init() {}
 
   uint64_t instance_id();
+
+  RGWAsyncRadosProcessor *get_async_processor() {
+    return async_processor.get();
+  }
 
   class Handle;
 

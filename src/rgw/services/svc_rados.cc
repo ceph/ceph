@@ -4,6 +4,7 @@
 #include "common/errno.h"
 #include "osd/osd_types.h"
 #include "rgw/rgw_tools.h"
+#include "rgw/rgw_cr_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -42,6 +43,15 @@ static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& 
   return 0;
 }
 
+RGWSI_RADOS::RGWSI_RADOS(CephContext *cct): RGWServiceInstance(cct),
+                                            handle_lock("rados_handle_lock")
+{
+}
+
+RGWSI_RADOS::~RGWSI_RADOS()
+{
+}
+
 int RGWSI_RADOS::do_start()
 {
   auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
@@ -57,7 +67,18 @@ int RGWSI_RADOS::do_start()
     }
   }
   std::swap(handles, rados);
+
+  async_processor.reset(new RGWAsyncRadosProcessor(cct, cct->_conf->rgw_num_async_rados_threads));
+  async_processor->start();
+
   return 0;
+}
+
+void RGWSI_RADOS::shutdown()
+{
+  if (async_processor) {
+    async_processor->stop();
+  }
 }
 
 librados::Rados* RGWSI_RADOS::get_rados_handle(int rados_handle)

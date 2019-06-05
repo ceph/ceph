@@ -405,8 +405,6 @@ class RGWRados
   bool run_sync_thread;
   bool run_reshard_thread;
 
-  RGWAsyncRadosProcessor* async_rados;
-
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
