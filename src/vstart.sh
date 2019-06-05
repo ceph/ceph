@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:4; sh-basic-offset:4; indent-tabs-mode:nil -*-
+# vim: softtabstop=4 shiftwidth=4 expandtab
 
 # abort on failure
 set -e
