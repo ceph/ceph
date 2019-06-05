@@ -6245,6 +6245,40 @@ struct get_obj_data {
   }
 }
 
+bool get_obj_data::deterministic_hash_is_local(string oid) {
+	return (deterministic_hash(oid).compare(cct->_conf->rgw_host)==0);
+}
+
+string get_obj_data::deterministic_hash(string oid) {
+
+  std::string location = cct->_conf->rgw_l2_hosts;
+  string delimiters(",");
+  std::vector<std::string> tokens = split(location, ",");
+  int mod = tokens.size();
+
+  std::string::size_type sz;   // alias of size_t
+  vector<string> sv = split(oid, "_");
+  int hash = std::stoi(sv[sv.size()-1], &sz);
+  return tokens[hash%mod];
+}
+
+void get_obj_data::add_pending_oid(std::string oid)
+{
+  pending_oid_list.push_back(oid);
+}
+
+string get_obj_data::get_pending_oid()
+{
+  string str;
+  str.clear();
+  if (!pending_oid_list.empty()) {
+    str = pending_oid_list.front();
+    pending_oid_list.pop_front();
+  }
+  return str;
+}
+
+
 void get_obj_data::cache_unmap_io(off_t ofs){
 	
   cache_lock.Lock();
