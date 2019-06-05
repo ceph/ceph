@@ -523,7 +523,7 @@ int RGWSI_Bucket::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
                                     RGWBucketEnt *ent)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr);
+  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr, boost::none);
   if (ret < 0) {
     return ret;
   }

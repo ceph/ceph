@@ -7,6 +7,7 @@
 #include "rgw/rgw_zone.h"
 
 #include "cls/otp/cls_otp_client.h"
+#include "cls/log/cls_log_client.h"
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -246,5 +247,173 @@ int RGWSI_Cls::MFA::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t
   }
 
   return 0;
+}
+
+void RGWSI_Cls::TimeLog::prepare_entry(cls_log_entry& entry,
+                                       const real_time& ut,
+                                       const string& section,
+                                       const string& key,
+                                       bufferlist& bl)
+{
+  cls_log_add_prepare_entry(entry, utime_t(ut), section, key, bl);
+}
+
+int RGWSI_Cls::TimeLog::init_obj(const string& oid, RGWSI_RADOS::Obj& obj)
+{
+  rgw_raw_obj o(zone_svc->get_zone_params().log_pool, oid);
+  obj = rados_svc->obj(o);
+  return obj.open();
+
+}
+int RGWSI_Cls::TimeLog::add(const string& oid,
+                            const real_time& ut,
+                            const string& section,
+                            const string& key,
+                            bufferlist& bl,
+			    optional_yield y)
+{
+  RGWSI_RADOS::Obj obj;
+
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  utime_t t(ut);
+  cls_log_add(op, t, section, key, bl);
+
+  return obj.operate(&op, y);
+}
+
+int RGWSI_Cls::TimeLog::add(const string& oid,
+                            std::list<cls_log_entry>& entries,
+                            librados::AioCompletion *completion,
+                            bool monotonic_inc,
+                            optional_yield y)
+{
+  RGWSI_RADOS::Obj obj;
+
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls_log_add(op, entries, monotonic_inc);
+
+  if (!completion) {
+    r = obj.operate(&op, y);
+  } else {
+    r = obj.aio_operate(completion, &op);
+  }
+  return r;
+}
+
+int RGWSI_Cls::TimeLog::list(const string& oid,
+                             const real_time& start_time,
+                             const real_time& end_time,
+                             int max_entries, std::list<cls_log_entry>& entries,
+                             const string& marker,
+                             string *out_marker,
+                             bool *truncated,
+                             optional_yield y)
+{
+  RGWSI_RADOS::Obj obj;
+
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+
+  utime_t st(start_time);
+  utime_t et(end_time);
+
+  cls_log_list(op, st, et, marker, max_entries, entries,
+	       out_marker, truncated);
+
+  bufferlist obl;
+
+  int ret = obj.operate(&op, &obl, y);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWSI_Cls::TimeLog::info(const string& oid,
+                             cls_log_header *header,
+                             optional_yield y)
+{
+  RGWSI_RADOS::Obj obj;
+
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+
+  cls_log_info(op, header);
+
+  bufferlist obl;
+
+  int ret = obj.operate(&op, &obl, y);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWSI_Cls::TimeLog::info_async(RGWSI_RADOS::Obj& obj,
+                                   const string& oid,
+                                   cls_log_header *header,
+                                   librados::AioCompletion *completion)
+{
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+
+  cls_log_info(op, header);
+
+  int ret = obj.aio_operate(completion, &op, nullptr);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWSI_Cls::TimeLog::trim(const string& oid,
+                             const real_time& start_time,
+                             const real_time& end_time,
+                             const string& from_marker,
+                             const string& to_marker,
+                             librados::AioCompletion *completion,
+                             optional_yield y)
+{
+  RGWSI_RADOS::Obj obj;
+
+  int r = init_obj(oid, obj);
+  if (r < 0) {
+    return r;
+  }
+
+  utime_t st(start_time);
+  utime_t et(end_time);
+
+  librados::ObjectWriteOperation op;
+  cls_log_trim(op, st, et, from_marker, to_marker);
+
+  if (!completion) {
+    r = obj.operate(&op, y);
+  } else {
+    r = obj.aio_operate(completion, &op);
+  }
+  return r;
 }
 

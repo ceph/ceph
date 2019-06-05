@@ -1381,19 +1381,6 @@ public:
   void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
   void shard_name(const string& prefix, unsigned shard_id, string& name);
   int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
-  void time_log_prepare_entry(cls_log_entry& entry, const ceph::real_time& ut, const string& section, const string& key, bufferlist& bl);
-  int time_log_add_init(librados::IoCtx& io_ctx);
-  int time_log_add(const string& oid, list<cls_log_entry>& entries,
-		   librados::AioCompletion *completion, bool monotonic_inc = true);
-  int time_log_add(const string& oid, const ceph::real_time& ut, const string& section, const string& key, bufferlist& bl);
-  int time_log_list(const string& oid, const ceph::real_time& start_time, const ceph::real_time& end_time,
-                    int max_entries, list<cls_log_entry>& entries,
-		    const string& marker, string *out_marker, bool *truncated);
-  int time_log_info(const string& oid, cls_log_header *header);
-  int time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion);
-  int time_log_trim(const string& oid, const ceph::real_time& start_time, const ceph::real_time& end_time,
-                    const string& from_marker, const string& to_marker,
-                    librados::AioCompletion *completion = nullptr);
 
   int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
   int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);

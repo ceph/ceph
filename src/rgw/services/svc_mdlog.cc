@@ -1,4 +1,5 @@
 #include "svc_mdlog.h"
+#include "svc_rados.h"
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 
@@ -23,11 +24,12 @@ RGWSI_MDLog::RGWSI_MDLog(CephContext *cct) : RGWServiceInstance(cct) {
 RGWSI_MDLog::~RGWSI_MDLog() {
 }
 
-int RGWSI_MDLog::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc)
+int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc)
 {
   svc.zone = zone_svc;
   svc.sysobj = sysobj_svc;
   svc.mdlog = this;
+  svc.rados = rados_svc;
 
   return 0;
 }
@@ -101,13 +103,16 @@ class ReadHistoryCR : public RGWCoroutine {
   Cursor *cursor;
   RGWObjVersionTracker *objv_tracker;
   RGWMetadataLogHistory state;
+  RGWAsyncRadosProcessor *async_processor;
+
  public:
   ReadHistoryCR(const Svc& svc,
                 Cursor *cursor,
                 RGWObjVersionTracker *objv_tracker)
     : RGWCoroutine(svc.zone->ctx()), svc(svc),
-    cursor(cursor),
-      objv_tracker(objv_tracker)
+      cursor(cursor),
+      objv_tracker(objv_tracker),
+      async_processor(svc.rados->get_async_processor())
   {}
 
   int operate() {
@@ -118,7 +123,7 @@ class ReadHistoryCR : public RGWCoroutine {
         constexpr bool empty_on_enoent = false;
 
         using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
-        call(new ReadCR(store->get_async_rados(), svc.sysobj, obj,
+        call(new ReadCR(async_processor, svc.sysobj, obj,
                         &state, empty_on_enoent, objv_tracker));
       }
       if (retcode < 0) {
@@ -146,12 +151,15 @@ class WriteHistoryCR : public RGWCoroutine {
   Cursor cursor;
   RGWObjVersionTracker *objv;
   RGWMetadataLogHistory state;
+  RGWAsyncRadosProcessor *async_processor;
+
  public:
   WriteHistoryCR(Svc& svc,
                  const Cursor& cursor,
                  RGWObjVersionTracker *objv)
     : RGWCoroutine(svc.zone->ctx()), svc(svc),
-      cursor(cursor), objv(objv)
+      cursor(cursor), objv(objv),
+      async_processor(svc.rados->get_async_processor())
   {}
 
   int operate() {
@@ -164,7 +172,7 @@ class WriteHistoryCR : public RGWCoroutine {
                         RGWMetadataLogHistory::oid};
 
         using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
-        call(new WriteCR(store->get_async_rados(), svc.sysobj, obj, state, objv));
+        call(new WriteCR(async_processor, svc.sysobj, obj, state, objv));
       }
       if (retcode < 0) {
         ldout(cct, 1) << "failed to write mdlog history: "
