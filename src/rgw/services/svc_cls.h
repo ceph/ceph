@@ -17,6 +17,7 @@
 #pragma once
 
 #include "cls/otp/cls_otp_types.h"
+#include "cls/log/cls_log_types.h"
 
 #include "rgw/rgw_service.h"
 
@@ -78,13 +79,59 @@ public:
 		 RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime, optional_yield y);
   } mfa;
 
-  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct) {}
+  class TimeLog : public ClsSubService {
+    int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
+  public:
+    TimeLog(CephContext *cct): ClsSubService(cct) {}
+
+    void prepare_entry(cls_log_entry& entry,
+                       const real_time& ut,
+                       const string& section,
+                       const string& key,
+                       bufferlist& bl);
+    int add(const string& oid,
+            const real_time& ut,
+            const string& section,
+            const string& key,
+            bufferlist& bl,
+            optional_yield y);
+    int add(const string& oid,
+            std::list<cls_log_entry>& entries,
+            librados::AioCompletion *completion,
+            bool monotonic_inc,
+            optional_yield y);
+    int list(const string& oid,
+             const real_time& start_time,
+             const real_time& end_time,
+             int max_entries, list<cls_log_entry>& entries,
+             const string& marker,
+             string *out_marker,
+             bool *truncated,
+             optional_yield y);
+    int info(const string& oid,
+             cls_log_header *header,
+             optional_yield y);
+    int info_async(RGWSI_RADOS::Obj& obj,
+                   const string& oid,
+                   cls_log_header *header,
+                   librados::AioCompletion *completion);
+    int trim(const string& oid,
+             const real_time& start_time,
+             const real_time& end_time,
+             const string& from_marker,
+             const string& to_marker,
+             librados::AioCompletion *completion,
+             optional_yield y);
+  } timelog;
+
+  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct) {}
 
   void init(RGWSI_Zone *_zone_svc, RGWSI_RADOS *_rados_svc) {
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
 
     mfa.init(this, zone_svc, rados_svc);
+    timelog.init(this, zone_svc, rados_svc);
   }
 
   int do_start() override;

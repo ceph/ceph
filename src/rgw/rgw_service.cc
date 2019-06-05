@@ -73,7 +73,7 @@ int RGWServices_Def::init(CephContext *cct,
                bi_rados.get(), meta.get(), meta_be_sobj.get(),
                sync_modules.get());
   cls->init(zone.get(), rados.get());
-  mdlog->init(zone.get(), sysobj.get());
+  mdlog->init(rados.get(), zone.get(), sysobj.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());

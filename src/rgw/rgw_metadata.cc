@@ -19,6 +19,7 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
 #include "services/svc_meta_be_sobj.h"
+#include "services/svc_cls.h"
 
 #include "include/ceph_assert.h"
 
@@ -113,7 +114,7 @@ int RGWMetadataLog::add_entry(const string& hash_key, const string& section, con
   store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
-  return store->time_log_add(oid, now, section, key, bl);
+  return store->svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
 }
 
 int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
@@ -122,7 +123,7 @@ int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int sha
 
   mark_modified(shard_id);
   store->shard_name(prefix, shard_id, oid);
-  return store->time_log_add(oid, entries, completion, false);
+  return store->svc.cls->timelog.add(oid, entries, completion, false, null_yield);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
@@ -158,9 +159,9 @@ int RGWMetadataLog::list_entries(void *handle,
   }
 
   std::string next_marker;
-  int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
-				 max_entries, entries, ctx->marker,
-				 &next_marker, truncated);
+  int ret = store->svc.cls->timelog.list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+                                         max_entries, entries, ctx->marker,
+                                         &next_marker, truncated, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -182,7 +183,7 @@ int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
 
   cls_log_header header;
 
-  int ret = store->time_log_info(oid, &header);
+  int ret = store->svc.cls->timelog.info(oid, &header, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -218,9 +219,9 @@ int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfoCompletion *c
 
   completion->get(); // hold a ref until the completion fires
 
-  return store->time_log_info_async(completion->get_io_ctx(), oid,
-                                    &completion->get_header(),
-                                    completion->get_completion());
+  return store->svc.cls->timelog.info_async(completion->get_io_obj(), oid,
+                                             &completion->get_header(),
+                                             completion->get_completion());
 }
 
 int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_time& end_time,
@@ -231,7 +232,7 @@ int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_ti
 
   int ret;
 
-  ret = store->time_log_trim(oid, from_time, end_time, start_marker, end_marker);
+  ret = store->svc.cls->timelog.trim(oid, from_time, end_time, start_marker, end_marker, nullptr, null_yield);
 
   if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;

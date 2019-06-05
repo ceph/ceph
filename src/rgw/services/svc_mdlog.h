@@ -29,6 +29,7 @@ class RGWCoroutine;
 
 class RGWSI_Zone;
 class RGWSI_SysObj;
+class RGWSI_RADOS;
 
 namespace mdlog {
   class ReadHistoryCR;
@@ -40,6 +41,7 @@ class RGWSI_MDLog : public RGWServiceInstance
   friend class mdlog::ReadHistoryCR;
   friend class mdlog::WriteHistoryCR;
 
+  RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
   RGWSI_SysObj *sysobj_svc{nullptr};
 
@@ -62,12 +64,15 @@ public:
   virtual ~RGWSI_MDLog();
 
   struct Svc {
+    RGWSI_RADOS *rados{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_MDLog *mdlog{nullptr};
   } svc;
 
-  int init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc);
+  int init(RGWSI_RADOS *_rados_svc,
+           RGWSI_Zone *_zone_svc,
+           RGWSI_SysObj *_sysobj_svc);
 
   int do_start() override;
 
