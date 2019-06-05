@@ -405,7 +405,7 @@ public:
   void handle_initialize(PeeringCtx &rctx);
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
-  void print(ostream& os) const;
+  void print(std::ostream& os) const;
 
 private:
   void do_peering_event(
