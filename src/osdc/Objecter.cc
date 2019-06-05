@@ -4955,6 +4955,22 @@ Objecter::OSDSession::~OSDSession()
   ceph_assert(command_ops.empty());
 }
 
+Objecter::Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+		   Finisher *fin,
+		   double mon_timeout,
+		   double osd_timeout) :
+  Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
+  trace_endpoint("0.0.0.0", 0, "Objecter"),
+  osdmap{std::make_unique<OSDMap>()},
+  homeless_session(new OSDSession(cct, -1)),
+  mon_timeout(ceph::make_timespan(mon_timeout)),
+  osd_timeout(ceph::make_timespan(osd_timeout)),
+  op_throttle_bytes(cct, "objecter_bytes",
+		    cct->_conf->objecter_inflight_op_bytes),
+  op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+  retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
+{}
+
 Objecter::~Objecter()
 {
   ceph_assert(homeless_session->get_nref() == 1);
