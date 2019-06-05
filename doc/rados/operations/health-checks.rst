@@ -201,7 +201,7 @@ ____________
 
 One or more cluster flags of interest has been set.  These flags include:
 
-* *full* - the cluster is flagged as full and cannot service writes
+* *full* - the cluster is flagged as full and cannot serve writes
 * *pauserd*, *pausewr* - paused reads or writes
 * *noup* - OSDs are not allowed to start
 * *nodown* - OSD failure reports are being ignored, such that the
@@ -223,7 +223,8 @@ With the exception of *full*, these flags can be set or cleared with::
 OSD_FLAGS
 _________
 
-One or more OSDs or CRUSH nodes has a flag of interest set.  These flags include:
+One or more OSDs or CRUSH {nodes,device classes} has a flag of interest set.
+These flags include:
 
 * *noup*: these OSDs are not allowed to start
 * *nodown*: failure reports for these OSDs will be ignored
@@ -232,15 +233,19 @@ One or more OSDs or CRUSH nodes has a flag of interest set.  These flags include
 * *noout*: if these OSDs are down they will not automatically be marked
   `out` after the configured interval
 
-These flags can be set and cleared with::
+These flags can be set and cleared in batch with::
 
-  ceph osd add-<flag> <osd-id-or-crush-node-name>
-  ceph osd rm-<flag> <osd-id-or-crush-node-name>
+  ceph osd set-group <flags> <who>
+  ceph osd unset-group <flags> <who>
 
 For example, ::
 
-  ceph osd rm-nodown osd.123
-  ceph osd rm-noout hostfoo
+  ceph osd set-group noup,noout osd.0 osd.1
+  ceph osd unset-group noup,noout osd.0 osd.1
+  ceph osd set-group noup,noout host-foo
+  ceph osd unset-group noup,noout host-foo
+  ceph osd set-group noup,noout class-hdd
+  ceph osd unset-group noup,noout class-hdd
 
 OLD_CRUSH_TUNABLES
 __________________
