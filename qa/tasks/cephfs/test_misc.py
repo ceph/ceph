@@ -123,12 +123,15 @@ class TestMisc(CephFSTestCase):
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
 
+        mount_a_client_id = self.mount_a.get_global_id()
         self.mount_a.kill()
         self.mount_a.kill_cleanup()
 
         time.sleep(session_autoclose * 1.5)
         ls_data = self.fs.mds_asok(['session', 'ls'])
         self.assert_session_count(1, ls_data)
+
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
 
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
