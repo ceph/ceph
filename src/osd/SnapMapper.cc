@@ -21,7 +21,8 @@
 
 using std::string;
 
-const string SnapMapper::MAPPING_PREFIX = "MAP_";
+const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
+const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
 /*
@@ -33,6 +34,16 @@ const string SnapMapper::OBJECT_PREFIX = "OBJ_";
   e.g., clean up on deletion).
 
   "MAP_"
+  + ("%016x" % snapid)
+  + "_"
+  + (".%x" % shard_id)
+  + "_"
+  + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
+  -> SnapMapping::Mapping { snap, hoid }
+
+  "SNA_"
+  + ("%lld" % poolid)
+  + "_"
   + ("%016x" % snapid)
   + "_"
   + (".%x" % shard_id)
@@ -95,20 +106,31 @@ struct Mapping {
 };
 WRITE_CLASS_ENCODER(Mapping)
 
-string SnapMapper::get_prefix(snapid_t snap)
+string SnapMapper::get_legacy_prefix(snapid_t snap)
 {
   char buf[100];
   int len = snprintf(
     buf, sizeof(buf),
-    "%.*X_", (int)(sizeof(snap)*2),
-    static_cast<unsigned>(snap));
+    "%.*X_",
+    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
+  return LEGACY_MAPPING_PREFIX + string(buf, len);
+}
+
+string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
+{
+  char buf[100];
+  int len = snprintf(
+    buf, sizeof(buf),
+    "%lld_%.*X_",
+    (long long)pool,
+    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
   return MAPPING_PREFIX + string(buf, len);
 }
 
 string SnapMapper::to_raw_key(
   const pair<snapid_t, hobject_t> &in)
 {
-  return get_prefix(in.first) + shard_prefix + in.second.to_str();
+  return get_prefix(pool, in.first) + shard_prefix + in.second.to_str();
 }
 
 pair<string, bufferlist> SnapMapper::to_raw(
@@ -322,7 +344,7 @@ int SnapMapper::get_next_objects_to_trim(
   for (set<string>::iterator i = prefixes.begin();
        i != prefixes.end() && out->size() < max && r == 0;
        ++i) {
-    string prefix(get_prefix(snap) + *i);
+    string prefix(get_prefix(pool, snap) + *i);
     string pos = prefix;
     while (out->size() < max) {
       pair<string, bufferlist> next;
