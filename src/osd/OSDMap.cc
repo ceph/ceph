@@ -598,7 +598,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 8;
+    uint8_t target_v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -641,6 +641,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 8) {
       encode(new_crush_node_flags, bl);
+    }
+    if (target_v >= 9) {
+      encode(new_device_class_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -851,7 +854,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(8, bl); // extended, osd-only data
+    DECODE_START(9, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -904,6 +907,9 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 8) {
       decode(new_crush_node_flags, bl);
+    }
+    if (struct_v >= 9) {
+      decode(new_device_class_flags, bl);
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1211,6 +1217,18 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("new_crush_node_flags");
   for (auto& i : new_crush_node_flags) {
     f->open_object_section("node");
+    f->dump_int("id", i.first);
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_device_class_flags");
+  for (auto& i : new_device_class_flags) {
+    f->open_object_section("device_class");
     f->dump_int("id", i.first);
     set<string> st;
     calc_state_set(i.second, st);
@@ -2131,6 +2149,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  for (auto& i : inc.new_device_class_flags) {
+    if (i.second) {
+      device_class_flags[i.first] = i.second;
+    } else {
+      device_class_flags.erase(i.first);
+    }
+  }
+
   // cluster snapshot?
   if (inc.cluster_snapshot.length()) {
     cluster_snapshot = inc.cluster_snapshot;
@@ -2178,6 +2204,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
       // are decoding and applying on their end.  if we won't encode
       // it in the canonical version, don't change it.
       ++crush_version;
+    }
+    for (auto it = device_class_flags.begin();
+         it != device_class_flags.end();) {
+      const char* class_name = crush->get_class_name(it->first);
+      if (!class_name) // device class is gone
+        it = device_class_flags.erase(it);
+      else
+        it++;
     }
   }
 
@@ -2832,7 +2866,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 8;
+    uint8_t target_v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2884,6 +2918,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 8) {
       encode(crush_node_flags, bl);
+    }
+    if (target_v >= 9) {
+      encode(device_class_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3145,7 +3182,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(8, bl); // extended, osd-only data
+    DECODE_START(9, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blacklist, bl);
@@ -3205,6 +3242,11 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       decode(crush_node_flags, bl);
     } else {
       crush_node_flags.clear();
+    }
+    if (struct_v >= 9) {
+      decode(device_class_flags, bl);
+    } else {
+      device_class_flags.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -3454,6 +3496,19 @@ void OSDMap::dump(Formatter *f) const
   for (auto& i : crush_node_flags) {
     string s = crush->item_exists(i.first) ? crush->get_item_name(i.first)
       : stringify(i.first);
+    f->open_array_section(s.c_str());
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("device_class_flags");
+  for (auto& i : device_class_flags) {
+    const char* class_name = crush->get_class_name(i.first);
+    string s = class_name ? class_name : stringify(i.first);
     f->open_array_section(s.c_str());
     set<string> st;
     calc_state_set(i.second, st);
@@ -5670,9 +5725,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	detail.push_back(ss.str());
       }
     }
+    for (auto& i : device_class_flags) {
+      const char* class_name = crush->get_class_name(i.first);
+      if (i.second && class_name) {
+        ostringstream ss;
+        set<string> states;
+        OSDMap::calc_state_set(i.second, states);
+        ss << "device class '" << class_name << "' has flags " << states;
+        detail.push_back(ss.str());
+      }
+    }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " OSDs or CRUSH nodes have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
       d.detail.swap(detail);
     }
@@ -5870,7 +5935,7 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   }
 }
 
-unsigned OSDMap::get_crush_node_flags(int osd) const
+unsigned OSDMap::get_osd_crush_node_flags(int osd) const
 {
   unsigned flags = 0;
   if (!crush_node_flags.empty()) {
@@ -5884,5 +5949,23 @@ unsigned OSDMap::get_crush_node_flags(int osd) const
       }
     }
   }
+  return flags;
+}
+
+unsigned OSDMap::get_crush_node_flags(int id) const
+{
+  unsigned flags = 0;
+  auto it = crush_node_flags.find(id);
+  if (it != crush_node_flags.end())
+    flags = it->second;
+  return flags;
+}
+
+unsigned OSDMap::get_device_class_flags(int id) const
+{
+  unsigned flags = 0;
+  auto it = device_class_flags.find(id);
+  if (it != device_class_flags.end())
+    flags = it->second;
   return flags;
 }
