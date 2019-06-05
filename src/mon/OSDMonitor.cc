@@ -941,7 +941,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     dout(10) << __func__ << " no pools, no pg_temp priming" << dendl;
   } else if (all) {
     PrimeTempJob job(next, this);
-    mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk);
+    mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk, {});
     if (job.wait_for(g_conf->mon_osd_prime_pg_temp_max_time)) {
       dout(10) << __func__ << " done in " << job.get_duration() << dendl;
     } else {

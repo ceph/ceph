@@ -31,7 +31,8 @@ public:
       assert(shards == 0);
     }
 
-    // child must implement this
+    // child must implement either form of process
+    virtual void process(const vector<pg_t>& pgs) = 0;
     virtual void process(int64_t poolid, unsigned ps_begin, unsigned ps_end) = 0;
     virtual void complete() = 0;
 
@@ -102,7 +103,9 @@ protected:
     Job *job;
     int64_t pool;
     unsigned begin, end;
+    vector<pg_t> pgs;
 
+    Item(Job *j, vector<pg_t> pgs) : job(j), pgs(pgs) {}
     Item(Job *j, int64_t p, unsigned b, unsigned e)
       : job(j),
 	pool(p),
@@ -157,7 +160,8 @@ public:
 
   void queue(
     Job *job,
-    unsigned pgs_per_item);
+    unsigned pgs_per_item,
+    const vector<pg_t>& input_pgs);
 
   void drain() {
     wq.drain();
@@ -269,6 +273,7 @@ private:
       : Job(osdmap), mapping(m) {
       mapping->_start(*osdmap);
     }
+    void process(const vector<pg_t>& pgs) override {}
     void process(int64_t pool, unsigned ps_begin, unsigned ps_end) override {
       mapping->_update_range(*osdmap, pool, ps_begin, ps_end);
     }
@@ -308,7 +313,7 @@ public:
     ParallelPGMapper& mapper,
     unsigned pgs_per_item) {
     std::unique_ptr<MappingJob> job(new MappingJob(&map, this));
-    mapper.queue(job.get(), pgs_per_item);
+    mapper.queue(job.get(), pgs_per_item, {});
     return job;
   }
 
