@@ -24,25 +24,25 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, logic.epoch)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
-  return *_dout << "mon." << mon->name << "@" << mon->rank
-		<< "(" << mon->get_state_name()
-		<< ").elector(" << epoch << ") ";
+#define dout_prefix _prefix(_dout, elector)
+static ostream& _prefix(std::ostream *_dout, Elector* elector) {
+  return *_dout << "mon." << elector->mon->name << "@" << elector->mon->rank
+		<< "(" << elector->mon->get_state_name()
+		<< ").elector(" << elector->logic.epoch << ") ";
 }
 
 void ElectionLogic::persist_epoch(epoch_t e)
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", e);
-  mon->store->apply_transaction(t);
+  elector->mon->store->apply_transaction(t);
 }
 
 void ElectionLogic::validate_store()
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
-  int r = mon->store->apply_transaction(t);
+  int r = elector->mon->store->apply_transaction(t);
   ceph_assert(r >= 0);
 }
 
@@ -69,21 +69,22 @@ void Elector::shutdown()
   cancel_timer();
 }
 
-void Elector::bump_epoch(epoch_t e) 
+void ElectionLogic::bump_epoch(epoch_t e)
 {
-  dout(10) << "bump_epoch " << logic.epoch << " to " << e << dendl;
-  ceph_assert(logic.epoch <= e);
-  logic.epoch = e;
-  auto t(std::make_shared<MonitorDBStore::Transaction>());
-  t->put(Monitor::MONITOR_NAME, "election_epoch", logic.epoch);
-  mon->store->apply_transaction(t);
-
-  mon->join_election();
-
+  dout(10) << __func__ << epoch << " to " << e << dendl;
+  ceph_assert(epoch <= e);
+  epoch = e;
+  validate_store();
   // clear up some state
-  logic.electing_me = false;
-  logic.acked_me.clear();
+  electing_me = false;
+  acked_me.clear();
+  elector->_bump_epoch();
+}
+
+void Elector::_bump_epoch()
+{
   peer_info.clear();
+  mon->join_election();
 }
 
 
@@ -101,7 +102,7 @@ void Elector::start()
   
   // start by trying to elect me
   if (logic.epoch % 2 == 0) {
-    bump_epoch(logic.epoch+1);  // odd == election cycle
+    logic.bump_epoch(logic.epoch+1);  // odd == election cycle
   } else {
     // do a trivial db write just to ensure it is writeable.
     auto t(std::make_shared<MonitorDBStore::Transaction>());
@@ -234,7 +235,7 @@ void Elector::victory()
   cancel_timer();
   
   ceph_assert(logic.epoch % 2 == 1);  // election
-  bump_epoch(logic.epoch+1);     // is over!
+  logic.bump_epoch(logic.epoch+1);     // is over!
 
   // tell everyone!
   for (set<int>::iterator p = quorum.begin();
@@ -296,7 +297,7 @@ void Elector::handle_propose(MonOpRequestRef op)
             << dendl;
     nak_old_peer(op);
   } else if (m->epoch > logic.epoch) {
-    bump_epoch(m->epoch);
+    logic.bump_epoch(m->epoch);
   } else if (m->epoch < logic.epoch) {
     // got an "old" propose,
     if (logic.epoch % 2 == 0 &&    // in a non-election cycle
@@ -346,7 +347,7 @@ void Elector::handle_ack(MonOpRequestRef op)
   ceph_assert(m->epoch % 2 == 1); // election
   if (m->epoch > logic.epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
-    bump_epoch(m->epoch);
+    logic.bump_epoch(m->epoch);
     start();
     return;
   }
@@ -418,12 +419,12 @@ void Elector::handle_victory(MonOpRequestRef op)
   // i should have seen this election if i'm getting the victory.
   if (m->epoch != logic.epoch + 1) { 
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
-    bump_epoch(m->epoch);
+    logic.bump_epoch(m->epoch);
     start();
     return;
   }
 
-  bump_epoch(m->epoch);
+  logic.bump_epoch(m->epoch);
 
   // they win
   mon->lose_election(logic.epoch, m->quorum, from,
