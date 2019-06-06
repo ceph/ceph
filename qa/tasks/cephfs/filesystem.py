@@ -595,6 +595,10 @@ class Filesystem(MDSCluster):
     def required_client_features(self, *args, **kwargs):
         c = ["fs", "required_client_features", self.name, *args]
         return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
+    
+    def create_snapshot(self, path, snapshot_name):
+        snap_shot = path + ".snap/" + snapshot_name
+        self.mon_manager.raw_cluster_cmd("mkdir", snap_shot)
 
     # In Octopus+, the PG count can be omitted to use the default. We keep the
     # hard-coded value for deployments of Mimic/Nautilus.

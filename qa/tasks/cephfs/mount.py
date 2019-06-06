@@ -657,6 +657,11 @@ class CephFSMount(object):
             'sudo', 'rm', '-f', os.path.join(self.hostfs_mntpt, filename)
         ])
 
+    def create_snapshot(self, path, snapshot_name):
+        assert(self.is_mounted())
+        snap_shot = path + ".snap/" + snapshot_name
+        self.run_shell(["mkdir", snap_shot])
+
     def _run_python(self, pyscript, py_version='python3'):
         return self.client_remote.run(
                args=['sudo', 'adjust-ulimits', 'daemon-helper', 'kill',

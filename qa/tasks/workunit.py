@@ -9,6 +9,7 @@ import shlex
 
 from tasks.util import get_remote_for_role
 from tasks.util.workunit import get_refspec_after_overrides
+from gevent.event import Event
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -23,7 +24,6 @@ class WorkunitState(object):
     Shared state between the workunit task and any other task that
     might want to observe and/or interact with the data being created,
     such as creating snapshots of it or copying it out (like the rsync task).
-
     Usage from workunit:
         ctx.workunit_state = WorkunitState()
         # ... Create my directory
@@ -31,17 +31,14 @@ class WorkunitState(object):
         # ... Do some long running activity
         ctx.workunit_state.finished()
         # ... Remove my directory
-
     Usage from observer:
-
         # ... wait until hasattr(ctx, "workunit_state") is true...
         should_stop = ctx.workunit_state.start_observing()
         while not should_stop:
             # ... do some work on the workunit directory, it is
             #     guaranteed to exist until we call stop_observing...
-            finished = ctx.workunit_state.observer_should_stop()
+            should_stop = ctx.workunit_state.observer_should_stop()
         ctx.workunit_state.stop_observing()
-
     """
     def __init__(self):
         # Whether some other task may be acting on this
@@ -86,7 +83,6 @@ class WorkunitState(object):
     def start_observing(self):
         """
         Call this from the observer thread to start observing.
-
         :return: True if the workunit already finished (observer should
                  not touch the workunit dir)
                  False if the workunit has not finished and the observer
@@ -94,7 +90,7 @@ class WorkunitState(object):
         """
         assert not self.observed
         self.workunit_started.wait()
-        finished = self.workunit_finished.is_set():
+        finished = self.workunit_finished.is_set()
         if not finished:
             self.observed = True
             self.workunit_finished.is_set()
@@ -120,7 +116,6 @@ class WorkunitState(object):
         to the workunit directory, and then call stop_observing.
         """
         return self.workunit_finished.is_set()
-
 
 
 def task(ctx, config):
@@ -227,34 +222,30 @@ def task(ctx, config):
 
     ctx.workunit_state = WorkunitState()
 
-    # Execute any non-all workunits
-    log.info("timeout={}".format(timeout))
-    log.info("cleanup={}".format(cleanup))
-    ctx.workunit_state.started()
-    with parallel() as p:
-        for role, tests in clients.items():
-            if role != "all":
-                p.spawn(_run_tests, ctx, refspec, role, tests,
-                        config.get('env'),
-                        basedir=config.get('basedir','qa/workunits'),
-                        timeout=timeout,
-                        cleanup=cleanup,
-                        coverage_and_limits=not config.get('no_coverage_and_limits', None))
-    ctx.workunit_state.finished()
-
-    if cleanup:
-        # Clean up dirs from any non-all workunits
-        for role, created in created_mountpoint.items():
-            _delete_dir(ctx, role, created)
-
-    # Execute any 'all' workunits
     if 'all' in clients:
+        # Execute any 'all' workunits
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
                               config.get('subdir'), timeout=timeout,
                               cleanup=cleanup)
-
+    else:
+        # Execute any non-all workunits
+        ctx.workunit_state.started()
+        log.info("timeout={}".format(timeout))
+        log.info("cleanup={}".format(cleanup))
+        with parallel() as p:
+            for role, tests in clients.items():
+                p.spawn(_run_tests, ctx, refspec, role, tests,
+                        config.get('env'),
+                        basedir=config.get('basedir','qa/workunits'),
+                        timeout=timeout,cleanup=cleanup)
+        ctx.workunit_state.finished()
+        
+    if cleanup:
+        # Clean up dirs from any non-all workunits
+        for role, created in created_mountpoint.items():
+            _delete_dir(ctx, role, created)
 
 def _client_mountpoint(ctx, cluster, id_):
     """

@@ -1,7 +1,9 @@
 import logging
 import contextlib
 import time
+import socket
 from teuthology import misc
+from teuthology.exceptions import CommandFailedError
 from gevent.greenlet import Greenlet
 from gevent.event import Event
 from tasks.cephfs.filesystem import Filesystem
@@ -98,30 +100,28 @@ class RSync(Greenlet):
         self.wait_time = self.config.get('waittime', 5)
         self.mount_point = self.config.get('mountpoint')
 
-        self.fs = Filesystem(self.ctx)
-
         self.snap_enable = bool(self.config.get('snapenable', False))
 
-        #Get CephFS mount client and mount object
-        if len(self.ctx.mounts.items()):
-            flag = False
-            for i, j in sorted(self.ctx.mounts.items()):
-                tmp = int(i)
-                if tmp == self.mount_point:
-                    self.mount_point = tmp
-                    self.my_mnt = j
-                if (not self.mount_point) and (not flag):
-                    self.mount_point = tmp
-                    self.my_mnt = j
-                    flag = True
-        else:
-            assert len(self.ctx.mounts.items()) > 0, 'No mount available asserting rsync'
+        self.data_dir = self.config.get('data_dir')
 
+        #Get CephFS mount client and mount object
+        assert len(self.ctx.mounts.items()) > 0, 'No mount available asserting rsync'
+
+        if not self.mount_point:
+            mounts = list(self.ctx.mounts.items())
+            i, j = mounts[0]
+            self.mount_point = i
+            self.my_mnt = j
+        else:
+            for i, j in list(sorted(self.ctx.mounts.items())):
+              if self.mount_point == i:
+                  self.my_mnt = j
+                  break
         #Set source directory for rsync
-        if self.config.get('data_dir'):
+        if self.data_dir:
             self.work_unit = True
             self.source_dir = misc.get_testdir(self.ctx) + '/mnt.{}'.format(self.mount_point) + \
-                              '/{}/'.format(self.config.get('data_dir'))
+                              '/{}/'.format(self.data_dir)
         else:
             self.data_dir = misc.get_testdir(self.ctx) + '/mnt.{}/'.format(self.mount_point) + 'source'
             self.source_dir = self.data_dir + '/subdir'
@@ -148,69 +148,79 @@ class RSync(Greenlet):
         try:
             self.my_mnt.stat(path)
             return True
-        except Exception, e :
+        except Exception as e :
             logging.error(e)
             return False
 
     def do_rsync(self):
 
+        self.fs = Filesystem(self.ctx)
+
         iteration = 0
-        finished = False
+        should_stop = False
 
         # Create destination directory
         self.my_mnt.run_shell(["mkdir", "rsyncdir"])
-
-        if self.snap_enable:
-            # Enable snapshots
-            self.fs.mon_manager.raw_cluster_cmd("mds", "set", "allow_new_snaps", "true", "--yes-i-really-mean-it")
 
         if not self.work_unit:
             # Create a data directory, sub directory and rsync directory
             self.my_mnt.run_shell(["mkdir", "{}".format(self.data_dir)])
             self.my_mnt.run_shell(["mkdir", "{}".format(self.source_dir)])
-            should_stop = False
 
         #Check for source directory exists
         while not self.check_if_dir_exists(self.source_dir):
-            time.sleep(5) # if source dorectory not exists wait for 5s and poll
+            time.sleep(5) # if source directory not exists wait for 5s and poll
             iteration += 1
             if iteration > 5:
-                assert self.check_if_dir_exists(self.source_dir), 'assert, source Directory doesnot exists'
+                assert self.check_if_dir_exists(self.source_dir), 'assert, source Directory does not exists'
 
         # Start observing the event started by workunit task.
         if self.work_unit:
             should_stop = self.ctx.workunit_state.start_observing()
+
+        iteration = 0
 
         while not (should_stop or self.stopping.is_set()):
 
             # rsync data from snapshot. snap is created using workunit IO data
             if self.work_unit and self.snap_enable:
 
-                snap_shot = self.source_dir + '.snap/snap' + '{}'.format(iteration)
+                snapshot_name = 'snap' + '{}'.format(iteration)
 
                 # Create Snapshot
-                self.my_mnt.run_shell(["mkdir", "{}".format(snap_shot)])
+                self.my_mnt.create_snapshot(self.source_dir, snapshot_name)
                 iteration += 1
 
-                self.my_mnt.run_shell(["rsync", "-azvh", "{}".format(snap_shot), "rsyncdir/dir1/"])
+                snap_shot = self.source_dir + '.snap/' + snapshot_name
 
-                # Delete snapshot
-                self.my_mnt.run_shell(["rmdir", "{}".format(snap_shot)])
-
-                # Check for even handler stop message
-                finished = self.ctx.workunit_state.observer_should_stop()
+                try:
+                    self.my_mnt.run_shell(["rsync", "-azvh", snap_shot, "rsyncdir/dir1/"])
+                except CommandFailedError as e:
+                    if e.exitstatus == 24:
+                        log.info("Some files vanished before they could be transferred")
+                    else:
+                        raise
+                except socket.timeout:
+                    log.info("IO timeout between worker and observer")
+                finally:
+                    # Delete snapshot
+                    self.my_mnt.run_shell(["rmdir", "{}".format(snap_shot)])
+                    
+                    # Check for even handler stop message
+                    should_stop = self.ctx.workunit_state.observer_should_stop()
 
             # rsync data from snapshot, snap is created using written pattern data
             elif self.snap_enable:
                 # Create file and add data to the file
                 self.my_mnt.write_test_pattern("{}/file_a".format(self.source_dir), self.file_size * 1024 * 1024)
-                snap_shot = self.data_dir + '/.snap/snap' + '{}'.format(iteration)
+                
+                snapshot_name = 'snap' + '{}'.format(iteration)
 
-                # Create Snapshot
-                self.my_mnt.run_shell(["mkdir", "{}".format(snap_shot)])
+                # Create Snapshoti
+                self.my_mnt.create_snapshot(self.data_dir, snapshot_name)
                 iteration += 1
 
-                self.my_mnt.run_shell(["rsync", "-azvh", "{}".format(snap_shot), "rsyncdir/dir{}/".format(iteration)])
+                snap_shot = self.data_dir + './snap' + snapshot_name
 
                 # Delete snapshot
                 self.my_mnt.run_shell(["rmdir", "{}".format(snap_shot)])
@@ -220,9 +230,18 @@ class RSync(Greenlet):
 
             # rsync data from workunit IO data
             elif self.work_unit:
-                self.my_mnt.run_shell(["rsync", "-azvh", "{}".format(self.source_dir), "rsyncdir/dir1/"])
-                # Check for event handler stop message
-                finished = self.ctx.workunit_state.observer_should_stop()
+                try:
+                    self.my_mnt.run_shell(["rsync", "-azvh", "{}".format(self.source_dir), "rsyncdir/dir1/"])
+                except CommandFailedError as e:
+                    if e.exitstatus == 24:
+                        log.info("Some files vanished before they could be transferred")
+                    else:
+                        raise
+                except socket.timeout:
+                    log.info("IO timeout between worker and observer")
+                finally:
+                    # Check for event handler stop message
+                    should_stop = self.ctx.workunit_state.observer_should_stop()
 
             # rsync data from written pattern data
             else:
@@ -236,7 +255,10 @@ class RSync(Greenlet):
                 self.my_mnt.run_shell(["rm", "-f", "{}/file_a".format(self.source_dir)])
 
             # Send back stop request to event handler in workunit task.
-            if finished:
+            if should_stop:
+                log.debug("I am here")
+                self.my_mnt.run_shell(["rm", "-rf", "rsyncdir/"])
+                self.my_mnt.run_shell(["rm", "-rf", "{}".format(self.source_dir)])
                 self.ctx.workunit_state.stop_observing()
 
             time.sleep(self.wait_time)
@@ -253,10 +275,8 @@ def task(ctx, config):
 
     run_time = config.get('runtime', 0)
 
-    log.info("Create object and start the gevent thread")
     start_rsync = RSync(ctx, config, logger=log.getChild('rsync'))
     start_rsync.start()
-    start_rsync_thread = start_rsync
 
     try:
         log.debug('Yielding')
@@ -264,7 +284,7 @@ def task(ctx, config):
         time.sleep(run_time)
     finally:
         log.info('joining rsync thread')
-        start_rsync_thread.stop()
-        start_rsync_thread.get()
-        start_rsync_thread.join()
+        start_rsync.stop()
+        start_rsync.get()
+        start_rsync.join()
         log.info("Done joining")
