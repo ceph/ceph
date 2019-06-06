@@ -2674,8 +2674,9 @@ static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
-    int ret = store->time_log_trim(oid, start_time, end_time,
-                                   start_marker, end_marker);
+    int ret = store->svc.cls->timelog.trim(oid, start_time, end_time,
+                                           start_marker, end_marker, nullptr,
+                                           null_yield);
     if (ret == -ENODATA) {
       return 0;
     }
@@ -7332,13 +7333,14 @@ next:
 
       do {
         list<cls_log_entry> entries;
-        ret = store->time_log_list(oid, start_time.to_real_time(), end_time.to_real_time(),
-                                   max_entries - count, entries, marker, &marker, &truncated);
+        ret = store->svc.cls->timelog.list(oid, start_time.to_real_time(), end_time.to_real_time(),
+                                           max_entries - count, entries, marker, &marker, &truncated,
+                                           null_yield);
         if (ret == -ENOENT) {
           break;
         }
         if (ret < 0) {
-          cerr << "ERROR: store->time_log_list(): " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: svc.cls->timelog.list(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
 

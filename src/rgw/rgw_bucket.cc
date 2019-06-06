@@ -31,6 +31,7 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
+#include "services/svc_cls.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -1693,6 +1694,34 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entry", entry, obj);
 }
 
+
+RGWDataChangesLog::RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
+  lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
+  changes(cct->_conf->rgw_data_log_changes_size)
+{
+  svc.zone = store->svc.zone;
+  svc.cls = store->svc.cls;
+
+  num_shards = cct->_conf->rgw_data_log_num_shards;
+
+  oids = new string[num_shards];
+
+  string prefix = cct->_conf->rgw_data_log_obj_prefix;
+
+  if (prefix.empty()) {
+    prefix = "data_log";
+  }
+
+  for (int i = 0; i < num_shards; i++) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
+    oids[i] = buf;
+  }
+
+  renew_thread = new ChangesRenewThread(cct, this);
+  renew_thread->create("rgw_dt_lg_renew");
+}
+
 int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
     const string& name = bs.bucket.name;
     int shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
@@ -1703,7 +1732,7 @@ int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
 
 int RGWDataChangesLog::renew_entries()
 {
-  if (!store->svc.zone->need_to_log_data())
+  if (!svc.zone->need_to_log_data())
     return 0;
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
@@ -1732,7 +1761,7 @@ int RGWDataChangesLog::renew_entries()
     change.timestamp = ut;
     encode(change, bl);
 
-    store->time_log_prepare_entry(entry, ut, section, change.key, bl);
+    svc.cls->timelog.prepare_entry(entry, ut, section, change.key, bl);
 
     m[index].first.push_back(bs);
     m[index].second.emplace_back(std::move(entry));
@@ -1744,11 +1773,11 @@ int RGWDataChangesLog::renew_entries()
 
     real_time now = real_clock::now();
 
-    int ret = store->time_log_add(oids[miter->first], entries, NULL);
+    int ret = svc.cls->timelog.add(oids[miter->first], entries, nullptr, true, null_yield);
     if (ret < 0) {
       /* we don't really need to have a special handling for failed cases here,
        * as this is just an optimization. */
-      lderr(cct) << "ERROR: store->time_log_add() returned " << ret << dendl;
+      lderr(cct) << "ERROR: svc.cls->timelog.add() returned " << ret << dendl;
       return ret;
     }
 
@@ -1797,7 +1826,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
-  if (!store->svc.zone->need_to_log_data())
+  if (!svc.zone->need_to_log_data())
     return 0;
 
   if (observer) {
@@ -1874,7 +1903,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
 
     ldout(cct, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
 
-    ret = store->time_log_add(oid, now, section, change.key, bl);
+    ret = svc.cls->timelog.add(oid, now, section, change.key, bl, null_yield);
 
     now = real_clock::now();
 
@@ -1906,9 +1935,9 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
 
   list<cls_log_entry> log_entries;
 
-  int ret = store->time_log_list(oids[shard], start_time, end_time,
+  int ret = svc.cls->timelog.list(oids[shard], start_time, end_time,
 				 max_entries, log_entries, marker,
-				 out_marker, truncated);
+				 out_marker, truncated, null_yield);
   if (ret < 0)
     return ret;
 
@@ -1966,7 +1995,7 @@ int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
 
   cls_log_header header;
 
-  int ret = store->time_log_info(oid, &header);
+  int ret = svc.cls->timelog.info(oid, &header, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -1984,7 +2013,7 @@ int RGWDataChangesLog::trim_entries(int shard_id, const real_time& start_time, c
   if (shard_id > num_shards)
     return -EINVAL;
 
-  ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
+  ret = svc.cls->timelog.trim(oids[shard_id], start_time, end_time, start_marker, end_marker, nullptr, null_yield);
 
   if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;
@@ -1996,7 +2025,7 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
                                     const string& start_marker, const string& end_marker)
 {
   for (int shard = 0; shard < num_shards; shard++) {
-    int ret = store->time_log_trim(oids[shard], start_time, end_time, start_marker, end_marker);
+    int ret = svc.cls->timelog.trim(oids[shard], start_time, end_time, start_marker, end_marker, nullptr, null_yield);
     if (ret == -ENOENT || ret == -ENODATA) {
       continue;
     }

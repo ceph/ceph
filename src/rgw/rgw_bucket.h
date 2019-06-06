@@ -462,6 +462,11 @@ class RGWDataChangesLog {
   RGWRados *store;
   rgw::BucketChangeObserver *observer = nullptr;
 
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_Cls *cls{nullptr};
+  } svc;
+
   int num_shards;
   string *oids;
 
@@ -513,29 +518,7 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
-                                                           lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
-                                                           changes(cct->_conf->rgw_data_log_changes_size) {
-    num_shards = cct->_conf->rgw_data_log_num_shards;
-
-    oids = new string[num_shards];
-
-    string prefix = cct->_conf->rgw_data_log_obj_prefix;
-
-    if (prefix.empty()) {
-      prefix = "data_log";
-    }
-
-    for (int i = 0; i < num_shards; i++) {
-      char buf[16];
-      snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
-      oids[i] = buf;
-    }
-
-    renew_thread = new ChangesRenewThread(cct, this);
-    renew_thread->create("rgw_dt_lg_renew");
-  }
-
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store);
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);
