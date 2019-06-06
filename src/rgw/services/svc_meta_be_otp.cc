@@ -1,5 +1,5 @@
 
-#include "svc_meta_be_sobj.h"
+#include "svc_meta_be_otp.h"
 
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_metadata.h"
@@ -8,31 +8,24 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-RGWSI_MetaBackend_OTP::RGWSI_MetaBackend_OTP(CephContext *cct) : RGWSI_MetaBackend(cct) {
+RGWSI_MetaBackend_OTP::RGWSI_MetaBackend_OTP(CephContext *cct) : RGWSI_MetaBackend_SObj(cct) {
 }
 
 RGWSI_MetaBackend_OTP::~RGWSI_MetaBackend_OTP() {
 }
 
-void RGWSI_MetaBackend_OTP::init_ctx(RGWSI_MetaBackend_Handle handle, RGWSI_MetaBackend::Context *_ctx)
+RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
 {
-  RGWSI_MetaBackend_OTP::Context_OTP *ctx = static_cast<RGWSI_MetaBackend_OTP::Context_OTP *>(_ctx);
-  rgwsi_meta_be_otp_handler_info *h = static_cast<rgwsi_meta_be_otp_handler_info *>(handle);
-
-  ctx->handle = handle;
-  ctx->module = h->module;
-  ctx->section = h->section;
-  ctx->obj_ctx.emplace(sysobj_svc->init_obj_ctx());
-  static_cast<RGWSI_MBOTP_Handler_Module *>(ctx->module)->get_pool_and_oid(key, ctx->pool, ctx->oid);
+  return new Context_OTP(sysobj_svc);
 }
 
-RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_OTP::alloc_default_get_params(ceph::real_time *pmtime)
+int RGWSI_MetaBackend_OTP::call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb)
 {
-  auto params = new RGWSI_MBOTP_GetParams;
-  params->pmtime = pmtime;
-  params->_devices = otp_devices_list_t();
-  params->pdevices = &(*params->_devices);
-  return params;
+  otp_device_list_t devices;
+  RGWSI_MBOTP_GetParams params;
+  params.pdevices = &devices;
+  params.pmtime = pmtime;
+  return cb(params);
 }
 
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,

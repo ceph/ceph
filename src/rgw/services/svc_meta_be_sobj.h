@@ -46,7 +46,6 @@ public:
 };
 
 struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
-  std::optional<bufferlist> _bl;
   bufferlist *pbl{nullptr};
   map<string, bufferlist> *pattrs{nullptr};
   rgw_cache_entry_info *cache_info{nullptr};
@@ -129,7 +128,7 @@ public:
   RGWSI_MetaBackend::Context *alloc_ctx() override;
 
 
-  RGWSI_MetaBackend::GetParams *alloc_default_get_params(ceph::real_time *pmtime) override;
+  int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb) override;
 
   int pre_modify(RGWSI_MetaBackend::Context *ctx,
                  const string& key,

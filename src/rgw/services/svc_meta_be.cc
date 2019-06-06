@@ -45,9 +45,10 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
                                       RGWObjVersionTracker *objv_tracker)
 {
   real_time orig_mtime;
-  unique_ptr<GetParams> params(alloc_default_get_params(&orig_mtime));
 
-  int ret = get_entry(ctx, key, *params, objv_tracker);
+  int ret = call_with_get_params(&orig_mtime, [&](GetParams& params) {
+    return get_entry(ctx, key, params, objv_tracker);
+  });
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }

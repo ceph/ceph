@@ -95,13 +95,13 @@ void RGWSI_MetaBackend_SObj::Context_SObj::init(RGWSI_MetaBackend_Handler *h)
   obj_ctx.emplace(sysobj_svc->init_obj_ctx());
 }
 
-RGWSI_MetaBackend::GetParams *RGWSI_MetaBackend_SObj::alloc_default_get_params(ceph::real_time *pmtime)
+int RGWSI_MetaBackend_SObj::call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb)
 {
-  auto params = new RGWSI_MBSObj_GetParams;
-  params->pmtime = pmtime;
-  params->_bl = bufferlist();
-  params->pbl = &(*params->_bl);
-  return params;
+  bufferlist bl;
+  RGWSI_MBSObj_GetParams params;
+  params.pmtime = pmtime;
+  params.pbl = &bl;
+  return cb(params);
 }
 
 int RGWSI_MetaBackend_SObj::get_entry(RGWSI_MetaBackend::Context *_ctx,
