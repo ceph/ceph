@@ -121,7 +121,7 @@ public:
   virtual Type get_type() = 0;
 
   virtual RGWSI_MetaBackend_Handler *alloc_be_handler() = 0;
-  virtual GetParams *alloc_default_get_params(ceph::real_time *pmtime) = 0;
+  virtual int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)>) = 0;
 
   /* these should be implemented by backends */
   virtual int get_entry(RGWSI_MetaBackend::Context *ctx,
