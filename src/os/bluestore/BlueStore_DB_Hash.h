@@ -2,7 +2,6 @@
 #define BLUESTORE_DB_HASH_H
 
 
-#include "BlueStore.h"
 #include "kv/RocksDBStore.h"
 #include "include/ceph_hash.h"
 
