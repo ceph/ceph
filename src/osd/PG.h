@@ -1720,6 +1720,7 @@ public:
     // Priority to use for scrub scheduling
     unsigned priority = 0;
 
+    bool time_for_deep;
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
     // this flag indicates that we are scrubbing post repair to verify everything is fixed
@@ -1839,6 +1840,7 @@ public:
       must_deep_scrub = false;
       must_repair = false;
       need_auto = false;
+      time_for_deep = false;
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;
