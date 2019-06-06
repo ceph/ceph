@@ -1,3 +1,4 @@
+#include "BlueStore.h"
 #include "BlueStore_DB_Hash.h"
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
