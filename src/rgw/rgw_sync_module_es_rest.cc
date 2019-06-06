@@ -379,7 +379,7 @@ class RGWHandler_REST_MDSearch_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get() override {
     if (s->info.args.exists("query")) {
-      return new RGWMetadataSearch_ObjStore_S3(store->get_sync_module());
+      return new RGWMetadataSearch_ObjStore_S3(store->getRados()->get_sync_module());
     }
     if (!s->init_state.url_bucket.empty() &&
         s->info.args.exists("mdsearch")) {

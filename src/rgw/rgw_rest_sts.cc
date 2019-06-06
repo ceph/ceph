@@ -335,7 +335,7 @@ void RGWSTSAssumeRole::execute()
 }
 
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
-                            RGWRados *store,
+                            rgw::sal::RGWRadosStore *store,
                             const rgw::auth::StrategyRegistry& auth_registry,
                             struct req_state *s)
 {
@@ -385,7 +385,7 @@ RGWOp *RGWHandler_REST_STS::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_STS::init(RGWRados *store,
+int RGWHandler_REST_STS::init(rgw::sal::RGWRadosStore *store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {

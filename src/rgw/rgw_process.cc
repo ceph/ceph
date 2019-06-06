@@ -166,7 +166,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   return 0;
 }
 
-int process_request(RGWRados* const store,
+int process_request(rgw::sal::RGWRadosStore* const store,
                     RGWREST* const rest,
                     RGWRequest* const req,
                     const std::string& frontend_prefix,
@@ -193,7 +193,7 @@ int process_request(RGWRados* const store,
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
 
-  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
   s->sysobj_ctx = &sysobj_ctx;
 
   if (ret < 0) {
@@ -202,9 +202,9 @@ int process_request(RGWRados* const store,
     return ret;
   }
 
-  s->req_id = store->svc.zone_utils->unique_id(req->id);
-  s->trans_id = store->svc.zone_utils->unique_trans_id(req->id);
-  s->host_id = store->host_id;
+  s->req_id = store->svc()->zone_utils->unique_id(req->id);
+  s->trans_id = store->svc()->zone_utils->unique_trans_id(req->id);
+  s->host_id = store->getRados()->host_id;
   s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
@@ -294,7 +294,7 @@ done:
   }
 
   if (should_log) {
-    rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
+    rgw_log_op(store->getRados(), rest, s, (op ? op->name() : "unknown"), olog);
   }
 
   if (http_ret != nullptr) {

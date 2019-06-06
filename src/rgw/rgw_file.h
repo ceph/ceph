@@ -972,8 +972,8 @@ namespace rgw {
       (void) fh_lru.unref(fh, cohort::lru::FLAG_NONE);
     }
 
-    int authorize(RGWRados* store) {
-      int ret = store->ctl.user->get_info_by_access_key(key.id, &user, null_yield);
+    int authorize(rgw::sal::RGWRadosStore* store) {
+      int ret = store->ctl()->user->get_info_by_access_key(key.id, &user, null_yield);
       if (ret == 0) {
 	RGWAccessKey* k = user.get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -992,8 +992,8 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (store->ctl.user->get_info_by_uid(token.id, &user, null_yield) < 0) {
-	    int ret = store->ctl.user->store_info(user, null_yield,
+	  if (store->ctl()->user->get_info_by_uid(token.id, &user, null_yield) < 0) {
+	    int ret = store->ctl()->user->store_info(user, null_yield,
                                                   RGWUserCtl::PutParams()
                                                   .set_exclusive(true));
 	    if (ret < 0) {
@@ -1277,7 +1277,7 @@ namespace rgw {
 
     void update_user() {
       RGWUserInfo _user = user;
-      auto user_ctl = rgwlib.get_store()->ctl.user;
+      auto user_ctl = rgwlib.get_store()->ctl()->user;
       int ret = user_ctl->get_info_by_access_key(key.id, &user, null_yield);
       if (ret != 0)
         user = _user;

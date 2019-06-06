@@ -16,11 +16,12 @@
 #include "cls/log/cls_log_types.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
-
 #include "services/svc_meta_be.h"
 
 
-class RGWRados;
+namespace rgw { namespace sal {
+class RGWRadosStore;
+} }
 class RGWCoroutine;
 class JSONObj;
 struct RGWObjVersionTracker;
@@ -136,7 +137,7 @@ public:
       return handler->do_get(op, entry, obj, y);
     }
   public:
-    Put(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *_op,
+    Put(RGWMetadataHandler_GenericMetaBE *_handler, RGWSI_MetaBackend_Handler::Op *_op,
         string& _entry, RGWMetadataObject *_obj,
         RGWObjVersionTracker& _objv_tracker, optional_yield _y,
         RGWMDLogSyncType _type);

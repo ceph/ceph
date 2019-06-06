@@ -19,7 +19,7 @@
 #include "common/Formatter.h"
 #include "common/Throttle.h"
 
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_zone.h"
 #include "rgw_cache.h"
 #include "rgw_acl.h"
@@ -483,8 +483,8 @@ class RGWMetaSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWMetaSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
-    : RGWSyncProcessorThread(_store, "meta-sync"), sync(_store, async_rados) {}
+  RGWMetaSyncProcessorThread(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados)
+    : RGWSyncProcessorThread(_store->getRados(), "meta-sync"), sync(_store, async_rados) {}
 
   void wakeup_sync_shards(set<int>& shard_ids) {
     for (set<int>::iterator iter = shard_ids.begin(); iter != shard_ids.end(); ++iter) {
@@ -526,9 +526,9 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
     sync.stop();
   }
 public:
-  RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWDataSyncProcessorThread(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados,
                              const RGWZone* source_zone)
-    : RGWSyncProcessorThread(_store, "data-sync"),
+    : RGWSyncProcessorThread(_store->getRados(), "data-sync"),
       counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
       sync(_store, async_rados, source_zone->id, counters.get()),
       initialized(false) {}
@@ -565,7 +565,7 @@ public:
 class RGWSyncLogTrimThread : public RGWSyncProcessorThread, DoutPrefixProvider
 {
   RGWCoroutinesManager crs;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   rgw::BucketTrimManager *bucket_trim;
   RGWHTTPManager http;
   const utime_t trim_interval;
@@ -573,10 +573,10 @@ class RGWSyncLogTrimThread : public RGWSyncProcessorThread, DoutPrefixProvider
   uint64_t interval_msec() override { return 0; }
   void stop_process() override { crs.stop(); }
 public:
-  RGWSyncLogTrimThread(RGWRados *store, rgw::BucketTrimManager *bucket_trim,
+  RGWSyncLogTrimThread(rgw::sal::RGWRadosStore *store, rgw::BucketTrimManager *bucket_trim,
                        int interval)
-    : RGWSyncProcessorThread(store, "sync-log-trim"),
-      crs(store->ctx(), store->get_cr_registry()), store(store),
+    : RGWSyncProcessorThread(store->getRados(), "sync-log-trim"),
+      crs(store->ctx(), store->getRados()->get_cr_registry()), store(store),
       bucket_trim(bucket_trim),
       http(store->ctx(), crs.get_completion_mgr()),
       trim_interval(interval, 0)
@@ -1172,7 +1172,7 @@ int RGWRados::init_complete()
   gc = new RGWGC();
   gc->initialize(cct, this);
 
-  obj_expirer = new RGWObjectExpirer(this);
+  obj_expirer = new RGWObjectExpirer(this->store);
 
   if (use_gc_thread) {
     gc->start_processor();
@@ -1214,7 +1214,7 @@ int RGWRados::init_complete()
     }
     auto async_processor = svc.rados->get_async_processor();
     std::lock_guard l{meta_sync_thread_lock};
-    meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this, async_processor);
+    meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this->store, async_processor);
     ret = meta_sync_processor_thread->init();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to initialize meta sync thread" << dendl;
@@ -1226,7 +1226,7 @@ int RGWRados::init_complete()
     rgw::BucketTrimConfig config;
     rgw::configure_bucket_trim(cct, config);
 
-    bucket_trim.emplace(this, config);
+    bucket_trim.emplace(this->store, config);
     ret = bucket_trim->init();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to start bucket trim manager" << dendl;
@@ -1237,7 +1237,7 @@ int RGWRados::init_complete()
     std::lock_guard dl{data_sync_thread_lock};
     for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
       ldout(cct, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
-      auto *thread = new RGWDataSyncProcessorThread(this, svc.rados->get_async_processor(), source_zone);
+      auto *thread = new RGWDataSyncProcessorThread(this->store, svc.rados->get_async_processor(), source_zone);
       ret = thread->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
@@ -1248,7 +1248,7 @@ int RGWRados::init_complete()
     }
     auto interval = cct->_conf->rgw_sync_log_trim_interval;
     if (interval > 0) {
-      sync_log_trimmer = new RGWSyncLogTrimThread(this, &*bucket_trim, interval);
+      sync_log_trimmer = new RGWSyncLogTrimThread(this->store, &*bucket_trim, interval);
       ret = sync_log_trimmer->init();
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: failed to initialize sync log trim thread" << dendl;
@@ -1261,12 +1261,12 @@ int RGWRados::init_complete()
   data_notifier->start();
 
   lc = new RGWLC();
-  lc->initialize(cct, this);
+  lc->initialize(cct, this->store);
 
   if (use_lc_thread)
     lc->start_processor();
 
-  quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
+  quota_handler = RGWQuotaHandler::generate_handler(this->store, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
                              zone.bucket_index_max_shards);
@@ -1288,7 +1288,7 @@ int RGWRados::init_complete()
 
   reshard_wait = std::make_shared<RGWReshardWait>();
 
-  reshard = new RGWReshard(this);
+  reshard = new RGWReshard(this->store);
 
   /* only the master zone in the zonegroup reshards buckets */
   run_reshard_thread = run_reshard_thread && (zonegroup.master_zone == zone.id);
@@ -2430,7 +2430,7 @@ int RGWRados::fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key
   }
 
   RGWObjState *astate = NULL;
-  RGWObjectCtx rctx(this);
+  RGWObjectCtx rctx(this->store);
   r = get_obj_state(&rctx, bucket_info, obj, &astate, false, y);
   if (r < 0)
     return r;
@@ -3325,7 +3325,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
 
   real_time mtime;
   uint64_t obj_size;
-  RGWObjectCtx rctx(this);
+  RGWObjectCtx rctx(this->store);
 
   RGWRados::Object op_target(this, dest_bucket_info, rctx, obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -3597,7 +3597,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
-  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
+  AtomicObjectProcessor processor(&aio, this->store, dest_bucket_info, ptail_rule, user_id,
                                   obj_ctx, dest_obj, olh_epoch, tag, dpp, null_yield);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
@@ -4188,7 +4188,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   // do not change the null_yield in the initialization of this AtomicObjectProcessor
   // it causes crashes in the ragweed tests
-  AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
+  AtomicObjectProcessor processor(&aio, this->store, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
                                   dest_obj, olh_epoch, tag, dpp, null_yield);
   int ret = processor.prepare(y);
@@ -5485,7 +5485,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
   if (!op.size())
     return 0;
 
-  RGWObjectCtx obj_ctx(this);
+  RGWObjectCtx obj_ctx(this->store);
 
   bufferlist bl;
   RGWRados::Bucket bop(this, bucket_info);
@@ -6415,10 +6415,10 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
       // since we expect to do this rarely, we'll do our work in a
       // block and erase our work after each try
 
-      RGWObjectCtx obj_ctx(this);
+      RGWObjectCtx obj_ctx(this->store);
       const rgw_bucket& b = bs->bucket;
       std::string bucket_id = b.get_key();
-      RGWBucketReshardLock reshard_lock(this, bucket_info, true);
+      RGWBucketReshardLock reshard_lock(this->store, bucket_info, true);
       ret = reshard_lock.lock();
       if (ret < 0) {
 	ldout(cct, 20) << __func__ <<
@@ -6428,7 +6428,7 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 	ldout(cct, 10) << __func__ <<
 	  " INFO: was able to take reshard lock for bucket " <<
 	  bucket_id << dendl;
-	ret = RGWBucketReshard::clear_resharding(this, bucket_info);
+	ret = RGWBucketReshard::clear_resharding(this->store, bucket_info);
 	if (ret < 0) {
 	  reshard_lock.unlock();
 	  ldout(cct, 0) << __func__ <<
@@ -8296,7 +8296,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   io_ctx.locator_set_key(list_state.locator);
 
   RGWObjState *astate = NULL;
-  RGWObjectCtx rctx(this);
+  RGWObjectCtx rctx(this->store);
   int r = get_obj_state(&rctx, bucket_info, obj, &astate, false, y);
   if (r < 0)
     return r;
@@ -8463,7 +8463,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
 
 int RGWRados::add_bucket_to_reshard(const RGWBucketInfo& bucket_info, uint32_t new_num_shards)
 {
-  RGWReshard reshard(this);
+  RGWReshard reshard(this->store);
 
   uint32_t num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
 
@@ -8526,56 +8526,6 @@ uint64_t RGWRados::next_bucket_id()
 {
   std::lock_guard l{bucket_id_lock};
   return ++max_bucket_id;
-}
-
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread,
-						 bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_cache)
-{
-  RGWRados *store = new RGWRados;
-
-  if ((*store).set_use_cache(use_cache)
-              .set_run_gc_thread(use_gc_thread)
-              .set_run_lc_thread(use_lc_thread)
-              .set_run_quota_threads(quota_threads)
-              .set_run_sync_thread(run_sync_thread)
-              .set_run_reshard_thread(run_reshard_thread)
-              .initialize(cct) < 0) {
-    delete store;
-    return NULL;
-  }
-
-  return store;
-}
-
-RGWRados *RGWStoreManager::init_raw_storage_provider(CephContext *cct)
-{
-  RGWRados *store = NULL;
-  store = new RGWRados;
-
-  store->set_context(cct);
-
-  int ret = store->init_svc(true);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
-    return nullptr;
-  }
-
-  if (store->init_rados() < 0) {
-    delete store;
-    return nullptr;
-  }
-
-  return store;
-}
-
-void RGWStoreManager::close_storage(RGWRados *store)
-{
-  if (!store)
-    return;
-
-  store->finalize();
-
-  delete store;
 }
 
 librados::Rados* RGWRados::get_rados_handle()

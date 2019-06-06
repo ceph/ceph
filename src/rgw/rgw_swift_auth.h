@@ -9,6 +9,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_keystone.h"
 #include "rgw_auth_filters.h"
+#include "rgw_sal.h"
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
@@ -298,7 +299,7 @@ public:
   ~RGWHandler_SWIFT_Auth() override {}
   RGWOp *op_get() override;
 
-  int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::RGWRadosStore *store, struct req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override { return 0; }
   int read_permissions(RGWOp *op) override { return 0; }

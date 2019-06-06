@@ -20,6 +20,7 @@
 #include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
+#include "rgw_sal.h"
 
 #include <atomic>
 #include <tuple>
@@ -451,7 +452,7 @@ WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
 class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   int max_objs{0};
   string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -480,7 +481,7 @@ class RGWLC : public DoutPrefixProvider {
     finalize();
   }
 
-  void initialize(CephContext *_cct, RGWRados *_store);
+  void initialize(CephContext *_cct, rgw::sal::RGWRadosStore *_store);
   void finalize();
 
   int process();
@@ -511,7 +512,7 @@ class RGWLC : public DoutPrefixProvider {
 
 namespace rgw::lc {
 
-int fix_lc_shard_entry(RGWRados *store, const RGWBucketInfo& bucket_info,
+int fix_lc_shard_entry(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs);
 
 std::string s3_expiration_header(

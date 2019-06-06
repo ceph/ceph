@@ -79,7 +79,7 @@ int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
 
 class RGWHandler {
 protected:
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore* store{nullptr};
   struct req_state *s{nullptr};
 
   int do_init_permissions();
@@ -89,7 +89,7 @@ public:
   RGWHandler() {}
   virtual ~RGWHandler();
 
-  virtual int init(RGWRados *store,
+  virtual int init(rgw::sal::RGWRadosStore* store,
                    struct req_state* _s,
                    rgw::io::BasicClient* cio);
 
@@ -126,7 +126,7 @@ class RGWOp : public DoutPrefixProvider {
 protected:
   struct req_state *s;
   RGWHandler *dialect_handler;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
   RGWQuotaInfo bucket_quota;
@@ -159,7 +159,7 @@ public:
     return 0;
   }
 
-  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
+  virtual void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *dialect_handler) {
     this->store = store;
     this->s = s;
     this->dialect_handler = dialect_handler;
@@ -483,11 +483,11 @@ public:
     unsigned int num_unfound;
     std::list<fail_desc_t> failures;
 
-    RGWRados * const store;
+    rgw::sal::RGWRadosStore * const store;
     req_state * const s;
 
   public:
-    Deleter(const DoutPrefixProvider* dpp, RGWRados * const str, req_state * const s)
+    Deleter(const DoutPrefixProvider* dpp, rgw::sal::RGWRadosStore * const str, req_state * const s)
       : dpp(dpp),
         num_deleted(0),
         num_unfound(0),
@@ -596,7 +596,7 @@ public:
     : num_created(0) {
   }
 
-  void init(RGWRados* const store,
+  void init(rgw::sal::RGWRadosStore* const store,
             struct req_state* const s,
             RGWHandler* const h) override;
 
@@ -983,7 +983,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
     relaxed_region_enforcement =
@@ -1136,7 +1136,7 @@ public:
     delete obj_legal_hold;
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1206,7 +1206,7 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1247,7 +1247,7 @@ public:
       has_policy(false) {
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1286,7 +1286,7 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1313,7 +1313,7 @@ public:
     : dlo_manifest(NULL)
   {}
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1435,7 +1435,7 @@ public:
     attrs.emplace(std::move(key), std::move(bl));
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     dest_policy.set_ctx(s->cct);
   }
@@ -1488,7 +1488,7 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
+  virtual int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_acls"; }
@@ -1525,7 +1525,7 @@ public:
   }
   ~RGWPutLC() override {}
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *dialect_handler) override {
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
 
@@ -1683,7 +1683,7 @@ protected:
 public:
   RGWInitMultipart() {}
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy.set_ctx(s->cct);
   }
@@ -1773,7 +1773,7 @@ public:
     truncated = false;
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     policy = RGWAccessControlPolicy(s->cct);
   }
@@ -1812,7 +1812,7 @@ public:
     default_max = 0;
   }
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
     max_uploads = default_max;
   }
@@ -1916,13 +1916,13 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
-extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
+extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s);
+extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
 				     bool prefetch_data);
-extern void rgw_build_iam_environment(RGWRados* store,
+extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        RGWRados* store,
+                        rgw::sal::RGWRadosStore* store,
                         map<string, bufferlist>& attrs,
                         const string& tenant);
 
@@ -2338,7 +2338,7 @@ protected:
 public:
   RGWGetClusterStat() {}
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
   }
   int verify_permission() override {return 0;}

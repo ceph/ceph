@@ -11,6 +11,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
+#include "rgw_sal.h"
 
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
@@ -234,7 +235,7 @@ class RGWRESTConn;
 struct RGWDataSyncEnv {
   const DoutPrefixProvider *dpp{nullptr};
   CephContext *cct{nullptr};
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWRESTConn *conn{nullptr};
   RGWAsyncRadosProcessor *async_rados{nullptr};
   RGWHTTPManager *http_manager{nullptr};
@@ -246,7 +247,7 @@ struct RGWDataSyncEnv {
 
   RGWDataSyncEnv() {}
 
-  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
             const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module,
@@ -273,7 +274,7 @@ class RGWDataChangesLogInfo;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager http_manager;
 
@@ -287,7 +288,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+  RGWRemoteDataLog(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *_store,
                    RGWAsyncRadosProcessor *async_rados);
   int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,
@@ -307,7 +308,7 @@ public:
 };
 
 class RGWDataSyncStatusManager : public DoutPrefixProvider {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
   string source_zone;
   RGWRESTConn *conn;
@@ -325,12 +326,12 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
   int num_shards;
 
 public:
-  RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWDataSyncStatusManager(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados,
                            const string& _source_zone, PerfCounters* counters)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr), counters(counters),
       source_log(this, store, async_rados), num_shards(0) {}
-  RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+  RGWDataSyncStatusManager(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados,
                            const string& _source_zone, PerfCounters* counters,
                            const RGWSyncModuleInstanceRef& _sync_module)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
@@ -495,7 +496,7 @@ struct rgw_bucket_index_marker_info {
 
 class RGWRemoteBucketLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWRESTConn *conn{nullptr};
   string source_zone;
   rgw_bucket_shard bs;
@@ -510,7 +511,7 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWBucketSyncCR *sync_cr{nullptr};
 
 public:
-  RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
+  RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, rgw::sal::RGWRadosStore *_store,
                      RGWBucketSyncStatusManager *_sm,
                      RGWAsyncRadosProcessor *_async_rados,
                      RGWHTTPManager *_http_manager);
@@ -530,7 +531,7 @@ public:
 };
 
 class RGWBucketSyncStatusManager : public DoutPrefixProvider {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
   RGWCoroutinesManager cr_mgr;
 
@@ -554,7 +555,7 @@ class RGWBucketSyncStatusManager : public DoutPrefixProvider {
   int num_shards;
 
 public:
-  RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
+  RGWBucketSyncStatusManager(rgw::sal::RGWRadosStore *_store, const string& _source_zone,
                              const rgw_bucket& bucket);
   ~RGWBucketSyncStatusManager();
 
@@ -576,7 +577,7 @@ public:
 };
 
 /// read the sync status of all bucket shards from the given source zone
-int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const std::string& source_zone,
+int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *store, const std::string& source_zone,
                            const RGWBucketInfo& bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 

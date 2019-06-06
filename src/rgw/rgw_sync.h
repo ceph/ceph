@@ -13,10 +13,13 @@
 #include "rgw_http_client.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
 
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -71,14 +74,14 @@ class RGWRESTConn;
 class RGWSyncTraceManager;
 
 class RGWSyncErrorLogger {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
   vector<string> oids;
   int num_shards;
 
   std::atomic<int64_t> counter = { 0 };
 public:
-  RGWSyncErrorLogger(RGWRados *_store, const string &oid_prefix, int _num_shards);
+  RGWSyncErrorLogger(rgw::sal::RGWRadosStore *_store, const string &oid_prefix, int _num_shards);
   RGWCoroutine *log_error_cr(const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message);
 
   static string get_shard_oid(const string& oid_prefix, int shard_id);
@@ -176,7 +179,7 @@ public:
 struct RGWMetaSyncEnv {
   const DoutPrefixProvider *dpp;
   CephContext *cct{nullptr};
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWRESTConn *conn{nullptr};
   RGWAsyncRadosProcessor *async_rados{nullptr};
   RGWHTTPManager *http_manager{nullptr};
@@ -185,7 +188,7 @@ struct RGWMetaSyncEnv {
 
   RGWMetaSyncEnv() {}
 
-  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer);
 
@@ -195,7 +198,7 @@ struct RGWMetaSyncEnv {
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWRESTConn *conn;
   RGWAsyncRadosProcessor *async_rados;
 
@@ -218,10 +221,10 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRemoteMetaLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+  RGWRemoteMetaLog(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *_store,
                    RGWAsyncRadosProcessor *async_rados,
                    RGWMetaSyncStatusManager *_sm)
-    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+    : RGWCoroutinesManager(_store->ctx(), _store->getRados()->get_cr_registry()),
       dpp(dpp), store(_store), conn(NULL), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
       status_manager(_sm) {}
@@ -246,7 +249,7 @@ public:
 };
 
 class RGWMetaSyncStatusManager : public DoutPrefixProvider {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   librados::IoCtx ioctx;
 
   RGWRemoteMetaLog master_log;
@@ -272,7 +275,7 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
   vector<string> clone_markers;
 
 public:
-  RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
+  RGWMetaSyncStatusManager(rgw::sal::RGWRadosStore *_store, RGWAsyncRadosProcessor *async_rados)
     : store(_store), master_log(this, store, async_rados, this)
   {}
   int init();

@@ -143,7 +143,7 @@ void handle_connection(boost::asio::io_context& context,
       }
 
       // process the request
-      RGWRequest req{env.store->get_new_req_id()};
+      RGWRequest req{env.store->getRados()->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
       StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
@@ -292,7 +292,7 @@ class AsioFrontend {
   void stop();
   void join();
   void pause();
-  void unpause(RGWRados* store, rgw_auth_registry_ptr_t);
+  void unpause(rgw::sal::RGWRadosStore* store, rgw_auth_registry_ptr_t);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -695,7 +695,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause(RGWRados* const store,
+void AsioFrontend::unpause(rgw::sal::RGWRadosStore* const store,
                            rgw_auth_registry_ptr_t auth_registry)
 {
   env.store = store;
@@ -759,7 +759,7 @@ void RGWAsioFrontend::pause_for_new_config()
 }
 
 void RGWAsioFrontend::unpause_with_new_config(
-  RGWRados* const store,
+  rgw::sal::RGWRadosStore* const store,
   rgw_auth_registry_ptr_t auth_registry
 ) {
   impl->unpause(store, std::move(auth_registry));

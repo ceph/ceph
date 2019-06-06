@@ -26,6 +26,7 @@ class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
+namespace rgw { namespace sal { class RGWRadosStore; } }
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
@@ -208,7 +209,7 @@ public:
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_read_user_buckets(RGWRados *store,
+extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  const rgw_user& user_id,
                                  RGWUserBuckets& buckets,
                                  const string& marker,
@@ -218,15 +219,15 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
-extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
+extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
+extern int rgw_remove_bucket(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
+extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
-extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
+extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
                                const rgw_obj& obj, const char* attr_name,
                                bufferlist& out_bl, optional_yield y);
 
-extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
+extern void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, bool fix);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
@@ -310,7 +311,7 @@ struct RGWBucketAdminOpState {
 class RGWBucket
 {
   RGWUserBuckets buckets;
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWAccessHandle handle;
 
   RGWUserInfo user_info;
@@ -323,7 +324,7 @@ class RGWBucket
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(RGWRados *storage, RGWBucketAdminOpState& op_state, optional_yield y,
+  int init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_state, optional_yield y,
               std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
@@ -359,37 +360,37 @@ public:
 class RGWBucketAdminOp
 {
 public:
-  static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher);
-  static int get_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int get_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWAccessControlPolicy& policy);
-  static int dump_s3_policy(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int dump_s3_policy(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   ostream& os);
 
-  static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
-  static int chown(RGWRados *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
+  static int unlink(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
+  static int link(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int chown(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
 
-  static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int check_index(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
-  static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
-  static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
-  static int limit_check(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
+  static int remove_object(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
+  static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
+  static int limit_check(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
-  static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
+  static int set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
 
-  static int list_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int list_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 				  RGWFormatterFlusher& flusher);
 
-  static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int clear_stale_instances(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher);
-  static int fix_lc_shards(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int fix_lc_shards(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                            RGWFormatterFlusher& flusher);
-  static int fix_obj_expiry(RGWRados *store, RGWBucketAdminOpState& op_state,
+  static int fix_obj_expiry(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
 			    RGWFormatterFlusher& flusher, bool dry_run = false);
 };
 
@@ -830,7 +831,7 @@ public:
 		    optional_yield y,
                     bool update_entrypoint = true);
 
-  int chown(RGWRados *store, RGWBucketInfo& bucket_info,
+  int chown(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info,
             const rgw_user& user_id, const std::string& display_name,
             const std::string& marker, optional_yield y);
 

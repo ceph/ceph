@@ -77,7 +77,7 @@ RGWOp *RGWHandler_REST_IAM::op_post()
   return nullptr;
 }
 
-int RGWHandler_REST_IAM::init(RGWRados *store,
+int RGWHandler_REST_IAM::init(rgw::sal::RGWRadosStore *store,
                               struct req_state *s,
                               rgw::io::BasicClient *cio)
 {

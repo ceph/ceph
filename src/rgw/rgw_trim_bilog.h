@@ -25,9 +25,12 @@
 class CephContext;
 class RGWCoroutine;
 class RGWHTTPManager;
-class RGWRados;
 
 namespace rgw {
+
+namespace sal {
+  class RGWRadosStore;
+}
 
 /// Interface to inform the trim process about which buckets are most active
 struct BucketChangeObserver {
@@ -69,7 +72,7 @@ class BucketTrimManager : public BucketChangeObserver {
   class Impl;
   std::unique_ptr<Impl> impl;
  public:
-  BucketTrimManager(RGWRados *store, const BucketTrimConfig& config);
+  BucketTrimManager(sal::RGWRadosStore *store, const BucketTrimConfig& config);
   ~BucketTrimManager();
 
   int init();

@@ -79,7 +79,7 @@ public:
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config(RGWRados* store,
+  virtual void unpause_with_new_config(rgw::sal::RGWRadosStore* store,
                                        rgw_auth_registry_ptr_t auth_registry) = 0;
 };
 
@@ -142,7 +142,7 @@ public:
     env.mutex.get_write();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = std::move(auth_registry);
@@ -185,7 +185,7 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) override {
     env.store = store;
     env.auth_registry = auth_registry;
@@ -229,7 +229,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = env.store->ctl.user->get_info_by_uid(uid, &user_info, null_yield);
+    int ret = env.store->ctl()->user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
@@ -269,11 +269,11 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(RGWRados *store) override {
+  void resume(rgw::sal::RGWRadosStore *store) override {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->pctl);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->getRados()->pctl);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

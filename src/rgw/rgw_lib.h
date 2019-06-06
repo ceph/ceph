@@ -30,7 +30,7 @@ namespace rgw {
     OpsLogSocket* olog;
     rgw::LDAPHelper* ldh{nullptr};
     RGWREST rest; // XXX needed for RGWProcessEnv
-    RGWRados* store;
+    rgw::sal::RGWRadosStore* store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
@@ -38,7 +38,7 @@ namespace rgw {
       {}
     ~RGWLib() {}
 
-    RGWRados* get_store() { return store; }
+    rgw::sal::RGWRadosStore* get_store() { return store; }
 
     RGWLibFrontend* get_fe() { return fe; }
 
@@ -74,7 +74,7 @@ namespace rgw {
       return user_info;
     }
 
-    int set_uid(RGWRados* store, const rgw_user& uid);
+    int set_uid(rgw::sal::RGWRadosStore* store, const rgw_user& uid);
 
     int write_data(const char *buf, int len);
     int read_data(char *buf, int len);
@@ -135,7 +135,7 @@ namespace rgw {
     inline struct req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
-      :  RGWRequest(rgwlib.get_store()->get_new_req_id()), cct(_cct),
+      :  RGWRequest(rgwlib.get_store()->getRados()->get_new_req_id()), cct(_cct),
 	 user(_user)
       {}
 
@@ -161,12 +161,12 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->get_store(), _s, io);
 
-      sysobj_ctx.emplace(store->svc.sysobj);
+      sysobj_ctx.emplace(store->svc()->sysobj);
 
       get_state()->obj_ctx = rados_ctx;
       get_state()->sysobj_ctx = &(sysobj_ctx.get());
-      get_state()->req_id = store->svc.zone_utils->unique_id(id);
-      get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
+      get_state()->req_id = store->svc()->zone_utils->unique_id(id);
+      get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
 
       ldpp_dout(_s, 2) << "initializing for trans_id = "
 	  << get_state()->trans_id.c_str() << dendl;
@@ -200,18 +200,18 @@ namespace rgw {
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.get_store(), &rstate, &io_ctx);
 
-	sysobj_ctx.emplace(store->svc.sysobj);
+	sysobj_ctx.emplace(store->svc()->sysobj);
 
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->sysobj_ctx = &(sysobj_ctx.get());
-	get_state()->req_id = store->svc.zone_utils->unique_id(id);
-	get_state()->trans_id = store->svc.zone_utils->unique_trans_id(id);
+	get_state()->req_id = store->svc()->zone_utils->unique_id(id);
+	get_state()->trans_id = store->svc()->zone_utils->unique_trans_id(id);
 
 	ldpp_dout(get_state(), 2) << "initializing for trans_id = "
 	    << get_state()->trans_id.c_str() << dendl;
       }
 
-    inline RGWRados* get_store() { return store; }
+    inline rgw::sal::RGWRadosStore* get_store() { return store; }
 
     virtual int execute() final { ceph_abort(); }
     virtual int exec_start() = 0;

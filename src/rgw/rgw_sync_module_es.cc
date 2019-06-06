@@ -800,7 +800,7 @@ public:
   ~RGWElasticDataSyncModule() override {}
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
-    conf->init_instance(sync_env->store->svc.zone->get_realm(), instance_id);
+    conf->init_instance(sync_env->store->svc()->zone->get_realm(), instance_id);
   }
 
   RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) override {
