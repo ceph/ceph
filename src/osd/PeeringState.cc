@@ -1612,12 +1612,12 @@ bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
   if (num_want_acting < pool.info.min_size) {
     if (cct->_conf->osd_allow_recovery_below_min_size && 
 	missing_loc.get_recoverable_predicate()(have)) {
-      dout(20) << "choose_acting successfully, we allow osd recovery below min "
+      psdout(20) << __func__ << " successful, we allow osd recovery below min "
                << "size and osd is recoverable"
                << dendl;
       // do nothing here
     } else {
-      dout(10) << "choose_acting failed, below min size and is not recoverable "
+      psdout(10) << __func__ << " failed, below min size and is not recoverable "
                << dendl;
       return false;
     }
