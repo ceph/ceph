@@ -6,10 +6,8 @@
 #include <functional>
 
 #include <boost/range/adaptor/filtered.hpp>
-#include <boost/range/adaptor/map.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
-#include <boost/range/algorithm/max_element.hpp>
 #include <boost/range/numeric.hpp>
 
 #include <fmt/format.h>
