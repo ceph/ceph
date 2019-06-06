@@ -24,12 +24,14 @@ export LC_ALL=C # the following is vulnerable to i18n
 ARCH=$(uname -m)
 
 function munge_ceph_spec_in {
+    local with_seastar=$1
+    shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if [ $WITH_SEASTAR ]; then
+    if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
     if $for_make_check; then
@@ -40,6 +42,8 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
+    local with_seastar=$1
+    shift
     local for_make_check=$1
     shift
     local control=$1
@@ -49,7 +53,7 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
-    if [ $with_seastar ]; then
+    if $with_seastar; then
 	sed -i -e 's/^# Crimson[[:space:]]//g' $control
     fi
     if $for_make_check; then
@@ -261,6 +265,7 @@ else
     else
         for_make_check=false
     fi
+    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case $ID in
     debian|ubuntu|devuan)
@@ -289,7 +294,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$for_make_check" "debian/control")
+	control=$(munge_debian_control "$VERSION" "$with_seastar" "$for_make_check" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -354,7 +359,7 @@ else
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
@@ -369,7 +374,7 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros
-        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
