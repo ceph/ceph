@@ -148,9 +148,6 @@
                     *ngIf="healthData.client_perf">
         <cd-health-pie *ngIf="isClientReadWriteChartShowable()"
                        [data]="healthData"
-                       [isBytesData]="false"
-                       chartType="pie"
-                       [displayLegend]="true"
                        (prepareFn)="prepareReadWriteRatio($event[0], $event[1])">
         </cd-health-pie>
         <span *ngIf="!isClientReadWriteChartShowable()">
@@ -183,7 +180,6 @@
                  class="row info-group"
                  *ngIf="healthData.pools
                  || healthData.df
-                 || healthData.df?.stats?.total_objects != null
                  || healthData.pg_info">
 
     <div class="cd-container-flex">
@@ -204,9 +200,8 @@
                     contentClass="content-chart"
                     *ngIf="healthData.df">
         <cd-health-pie [data]="healthData"
+                       [config]="rawCapacityChartConfig"
                        [showLabelAsTooltip]="true"
-                       chartType="pie"
-                       [displayLegend]="true"
                        (prepareFn)="prepareRawUsage($event[0], $event[1])">
         </cd-health-pie>
       </cd-info-card>
@@ -215,9 +210,12 @@
                     i18n-cardTitle
                     class="cd-col-5"
                     cardClass="card-medium"
-                    contentClass="content-medium content-highlight"
-                    *ngIf="healthData.df?.stats?.total_objects != null">
-        {{ healthData.df?.stats?.total_objects }}
+                    contentClass="content-chart"
+                    *ngIf="healthData.pg_info?.object_stats?.num_objects != null">
+        <cd-health-pie [data]="healthData"
+                       [config]="objectsChartConfig"
+                       (prepareFn)="prepareObjects($event[0], $event[1])">
+        </cd-health-pie>
       </cd-info-card>
 
       <cd-info-card cardTitle="PGs per OSD"
@@ -250,8 +248,7 @@
                #pgStatusTarget="bs-popover"
                placement="bottom">
             <cd-health-pie [data]="healthData"
-                           chartType="pie"
-                           [displayLegend]="true"
+                           [config]="pgStatusChartConfig"
                            (prepareFn)="preparePgStatus($event[0], $event[1])">
             </cd-health-pie>
           </div>
