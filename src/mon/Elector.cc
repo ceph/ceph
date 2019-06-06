@@ -112,46 +112,51 @@ void Elector::_bump_epoch()
 }
 
 
-void Elector::start()
+void ElectionLogic::start()
 {
-  if (!logic.participating) {
+  if (!participating) {
     dout(0) << "not starting new election -- not participating" << dendl;
     return;
   }
   dout(5) << "start -- can i be leader?" << dendl;
 
-  logic.acked_me.clear();
-  peer_info.clear();
-  logic.init();
+  acked_me.clear();
+  init();
   
   // start by trying to elect me
-  if (logic.epoch % 2 == 0) {
-    logic.bump_epoch(logic.epoch+1);  // odd == election cycle
+  if (epoch % 2 == 0) {
+    bump_epoch(epoch+1);  // odd == election cycle
   } else {
-    // do a trivial db write just to ensure it is writeable.
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
-    t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
-    int r = mon->store->apply_transaction(t);
-    ceph_assert(r >= 0);
+    validate_store();
   }
-  logic.electing_me = true;
-  logic.acked_me.insert(mon->rank);
+  electing_me = true;
+  acked_me.insert(elector_my_rank());
+  leader_acked = -1;
+
+  elector_propose_to_peers(epoch);
+  elector->_start();
+}
+
+void ElectionLogic::elector_propose_to_peers(epoch_t e)
+{
+  // bcast to everyone else
+  for (unsigned i=0; i<elector->mon->monmap->size(); ++i) {
+    if ((int)i == elector->mon->rank) continue;
+    MMonElection *m =
+      new MMonElection(MMonElection::OP_PROPOSE, e, elector->mon->monmap);
+    m->mon_features = ceph::features::mon::get_supported();
+    m->mon_release = ceph_release();
+    elector->mon->send_mon_message(m, i);
+  }  
+}
+
+void Elector::_start()
+{
+  peer_info.clear();
   peer_info[mon->rank].cluster_features = CEPH_FEATURES_ALL;
   peer_info[mon->rank].mon_release = ceph_release();
   peer_info[mon->rank].mon_features = ceph::features::mon::get_supported();
   mon->collect_metadata(&peer_info[mon->rank].metadata);
-  logic.leader_acked = -1;
-
-  // bcast to everyone else
-  for (unsigned i=0; i<mon->monmap->size(); ++i) {
-    if ((int)i == mon->rank) continue;
-    MMonElection *m =
-      new MMonElection(MMonElection::OP_PROPOSE, logic.epoch, mon->monmap);
-    m->mon_features = ceph::features::mon::get_supported();
-    m->mon_release = ceph_release();
-    mon->send_mon_message(m, i);
-  }
-  
   reset_timer();
 }
 
@@ -229,7 +234,7 @@ void Elector::expire()
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
     if (mon->has_ever_joined)
-      start();
+      logic.start();
     else
       mon->bootstrap();
   }
@@ -382,7 +387,7 @@ void Elector::handle_ack(MonOpRequestRef op)
   if (m->epoch > logic.epoch) {
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     logic.bump_epoch(m->epoch);
-    start();
+    logic.start();
     return;
   }
   ceph_assert(m->epoch == logic.epoch);
@@ -454,7 +459,7 @@ void Elector::handle_victory(MonOpRequestRef op)
   if (m->epoch != logic.epoch + 1) { 
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     logic.bump_epoch(m->epoch);
-    start();
+    logic.start();
     return;
   }
 
