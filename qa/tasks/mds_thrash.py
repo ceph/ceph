@@ -14,7 +14,6 @@ from gevent.event import Event
 from teuthology import misc as teuthology
 
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
-from tasks.daemonwatchdog import DaemonWatchdog
 
 log = logging.getLogger(__name__)
 
@@ -409,29 +408,25 @@ def task(ctx, config):
         status = mds_cluster.status()
     log.info('Ready to start thrashing')
 
-    thrashers = []
-
-    watchdog = DaemonWatchdog(ctx, manager, config, thrashers)
-    watchdog.start()
-
     manager.wait_for_clean()
     assert manager.is_clean()
+
+    if 'cluster' not in config:
+        config['cluster'] = 'ceph'
+
     for fs in status.get_filesystems():
         thrasher = MDSThrasher(ctx, manager, config, Filesystem(ctx, fs['id']), fs['mdsmap']['max_mds'])
         thrasher.start()
-        thrashers.append(thrasher)
+        ctx.ceph[config['cluster']].thrashers.append(thrasher)
 
     try:
         log.debug('Yielding')
         yield
     finally:
         log.info('joining mds_thrashers')
-        for thrasher in thrashers:
+        for thrasher in ctx.ceph[config['cluster']].thrashers:
             thrasher.stop()
             if thrasher.e:
                 raise RuntimeError('error during thrashing')
             thrasher.join()
         log.info('done joining')
-
-        watchdog.stop()
-        watchdog.join()
