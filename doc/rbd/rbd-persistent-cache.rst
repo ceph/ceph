@@ -18,7 +18,7 @@ ceph.conf. The ``ceph-immmutable-object-cache`` daemon is responsible for
 caching the parent content on local disk, and future reads on those contents
 will be serviced from the local cache.
 
-.. note:: RBD shared read-only parent image cache requires the Ceph Nautiaulas release or later.
+.. note:: RBD shared read-only parent image cache requires the Ceph Nautilus release or later.
 
 .. ditaa::  +--------------------------------------------------------+
             |                       QEMU                             |
@@ -34,23 +34,43 @@ will be serviced from the local cache.
 Enable RBD Shared Read-only Parent Image Cache
 ----------------------------------------------
 
-The ``ceph.conf`` file `ceph-conf`_ settings for RBD shared read-only parent
-image cache should be set in the ``[client]`` section of your configuration
+To enable RBD shared read-only parent image cache, the following Ceph settings
+need to added in the ``[client]`` section `ceph-conf`_ of your ``ceph.conf``
 file.
-The settings include:
 
-``rbd shared cache enabled``
+``rbd parent cache enabled = true``
 
-:Description: Enable caching for shared read-only cache.
-:Type: Boolean
-:Required: No
-:Default: ``false``
 
 Immutable Object Cache Daemon
 =============================
 
 The ``ceph-immutable-object-cache`` daemon is responsible for caching parent
-image content on local caching directory.
+image content within its local caching directory. For better performance it's
+recommended to use SSDs as the underlying storage.
+
+The key components of the daemon are:
+- domain socket based simple IPC
+- simple LRU policy based promotion/demotion on cache capacity management
+- simple file based caching store for RADOS objects
+
+On the opening of each cloned rbd image, librbd will try to connect to the
+cache daemon over domain socket based IPC. If it's successfully connected,
+librbd will automatically check with the daemon on the following reads.
+If there's read that's not cached, the daemon will promote the RADOS object
+to local caching directory. So the next read on that object will be serviced
+from local file. The daemon also maintains a simple LRU statics so if there's
+not enough capacity it will delete some cold cache files.
+
+Some important cache options correspond to the following settings.
+``immutable_object_cache_path``
+The immutable object cache data directory.
+
+``immutable_object_cache_max_size``
+The max size for immutable cache.
+
+``immutable_object_cache_watermark``
+The watermark for the cache. If the capacity reaches to this watermark, the
+daemon will delete cache files based the LRU statics.
 
 The ``ceph-immutable-object-cache`` daemon is available within the optional
 ``ceph-immutable-object-cache`` distribution package.
@@ -74,6 +94,6 @@ The ``ceph-immutable-object-cache`` can also be run in foreground by ``ceph-immu
   ceph-immutable-object-cache -f --log-file={log_path}
 
 .. _rbd-snapshots: ../rbd-snapshot
-.. _ceph-conf: ../../rados/configuration/ceph-conf/#running-multiple-clusters
+.. _ceph-conf: ../../rados/configuration/ceph-conf/#configuration-sections
 .. _create a Ceph user: ../../rados/operations/user-management#add-a-user
 
