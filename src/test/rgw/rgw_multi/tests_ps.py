@@ -67,7 +67,7 @@ class HTTPPostHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 def http_thread_runner(httpd):
     """main thread function for the http server"""
     try:
-        log.info('HTTP Server started')
+        log.info('HTTP Server started on: %s', httpd.server_address)
         httpd.serve_forever()
         log.info('HTTP Server ended')
     except:
@@ -1090,7 +1090,7 @@ def test_ps_push_http():
     topic_name = bucket_name+TOPIC_SUFFIX
 
     # create random port for the http server
-    host = 'localhost'
+    host = socket.gethostname()
     port = random.randint(10000, 20000)
     # start an http server in a separate thread
     task, httpd, = create_http_thread(host, port)
@@ -1150,7 +1150,7 @@ def test_ps_s3_push_http():
     topic_name = bucket_name+TOPIC_SUFFIX
 
     # create random port for the http server
-    host = 'localhost'
+    host = socket.gethostname()
     port = random.randint(10000, 20000)
     # start an http server in a separate thread
     task, httpd, = create_http_thread(host, port)
