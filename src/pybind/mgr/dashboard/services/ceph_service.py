@@ -18,6 +18,11 @@ except ImportError:
 
 from .. import logger, mgr
 
+try:
+    from typing import Dict, Any  # pylint: disable=unused-import
+except ImportError:
+    pass  # For typing only
+
 
 class SendCommandError(rados.Error):
     def __init__(self, err, prefix, argdict, errno):
@@ -40,7 +45,7 @@ class CephService(object):
 
     @classmethod
     def get_service_map(cls, service_name):
-        service_map = {}
+        service_map = {}  # type: Dict[str, Dict[str, Any]]
         for server in mgr.list_servers():
             for service in server['services']:
                 if service['type'] == service_name:
@@ -234,6 +239,9 @@ class CephService(object):
     @classmethod
     def get_pg_info(cls):
         pg_summary = mgr.get('pg_summary')
+        object_stats = {stat: pg_summary['pg_stats_sum']['stat_sum'][stat] for stat in [
+            'num_objects', 'num_object_copies', 'num_objects_degraded',
+            'num_objects_misplaced', 'num_objects_unfound']}
 
         pgs_per_osd = 0.0
         total_osds = len(pg_summary['by_osd'])
@@ -246,6 +254,7 @@ class CephService(object):
             pgs_per_osd = total_pgs / total_osds
 
         return {
+            'object_stats': object_stats,
             'statuses': pg_summary['all'],
             'pgs_per_osd': pgs_per_osd,
         }
