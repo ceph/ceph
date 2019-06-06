@@ -4123,6 +4123,11 @@ std::vector<Option> get_global_options() {
     .set_default(64_K)
     .set_description(""),
 
+    Option("memstore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .add_see_also("bluestore_debug_omit_block_device_write")
+    .set_description("write metadata only"),
+
     Option("objectstore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
