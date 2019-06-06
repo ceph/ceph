@@ -37,6 +37,9 @@ public:
 
   ElectionLogic(Elector *e) : elector(e), epoch(0),
 			      electing_me(false), leader_acked(-1) {}
+
+  void bump_epoch(epoch_t e);
+  
 private:
   void persist_epoch(epoch_t e);
   void validate_store();
@@ -53,8 +56,11 @@ class Elector {
    * @defgroup Elector_h_class Elector
    * @{
    */
- private:
+  friend class ElectionLogic;
+  // FIXME!
+  public:
   ElectionLogic logic;
+  Elector *elector;
    /**
    * @defgroup Elector_h_internal_types Internal Types
    * @{
@@ -81,6 +87,7 @@ class Elector {
    */
   Monitor *mon;
 
+private:
   /**
    * Event callback responsible for dealing with an expired election once a
    * timer runs out and fires up.
@@ -174,7 +181,7 @@ class Elector {
    *
    * @param e Epoch to which we will update our epoch
    */
-  void bump_epoch(epoch_t e);
+  void _bump_epoch();
 
   /**
    * Start new elections by proposing ourselves as the new Leader.
@@ -347,7 +354,8 @@ class Elector {
    * @param m A Monitor instance
    */
   explicit Elector(Monitor *m) : logic(this),
-			mon(m),
+				 elector(this),
+				 mon(m),
 				 participating(true) {}
 
   /**
@@ -381,7 +389,7 @@ class Elector {
    * increase election epoch by 1
    */
   void advance_epoch() {
-    bump_epoch(logic.epoch + 1);
+    logic.bump_epoch(logic.epoch + 1);
   }
 
   /**
