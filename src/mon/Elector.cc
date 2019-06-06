@@ -114,7 +114,7 @@ void Elector::_bump_epoch()
 
 void Elector::start()
 {
-  if (!participating) {
+  if (!logic.participating) {
     dout(0) << "not starting new election -- not participating" << dendl;
     return;
   }
@@ -536,7 +536,7 @@ void Elector::dispatch(MonOpRequestRef op)
     
   case MSG_MON_ELECTION:
     {
-      if (!participating) {
+      if (!logic.participating) {
         return;
       }
       if (op->get_req()->get_source().num() >= mon->monmap->size()) {
@@ -617,7 +617,5 @@ void Elector::dispatch(MonOpRequestRef op)
 
 void Elector::start_participating()
 {
-  if (!participating) {
-    participating = true;
-  }
+  logic.participating = true;
 }

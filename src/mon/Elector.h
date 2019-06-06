@@ -31,11 +31,12 @@ class ElectionLogic {
 public:
   Elector *elector;
   epoch_t epoch;
+  bool participating;
   bool electing_me;
   set<int> acked_me;
   int leader_acked;
 
-  ElectionLogic(Elector *e) : elector(e), epoch(0),
+  ElectionLogic(Elector *e) : elector(e), epoch(0), participating(true),
 			      electing_me(false), leader_acked(-1) {}
   void init();
   void bump_epoch(epoch_t e);
@@ -139,7 +140,7 @@ private:
    *	      have to call Elector::start_participating for us to resume
    *	      participating in the quorum.
    */
-  bool participating;
+  //  bool participating;
 
   // electing me
   /**
@@ -363,8 +364,7 @@ private:
    */
   explicit Elector(Monitor *m) : logic(this),
 				 elector(this),
-				 mon(m),
-				 participating(true) {}
+				 mon(m) {}
 
   /**
    * Initiate the Elector class.
@@ -426,7 +426,7 @@ private:
    *
    * @post @p participating is false
    */
-  void stop_participating() { participating = false; }
+  void stop_participating() { logic.participating = false; }
   /**
    * Start participating in Elections.
    *
