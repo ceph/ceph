@@ -23,15 +23,6 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
 
-function install_seastar_deps {
-    if [ $WITH_SEASTAR ]; then
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              ragel libc-ares-dev libhwloc-dev libnuma-dev libpciaccess-dev \
-              libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
-              protobuf-compiler systemtap-sdt-dev libyaml-cpp-dev
-    fi
-}
-
 function munge_ceph_spec_in {
     local for_make_check=$1
     shift
@@ -58,6 +49,9 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
+    if [ $with_seastar ]; then
+	sed -i -e 's/^# Crimson[[:space:]]//g' $control
+    fi
     if $for_make_check; then
         sed -i 's/^# Make-Check[[:space:]]/             /g' $control
     fi
@@ -307,7 +301,6 @@ else
 	# work is done
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
-	install_seastar_deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
