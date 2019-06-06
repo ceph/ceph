@@ -1357,12 +1357,13 @@ public:
   void reject_reservation();
 
   // acting set
-  map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
+  std::optional<std::reference_wrapper<const std::pair<const pg_shard_t, pg_info_t>>>
+  find_best_info(
     const map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
     bool *history_les_bound) const;
   static void calc_ec_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const pg_info_t& auth_pg_info,
     unsigned size,
     const vector<int> &acting,
     const vector<int> &up,
@@ -1373,7 +1374,7 @@ public:
     set<pg_shard_t> *acting_backfill,
     ostream &ss);
   static void calc_replicated_acting(
-    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    const pair<const pg_shard_t, pg_info_t>& auth_log_shard,
     uint64_t force_auth_primary_missing_objects,
     unsigned size,
     const vector<int> &acting,
