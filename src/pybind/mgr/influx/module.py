@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from datetime import datetime
 from threading import Event, Thread
 from itertools import chain
@@ -130,9 +131,8 @@ class Module(MgrModule):
                     break
 
                 start = time.time()
-                client = self.get_influx_client()
-                client.write_points(points, time_precision='ms')
-                client.close()
+                with self.get_influx_client() as client:
+                    client.write_points(points, time_precision='ms')
                 runtime = time.time() - start
                 self.log.debug('Writing points %d to Influx took %.3f seconds',
                                len(points), runtime)
@@ -332,14 +332,23 @@ class Module(MgrModule):
                      self.get_pg_summary_osd(pools, now),
                      self.get_pg_summary_pool(pools, now))
 
+    @contextmanager
     def get_influx_client(self):
-        return InfluxDBClient(self.config['hostname'],
-                                     self.config['port'],
-                                     self.config['username'],
-                                     self.config['password'],
-                              self.config['database'],
-                                     self.config['ssl'],
-                                     self.config['verify_ssl'])
+        client = InfluxDBClient(self.config['hostname'],
+                                self.config['port'],
+                                self.config['username'],
+                                self.config['password'],
+                                self.config['database'],
+                                self.config['ssl'],
+                                self.config['verify_ssl'])
+        try:
+            yield client
+        finally:
+            try:
+                client.close()
+            except AttributeError:
+                # influxdb older than v5.0.0
+                pass
 
     def send_to_influx(self):
         if not self.config['hostname']:
@@ -360,21 +369,20 @@ class Module(MgrModule):
         self.log.debug("Sending data to Influx host: %s",
                        self.config['hostname'])
         try:
-            client = self.get_influx_client()
-            databases = client.get_list_database()
-            if {'name': self.config['database']} not in databases:
-                self.log.info("Database '%s' not found, trying to create "
-                              "(requires admin privs). You can also create "
-                              "manually and grant write privs to user "
-                              "'%s'", self.config['database'],
-                              self.config['database'])
-                client.create_database(self.config['database'])
-                client.create_retention_policy(name='8_weeks',
-                                               duration='8w',
-                                               replication='1',
-                                               default=True,
-                                               database=self.config['database'])
-            client.close()
+            with self.get_influx_client() as client:
+                databases = client.get_list_database()
+                if {'name': self.config['database']} not in databases:
+                    self.log.info("Database '%s' not found, trying to create "
+                                  "(requires admin privs). You can also create "
+                                  "manually and grant write privs to user "
+                                  "'%s'", self.config['database'],
+                                  self.config['database'])
+                    client.create_database(self.config['database'])
+                    client.create_retention_policy(name='8_weeks',
+                                                   duration='8w',
+                                                   replication='1',
+                                                   default=True,
+                                                   database=self.config['database'])
 
             self.log.debug('Gathering statistics')
             points = self.gather_statistics()
