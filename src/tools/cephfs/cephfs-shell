@@ -589,13 +589,13 @@ exists.')
                         dst_dir[:-1]) and not locate_file(dst_dir):
                     try:
                         cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                    except:
+                    except libcephfs.Error:
                         pass
                 if (not args.force) and dst_dir != '/' and not is_dir_exists(
                         dst_dir) and not os.path.isfile(root_src_dir):
                     try:
                         cephfs.mkdirs(to_bytes(dst_dir), 0o777)
-                    except:
+                    except libcephfs.Error:
                         pass
 
                 for dir_ in dirs:
@@ -603,7 +603,7 @@ exists.')
                     if not is_dir_exists(dir_name):
                         try:
                             cephfs.mkdirs(to_bytes(dir_name), 0o777)
-                        except:
+                        except libcephfs.Error:
                             pass
 
                 for file_ in files:
@@ -657,7 +657,7 @@ exists.')
             if len(files) == 0:
                 try:
                     os.makedirs(root_dst_dir + '/' + root_src_dir)
-                except:
+                except OSError:
                     if args.force:
                         pass
                     else:
@@ -673,7 +673,7 @@ exists.')
                 if is_dir_exists(file_):
                     try:
                         os.makedirs(dst_path)
-                    except:
+                    except OSError:
                         pass
                 else:
                     if not args.force:
@@ -681,7 +681,7 @@ exists.')
                             os.stat(dst_path)
                             self.poutput("%s: file already exists! use --force to override" % file_)
                             return
-                        except:
+                        except OSError:
                             copy_to_local(file_, dst_path)
                     else:
                         copy_to_local(file_, dst_path)
@@ -1172,7 +1172,7 @@ sub-directories, files')
                                     max_bytes, len(max_bytes),
                                     os.XATTR_CREATE)
                     self.poutput('max_bytes set to %d' % args.max_bytes)
-                except:
+                except libcephfs.Error:
                     cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
@@ -1185,7 +1185,7 @@ sub-directories, files')
                                     max_files, len(max_files),
                                     os.XATTR_CREATE)
                     self.poutput('max_files set to %d' % args.max_files)
-                except:
+                except libcephfs.Error:
                     cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
@@ -1197,7 +1197,7 @@ sub-directories, files')
                 max_bytes = cephfs.getxattr(to_bytes(args.dir),
                                             'ceph.quota.max_bytes')
                 self.poutput('max_bytes: %s' % max_bytes)
-            except:
+            except libcephfs.Error:
                 self.poutput('max_bytes is not set')
                 pass
 
@@ -1205,7 +1205,7 @@ sub-directories, files')
                 max_files = cephfs.getxattr(to_bytes(args.dir),
                                             'ceph.quota.max_files')
                 self.poutput('max_files: %s' % max_files)
-            except:
+            except libcephfs.Error:
                 self.poutput('max_files is not set')
                 pass
 
