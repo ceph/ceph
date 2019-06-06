@@ -39,6 +39,7 @@ public:
 			      electing_me(false), leader_acked(-1) {}
 
   void bump_epoch(epoch_t e);
+  void defer(int who);
   void handle_propose_logic(epoch_t mepoch, int from);
   
 private:
@@ -219,7 +220,7 @@ private:
    *
    * @param who Some other monitor's numeric identifier. 
    */
-  void defer(int who);
+  void _defer_to(int who);
   /**
    * The election has taken too long and has expired.
    *
