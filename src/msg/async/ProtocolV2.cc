@@ -220,14 +220,11 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 }
 
 void ProtocolV2::reset_recv_state() {
-  if ((state >= AUTH_CONNECTING && state <= SESSION_RECONNECTING) ||
-      state == READY) {
-    auth_meta.reset(new AuthConnectionMeta);
-    session_stream_handlers.tx.reset(nullptr);
-    session_stream_handlers.rx.reset(nullptr);
-    pre_auth.txbuf.clear();
-    pre_auth.rxbuf.clear();
-  }
+  auth_meta.reset(new AuthConnectionMeta);
+  session_stream_handlers.tx.reset(nullptr);
+  session_stream_handlers.rx.reset(nullptr);
+  pre_auth.txbuf.clear();
+  pre_auth.rxbuf.clear();
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
@@ -2666,6 +2663,10 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
 
   ldout(messenger->cct, 5) << __func__ << " stop myself to swap existing"
                            << dendl;
+
+  std::swap(exproto->session_stream_handlers, session_stream_handlers);
+  exproto->auth_meta = auth_meta;
+
   // avoid _stop shutdown replacing socket
   // queue a reset on the new connection, which we're dumping for the old
   stop();
@@ -2675,8 +2676,6 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
   exproto->can_write = false;
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
-  std::swap(exproto->session_stream_handlers, session_stream_handlers);
-  exproto->auth_meta = auth_meta;
   existing->state_offset = 0;
   // avoid previous thread modify event
   exproto->state = NONE;
