@@ -8,10 +8,12 @@
 
 #include "cls/otp/cls_otp_client.h"
 #include "cls/log/cls_log_client.h"
+#include "cls/lock/cls_lock_client.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
+static string log_lock_name = "rgw_log_lock";
 
 int RGWSI_Cls::do_start()
 {
@@ -415,5 +417,49 @@ int RGWSI_Cls::TimeLog::trim(const string& oid,
     r = obj.aio_operate(completion, &op);
   }
   return r;
+}
+
+int RGWSI_Cls::Lock::lock_exclusive(const rgw_pool& pool,
+                                    const string& oid,
+                                    timespan& duration,
+                                    string& zone_id,
+                                    string& owner_id,
+                                    std::optional<string> lock_name)
+{
+  auto p = rados_svc->pool(pool);
+  int r = p.open();
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t msec = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+  utime_t ut(msec / 1000, msec % 1000);
+  
+  rados::cls::lock::Lock l(lock_name.value_or(log_lock_name));
+  l.set_duration(ut);
+  l.set_cookie(owner_id);
+  l.set_tag(zone_id);
+  l.set_may_renew(true);
+  
+  return l.lock_exclusive(&p.ioctx(), oid);
+}
+
+int RGWSI_Cls::Lock::unlock(const rgw_pool& pool,
+                            const string& oid,
+                            string& zone_id,
+                            string& owner_id,
+                            std::optional<string> lock_name)
+{
+  auto p = rados_svc->pool(pool);
+  int r = p.open();
+  if (r < 0) {
+    return r;
+  }
+  
+  rados::cls::lock::Lock l(lock_name.value_or(log_lock_name));
+  l.set_tag(zone_id);
+  l.set_cookie(owner_id);
+  
+  return l.unlock(&p.ioctx(), oid);
 }
 

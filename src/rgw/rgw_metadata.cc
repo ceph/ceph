@@ -8,7 +8,6 @@
 #include "rgw_coroutine.h"
 #include "cls/version/cls_version_types.h"
 
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_tools.h"
 #include "rgw_mdlog.h"
@@ -105,16 +104,16 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
 
 
 int RGWMetadataLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl) {
-  if (!store->svc.zone->need_to_log_metadata())
+  if (!svc.zone->need_to_log_metadata())
     return 0;
 
   string oid;
   int shard_id;
 
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
+  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
-  return store->svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
+  return svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
 }
 
 int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
@@ -122,8 +121,8 @@ int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int sha
   string oid;
 
   mark_modified(shard_id);
-  store->shard_name(prefix, shard_id, oid);
-  return store->svc.cls->timelog.add(oid, entries, completion, false, null_yield);
+  rgw_shard_name(prefix, shard_id, oid);
+  return svc.cls->timelog.add(oid, entries, completion, false, null_yield);
 }
 
 void RGWMetadataLog::init_list_entries(int shard_id, const real_time& from_time, const real_time& end_time, 
@@ -159,9 +158,9 @@ int RGWMetadataLog::list_entries(void *handle,
   }
 
   std::string next_marker;
-  int ret = store->svc.cls->timelog.list(ctx->cur_oid, ctx->from_time, ctx->end_time,
-                                         max_entries, entries, ctx->marker,
-                                         &next_marker, truncated, null_yield);
+  int ret = svc.cls->timelog.list(ctx->cur_oid, ctx->from_time, ctx->end_time,
+                                  max_entries, entries, ctx->marker,
+                                  &next_marker, truncated, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -183,7 +182,7 @@ int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
 
   cls_log_header header;
 
-  int ret = store->svc.cls->timelog.info(oid, &header, null_yield);
+  int ret = svc.cls->timelog.info(oid, &header, null_yield);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -219,9 +218,9 @@ int RGWMetadataLog::get_info_async(int shard_id, RGWMetadataLogInfoCompletion *c
 
   completion->get(); // hold a ref until the completion fires
 
-  return store->svc.cls->timelog.info_async(completion->get_io_obj(), oid,
-                                             &completion->get_header(),
-                                             completion->get_completion());
+  return svc.cls->timelog.info_async(completion->get_io_obj(), oid,
+                                     &completion->get_header(),
+                                     completion->get_completion());
 }
 
 int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_time& end_time,
@@ -232,7 +231,7 @@ int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_ti
 
   int ret;
 
-  ret = store->svc.cls->timelog.trim(oid, from_time, end_time, start_marker, end_marker, nullptr, null_yield);
+  ret = svc.cls->timelog.trim(oid, from_time, end_time, start_marker, end_marker, nullptr, null_yield);
 
   if (ret == -ENOENT || ret == -ENODATA)
     ret = 0;
@@ -244,14 +243,14 @@ int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
+  return svc.cls->lock.lock_exclusive(svc.zone->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
 int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->unlock(store->svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
+  return svc.cls->lock.unlock(svc.zone->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)

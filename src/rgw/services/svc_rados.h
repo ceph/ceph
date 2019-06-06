@@ -34,7 +34,6 @@ class RGWSI_RADOS : public RGWServiceInstance
   std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   int do_start() override;
-  void shutdown() override;
 
   librados::Rados* get_rados_handle(int rados_handle);
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx& io_ctx, int rados_handle);
@@ -49,6 +48,7 @@ public:
   ~RGWSI_RADOS();
 
   void init() {}
+  void shutdown() override;
 
   uint64_t instance_id();
 

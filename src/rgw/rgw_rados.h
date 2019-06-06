@@ -1377,9 +1377,6 @@ public:
                              uint64_t end_epoch);
   int cls_obj_usage_log_clear(string& oid);
 
-  void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
-  void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
-  void shard_name(const string& prefix, unsigned shard_id, string& name);
   int get_target_shard_id(const RGWBucketInfo& bucket_info, const string& obj_key, int *shard_id);
 
   int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
