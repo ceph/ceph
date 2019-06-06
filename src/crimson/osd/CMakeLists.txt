@@ -19,3 +19,6 @@ add_executable(crimson-osd
   )
 target_link_libraries(crimson-osd
   crimson-common crimson-os crimson fmt::fmt)
+if(WITH_TESTS)
+  add_dependencies(tests crimson-osd)
+endif()
