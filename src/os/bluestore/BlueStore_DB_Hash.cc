@@ -1,3 +1,4 @@
+#include "BlueStore.h"
 #include "BlueStore_DB_Hash.h"
 
 #include "common/debug.h"

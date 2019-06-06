@@ -59,6 +59,7 @@ KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size
 #include "BlueStore_DB_Hash.h"
 #include "common/url_escape.h"
 #include "kv/RocksDBStore.h"
+#include "functional"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -8939,21 +8940,26 @@ int BlueStore::reshard(const std::string& new_sharding)
   //all columns created, now opening of targer_hash_db should succeed
   BlueStore_DB_Hash target_hash_db(r_source_db, new_shards);
 
-
-
-  auto do_move = [&](
-      KeyValueDB::IteratorBase data_source,
+  auto reshard_move = [&](
+      std::function<KeyValueDB::IteratorBase(const std::string&, const std::string&)> create_iterator,
       std::string source_cf_name,
       bool skip_bitmap_entries) {
     KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
     ceph_assert(source_cf_handle);
+    KeyValueDB::IteratorBase data_source = create_iterator("","");
 
     KeyValueDB::Transaction transaction = source_db->get_transaction();
     size_t data_in_transaction = 0;
     size_t ops_in_transaction = 0;
+    size_t keys_in_iterator = 0;
+    size_t data_in_iterator = 0;
 
     while (data_source->valid()) {
       std::pair<std::string, std::string> raw_key = data_source->raw_key();
+      if (ops_in_transaction == 10000 || data_in_transaction > 10000000) {
+        data_source = create_iterator(raw_key.first, raw_key.second);
+      }
+
       ceph::bufferlist data = data_source->value();
       dout(20) << "Processing key '" << url_escape(raw_key.first) << " " << url_escape(raw_key.second) << "'" << dendl;
 
@@ -8972,6 +8978,8 @@ int BlueStore::reshard(const std::string& new_sharding)
           transaction->set(raw_key.first, raw_key.second, data);
           ops_in_transaction++;
           data_in_transaction += data.length();
+          keys_in_iterator ++;
+          data_in_iterator += data.length();
         } else {
           //there is special handling of prefix PREFIX_ALLOC_BITMAP as it is used internally by bluefs
           //do not delete those entries, only move them
@@ -8982,6 +8990,8 @@ int BlueStore::reshard(const std::string& new_sharding)
               transaction->set(raw_key.first, raw_key.second, data);
               ops_in_transaction++;
               data_in_transaction += data.length();
+              keys_in_iterator ++;
+              data_in_iterator += data.length();
             }
           }
         }
@@ -9009,9 +9019,15 @@ int BlueStore::reshard(const std::string& new_sharding)
     dout(10) << "Starting processing column family '" << source_cf_name << "'" << dendl;
     KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
     ceph_assert(source_cf_handle);
-    KeyValueDB::WholeSpaceIterator data_source = source_db->get_wholespace_iterator_cf(source_cf_handle);
-    data_source->seek_to_first();
-    do_move(data_source, source_cf_name, true);
+    reshard_move(
+        [&](const std::string& prefix, const std::string& key) -> KeyValueDB::IteratorBase {
+              KeyValueDB::WholeSpaceIterator data_source = source_db->get_wholespace_iterator_cf(source_cf_handle);
+              data_source->lower_bound(prefix, key);
+              return data_source;
+            },
+        source_cf_name,
+        true
+    );
     dout(10) << "Finished processing column family '" << source_cf_name << "'" << dendl;
   }
 
@@ -9026,9 +9042,16 @@ int BlueStore::reshard(const std::string& new_sharding)
           "' for ALLOC_BITMAP" << dendl;
       KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
       ceph_assert(source_cf_handle);
-      KeyValueDB::Iterator data_source = source_db->get_iterator_cf(source_cf_handle, PREFIX_ALLOC_BITMAP);
-      data_source->seek_to_first();
-      do_move(data_source, source_cf_name, true);
+      reshard_move(
+          [&](const std::string& prefix, const std::string& key) -> KeyValueDB::IteratorBase {
+              KeyValueDB::Iterator data_source = source_db->get_iterator_cf(source_cf_handle, PREFIX_ALLOC_BITMAP);
+              //KeyValueDB::WholeSpaceIterator data_source = source_db->get_wholespace_iterator_cf(source_cf_handle);
+              data_source->lower_bound(key);
+              return data_source;
+          },
+          source_cf_name,
+          false
+      );
       dout(10) << "Finished processing column family '" << source_cf_name << "'" << dendl;
     }
 
