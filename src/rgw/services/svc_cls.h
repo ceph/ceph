@@ -124,7 +124,24 @@ public:
              optional_yield y);
   } timelog;
 
-  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct) {}
+  class Lock : public ClsSubService {
+    int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
+    public:
+    Lock(CephContext *cct): ClsSubService(cct) {}
+    int lock_exclusive(const rgw_pool& pool,
+                       const string& oid,
+                       timespan& duration,
+                       string& zone_id,
+                       string& owner_id,
+                       std::optional<string> lock_name = std::nullopt);
+    int unlock(const rgw_pool& pool,
+               const string& oid,
+               string& zone_id,
+               string& owner_id,
+               std::optional<string> lock_name = std::nullopt);
+  } lock;
+
+  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct), lock(cct) {}
 
   void init(RGWSI_Zone *_zone_svc, RGWSI_RADOS *_rados_svc) {
     rados_svc = _rados_svc;
@@ -132,6 +149,7 @@ public:
 
     mfa.init(this, zone_svc, rados_svc);
     timelog.init(this, zone_svc, rados_svc);
+    lock.init(this, zone_svc, rados_svc);
   }
 
   int do_start() override;

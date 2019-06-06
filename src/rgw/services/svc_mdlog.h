@@ -41,10 +41,6 @@ class RGWSI_MDLog : public RGWServiceInstance
   friend class mdlog::ReadHistoryCR;
   friend class mdlog::WriteHistoryCR;
 
-  RGWSI_RADOS *rados_svc{nullptr};
-  RGWSI_Zone *zone_svc{nullptr};
-  RGWSI_SysObj *sysobj_svc{nullptr};
-
   // maintain a separate metadata log for each period
   std::map<std::string, RGWMetadataLog> md_logs;
 
@@ -68,11 +64,13 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_MDLog *mdlog{nullptr};
+    RGWSI_Cls *cls{nullptr};
   } svc;
 
   int init(RGWSI_RADOS *_rados_svc,
            RGWSI_Zone *_zone_svc,
-           RGWSI_SysObj *_sysobj_svc);
+           RGWSI_SysObj *_sysobj_svc,
+           RGWSI_Cls *_cls_svc);
 
   int do_start() override;
 
