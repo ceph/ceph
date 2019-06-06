@@ -64,5 +64,6 @@ target_link_libraries(rbd-mirror
   cls_rbd_client
   cls_lock_client
   cls_journal_client
-  global)
+  global
+  ${ALLOC_LIBS})
 install(TARGETS rbd-mirror DESTINATION bin)
