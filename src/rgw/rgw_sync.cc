@@ -58,7 +58,7 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
   encode(info, bl);
-  store->time_log_prepare_entry(entry, real_clock::now(), section, name, bl);
+  store->svc.cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
 
   uint32_t shard_id = ++counter % num_shards;
 
