@@ -422,7 +422,7 @@ class CephFSShell(Cmd):
             res = None
             try:
                 o_mode = int(values, base=8)
-            except ValueError as e:
+            except ValueError:
                 res = re.match('((u?g?o?)|(a?))(=)(r?w?x?)', values)
                 if res is None:
                     parser.error("invalid mode: %s\n"
