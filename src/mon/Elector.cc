@@ -152,19 +152,23 @@ void Elector::start()
   reset_timer();
 }
 
-void Elector::defer(int who)
+void ElectionLogic::defer(int who)
 {
   dout(5) << "defer to " << who << dendl;
 
-  if (logic.electing_me) {
+  if (electing_me) {
     // drop out
-    logic.acked_me.clear();
-    peer_info.clear();
-    logic.electing_me = false;
+    acked_me.clear();
+    electing_me = false;
   }
 
   // ack them
-  logic.leader_acked = who;
+  leader_acked = who;
+  elector->_defer_to(who);
+}
+
+void Elector::_defer_to(int who)
+{
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, logic.epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   m->mon_release = ceph_release();
@@ -356,7 +360,7 @@ void ElectionLogic::handle_propose_logic(epoch_t mepoch, int from)
     if (leader_acked < 0 ||      // haven't acked anyone yet, or
 	leader_acked > from ||   // they would win over who you did ack, or
 	leader_acked == from) {  // this is the guy we're already deferring to
-      elector->defer(from);
+      defer(from);
     } else {
       // ignore them!
       dout(5) << "no, we already acked " << leader_acked << dendl;
