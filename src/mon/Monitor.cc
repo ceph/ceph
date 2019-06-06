@@ -2095,7 +2095,7 @@ void Monitor::win_standalone_election()
 
   // bump election epoch, in case the previous epoch included other
   // monitors; we need to be able to make the distinction.
-  elector.init();
+  elector.logic.init();
   elector.advance_epoch();
 
   rank = monmap->get_rank(name);

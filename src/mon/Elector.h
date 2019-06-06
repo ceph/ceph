@@ -37,7 +37,7 @@ public:
 
   ElectionLogic(Elector *e) : elector(e), epoch(0),
 			      electing_me(false), leader_acked(-1) {}
-
+  void init();
   void bump_epoch(epoch_t e);
   void defer(int who);
   void handle_propose_logic(epoch_t mepoch, int from);
@@ -45,6 +45,7 @@ public:
 private:
   // call-outs
   void persist_epoch(epoch_t e);
+  epoch_t read_persisted_epoch();
   void validate_store();
   bool elector_is_current_member(int rank);
   void elector_trigger_new_election();
@@ -373,7 +374,7 @@ private:
    *
    * @post @p epoch is set to 1 or higher.
    */
-  void init();
+  //  void init();
   /**
    * Inform this class it is supposed to shutdown.
    *
