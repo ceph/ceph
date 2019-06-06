@@ -85,37 +85,6 @@ int OSDriver::get_next(
   }
 }
 
-struct Mapping {
-  snapid_t snap;
-  hobject_t hoid;
-  explicit Mapping(const pair<snapid_t, hobject_t> &in)
-    : snap(in.first), hoid(in.second) {}
-  Mapping() : snap(0) {}
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(snap, bl);
-    encode(hoid, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(snap, bl);
-    decode(hoid, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(Mapping)
-
-string SnapMapper::get_legacy_prefix(snapid_t snap)
-{
-  char buf[100];
-  int len = snprintf(
-    buf, sizeof(buf),
-    "%.*X_",
-    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
-  return LEGACY_MAPPING_PREFIX + string(buf, len);
-}
-
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
   char buf[100];
@@ -146,6 +115,7 @@ pair<string, bufferlist> SnapMapper::to_raw(
 pair<snapid_t, hobject_t> SnapMapper::from_raw(
   const pair<std::string, bufferlist> &image)
 {
+  using ceph::decode;
   Mapping map;
   bufferlist bl(image.second);
   auto bp = bl.cbegin();
@@ -426,5 +396,83 @@ int SnapMapper::get_snaps(
     return r;
   if (snaps)
     snaps->swap(out.snaps);
+  return 0;
+}
+
+
+// -------------------------------------
+// legacy conversion/support
+
+string SnapMapper::get_legacy_prefix(snapid_t snap)
+{
+  char buf[100];
+  int len = snprintf(
+    buf, sizeof(buf),
+    "%.*X_",
+    (int)(sizeof(snap)*2), static_cast<unsigned>(snap));
+  return LEGACY_MAPPING_PREFIX + string(buf, len);
+}
+
+string SnapMapper::to_legacy_raw_key(
+  const pair<snapid_t, hobject_t> &in)
+{
+  return get_legacy_prefix(in.first) + shard_prefix + in.second.to_str();
+}
+
+bool SnapMapper::is_legacy_mapping(const string &to_test)
+{
+  return to_test.substr(0, LEGACY_MAPPING_PREFIX.size()) ==
+    LEGACY_MAPPING_PREFIX;
+}
+
+int SnapMapper::convert_legacy(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  ghobject_t hoid,
+  unsigned max)
+{
+  uint64_t n = 0;
+
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
+  if (!iter) {
+    return -EIO;
+  }
+
+  auto start = ceph::mono_clock::now();
+
+  iter->upper_bound(SnapMapper::LEGACY_MAPPING_PREFIX);
+  map<string,bufferlist> to_set;
+  while (iter->valid()) {
+    bool valid = SnapMapper::is_legacy_mapping(iter->key());
+    if (valid) {
+      SnapMapper::Mapping m;
+      bufferlist bl(iter->value());
+      auto bp = bl.cbegin();
+      decode(m, bp);
+      to_set.emplace(
+	SnapMapper::get_prefix(m.hoid.pool, m.snap),
+	bl);
+      ++n;
+      iter->next();
+    }
+    if (!valid || !iter->valid() || to_set.size() >= max) {
+      ObjectStore::Transaction t;
+      t.omap_setkeys(ch->cid, hoid, to_set);
+      int r = store->queue_transaction(ch, std::move(t));
+      ceph_assert(r == 0);
+      to_set.clear();
+      if (!valid) {
+	break;
+      }
+      dout(10) << __func__ << " converted " << n << " keys" << dendl;
+    }
+  }
+
+  auto end = ceph::mono_clock::now();
+
+  dout(1) << __func__ << " converted " << n << " keys in "
+	  << timespan_str(end - start) << dendl;
+#warning fixme remove old keys
   return 0;
 }

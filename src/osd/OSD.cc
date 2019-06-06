@@ -198,6 +198,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_MISSING);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_FASTINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -2849,6 +2850,17 @@ int OSD::init()
   initial = get_osd_initial_compat_set();
   diff = superblock.compat_features.unsupported(initial);
   if (superblock.compat_features.merge(initial)) {
+    // Are we adding SNAPMAPPER2?
+    if (diff.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2)) {
+      dout(1) << __func__ << " upgrade snap_mapper (first start as octopus)"
+	      << dendl;
+      auto ch = service.meta_ch;
+      auto hoid = make_snapmapper_oid();
+      unsigned max = cct->_conf->osd_target_transaction_size;
+      r = SnapMapper::convert_legacy(cct, store, ch, hoid, max);
+      if (r < 0)
+	goto out;
+    }
     // We need to persist the new compat_set before we
     // do anything else
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
