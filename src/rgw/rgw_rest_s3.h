@@ -28,6 +28,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_sts.h"
+#include "rgw_sal.h"
 
 struct rgw_http_error {
   int http_ret;
@@ -326,7 +327,7 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) override;
+  int get_policy_from_state(rgw::sal::RGWRadosStore *store, struct req_state *s, stringstream& ss) override;
   void send_response() override;
   int get_params() override;
 };
@@ -547,7 +548,7 @@ public:
 class RGW_Auth_S3 {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       RGWRados *store,
+                       rgw::sal::RGWRadosStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
 };
@@ -567,7 +568,7 @@ public:
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& bucket);
 
-  int init(RGWRados *store,
+  int init(rgw::sal::RGWRadosStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override {
@@ -589,7 +590,7 @@ public:
     }
   ~RGWHandler_REST_S3() override = default;
 
-  int init(RGWRados *store,
+  int init(rgw::sal::RGWRadosStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override;

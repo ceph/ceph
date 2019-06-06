@@ -26,12 +26,14 @@
 
 #define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
 
-class RGWRados;
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
 class RGWGetUserStats_CB;
+namespace rgw { namespace sal {
+class RGWRadosStore;
+} }
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -55,8 +57,8 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
-extern int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
+extern int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id);
+extern int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
@@ -552,7 +554,7 @@ class RGWAccessKeyPool
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
   rgw_user user_id;
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWUserCtl *user_ctl{nullptr};
 
   map<std::string, RGWAccessKey> *swift_keys{nullptr};
@@ -595,7 +597,7 @@ class RGWSubUserPool
   RGWUser *user{nullptr};
 
   rgw_user user_id;
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWUserCtl *user_ctl{nullptr};
   bool subusers_allowed{false};
 
@@ -653,7 +655,7 @@ class RGWUser
 
 private:
   RGWUserInfo old_info;
-  RGWRados *store{nullptr};
+  rgw::sal::RGWRadosStore *store{nullptr};
   RGWUserCtl *user_ctl{nullptr};
 
   rgw_user user_id;
@@ -679,13 +681,13 @@ private:
 public:
   RGWUser();
 
-  int init(RGWRados *storage, RGWUserAdminOpState& op_state);
+  int init(rgw::sal::RGWRadosStore *storage, RGWUserAdminOpState& op_state);
 
-  int init_storage(RGWRados *storage);
+  int init_storage(rgw::sal::RGWRadosStore *storage);
   int init(RGWUserAdminOpState& op_state);
   int init_members(RGWUserAdminOpState& op_state);
 
-  RGWRados *get_store() { return store; }
+  rgw::sal::RGWRadosStore *get_store() { return store; }
   RGWUserCtl *get_user_ctl() { return user_ctl; }
 
   /* API Contracted Members */
@@ -724,52 +726,52 @@ public:
 class RGWUserAdminOp_User
 {
 public:
-  static int list(RGWRados *store,
+  static int list(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int info(RGWRados *store,
+  static int info(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int create(RGWRados *store,
+  static int create(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int modify(RGWRados *store,
+  static int modify(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int remove(RGWRados *store,
+  static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y);
 };
 
 class RGWUserAdminOp_Subuser
 {
 public:
-  static int create(RGWRados *store,
+  static int create(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int modify(RGWRados *store,
+  static int modify(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int remove(RGWRados *store,
+  static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
 class RGWUserAdminOp_Key
 {
 public:
-  static int create(RGWRados *store,
+  static int create(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int remove(RGWRados *store,
+  static int remove(rgw::sal::RGWRadosStore *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
 class RGWUserAdminOp_Caps
 {
 public:
-  static int add(RGWRados *store,
+  static int add(rgw::sal::RGWRadosStore *store,
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 
-  static int remove(RGWRados *store,
+  static int remove(rgw::sal::RGWRadosStore *store,
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 

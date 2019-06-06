@@ -19,6 +19,9 @@ class RGWRados;
 class RGWSysObjectCtx;
 struct RGWObjVersionTracker;
 class optional_yield;
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 struct obj_version;
 
@@ -132,11 +135,11 @@ using RGWMD5Etag = RGWEtag<MD5, CEPH_CRYPTO_MD5_DIGESTSIZE>;
 
 class RGWDataAccess
 {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   std::unique_ptr<RGWSysObjectCtx> sysobj_ctx;
 
 public:
-  RGWDataAccess(RGWRados *_store);
+  RGWDataAccess(rgw::sal::RGWRadosStore *_store);
 
   class Object;
   class Bucket;

@@ -52,7 +52,7 @@ void RGWOp_Usage_Get::execute() {
     }
   }
 
-  http_ret = RGWUsage::show(store, uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
+  http_ret = RGWUsage::show(store->getRados(), uid, bucket_name, start, end, show_entries, show_summary, &categories, flusher);
 }
 
 class RGWOp_Usage_Delete : public RGWRESTOp {
@@ -92,7 +92,7 @@ void RGWOp_Usage_Delete::execute() {
     }
   }
 
-  http_ret = RGWUsage::trim(store, uid, bucket_name, start, end);
+  http_ret = RGWUsage::trim(store->getRados(), uid, bucket_name, start, end);
 }
 
 RGWOp *RGWHandler_Usage::op_get()

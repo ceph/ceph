@@ -20,7 +20,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -124,13 +124,13 @@ struct RGWOrphanSearchState {
 WRITE_CLASS_ENCODER(RGWOrphanSearchState)
 
 class RGWOrphanStore {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   librados::IoCtx ioctx;
 
   string oid;
 
 public:
-  explicit RGWOrphanStore(RGWRados *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
+  explicit RGWOrphanStore(rgw::sal::RGWRadosStore *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
 
@@ -148,7 +148,7 @@ public:
 
 
 class RGWOrphanSearch {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
 
   RGWOrphanStore orphan_store;
 
@@ -186,7 +186,7 @@ class RGWOrphanSearch {
 
   int remove_index(map<int, string>& index);
 public:
-  RGWOrphanSearch(RGWRados *_store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
+  RGWOrphanSearch(rgw::sal::RGWRadosStore *_store, int _max_ios, uint64_t _stale_secs) : store(_store), orphan_store(store), max_concurrent_ios(_max_ios), stale_secs(_stale_secs) {}
 
   int save_state() {
     RGWOrphanSearchState state;

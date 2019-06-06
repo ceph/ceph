@@ -70,7 +70,7 @@ public:
     dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
-        store->svc.zone->get_zonegroup().get_name(),
+        store->svc()->zone->get_zonegroup().get_name(),
         s->user->user_id.tenant, topic_name);
     topic_arn = arn.to_string();
     return 0;
@@ -348,7 +348,7 @@ public:
       return -EINVAL;
     }
 
-    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
+    const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->getRados()->get_sync_module().get());
     const auto& conf = psmodule->get_effective_conf();
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
@@ -701,7 +701,7 @@ public:
 
     const auto& id = s->owner.get_id();
 
-    ret = store->get_bucket_info(*s->sysobj_ctx, id.tenant, bucket_name,
+    ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, id.tenant, bucket_name,
                                  bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
@@ -872,7 +872,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
   ups = make_unique<RGWUserPubSub>(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);
-  const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->get_sync_module().get());
+  const auto psmodule = static_cast<RGWPSSyncModuleInstance*>(store->getRados()->get_sync_module().get());
   const auto& conf = psmodule->get_effective_conf();
 
   for (const auto& c : configurations.list) {
@@ -964,7 +964,7 @@ public:
       return ret;
     }
 
-    ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
+    ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
                                  bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       return ret;
@@ -1124,7 +1124,7 @@ public:
       return ret;
     }
 
-    ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
+    ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
                                  bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       return ret;

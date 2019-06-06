@@ -203,20 +203,20 @@ struct RGWObjState {
 };
 
 class RGWObjectCtx {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
   void *s{nullptr};
 
   std::map<rgw_obj, RGWObjState> objs_state;
 public:
-  explicit RGWObjectCtx(RGWRados *_store) : store(_store) {}
-  explicit RGWObjectCtx(RGWRados *_store, void *_s) : store(_store), s(_s) {}
+  explicit RGWObjectCtx(rgw::sal::RGWRadosStore *_store) : store(_store) {}
+  explicit RGWObjectCtx(rgw::sal::RGWRadosStore *_store, void *_s) : store(_store), s(_s) {}
 
   void *get_private() {
     return s;
   }
 
-  RGWRados *get_store() {
+  rgw::sal::RGWRadosStore *get_store() {
     return store;
   }
 
@@ -348,6 +348,7 @@ public:
 
 class RGWGetDirHeader_CB;
 class RGWGetUserHeader_CB;
+namespace rgw { namespace sal { class RGWRadosStore; } }
 
 class RGWAsyncRadosProcessor;
 
@@ -397,6 +398,7 @@ class RGWRados
   ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
+  rgw::sal::RGWRadosStore *store;
   RGWGC *gc;
   RGWLC *lc;
   RGWObjectExpirer *obj_expirer;
@@ -533,6 +535,9 @@ public:
   }
   void set_context(CephContext *_cct) {
     cct = _cct;
+  }
+  void set_store(rgw::sal::RGWRadosStore *_store) {
+    store = _store;
   }
 
   RGWServices svc;
@@ -1487,25 +1492,6 @@ public:
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   uint64_t next_bucket_id();
-};
-
-class RGWStoreManager {
-public:
-  RGWStoreManager() {}
-  static RGWRados *get_storage(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads,
-			       bool run_sync_thread, bool run_reshard_thread, bool use_cache = true) {
-    RGWRados *store = init_storage_provider(cct, use_gc_thread, use_lc_thread, quota_threads, run_sync_thread,
-					    run_reshard_thread, use_cache);
-    return store;
-  }
-  static RGWRados *get_raw_storage(CephContext *cct) {
-    RGWRados *store = init_raw_storage_provider(cct);
-    return store;
-  }
-  static RGWRados *init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread, bool use_metadata_cache);
-  static RGWRados *init_raw_storage_provider(CephContext *cct);
-  static void close_storage(RGWRados *store);
-
 };
 
 #endif

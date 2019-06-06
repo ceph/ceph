@@ -28,10 +28,11 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "rgw_sal.h"
+
 class CephContext;
 class RGWSI_RADOS;
 class RGWSI_Zone;
-class RGWRados;
 class RGWBucketInfo;
 class cls_timeindex_entry;
 
@@ -68,7 +69,7 @@ public:
 
 class RGWObjectExpirer {
 protected:
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWObjExpStore exp_store;
 
   int init_bucket_info(const std::string& tenant_name,
@@ -97,9 +98,9 @@ protected:
   std::atomic<bool> down_flag = { false };
 
 public:
-  explicit RGWObjectExpirer(RGWRados *_store)
+  explicit RGWObjectExpirer(rgw::sal::RGWRadosStore *_store)
     : store(_store),
-      exp_store(_store->ctx(), _store->svc.rados, _store->svc.zone),
+      exp_store(_store->getRados()->ctx(), _store->svc()->rados, _store->svc()->zone),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {

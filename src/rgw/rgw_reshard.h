@@ -20,13 +20,15 @@
 
 
 class CephContext;
-class RGWRados;
 class RGWReshard;
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 class RGWBucketReshardLock {
   using Clock = ceph::coarse_mono_clock;
 
-  RGWRados* store;
+  rgw::sal::RGWRadosStore* store;
   const std::string lock_oid;
   const bool ephemeral;
   rados::cls::lock::Lock internal_lock;
@@ -41,10 +43,10 @@ class RGWBucketReshardLock {
   }
 
 public:
-  RGWBucketReshardLock(RGWRados* _store,
+  RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
 		       const std::string& reshard_lock_oid,
 		       bool _ephemeral);
-  RGWBucketReshardLock(RGWRados* _store,
+  RGWBucketReshardLock(rgw::sal::RGWRadosStore* _store,
 		       const RGWBucketInfo& bucket_info,
 		       bool _ephemeral) :
     RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
@@ -68,7 +70,7 @@ public:
 
 private:
 
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
@@ -87,7 +89,7 @@ public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
   // manage
-  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+  RGWBucketReshard(rgw::sal::RGWRadosStore *_store, const RGWBucketInfo& _bucket_info,
                    const std::map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
@@ -96,17 +98,17 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel();
-  static int clear_resharding(RGWRados* store,
+  static int clear_resharding(rgw::sal::RGWRadosStore* store,
 			      const RGWBucketInfo& bucket_info);
   int clear_resharding() {
     return clear_resharding(store, bucket_info);
   }
-  static int clear_index_shard_reshard_status(RGWRados* store,
+  static int clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* store,
 					      const RGWBucketInfo& bucket_info);
   int clear_index_shard_reshard_status() {
     return clear_index_shard_reshard_status(store, bucket_info);
   }
-  static int set_resharding_status(RGWRados* store,
+  static int set_resharding_status(rgw::sal::RGWRadosStore* store,
 				   const RGWBucketInfo& bucket_info,
 				   const string& new_instance_id,
 				   int32_t num_shards,
@@ -124,7 +126,7 @@ public:
     using Clock = ceph::coarse_mono_clock;
 
 private:
-    RGWRados *store;
+    rgw::sal::RGWRadosStore *store;
     string lock_name;
     rados::cls::lock::Lock instance_lock;
     int num_logshards;
@@ -159,7 +161,7 @@ protected:
   void get_bucket_logshard_oid(const string& tenant, const string& bucket_name, string *oid);
 
 public:
-  RGWReshard(RGWRados* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
+  RGWReshard(rgw::sal::RGWRadosStore* _store, bool _verbose = false, ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(cls_rgw_reshard_entry& entry);
   int update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& new_bucket_info);
   int get(cls_rgw_reshard_entry& entry);

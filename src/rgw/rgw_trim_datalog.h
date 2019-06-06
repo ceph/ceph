@@ -7,14 +7,17 @@ class RGWCoroutine;
 class RGWRados;
 class RGWHTTPManager;
 class utime_t;
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 // DataLogTrimCR factory function
-extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
+extern RGWCoroutine* create_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
                                              RGWHTTPManager *http,
                                              int num_shards, utime_t interval);
 
 // factory function for datalog trim via radosgw-admin
-RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+RGWCoroutine* create_admin_data_log_trim_cr(rgw::sal::RGWRadosStore *store,
                                             RGWHTTPManager *http,
                                             int num_shards,
                                             std::vector<std::string>& markers);

@@ -17,7 +17,7 @@
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
-extern void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_group);
+extern void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
 					 ceph::Formatter *formatter);
@@ -163,7 +163,7 @@ protected:
 public:
   RGWGetObj_ObjStore() : sent_header(false) {}
 
-  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s, RGWHandler *h) override {
     RGWGetObj::init(store, s, h);
     sent_header = false;
   }
@@ -529,7 +529,7 @@ protected:
   RGWRESTFlusher flusher;
 public:
   RGWRESTOp() : http_ret(0) {}
-  void init(RGWRados *store, struct req_state *s,
+  void init(rgw::sal::RGWRadosStore *store, struct req_state *s,
             RGWHandler *dialect_handler) override {
     RGWOp::init(store, s, dialect_handler);
     flusher.init(s, this);
@@ -570,7 +570,7 @@ public:
   int init_permissions(RGWOp* op) override;
   int read_permissions(RGWOp* op) override;
 
-  virtual RGWOp* get_op(RGWRados* store);
+  virtual RGWOp* get_op(rgw::sal::RGWRadosStore* store);
   virtual void put_op(RGWOp* op);
 };
 
@@ -655,7 +655,7 @@ class RGWREST {
   static int preprocess(struct req_state *s, rgw::io::BasicClient* rio);
 public:
   RGWREST() {}
-  RGWHandler_REST *get_handler(RGWRados *store,
+  RGWHandler_REST *get_handler(rgw::sal::RGWRadosStore *store,
                                struct req_state *s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix,

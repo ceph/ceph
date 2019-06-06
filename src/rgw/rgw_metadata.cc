@@ -11,6 +11,7 @@
 #include "rgw_zone.h"
 #include "rgw_tools.h"
 #include "rgw_mdlog.h"
+#include "rgw_sal.h"
 
 #include "rgw_cr_rados.h"
 
@@ -23,6 +24,8 @@
 #include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
+
+using namespace rgw::sal;
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -389,11 +392,11 @@ int RGWMetadataHandler::attach(RGWMetadataManager *manager)
 }
 
 RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_handler,
-                                           RGWSI_MetaBackend_Handler::Op *_op,
-                                           string& _entry, RGWMetadataObject *_obj,
-                                           RGWObjVersionTracker& _objv_tracker,
-                                           optional_yield _y,
-                                           RGWMDLogSyncType _type) :
+					   RGWSI_MetaBackend_Handler::Op *_op,
+					   string& _entry, RGWMetadataObject *_obj,
+					   RGWObjVersionTracker& _objv_tracker,
+					   optional_yield _y,
+					   RGWMDLogSyncType _type):
   handler(_handler), op(_op),
   entry(_entry), obj(_obj),
   objv_tracker(_objv_tracker),

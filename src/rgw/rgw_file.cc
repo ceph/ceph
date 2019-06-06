@@ -1515,7 +1515,7 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->svc.zone->get_zone_params().get_compression_type(
+      get_store()->svc()->zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
@@ -1551,7 +1551,7 @@ namespace rgw {
       if (!version_id.empty()) {
         obj.key.set_instance(version_id);
       } else {
-        get_store()->gen_rand_obj_instance_name(&obj);
+        get_store()->getRados()->gen_rand_obj_instance_name(&obj);
         version_id = obj.key.instance;
       }
     }
@@ -1597,7 +1597,7 @@ namespace rgw {
       return -EIO;
     }
 
-    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket,
                                       user_quota, bucket_quota, real_ofs, true);
     /* max_size exceed */
     if (op_ret < 0)
@@ -1640,14 +1640,14 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+    op_ret = get_store()->getRados()->check_quota(s->bucket_owner.get_id(), s->bucket,
 				      user_quota, bucket_quota, s->obj_size, true);
     /* max_size exceed */
     if (op_ret < 0) {
       goto done;
     }
 
-    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket,
+    op_ret = get_store()->getRados()->check_bucket_shards(s->bucket_info, s->bucket,
 					      bucket_quota);
     if (op_ret < 0) {
       goto done;

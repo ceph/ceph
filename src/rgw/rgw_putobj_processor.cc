@@ -75,7 +75,7 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
 
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
-  stripe_obj = store->svc.rados->obj(raw_obj);
+  stripe_obj = store->svc()->rados->obj(raw_obj);
   return stripe_obj.open();
 }
 
@@ -126,7 +126,7 @@ RadosWriter::~RadosWriter()
   std::optional<rgw_raw_obj> raw_head;
   if (!head_obj.empty()) {
     raw_head.emplace();
-    store->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
+    store->getRados()->obj_to_raw(bucket_info.placement_rule, head_obj, &*raw_head);
   }
 
   /**
@@ -148,7 +148,7 @@ RadosWriter::~RadosWriter()
       continue;
     }
 
-    int r = store->delete_raw_obj(obj);
+    int r = store->getRados()->delete_raw_obj(obj);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 5) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -156,7 +156,7 @@ RadosWriter::~RadosWriter()
 
   if (need_to_remove_head) {
     ldpp_dout(dpp, 5) << "NOTE: we are going to process the head obj (" << *raw_head << ")" << dendl;
-    int r = store->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
+    int r = store->getRados()->delete_obj(obj_ctx, bucket_info, head_obj, 0, 0);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *raw_head << "), leaked" << dendl;
     }
@@ -173,10 +173,10 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
 
   uint64_t chunk_size = 0;
-  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  r = store->getRados()->get_max_chunk_size(stripe_obj.pool, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -208,11 +208,11 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t alignment;
   rgw_pool head_pool;
 
-  if (!store->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
+  if (!store->getRados()->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
     return -EIO;
   }
 
-  int r = store->get_max_chunk_size(head_pool, &max_head_chunk_size, &alignment);
+  int r = store->getRados()->get_max_chunk_size(head_pool, &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
   }
@@ -221,14 +221,14 @@ int AtomicObjectProcessor::prepare(optional_yield y)
 
   if (bucket_info.placement_rule != tail_placement_rule) {
     rgw_pool tail_pool;
-    if (!store->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
+    if (!store->getRados()->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
       return -EIO;
     }
 
     if (tail_pool != head_pool) {
       same_pool = false;
 
-      r = store->get_max_chunk_size(tail_pool, &chunk_size);
+      r = store->getRados()->get_max_chunk_size(tail_pool, &chunk_size);
       if (r < 0) {
         return r;
       }
@@ -245,7 +245,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
 
-  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
 
   manifest.set_trivial_rule(head_max_size, stripe_size);
 
@@ -257,7 +257,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
 
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
@@ -295,7 +295,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   obj_ctx.set_atomic(head_obj);
 
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
 
   /* some object types shouldn't be versioned, e.g., multipart parts */
   op_target.set_versioning_disabled(!bucket_info.versioning_enabled());
@@ -367,12 +367,12 @@ int MultipartObjectProcessor::prepare_head()
   uint64_t stripe_size;
   uint64_t alignment;
 
-  int r = store->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
+  int r = store->getRados()->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
     return r;
   }
-  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+  store->getRados()->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
 
   manifest.set_multipart_part_rule(stripe_size, part_num);
 
@@ -384,7 +384,7 @@ int MultipartObjectProcessor::prepare_head()
     return r;
   }
 
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
   RGWSI_Tier_RADOS::raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
   head_obj.index_hash_source = target_obj.key.name;
 
@@ -431,7 +431,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     return r;
   }
 
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write obj_op(&op_target);
 
@@ -480,9 +480,9 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   rgw_raw_obj raw_meta_obj;
 
-  store->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  store->getRados()->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_meta_obj);
 
   r = sysobj.omap()
@@ -515,7 +515,7 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::D
 int AppendObjectProcessor::prepare(optional_yield y)
 {
   RGWObjState *astate;
-  int r = store->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate, y);
+  int r = store->getRados()->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate, y);
   if (r < 0) {
     return r;
   }
@@ -570,10 +570,10 @@ int AppendObjectProcessor::prepare(optional_yield y)
   if (r < 0) {
     return r;
   }
-  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store->getRados());
 
   uint64_t chunk_size = 0;
-  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  r = store->getRados()->get_max_chunk_size(stripe_obj.pool, &chunk_size);
   if (r < 0) {
     return r;
   }
@@ -609,12 +609,12 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     return r;
   }
   obj_ctx.set_atomic(head_obj);
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write obj_op(&op_target);
   if (cur_manifest) {
-    cur_manifest->append(manifest, store->svc.zone);
+    cur_manifest->append(manifest, store->svc()->zone);
     obj_op.meta.manifest = cur_manifest;
   } else {
     obj_op.meta.manifest = &manifest;

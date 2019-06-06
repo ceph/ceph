@@ -20,18 +20,17 @@
 #include "common/config.h"
 
 #include <boost/intrusive_ptr.hpp>
-
-class RGWRados;
+#include "rgw_sal.h"
 
 namespace rgw {
 
   class RGWLibAdmin
   {
-    RGWRados *store;
+    rgw::sal::RGWRadosStore *store;
     boost::intrusive_ptr<CephContext> cct;
 
   public:
-    RGWRados* get_store()
+    rgw::sal::RGWRadosStore* get_store()
     {
       return store;
     }

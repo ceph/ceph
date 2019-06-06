@@ -21,6 +21,7 @@
 class RGWSI_Zone;
 struct RGWZoneGroup;
 struct RGWZoneParams;
+class RGWRados;
 
 class rgw_obj_select {
   rgw_placement_rule placement_rule;
