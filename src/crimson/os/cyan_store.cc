@@ -15,6 +15,8 @@ namespace {
   }
 }
 
+using ceph::common::local_conf;
+
 namespace ceph::os {
 
 using ObjectRef = boost::intrusive_ptr<Object>;
@@ -346,7 +348,7 @@ int CyanStore::_write(const coll_t& cid, const ghobject_t& oid,
     return -ENOENT;
 
   ObjectRef o = c->get_or_create_object(oid);
-  if (len > 0) {
+  if (len > 0 && !local_conf()->memstore_debug_omit_block_device_write) {
     const ssize_t old_size = o->get_size();
     o->write(offset, bl);
     used_bytes += (o->get_size() - old_size);
@@ -366,6 +368,8 @@ int CyanStore::_truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
+  if (local_conf()->memstore_debug_omit_block_device_write)
+    return 0;
   const ssize_t old_size = o->get_size();
   int r = o->truncate(size);
   used_bytes += (o->get_size() - old_size);
