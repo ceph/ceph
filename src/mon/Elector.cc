@@ -31,6 +31,20 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, epoch_t epoch) {
 		<< ").elector(" << epoch << ") ";
 }
 
+void ElectionLogic::persist_epoch(epoch_t e)
+{
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  t->put(Monitor::MONITOR_NAME, "election_epoch", e);
+  mon->store->apply_transaction(t);
+}
+
+void ElectionLogic::validate_store()
+{
+  auto t(std::make_shared<MonitorDBStore::Transaction>());
+  t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
+  int r = mon->store->apply_transaction(t);
+  ceph_assert(r >= 0);
+}
 
 void Elector::init()
 {

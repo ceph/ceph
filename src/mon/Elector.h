@@ -37,6 +37,10 @@ public:
 
   ElectionLogic(Elector *e) : elector(e), epoch(0),
 			      electing_me(false), leader_acked(-1) {}
+private:
+  void persist_epoch(epoch_t e);
+  void validate_store();
+  
 };
 
 /**
