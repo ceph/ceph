@@ -89,6 +89,7 @@ enum {
   l_pq_executing_ops,
   l_pq_executing,
   l_pq_executed,
+  l_pq_item_in_journal,
   l_pq_last
 };
 
@@ -166,6 +167,8 @@ protected:
   std::vector<Context*> waiting_for_recovery;
 
   void _go_readonly(int r);
+
+  size_t purge_item_journal_size;
 
 public:
   void init();
