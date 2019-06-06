@@ -739,49 +739,38 @@ void PeeringState::on_new_interval()
 }
 
 void PeeringState::init_primary_up_acting(
-  const vector<int> &newup,
-  const vector<int> &newacting,
+  const vector<int> &new_up,
+  const vector<int> &new_acting,
   int new_up_primary,
-  int new_acting_primary) {
-  actingset.clear();
-  acting = newacting;
-  for (uint8_t i = 0; i < acting.size(); ++i) {
-    if (acting[i] != CRUSH_ITEM_NONE)
-      actingset.insert(
-	pg_shard_t(
-	  acting[i],
-	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-  }
-  upset.clear();
-  up = newup;
-  for (uint8_t i = 0; i < up.size(); ++i) {
-    if (up[i] != CRUSH_ITEM_NONE)
-      upset.insert(
-	pg_shard_t(
-	  up[i],
-	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
-  }
-  if (!pool.info.is_erasure()) {
-    up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
-    primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
-    return;
-  }
-  up_primary = pg_shard_t();
-  primary = pg_shard_t();
-  for (uint8_t i = 0; i < up.size(); ++i) {
-    if (up[i] == new_up_primary) {
-      up_primary = pg_shard_t(up[i], shard_id_t(i));
-      break;
-    }
-  }
-  for (uint8_t i = 0; i < acting.size(); ++i) {
-    if (acting[i] == new_acting_primary) {
-      primary = pg_shard_t(acting[i], shard_id_t(i));
-      break;
-    }
-  }
-  ceph_assert(up_primary.osd == new_up_primary);
+  int new_acting_primary)
+{
+  auto collect_pg_shards =
+    [is_erasure=pool.info.is_erasure()](const std::vector<int>& osds,
+					int osd_primary) {
+      int8_t index = 0;
+      set<pg_shard_t> collected;
+      pg_shard_t pg_primary;
+      for (auto osd : osds) {
+        if (osd != CRUSH_ITEM_NONE) {
+          pg_shard_t pg_shard{
+            osd, is_erasure ? shard_id_t{index} : shard_id_t::NO_SHARD};
+          if (osd == osd_primary) {
+            pg_primary = pg_shard;
+          }
+          collected.insert(pg_shard);
+        }
+        index++;
+      }
+      return std::make_pair(collected, pg_primary);
+    };
+
+  acting = new_acting;
+  std::tie(actingset, primary) = collect_pg_shards(acting, new_acting_primary);
   ceph_assert(primary.osd == new_acting_primary);
+
+  up = new_up;
+  std::tie(upset, up_primary) = collect_pg_shards(up, new_up_primary);
+  ceph_assert(up_primary.osd == new_up_primary);
 }
 
 void PeeringState::clear_recovery_state()
