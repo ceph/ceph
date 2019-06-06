@@ -1209,7 +1209,6 @@ sub-directories, files')
                 self.poutput('max_files is not set')
                 pass
 
-
     def do_help(self, line):
         """
         Get details about a command.
