@@ -69,6 +69,9 @@ public:
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, bool ignore_enoent,
                   T *callback_object) {
+  	if (start_object_no >= m_object_map.size()){
+  		return false;
+  	}
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
                              new_state, current_state, parent_trace,
                              ignore_enoent, callback_object);
