@@ -39,11 +39,15 @@ public:
 			      electing_me(false), leader_acked(-1) {}
 
   void bump_epoch(epoch_t e);
+  void handle_propose_logic(epoch_t mepoch, int from);
   
 private:
+  // call-outs
   void persist_epoch(epoch_t e);
   void validate_store();
-  
+  bool elector_is_current_member(int rank);
+  void elector_trigger_new_election();
+  int elector_my_rank();
 };
 
 /**
@@ -61,6 +65,8 @@ class Elector {
   public:
   ElectionLogic logic;
   Elector *elector;
+  bool is_current_member(int rank);
+
    /**
    * @defgroup Elector_h_internal_types Internal Types
    * @{

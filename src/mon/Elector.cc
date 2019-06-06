@@ -46,6 +46,27 @@ void ElectionLogic::validate_store()
   ceph_assert(r >= 0);
 }
 
+bool ElectionLogic::elector_is_current_member(int rank)
+{
+  return elector->is_current_member(rank);
+}
+
+bool Elector::is_current_member(int rank)
+{
+  return mon->quorum.count(rank);
+}
+
+void ElectionLogic::elector_trigger_new_election()
+{
+  elector->mon->start_election();
+}
+
+int ElectionLogic::elector_my_rank()
+{
+  return elector->mon->rank;
+}
+
+
 void Elector::init()
 {
   logic.epoch = mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
@@ -296,43 +317,49 @@ void Elector::handle_propose(MonOpRequestRef op)
             << " without required mon_features " << missing
             << dendl;
     nak_old_peer(op);
-  } else if (m->epoch > logic.epoch) {
-    logic.bump_epoch(m->epoch);
-  } else if (m->epoch < logic.epoch) {
+  }
+  logic.handle_propose_logic(m->epoch, from);
+}
+
+void ElectionLogic::handle_propose_logic(epoch_t mepoch, int from)
+{
+  if (mepoch > epoch) {
+    bump_epoch(mepoch);
+  } else if (mepoch < epoch) {
     // got an "old" propose,
-    if (logic.epoch % 2 == 0 &&    // in a non-election cycle
-	mon->quorum.count(from) == 0) {  // from someone outside the quorum
+    if (epoch % 2 == 0 &&    // in a non-election cycle
+	!elector_is_current_member(from)) {  // from someone outside the quorum
       // a mon just started up, call a new election so they can rejoin!
-      dout(5) << " got propose from old epoch, quorum is " << mon->quorum 
-	      << ", " << m->get_source() << " must have just started" << dendl;
+      dout(5) << " got propose from old epoch, "
+	      << from << " must have just started" << dendl;
       // we may be active; make sure we reset things in the monitor appropriately.
-      mon->start_election();
+      elector_trigger_new_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
       return;
     }
   }
 
-  if (mon->rank < from) {
+  if (elector_my_rank() < from) {
     // i would win over them.
-    if (logic.leader_acked >= 0) {        // we already acked someone
-      ceph_assert(logic.leader_acked < from);  // and they still win, of course
-      dout(5) << "no, we already acked " << logic.leader_acked << dendl;
+    if (leader_acked >= 0) {        // we already acked someone
+      ceph_assert(leader_acked < from);  // and they still win, of course
+      dout(5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
-      if (!logic.electing_me) {
-	mon->start_election();
+      if (!electing_me) {
+	elector_trigger_new_election();
       }
     }
   } else {
     // they would win over me
-    if (logic.leader_acked < 0 ||      // haven't acked anyone yet, or
-	logic.leader_acked > from ||   // they would win over who you did ack, or
-	logic.leader_acked == from) {  // this is the guy we're already deferring to
-      defer(from);
+    if (leader_acked < 0 ||      // haven't acked anyone yet, or
+	leader_acked > from ||   // they would win over who you did ack, or
+	leader_acked == from) {  // this is the guy we're already deferring to
+      elector->defer(from);
     } else {
       // ignore them!
-      dout(5) << "no, we already acked " << logic.leader_acked << dendl;
+      dout(5) << "no, we already acked " << leader_acked << dendl;
     }
   }
 }
