@@ -102,7 +102,6 @@ static string shadow_ns = "shadow";
 static string default_bucket_index_pool_suffix = "rgw.buckets.index";
 static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 
-static string log_lock_name = "rgw_log_lock";
 static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
@@ -1682,69 +1681,6 @@ int RGWRados::clear_usage()
     }
   }
   return ret;
-}
-
-void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  char buf[16];
-  if (shard_id) {
-    *shard_id = val % max_shards;
-  }
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
-{
-  uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
-  val ^= ceph_str_hash_linux(section.c_str(), section.size());
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", (unsigned)(val % max_shards));
-  name = prefix + buf;
-}
-
-void RGWRados::shard_name(const string& prefix, unsigned shard_id, string& name)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%u", shard_id);
-  name = prefix + buf;
-
-}
-
-int RGWRados::lock_exclusive(const rgw_pool& pool, const string& oid, timespan& duration,
-                             string& zone_id, string& owner_id) {
-  librados::IoCtx io_ctx;
-
-  int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
-  if (r < 0) {
-    return r;
-  }
-  uint64_t msec = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  utime_t ut(msec / 1000, msec % 1000);
-  
-  rados::cls::lock::Lock l(log_lock_name);
-  l.set_duration(ut);
-  l.set_cookie(owner_id);
-  l.set_tag(zone_id);
-  l.set_may_renew(true);
-  
-  return l.lock_exclusive(&io_ctx, oid);
-}
-
-int RGWRados::unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
-  librados::IoCtx io_ctx;
-
-  int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
-  if (r < 0) {
-    return r;
-  }
-  
-  rados::cls::lock::Lock l(log_lock_name);
-  l.set_tag(zone_id);
-  l.set_cookie(owner_id);
-  
-  return l.unlock(&io_ctx, oid);
 }
 
 int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)

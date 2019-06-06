@@ -54,6 +54,10 @@ static inline int rgw_shard_id(const string& key, int max_shards)
 			max_shards);
 }
 
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
+
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,

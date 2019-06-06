@@ -24,12 +24,13 @@ RGWSI_MDLog::RGWSI_MDLog(CephContext *cct) : RGWServiceInstance(cct) {
 RGWSI_MDLog::~RGWSI_MDLog() {
 }
 
-int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc)
+int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_Cls *_cls_svc)
 {
-  svc.zone = zone_svc;
-  svc.sysobj = sysobj_svc;
+  svc.zone = _zone_svc;
+  svc.sysobj = _sysobj_svc;
   svc.mdlog = this;
-  svc.rados = rados_svc;
+  svc.rados = _rados_svc;
+  svc.cls = _cls_svc;
 
   return 0;
 }
@@ -357,7 +358,7 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   // construct the period's log in place if it doesn't exist
   auto insert = md_logs.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(period),
-                                std::forward_as_tuple(cct, store, period));
+                                std::forward_as_tuple(cct, svc.zone, svc.cls, period));
   return &insert.first->second;
 }
 
