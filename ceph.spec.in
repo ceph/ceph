@@ -650,6 +650,19 @@ ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
+%if 0%{with seastar}
+%package crimson-osd
+Summary:	Ceph Object Storage Daemon (crimson)
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
+%description crimson-osd
+crimson-osd is the object storage daemon for the Ceph distributed file
+system.  It is responsible for storing objects on a local file system
+and providing access to them over the network.
+%endif
+
 %package -n librados2
 Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
@@ -1935,6 +1948,11 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart ceph-osd@\*.service ceph-volume@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%if 0%{with seastar}
+%files crimson-osd
+%{_bindir}/crimson-osd
+%endif
 
 %if %{with ocf}
 
