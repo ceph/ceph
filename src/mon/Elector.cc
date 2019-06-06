@@ -38,6 +38,11 @@ void ElectionLogic::persist_epoch(epoch_t e)
   elector->mon->store->apply_transaction(t);
 }
 
+epoch_t ElectionLogic::read_persisted_epoch()
+{
+  return elector->mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
+}
+
 void ElectionLogic::validate_store()
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
@@ -67,21 +72,19 @@ int ElectionLogic::elector_my_rank()
 }
 
 
-void Elector::init()
+void ElectionLogic::init()
 {
-  logic.epoch = mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
-  if (!logic.epoch) {
+  epoch = read_persisted_epoch();
+  if (!epoch) {
     dout(1) << "init, first boot, initializing epoch at 1 " << dendl;
-    logic.epoch = 1;
-  } else if (logic.epoch % 2) {
-    dout(1) << "init, last seen epoch " << logic.epoch
+    epoch = 1;
+  } else if (epoch % 2) {
+    dout(1) << "init, last seen epoch " << epoch
 	    << ", mid-election, bumping" << dendl;
-    ++logic.epoch;
-    auto t(std::make_shared<MonitorDBStore::Transaction>());
-    t->put(Monitor::MONITOR_NAME, "election_epoch", logic.epoch);
-    mon->store->apply_transaction(t);
+    ++epoch;
+    persist_epoch(epoch);
   } else {
-    dout(1) << "init, last seen epoch " << logic.epoch << dendl;
+    dout(1) << "init, last seen epoch " << epoch << dendl;
   }
 }
 
@@ -119,7 +122,7 @@ void Elector::start()
 
   logic.acked_me.clear();
   peer_info.clear();
-  init();
+  logic.init();
   
   // start by trying to elect me
   if (logic.epoch % 2 == 0) {
