@@ -797,6 +797,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_latest_counter(svc_type, svc_name, path)
 
+    def get_rate(self, daemon_type, daemon_name, stat):
+        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+
+        if data and len(data) > 1:
+            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
+        else:
+            return 0
+
     def list_servers(self):
         """
         Like ``get_server``, but gives information about all servers (i.e. all

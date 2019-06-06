@@ -88,6 +88,10 @@ OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
+OSD_CAPACITY = ['kb', 'kb_used', 'kb_avail']
+
+OSD_RATE = ['op_w', 'op_r', 'op_in_bytes', 'op_out_bytes']
+
 POOL_METADATA = ('pool_id', 'name')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
@@ -312,6 +316,22 @@ class Module(MgrModule):
                 'OSD stat {}'.format(stat),
                 ('ceph_daemon',)
             )
+        for stat in OSD_CAPACITY:
+            path = 'osd_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD capacity {}'.format(stat),
+                ('ceph_daemon',)
+            )
+        for stat in OSD_RATE:
+            path = 'osd_rate_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD rate {}'.format(stat),
+                ('ceph_daemon',)
+            )
         for stat in OSD_POOL_STATS:
             path = 'pool_{}'.format(stat)
             metrics[path] = Metric(
@@ -458,6 +478,21 @@ class Module(MgrModule):
                 val = osd['perf_stat'][stat]
                 self.metrics['osd_{}'.format(stat)].set(val, (
                     'osd.{}'.format(id_),
+                ))
+            for stat in OSD_CAPACITY:
+                val = osd[stat]
+                self.metrics['osd_{}'.format(stat)].set(val, (
+                    'osd.{}'.format(id_),
+                ))
+
+    def get_osd_rate(self):
+        osd_map = self.get('osd_map')
+        for osd in osd_map['osds']:
+            id_ = osd['osd']
+            for stat in OSD_RATE:
+                val = self.get_rate("osd", id_.__str__(), "osd.{}".format(stat))
+                self.metrics['osd_rate_{}'.format(stat)].set(val, (
+                      'osd.{}'.format(id_),
                 ))
 
     def get_service_list(self):
@@ -829,6 +864,7 @@ class Module(MgrModule):
         self.get_pool_stats()
         self.get_fs()
         self.get_osd_stats()
+        self.get_osd_rate()
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
