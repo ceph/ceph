@@ -775,7 +775,7 @@ int RGWRadosTimelogAddCR::send_request()
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  return store->time_log_add(oid, entries, cn->completion(), true);
+  return store->svc.cls->timelog.add(oid, entries, cn->completion(), true, null_yield);
 }
 
 int RGWRadosTimelogAddCR::request_complete()
@@ -807,8 +807,9 @@ int RGWRadosTimelogTrimCR::send_request()
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  return store->time_log_trim(oid, start_time, end_time, from_marker,
-                              to_marker, cn->completion());
+  return store->svc.cls->timelog.trim(oid, start_time, end_time, from_marker,
+                                      to_marker, cn->completion(),
+                                      null_yield);
 }
 
 int RGWRadosTimelogTrimCR::request_complete()
