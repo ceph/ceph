@@ -25,6 +25,20 @@
 
 class Monitor;
 
+class Elector;
+
+class ElectionLogic {
+public:
+  Elector *elector;
+  epoch_t epoch;
+  bool electing_me;
+  set<int> acked_me;
+  int leader_acked;
+
+  ElectionLogic(Elector *e) : elector(e), epoch(0),
+			      electing_me(false), leader_acked(-1) {}
+};
+
 /**
  * This class is responsible for maintaining the local state when electing
  * a new Leader. We may win or we may lose. If we win, it means we became the
@@ -36,6 +50,7 @@ class Elector {
    * @{
    */
  private:
+  ElectionLogic logic;
    /**
    * @defgroup Elector_h_internal_types Internal Types
    * @{
@@ -94,7 +109,7 @@ class Elector {
    * @remarks if its value is odd, we're electing; if it's even, then we're
    *	      stable.
    */
-  epoch_t epoch;
+  //epoch_t epoch;
 
   /**
    * Indicates if we are participating in the quorum.
@@ -120,14 +135,14 @@ class Elector {
    * to be elected if we think we might have a chance (i.e., the other guy's
    * rank is lower than ours).
    */
-  bool     electing_me;
+  //  bool     electing_me;
   /**
    * Set containing all those that acked our proposal to become the Leader.
    *
    * If we are acked by everyone in the MonMap, we will declare
    * victory.  Also note each peer's feature set.
    */
-  map<int, elector_info_t> acked_me;
+  map<int, elector_info_t> peer_info;
   /**
    * @}
    */
@@ -138,7 +153,7 @@ class Elector {
   /**
    * Indicates who we have acked
    */
-  int	    leader_acked;
+  //  int	    leader_acked;
   /**
    * @}
    */
@@ -327,11 +342,9 @@ class Elector {
    *
    * @param m A Monitor instance
    */
-  explicit Elector(Monitor *m) : mon(m),
-			epoch(0),
-			participating(true),
-			electing_me(false),
-			leader_acked(-1) { }
+  explicit Elector(Monitor *m) : logic(this),
+			mon(m),
+				 participating(true) {}
 
   /**
    * Initiate the Elector class.
@@ -356,7 +369,7 @@ class Elector {
    *
    * @returns Our current epoch number
    */
-  epoch_t get_epoch() { return epoch; }
+  epoch_t get_epoch() { return logic.epoch; }
 
   /**
    * advance_epoch
@@ -364,7 +377,7 @@ class Elector {
    * increase election epoch by 1
    */
   void advance_epoch() {
-    bump_epoch(epoch + 1);
+    bump_epoch(logic.epoch + 1);
   }
 
   /**
