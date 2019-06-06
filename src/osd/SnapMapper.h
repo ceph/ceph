@@ -111,16 +111,46 @@ public:
     void decode(bufferlist::const_iterator &bp);
   };
 
-private:
-  MapCacher::MapCacher<std::string, bufferlist> backend;
+  struct Mapping {
+    snapid_t snap;
+    hobject_t hoid;
+    explicit Mapping(const pair<snapid_t, hobject_t> &in)
+      : snap(in.first), hoid(in.second) {}
+    Mapping() : snap(0) {}
+    void encode(bufferlist &bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(snap, bl);
+      encode(hoid, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(bufferlist::const_iterator &bl) {
+      DECODE_START(1, bl);
+      decode(snap, bl);
+      decode(hoid, bl);
+      DECODE_FINISH(bl);
+    }
+  };
 
   static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
 
-  static std::string get_legacy_prefix(snapid_t snap);
-  static std::string get_prefix(int64_t pool, snapid_t snap);
+  static int convert_legacy(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    unsigned max);
 
+private:
+  MapCacher::MapCacher<std::string, bufferlist> backend;
+
+  static std::string get_legacy_prefix(snapid_t snap);
+  std::string to_legacy_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map);
+  static bool is_legacy_mapping(const std::string &to_test);
+
+  static std::string get_prefix(int64_t pool, snapid_t snap);
   std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map);
 
@@ -129,7 +159,7 @@ private:
 
   static bool is_mapping(const std::string &to_test);
 
-  std::pair<snapid_t, hobject_t> from_raw(
+  static std::pair<snapid_t, hobject_t> from_raw(
     const std::pair<std::string, bufferlist> &image);
 
   std::string to_object_key(const hobject_t &hoid);
@@ -234,5 +264,6 @@ public:
     ); ///< @return error, -ENOENT if oid is not recorded
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
+WRITE_CLASS_ENCODER(SnapMapper::Mapping)
 
 #endif
