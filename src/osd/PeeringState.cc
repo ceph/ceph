@@ -1594,7 +1594,7 @@ void PeeringState::calc_replicated_acting(
   }
 }
 
-bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
+bool PeeringState::recoverable(const vector<int> &want) const
 {
   unsigned num_want_acting = 0;
   set<pg_shard_t> have;
@@ -1684,7 +1684,7 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable_and_ge_min_size(candidate_want)) {
+    if (recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
@@ -1851,7 +1851,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
       ss);
   psdout(10) << ss.str() << dendl;
 
-  if (!recoverable_and_ge_min_size(want)) {
+  if (!recoverable(want)) {
     want_acting.clear();
     return false;
   }
