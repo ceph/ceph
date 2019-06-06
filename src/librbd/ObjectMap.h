@@ -62,16 +62,16 @@ public:
 
   void aio_save(Context *on_finish);
   void aio_resize(uint64_t new_size, uint8_t default_object_state,
-		  Context *on_finish);
+                  Context *on_finish);
 
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, bool ignore_enoent,
                   T *callback_object) {
-  	if (start_object_no >= m_object_map.size()){
-  		return false;
-  	}
+    if (start_object_no >= m_object_map.size()) {
+      return false;
+    }
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
                              new_state, current_state, parent_trace,
                              ignore_enoent, callback_object);
