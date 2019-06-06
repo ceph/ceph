@@ -40,6 +40,7 @@ public:
 			      electing_me(false), leader_acked(-1) {}
   void init();
   void bump_epoch(epoch_t e);
+  void start();
   void defer(int who);
   void handle_propose_logic(epoch_t mepoch, int from);
   
@@ -51,6 +52,7 @@ private:
   bool elector_is_current_member(int rank);
   void elector_trigger_new_election();
   int elector_my_rank();
+  void elector_propose_to_peers(epoch_t e);
 };
 
 /**
@@ -205,7 +207,7 @@ private:
    * @post  we sent propose messages to all the monitors in the MonMap
    * @post  we reset the expire_event timer
    */
-  void start();
+  void _start();
   /**
    * Defer the current election to some other monitor.
    *
@@ -418,7 +420,7 @@ private:
    * This function simply calls Elector::start.
    */
   void call_election() {
-    start();
+    logic.start();
   }
 
   /**
