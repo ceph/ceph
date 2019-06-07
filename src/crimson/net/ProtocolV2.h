@@ -14,8 +14,14 @@ class ProtocolV2 final : public Protocol,
   // TODO: the ibf is basically a thing living at the Socket level.
   // Likely the protocols should use an interface to tell it about
   // frame structure (xor just next read size + alignment).
-  seastar::temporary_buffer<char>
+  buffer_t last_returned;
+
+  buffer_t
   create(seastar::compat::polymorphic_allocator<char>* const allocator) override;
+
+  void return_unused(buffer_t&& buf) {
+    last_returned = std::move(buf);
+  }
 
  public:
   ProtocolV2(Dispatcher& dispatcher,

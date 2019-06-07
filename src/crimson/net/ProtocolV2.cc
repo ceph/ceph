@@ -188,6 +188,11 @@ ProtocolV2::create(seastar::compat::polymorphic_allocator<char>* const allocator
   // space for segments_n, epilogue_n and preable_n+1
   return seastar::make_temporary_buffer<char>(allocator, 8192);
 #else
+
+  if (!last_returned.empty()) {
+    return std::move(last_returned);
+  }
+
   if (rx_segments_desc.empty()) {
     // space just for the ceph banner + preamble_0
     // FIXME: magic
@@ -199,7 +204,7 @@ ProtocolV2::create(seastar::compat::polymorphic_allocator<char>* const allocator
       segment_size_sum += segment.length;
     }
     return seastar::make_temporary_buffer<char>(allocator,
-      segment_size_sum + FRAME_PLAIN_EPILOGUE_SIZE + FRAME_PREAMBLE_SIZE);
+        segment_size_sum + FRAME_PLAIN_EPILOGUE_SIZE + FRAME_PREAMBLE_SIZE);
   }
 
   // TODO: implement prefetching for very small (under 4K) chunk sizes to not

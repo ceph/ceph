@@ -32,12 +32,16 @@ class Socket : private seastar::net::input_buffer_factory
   struct construct_tag {};
 
   // input_buffer_factory
-  seastar::temporary_buffer<char>
+  buffer_t
   create(seastar::compat::polymorphic_allocator<char>* const allocator) override {
     ceph_assert(ibf);
     // XXX: we'll have deep, multi-stage delegation. CPU's front-end might not
     // be supper happy. Profile and refactor if necessary.
     return ibf->create(allocator);
+  }
+
+  void return_unused(buffer_t&& buf) {
+    return ibf->return_unused(std::move(buf));
   }
 
  public:
