@@ -4994,6 +4994,7 @@ public:
   epoch_t mounted = 0;     // last epoch i mounted
   epoch_t clean_thru = 0;  // epoch i was active and clean thru
 
+  epoch_t purged_snaps_last = 0;
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
