@@ -230,6 +230,15 @@ namespace rgw {
 
     void clear_state();
 
+    void advance_mtime() {
+      /* intended for use on directories, fast-forward mtime so as to
+       * ensure a new, higher value for the change attribute */
+      lock_guard guard(mtx);
+      /* sets ctime as well as mtime, to avoid masking updates should
+       * ctime inexplicably hold a higher value */
+      set_times(real_clock::now());
+    }
+
     boost::variant<file, directory> variant_type;
 
     uint16_t depth;
@@ -333,6 +342,8 @@ namespace rgw {
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
 	state.unix_mode = RGW_RWXMODE|S_IFDIR;
+	/* virtual directories are always invalid */
+	advance_mtime();
 	break;
       case RGW_FS_TYPE_FILE:
 	state.unix_mode = RGW_RWMODE|S_IFREG;
@@ -393,8 +404,12 @@ namespace rgw {
 
       if (mask & RGW_SETATTR_ATIME)
 	state.atime = st->st_atim;
-      if (mask & RGW_SETATTR_MTIME)
-	state.mtime = st->st_mtim;
+
+      if (mask & RGW_SETATTR_MTIME) {
+	if (fh.fh_type != RGW_FS_TYPE_DIRECTORY)
+	  state.mtime = st->st_mtim;
+      }
+
       if (mask & RGW_SETATTR_CTIME)
 	state.ctime = st->st_ctim;
     }
@@ -410,18 +425,10 @@ namespace rgw {
 
       st->st_mode = state.unix_mode;
 
-#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
-      st->st_atimespec = state.atime;
-      st->st_mtimespec = state.mtime;
-      st->st_ctimespec = state.ctime;
-#else
-      st->st_atim = state.atime;
-      st->st_mtim = state.mtime;
-      st->st_ctim = state.ctime;
-#endif
-
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
+	/* virtual directories are always invalid */
+	advance_mtime();
 	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
@@ -432,6 +439,16 @@ namespace rgw {
       default:
 	break;
       }
+
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      st->st_atimespec = state.atime;
+      st->st_mtimespec = state.mtime;
+      st->st_ctimespec = state.ctime;
+#else
+      st->st_atim = state.atime;
+      st->st_mtim = state.mtime;
+      st->st_ctim = state.ctime;
+#endif
 
       return 0;
     }
