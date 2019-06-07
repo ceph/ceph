@@ -512,7 +512,7 @@ private:
   string make_snap_purged_key_value(int64_t pool, snapid_t snap, snapid_t num,
 				    epoch_t epoch, bufferlist *v);
   bool try_prune_purged_snaps();
-  int lookup_pruned_snap(int64_t pool, snapid_t snap,
+  int lookup_purged_snap(int64_t pool, snapid_t snap,
 			 snapid_t *begin, snapid_t *end);
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
