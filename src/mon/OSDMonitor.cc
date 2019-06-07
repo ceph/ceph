@@ -1495,6 +1495,45 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 		 << dendl;
 	pending_inc.new_pools[poolid].removed_snaps.clear();
       }
+
+      // create a combined purged snap epoch key for all purged snaps
+      // prior to this epoch, and store it in the current epoch (i.e.,
+      // the last pre-octopus epoch, just prior to the one we're
+      // encoding now).
+      auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
+      it->lower_bound("purged_snap_");
+      map<int64_t,snap_interval_set_t> combined;
+      while (it->valid()) {
+	if (it->key().find("purged_snap_") != 0) {
+	  break;
+	}
+	string k = it->key();
+	long long unsigned pool;
+	int n = sscanf(k.c_str(), "purged_snap_%llu_", &pool);
+	if (n != 1) {
+	  derr << __func__ << " invalid purged_snaps key '" << k << "'" << dendl;
+	} else {
+	  bufferlist v = it->value();
+	  auto p = v.cbegin();
+	  snapid_t begin, end;
+	  ceph::decode(begin, p);
+	  ceph::decode(end, p);
+	  combined[pool].insert(begin, end - begin);
+	}
+	it->next();
+      }
+      if (!combined.empty()) {
+	string k = make_purged_snap_epoch_key(pending_inc.epoch - 1);
+	bufferlist v;
+	ceph::encode(combined, v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+	dout(10) << __func__ << " recording pre-octopus purged_snaps in epoch "
+		 << (pending_inc.epoch - 1) << ", " << v.length() << " bytes"
+		 << dendl;
+      } else {
+	dout(10) << __func__ << " there were no pre-octopus purged snaps"
+		 << dendl;
+      }
     }
   }
 
