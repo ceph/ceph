@@ -423,10 +423,9 @@ def task(ctx, config):
         log.debug('Yielding')
         yield
     finally:
-        log.info('joining mds_thrashers')
-        for thrasher in ctx.ceph[config['cluster']].thrashers:
-            thrasher.stop()
-            if thrasher.e:
-                raise RuntimeError('error during thrashing')
-            thrasher.join()
+        log.info('joining mds_thrasher')
+        thrasher.stop()
+        if thrasher.e:
+            raise RuntimeError('error during thrashing')
+        thrasher.join()
         log.info('done joining')

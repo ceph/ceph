@@ -356,6 +356,10 @@ def task(ctx, config):
         'mon_thrash task only accepts a dict for configuration'
     assert len(_get_mons(ctx)) > 2, \
         'mon_thrash task requires at least 3 monitors'
+
+    if 'cluster' not in config:
+        config['cluster'] = 'ceph'
+
     log.info('Beginning mon_thrash...')
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
@@ -367,6 +371,7 @@ def task(ctx, config):
     thrash_proc = MonitorThrasher(ctx,
         manager, config,
         logger=log.getChild('mon_thrasher'))
+    ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
     try:
         log.debug('Yielding')
         yield
