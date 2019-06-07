@@ -39,7 +39,7 @@ public:
   RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
-  real_time get_mtime() { return mtime; }
+  real_time& get_mtime() { return mtime; }
   void set_pattrs(std::map<string, bufferlist> *_pattrs) {
     pattrs = _pattrs;
   }

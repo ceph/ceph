@@ -27,6 +27,7 @@
 
 
 using RGWSI_MBOTP_Handler_Module  = RGWSI_MBSObj_Handler_Module;
+using RGWSI_MetaBackend_Handler_OTP  = RGWSI_MetaBackend_Handler_SObj;
 
 using otp_devices_list_t = list<rados::cls::otp::otp_info_t>;
 
@@ -50,7 +51,7 @@ public:
 
     void init(RGWSI_MetaBackend_Handler *h) override;
 
-    Context_SObj(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc) {}
+    Context_OTP(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc) {}
   };
 
   RGWSI_MetaBackend_OTP(CephContext *cct);
@@ -66,6 +67,9 @@ public:
     RGWSI_MetaBackend_SObj::init(_sysobj_svc, _mdlog_svc);
     cls_svc = _cls_svc;
   }
+
+  RGWSI_MetaBackend_Handler *alloc_be_handler() override;
+  RGWSI_MetaBackend::Context *alloc_ctx() override;
 
   int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb) override;
 
