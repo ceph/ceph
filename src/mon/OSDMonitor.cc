@@ -6257,13 +6257,18 @@ string OSDMonitor::make_snap_purged_key_value(
 int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
 				   snapid_t *begin, snapid_t *end)
 {
-  string k = make_snap_key(pool, snap);
+  string k = make_snap_purged_key(pool, snap);
   auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
   it->lower_bound(k);
   if (!it->valid()) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " - key '" << k << "' not found" << dendl;
     return -ENOENT;
   }
-  if (it->key().find(OSD_SNAP_PREFIX) != 0) {
+  if (it->key().find("purged_snap_") != 0) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " - key '" << k << "' got '" << it->key()
+	     << "', wrong prefix" << dendl;
     return -ENOENT;
   }
   bufferlist v = it->value();
@@ -6271,6 +6276,9 @@ int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
   decode(*begin, p);
   decode(*end, p);
   if (snap < *begin || snap >= *end) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " - found [" << *begin << "," << *end << "), no overlap"
+	     << dendl;
     return -ENOENT;
   }
   return 0;
