@@ -610,7 +610,7 @@ int RocksDBStore::_open(ostream &out, bool read_only, const std::vector<ColumnFa
     for (size_t i = 0; i < existing_cfs.size(); ++i) {
       if (existing_cfs[i] == rocksdb::kDefaultColumnFamilyName) {
         default_cf = handles[i];
-        must_close_default_cf = true;
+        column_families[existing_cfs[i]].handle = cf_wrap_handle(default_cf);
       } else {
         // add_column_family(existing_cfs[i], static_cast<void*>(handles[i]));
         // store the new CF handle
@@ -1130,10 +1130,6 @@ RocksDBStore::~RocksDBStore()
   for (auto& p : column_families) {
     db->DestroyColumnFamilyHandle(
       static_cast<rocksdb::ColumnFamilyHandle*>(p.second.handle.priv));
-  }
-  if (must_close_default_cf) {
-    db->DestroyColumnFamilyHandle(default_cf);
-    must_close_default_cf = false;
   }
   default_cf = nullptr;
   delete db;

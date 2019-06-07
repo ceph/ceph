@@ -85,7 +85,6 @@ private:
   uint64_t cache_size = 0;
   bool set_cache_flag = false;
 
-  bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
   RWLock api_lock;
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
