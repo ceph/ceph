@@ -230,6 +230,128 @@ function TEST_scrub_extented_sleep() {
     teardown $dir || return 1
 }
 
+
+function check_disabled_scrub() {
+    local primary=$1
+    local pgid=$2
+    local check=$3
+    local reason=$4
+
+    RESULT=$(grep "sched_scrub scrubbing" $dir/osd.${primary}.log | wc -l)
+    test "$RESULT" = $check || return 1
+    RESULT=$(grep "sched_scrub: $reason" $dir/osd.${primary}.log | wc -l)
+    test "$RESULT" = $check || return 1
+    RESULT=$(grep "sched_scrub: Backoff scrub PG $pgid" $dir/osd.${primary}.log | wc -l)
+    test "$RESULT" = $check || return 1
+}
+
+function TEST_scrub_disable_both_scrubs() {
+    local poolname=test
+    local OSDS=2
+    local objects=10
+    local PGS=1
+    local interval=30
+    local backoff=60 # See osd_scrub_reserve_backoff
+
+    TESTDATA="testdata.$$"
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd_scrub_min_interval=$interval --osd_scrub_interval_randomize_ratio=0 || return 1
+    done
+
+    ceph osd set noscrub
+    ceph osd set nodeep-scrub
+
+    # Create a pool with a single pg
+    create_pool $poolname $PGS $PGS
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+    local pgid="${poolid}.0"
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    local primary=$(get_primary $poolname obj1)
+
+    # Nothing yet
+    check_disabled_scrub $primary $pgid "0" "Scrub disabled" || return 1
+
+    sleep $(expr $interval + 10)
+    check_disabled_scrub $primary $pgid "1" "Scrub disabled" || return 1
+
+    # Change from global to local options
+    ceph osd pool set $poolname noscrub 1
+    ceph osd pool set $poolname nodeep-scrub 1
+    ceph osd unset noscrub
+    ceph osd unset nodeep-scrub
+
+    sleep $backoff
+    check_disabled_scrub $primary $pgid "2" "Scrub disabled" || return 1
+
+    teardown $dir || return 1
+}
+
+function TEST_scrub_disable_scrubs() {
+    local poolname=test
+    local OSDS=2
+    local objects=10
+    local interval=30
+
+    TESTDATA="testdata.$$"
+
+    setup $dir || return 1
+    # This min scrub interval results in 30 seconds backoff time
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd_scrub_min_interval=$interval --osd_scrub_interval_randomize_ratio=0 || return 1
+    done
+
+    ceph osd set noscrub
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+    local poolid=$(ceph osd dump | grep "^pool.*[']${poolname}[']" | awk '{ print $2 }')
+    local pgid="${poolid}.0"
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $objects`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+    rm -f $TESTDATA
+
+    local primary=$(get_primary $poolname obj1)
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs
+
+    # Nothing yet
+    check_disabled_scrub $primary $pgid "0" "Regular scrub disabled"
+
+    sleep $(expr $interval + 10)
+    check_disabled_scrub $primary $pgid "1" "Regular scrub disabled"
+
+    # Change from global to local options
+    ceph osd pool set $poolname noscrub 1
+    ceph osd unset noscrub
+
+    sleep $interval
+    check_disabled_scrub $primary $pgid "2" "Regular scrub disabled"
+
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs
+
+    teardown $dir || return 1
+}
+
 main osd-scrub-test "$@"
 
 # Local Variables:

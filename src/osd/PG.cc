@@ -1343,13 +1343,19 @@ void PG::requeue_map_waiters()
  *     scrubber.reserved_peers empty
  */
 
-// returns true if a scrub has been newly kicked off
-bool PG::sched_scrub()
+// returns OK if a scrub has been newly kicked off
+// otherwise returns SKIPPED or BACKOFF
+//	SKIPPED tells caller to schedule scrub at next interval
+//	BACKOFF tells caller to try again after a short while
+enum PG::scrub_result PG::sched_scrub(double *backoff)
 {
   ceph_assert(ceph_mutex_is_locked(_lock));
   ceph_assert(!is_scrubbing());
   if (!(is_primary() && is_active() && is_clean())) {
-    return false;
+    dout(20) << __func__ << ": Can't scrub in this pg state, pg " << info.pgid << dendl;
+    // Backoff 5 minutes
+    *backoff = cct->_conf->osd_scrub_pg_state_backoff;
+    return PG::scrub_result::BACKOFF;
   }
 
   // All processing the first time through commits us to whatever
@@ -1375,6 +1381,12 @@ bool PG::sched_scrub()
     // always set for must_deep_scrub and must_repair.
     if (!scrubber.must_scrub) {
       ceph_assert(!scrubber.must_deep_scrub && !scrubber.must_repair);
+      if (!allow_scrub && !allow_deep_scrub) {
+	dout(20) << __func__ << ": Scrub disabled (noscrub, nodeep-scrub), pg " << info.pgid << dendl;
+	// Backoff 1 hour
+	*backoff = cct->_conf->osd_scrub_reserve_backoff;
+	return PG::scrub_result::BACKOFF;
+      }
       // Handle deep scrub determination only if allowed
       if (allow_deep_scrub) {
         // Initial entry and scheduled scrubs without nodeep_scrub set get here
@@ -1422,13 +1434,17 @@ bool PG::sched_scrub()
           osd->clog->error() << "osd." << osd->whoami
 			     << " pg " << info.pgid
 			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
-          return false;
+	  // Skip min_interval
+          return PG::scrub_result::SKIPPED;
         }
       }
 
       //NOSCRUB so skip regular scrubs
       if (!allow_scrub && !scrubber.time_for_deep) {
-        return false;
+        dout(20) << __func__ << ": Regular scrub disabled (noscrub), pg " << info.pgid << dendl;
+	 // Backoff 1 hour
+        *backoff = cct->_conf->osd_scrub_reserve_backoff;
+        return PG::scrub_result::BACKOFF;
       }
     // scrubber.must_scrub
     } else if (!scrubber.must_deep_scrub && has_deep_errors) {
@@ -1451,7 +1467,9 @@ bool PG::sched_scrub()
       scrub_reserve_replicas();
     } else {
       dout(20) << __func__ << ": failed to reserve locally" << dendl;
-      return false;
+      // Backoff 1 minute
+      *backoff = cct->_conf->osd_scrub_reserve_backoff;
+      return PG::scrub_result::BACKOFF;
     }
   }
 
@@ -1460,7 +1478,9 @@ bool PG::sched_scrub()
       dout(20) << __func__ << ": failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
-      return false;
+      // Backoff 1 minute
+      *backoff = cct->_conf->osd_scrub_reserve_backoff;
+      return PG::scrub_result::BACKOFF;
     } else if (scrubber.reserved_peers.size() == get_actingset().size()) {
       dout(20) << __func__ << ": success, reserved self and replicas" << dendl;
       if (scrubber.time_for_deep) {
@@ -1468,6 +1488,9 @@ bool PG::sched_scrub()
 	state_set(PG_STATE_DEEP_SCRUB);
 	scrubber.time_for_deep = false;
       }
+      // The scrub is really happening, so clear tracker used when
+      // skipping scrubs.
+      scrubber.last_scrub_check = utime_t();
       queue_scrub();
     } else {
       // none declined, since scrubber.reserved is set
@@ -1475,7 +1498,7 @@ bool PG::sched_scrub()
 	       << ", waiting for replicas" << dendl;
     }
   }
-  return true;
+  return PG::scrub_result::OK;
 }
 
 bool PG::is_scrub_registered()
@@ -1498,7 +1521,11 @@ void PG::reg_next_scrub()
     reg_stamp = ceph_clock_now();
     must = true;
   } else {
-    reg_stamp = info.history.last_scrub_stamp;
+    if (!scrubber.last_scrub_check.is_zero()) {
+      reg_stamp = scrubber.last_scrub_check;
+    } else {
+      reg_stamp = info.history.last_scrub_stamp;
+    }
   }
   // note down the sched_time, so we can locate this scrub, and remove it
   // later on.
@@ -1932,7 +1959,19 @@ void PG::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
   } else {
     dout(10) << " osd." << from << " scrub reserve = success" << dendl;
     scrubber.reserved_peers.insert(from);
-    sched_scrub();
+    double backoff_amount = 0;
+    enum scrub_result result = sched_scrub(&backoff_amount);
+    ceph_assert(result != scrub_result::SKIPPED);
+    if (result == scrub_result::BACKOFF && backoff_amount) {
+      utime_t backoff;
+      backoff.set_from_double(backoff_amount);
+      double r = rand() / (double)RAND_MAX;
+      backoff -=
+        backoff * cct->_conf->osd_scrub_interval_randomize_ratio * r;
+      utime_t old_time = scrubber.scrub_reg_stamp;
+      scrubber.scrub_reg_stamp = ceph_clock_now() + backoff;
+      osd->scrub_resched(pg_id, old_time, scrubber.scrub_reg_stamp);
+    }
   }
 }
 
@@ -1950,7 +1989,19 @@ void PG::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
     /* One decline stops this pg from being scheduled for scrubbing. */
     dout(10) << " osd." << from << " scrub reserve = fail" << dendl;
     scrubber.reserve_failed = true;
-    sched_scrub();
+    double backoff_amount = 0;
+    enum scrub_result result = sched_scrub(&backoff_amount);
+    ceph_assert(result != scrub_result::SKIPPED);
+    if (result == scrub_result::BACKOFF && backoff_amount) {
+      utime_t backoff;
+      backoff.set_from_double(backoff_amount);
+      double r = rand() / (double)RAND_MAX;
+      backoff -=
+        backoff * cct->_conf->osd_scrub_interval_randomize_ratio * r;
+      utime_t old_time = scrubber.scrub_reg_stamp;
+      scrubber.scrub_reg_stamp = ceph_clock_now() + backoff;
+      osd->scrub_resched(pg_id, old_time, scrubber.scrub_reg_stamp);
+    }
   }
 }
 

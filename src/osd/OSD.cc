@@ -7568,13 +7568,14 @@ double OSD::scrub_sleep_time(bool must_scrub)
   return std::max(extended_sleep, normal_sleep);
 }
 
-bool OSD::scrub_time_permit(utime_t now)
+bool OSD::scrub_time_permit(utime_t now, bool *dpp)
 {
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
-  bool day_permit = false;
+  bool &day_permit = *dpp;
+  day_permit = false;
   if (cct->_conf->osd_scrub_begin_week_day < cct->_conf->osd_scrub_end_week_day) {
     if (bdt.tm_wday >= cct->_conf->osd_scrub_begin_week_day && bdt.tm_wday < cct->_conf->osd_scrub_end_week_day) {
       day_permit = true;
@@ -7669,7 +7670,8 @@ void OSD::sched_scrub()
   }
 
   utime_t now = ceph_clock_now();
-  bool time_permit = scrub_time_permit(now);
+  bool day_permit;
+  bool time_permit = scrub_time_permit(now, &day_permit);
   bool load_is_low = scrub_load_below_threshold();
   dout(20) << "sched_scrub load_is_low=" << (int)load_is_low << dendl;
 
@@ -7683,12 +7685,6 @@ void OSD::sched_scrub()
 	dout(10) << "sched_scrub " << scrub.pgid << " scheduled at " << scrub.sched_time
 		 << " > " << now << dendl;
 	break;
-      }
-
-      if ((scrub.deadline.is_zero() || scrub.deadline >= now) && !(time_permit && load_is_low)) {
-        dout(10) << __func__ << " not scheduling scrub for " << scrub.pgid << " due to "
-                 << (!time_permit ? "time not permit" : "high load") << dendl;
-        continue;
       }
 
       PGRef pg = _lookup_lock_pg(scrub.pgid);
@@ -7714,13 +7710,58 @@ void OSD::sched_scrub()
 	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
 	break;
       }
-      dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
-	       << (pg->get_must_scrub() ? ", explicitly requested" :
-		   (load_is_low ? ", load_is_low" : " deadline < now"))
-	       << dendl;
-      if (pg->sched_scrub()) {
-	pg->unlock();
-	break;
+      enum PG::scrub_result result;
+      double backoff_amount = 0;
+      if ((scrub.deadline.is_zero() || scrub.deadline >= now) && !(time_permit && load_is_low)) {
+        dout(10) << __func__ << " not scheduling scrub for " << scrub.pgid << " due to "
+                 << (!time_permit ? "time not permit" : "high load") << dendl;
+	if (!day_permit) {
+	  // Backoff 1 day
+	  backoff_amount = cct->_conf->osd_scrub_day_backoff;
+	} else if (!time_permit) {
+	  // Backoff 1 hour
+	  backoff_amount = cct->_conf->osd_scrub_hour_backoff;
+	} else {
+	  ceph_assert(!load_is_low);
+	  // Backoff 10 minutes
+          backoff_amount = cct->_conf->osd_scrub_load_backoff;
+	}
+	result =  PG::scrub_result::BACKOFF;
+      } else {
+        dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
+	         << (pg->get_must_scrub() ? ", explicitly requested" :
+		    (load_is_low ? ", load_is_low" : " deadline < now"))
+	         << dendl;
+        result = pg->sched_scrub(&backoff_amount);
+        if (result == PG::scrub_result::OK) {
+	  pg->unlock();
+	  break;
+        }
+      }
+      if (pg->is_scrub_registered()) {
+	if (result == PG::scrub_result::SKIPPED) {
+          double scrub_min_interval = 0;
+          pg->get_pool().info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
+          if (scrub_min_interval == 0)
+            scrub_min_interval = cct->_conf->osd_scrub_min_interval;
+	  utime_t interval;
+	  interval.set_from_double(scrub_min_interval);
+	  pg->scrubber.last_scrub_check = ceph_clock_now();
+	  pg->scrubber.scrub_reg_stamp = pg->scrubber.last_scrub_check + interval;
+	  service.scrub_resched(scrub, pg->scrubber.scrub_reg_stamp);
+	  dout(20) << __func__ << ": Skipped scrub PG " << scrub.pgid << " until "
+		   << pg->scrubber.scrub_reg_stamp << dendl;
+	} else if (result == PG::scrub_result::BACKOFF && backoff_amount) {
+	  utime_t backoff;
+	  backoff.set_from_double(backoff_amount);
+          double r = rand() / (double)RAND_MAX;
+          backoff -=
+            backoff * cct->_conf->osd_scrub_interval_randomize_ratio * r;
+	  dout(20) << __func__ << ": Backoff scrub PG " << scrub.pgid
+		   << " by " << (int)backoff << " seconds" << dendl;
+	  pg->scrubber.scrub_reg_stamp = ceph_clock_now() + backoff;
+	  service.scrub_resched(scrub, pg->scrubber.scrub_reg_stamp);
+        }
       }
       pg->unlock();
     } while (service.next_scrub_stamp(scrub, &scrub));

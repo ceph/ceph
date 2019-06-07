@@ -310,6 +310,28 @@ public:
     size_t removed = sched_scrub_pg.erase(ScrubJob(cct, pgid, t));
     ceph_assert(removed);
   }
+  void scrub_resched(ScrubJob scrub, utime_t new_time) {
+    std::lock_guard l(sched_scrub_lock);
+    size_t removed = sched_scrub_pg.erase(scrub);
+    assert(removed);
+    scrub.sched_time = new_time;
+    sched_scrub_pg.insert(scrub);
+  }
+  void scrub_resched(spg_t pgid, utime_t old_time, utime_t new_time) {
+    std::lock_guard l(sched_scrub_lock);
+    ScrubJob scrub;
+    for (set<ScrubJob>::iterator s = sched_scrub_pg.begin();
+	 s != sched_scrub_pg.end() ; ++s) {
+      if (s->pgid == pgid && s->sched_time == old_time) {
+	scrub = *s;
+	sched_scrub_pg.erase(s);
+	break;
+      }
+    }
+    assert(scrub.pgid == pgid);
+    scrub.sched_time = new_time;
+    sched_scrub_pg.insert(scrub);
+  }
   bool first_scrub_stamp(ScrubJob *out) {
     std::lock_guard l(sched_scrub_lock);
     if (sched_scrub_pg.empty())
@@ -2031,7 +2053,7 @@ protected:
   void resched_all_scrubs();
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
-  bool scrub_time_permit(utime_t now);
+  bool scrub_time_permit(utime_t now, bool *day_permit);
 
   // -- status reporting --
   MPGStats *collect_pg_stats();

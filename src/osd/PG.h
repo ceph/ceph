@@ -522,7 +522,10 @@ public:
   bool get_must_scrub() const {
     return scrubber.must_scrub;
   }
-  bool sched_scrub();
+  enum scrub_result {
+    OK, SKIPPED, BACKOFF
+  };
+  enum scrub_result sched_scrub(double *);
 
   virtual void do_request(
     OpRequestRef& op,
@@ -1108,6 +1111,7 @@ public:
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
+    utime_t last_scrub_check; // Last time we skipped a scrub
 
     static utime_t scrub_must_stamp() { return utime_t(0,1); }
 

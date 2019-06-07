@@ -3566,6 +3566,35 @@ std::vector<Option> get_global_options() {
     .set_default(5)
     .set_description("Set the maximum number of times we will preempt a deep scrub due to a client operation before blocking client IO to complete the scrub"),
 
+    Option("osd_scrub_load_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(15_min)
+    .set_description("Amount of time before retrying a scrub that was blocked due to system load")
+    .add_see_also("osd_scrub_load_threshold"),
+
+    Option("osd_scrub_day_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1_day)
+    .set_description("Amount of time before retrying a scrub that was blocked due to time restriction on day of week")
+    .add_see_also("osd_scrub_begin_week_day")
+    .add_see_also("osd_scrub_end_week_day"),
+
+    Option("osd_scrub_hour_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1_hr)
+    .set_description("Amount of time before retrying a scrub that was blocked due to time restriction on hour of day")
+    .add_see_also("osd_scrub_begin_hour")
+    .add_see_also("osd_scrub_end_hour"),
+
+    Option("osd_scrub_reserve_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1_min)
+    .set_description("Amount of time before retrying a scrub with a reservation failure"),
+
+    Option("osd_scrub_pg_state_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(5_min)
+    .set_description("Amount of time before retrying a scrub with an incompatible pg state"),
+
+    Option("osd_scrub_noscrub_backoff", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1_hr)
+    .set_description("Amount of time before retrying a scrub when noscrub or nodeep-scrub blocks scrubbing"),
+
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
     .set_description("Deep scrub each PG (i.e., verify data checksums) at least this often"),

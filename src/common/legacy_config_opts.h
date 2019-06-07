@@ -724,6 +724,11 @@ OPTION(osd_scrub_sleep, OPT_FLOAT)   // sleep between [deep]scrub ops
 OPTION(osd_scrub_extended_sleep, OPT_FLOAT)   // more sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32)   // only auto-repair when number of errors is below this threshold
+OPTION(osd_scrub_load_backoff, OPT_FLOAT)   // Amount of time before trying to scrub again due to load
+OPTION(osd_scrub_day_backoff, OPT_FLOAT)   // Amount of time before trying to scrub again due time restriction on day of week
+OPTION(osd_scrub_hour_backoff, OPT_FLOAT)   // Amount of time before trying to scrub again due to time restriction on hour of day
+OPTION(osd_scrub_reserve_backoff, OPT_FLOAT)   // Amount of time before trying to scrub again with a reservation failure
+OPTION(osd_scrub_pg_state_backoff, OPT_FLOAT)   // Amount of time before trying to scrub again with an incompatible pg state
 OPTION(osd_deep_scrub_interval, OPT_FLOAT) // once a week
 OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
 OPTION(osd_deep_scrub_stride, OPT_INT)
