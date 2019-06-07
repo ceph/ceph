@@ -794,7 +794,7 @@ int RGWReshard::add(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_add(op, entry);
 
-  int ret = store->getRados()->reshard_pool_ctx.operate(logshard_oid, &op);
+  int ret = rgw_rados_operate(store->reshard_pool_ctx, logshard_oid, &op, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to add entry to reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
     return ret;
@@ -876,7 +876,7 @@ int RGWReshard::remove(cls_rgw_reshard_entry& entry)
   librados::ObjectWriteOperation op;
   cls_rgw_reshard_remove(op, entry);
 
-  int ret = store->getRados()->reshard_pool_ctx.operate(logshard_oid, &op);
+  int ret = rgw_rados_operate(store->reshard_pool_ctx, logshard_oid, &op, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to remove entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
     return ret;
