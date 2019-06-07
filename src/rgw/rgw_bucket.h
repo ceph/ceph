@@ -694,10 +694,17 @@ public:
     };
 
     struct PutParams {
+      std::optional<RGWBucketInfo *> orig_info; /* nullopt: orig_info was not fetched,
+                                                   nullptr: orig_info was not found (new bucket instance */
       ceph::real_time mtime;
       bool exclusive{false};
       map<string, bufferlist> *attrs{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
+
+      PutParams& set_orig_info(RGWBucketInfo *pinfo) {
+        orig_info = pinfo;
+        return *this;
+      }
 
       PutParams& set_mtime(const ceph::real_time& _mtime) {
         mtime = _mtime;
@@ -781,6 +788,14 @@ private:
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
+
+  int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
+                                  RGWBucketInfo& info,
+                                  RGWBucketInfo *orig_info,
+                                  bool exclusive, real_time mtime,
+                                  obj_version *pep_objv,
+                                  map<string, bufferlist> *pattrs,
+                                  bool create_entry_point);
 
   int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
                      const rgw_user& user,

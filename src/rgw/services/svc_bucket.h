@@ -64,6 +64,10 @@ class RGWSI_Bucket : public RGWServiceInstance
   int read_bucket_stats(const RGWBucketInfo& bucket_info,
                         RGWBucketEnt *ent);
 
+  int handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
+                              const string& key,
+                              const RGWBucketInfo& info,
+                              const RGWBucketInfo& orig_info);
 public:
   struct Svc {
     RGWSI_Bucket *bucket{nullptr};
@@ -138,6 +142,8 @@ public:
   int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                  const string& key,
                                  RGWBucketInfo& info,
+                                 std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
+                                                                              nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
                                  map<string, bufferlist> *pattrs);

@@ -2419,7 +2419,8 @@ public:
     ret = ctl.bucket->store_bucket_instance_info(be.bucket, new_bi, RGWBucketCtl::BucketInstance::PutParams()
                                                                     .set_exclusive(false)
                                                                     .set_mtime(orig_mtime)
-                                                                    .set_attrs(&attrs_m));
+                                                                    .set_attrs(&attrs_m)
+                                                                    .set_orig_info(&old_bi));
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2621,6 +2622,7 @@ public:
   }
 
   int put_check() override;
+  int put_checked() override;
   int put_post() override;
 };
 
@@ -2672,38 +2674,32 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
     bci.info.placement_rule = old_bci->info.placement_rule;
   }
 
-  if (exists && old_bci->info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {
-    int shards_num = bci.info.num_shards? bci.info.num_shards : 1;
-    int shard_id = bci.info.num_shards? 0 : -1;
-
-    if (!bci.info.datasync_flag_enabled()) {
-      ret = store->stop_bi_log_entries(bci.info, -1);
-      if (ret < 0) {
-        lderr(cct) << "ERROR: failed writing bilog" << dendl;
-        return ret;
-      }
-    } else {
-      ret = store->resync_bi_log_entries(bci.info, -1);
-      if (ret < 0) {
-        lderr(cct) << "ERROR: failed writing bilog" << dendl;
-        return ret;
-      }
-    }
-
-    for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = store->data_log->add_entry(bci.info.bucket, shard_id);
-      if (ret < 0) {
-        lderr(cct) << "ERROR: failed writing data log" << dendl;
-        return ret;
-      }
-    }
-  }
-
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
 
   return 0;
+}
+
+int RGWMetadataHandlerPut_BucketInstance::put_checked()
+{
+  RGWBucketInstanceMetadataObject *orig_obj = static_cast<RGWBucketInstanceMetadataObject *>(old_obj);
+
+  RGWBucketInfo *orig_info = (orig_obj ? &orig_obj->get_bucket_info() : nullptr);
+
+  auto& info = obj->get_bucket_info();
+  auto mtime = obj->get_mtime();
+  auto pattrs = obj->get_pattrs();
+
+  RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+
+  return handler->svc.bucket->store_bucket_instance_info(ctx,
+                                                         entry,
+                                                         info,
+                                                         orig_info,
+                                                         false,
+                                                         mtime,
+                                                         pattrs);
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_post()
@@ -2844,6 +2840,7 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return svc.bucket->store_bucket_instance_info(ctx,
                                                 RGWSI_Bucket::get_bi_meta_key(bucket),
                                                 info,
+                                                params.orig_info,
                                                 params.exclusive,
                                                 params.mtime,
                                                 params.attrs);
@@ -2874,6 +2871,55 @@ int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
   });
 }
 
+int RGWBucketCtl::do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
+                                              RGWBucketInfo& info,
+                                              RGWBucketInfo *orig_info,
+                                              bool exclusive, real_time mtime,
+                                              obj_version *pep_objv,
+                                              map<string, bufferlist> *pattrs,
+                                              bool create_entry_point)
+{
+  bool create_head = !info.has_instance_obj || create_entry_point;
+
+  int ret = svc.bucket->store_bucket_instance_info(ctx.bi,
+                                                   RGWSI_Bucket::get_bi_meta_key(info.bucket),
+                                                   info,
+                                                   orig_info,
+                                                   exclusive,
+                                                   mtime, pattrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!create_head)
+    return 0; /* done! */
+
+  RGWBucketEntryPoint entry_point;
+  entry_point.bucket = info.bucket;
+  entry_point.owner = info.owner;
+  entry_point.creation_time = info.creation_time;
+  entry_point.linked = true;
+  RGWObjVersionTracker ot;
+  if (pep_objv && !pep_objv->tag.empty()) {
+    ot.write_version = *pep_objv;
+  } else {
+    ot.generate_new_write_ver(cct);
+    if (pep_objv) {
+      *pep_objv = ot.write_version;
+    }
+  }
+  ret = svc.bucket->store_bucket_entrypoint_info(ctx.ep,
+                                                 RGWSI_Bucket::get_entrypoint_meta_key(info.bucket),
+                                                 entry_point,
+                                                 exclusive,
+                                                 mtime,
+                                                 pattrs,
+                                                 &ot);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
 int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                           const rgw_bucket& bucket)
 {
@@ -2905,7 +2951,7 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   ot.generate_new_write_ver(cct);
 
-  ret = svc.bucket->store_linked_bucket_info(ctx.bi, info, false, ep_mtime, &ot.write_version, &attrs, true);
+  ret = do_store_linked_bucket_info(ctx, info, nullptr, false, ep_mtime, &ot.write_version, &attrs, true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
     return ret;
@@ -2934,7 +2980,8 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                          bucket,
                                          bucket_info,
                                          BucketInstance::PutParams().set_attrs(&attrs)
-                                                                    .set_objv_tracker(objv_tracker));
+                                                                    .set_objv_tracker(objv_tracker)
+                                                                    .set_orig_info(&bucket_info));
     });
 }
 
