@@ -205,6 +205,7 @@ def task(ctx, config):
         config,
         logger=log.getChild('thrasher')
         )
+    ctx.ceph[cluster].thrashers.append(thrash_proc)
     try:
         yield
     finally:
