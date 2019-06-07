@@ -4983,22 +4983,17 @@ inline std::ostream& operator<<(std::ostream& out, const ObjectExtent &ex)
 class OSDSuperblock {
 public:
   uuid_d cluster_fsid, osd_fsid;
-  int32_t whoami;    // my role in this fs.
-  epoch_t current_epoch;             // most recent epoch
-  epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
-  double weight;
+  int32_t whoami = -1;    // my role in this fs.
+  epoch_t current_epoch = 0;             // most recent epoch
+  epoch_t oldest_map = 0, newest_map = 0;    // oldest/newest maps we have.
+  double weight = 0.0;
 
   CompatSet compat_features;
 
   // last interval over which i mounted and was then active
-  epoch_t mounted;     // last epoch i mounted
-  epoch_t clean_thru;  // epoch i was active and clean thru
+  epoch_t mounted = 0;     // last epoch i mounted
+  epoch_t clean_thru = 0;  // epoch i was active and clean thru
 
-  OSDSuperblock() : 
-    whoami(-1), 
-    current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0) {
-  }
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
