@@ -818,6 +818,7 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 
 void MDSMonitor::on_active()
 {
+  init();
   tick();
   update_logger();
 
