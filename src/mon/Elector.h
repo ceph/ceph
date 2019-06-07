@@ -42,7 +42,9 @@ public:
   void bump_epoch(epoch_t e);
   void start();
   void defer(int who);
+  void end_election_period();
   void handle_propose_logic(epoch_t mepoch, int from);
+
   
 private:
   // call-outs
@@ -53,6 +55,9 @@ private:
   void elector_trigger_new_election();
   int elector_my_rank();
   void elector_propose_to_peers(epoch_t e);
+  void elector_reset();
+  bool elector_ever_participated();
+  unsigned elector_paxos_size();
 };
 
 /**
@@ -237,7 +242,7 @@ private:
    * as far as we know, we may even be dead); so, just propose ourselves as the
    * Leader.
    */
-  void expire();
+  //  void expire();
   /**
    * Declare Victory.
    * 
