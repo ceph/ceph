@@ -1574,7 +1574,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   for (auto& i : pending_inc.new_removed_snaps) {
     {
       // all snaps removed this epoch
-      string k = make_snap_epoch_key(i.first, pending_inc.epoch);
+      string k = make_removed_snap_epoch_key(i.first, pending_inc.epoch);
       bufferlist v;
       encode(i.second, v);
       t->put(OSD_SNAP_PREFIX, k, v);
@@ -3876,7 +3876,7 @@ void OSDMonitor::get_removed_snaps_range(
   for (auto& p : osdmap.get_pools()) {
     auto& t = (*gap_removed_snaps)[p.first];
     for (epoch_t epoch = start; epoch < end; ++epoch) {
-      string k = make_snap_epoch_key(p.first, epoch);
+      string k = make_removed_snap_epoch_key(p.first, epoch);
       bufferlist v;
       mon->store->get(OSD_SNAP_PREFIX, k, v);
       if (v.length()) {
@@ -6203,7 +6203,7 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
   pool->unset_flag(flags);
 }
 
-string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
+string OSDMonitor::make_removed_snap_epoch_key(int64_t pool, epoch_t epoch)
 {
   char k[80];
   snprintf(k, sizeof(k), "removed_epoch_%llu_%08lx",
