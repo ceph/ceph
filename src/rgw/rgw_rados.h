@@ -481,7 +481,7 @@ protected:
 public:
   RGWRados(): lock("rados_timer_lock"), timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
-               run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
+               run_sync_thread(false), run_reshard_thread(false), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
                meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
                bucket_id_lock("rados_bucket_id"),
@@ -548,8 +548,6 @@ public:
    * try to be more transparent. This has a wrapper so we can update it when zonegroup/zone are changed.
    */
   string host_id;
-
-  RGWAsyncRadosProcessor* get_async_rados() const { return async_rados; };
 
   RGWDataChangesLog *data_log;
 

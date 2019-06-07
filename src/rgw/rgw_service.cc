@@ -13,6 +13,7 @@
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_notify.h"
+#include "services/svc_otp.h"
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -52,6 +53,7 @@ int RGWServices_Def::init(CephContext *cct,
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
   meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
+  otp = std::make_unique<RGWSI_OTP>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
@@ -78,6 +80,7 @@ int RGWServices_Def::init(CephContext *cct,
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
   notify->init(zone.get(), rados.get(), finisher.get());
+  otp->init(zone.get(), meta.get(), meta_be_otp.get());
   rados->init();
   zone->init(sysobj.get(), rados.get(), sync_modules.get());
   zone_utils->init(rados.get(), zone.get());
@@ -197,6 +200,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = otp->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   /* cache or core services will be started by sysobj */
 
   return  0;
@@ -246,6 +255,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   meta_be_sobj = _svc.meta_be_sobj.get();
   meta_be_otp = _svc.meta_be_otp.get();
   notify = _svc.notify.get();
+  otp = _svc.otp.get();
   rados = _svc.rados.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
@@ -299,12 +309,13 @@ int RGWCtlDef::init(RGWServices& svc)
     meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc());
   }
 
-  meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc(svc.zone, svc.meta_be_otp));
+  meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
                                 svc.bi));
+  otp.reset(new RGWOTPCtl(svc.zone, svc.otp, (RGWOTPMetadataHandler *)meta.otp.get()));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
@@ -332,9 +343,11 @@ int RGWCtl::init(RGWServices& svc)
   meta.user = _ctl.meta.user.get();
   meta.bucket = _ctl.meta.bucket.get();
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
+  meta.otp = _ctl.meta.otp.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
+  otp = _ctl.otp.get();
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
