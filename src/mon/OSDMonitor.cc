@@ -6214,17 +6214,17 @@ string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
   return k;
 }
 
-string OSDMonitor::make_removed_snap_key(int64_t pool, snapid_t snap)
+string OSDMonitor::_make_snap_key(bool purged, int64_t pool, snapid_t snap)
 {
   char k[80];
-  snprintf(k, sizeof(k), "removed_snap_%llu_%016llx",
+  snprintf(k, sizeof(k), "%s_snap_%llu_%016llx",
+	   purged ? "purged" : "removed",
 	   (unsigned long long)pool, (unsigned long long)snap);
   return k;
 }
 
-
-string OSDMonitor::make_removed_snap_key_value(
-  int64_t pool, snapid_t snap, snapid_t num,
+string OSDMonitor::_make_snap_key_value(
+  bool purged, int64_t pool, snapid_t snap, snapid_t num,
   epoch_t epoch, bufferlist *v)
 {
   // encode the *last* epoch in the key so that we can use forward
@@ -6232,27 +6232,9 @@ string OSDMonitor::make_removed_snap_key_value(
   encode(snap, *v);
   encode(snap + num, *v);
   encode(epoch, *v);
-  return make_removed_snap_key(pool, snap + num - 1);
+  return _make_snap_key(purged, pool, snap + num - 1);
 }
 
-string OSDMonitor::make_purged_snap_key(int64_t pool, snapid_t snap)
-{
-  char k[80];
-  snprintf(k, sizeof(k), "purged_snap_%llu_%016llx",
-	   (unsigned long long)pool, (unsigned long long)snap);
-  return k;
-}
-string OSDMonitor::make_purged_snap_key_value(
-  int64_t pool, snapid_t snap, snapid_t num,
-  epoch_t epoch, bufferlist *v)
-{
-  // encode the *last* epoch in the key so that we can use forward
-  // iteration only to search for an epoch in an interval.
-  encode(snap, *v);
-  encode(snap + num, *v);
-  encode(epoch, *v);
-  return make_purged_snap_key(pool, snap + num - 1);
-}
 
 int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
 				   snapid_t *begin, snapid_t *end)
