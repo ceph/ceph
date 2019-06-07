@@ -165,7 +165,7 @@ int RGWOrphanStore::store_entries(const string& oid, const map<string, bufferlis
   for (map<string, bufferlist>::const_iterator iter = entries.begin(); iter != entries.end(); ++iter) {
     ldout(store->ctx(), 20) << " > " << iter->first << dendl;
   }
-  int ret = ioctx.operate(oid, &op);
+  int ret = rgw_rados_operate(ioctx, oid, &op, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: " << __func__ << "(" << oid << ") returned ret=" << ret << dendl;
   }
