@@ -327,9 +327,8 @@ parse the TypeScript files.
 When the command ran successfully, it should have created or updated the file
 ``src/locale/messages.xlf``.
 
-To make sure this file is always up to date in master branch, we added a
-validation in ``run-frontend-unittests.sh`` that will fail if it finds
-uncommitted translations.
+The file isn't tracked by git, you can just use it to start with the
+translation offline or add/update the resource files on transifex.
 
 Supported languages
 ~~~~~~~~~~~~~~~~~~~
