@@ -44,6 +44,7 @@ public:
   void defer(int who);
   void end_election_period();
   void handle_propose_logic(epoch_t mepoch, int from);
+  void declare_victory();
 
   
 private:
@@ -264,8 +265,7 @@ private:
    * @post  We have a quorum, composed of the monitors that acked us
    * @post  We sent a message of type OP_VICTORY to each quorum member.
    */
-  void victory();
-
+  void message_victory(const set<int>& quorum);
   /**
    * Handle a message from some other node proposing itself to become it
    * the Leader.
