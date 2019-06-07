@@ -96,6 +96,8 @@ static const string OSD_SNAP_PREFIX("osd_snap");
   OSD snapshot metadata
   ---------------------
 
+  -- starting with mimic --
+
   "removed_epoch_%llu_%08lx" % (pool, epoch)
    -> interval_set<snapid_t>
 
@@ -109,6 +111,12 @@ static const string OSD_SNAP_PREFIX("osd_snap");
     that we can use forward iteration only to search for an epoch in an
     interval.  e.g., to test if epoch N is removed/purged, we'll find a key
     >= N that either does or doesn't contain the given snap.
+
+
+  -- starting with octopus --
+
+  "purged_epoch_%08lx" % epoch
+  -> map<int64_t,interval_set<snapid_t>>
 
   */
 
@@ -1586,6 +1594,14 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 			 pending_inc.epoch,
 			 t);
     }
+  }
+  if (tmp.require_osd_release >= ceph_release_t::octopus &&
+      !pending_inc.new_purged_snaps.empty()) {
+    // all snaps purged this epoch (across all pools)
+    string k = make_purged_snap_epoch_key(pending_inc.epoch);
+    bufferlist v;
+    encode(pending_inc.new_purged_snaps, v);
+    t->put(OSD_SNAP_PREFIX, k, v);
   }
   for (auto& i : pending_inc.new_purged_snaps) {
     for (auto q = i.second.begin();
@@ -6208,6 +6224,13 @@ string OSDMonitor::make_removed_snap_epoch_key(int64_t pool, epoch_t epoch)
   char k[80];
   snprintf(k, sizeof(k), "removed_epoch_%llu_%08lx",
 	   (unsigned long long)pool, (unsigned long)epoch);
+  return k;
+}
+
+string OSDMonitor::make_purged_snap_epoch_key(epoch_t epoch)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "purged_epoch_%08lx", (unsigned long)epoch);
   return k;
 }
 
