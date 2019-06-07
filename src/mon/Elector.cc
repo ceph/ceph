@@ -71,6 +71,21 @@ int ElectionLogic::elector_my_rank()
   return elector->mon->rank;
 }
 
+void ElectionLogic::elector_reset()
+{
+  elector->mon->bootstrap();
+}
+
+bool ElectionLogic::elector_ever_participated()
+{
+  return elector->mon->has_ever_joined;
+}
+
+unsigned ElectionLogic::elector_paxos_size()
+{
+  return (unsigned)elector->mon->monmap->size();
+}
+
 
 void ElectionLogic::init()
 {
@@ -209,7 +224,7 @@ void Elector::reset_timer(double plus)
   expire_event = mon->timer.add_event_after(
     g_conf()->mon_election_timeout + plus,
     new C_MonContext(mon, [this](int) {
-	expire();
+	logic.end_election_period();
       }));
 }
 
@@ -222,24 +237,23 @@ void Elector::cancel_timer()
   }
 }
 
-void Elector::expire()
+void ElectionLogic::end_election_period()
 {
-  dout(5) << "election timer expired" << dendl;
+  dout(5) << "election period ended" << dendl;
   
   // did i win?
-  if (logic.electing_me &&
-      logic.acked_me.size() > (unsigned)(mon->monmap->size() / 2)) {
+  if (electing_me &&
+      acked_me.size() > (elector_paxos_size() / 2)) {
     // i win
-    victory();
+    elector->victory();
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
-    if (mon->has_ever_joined)
-      logic.start();
+    if (elector_ever_participated())
+      start();
     else
-      mon->bootstrap();
+      elector_reset();
   }
 }
-
 
 void Elector::victory()
 {
