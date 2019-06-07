@@ -505,11 +505,11 @@ private:
   bool _is_pending_removed_snap(int64_t pool_id, snapid_t snapid);
 
   string make_snap_epoch_key(int64_t pool, epoch_t epoch);
-  string make_snap_key(int64_t pool, snapid_t snap);
-  string make_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
-			     epoch_t epoch, bufferlist *v);
-  string make_snap_purged_key(int64_t pool, snapid_t snap);
-  string make_snap_purged_key_value(int64_t pool, snapid_t snap, snapid_t num,
+  string make_removed_snap_key(int64_t pool, snapid_t snap);
+  string make_removed_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
+				     epoch_t epoch, bufferlist *v);
+  string make_purged_snap_key(int64_t pool, snapid_t snap);
+  string make_purged_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
 				    epoch_t epoch, bufferlist *v);
   bool try_prune_purged_snaps();
   int lookup_purged_snap(int64_t pool, snapid_t snap,
