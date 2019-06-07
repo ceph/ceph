@@ -1583,7 +1583,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	 q != i.second.end();
 	 ++q) {
       bufferlist v;
-      string k = make_snap_key_value(i.first, q.get_start(),
+      string k = make_removed_snap_key_value(i.first, q.get_start(),
 				     q.get_len(), pending_inc.epoch, &v);
       t->put(OSD_SNAP_PREFIX, k, v);
     }
@@ -6214,7 +6214,7 @@ string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
   return k;
 }
 
-string OSDMonitor::make_snap_key(int64_t pool, snapid_t snap)
+string OSDMonitor::make_removed_snap_key(int64_t pool, snapid_t snap)
 {
   char k[80];
   snprintf(k, sizeof(k), "removed_snap_%llu_%016llx",
@@ -6223,7 +6223,7 @@ string OSDMonitor::make_snap_key(int64_t pool, snapid_t snap)
 }
 
 
-string OSDMonitor::make_snap_key_value(
+string OSDMonitor::make_removed_snap_key_value(
   int64_t pool, snapid_t snap, snapid_t num,
   epoch_t epoch, bufferlist *v)
 {
@@ -6232,17 +6232,17 @@ string OSDMonitor::make_snap_key_value(
   encode(snap, *v);
   encode(snap + num, *v);
   encode(epoch, *v);
-  return make_snap_key(pool, snap + num - 1);
+  return make_removed_snap_key(pool, snap + num - 1);
 }
 
-string OSDMonitor::make_snap_purged_key(int64_t pool, snapid_t snap)
+string OSDMonitor::make_purged_snap_key(int64_t pool, snapid_t snap)
 {
   char k[80];
   snprintf(k, sizeof(k), "purged_snap_%llu_%016llx",
 	   (unsigned long long)pool, (unsigned long long)snap);
   return k;
 }
-string OSDMonitor::make_snap_purged_key_value(
+string OSDMonitor::make_purged_snap_key_value(
   int64_t pool, snapid_t snap, snapid_t num,
   epoch_t epoch, bufferlist *v)
 {
@@ -6251,13 +6251,13 @@ string OSDMonitor::make_snap_purged_key_value(
   encode(snap, *v);
   encode(snap + num, *v);
   encode(epoch, *v);
-  return make_snap_purged_key(pool, snap + num - 1);
+  return make_purged_snap_key(pool, snap + num - 1);
 }
 
 int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
 				   snapid_t *begin, snapid_t *end)
 {
-  string k = make_snap_purged_key(pool, snap);
+  string k = make_purged_snap_key(pool, snap);
   auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
   it->lower_bound(k);
   if (!it->valid()) {
