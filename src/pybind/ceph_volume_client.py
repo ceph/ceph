@@ -1477,7 +1477,7 @@ class CephFSVolumeClient(object):
             raise CephFSVolumeClientError(msg)
 
         try:
-            with rados.WriteOpCtx(ioctx) as wop:
+            with rados.WriteOpCtx() as wop:
                 if version is not None:
                     wop.assert_version(version)
                 wop.write_full(data)
