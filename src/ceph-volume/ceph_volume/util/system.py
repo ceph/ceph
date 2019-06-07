@@ -214,9 +214,9 @@ def device_is_mounted(dev, destination=None):
                     )
                     return True
             else:
-                logger.info('%s was found as mounted')
+                logger.info('%s was found as mounted', dev)
                 return True
-    logger.info('%s was not found as mounted')
+    logger.info('%s was not found as mounted', dev)
     return False
 
 
