@@ -6135,7 +6135,7 @@ int RGWCompleteMultipart::MPSerializer::try_lock(
   op.assert_exists();
   lock.set_duration(dur);
   lock.lock_exclusive(&op);
-  int ret = ioctx.operate(oid, &op);
+  int ret = rgw_rados_operate(ioctx, oid, &op, null_yield);
   if (! ret) {
     locked = true;
   }
