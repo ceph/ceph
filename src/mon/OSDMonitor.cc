@@ -6236,19 +6236,23 @@ string OSDMonitor::_make_snap_key_value(
 }
 
 
-int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
-				   snapid_t *begin, snapid_t *end)
+int OSDMonitor::_lookup_snap(bool purged,
+			     int64_t pool, snapid_t snap,
+			     snapid_t *begin, snapid_t *end)
 {
-  string k = make_purged_snap_key(pool, snap);
+  string k = _make_snap_key(purged, pool, snap);
   auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
   it->lower_bound(k);
   if (!it->valid()) {
-    dout(20) << __func__ << " pool " << pool << " snap " << snap
+    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+	     << " pool " << pool << " snap " << snap
 	     << " - key '" << k << "' not found" << dendl;
     return -ENOENT;
   }
-  if (it->key().find("purged_snap_") != 0) {
-    dout(20) << __func__ << " pool " << pool << " snap " << snap
+  if ((purged && it->key().find("purged_snap_") != 0) ||
+      (!purged && it->key().find("removed_snap_") != 0)) {
+    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+	     << " pool " << pool << " snap " << snap
 	     << " - key '" << k << "' got '" << it->key()
 	     << "', wrong prefix" << dendl;
     return -ENOENT;
@@ -6258,7 +6262,8 @@ int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
   decode(*begin, p);
   decode(*end, p);
   if (snap < *begin || snap >= *end) {
-    dout(20) << __func__ << " pool " << pool << " snap " << snap
+    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+	     << " pool " << pool << " snap " << snap
 	     << " - found [" << *begin << "," << *end << "), no overlap"
 	     << dendl;
     return -ENOENT;
