@@ -2136,7 +2136,7 @@ void Monitor::_finish_svc_election()
   }
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
+void Monitor::win_election(epoch_t epoch, const set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
 			   ceph_release_t min_mon_release,
 			   const map<int,Metadata>& metadata)

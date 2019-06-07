@@ -245,7 +245,7 @@ void ElectionLogic::end_election_period()
   if (electing_me &&
       acked_me.size() > (elector_paxos_size() / 2)) {
     // i win
-    elector->victory();
+    declare_victory();
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
     if (elector_ever_participated())
@@ -255,18 +255,29 @@ void ElectionLogic::end_election_period()
   }
 }
 
-void Elector::victory()
+
+void ElectionLogic::declare_victory()
 {
-  logic.leader_acked = -1;
-  logic.electing_me = false;
+  leader_acked = -1;
+  electing_me = false;
+
+  set<int> new_quorum;
+  new_quorum.swap(acked_me);
+  
+  ceph_assert(epoch % 2 == 1);  // election
+  bump_epoch(epoch+1);     // is over!
+
+  elector->message_victory(new_quorum);
+}
+
+void Elector::message_victory(const set<int>& quorum)
+{
 
   uint64_t cluster_features = CEPH_FEATURES_ALL;
   mon_feature_t mon_features = ceph::features::mon::get_supported();
-  set<int> quorum;
   map<int,Metadata> metadata;
   ceph_release_t min_mon_release{ceph_release_t::unknown};
-  for (auto id : logic.acked_me) {
-    quorum.insert(id);
+  for (auto id : quorum) {
     auto i = peer_info.find(id);
     ceph_assert(i != peer_info.end());
     auto& info = i->second;
@@ -281,8 +292,6 @@ void Elector::victory()
 
   cancel_timer();
   
-  ceph_assert(logic.epoch % 2 == 1);  // election
-  logic.bump_epoch(logic.epoch+1);     // is over!
 
   // tell everyone!
   for (set<int>::iterator p = quorum.begin();
@@ -445,7 +454,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     // is that _everyone_?
     if (logic.acked_me.size() == mon->monmap->size()) {
       // if yes, shortcut to election finish
-      victory();
+      logic.declare_victory();
     }
   } else {
     // ignore, i'm deferring already.
