@@ -189,8 +189,9 @@ ProtocolV2::create(seastar::compat::polymorphic_allocator<char>* const allocator
   return seastar::make_temporary_buffer<char>(allocator, 8192);
 #else
   if (rx_segments_desc.empty()) {
-    // space just for preamble_n
-    return seastar::make_temporary_buffer<char>(allocator, FRAME_PREAMBLE_SIZE);
+    // space just for the ceph banner + preamble_0
+    // FIXME: magic
+    return seastar::make_temporary_buffer<char>(allocator, 26 + FRAME_PREAMBLE_SIZE);
   } else {
     // space for segments_n, epilogue_n and preable_n+1
     size_t segment_size_sum = 0;
@@ -288,12 +289,11 @@ seastar::future<> ProtocolV2::read_frame_payload()
                        conn, cur_rx_desc.alignment, rx_segments_data.size());
       }
       // TODO: create aligned and contiguous buffer from socket
-      return read_exactly(cur_rx_desc.length)
-      .then([this] (auto tmp_bl) {
-        bufferlist data;
-        data.append(buffer::create(std::move(tmp_bl)));
-        logger().debug("{} read frame segment[{}], length={}",
-                       conn, rx_segments_data.size(), data.length());
+      return read(cur_rx_desc.length)
+      .then([this] (auto&& data) {
+        logger().debug("{} read frame segment[{}], length={}, num_buffers={}",
+                       conn, rx_segments_data.size(), data.length(), data.get_num_buffers());
+
         if (session_stream_handlers.rx) {
           // TODO
           ceph_assert(false);
