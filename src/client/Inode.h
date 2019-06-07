@@ -156,6 +156,7 @@ struct Inode {
   // special stuff
   version_t version;           // auth only
   version_t xattr_version;
+  utime_t   snap_btime;        // snapshot creation (birth) time
 
   // inline data
   version_t  inline_version;
