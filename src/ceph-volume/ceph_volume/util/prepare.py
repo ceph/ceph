@@ -198,6 +198,8 @@ def osd_id_available(osd_id):
 
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
+    if 'stray' in output:
+        osds += output['stray']
     osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
     if osd and osd[0].get('status') == "destroyed":
         return True
