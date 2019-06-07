@@ -1582,21 +1582,18 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     for (auto q = i.second.begin();
 	 q != i.second.end();
 	 ++q) {
-      bufferlist v;
-      string k = make_removed_snap_key_value(i.first, q.get_start(),
-				     q.get_len(), pending_inc.epoch, &v);
-      t->put(OSD_SNAP_PREFIX, k, v);
+      insert_snap_update(false, i.first, q.get_start(), q.get_end(),
+			 pending_inc.epoch,
+			 t);
     }
   }
   for (auto& i : pending_inc.new_purged_snaps) {
     for (auto q = i.second.begin();
 	 q != i.second.end();
 	 ++q) {
-      bufferlist v;
-      string k = make_snap_purged_key_value(i.first, q.get_start(),
-					    q.get_len(), pending_inc.epoch,
-					    &v);
-      t->put(OSD_SNAP_PREFIX, k, v);
+      insert_snap_update(true, i.first, q.get_start(), q.get_end(),
+			 pending_inc.epoch,
+			 t);
     }
   }
 
@@ -6269,6 +6266,19 @@ int OSDMonitor::_lookup_snap(bool purged,
     return -ENOENT;
   }
   return 0;
+}
+
+void OSDMonitor::insert_snap_update(
+  bool purged,
+  int64_t pool,
+  snapid_t start, snapid_t end,
+  epoch_t epoch,
+  MonitorDBStore::TransactionRef t)
+{
+  bufferlist v;
+  string k = _make_snap_key_value(purged, pool, start, end - start,
+				  pending_inc.epoch, &v);
+  t->put(OSD_SNAP_PREFIX, k, v);
 }
 
 bool OSDMonitor::try_prune_purged_snaps()

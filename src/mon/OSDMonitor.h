@@ -536,6 +536,13 @@ private:
     return _lookup_snap(true, pool, snap, begin,end);
   }
 
+  void insert_snap_update(
+    bool purged,
+    int64_t pool,
+    snapid_t start, snapid_t end,
+    epoch_t epoch,
+    MonitorDBStore::TransactionRef t);
+
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
 
