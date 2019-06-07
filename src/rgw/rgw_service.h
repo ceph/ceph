@@ -55,6 +55,7 @@ class RGWSI_MetaBackend;
 class RGWSI_MetaBackend_SObj;
 class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
+class RGWSI_OTP;
 class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
@@ -80,6 +81,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
   std::unique_ptr<RGWSI_MetaBackend_OTP> meta_be_otp;
   std::unique_ptr<RGWSI_Notify> notify;
+  std::unique_ptr<RGWSI_OTP> otp;
   std::unique_ptr<RGWSI_RADOS> rados;
   std::unique_ptr<RGWSI_Zone> zone;
   std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
@@ -113,6 +115,7 @@ struct RGWServices
   RGWSI_MetaBackend *meta_be_sobj{nullptr};
   RGWSI_MetaBackend *meta_be_otp{nullptr};
   RGWSI_Notify *notify{nullptr};
+  RGWSI_OTP *otp{nullptr};
   RGWSI_RADOS *rados{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
@@ -141,6 +144,7 @@ class RGWMetadataManager;
 class RGWMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
+class RGWOTPCtl;
 
 struct RGWCtlDef {
   struct _meta {
@@ -156,6 +160,7 @@ struct RGWCtlDef {
 
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
+  std::unique_ptr<RGWOTPCtl> otp;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -177,6 +182,7 @@ struct RGWCtl {
 
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
+  RGWOTPCtl *otp{nullptr};
 
   int init(RGWServices& svc);
 };

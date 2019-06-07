@@ -10,8 +10,9 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
-#include "rgw_rados.h"
+#include "rgw_otp.h"
 #include "rgw_zone.h"
+#include "rgw_metadata.h"
 
 #include "include/types.h"
 
@@ -19,17 +20,14 @@
 #include "rgw_tools.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_cls.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
 #include "services/svc_meta_be_otp.h"
+#include "services/svc_otp.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-
-static RGWMetadataHandler *otp_meta_handler = NULL;
 
 
 class RGWOTPMetadataHandler;
@@ -55,27 +53,30 @@ public:
   }
 };
 
-class RGW_MB_Handler_Module_OTP : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Zone *zone_svc;
-public:
-  RGW_MB_Handler_Module_OTP(RGWSI_Zone *_zone_svc) : zone_svc(_zone_svc) {}
 
-  void get_pool_and_oid(const string& key, rgw_pool& pool, string& oid) override {
-    oid = key;
-    pool = zone_svc->get_zone_params().otp_pool;
-  }
-};
+class RGWOTPMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
+  friend class RGWOTPCtl;
 
-
-class RGWOTPMetadataHandler : public RGWMetadataHandler {
   struct Svc {
     RGWSI_Zone *zone;
     RGWSI_MetaBackend *meta_be;
+    RGWSI_OTP *otp;
   } svc;
 
-  int init_module() override {
-    be_module.reset(new RGW_MB_Handler_Module_OTP(svc.zone));
+  int init(RGWSI_Zone *zone,
+           RGWSI_MetaBackend *_meta_be,
+           RGWSI_OTP *_otp) {
+    svc.zone = zone;
+    svc.meta_be = _meta_be;
+    svc.otp = _otp;
     return 0;
+  }
+
+  int call(std::function<int(RGWSI_OTP_BE_Ctx& ctx)> f) {
+    return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+      RGWSI_OTP_BE_Ctx ctx(op->ctx());
+      return f(ctx);
+    });
   }
 
   RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
@@ -89,37 +90,42 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler {
     return new RGWOTPMetadataObject(std::move(devices), objv, mtime);
   }
 
-  int do_get(RGWSI_MetaBackend::Context *ctx, string& entry, RGWMetadataObject **obj) override {
+  int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj) override {
     RGWObjVersionTracker objv_tracker;
 
-    RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject;
+    std::unique_ptr<RGWOTPMetadataObject> mdo(new RGWOTPMetadataObject);
 
     
-    RGWSI_MBOTP_GetParams params;
-    params.pdevices = &(mdo->get_devs());
+    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    int ret = svc.meta_be->get_entry(ctx, params, &objv_tracker);
+    int ret = svc.otp->read_all(be_ctx,
+                                entry,
+                                &mdo->get_devs(),
+                                &mdo->get_mtime(),
+                                &objv_tracker);
     if (ret < 0) {
       return ret;
     }
 
     mdo->objv = objv_tracker.read_version;
 
-    *obj = mdo;
+    *obj = mdo.release();
 
     return 0;
   }
 
-  int do_put(RGWSI_MetaBackend::Context *ctx, string& entry,
+  int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry,
              RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
              RGWMDLogSyncType type) override {
     RGWOTPMetadataObject *obj = static_cast<RGWOTPMetadataObject *>(_obj);
 
-    RGWSI_MBOTP_PutParams params;
-    params.mtime = obj->mtime;
-    params.devices = obj->devices;
+    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    int ret = svc.meta_be->put_entry(ctx, params, &objv_tracker);
+    int ret = svc.otp->store_all(be_ctx,
+                                 entry,
+                                 obj->devices,
+                                 obj->mtime,
+                                 &objv_tracker);
     if (ret < 0) {
       return ret;
     }
@@ -127,82 +133,55 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler {
     return STATUS_APPLIED;
   }
 
-  int do_remove(RGWSI_MetaBackend::Context *ctx, string& entry, RGWObjVersionTracker& objv_tracker) override {
+  int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) override {
     RGWSI_MBOTP_RemoveParams params;
-    return svc.meta_be->remove_entry(ctx, params, &objv_tracker);
+
+    RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
+
+    return svc.otp->remove_all(be_ctx,
+                               entry,
+                               &objv_tracker);
   }
 
 public:
-  RGWOTPMetadataHandler(RGWSI_Zone *zone_svc,
-                        RGWSI_MetaBackend *meta_be_svc) {
-    svc.zone = zone_svc;
-    svc.meta_be = meta_be_svc;
-  }
+  RGWOTPMetadataHandler() {}
 
   string get_type() override { return "otp"; }
-
-  struct list_keys_info {
-    RGWRados *store;
-    RGWListRawObjsCtx ctx;
-  };
-
-  int list_keys_init(const string& marker, void **phandle) override
-  {
-    auto info = std::make_unique<list_keys_info>();
-
-    info->store = store;
-
-    int ret = store->list_raw_objects_init(svc.zone->get_zone_params().otp_pool, marker,
-                                           &info->ctx);
-    if (ret < 0) {
-      return ret;
-    }
-
-    *phandle = (void *)info.release();
-
-    return 0;
-  }
-
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
-
-    string no_filter;
-
-    keys.clear();
-
-    RGWRados *store = info->store;
-
-    int ret = store->list_raw_objects_next(no_filter, max, info->ctx,
-                                           keys, truncated);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
-    if (ret == -ENOENT) {
-      if (truncated)
-        *truncated = false;
-      return 0;
-    }
-
-    return 0;
-  }
-
-  void list_keys_complete(void *handle) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
-    delete info;
-  }
-
-  string get_marker(void *handle) override {
-    list_keys_info *info = static_cast<list_keys_info *>(handle);
-    return info->store->list_raw_objs_get_cursor(info->ctx);
-  }
 };
 
-RGWMetadataHandler *rgw_otp_get_handler()
+
+
+int RGWOTPCtl::read_all(const rgw_user& uid,
+                        RGWOTPInfo *info,
+                        ceph::optional_ref_default<RGWOTPCtl::GetParams> _params)
 {
-  return otp_meta_handler;
+  auto& params = *_params;
+  info->uid = uid;
+  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
+    return svc.otp->read_all(ctx, uid, &info->devices, params.mtime, params.objv_tracker);
+  });
 }
 
-RGWMetadataHandler *RGWOTPMetaHandlerAllocator::alloc(RGWSI_Zone *zone_svc,
-                                                      RGWSI_MetaBackend *meta_be_svc)
+int RGWOTPCtl::store_all(const RGWOTPInfo& info,
+                         ceph::optional_ref_default<RGWOTPCtl::PutParams> _params)
 {
-  return new RGWOTPMetadataHandler(zone_svc, meta_be_svc);
+  auto& params = *_params;
+  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
+    return svc.otp->store_all(ctx, info.uid, info.devices, params.mtime, params.objv_tracker);
+  });
+}
+
+int RGWOTPCtl::remove_all(const rgw_user& uid,
+                         ceph::optional_ref_default<RGWOTPCtl::RemoveParams> _params)
+{
+  auto& params = *_params;
+  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
+    return svc.otp->remove_all(ctx, uid, params.objv_tracker);
+  });
+}
+
+
+RGWMetadataHandler *RGWOTPMetaHandlerAllocator::alloc()
+{
+  return new RGWOTPMetadataHandler();
 }
