@@ -260,7 +260,7 @@ int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -285,7 +285,7 @@ int RGWSI_Bucket::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                 optional_yield y)
 {
   RGWSI_MBSObj_RemoveParams params;
-  return svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
+  return svc.meta_be->remove(ctx.get(), key, params, objv_tracker, y);
 }
 
 int RGWSI_Bucket::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
@@ -470,6 +470,7 @@ int RGWSI_Bucket::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 int RGWSI_Bucket::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                              const string& key,
                                              RGWBucketInfo& info,
+                                             std::optional<RGWBucketInfo *> orig_info,
                                              bool exclusive,
                                              real_time mtime,
                                              map<string, bufferlist> *pattrs,
@@ -478,9 +479,44 @@ int RGWSI_Bucket::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   bufferlist bl;
   encode(info, bl);
 
+  /*
+   * we might need some special handling if overwriting
+   */
+
+  if (!orig_info && !exclusive) {  /* if exclusive, we're going to fail when try
+                                      to overwrite, so the whole check here is moot */
+    /* we're here because orig_info wasn't passed in */
+    RGWBucketInfo _orig_info;
+
+    /*
+     * we don't have info about what was there before, so need to fetch first
+     */
+    int r  = read_bucket_instance_info(ctx,
+                                       key,
+                                       &_orig_info,
+                                       nullptr, nullptr,
+                                       nullptr, boost::none);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        ldout(cct, 0) << "ERROR: " << __func__ << "(): read_bucket_instance_info() of key=" << key << " returned r=" << r << dendl;
+        return r;
+      }
+    } else {
+      *orig_info = &_orig_info;
+    }
+  }
+
+  if (orig_info && *orig_info && !exclusive) {
+    int r = handle_bucket_overwrite(ctx, key, info, *(orig_info.value()));
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): handle_bucket_overwrite() of key=" << key << " returned r=" << r << dendl;
+      return r;
+    }
+  }
+
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, &info.objv_tracker, y);
+  int ret = svc.meta_be->put(ctx.get(), key, params, &info.objv_tracker, y);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -498,6 +534,38 @@ int RGWSI_Bucket::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   return ret;
+}
+
+int RGWSI_Bucket::handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
+                                          const string& key,
+                                          const RGWBucketInfo& info,
+                                          const RGWBucketInfo& orig_info)
+{
+  if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
+    int shards_num = info.num_shards? info.num_shards : 1;
+    int shard_id = info.num_shards? 0 : -1;
+
+    int ret;
+    if (!info.datasync_flag_enabled()) {
+      ret = store->stop_bi_log_entries(info, -1);
+    } else {
+      ret = store->resync_bi_log_entries(info, -1);
+    }
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed writing bilog (key=" << key << "); ret=" << ret << dendl;
+      return ret;
+    }
+
+    for (int i = 0; i < shards_num; ++i, ++shard_id) {
+      ret = store->data_log->add_entry(info.bucket, shard_id);
+      if (ret < 0) {
+        lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
+        return ret;
+      }
+    }
+  }
+
+  return 0;
 }
 
 int RGWSI_Bucket::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
