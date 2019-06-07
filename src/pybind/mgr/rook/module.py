@@ -92,6 +92,9 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
         global all_completions
         all_completions.append(self)
 
+    def __str__(self):
+        return self.message
+
     @property
     def result(self):
         return self._result
@@ -158,14 +161,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # TODO: configure k8s API addr instead of assuming local
     ]
 
-    def _progress(self, *args, **kwargs):
-        try:
-            self.remote("progress", *args, **kwargs)
-        except ImportError:
-            # If the progress module is disabled that's fine,
-            # they just won't see the output.
-            pass
-
     def wait(self, completions):
         self.log.info("wait: completions={0}".format(completions))
 
@@ -184,9 +179,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if c.is_complete:
                 continue
 
-            if not c.is_read:
-                self._progress("update", c.id, c.message, 0.5)
-
             try:
                 c.execute()
             except Exception as e:
@@ -195,12 +187,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ))
                 c.error = e
                 c._complete = True
-                if not c.is_read:
-                    self._progress("complete", c.id)
-            else:
-                if c.is_complete:
-                    if not c.is_read:
-                        self._progress("complete", c.id)
 
             if not c.is_complete:
                 incomplete = True
