@@ -271,8 +271,7 @@ def test_ps_s3_notification_records():
     for record in parsed_result['Records']:
         log.debug(record)
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=True)
 
     # cleanup
     _, status = s3_notification_conf.del_config()
@@ -516,8 +515,7 @@ def test_ps_subscription():
     for event in parsed_result['events']:
         log.debug('Event: objname: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True)
     # delete objects from the bucket
     for key in bucket.list():
         key.delete()
@@ -614,8 +612,7 @@ def test_ps_event_type_subscription():
         log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True)
     # get the events from the deletions subscription
     result, _ = sub_delete_conf.get_events()
     parsed_result = json.loads(result)
@@ -629,8 +626,7 @@ def test_ps_event_type_subscription():
     for event in parsed_result['events']:
         log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' +
                   str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
-    # TODO: set exact_match to true
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True)
     # delete objects from the bucket
     for key in bucket.list():
         key.delete()
@@ -645,8 +641,7 @@ def test_ps_event_type_subscription():
         log.debug('Event (OBJECT_CREATE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # deletions should not change the creation events
-    # TODO: set exact_match to true
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True)
     # get the events from the deletions subscription
     result, _ = sub_delete_conf.get_events()
     parsed_result = json.loads(result)
@@ -654,8 +649,7 @@ def test_ps_event_type_subscription():
         log.debug('Event (OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # only deletions should be listed here
-    # TODO: set exact_match to true
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True, deletions=True)
     # get the events from the all events subscription
     result, _ = sub_create_conf.get_events()
     parsed_result = json.loads(result)
@@ -663,7 +657,7 @@ def test_ps_event_type_subscription():
         log.debug('Event (OBJECT_CREATE,OBJECT_DELETE): objname: "' + str(event['info']['key']['name']) +
                   '" type: "' + str(event['event']) + '"')
     # both deletions and creations should be here
-    verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=False)
+    verify_events_by_elements(parsed_result['events'], keys, exact_match=True, deletions=False)
     # verify_events_by_elements(parsed_result['events'], keys, exact_match=False, deletions=True)
     # TODO: (1) test deletions (2) test overall number of events
 
@@ -732,8 +726,7 @@ def test_ps_event_fetching():
         if next_marker == '':
             break
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_events_by_elements(all_events, keys, exact_match=False)
+    verify_events_by_elements(all_events, keys, exact_match=True)
 
     # cleanup
     sub_conf.del_config()
@@ -783,8 +776,7 @@ def test_ps_event_acking():
     for event in events:
         log.debug('Event (before ack)  id: "' + str(event['id']) + '"')
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_events_by_elements(events, keys, exact_match=False)
+    verify_events_by_elements(events, keys, exact_match=True)
     # ack half of the  events
     events_to_ack = number_of_objects/2
     for event in events:
@@ -1184,8 +1176,7 @@ def test_ps_delete_bucket():
                               topic_name)
     result, _ = sub_conf.get_events()
     parsed_result = json.loads(result)
-    # TODO: set exact_match to true
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=True)
 
     # s3 notification is deleted with bucket
     _, status = s3_notification_conf.get_config(notification=notification_name)
@@ -1475,16 +1466,14 @@ def test_ps_s3_multiple_topics_notification():
     for record in parsed_result['Records']:
         log.debug(record)
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=True)
     
     result, _ = sub_conf2.get_events()
     parsed_result = json.loads(result)
     for record in parsed_result['Records']:
         log.debug(record)
     keys = list(bucket.list())
-    # TODO: set exact_match to true
-    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
+    verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=True)
     
     # cleanup
     s3_notification_conf.del_config()
