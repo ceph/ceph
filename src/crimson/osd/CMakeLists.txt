@@ -19,3 +19,9 @@ add_executable(crimson-osd
   )
 target_link_libraries(crimson-osd
   crimson-common crimson-os crimson fmt::fmt)
+set_target_properties(crimson-osd PROPERTIES
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+install(TARGETS crimson-osd DESTINATION bin)
+if(WITH_TESTS)
+  add_dependencies(tests crimson-osd)
+endif()
