@@ -6254,7 +6254,7 @@ string OSDMonitor::make_snap_purged_key_value(
   return make_snap_purged_key(pool, snap + num - 1);
 }
 
-int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
+int OSDMonitor::lookup_purged_snap(int64_t pool, snapid_t snap,
 				   snapid_t *begin, snapid_t *end)
 {
   string k = make_snap_key(pool, snap);
@@ -6311,14 +6311,14 @@ bool OSDMonitor::try_prune_purged_snaps()
       snapid_t begin = i.get_start();
       auto end = i.get_start() + i.get_len();
       snapid_t pbegin = 0, pend = 0;
-      int r = lookup_pruned_snap(p.first, begin, &pbegin, &pend);
+      int r = lookup_purged_snap(p.first, begin, &pbegin, &pend);
       if (r == 0) {
 	// already purged.
 	// be a bit aggressive about backing off here, because the mon may
 	// do a lot of work going through this set, and if we know the
 	// purged set from the OSDs is at least *partly* stale we may as
 	// well wait for it to be fresh.
-	dout(20) << __func__ << "  we've already pruned " << pbegin
+	dout(20) << __func__ << "  we've already purged " << pbegin
 		 << "~" << (pend - pbegin) << dendl;
 	break;  // next pool
       }
@@ -12701,7 +12701,7 @@ bool OSDMonitor::_is_removed_snap(int64_t pool, snapid_t snap)
     return true;
   }
   snapid_t begin, end;
-  int r = lookup_pruned_snap(pool, snap, &begin, &end);
+  int r = lookup_purged_snap(pool, snap, &begin, &end);
   if (r == 0) {
     dout(10) << __func__ << " pool " << pool << " snap " << snap
 	     << " - purged, [" << begin << "," << end << ")" << dendl;
