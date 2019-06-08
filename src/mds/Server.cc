@@ -1200,7 +1200,8 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
-  ceph_assert(session);
+  if (!session)
+    return;
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
