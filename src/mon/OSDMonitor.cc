@@ -2552,29 +2552,8 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 
 bool OSDMonitor::can_mark_down(int i)
 {
-  if (osdmap.test_flag(CEPH_OSDMAP_NODOWN)) {
-    dout(5) << __func__ << " NODOWN flag set, will not mark osd." << i
-            << " down" << dendl;
-    return false;
-  }
-
   if (osdmap.is_nodown(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as nodown, "
-            << "will not mark it down" << dendl;
-    return false;
-  }
-
-  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NODOWN) {
-    dout(5) << __func__ << " osd." << i
-	    << " is marked as nodown via a crush node flag, "
-            << "will not mark it down" << dendl;
-    return false;
-  }
-
-  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
-      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NODOWN)) {
-    dout(5) << __func__ << " osd." << i
-            << " is marked as nodown via device class, "
             << "will not mark it down" << dendl;
     return false;
   }
@@ -2597,29 +2576,8 @@ bool OSDMonitor::can_mark_down(int i)
 
 bool OSDMonitor::can_mark_up(int i)
 {
-  if (osdmap.test_flag(CEPH_OSDMAP_NOUP)) {
-    dout(5) << __func__ << " NOUP flag set, will not mark osd." << i
-            << " up" << dendl;
-    return false;
-  }
-
   if (osdmap.is_noup(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as noup, "
-            << "will not mark it up" << dendl;
-    return false;
-  }
-
-  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOUP) {
-    dout(5) << __func__ << " osd." << i
-	    << " is marked as noup via a crush node flag, "
-            << "will not mark it up" << dendl;
-    return false;
-  }
-
-  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
-      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOUP)) {
-    dout(5) << __func__ << " osd." << i
-            << " is marked as noup via device class, "
             << "will not mark it up" << dendl;
     return false;
   }
@@ -2633,28 +2591,8 @@ bool OSDMonitor::can_mark_up(int i)
  */
 bool OSDMonitor::can_mark_out(int i)
 {
-  if (osdmap.test_flag(CEPH_OSDMAP_NOOUT)) {
-    dout(5) << __func__ << " NOOUT flag set, will not mark osds out" << dendl;
-    return false;
-  }
-
   if (osdmap.is_noout(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as noout, "
-            << "will not mark it out" << dendl;
-    return false;
-  }
-
-  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOOUT) {
-    dout(5) << __func__ << " osd." << i
-	    << " is marked as noout via a crush node flag, "
-            << "will not mark it out" << dendl;
-    return false;
-  }
-
-  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
-      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOOUT)) {
-    dout(5) << __func__ << " osd." << i
-            << " is marked as noout via device class, "
             << "will not mark it out" << dendl;
     return false;
   }
@@ -2683,29 +2621,8 @@ bool OSDMonitor::can_mark_out(int i)
 
 bool OSDMonitor::can_mark_in(int i)
 {
-  if (osdmap.test_flag(CEPH_OSDMAP_NOIN)) {
-    dout(5) << __func__ << " NOIN flag set, will not mark osd." << i
-            << " in" << dendl;
-    return false;
-  }
-
   if (osdmap.is_noin(i)) {
     dout(5) << __func__ << " osd." << i << " is marked as noin, "
-            << "will not mark it in" << dendl;
-    return false;
-  }
-
-  if (osdmap.get_osd_crush_node_flags(i) & CEPH_OSD_NOIN) {
-    dout(5) << __func__ << " osd." << i
-	    << " is marked as noin via a crush node flag, "
-            << "will not mark it in" << dendl;
-    return false;
-  }
-
-  if (auto class_id = osdmap.crush->get_item_class_id(i); class_id >= 0 &&
-      (osdmap.get_device_class_flags(class_id) & CEPH_OSD_NOIN)) {
-    dout(5) << __func__ << " osd." << i
-            << " is marked as noin via device class, "
             << "will not mark it in" << dendl;
     return false;
   }
@@ -10827,43 +10744,43 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
       if (do_set) {
         if (flags & CEPH_OSD_NOUP) {
-          any |= osdmap.is_noup(osd) ?
+          any |= osdmap.is_noup_by_osd(osd) ?
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP) :
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP);
         }
         if (flags & CEPH_OSD_NODOWN) {
-          any |= osdmap.is_nodown(osd) ?
+          any |= osdmap.is_nodown_by_osd(osd) ?
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN) :
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN);
         }
         if (flags & CEPH_OSD_NOIN) {
-          any |= osdmap.is_noin(osd) ?
+          any |= osdmap.is_noin_by_osd(osd) ?
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN) :
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN);
         }
         if (flags & CEPH_OSD_NOOUT) {
-          any |= osdmap.is_noout(osd) ?
+          any |= osdmap.is_noout_by_osd(osd) ?
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT) :
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT);
         }
       } else {
         if (flags & CEPH_OSD_NOUP) {
-          any |= osdmap.is_noup(osd) ?
+          any |= osdmap.is_noup_by_osd(osd) ?
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOUP) :
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOUP);
         }
         if (flags & CEPH_OSD_NODOWN) {
-          any |= osdmap.is_nodown(osd) ?
+          any |= osdmap.is_nodown_by_osd(osd) ?
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NODOWN) :
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NODOWN);
         }
         if (flags & CEPH_OSD_NOIN) {
-          any |= osdmap.is_noin(osd) ?
+          any |= osdmap.is_noin_by_osd(osd) ?
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOIN) :
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOIN);
         }
         if (flags & CEPH_OSD_NOOUT) {
-          any |= osdmap.is_noout(osd) ?
+          any |= osdmap.is_noout_by_osd(osd) ?
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_NOOUT) :
             pending_inc.pending_osd_state_clear(osd, CEPH_OSD_NOOUT);
         }
