@@ -4882,9 +4882,11 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
+  // do not change the null_yield in the initialization of this AtomicObjectProcessor
+  // it causes crashes in the ragweed tests
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
-                                  dest_obj, olh_epoch, tag, dpp, y);
+                                  dest_obj, olh_epoch, tag, dpp, null_yield);
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
