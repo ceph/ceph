@@ -844,64 +844,72 @@ public:
   unsigned get_crush_node_flags(int id) const;
   unsigned get_device_class_flags(int id) const;
 
-  bool is_noup(int osd) const {
+  bool is_noup_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
   }
 
-  bool is_nodown(int osd) const {
+  bool is_nodown_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NODOWN);
   }
 
-  bool is_noin(int osd) const {
+  bool is_noin_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOIN);
   }
 
-  bool is_noout(int osd) const {
+  bool is_noout_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
   }
 
-  void get_noup_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noup(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noup(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOUP)) // global?
+      return true;
+    if (is_noup_by_osd(osd)) // by osd?
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOUP) // by crush-node?
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOUP) // by device-class?
+      return true;
+    return false;
   }
 
-  void get_nodown_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_nodown(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_nodown(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NODOWN))
+      return true;
+    if (is_nodown_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NODOWN)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NODOWN)
+      return true;
+    return false;
   }
 
-  void get_noin_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noin(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noin(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOIN))
+      return true;
+    if (is_noin_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOIN)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOIN)
+      return true;
+    return false;
   }
 
-  void get_noout_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noout(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noout(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOOUT))
+      return true;
+    if (is_noout_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOOUT)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOOUT)
+      return true;
+    return false;
   }
 
   /**
