@@ -534,6 +534,9 @@ public:
   uint64_t get_read_pos() const { return read_pos; }
   uint64_t get_expire_pos() const { return expire_pos; }
   uint64_t get_trimmed_pos() const { return trimmed_pos; }
+  size_t get_journal_envelope_size() const { 
+    return journal_stream.get_envelope_size(); 
+  }
 };
 WRITE_CLASS_ENCODER(Journaler::Header)
 
