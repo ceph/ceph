@@ -7757,6 +7757,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(this, mdr, srcdn, destdn, straydn);
 
   journal_and_reply(mdr, srci, destdn, le, fin);
+  mds->balancer->maybe_fragment(destdn->get_dir(), false);
 }
 
 
