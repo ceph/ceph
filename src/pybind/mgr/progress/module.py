@@ -135,6 +135,8 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
+        self._start_epoch = _module.get_osdmap().get_epoch() 
+
         self.id = str(uuid.uuid4())
         self._refresh()
 
@@ -179,6 +181,9 @@ class PgRecoveryEvent(Event):
             except KeyError:
                 # The PG is gone!  Probably a pool was deleted. Drop it.
                 complete.add(pg)
+                continue
+            # Only checks the state of each PGs when it's epoch >= the OSDMap's epoch
+            if int(info['reported_epoch']) < int(self._start_epoch):
                 continue
 
             state = info['state']
