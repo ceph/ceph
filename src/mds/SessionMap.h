@@ -637,28 +637,6 @@ public:
     get_client_sessions(f);
   }
 
-  void replay_open_sessions(version_t event_cmapv,
-			    map<client_t,entity_inst_t>& client_map) {
-    // Server::finish_force_open_sessions() marks sessions dirty one by one.
-    // Marking a session dirty may flush all existing dirty sessions. So it's
-    // possible that some sessions are already saved in sessionmap.
-    ceph_assert(version + client_map.size() >= event_cmapv);
-    unsigned already_saved = client_map.size() - (event_cmapv - version);
-    for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
-	 p != client_map.end(); 
-	 ++p) {
-      Session *s = get_or_add_session(p->second);
-      if (already_saved > 0) {
-	ceph_assert(s->is_open());
-	--already_saved;
-	continue;
-      }
-
-      set_state(s, Session::STATE_OPEN);
-      replay_dirty_session(s);
-    }
-  }
-
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
     assert(session_map.count(w));
@@ -747,6 +725,13 @@ public:
    * and `projected` to account for that.
    */
   void replay_advance_version();
+
+  /**
+   * During replay, open sessions, advance versions and
+   * mark these sessions as dirty.
+   */
+  void replay_open_sessions(version_t event_cmapv,
+			    map<client_t,entity_inst_t>& client_map);
 
   /**
    * For these session IDs, if a session exists with this ID, and it has

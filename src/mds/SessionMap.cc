@@ -712,6 +712,41 @@ void SessionMap::replay_advance_version()
   projected = version;
 }
 
+void SessionMap::replay_open_sessions(version_t event_cmapv,
+				      map<client_t,entity_inst_t>& client_map)
+{
+  unsigned already_saved;
+
+  if (version + client_map.size() < event_cmapv)
+    goto bad;
+
+  // Server::finish_force_open_sessions() marks sessions dirty one by one.
+  // Marking a session dirty may flush all existing dirty sessions. So it's
+  // possible that some sessions are already saved in sessionmap.
+  already_saved = client_map.size() - (event_cmapv - version);
+  for (const auto& p : client_map) {
+    Session *s = get_or_add_session(p.second);
+    if (already_saved > 0) {
+      if (s->is_closed())
+	goto bad;
+
+      --already_saved;
+      continue;
+    }
+
+    set_state(s, Session::STATE_OPEN);
+    replay_dirty_session(s);
+  }
+  return;
+
+bad:
+  mds->clog->error() << "error replaying open sessions(" << client_map.size()
+		     << ") sessionmap v " << event_cmapv << " table " << version;
+  ceph_assert(g_conf->mds_wipe_sessions);
+  mds->sessionmap.wipe();
+  mds->sessionmap.set_version(event_cmapv);
+}
+
 version_t SessionMap::mark_projected(Session *s)
 {
   dout(20) << __func__ << " s=" << s << " name=" << s->info.inst.name
