@@ -1483,12 +1483,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
   }
   if (sessionmapv) {
+    unsigned diff = (used_preallocated_ino && !preallocated_inos.empty()) ? 2 : 1;
     if (mds->sessionmap.get_version() >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.get_version() << dendl;
-    } else if (mds->sessionmap.get_version() + 2 >= sessionmapv) {
+    } else if (mds->sessionmap.get_version() + diff == sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
-	       << " -(1|2) == table " << mds->sessionmap.get_version()
+	       << " - " << diff << " == table " << mds->sessionmap.get_version()
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
@@ -1514,16 +1515,16 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
       } else {
 	dout(10) << "EMetaBlob.replay no session for " << client_name << dendl;
-	if (used_preallocated_ino) {
+	if (used_preallocated_ino)
 	  mds->sessionmap.replay_advance_version();
-        }
+
 	if (!preallocated_inos.empty())
 	  mds->sessionmap.replay_advance_version();
       }
       ceph_assert(sessionmapv == mds->sessionmap.get_version());
     } else {
-      mds->clog->error() << "journal replay sessionmap v " << sessionmapv
-			<< " -(1|2) > table " << mds->sessionmap.get_version();
+      mds->clog->error() << "EMetaBlob.replay sessionmap v " << sessionmapv
+			 << " - " << diff << " > table " << mds->sessionmap.get_version();
       ceph_assert(g_conf()->mds_wipe_sessions);
       mds->sessionmap.wipe();
       mds->sessionmap.set_version(sessionmapv);
@@ -1617,7 +1618,7 @@ void ESession::replay(MDSRank *mds)
   if (mds->sessionmap.get_version() >= cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version() 
 	     << " >= " << cmapv << ", noop" << dendl;
-  } else {
+  } else if (mds->sessionmap.get_version() + 1 == cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << " " << (open ? "open":"close") << " " << client_inst << dendl;
     Session *session;
@@ -1648,6 +1649,12 @@ void ESession::replay(MDSRank *mds)
       mds->sessionmap.replay_advance_version();
     }
     ceph_assert(mds->sessionmap.get_version() == cmapv);
+  } else {
+    mds->clog->error() << "ESession.replay sessionmap v " << cmapv
+		       << " - 1 > table " << mds->sessionmap.get_version();
+    ceph_assert(g_conf()->mds_wipe_sessions);
+    mds->sessionmap.wipe();
+    mds->sessionmap.set_version(cmapv);
   }
   
   if (inos.size() && inotablev) {
