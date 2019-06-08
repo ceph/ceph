@@ -1780,8 +1780,7 @@ void ESessions::replay(MDSRank *mds)
   } else {
     dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << dendl;
-    mds->sessionmap.replay_open_sessions(client_map, client_metadata_map);
-    ceph_assert(mds->sessionmap.get_version() == cmapv);
+    mds->sessionmap.replay_open_sessions(cmapv, client_map, client_metadata_map);
   }
   update_segment();
 }
@@ -2064,9 +2063,7 @@ void EUpdate::replay(MDSRank *mds)
       decode(cm, blp);
       if (!blp.end())
 	decode(cmm, blp);
-      mds->sessionmap.replay_open_sessions(cm, cmm);
-
-      ceph_assert(mds->sessionmap.get_version() == cmapv);
+      mds->sessionmap.replay_open_sessions(cmapv, cm, cmm);
     }
   }
   update_segment();
@@ -2912,15 +2909,7 @@ void EImportStart::replay(MDSRank *mds)
     decode(cm, blp);
     if (!blp.end())
       decode(cmm, blp);
-    mds->sessionmap.replay_open_sessions(cm, cmm);
-
-    if (mds->sessionmap.get_version() != cmapv) {
-      derr << "sessionmap version " << mds->sessionmap.get_version()
-           << " != cmapv " << cmapv << dendl;
-      mds->clog->error() << "failure replaying journal (EImportStart)";
-      mds->damaged();
-      ceph_abort();  // Should be unreachable because damaged() calls respawn()
-    }
+    mds->sessionmap.replay_open_sessions(cmapv, cm, cmm);
   }
   update_segment();
 }
