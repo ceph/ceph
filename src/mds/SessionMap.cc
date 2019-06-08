@@ -669,12 +669,13 @@ void SessionMap::touch_session(Session *session)
   session->last_cap_renew = clock::now();
 }
 
-void SessionMap::_mark_dirty(Session *s)
+void SessionMap::_mark_dirty(Session *s, bool may_save)
 {
   if (dirty_sessions.count(s->info.inst.name))
     return;
 
-  if (dirty_sessions.size() >= g_conf->mds_sessionmap_keys_per_op) {
+  if (may_save &&
+      dirty_sessions.size() >= g_conf->mds_sessionmap_keys_per_op) {
     // Pre-empt the usual save() call from journal segment trim, in
     // order to avoid building up an oversized OMAP update operation
     // from too many sessions modified at once
@@ -685,12 +686,12 @@ void SessionMap::_mark_dirty(Session *s)
   dirty_sessions.insert(s->info.inst.name);
 }
 
-void SessionMap::mark_dirty(Session *s)
+void SessionMap::mark_dirty(Session *s, bool may_save)
 {
   dout(20) << __func__ << " s=" << s << " name=" << s->info.inst.name
     << " v=" << version << dendl;
 
-  _mark_dirty(s);
+  _mark_dirty(s, may_save);
   version++;
   s->pop_pv(version);
 }
@@ -700,7 +701,7 @@ void SessionMap::replay_dirty_session(Session *s)
   dout(20) << __func__ << " s=" << s << " name=" << s->info.inst.name
     << " v=" << version << dendl;
 
-  _mark_dirty(s);
+  _mark_dirty(s, false);
 
   replay_advance_version();
 }

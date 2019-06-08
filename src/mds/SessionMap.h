@@ -637,11 +637,23 @@ public:
     get_client_sessions(f);
   }
 
-  void replay_open_sessions(map<client_t,entity_inst_t>& client_map) {
+  void replay_open_sessions(version_t event_cmapv,
+			    map<client_t,entity_inst_t>& client_map) {
+    // Server::finish_force_open_sessions() marks sessions dirty one by one.
+    // Marking a session dirty may flush all existing dirty sessions. So it's
+    // possible that some sessions are already saved in sessionmap.
+    ceph_assert(version + client_map.size() >= event_cmapv);
+    unsigned already_saved = client_map.size() - (event_cmapv - version);
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *s = get_or_add_session(p->second);
+      if (already_saved > 0) {
+	ceph_assert(s->is_open());
+	--already_saved;
+	continue;
+      }
+
       set_state(s, Session::STATE_OPEN);
       replay_dirty_session(s);
     }
@@ -697,7 +709,7 @@ protected:
   std::set<entity_name_t> dirty_sessions;
   std::set<entity_name_t> null_sessions;
   bool loaded_legacy = false;
-  void _mark_dirty(Session *session);
+  void _mark_dirty(Session *session, bool may_save);
 public:
 
   /**
@@ -708,7 +720,7 @@ public:
    * to the backing store.  Must have called
    * mark_projected previously for this session.
    */
-  void mark_dirty(Session *session);
+  void mark_dirty(Session *session, bool may_save=true);
 
   /**
    * Advance the projected version, and mark this
