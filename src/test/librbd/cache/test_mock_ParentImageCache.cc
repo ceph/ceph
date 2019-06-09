@@ -271,17 +271,18 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   Context* temp_on_dispatched = nullptr;
   ZTracer::Trace* temp_trace = nullptr;
   io::FlushSource temp_flush_source;
+  io::LightweightBufferExtents buffer_extents;
   
-  ASSERT_EQ(mock_parent_image_cache->discard(temp_oid, 0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags, 
+  ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->write(temp_oid, 0, 0, std::move(temp_bl), *temp_snapc, 0,
-            *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result, 
+  ASSERT_EQ(mock_parent_image_cache->write(0, 0, std::move(temp_bl), *temp_snapc, 0,
+            *temp_trace, temp_op_flags, temp_journal_tid, temp_dispatch_result,
             temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->write_same(temp_oid, 0, 0, 0, std::move(temp_buffer_extents),
+  ASSERT_EQ(mock_parent_image_cache->write_same(0, 0, 0, std::move(buffer_extents),
             std::move(temp_bl), *temp_snapc, 0, *temp_trace, temp_op_flags,
             temp_journal_tid, temp_dispatch_result, temp_on_finish, temp_on_dispatched), false );
-  ASSERT_EQ(mock_parent_image_cache->compare_and_write(temp_oid, 0, 0, std::move(temp_bl), std::move(temp_bl), 
-            *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid, 
+  ASSERT_EQ(mock_parent_image_cache->compare_and_write(0, 0, std::move(temp_bl), std::move(temp_bl),
+            *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->flush(temp_flush_source, *temp_trace, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
@@ -332,7 +333,7 @@ TEST_F(TestMockParentImageCache, test_read) {
                    .WillOnce(Return(true));
   expect_cache_lookup_object(*mock_parent_image_cache, on_finish); 
 
-  mock_parent_image_cache->read(ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {}, 
+  mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {},
                         nullptr, nullptr, nullptr, nullptr, &on_finish, nullptr);
   ASSERT_EQ(0, cond.wait());
 

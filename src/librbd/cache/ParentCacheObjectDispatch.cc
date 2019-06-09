@@ -20,6 +20,7 @@
                            << this << " " << __func__ << ": "
 
 using namespace ceph::immutable_obj_cache;
+using librbd::util::data_object_name;
 
 namespace librbd {
 namespace cache {
@@ -63,7 +64,7 @@ void ParentCacheObjectDispatch<I>::init() {
 
 template <typename I>
 bool ParentCacheObjectDispatch<I>::read(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
+    uint64_t object_no, uint64_t object_off,
     uint64_t object_len, librados::snap_t snap_id, int op_flags,
     const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
     io::ExtentMap* extent_map, int* object_dispatch_flags,
@@ -73,6 +74,7 @@ bool ParentCacheObjectDispatch<I>::read(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
   ceph_assert(m_initialized);
+  string oid = data_object_name(m_image_ctx, object_no);
 
   /* if RO daemon still don't startup, or RO daemon crash,
    * or session have any error, try to re-connect daemon.*/
