@@ -51,6 +51,7 @@ set(unittest_librbd_srcs
   test_mock_TrashWatcher.cc
   test_mock_Watcher.cc
   cache/test_mock_WriteAroundObjectDispatch.cc
+  cache/test_mock_ParentImageCache.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
   deep_copy/test_mock_ObjectCopyRequest.cc
