@@ -32,11 +32,10 @@ namespace {
 seastar::future<epoch_t> PGMeta::get_epoch()
 {
   auto ch = store->open_collection(coll_t{pgid});
-  std::set<std::string> keys{infover_key.data(), 
-                             epoch_key.data()};
   return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
-                                keys).then(
+                                {string{infover_key},
+                                 string{epoch_key}}).then(
     [](auto&& values) {
       {
         // sanity check
@@ -57,13 +56,12 @@ seastar::future<epoch_t> PGMeta::get_epoch()
 seastar::future<pg_info_t, PastIntervals> PGMeta::load()
 {
   auto ch = store->open_collection(coll_t{pgid});
-  std::set<std::string> keys{infover_key.data(),
-                             info_key.data(),
-                             biginfo_key.data(),
-                             fastinfo_key.data()};
   return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
-                                keys).then(
+                                {string{infover_key},
+                                 string{info_key},
+                                 string{biginfo_key},
+                                 string{fastinfo_key}}).then(
     [this](auto&& values) {
       {
         // sanity check
