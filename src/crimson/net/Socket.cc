@@ -9,76 +9,79 @@ namespace ceph::net {
 
 namespace {
 
-// an input_stream consumer that reads buffer segments into a bufferlist up to
-// the given number of remaining bytes
-struct bufferlist_consumer {
-  bufferlist& bl;
-  size_t& remaining;
-
-  bufferlist_consumer(bufferlist& bl, size_t& remaining)
-    : bl(bl), remaining(remaining) {}
-
-  using tmp_buf = seastar::temporary_buffer<char>;
-  using consumption_result_type = typename seastar::input_stream<char>::consumption_result_type;
-
-  // consume some or all of a buffer segment
-  seastar::future<consumption_result_type> operator()(tmp_buf&& data) {
-    if (remaining >= data.size()) {
-      // consume the whole buffer
-      remaining -= data.size();
-      bl.append(buffer::create(std::move(data)));
-      if (remaining > 0) {
-        // return none to request more segments
-        return seastar::make_ready_future<consumption_result_type>(
-            seastar::continue_consuming{});
-      } else {
-        // return an empty buffer to singal that we're done
-        return seastar::make_ready_future<consumption_result_type>(
-            consumption_result_type::stop_consuming_type({}));
-      }
-    }
-    if (remaining > 0) {
-      // consume the front
-      bl.append(buffer::create(data.share(0, remaining)));
-      data.trim_front(remaining);
-      remaining = 0;
-    }
-    // give the rest back to signal that we're done
-    return seastar::make_ready_future<consumption_result_type>(
-        consumption_result_type::stop_consuming_type{std::move(data)});
-  };
-};
+inline seastar::temporary_buffer<char> sharing_split(
+  seastar::temporary_buffer<char>& buf,
+  const size_t bytes)
+{
+  auto shared_part = buf.share(0, bytes);
+  buf.trim_front(bytes);
+  return shared_part;
+}
 
 } // anonymous namespace
 
-seastar::future<bufferlist> Socket::read(size_t bytes)
+seastar::future<bufferlist> Socket::read(const size_t bytes)
 {
-  if (bytes == 0) {
-    return seastar::make_ready_future<bufferlist>();
-  }
-  r.buffer.clear();
   r.remaining = bytes;
-  return in.consume(bufferlist_consumer{r.buffer, r.remaining})
-    .then([this] {
-      if (r.remaining) { // throw on short reads
-        throw std::system_error(make_error_code(error::read_eof));
+  r.sgl.clear();
+  return seastar::do_until(
+    [this] { return r.remaining == 0; },
+    [this] {
+      if (wrapping_rxbuf.empty()) {
+        return in.read().then([this] (read_buffer_t&& new_wrapping_rxbuf) {
+          if (new_wrapping_rxbuf.empty()) {
+            throw std::system_error(make_error_code(error::read_eof));
+          }
+          wrapping_rxbuf = std::move(new_wrapping_rxbuf);
+          return seastar::now();
+        });
       }
-      return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
-    });
+
+      const size_t round_size = std::min(r.remaining, wrapping_rxbuf.size());
+      r.sgl.push_back(buffer::create(sharing_split(wrapping_rxbuf, round_size)));
+      r.remaining -= round_size;
+      return seastar::now();
+    }
+  ).then([this] {
+    return seastar::make_ready_future<ceph::bufferlist>(std::move(r.sgl));
+  });
 }
 
-seastar::future<seastar::temporary_buffer<char>>
-Socket::read_exactly(size_t bytes) {
-  if (bytes == 0) {
-    return seastar::make_ready_future<seastar::temporary_buffer<char>>();
+seastar::future<Socket::read_buffer_t> Socket::read_exactly(size_t bytes) {
+  if (bytes <= wrapping_rxbuf.size()) {
+    // oh, the cheap and straightforward case ::read_exactly() is really
+    // intended for.
+    return seastar::make_ready_future<seastar::temporary_buffer<char>>(
+        sharing_split(wrapping_rxbuf, bytes));
   }
-  return in.read_exactly(bytes)
-    .then([this](auto buf) {
-      if (buf.empty()) {
-        throw std::system_error(make_error_code(error::read_eof));
+
+  r.remaining = bytes;
+  r.contiguous_buffer = seastar::temporary_buffer<char>(bytes);
+  return seastar::do_until(
+    [this] { return r.remaining == 0; },
+    [this] {
+      if (wrapping_rxbuf.empty()) {
+        return in.read().then([this] (read_buffer_t&& new_wrapping_rxbuf) {
+          if (new_wrapping_rxbuf.empty()) {
+            throw std::system_error(make_error_code(error::read_eof));
+          }
+          wrapping_rxbuf = std::move(new_wrapping_rxbuf);
+          return seastar::now();
+        });
       }
-      return seastar::make_ready_future<tmp_buf>(std::move(buf));
-    });
+
+      const size_t round_size = std::min(r.remaining, wrapping_rxbuf.size());
+      const size_t completed = r.contiguous_buffer.size() - r.remaining;
+      std::copy(wrapping_rxbuf.get(), wrapping_rxbuf.get() + round_size,
+                r.contiguous_buffer.get_write() + completed);
+      r.remaining -= round_size;
+      wrapping_rxbuf.trim_front(round_size);
+      return seastar::now();
+    }
+  ).then([this] {
+    return seastar::make_ready_future<seastar::temporary_buffer<char>>(
+        std::move(r.contiguous_buffer));
+  });
 }
 
 } // namespace ceph::net

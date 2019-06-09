@@ -139,7 +139,7 @@ void ProtocolV2::enable_recording()
   record_io = true;
 }
 
-seastar::future<Socket::tmp_buf> ProtocolV2::read_exactly(size_t bytes)
+seastar::future<Socket::read_buffer_t> ProtocolV2::read_exactly(size_t bytes)
 {
   if (unlikely(record_io)) {
     return socket->read_exactly(bytes)

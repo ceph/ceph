@@ -17,15 +17,22 @@ using SocketFRef = seastar::foreign_ptr<std::unique_ptr<Socket>>;
 
 class Socket : private seastar::net::input_buffer_factory
 {
+public:
+  using read_buffer_t = seastar::temporary_buffer<char>;
+
+private:
   const seastar::shard_id sid;
   seastar::connected_socket socket;
   seastar::net::input_buffer_factory* ibf = nullptr;
   seastar::input_stream<char> in;
   seastar::output_stream<char> out;
 
-  /// buffer state for read()
+  read_buffer_t wrapping_rxbuf;
+
+  // reading state for read() and read_exactly()
   struct {
-    bufferlist buffer;
+    ceph::bufferlist sgl;
+    read_buffer_t contiguous_buffer;
     size_t remaining;
   } r;
 
@@ -86,11 +93,12 @@ class Socket : private seastar::net::input_buffer_factory
   }
 
   /// read the requested number of bytes into a bufferlist
-  seastar::future<bufferlist> read(size_t bytes);
-  using tmp_buf = seastar::temporary_buffer<char>;
-  using packet = seastar::net::packet;
-  seastar::future<tmp_buf> read_exactly(size_t bytes);
+  // TODO: rename to read_scattered() or read_sgl()
+  seastar::future<ceph::bufferlist> read(size_t bytes);
+  // TODO: rename to read_contiguous()
+  seastar::future<read_buffer_t> read_exactly(size_t bytes);
 
+  using packet = seastar::net::packet;
   seastar::future<> write(packet&& buf) {
     return out.write(std::move(buf));
   }
