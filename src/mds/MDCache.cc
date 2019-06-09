@@ -1487,6 +1487,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       in->client_snap_caps.clear();
       in->item_open_file.remove_myself();
       in->item_caps.remove_myself();
+
+      MDSContext::vec finished;
       for (const auto &p : client_snap_caps) {
 	SimpleLock *lock = in->get_lock(p.first);
 	ceph_assert(lock);
@@ -1495,10 +1497,13 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 	  lock->put_wrlock();
 	  (void)q; /* unused */
 	}
-	ceph_assert(!lock->get_num_wrlocks());
-	lock->set_state(LOCK_SYNC);
-	in->auth_unpin(lock);
+	if (!lock->get_num_wrlocks()) {
+	  lock->set_state(LOCK_SYNC);
+	  lock->take_waiting(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, finished);
+	  in->auth_unpin(lock);
+	}
       }
+      mds->queue_waiters(finished);
     }
     return oldin;
   }
