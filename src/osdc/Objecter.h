@@ -41,12 +41,10 @@
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
-#include "osd/OSDMap.h"
-
+#include "osd/OSDMap.h"		// for OSDMap::snap_interval_set_t
 
 class Context;
 class Messenger;
-class OSDMap;
 class MonClient;
 class Message;
 class Finisher;
@@ -1228,7 +1226,7 @@ public:
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
 private:
-  OSDMap    *osdmap;
+  std::unique_ptr<OSDMap> osdmap;
 public:
   using Dispatcher::cct;
   std::multimap<std::string,std::string> crush_location;
@@ -1239,16 +1237,16 @@ private:
   std::atomic<uint64_t> last_tid{0};
   std::atomic<unsigned> inflight_ops{0};
   std::atomic<int> client_inc{-1};
-  uint64_t max_linger_id;
+  uint64_t max_linger_id{0};
   std::atomic<unsigned> num_in_flight{0};
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
-  bool keep_balanced_budget;
-  bool honor_osdmap_full;
-  bool osdmap_full_try;
+  bool keep_balanced_budget = false;
+  bool honor_osdmap_full = true;
+  bool osdmap_full_try = false;
 
   // If this is true, accumulate a set of blacklisted entities
   // to be drained by consume_blacklist_events.
-  bool blacklist_events_enabled;
+  bool blacklist_events_enabled = false;
   std::set<entity_addr_t> blacklist_events;
 
 public:
@@ -1259,8 +1257,8 @@ private:
 
   void _maybe_request_map();
 
-  version_t last_seen_osdmap_version;
-  version_t last_seen_pgmap_version;
+  version_t last_seen_osdmap_version = 0;
+  version_t last_seen_pgmap_version = 0;
 
   mutable std::shared_mutex rwlock;
   using lock_guard = std::lock_guard<decltype(rwlock)>;
@@ -1269,9 +1267,9 @@ private:
   using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
   ceph::timer<ceph::coarse_mono_clock> timer;
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
-  uint64_t tick_event;
+  uint64_t tick_event = 0;
 
   void start_tick();
   void tick();
@@ -1279,7 +1277,7 @@ private:
 
   class RequestStateHook;
 
-  RequestStateHook *m_request_state_hook;
+  RequestStateHook *m_request_state_hook = nullptr;
 
 public:
   /*** track pending operations ***/
@@ -2038,24 +2036,7 @@ private:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
 	   Finisher *fin,
 	   double mon_timeout,
-	   double osd_timeout) :
-    Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
-    trace_endpoint("0.0.0.0", 0, "Objecter"),
-    osdmap(new OSDMap),
-    max_linger_id(0),
-    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
-    blacklist_events_enabled(false),
-    last_seen_osdmap_version(0), last_seen_pgmap_version(0),
-    logger(NULL), tick_event(0), m_request_state_hook(NULL),
-    homeless_session(new OSDSession(cct, -1)),
-    mon_timeout(ceph::make_timespan(mon_timeout)),
-    osd_timeout(ceph::make_timespan(osd_timeout)),
-    op_throttle_bytes(cct, "objecter_bytes",
-		      cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
-    epoch_barrier(0),
-    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+	   double osd_timeout);
   ~Objecter() override;
 
   void init();
@@ -3070,7 +3051,7 @@ public:
   void blacklist_self(bool set);
 
 private:
-  epoch_t epoch_barrier;
+  epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);
