@@ -262,7 +262,6 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   std::string temp_oid("12345");
   ceph::bufferlist temp_bl;
   ::SnapContext *temp_snapc = nullptr;
-  io::ExtentMap *temp_extent_map = nullptr;
   io::DispatchResult* temp_dispatch_result = nullptr;
   io::Extents temp_buffer_extents;
   int* temp_op_flags = nullptr;
@@ -270,7 +269,6 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   Context** temp_on_finish = nullptr;
   Context* temp_on_dispatched = nullptr;
   ZTracer::Trace* temp_trace = nullptr;
-  io::FlushSource temp_flush_source;
   io::LightweightBufferExtents buffer_extents;
   
   ASSERT_EQ(mock_parent_image_cache->discard(0, 0, 0, *temp_snapc, 0, *temp_trace, temp_op_flags,
@@ -284,7 +282,7 @@ TEST_F(TestMockParentImageCache, test_disble_interface) {
   ASSERT_EQ(mock_parent_image_cache->compare_and_write(0, 0, std::move(temp_bl), std::move(temp_bl),
             *temp_snapc, 0, *temp_trace, temp_journal_tid, temp_op_flags, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
-  ASSERT_EQ(mock_parent_image_cache->flush(temp_flush_source, *temp_trace, temp_journal_tid,
+  ASSERT_EQ(mock_parent_image_cache->flush(io::FLUSH_SOURCE_USER, *temp_trace, temp_journal_tid,
             temp_dispatch_result, temp_on_finish, temp_on_dispatched), false);
   ASSERT_EQ(mock_parent_image_cache->invalidate_cache(nullptr), false);
   ASSERT_EQ(mock_parent_image_cache->reset_existence_cache(nullptr), false);
@@ -328,9 +326,9 @@ TEST_F(TestMockParentImageCache, test_read) {
   C_SaferCond cond;
   Context* on_finish = &cond;
 
-  auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work())
-                   .WillOnce(Return(true))
-                   .WillOnce(Return(true));
+  auto& expect = EXPECT_CALL(*(mock_parent_image_cache->get_cache_client()), is_session_work());
+  expect.WillOnce(Return(true)).WillOnce(Return(true));
+
   expect_cache_lookup_object(*mock_parent_image_cache, on_finish); 
 
   mock_parent_image_cache->read(0, 0, 4096, CEPH_NOSNAP, 0, {},

@@ -28,7 +28,7 @@ namespace cache {
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialized(false), m_object_store(nullptr), m_re_connecting(false) {
+    m_object_store(nullptr), m_initialized(false), m_re_connecting(false) {
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
@@ -77,7 +77,7 @@ bool ParentCacheObjectDispatch<I>::read(
   string oid = data_object_name(m_image_ctx, object_no);
 
   /* if RO daemon still don't startup, or RO daemon crash,
-   * or session have any error, try to re-connect daemon.*/
+   * or session occur any error, try to re-connect daemon.*/
   if (!m_cache_client->is_session_work()) {
     if(!m_re_connecting.load()) {
       ldout(cct, 20) << "try to re-connct RO daemon. " << dendl;
@@ -92,7 +92,6 @@ bool ParentCacheObjectDispatch<I>::read(
     ldout(cct, 5) << "session don't work, dispatch current request to lower object layer " << dendl;
     return false;
   }
-
   ceph_assert(m_cache_client->is_session_work());
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
@@ -111,9 +110,9 @@ bool ParentCacheObjectDispatch<I>::read(
 
 template <typename I>
 void ParentCacheObjectDispatch<I>::handle_read_cache(
-    ObjectCacheRequest* ack, uint64_t read_off,
-    uint64_t read_len, ceph::bufferlist* read_data,
-    io::DispatchResult* dispatch_result, Context* on_dispatched) {
+     ObjectCacheRequest* ack, uint64_t read_off, uint64_t read_len,
+     ceph::bufferlist* read_data, io::DispatchResult* dispatch_result,
+     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
@@ -159,7 +158,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
 
   Context* register_ctx = new FunctionContext([this, cct, on_finish](int ret) {
     if (ret < 0) {
-      ldout(cct, 20) << "Parent cache fail to register client." << dendl;
+      lderr(cct) << "Parent cache fail to register client." << dendl;
       handle_register_client(false);
       on_finish->complete(-1);
       return;
@@ -173,7 +172,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
   Context* connect_ctx = new FunctionContext(
     [this, cct, register_ctx](int ret) {
     if (ret < 0) {
-      ldout(cct, 20) << "Parent cache fail to connect RO daeomn." << dendl;
+      lderr(cct) << "Parent cache fail to connect RO daeomn." << dendl;
       register_ctx->complete(-1);
       return;
     }

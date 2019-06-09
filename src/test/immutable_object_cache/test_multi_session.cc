@@ -106,8 +106,8 @@ public:
   void test_register_client(uint64_t random_index) {
     ASSERT_TRUE(m_cache_client_vec[random_index] == nullptr);
 
-    auto ctx = new FunctionContext([](bool ret){
-       ASSERT_TRUE(ret);
+    auto ctx = new FunctionContext([](int ret){
+       ASSERT_TRUE(ret == 0);
     });
     auto session = create_session(random_index);
     session->register_client(ctx);
