@@ -91,7 +91,7 @@ The following labels need to be set to deploy a Ceph cluster:
  - ceph-osd-device-<name>=enabled
 
 The ``ceph-osd-device-<name>`` label is created based on the osd_devices name value defined in our ``ceph-overrides.yaml``.
-From our example above we will have the two following label: ``ceph-osd-device-dev-sdb`` and ``ceph-osd-device-dev-sdc``.
+From our example above we will have the two following label: ``ceph-osd-device-dev-sdd`` and ``ceph-osd-device-dev-sde``.
 
 For each Ceph Monitor::
 
@@ -99,7 +99,7 @@ For each Ceph Monitor::
 
 For each OSD node::
 
-    $ kubectl label node <nodename> ceph-osd=enabled ceph-osd-device-dev-sdb=enabled ceph-osd-device-dev-sdc=enabled
+    $ kubectl label node <nodename> ceph-osd=enabled ceph-osd-device-dev-sdd=enabled ceph-osd-device-dev-sde=enabled
 
 Ceph Deployment
 ===============
