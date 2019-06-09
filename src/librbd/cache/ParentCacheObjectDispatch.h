@@ -141,9 +141,9 @@ private:
   int handle_register_client(bool reg);
   int create_cache_session(Context* on_finish, bool is_reconnect);
 
-  CacheClient *m_cache_client = nullptr;
   ImageCtxT* m_image_ctx;
-  SharedPersistentObjectCacher *m_object_store = nullptr;
+  CacheClient *m_cache_client;
+  SharedPersistentObjectCacher *m_object_store;
   bool m_initialized;
   std::atomic<bool> m_re_connecting;
 };
