@@ -5694,7 +5694,7 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
   uint64_t min_free = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
   if (bluefs_free < min_free &&
       min_free < free_cap) {
-    uint64_t g = min_free - bluefs_free;
+    uint64_t g = std::max<uint64_t>(min_free - bluefs_free, cct->_conf->bluestore_bluefs_gift_ratio * total_free);
     dout(10) << __func__ << " bluefs_free " << bluefs_free
 	     << " < min " << min_free
 	     << ", should gift " << byte_u_t(g) << dendl;
