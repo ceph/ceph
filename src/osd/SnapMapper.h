@@ -138,6 +138,41 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
+  struct Scrubber {
+    CephContext *cct;
+    ObjectStore *store;
+    ObjectStore::CollectionHandle ch;
+    ghobject_t hoid;
+
+    ObjectMap::ObjectMapIterator psit;
+    int64_t pool;
+    snapid_t begin, end;
+
+    bool _parse_p();   ///< advance the purged_snaps pointer
+
+    ObjectMap::ObjectMapIterator mapit;
+    Mapping mapping;
+    shard_id_t shard;
+
+    bool _parse_m();   ///< advance the (object) mapper pointer
+
+    vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
+
+    Scrubber(
+      CephContext *cct,
+      ObjectStore *store,
+      ObjectStore::CollectionHandle& ch,
+      ghobject_t hoid)
+      : cct(cct),
+	store(store),
+	ch(ch),
+	hoid(hoid) {}
+
+
+    void _init();
+    void run();
+  };
+
   static int convert_legacy(
     CephContext *cct,
     ObjectStore *store,
@@ -152,6 +187,11 @@ public:
     ghobject_t hoid,
     ObjectStore::Transaction *t,
     map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
+  static void scrub_purged_snaps(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid);
 
 private:
   static int _lookup_purged_snap(

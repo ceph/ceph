@@ -6060,6 +6060,9 @@ COMMAND("cache status",
 COMMAND("send_beacon",
         "Send OSD beacon to mon immediately",
         "osd", "r")
+COMMAND("scrub_purged_snaps",
+	"Scrub purged_snaps vs snapmapper index",
+	"osd", "r")
 };
 
 void OSD::do_command(
@@ -6588,6 +6591,36 @@ int OSD::_do_command(
   else if (prefix == "send_beacon") {
     if (is_active()) {
       send_beacon(ceph::coarse_mono_clock::now());
+    }
+  } else if (prefix == "scrub_purged_snaps") {
+    SnapMapper::Scrubber s(cct, store, service.meta_ch,
+			   make_snapmapper_oid());
+    s.run();
+    set<pair<spg_t,snapid_t>> queued;
+    for (auto& [pool, snap, hash, shard] : s.stray) {
+      const pg_pool_t *pi = get_osdmap()->get_pg_pool(pool);
+      if (!pi) {
+	dout(20) << __func__ << " pool " << pool << " dne" << dendl;
+	continue;
+      }
+      pg_t pgid(pi->raw_hash_to_pg(hash), pool);
+      spg_t spgid(pgid, shard);
+      pair<spg_t,snapid_t> p(spgid, snap);
+      if (queued.count(p)) {
+	dout(20) << __func__ << " pg " << spgid << " snap " << snap
+		 << " already queued" << dendl;
+	continue;
+      }
+      PGRef pg = lookup_lock_pg(spgid);
+      if (!pg) {
+	dout(20) << __func__ << " pg " << spgid << " not found" << dendl;
+	continue;
+      }
+      queued.insert(p);
+      dout(10) << __func__ << " requeue pg " << spgid << " " << pg << " snap "
+	       << snap << dendl;
+      pg->queue_snap_retrim(snap);
+      pg->unlock();
     }
   } else {
     ss << "unrecognized command '" << prefix << "'";

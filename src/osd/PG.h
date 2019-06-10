@@ -457,6 +457,8 @@ public:
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
 
+  void queue_snap_retrim(snapid_t snap);
+
   void on_backfill_reserved() override;
   void on_backfill_canceled() override;
   void on_recovery_reserved() override;
@@ -653,6 +655,7 @@ protected:
 
   // ------------------
   interval_set<snapid_t> snap_trimq;
+  set<snapid_t> snap_trimq_repeat;
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
