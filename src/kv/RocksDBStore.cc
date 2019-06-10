@@ -863,9 +863,6 @@ int RocksDBStore::column_family_delete(const std::string& cf_name)
 KeyValueDB::ColumnFamilyHandle RocksDBStore::column_family_handle(const std::string& cf_name) const
 {
   RWLock::RLocker l(api_lock);
-  if (cf_name == "default") {
-    return cf_wrap_handle(default_cf);
-  }
   auto it = column_families.find(cf_name);
   if (it == column_families.end())
     return KeyValueDB::ColumnFamilyHandle();
