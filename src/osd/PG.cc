@@ -320,6 +320,7 @@ void PG::clear_primary_state()
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
+  snap_trimq_repeat.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
@@ -533,6 +534,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->update_snap_mapper_bits(split_bits);
 
   child->snap_trimq = snap_trimq;
+  child->snap_trimq_repeat = snap_trimq_repeat;
 
   _split_into(child_pgid, child, split_bits);
 
@@ -1666,6 +1668,27 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     dout(10) << __func__ << " new purged_snaps " << j->second
 	     << ", now " << recovery_state.get_info().purged_snaps << dendl;
     ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+  }
+}
+
+void PG::queue_snap_retrim(snapid_t snap)
+{
+  if (!is_active() ||
+      !is_primary()) {
+    dout(10) << __func__ << " snap " << snap << " - not active and primary"
+	     << dendl;
+    return;
+  }
+  if (!snap_trimq.contains(snap)) {
+    snap_trimq.insert(snap);
+    snap_trimq_repeat.insert(snap);
+    dout(20) << __func__ << " snap " << snap
+	     << ", trimq now " << snap_trimq
+	     << ", repeat " << snap_trimq_repeat << dendl;
+    kick_snap_trim();
+  } else {
+    dout(20) << __func__ << " snap " << snap
+	     << " already in trimq " << snap_trimq << dendl;
   }
 }
 
@@ -3312,8 +3335,14 @@ ostream& operator<<(ostream& out, const PG& pg)
     // only show a count if the set is large
     if (pg.snap_trimq.num_intervals() > 16) {
       out << pg.snap_trimq.size();
+      if (!pg.snap_trimq_repeat.empty()) {
+	out << "(" << pg.snap_trimq_repeat.size() << ")";
+      }
     } else {
       out << pg.snap_trimq;
+      if (!pg.snap_trimq_repeat.empty()) {
+	out << "(" << pg.snap_trimq_repeat << ")";
+      }
     }
   }
   if (!pg.recovery_state.get_info().purged_snaps.empty()) {

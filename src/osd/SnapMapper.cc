@@ -418,6 +418,7 @@ void SnapMapper::make_purged_snap_key_value(
 {
   string k = make_purged_snap_key(pool, end - 1);
   auto& v = (*m)[k];
+  ceph::encode(pool, v);
   ceph::encode(begin, v);
   ceph::encode(end, v);
 }
@@ -446,6 +447,8 @@ int SnapMapper::_lookup_purged_snap(
   }
   bufferlist v = it->value();
   auto p = v.cbegin();
+  int64_t gotpool;
+  decode(gotpool, p);
   decode(*begin, p);
   decode(*end, p);
   if (snap < *begin || snap >= *end) {
@@ -517,6 +520,116 @@ void SnapMapper::record_purged_snaps(
   t->omap_setkeys(ch->cid, hoid, m);
   dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
 	   << " keys" << dendl;
+}
+
+
+bool SnapMapper::Scrubber::_parse_p()
+{
+  if (!psit->valid()) {
+    pool = -1;
+    return false;
+  }
+  if (psit->key().find(PURGED_SNAP_PREFIX) != 0) {
+    pool = -1;
+    return false;
+  }
+  bufferlist v = psit->value();
+  auto p = v.cbegin();
+  ceph::decode(pool, p);
+  ceph::decode(begin, p);
+  ceph::decode(end, p);
+  dout(20) << __func__ << " purged_snaps pool " << pool
+	   << " [" << begin << "," << end << ")" << dendl;
+  psit->next();
+  return true;
+}
+
+bool SnapMapper::Scrubber::_parse_m()
+{
+  if (!mapit->valid()) {
+    return false;
+  }
+  if (mapit->key().find(MAPPING_PREFIX) != 0) {
+    return false;
+  }
+  auto v = mapit->value();
+  auto p = v.cbegin();
+  mapping.decode(p);
+
+  {
+    unsigned long long p, s;
+    long sh;
+    string k = mapit->key();
+    int r = sscanf(k.c_str(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
+    if (r != 1) {
+      shard = shard_id_t::NO_SHARD;
+    } else {
+      shard = shard_id_t(sh);
+    }
+  }
+  dout(20) << __func__ << " mapping pool " << mapping.hoid.pool
+	   << " snap " << mapping.snap
+	   << " shard " << shard
+	   << " " << mapping.hoid << dendl;
+  mapit->next();
+  return true;
+}
+
+void SnapMapper::Scrubber::_init()
+{
+  dout(10) << __func__ << dendl;
+}
+
+void SnapMapper::Scrubber::run()
+{
+  dout(10) << __func__ << dendl;
+
+  _init();
+
+  psit = store->get_omap_iterator(ch, hoid);
+  psit->upper_bound(PURGED_SNAP_PREFIX);
+  _parse_p();
+
+  mapit = store->get_omap_iterator(ch, hoid);
+  mapit->upper_bound(MAPPING_PREFIX);
+
+  while (_parse_m()) {
+    // advance to next purged_snaps range?
+    while (pool >= 0 &&
+	   (mapping.hoid.pool > pool ||
+	    (mapping.hoid.pool == pool && mapping.snap >= end))) {
+      _parse_p();
+    }
+    if (pool < 0) {
+      dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
+	       << dendl;
+      break;
+    }
+    if (mapping.hoid.pool < pool ||
+	mapping.snap < begin) {
+      // ok
+      dout(20) << __func__ << " ok " << mapping.hoid
+	       << " snap " << mapping.snap
+	       << " precedes pool " << pool
+	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
+    } else {
+      assert(mapping.snap >= begin &&
+	     mapping.snap < end &&
+	     mapping.hoid.pool == pool);
+      // invalid
+      dout(10) << __func__ << " stray " << mapping.hoid
+	       << " snap " << mapping.snap
+	       << " in pool " << pool
+	       << " shard " << shard
+	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
+      stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
+			   pool, mapping.snap, mapping.hoid.get_hash(),
+			   shard
+			   ));
+    }
+  }
+
+  dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
 }
 
 
