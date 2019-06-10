@@ -130,10 +130,6 @@
 /* Define if using OpenSSL. */
 #cmakedefine USE_OPENSSL
 
-/* Accelio conditional compilation */
-#cmakedefine HAVE_XIO
-
-
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
