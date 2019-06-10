@@ -4195,7 +4195,8 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
 }
 
 int PrimaryLogPG::trim_object(
-  bool first, const hobject_t &coid, PrimaryLogPG::OpContextUPtr *ctxp)
+  bool first, const hobject_t &coid, snapid_t snap_to_trim,
+  PrimaryLogPG::OpContextUPtr *ctxp)
 {
   *ctxp = NULL;
 
@@ -4243,7 +4244,8 @@ int PrimaryLogPG::trim_object(
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
        ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i)) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
+	*i != snap_to_trim) {
       new_snaps.insert(*i);
     }
   }
@@ -15176,7 +15178,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight.empty(), object, &ctx);
+    int error = pg->trim_object(in_flight.empty(), object, snap_to_trim, &ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
