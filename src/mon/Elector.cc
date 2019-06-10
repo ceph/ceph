@@ -470,6 +470,26 @@ void Elector::handle_ack(MonOpRequestRef op)
   logic.receive_ack(from, m->epoch);
 }
 
+bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
+{
+  ceph_assert(from < elector_my_rank());
+  ceph_assert(from_epoch % 2 == 0);  
+
+  leader_acked = -1;
+
+  // i should have seen this election if i'm getting the victory.
+  if (from_epoch != epoch + 1) { 
+    dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
+    bump_epoch(from_epoch);
+    start();
+    return false;
+  }
+
+  bump_epoch(from_epoch);
+
+  // they win
+  return true;
+}
 
 void Elector::handle_victory(MonOpRequestRef op)
 {
@@ -481,22 +501,12 @@ void Elector::handle_victory(MonOpRequestRef op)
           << dendl;
   int from = m->get_source().num();
 
-  ceph_assert(from < mon->rank);
-  ceph_assert(m->epoch % 2 == 0);  
+  bool accept_victory = logic.receive_victory_claim(from, m->epoch);
 
-  logic.leader_acked = -1;
-
-  // i should have seen this election if i'm getting the victory.
-  if (m->epoch != logic.epoch + 1) { 
-    dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
-    logic.bump_epoch(m->epoch);
-    logic.start();
+  if (!accept_victory) {
     return;
   }
 
-  logic.bump_epoch(m->epoch);
-
-  // they win
   mon->lose_election(logic.epoch, m->quorum, from,
                      m->quorum_features, m->mon_features, m->mon_release);
 
