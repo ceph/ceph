@@ -70,6 +70,8 @@
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
@@ -438,6 +440,12 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_MON_GET_OSDMAP:
     m = make_message<MMonGetOSDMap>();
+    break;
+  case MSG_MON_GET_PURGED_SNAPS:
+    m = make_message<MMonGetPurgedSnaps>();
+    break;
+  case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    m = make_message<MMonGetPurgedSnapsReply>();
     break;
   case CEPH_MSG_MON_GET_VERSION:
     m = make_message<MMonGetVersion>();
