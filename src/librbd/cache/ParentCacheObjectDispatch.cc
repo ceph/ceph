@@ -146,7 +146,7 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
 
   if (reg) {
     ldout(cct, 20) << "Parent cache open cache handler" << dendl;
-    m_object_store = new SharedPersistentObjectCacher(m_image_ctx, m_image_ctx->shared_cache_path);
+    m_object_store = new SharedPersistentObjectCacher(m_image_ctx);
   }
   return 0;
 }
@@ -200,8 +200,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
 
 template <typename I>
 ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::SharedPersistentObjectCacher (
-   I *image_ctx, std::string cache_path)
-  : m_image_ctx(image_ctx) {
+   I *image_ctx) : m_image_ctx(image_ctx) {
   auto *cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 }
