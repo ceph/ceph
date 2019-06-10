@@ -9553,7 +9553,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           (idvec[0] == "any" || idvec[0] == "all" || idvec[0] == "*")) {
         if (prefix == "osd in") {
           // touch out osds only
-          osdmap.get_out_osds(osds);
+          osdmap.get_out_existing_osds(osds);
         } else {
           osdmap.get_all_osds(osds);
         }
