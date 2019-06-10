@@ -25,6 +25,9 @@ const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
+const char *SnapMapper::PURGED_SNAP_EPOCH_PREFIX = "PSE_";
+const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
+
 /*
 
   We have a bidirectional mapping, (1) from each snap+obj to object,
@@ -397,6 +400,123 @@ int SnapMapper::get_snaps(
   if (snaps)
     snaps->swap(out.snaps);
   return 0;
+}
+
+
+// -- purged snaps --
+
+string SnapMapper::make_purged_snap_key(int64_t pool, snapid_t last)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "%s_%llu_%016llx", PURGED_SNAP_PREFIX,
+	   (unsigned long long)pool, (unsigned long long)last);
+  return k;
+}
+
+void SnapMapper::make_purged_snap_key_value(
+  int64_t pool, snapid_t begin, snapid_t end, map<string,bufferlist> *m)
+{
+  string k = make_purged_snap_key(pool, end - 1);
+  auto& v = (*m)[k];
+  ceph::encode(begin, v);
+  ceph::encode(end, v);
+}
+
+int SnapMapper::_lookup_purged_snap(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  const ghobject_t& hoid,
+  int64_t pool, snapid_t snap,
+  snapid_t *begin, snapid_t *end)
+{
+  string k = make_purged_snap_key(pool, snap);
+  auto it = store->get_omap_iterator(ch, hoid);
+  it->lower_bound(k);
+  if (!it->valid()) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " key '" << k << "' lower_bound not found" << dendl;
+    return -ENOENT;
+  }
+  if (it->key().find(PURGED_SNAP_PREFIX) != 0) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " key '" << k << "' lower_bound got mismatched prefix '"
+	     << it->key() << "'" << dendl;
+    return -ENOENT;
+  }
+  bufferlist v = it->value();
+  auto p = v.cbegin();
+  decode(*begin, p);
+  decode(*end, p);
+  if (snap < *begin || snap >= *end) {
+    dout(20) << __func__ << " pool " << pool << " snap " << snap
+	     << " found [" << *begin << "," << *end << "), no overlap" << dendl;
+    return -ENOENT;
+  }
+  return 0;
+}
+
+void SnapMapper::record_purged_snaps(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  ghobject_t hoid,
+  ObjectStore::Transaction *t,
+  map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
+{
+  dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
+  map<string,bufferlist> m;
+  set<string> rm;
+  for (auto& [epoch, bypool] : purged_snaps) {
+    // store per-epoch key
+    char ek[80];
+    snprintf(ek, sizeof(ek), "%s_%08lx", PURGED_SNAP_EPOCH_PREFIX,
+	     (unsigned long)epoch);
+    ceph::encode(bypool, m[ek]);
+
+    // index by (pool, snap)
+    for (auto& [pool, snaps] : bypool) {
+      for (auto i = snaps.begin();
+	   i != snaps.end();
+	   ++i) {
+	snapid_t begin = i.get_start();
+	snapid_t end = i.get_end();
+	snapid_t before_begin, before_end;
+	snapid_t after_begin, after_end;
+	int b = _lookup_purged_snap(cct, store, ch, hoid,
+				    pool, begin - 1, &before_begin, &before_end);
+	int a = _lookup_purged_snap(cct, store, ch, hoid,
+				    pool, end, &after_begin, &after_end);
+	if (!b && !a) {
+	  dout(10) << __func__
+		   << " [" << begin << "," << end << ") - joins ["
+		   << before_begin << "," << before_end << ") and ["
+		   << after_begin << "," << after_end << ")" << dendl;
+	  // erase only the begin record; we'll overwrite the end one
+	  rm.insert(make_purged_snap_key(pool, before_end - 1));
+	  make_purged_snap_key_value(pool, before_begin, after_end, &m);
+	} else if (!b) {
+	  dout(10) << __func__
+		   << " [" << begin << "," << end << ") - join with earlier ["
+		   << before_begin << "," << before_end << ")" << dendl;
+	  rm.insert(make_purged_snap_key(pool, before_end - 1));
+	  make_purged_snap_key_value(pool, before_begin, end, &m);
+	} else if (!a) {
+	  dout(10) << __func__
+		   << " [" << begin << "," << end << ") - join with later ["
+		   << after_begin << "," << after_end << ")" << dendl;
+	  // overwrite after record
+	  make_purged_snap_key_value(pool, begin, after_end, &m);
+	} else {
+	  make_purged_snap_key_value(pool, begin, end, &m);
+	}
+      }
+    }
+  }
+  t->omap_rmkeys(ch->cid, hoid, rm);
+  t->omap_setkeys(ch->cid, hoid, m);
+  dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
+	   << " keys" << dendl;
 }
 
 

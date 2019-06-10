@@ -26,6 +26,7 @@
 #include "include/encoding.h"
 #include "include/object.h"
 #include "os/ObjectStore.h"
+#include "osd/OSDMap.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, bufferlist> {
   ObjectStore *os;
@@ -134,6 +135,8 @@ public:
   static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
+  static const char *PURGED_SNAP_EPOCH_PREFIX;
+  static const char *PURGED_SNAP_PREFIX;
 
   static int convert_legacy(
     CephContext *cct,
@@ -142,7 +145,28 @@ public:
     ghobject_t hoid,
     unsigned max);
 
+  static void record_purged_snaps(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    ObjectStore::Transaction *t,
+    map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
+
 private:
+  static int _lookup_purged_snap(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    const ghobject_t& hoid,
+    int64_t pool, snapid_t snap,
+    snapid_t *begin, snapid_t *end);
+  static void make_purged_snap_key_value(
+    int64_t pool, snapid_t begin,
+    snapid_t end, map<string,bufferlist> *m);
+  static string make_purged_snap_key(int64_t pool, snapid_t last);
+
+
   MapCacher::MapCacher<std::string, bufferlist> backend;
 
   static std::string get_legacy_prefix(snapid_t snap);
