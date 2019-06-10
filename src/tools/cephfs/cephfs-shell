@@ -1024,28 +1024,23 @@ sub-directories, files')
 
     lls_parser = argparse.ArgumentParser(
         description='List files in local system.')
-    lls_parser.add_argument('paths', help='Paths', nargs='*', default=[''])
+    lls_parser.add_argument('paths', help='Paths', nargs='*')
 
     @with_argparser(lls_parser)
     def do_lls(self, args):
         """
         Lists all files and folders in the current local directory
         """
-
-        if len(args.paths) == 0 or (len(args.paths) == 1 and
-                                    args.paths[0] == ''):
-            if len(args.paths) > 0:
-                args.paths.pop(0)
-            args.paths.append(os.getcwd())
-        for path in args.paths:
-            if not os.path.isabs(path):
-                path = os.path.relpath(path)
-            if os.path.isdir(path):
-                self.poutput("%s:" % path)
-                items = os.listdir(path)
-                print_list(items)
-            else:
-                self.poutput("%s: no such directory" % path)
+        if not args.paths:
+            print_list(os.listdir(os.getcwd()))
+        else:
+            for path in args.paths:
+                try:
+                    items = os.listdir(path)
+                    self.poutput("{}:".format(path))
+                    print_list(items)
+                except OSError as e:
+                    self.perror("'{}': {}".format(e.filename, e.strerror), False)
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
