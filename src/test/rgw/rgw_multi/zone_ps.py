@@ -15,7 +15,7 @@ log = logging.getLogger('rgw_multi.tests')
 
 class PSZone(Zone):  # pylint: disable=too-many-ancestors
     """ PubSub zone class """
-    def __init__(self, name, full_sync, retention_days, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
+    def __init__(self, name, zonegroup=None, cluster=None, data=None, zone_id=None, gateways=None, full_sync='false', retention_days ='7'):
         self.full_sync = full_sync
         self.retention_days = retention_days
         super(PSZone, self).__init__(name, zonegroup, cluster, data, zone_id, gateways)

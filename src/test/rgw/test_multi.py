@@ -312,10 +312,11 @@ def init(parse_args):
             elif ps_zone:
                 zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
                 if num_ps_zones_from_conf == 0:
-                    zone = PSZone(zone_name(zg, z), "false", "7", zonegroup, cluster)
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster)
                 else:
                     pscfg = ps_cfg[zone_index]
-                    zone = PSZone(zone_name(zg, z), pscfg.full_sync, pscfg.retention_days, zonegroup, cluster)
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster,
+                                  full_sync=pscfg.full_sync, retention_days=pscfg.retention_days)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 
