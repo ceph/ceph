@@ -965,8 +965,10 @@ bool MDSRankDispatcher::ms_dispatch(Message *m)
 {
   if (m->get_source().is_client()) {
     Session *session = static_cast<Session*>(m->get_connection()->get_priv());
-    if (session)
+    if (session) {
+      session->put(); // do not carry ref
       session->last_seen = Session::clock::now();
+    }
   }
 
   inc_dispatch_depth();
