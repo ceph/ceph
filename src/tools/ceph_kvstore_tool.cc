@@ -25,31 +25,46 @@
 #include "global/global_init.h"
 
 #include "kvstore_tool.h"
+#include <tuple>
 
 void usage(const char *pname)
 {
   std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
-    << "  list [prefix]\n"
-    << "  list-crc [prefix]\n"
-    << "  dump [prefix]\n"
-    << "  exists <prefix> [key]\n"
-    << "  get <prefix> <key> [out <file>]\n"
-    << "  crc <prefix> <key>\n"
-    << "  get-size [<prefix> <key>]\n"
-    << "  set <prefix> <key> [ver <N>|in <file>]\n"
-    << "  rm <prefix> <key>\n"
-    << "  rm-prefix <prefix>\n"
+    << "  list [column/][prefix]\n"
+    << "  list-crc [column/][prefix]\n"
+    << "  dump [column/][prefix]\n"
+    << "  exists [column/]<prefix> [key]\n"
+    << "  get [column/]<prefix> <key> [out <file>]\n"
+    << "  crc [column/]<prefix> <key>\n"
+    << "  get-size [[column/]<prefix> <key>]\n"
+    << "  set [column/]<prefix> <key> [ver <N>|in <file>]\n"
+    << "  rm [column/]<prefix> <key>\n"
+    << "  rm-prefix [column/]<prefix>\n"
     << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
     << "  store-crc <path>\n"
     << "  compact\n"
-    << "  compact-prefix <prefix>\n"
-    << "  compact-range <prefix> <start> <end>\n"
+    << "  compact-prefix [column/]<prefix>\n"
+    << "  compact-range [column/]<prefix> <start> <end>\n"
     << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << "  stats\n"
     << std::endl;
 }
+
+std::tuple<std::string, std::string> parse_cf_prefix(std::string cf_prefix) {
+  std::string cf;
+  std::string prefix;
+  size_t pos = cf_prefix.find('/');
+  if (pos != std::string::npos) {
+    cf = cf_prefix.substr(0, pos);
+    prefix = cf_prefix.substr(pos+1);
+  } else {
+    prefix = cf_prefix;
+  }
+  return  std::make_tuple(cf, prefix);
+}
+
 
 int main(int argc, const char *argv[])
 {
@@ -112,18 +127,18 @@ int main(int argc, const char *argv[])
     }
     return ret;
   } else if (cmd == "list" || cmd == "list-crc") {
-    string prefix;
+    string prefix, cf;
     if (argc > 4)
-      prefix = url_unescape(argv[4]);
+      tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
 
     bool do_crc = (cmd == "list-crc");
-    st.list(prefix, do_crc, false);
+    st.list(cf, prefix, do_crc, false);
 
   } else if (cmd == "dump") {
-    string prefix;
+    string prefix, cf;
     if (argc > 4)
-      prefix = url_unescape(argv[4]);
-    st.list(prefix, false, true);
+      tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
+    st.list(cf, prefix, false, true);
 
   } else if (cmd == "exists") {
     string key;
@@ -131,11 +146,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string prefix, cf;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     if (argc > 5)
       key = url_unescape(argv[5]);
 
-    bool ret = st.exists(prefix, key);
+    bool ret = st.exists(cf, prefix, key);
     std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") "
       << (ret ? "exists" : "does not exist")
       << std::endl;
@@ -146,11 +162,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string prefix, cf;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string key(url_unescape(argv[5]));
 
     bool exists = false;
-    bufferlist bl = st.get(prefix, key, exists);
+    bufferlist bl = st.get(cf, prefix, key, exists);
     std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ")";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
@@ -193,11 +210,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string key(url_unescape(argv[5]));
 
     bool exists = false;
-    bufferlist bl = st.get(prefix, key, exists);
+    bufferlist bl = st.get(cf, prefix, key, exists);
     std::cout << "(" << url_escape(prefix) << ", " << url_escape(key) << ") ";
     if (!exists) {
       std::cout << " does not exist" << std::endl;
@@ -215,11 +233,12 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string key(url_unescape(argv[5]));
 
     bool exists = false;
-    bufferlist bl = st.get(prefix, key, exists);
+    bufferlist bl = st.get(cf, prefix, key, exists);
     if (!exists) {
       std::cerr << "(" << url_escape(prefix) << "," << url_escape(key)
                 << ") does not exist" << std::endl;
@@ -233,7 +252,8 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string key(url_unescape(argv[5]));
     string subcmd(argv[6]);
 
@@ -258,7 +278,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
 
-    bool ret = st.set(prefix, key, val);
+    bool ret = st.set(cf, prefix, key, val);
     if (!ret) {
       std::cerr << "error setting ("
                 << url_escape(prefix) << "," << url_escape(key) << ")" << std::endl;
@@ -269,10 +289,11 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string key(url_unescape(argv[5]));
 
-    bool ret = st.rm(prefix, key);
+    bool ret = st.rm(cf, prefix, key);
     if (!ret) {
       std::cerr << "error removing ("
                 << url_escape(prefix) << "," << url_escape(key) << ")"
@@ -284,9 +305,10 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
 
-    bool ret = st.rm_prefix(prefix);
+    bool ret = st.rm_prefix(cf, prefix);
     if (!ret) {
       std::cerr << "error removing prefix ("
                 << url_escape(prefix) << ")"
@@ -324,7 +346,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::ofstream fs(argv[4]);
-    uint32_t crc = st.traverse(string(), true, false, &fs);
+    uint32_t crc = st.traverse(string(), string(), true, false, &fs);
     std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {
@@ -334,17 +356,19 @@ int main(int argc, const char *argv[])
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
-    st.compact_prefix(prefix);
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
+    st.compact_prefix(cf, prefix);
   } else if (cmd == "compact-range") {
     if (argc < 7) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(url_unescape(argv[4]));
+    string cf, prefix;
+    tie(cf, prefix) = parse_cf_prefix(url_unescape(argv[4]));
     string start(url_unescape(argv[5]));
     string end(url_unescape(argv[6]));
-    st.compact_range(prefix, start, end);
+    st.compact_range(cf, prefix, start, end);
   } else if (cmd == "stats") {
     st.print_stats();
   } else {
