@@ -122,7 +122,7 @@ private:
   class SharedPersistentObjectCacher {
   public:
 
-    SharedPersistentObjectCacher(ImageCtxT *image_ctx, std::string cache_path);
+    SharedPersistentObjectCacher(ImageCtxT *image_ctx);
     ~SharedPersistentObjectCacher();
 
     int read_object(std::string file_path, ceph::bufferlist* read_data,

@@ -523,7 +523,9 @@ Context *OpenRequest<I>::send_init_cache(int *result) {
 
   if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
      // enable Shared Read-only cache for parent image
-    if (m_image_ctx->child != nullptr && m_image_ctx->parent_cache_enabled ) {
+    bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
+      "rbd_parent_cache_enabled");
+    if (m_image_ctx->child != nullptr && parent_cache_enabled ) {
       ldout(cct, 10) << this << " " << "setting up parent cache"<< dendl;
       auto sro_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
       sro_cache->init();
