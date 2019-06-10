@@ -15149,26 +15149,31 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     // Done!
     ldout(pg->cct, 10) << "got ENOENT" << dendl;
 
-    ldout(pg->cct, 10) << "adding snap " << snap_to_trim
-		       << " to purged_snaps"
-		       << dendl;
-
-    ObjectStore::Transaction t;
-    pg->recovery_state.adjust_purged_snaps(
-      [snap_to_trim](auto &purged_snaps) {
-	purged_snaps.insert(snap_to_trim);
-      });
-    pg->write_if_dirty(t);
-
     pg->snap_trimq.erase(snap_to_trim);
-    ldout(pg->cct, 10) << "purged_snaps now "
-		       << pg->info.purged_snaps << ", snap_trimq now "
-		       << pg->snap_trimq << dendl;
 
-    int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
-    ceph_assert(tr == 0);
+    if (pg->snap_trimq_repeat.count(snap_to_trim)) {
+      ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
+      pg->snap_trimq_repeat.erase(snap_to_trim);
+    } else {
+      ldout(pg->cct, 10) << "adding snap " << snap_to_trim
+			 << " to purged_snaps"
+			 << dendl;
+      ObjectStore::Transaction t;
+      pg->recovery_state.adjust_purged_snaps(
+	[snap_to_trim](auto &purged_snaps) {
+	  purged_snaps.insert(snap_to_trim);
+	});
+      pg->write_if_dirty(t);
 
-    pg->recovery_state.share_pg_info();
+      ldout(pg->cct, 10) << "purged_snaps now "
+			 << pg->info.purged_snaps << ", snap_trimq now "
+			 << pg->snap_trimq << dendl;
+
+      int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
+      ceph_assert(tr == 0);
+
+      pg->recovery_state.share_pg_info();
+    }
     post_event(KickTrim());
     return transit< NotTrimming >();
   }
