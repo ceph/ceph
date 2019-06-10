@@ -5,6 +5,7 @@ Client module to interact with the Ansible Runner Service
 import json
 import re
 from functools import wraps
+import collections
 
 import requests
 
@@ -13,6 +14,8 @@ API_URL = "api"
 PLAYBOOK_EXEC_URL = "api/v1/playbooks"
 PLAYBOOK_EVENTS = "api/v1/jobs/%s/events"
 EVENT_DATA_URL = "api/v1/jobs/%s/events/%s"
+URL_MANAGE_GROUP = "api/v1/groups/{group_name}"
+URL_ADD_RM_HOSTS = "api/v1/hosts/{host_name}/groups/{inventory_group}"
 
 class AnsibleRunnerServiceError(Exception):
     """Generic Ansible Runner Service Exception"""
@@ -308,3 +311,202 @@ class Client(object):
         """
         # TODO
         raise NotImplementedError("TODO")
+
+
+    def add_hosts_to_group(self, hosts, group):
+        """ Add one or more hosts to an Ansible inventory group
+
+        :host : host to add
+        :group: Ansible inventory group where the hosts will be included
+
+        :return : Nothing
+
+        :raises : AnsibleRunnerServiceError if not possible to complete
+                  the operation
+        """
+
+        url_group = URL_MANAGE_GROUP.format(group_name=group)
+
+        # Get/Create the group
+        response = self.http_get(url_group)
+        if response.status_code == 404:
+            # Create the new group
+            response = self.http_post(url_group, "", {})
+            if response.status_code != 200:
+                raise AnsibleRunnerServiceError("Error when trying to "\
+                                                "create group:{}".format(group))
+            hosts_in_group = []
+        else:
+            hosts_in_group = json.loads(response.text)["data"]["members"]
+
+        # Here we have the group in the inventory. Add the hosts
+        for host in hosts:
+            if host not in hosts_in_group:
+                add_url = URL_ADD_RM_HOSTS.format(host_name=host,
+                                                  inventory_group=group)
+
+                response = self.http_post(add_url, "", {})
+                if response.status_code != 200:
+                    raise AnsibleRunnerServiceError("Error when trying to "\
+                                                    "include host '{}' in group"\
+                                                    " '{}'".format(host, group))
+
+    def remove_hosts_from_group(self, group, hosts):
+        """ Remove all the hosts from group, it also removes the group itself if
+        it is empty
+
+        : group : Group name (str)
+        : hosts : List of hosts to remove
+        """
+
+        url_group = URL_MANAGE_GROUP.format(group_name=group)
+        response = self.http_get(url_group)
+
+        # Group not found is OK!
+        if response.status_code == 404:
+            return
+
+        # Once we have the group, we remove the hosts required
+        if response.status_code == 200:
+            hosts_in_group = json.loads(response.text)["data"]["members"]
+
+            # Delete the hosts (it does not matter if the host does not exist)
+            for host in hosts:
+                if host in hosts_in_group:
+                    url_host = URL_ADD_RM_HOSTS.format(host_name=host,
+                                                       inventory_group=group)
+                    response = self.http_delete(url_host)
+                    hosts_in_group.remove(host)
+
+            # Delete the group if no hosts in it
+            if not hosts_in_group:
+                response = self.http_delete(url_group)
+
+    def get_hosts_in_group(self, group):
+        """ Return the list of hosts in and inventory group
+
+        : group : Group name (str)
+        """
+        url_group = URL_MANAGE_GROUP.format(group_name=group)
+        response = self.http_get(url_group)
+        if response.status_code == 404:
+            raise AnsibleRunnerServiceError("Group {} not found in Ansible"\
+                                            " inventory".format(group))
+
+        return json.loads(response.text)["data"]["members"]
+
+
+class InventoryGroup(collections.MutableSet):
+    """ Manages an Ansible Inventory Group
+    """
+    def __init__(self, group_name, ars_client):
+        """Init the group_name attribute and
+           Create the inventory group if it does not exist
+
+        : group_name : Name of the group in the Ansible Inventory
+        : returns    : Nothing
+        """
+
+        self.elements = set()
+
+        self.group_name = group_name
+        self.url_group = URL_MANAGE_GROUP.format(group_name=self.group_name)
+        self.created = False
+        self.ars_client = ars_client
+
+        # Get/Create the group
+        response = self.ars_client.http_get(self.url_group)
+        if response.status_code == 404:
+            return
+
+        # get members if the group exists previously
+        self.created = True
+        self.elements.update(json.loads(response.text)["data"]["members"])
+
+    def __contains__(self, host):
+        """ Check if the host is in the group
+
+        : host: Check if hosts is in Ansible Inventory Group
+        """
+        return host in  self.elements
+
+    def __iter__(self):
+        return iter(self.elements)
+
+    def __len__(self):
+        return len(self.elements)
+
+    def add(self, value):
+        """ Add a new host to the group
+        Create the Ansible Inventory group if it does not exist
+
+        : value : The host(string) to add
+        """
+
+        if not self.created:
+            self.__create_group__()
+
+        add_url = URL_ADD_RM_HOSTS.format(host_name=value,
+                                          inventory_group=self.group_name)
+
+        response = self.ars_client.http_post(add_url, "", {})
+        if response.status_code != 200:
+            raise AnsibleRunnerServiceError("Error when trying to "\
+                                            "include host '{}' in group"\
+                                            " '{}'".format(value,
+                                                           self.group_name))
+
+        # Refresh members
+        response = self.ars_client.http_get(self.url_group)
+        self.elements.update(json.loads(response.text)["data"]["members"])
+
+    def discard(self, value):
+        """Remove a host from the group.
+        Remove the group from the Ansible inventory if it is empty
+
+        : value : The host(string) to remove
+        """
+        url_host = URL_ADD_RM_HOSTS.format(host_name=value,
+                                           inventory_group=self.group_name)
+        response = self.ars_client.http_delete(url_host)
+
+        # Refresh members
+        response = self.ars_client.http_get(self.url_group)
+        self.elements.update(json.loads(response.text)["data"]["members"])
+
+        # Delete the group if no members
+        if not self.elements:
+            response = self.ars_client.http_delete(self.url_group)
+
+    def update(self, iterable=None):
+        """ Update the hosts in the group with the iterable items
+
+        :iterable : And iterable object with hosts names
+        """
+        for item in iterable:
+            self.add(item)
+
+    def clean(self, iterable=None):
+        """ Remove from the group the hosts included in iterable
+        If not provided an iterable, all the hosts are removed from the group
+
+        :iterable : And iterable object with hosts names
+        """
+
+        if not iterable:
+            iterable = self.elements
+
+        for item in iterable:
+            self.discard(item)
+
+    def __create_group__(self):
+        """ Create the Ansible inventory group
+        """
+        response = self.ars_client.http_post(self.url_group, "", {})
+
+        if response.status_code != 200:
+            raise AnsibleRunnerServiceError("Error when trying to "\
+                                            "create group:{}".format(
+                                                self.group_name))
+        self.created = True
+        self.elements = {}

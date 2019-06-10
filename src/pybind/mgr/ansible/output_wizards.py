@@ -97,7 +97,6 @@ class ProcessPlaybookResult(OutputWizard):
         """
         # Just making more readable the method
         inventory_events = raw_result
-
         result = ""
 
         # Loop over the result events and request the data
@@ -106,7 +105,6 @@ class ProcessPlaybookResult(OutputWizard):
                                                      (operation_id, event_key))
 
             result += event_response.text
-
         return result
 
 
