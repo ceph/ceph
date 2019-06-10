@@ -39,42 +39,54 @@ class StoreTool
 #endif
 
   const std::string store_path;
-
 public:
   StoreTool(const std::string& type,
 	    const std::string& path,
 	    bool need_open_db = true,
 	    bool need_stats = false);
   int load_bluestore(const std::string& path, bool need_open_db);
-  uint32_t traverse(const std::string& prefix,
+  uint32_t traverse(const std::string& column_family,
+		    const std::string& prefix,
                     const bool do_crc,
                     const bool do_value_dump,
                     ostream *out);
-  void list(const std::string& prefix,
+  void list(const std::string& column_family,
+	    const std::string& prefix,
 	    const bool do_crc,
 	    const bool do_value_dump);
-  bool exists(const std::string& prefix);
-  bool exists(const std::string& prefix, const std::string& key);
-  ceph::bufferlist get(const std::string& prefix,
+  bool exists(const std::string& column_family,
+	      const std::string& prefix);
+  bool exists(const std::string& column_family,
+	      const std::string& prefix,
+	      const std::string& key);
+  ceph::bufferlist get(const std::string& column_family,
+		       const std::string& prefix,
 		       const std::string& key,
 		       bool& exists);
   uint64_t get_size();
-  bool set(const std::string& prefix,
+  bool set(const std::string& column_family,
+	   const std::string& prefix,
 	   const std::string& key,
 	   ceph::bufferlist& val);
-  bool rm(const std::string& prefix, const std::string& key);
-  bool rm_prefix(const std::string& prefix);
+  bool rm(const std::string& column_family,
+	  const std::string& prefix,
+	  const std::string& key);
+  bool rm_prefix(const std::string& column_family,
+		 const std::string& prefix);
   void print_summary(const uint64_t total_keys, const uint64_t total_size,
                      const uint64_t total_txs, const std::string& store_path,
                      const std::string& other_path, const int duration) const;
   int copy_store_to(const std::string& type, const std::string& other_path,
                     const int num_keys_per_tx, const std::string& other_type);
   void compact();
-  void compact_prefix(const std::string& prefix);
-  void compact_range(const std::string& prefix,
+  void compact_prefix(const std::string& column_family,
+		      const std::string& prefix);
+  void compact_range(const std::string& column_family,
+		     const std::string& prefix,
 		     const std::string& start,
 		     const std::string& end);
   int destructive_repair();
 
   int print_stats() const;
+
 };

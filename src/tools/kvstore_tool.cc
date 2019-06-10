@@ -55,12 +55,20 @@ int StoreTool::load_bluestore(const string& path, bool need_open_db)
     return 0;
 }
 
-uint32_t StoreTool::traverse(const string& prefix,
+uint32_t StoreTool::traverse(const string& column_family,
+			     const string& prefix,
                              const bool do_crc,
                              const bool do_value_dump,
                              ostream *out)
 {
-  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  KeyValueDB::WholeSpaceIterator iter;
+  if (column_family.empty()) {
+    iter = db->get_wholespace_iterator();
+  } else {
+    KeyValueDB::ColumnFamilyHandle cfh;
+    cfh = db->column_family_handle(column_family);
+    iter = db->get_wholespace_iterator_cf(cfh);
+  }
 
   if (prefix.empty())
     iter->seek_to_first();
@@ -103,42 +111,60 @@ uint32_t StoreTool::traverse(const string& prefix,
   return crc;
 }
 
-void StoreTool::list(const string& prefix, const bool do_crc,
+void StoreTool::list(const string& column_family, const string& prefix, const bool do_crc,
                      const bool do_value_dump)
 {
-  traverse(prefix, do_crc, do_value_dump,& std::cout);
+  traverse(column_family, prefix, do_crc, do_value_dump,& std::cout);
 }
 
-bool StoreTool::exists(const string& prefix)
+bool StoreTool::exists(const string& column_family, const string& prefix)
 {
+  KeyValueDB::WholeSpaceIterator iter;
   ceph_assert(!prefix.empty());
-  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  if (column_family.empty()) {
+    iter = db->get_wholespace_iterator();
+  } else {
+    KeyValueDB::ColumnFamilyHandle cfh;
+    cfh = db->column_family_handle(column_family);
+    iter = db->get_wholespace_iterator_cf(cfh);
+  }
+  
   iter->seek_to_first(prefix);
   return (iter->valid() && (iter->raw_key().first == prefix));
 }
 
-bool StoreTool::exists(const string& prefix, const string& key)
+bool StoreTool::exists(const string& column_family, const string& prefix, const string& key)
 {
   ceph_assert(!prefix.empty());
 
   if (key.empty()) {
-    return exists(prefix);
+    return exists(column_family, prefix);
   }
   bool exists = false;
-  get(prefix, key, exists);
+  get(column_family, prefix, key, exists);
   return exists;
 }
 
-bufferlist StoreTool::get(const string& prefix,
+bufferlist StoreTool::get(const string& column_family,
+			  const string& prefix,
 			  const string& key,
 			  bool& exists)
 {
   ceph_assert(!prefix.empty() && !key.empty());
-
+  KeyValueDB::ColumnFamilyHandle cfh = db->column_family_handle(column_family);
+  if (!column_family.empty() && !cfh) {
+    exists = false;
+    return bufferlist();
+  }
   map<string,bufferlist> result;
   std::set<std::string> keys;
   keys.insert(key);
-  db->get(prefix, keys, &result);
+  if (!column_family.empty()) {
+    db->get(cfh, prefix, keys, &result);
+  }
+  else {
+    db->get(prefix, keys, &result);
+  }
 
   if (result.count(key) > 0) {
     exists = true;
@@ -160,36 +186,53 @@ uint64_t StoreTool::get_size()
   return s;
 }
 
-bool StoreTool::set(const string &prefix, const string &key, bufferlist &val)
+bool StoreTool::set(const string& column_family,
+		    const string &prefix,
+		    const string &key,
+		    bufferlist &val)
 {
   ceph_assert(!prefix.empty());
   ceph_assert(!key.empty());
   ceph_assert(val.length() > 0);
-
+  KeyValueDB::ColumnFamilyHandle cfh;
+  if (!column_family.empty()) {
+    cfh = db->column_family_handle(column_family);
+    if (!cfh) 
+      return false;
+  }
   KeyValueDB::Transaction tx = db->get_transaction();
+  if (cfh)
+    tx->select(cfh);
   tx->set(prefix, key, val);
   int ret = db->submit_transaction_sync(tx);
 
   return (ret == 0);
 }
 
-bool StoreTool::rm(const string& prefix, const string& key)
+bool StoreTool::rm(const std::string& column_family,
+		   const string& prefix,
+		   const string& key)
 {
   ceph_assert(!prefix.empty());
   ceph_assert(!key.empty());
 
+  KeyValueDB::ColumnFamilyHandle cfh = db->column_family_handle(column_family);
   KeyValueDB::Transaction tx = db->get_transaction();
+  tx->select(cfh);
   tx->rmkey(prefix, key);
   int ret = db->submit_transaction_sync(tx);
 
   return (ret == 0);
 }
 
-bool StoreTool::rm_prefix(const string& prefix)
+bool StoreTool::rm_prefix(const std::string& column_family,
+			  const string& prefix)
 {
   ceph_assert(!prefix.empty());
 
+  KeyValueDB::ColumnFamilyHandle cfh = db->column_family_handle(column_family);
   KeyValueDB::Transaction tx = db->get_transaction();
+  tx->select(cfh);
   tx->rmkeys_by_prefix(prefix);
   int ret = db->submit_transaction_sync(tx);
 
@@ -298,12 +341,14 @@ void StoreTool::compact()
   db->compact();
 }
 
-void StoreTool::compact_prefix(const string& prefix)
+void StoreTool::compact_prefix(const std::string& column_family,
+			       const string& prefix)
 {
   db->compact_prefix(prefix);
 }
 
-void StoreTool::compact_range(const string& prefix,
+void StoreTool::compact_range(const std::string& column_family,
+			      const string& prefix,
                               const string& start,
                               const string& end)
 {

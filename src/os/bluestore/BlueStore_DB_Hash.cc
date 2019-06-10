@@ -48,6 +48,7 @@ class BlueStore_DB_Hash::HashSharded_TransactionImpl : public RocksDBStore::Rock
 private:
   typedef RocksDBStore::RocksDBTransactionImpl base;
   BlueStore_DB_Hash &db_hash;
+  KeyValueDB::ColumnFamilyHandle cf;
 public:
   HashSharded_TransactionImpl(BlueStore_DB_Hash &db_hash)
 : RocksDBStore::RocksDBTransactionImpl(db_hash.db)
@@ -60,71 +61,95 @@ public:
       const string &prefix,
       const string &k,
       const bufferlist &bl) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
     base::select(cf);
     base::set(prefix, k, bl);
+    cf.clear();
   }
   void set(
       const string &prefix,
       const char *k,
       size_t keylen,
       const bufferlist &bl) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k, keylen);
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k, keylen);
     base::select(cf);
     base::set(prefix, k, keylen, bl);
+    cf.clear();
   }
   void rmkey(
       const string &prefix,
       const string &k) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
     base::select(cf);
     base::rmkey(prefix, k);
+    cf.clear();
   }
   void rmkey(
       const string &prefix,
       const char *k,
       size_t keylen) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k, keylen);
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k, keylen);
     base::select(cf);
     base::rmkey(prefix, k, keylen);
+    cf.clear();
   }
   void rm_single_key(
       const string &prefix,
       const string &k) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
     base::select(cf);
     base::rm_single_key(prefix, k);
+    cf.clear();
   }
   void rmkeys_by_prefix(
       const string &prefix
   ) override {
-    std::vector<KeyValueDB::ColumnFamilyHandle> &shards = db_hash.get_shards(prefix);
-    for (auto &s : shards) {
-      base::select(s);
+    if (!cf) {
+      std::vector<KeyValueDB::ColumnFamilyHandle> &shards = db_hash.get_shards(prefix);
+      for (auto &s : shards) {
+	base::select(s);
+	base::rmkeys_by_prefix(prefix);
+      }
+    } else {
+      base::select(cf);
       base::rmkeys_by_prefix(prefix);
+      cf.clear();
     }
   }
   void rm_range_keys(
       const string &prefix,
       const string &start,
       const string &end) override {
-    std::vector<KeyValueDB::ColumnFamilyHandle> &shards = db_hash.get_shards(prefix);
-    for (auto &s : shards) {
-      base::select(s);
+    if (!cf) {
+      std::vector<KeyValueDB::ColumnFamilyHandle> &shards = db_hash.get_shards(prefix);
+      for (auto &s : shards) {
+	base::select(s);
+	base::rm_range_keys(prefix, start, end);
+      }
+    } else {
+      base::select(cf);
       base::rm_range_keys(prefix, start, end);
+      cf.clear();
     }
   }
   void merge(
       const string& prefix,
       const string& k,
       const bufferlist &bl) override {
-    KeyValueDB::ColumnFamilyHandle cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
+    if (!cf)
+      cf = db_hash.get_db_shard(prefix, k.c_str(), k.size());
     base::select(cf);
     base::merge(prefix, k, bl);
+    cf.clear();
   }
   void select(
       KeyValueDB::ColumnFamilyHandle column_family_handle) override {
-    ceph_abort("Not expected");
+    cf = column_family_handle;
   }
 };
 
@@ -664,16 +689,14 @@ int BlueStore_DB_Hash::get(ColumnFamilyHandle cf_handle,
                            const std::string &prefix,
                            const std::set<std::string> &keys,
                            std::map<std::string, bufferlist> *out) {
-  ceph_assert(false && "invalid call");
-  return 0;
+  return db->get(cf_handle, prefix, keys, out);
 }
 
 int BlueStore_DB_Hash::get(ColumnFamilyHandle cf_handle,///< [in] Column family handle
                            const std::string &prefix,    ///< [in] prefix or CF name
                            const std::string &key,       ///< [in] key
                            bufferlist *value) {          ///< [out] value
-  ceph_assert(false && "invalid call");
-  return 0;
+  return db->get(cf_handle, prefix, key, value);
 }
 
 KeyValueDB::WholeSpaceIterator BlueStore_DB_Hash::get_wholespace_iterator() {
@@ -687,10 +710,10 @@ KeyValueDB::Iterator BlueStore_DB_Hash::get_iterator(const std::string &prefix) 
   return db->get_iterator(prefix);
 }
 KeyValueDB::WholeSpaceIterator BlueStore_DB_Hash::get_wholespace_iterator_cf(ColumnFamilyHandle cfh) {
-  ceph_abort_msg("Not implemented"); return {};
+  return db->get_wholespace_iterator_cf(cfh);
 }
 KeyValueDB::Iterator BlueStore_DB_Hash::get_iterator_cf(ColumnFamilyHandle cfh, const std::string &prefix) {
-  ceph_abort_msg("Not implemented"); return {};
+  return db->get_iterator_cf(cfh, prefix);
 }
 
 uint64_t BlueStore_DB_Hash::get_estimated_size(std::map<std::string,uint64_t> &extra) {

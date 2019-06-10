@@ -43,6 +43,7 @@ public:
     bool operator==(void* rhs) const {return rhs == priv;}
     bool operator!=(void* rhs) const {return rhs != priv;}
     operator bool() const {return priv != nullptr;}
+    void clear() { priv = nullptr; }
   };
 
   class TransactionImpl {
