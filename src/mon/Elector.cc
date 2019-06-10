@@ -399,6 +399,28 @@ void ElectionLogic::handle_propose_logic(epoch_t mepoch, int from)
   }
 }
 
+void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
+{
+  ceph_assert(from_epoch % 2 == 1); // sender in an election epoch
+  if (from_epoch > epoch) {
+    dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
+    bump_epoch(from_epoch);
+    start();
+    return;
+  }
+  // is that _everyone_?
+  if (electing_me) {
+    acked_me.insert(from);
+    if (acked_me.size() == elector_paxos_size()) {
+      // if yes, shortcut to election finish
+      declare_victory();
+    }
+  } else {
+    // ignore, i'm deferring already.
+    ceph_assert(leader_acked >= 0);
+  }
+}
+
 void Elector::handle_ack(MonOpRequestRef op)
 {
   op->mark_event("elector:handle_ack");
@@ -406,13 +428,6 @@ void Elector::handle_ack(MonOpRequestRef op)
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  ceph_assert(m->epoch % 2 == 1); // election
-  if (m->epoch > logic.epoch) {
-    dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
-    logic.bump_epoch(m->epoch);
-    logic.start();
-    return;
-  }
   ceph_assert(m->epoch == logic.epoch);
   uint64_t required_features = mon->get_required_features();
   if ((required_features ^ m->get_connection()->get_features()) &
@@ -450,16 +465,9 @@ void Elector::handle_ack(MonOpRequestRef op)
              << " " << p->second.mon_features;
     }
     *_dout << " }" << dendl;
-
-    // is that _everyone_?
-    if (logic.acked_me.size() == mon->monmap->size()) {
-      // if yes, shortcut to election finish
-      logic.declare_victory();
-    }
-  } else {
-    // ignore, i'm deferring already.
-    ceph_assert(logic.leader_acked >= 0);
   }
+
+  logic.receive_ack(from, m->epoch);
 }
 
 
