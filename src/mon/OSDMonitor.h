@@ -609,6 +609,8 @@ private:
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
+  bool preprocess_get_purged_snaps(MonOpRequestRef op);
+
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
 

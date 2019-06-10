@@ -55,6 +55,8 @@
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MRoute.h"
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 
 #include "common/TextTable.h"
 #include "common/Timer.h"
@@ -2279,6 +2281,9 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_REMOVE_SNAPS:
     return preprocess_remove_snaps(op);
 
+  case MSG_MON_GET_PURGED_SNAPS:
+    return preprocess_get_purged_snaps(op);
+
   default:
     ceph_abort();
     return true;
@@ -3715,6 +3720,56 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
     reply->snaps = m->snaps;
     wait_for_finished_proposal(op, new C_ReplyOp(this, op, reply));
   }
+
+  return true;
+}
+
+bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  const MMonGetPurgedSnaps *m = static_cast<MMonGetPurgedSnaps*>(op->get_req());
+  dout(7) << __func__ << " " << *m << dendl;
+
+  map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> r;
+
+  string k = make_purged_snap_epoch_key(m->start);
+  auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
+  it->upper_bound(k);
+  unsigned long epoch = m->last;
+  while (it->valid()) {
+    if (it->key().find("purged_epoch_") != 0) {
+      break;
+    }
+    string k = it->key();
+    int n = sscanf(k.c_str(), "purged_epoch_%lx", &epoch);
+    if (n != 1) {
+      derr << __func__ << " unable to parse key '" << it->key() << "'" << dendl;
+    } else if (epoch > m->last) {
+      break;
+    } else {
+      bufferlist bl = it->value();
+      auto p = bl.cbegin();
+      auto &v = r[epoch];
+      try {
+	ceph::decode(v, p);
+      } catch (buffer::error& e) {
+	derr << __func__ << " unable to parse value for key '" << it->key()
+	     << "': \n";
+	bl.hexdump(*_dout);
+	*_dout << dendl;
+      }
+      n += 4 + v.size() * 16;
+    }
+    if (n > 1048576) {
+      // impose a semi-arbitrary limit to message size
+      break;
+    }
+    it->next();
+  }
+
+  auto reply = make_message<MMonGetPurgedSnapsReply>(m->start, epoch);
+  reply->purged_snaps.swap(r);
+  mon->send_reply(op, reply.detach());
 
   return true;
 }
