@@ -1608,21 +1608,24 @@ bool PeeringState::recoverable(const vector<int> &want) const
     }
   }
 
-  /* Check whether we have enough acting shards to later perform recovery */
   if (num_want_acting < pool.info.min_size) {
-    if (cct->_conf->osd_allow_recovery_below_min_size && 
-	missing_loc.get_recoverable_predicate()(have)) {
-      psdout(20) << __func__ << " successful, we allow osd recovery below min "
-               << "size and osd is recoverable"
-               << dendl;
-      // do nothing here
-    } else {
-      psdout(10) << __func__ << " failed, below min size and is not recoverable "
-               << dendl;
+    const bool recovery_ec_pool_below_min_size=
+      HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
+
+    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
+      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
+      return false;
+    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+      psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
       return false;
     }
   }
-  return true;
+  if (missing_loc.get_recoverable_predicate()(have)) {
+    return true;
+  } else {
+    psdout(10) << __func__ << " failed, not recoverable " << dendl;
+    return false;
+  }
 }
 
 void PeeringState::choose_async_recovery_ec(
