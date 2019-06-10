@@ -3423,6 +3423,7 @@ int FileStore::read(
   if (got < 0) {
     dout(10) << __FUNC__ << ": (" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
+    ceph_assert(!m_filestore_fail_eio || l != -EIO);
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
