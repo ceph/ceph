@@ -257,9 +257,9 @@ void RDMAConnectedSocketImpl::handle_connection() {
 
 ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 {
-  uint64_t i = 0;
-  int r = ::read(notify_fd, &i, sizeof(i));
-  ldout(cct, 20) << __func__ << " notify_fd : " << i << " in " << my_msg.qpn << " r = " << r << dendl;
+  eventfd_t event_val = 0;
+  int r = eventfd_read(notify_fd, &event_val);
+  ldout(cct, 20) << __func__ << " notify_fd : " << event_val << " in " << my_msg.qpn << " r = " << r << dendl;
   
   if (!active) {
     ldout(cct, 1) << __func__ << " when ib not active. len: " << len << dendl;
@@ -618,11 +618,9 @@ void RDMAConnectedSocketImpl::cleanup() {
 
 void RDMAConnectedSocketImpl::notify()
 {
-  // note: notify_fd is an event fd (man eventfd)
-  // write argument must be a 64bit integer
-  uint64_t i = 1;
-
-  ceph_assert(sizeof(i) == write(notify_fd, &i, sizeof(i)));
+  eventfd_t event_val = 1;
+  int r = eventfd_write(notify_fd, event_val);
+  ceph_assert(r == 0);
 }
 
 void RDMAConnectedSocketImpl::shutdown()
