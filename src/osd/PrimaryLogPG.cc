@@ -4432,8 +4432,13 @@ int PrimaryLogPG::trim_object(
     head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
   } else {
-    dout(10) << coid << " filtering snapset on " << head_oid << dendl;
-    snapset.filter(pool.info);
+    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+      // filter SnapSet::snaps for the benefit of pre-octopus
+      // peers. This is perhaps overly conservative in that I'm not
+      // certain they need this, but let's be conservative here.
+      dout(10) << coid << " filtering snapset on " << head_oid << dendl;
+      snapset.filter(pool.info);
+    }
     dout(10) << coid << " writing updated snapset on " << head_oid
 	     << ", snapset is " << snapset << dendl;
     ctx->log.push_back(
