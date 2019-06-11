@@ -1,6 +1,6 @@
 
 
-#include "svc_bucket.h"
+#include "svc_bucket_sobj.h"
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
@@ -17,12 +17,12 @@
 
 #define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
 
-class RGWSI_Bucket_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Bucket::Svc& svc;
+class RGWSI_Bucket_SObj_Module : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Bucket_SObj::Svc& svc;
 
   const string prefix;
 public:
-  RGWSI_Bucket_Module(RGWSI_Bucket::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket"),
+  RGWSI_Bucket_SObj_Module(RGWSI_Bucket_SObj::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket"),
                                                  svc(_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
@@ -53,13 +53,13 @@ public:
   }
 };
 
-class RGWSI_BucketInstance_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Bucket::Svc& svc;
+class RGWSI_BucketInstance_SObj_Module : public RGWSI_MBSObj_Handler_Module {
+  RGWSI_Bucket_SObj::Svc& svc;
 
   const string prefix;
 public:
-  RGWSI_BucketInstance_Module(RGWSI_Bucket::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket.instance"),
-                                                         svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
+  RGWSI_BucketInstance_SObj_Module(RGWSI_Bucket_SObj::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket.instance"),
+                                                                     svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
     if (pool) {
@@ -134,16 +134,16 @@ public:
   }
 };
 
-RGWSI_Bucket::RGWSI_Bucket(CephContext *cct): RGWServiceInstance(cct) {
+RGWSI_Bucket_SObj::RGWSI_Bucket_SObj(CephContext *cct): RGWSI_Bucket(cct) {
 }
 
-RGWSI_Bucket::~RGWSI_Bucket() {
+RGWSI_Bucket_SObj::~RGWSI_Bucket_SObj() {
 }
 
-void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-                        RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
-                        RGWSI_Meta *_meta_svc, RGWSI_MetaBackend *_meta_be_svc,
-                        RGWSI_SyncModules *_sync_modules_svc)
+void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
+                             RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
+                             RGWSI_Meta *_meta_svc, RGWSI_MetaBackend *_meta_be_svc,
+                             RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.bucket = this;
   svc.zone = _zone_svc;
@@ -155,24 +155,7 @@ void RGWSI_Bucket::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.sync_modules = _sync_modules_svc;
 }
 
-string RGWSI_Bucket::get_entrypoint_meta_key(const rgw_bucket& bucket)
-{
-  if (bucket.bucket_id.empty()) {
-    return bucket.get_key();
-  }
-
-  rgw_bucket b(bucket);
-  b.bucket_id.clear();
-
-  return b.get_key();
-}
-
-string RGWSI_Bucket::get_bi_meta_key(const rgw_bucket& bucket)
-{
-  return bucket.get_key();
-}
-
-int RGWSI_Bucket::do_start()
+int RGWSI_Bucket_SObj::do_start()
 {
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
   binfo_cache->init(svc.cache);
@@ -191,7 +174,7 @@ int RGWSI_Bucket::do_start()
 
   RGWSI_MetaBackend_Handler_SObj *ep_bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(ep_handler);
 
-  auto ep_module = new RGWSI_Bucket_Module(svc);
+  auto ep_module = new RGWSI_Bucket_SObj_Module(svc);
   ep_be_module.reset(ep_module);
   ep_bh->set_module(ep_module);
 
@@ -209,21 +192,21 @@ int RGWSI_Bucket::do_start()
 
   RGWSI_MetaBackend_Handler_SObj *bi_bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(bi_handler);
 
-  auto bi_module = new RGWSI_BucketInstance_Module(svc);
+  auto bi_module = new RGWSI_BucketInstance_SObj_Module(svc);
   bi_be_module.reset(bi_module);
   bi_bh->set_module(bi_module);
 
   return 0;
 }
 
-int RGWSI_Bucket::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                              const string& key,
-                                              RGWBucketEntryPoint *entry_point,
-                                              RGWObjVersionTracker *objv_tracker,
-                                              real_time *pmtime,
-                                              map<string, bufferlist> *pattrs,
-                                              rgw_cache_entry_info *cache_info,
-                                              boost::optional<obj_version> refresh_version)
+int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
+                                                   const string& key,
+                                                   RGWBucketEntryPoint *entry_point,
+                                                   RGWObjVersionTracker *objv_tracker,
+                                                   real_time *pmtime,
+                                                   map<string, bufferlist> *pattrs,
+                                                   rgw_cache_entry_info *cache_info,
+                                                   boost::optional<obj_version> refresh_version)
 {
   bufferlist bl;
 
@@ -245,13 +228,13 @@ int RGWSI_Bucket::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                               const string& key,
-                                               RGWBucketEntryPoint& info,
-                                               bool exclusive,
-                                               real_time mtime,
-                                               map<string, bufferlist> *pattrs,
-                                               RGWObjVersionTracker *objv_tracker)
+int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
+                                                    const string& key,
+                                                    RGWBucketEntryPoint& info,
+                                                    bool exclusive,
+                                                    real_time mtime,
+                                                    map<string, bufferlist> *pattrs,
+                                                    RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
   encode(info, bl);
@@ -278,20 +261,20 @@ int RGWSI_Bucket::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   return ret;
 }
 
-int RGWSI_Bucket::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                                const string& key,
-                                                RGWObjVersionTracker *objv_tracker)
+int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
+                                                     const string& key,
+                                                     RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MBSObj_RemoveParams params;
   return svc.meta_be->remove(ctx.get(), key, params, objv_tracker);
 }
 
-int RGWSI_Bucket::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                            const string& key,
-                                            RGWBucketInfo *info,
-                                            real_time *pmtime, map<string, bufferlist> *pattrs,
-                                            rgw_cache_entry_info *cache_info,
-                                            boost::optional<obj_version> refresh_version)
+int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                                                 const string& key,
+                                                 RGWBucketInfo *info,
+                                                 real_time *pmtime, map<string, bufferlist> *pattrs,
+                                                 rgw_cache_entry_info *cache_info,
+                                                 boost::optional<obj_version> refresh_version)
 {
 #warning cache set/get is a mess
   if (auto e = binfo_cache->find(key)) {
@@ -320,12 +303,12 @@ int RGWSI_Bucket::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                               const string& key,
-                                               RGWBucketInfo *info,
-                                               real_time *pmtime, map<string, bufferlist> *pattrs,
-                                               rgw_cache_entry_info *cache_info,
-                                               boost::optional<obj_version> refresh_version)
+int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                                                    const string& key,
+                                                    RGWBucketInfo *info,
+                                                    real_time *pmtime, map<string, bufferlist> *pattrs,
+                                                    rgw_cache_entry_info *cache_info,
+                                                    boost::optional<obj_version> refresh_version)
 {
   bufferlist bl;
   RGWObjVersionTracker ot;
@@ -353,12 +336,12 @@ int RGWSI_Bucket::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                   const rgw_bucket& bucket,
-                                   RGWBucketInfo *info,
-                                   real_time *pmtime,
-                                   map<string, bufferlist> *pattrs,
-                                   boost::optional<obj_version> refresh_version)
+int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
+                                        const rgw_bucket& bucket,
+                                        RGWBucketInfo *info,
+                                        real_time *pmtime,
+                                        map<string, bufferlist> *pattrs,
+                                        boost::optional<obj_version> refresh_version)
 {
   rgw_cache_entry_info cache_info;
 
@@ -460,13 +443,13 @@ int RGWSI_Bucket::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 }
 
 
-int RGWSI_Bucket::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                             const string& key,
-                                             RGWBucketInfo& info,
-                                             std::optional<RGWBucketInfo *> orig_info,
-                                             bool exclusive,
-                                             real_time mtime,
-                                             map<string, bufferlist> *pattrs)
+int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                                                  const string& key,
+                                                  RGWBucketInfo& info,
+                                                  std::optional<RGWBucketInfo *> orig_info,
+                                                  bool exclusive,
+                                                  real_time mtime,
+                                                  map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
   encode(info, bl);
@@ -528,10 +511,10 @@ int RGWSI_Bucket::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return ret;
 }
 
-int RGWSI_Bucket::handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
-                                          const string& key,
-                                          const RGWBucketInfo& info,
-                                          const RGWBucketInfo& orig_info)
+int RGWSI_Bucket_SObj::handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
+                                               const string& key,
+                                               const RGWBucketInfo& info,
+                                               const RGWBucketInfo& orig_info)
 {
   if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
     int shards_num = info.num_shards? info.num_shards : 1;
@@ -560,16 +543,16 @@ int RGWSI_Bucket::handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                              const string& key,
-                                              RGWObjVersionTracker *objv_tracker)
+int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                                                   const string& key,
+                                                   RGWObjVersionTracker *objv_tracker)
 {
   RGWSI_MBSObj_RemoveParams params;
   return svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker);
 }
 
-int RGWSI_Bucket::read_bucket_stats(const RGWBucketInfo& bucket_info,
-                                    RGWBucketEnt *ent)
+int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,
+                                         RGWBucketEnt *ent)
 {
   ent->count = 0;
   ent->size = 0;
@@ -586,9 +569,9 @@ int RGWSI_Bucket::read_bucket_stats(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_Bucket::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                    const rgw_bucket& bucket,
-                                    RGWBucketEnt *ent)
+int RGWSI_Bucket_SObj::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
+                                         const rgw_bucket& bucket,
+                                         RGWBucketEnt *ent)
 {
   RGWBucketInfo bucket_info;
   int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr, boost::none);
@@ -599,8 +582,8 @@ int RGWSI_Bucket::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
   return read_bucket_stats(bucket_info, ent);
 }
 
-int RGWSI_Bucket::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                     map<string, RGWBucketEnt>& m)
+int RGWSI_Bucket_SObj::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
+                                          map<string, RGWBucketEnt>& m)
 {
   map<string, RGWBucketEnt>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
