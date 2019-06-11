@@ -35,7 +35,7 @@ public:
   // if we are fetching maps from the mon and have to jump a gap
   // (client's next needed std::map is older than mon's oldest) we can
   // share removed snaps from the gap here.
-  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> gap_removed_snaps;
+  mempool::osdmap::map<int64_t,snap_interval_set_t> gap_removed_snaps;
 
   epoch_t get_first() const {
     epoch_t e = 0;

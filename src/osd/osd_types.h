@@ -137,6 +137,12 @@ typedef std::map<std::string,std::string> osd_alert_list_t;
 typedef std::map<int, osd_alert_list_t> osd_alerts_t;
 void dump(ceph::Formatter* f, const osd_alerts_t& alerts);
 
+
+typedef interval_set<
+  snapid_t,
+  mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+
+
 /**
  * osd request identifier
  *

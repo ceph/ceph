@@ -1036,7 +1036,7 @@ void Objecter::_scan_requests(
   list<LingerOp*>& need_resend_linger,
   map<ceph_tid_t, CommandOp*>& need_resend_command,
   shunique_lock& sul,
-  const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
+  const mempool::osdmap::map<int64_t,snap_interval_set_t> *gap_removed_snaps)
 {
   ceph_assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
@@ -2767,7 +2767,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
 
 void Objecter::_prune_snapc(
   const mempool::osdmap::map<int64_t,
-  OSDMap::snap_interval_set_t>& new_removed_snaps,
+  snap_interval_set_t>& new_removed_snaps,
   Op *op)
 {
   bool match = false;
