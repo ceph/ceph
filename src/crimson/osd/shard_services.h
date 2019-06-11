@@ -6,6 +6,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 
+#include "osd_operation.h"
 #include "msg/MessageRef.h"
 #include "crimson/os/cyan_collection.h"
 
@@ -28,6 +29,7 @@ namespace ceph::os {
 class PerfCounters;
 class OSDMap;
 class PeeringCtx;
+class BufferedRecoveryMessages;
 
 namespace ceph::osd {
 
@@ -68,6 +70,16 @@ public:
     return &cct;
   }
 
+  // Op Tracking
+  OperationRegistry registry;
+
+  template <typename T, typename... Args>
+  typename T::IRef start_operation(Args&&... args) {
+    auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    op->start();
+    return op;
+  }
+
   // Loggers
   PerfCounters &get_recoverystate_perf_logger() {
     return *recoverystate_perf;
@@ -82,7 +94,7 @@ public:
 
   /// Dispatch and reset ctx messages
   seastar::future<> dispatch_context_messages(
-    PeeringCtx &ctx);
+    BufferedRecoveryMessages &&ctx);
 
   /// Dispatch ctx and dispose of context
   seastar::future<> dispatch_context(
@@ -118,12 +130,8 @@ public:
 private:
   cached_map_t osdmap;
 public:
-  void update_map(cached_map_t new_osdmap) {
-    osdmap = std::move(new_osdmap);
-  }
-  cached_map_t &get_osdmap() {
-    return osdmap;
-  }
+  void update_map(cached_map_t new_osdmap);
+  cached_map_t &get_osdmap();
 
   // PG Created State
 private:
@@ -132,6 +140,8 @@ public:
   seastar::future<> send_pg_created(pg_t pgid);
   seastar::future<> send_pg_created();
   void prune_pg_created();
+
+  seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 };
 
 
