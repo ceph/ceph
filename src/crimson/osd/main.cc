@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
-  seastar::sharded<OSD> osd;
+  seastar::sharded<ceph::osd::OSD> osd;
   seastar::sharded<ceph::net::SocketMessenger> cluster_msgr, client_msgr;
   seastar::sharded<ceph::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
   using ceph::common::sharded_conf;
@@ -145,13 +145,13 @@ int main(int argc, char* argv[])
         if (config.count("mkfs")) {
           osd.invoke_on(
 	    0,
-	    &OSD::mkfs,
+	    &ceph::osd::OSD::mkfs,
 	    local_conf().get_val<uuid_d>("osd_uuid"),
 	    local_conf().get_val<uuid_d>("fsid")).then([] {
 	      seastar::engine().exit(0);
 	    }).get();
         } else {
-          osd.invoke_on(0, &OSD::start).get();
+          osd.invoke_on(0, &ceph::osd::OSD::start).get();
         }
       });
     });
