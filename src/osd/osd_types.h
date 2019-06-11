@@ -5031,6 +5031,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
+  // NOTE: this is for pre-octopus compatibility only! remove in Q release
   std::vector<snapid_t> snaps;    // descending
   std::vector<snapid_t> clones;   // ascending
   std::map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
