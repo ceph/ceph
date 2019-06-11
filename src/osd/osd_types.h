@@ -5057,11 +5057,14 @@ struct SnapSet {
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
     out.seq = as_of;
-    for (std::vector<snapid_t>::const_iterator i = snaps.begin();
-	 i != snaps.end();
-	 ++i) {
-      if (*i <= as_of)
-	out.snaps.push_back(*i);
+    for (auto p = clone_snaps.rbegin();
+	 p != clone_snaps.rend();
+	 ++p) {
+      for (auto snap : p->second) {
+	if (snap <= as_of) {
+	  out.snaps.push_back(snap);
+	}
+      }
     }
     return out;
   }
