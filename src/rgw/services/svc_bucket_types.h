@@ -16,6 +16,7 @@
 
 #include "common/ptr_wrapper.h"
 
+#include "svc_meta_be.h"
 #include "svc_meta_be_types.h"
 
 class RGWSI_MetaBackend_Handler;

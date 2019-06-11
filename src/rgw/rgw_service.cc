@@ -5,7 +5,7 @@
 
 #include "services/svc_finisher.h"
 #include "services/svc_bi_rados.h"
-#include "services/svc_bucket.h"
+#include "services/svc_bucket_sobj.h"
 #include "services/svc_cls.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
@@ -45,7 +45,7 @@ int RGWServices_Def::init(CephContext *cct,
                           bool raw)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
-  bucket = std::make_unique<RGWSI_Bucket>(cct);
+  bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct);
@@ -249,6 +249,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   finisher = _svc.finisher.get();
   bi_rados = _svc.bi_rados.get();
   bi = bi_rados;
+  bucket_sobj = _svc.bucket_sobj.get();
   bucket = _svc.bucket.get();
   cls = _svc.cls.get();
   mdlog = _svc.mdlog.get();
