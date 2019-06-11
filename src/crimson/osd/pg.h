@@ -19,7 +19,7 @@
 #include "osd/osd_internal_types.h"
 #include "osd/PeeringState.h"
 
-template<typename T> using Ref = boost::intrusive_ptr<T>;
+#include "crimson/common/type_helpers.h"
 class OSDMap;
 class MQuery;
 class PGBackend;
