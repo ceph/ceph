@@ -25,6 +25,7 @@
 #include "Session.h"
 #include "objclass/objclass.h"
 
+#include "common/ceph_crypto.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "common/perf_counters.h"
@@ -2469,32 +2470,23 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
 		     CEPH_OSD_FLAG_RWORDERED;
     tgt_length = chunk_data.length();
-    pg_pool_t::fingerprint_t fp_algo_t = pool.info.get_fingerprint_type();
-    if (iter->second.has_reference() &&
-	fp_algo_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-      object_t fp_oid;
-      bufferlist in;
-      switch (fp_algo_t) {
+    if (pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
+	iter->second.has_reference() &&
+	fp_algo != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+      object_t fp_oid = [fp_algo, &chunk_data]() -> string {
+        switch (fp_algo) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
-	  {
-	    sha1_digest_t sha1r = chunk_data.sha1();
-	    fp_oid = sha1r.to_str();
-	    break;
-	  }
+	  return crypto::digest<crypto::SHA1>(chunk_data).to_str();
 	case pg_pool_t::TYPE_FINGERPRINT_SHA256:
-	  {
-	    sha256_digest_t sha256r = chunk_data.sha256();
-	    fp_oid = sha256r.to_str();
-	  }
+	  return crypto::digest<crypto::SHA256>(chunk_data).to_str();
 	case pg_pool_t::TYPE_FINGERPRINT_SHA512:
-	  {
-	    sha512_digest_t sha512r = chunk_data.sha512();
-	    fp_oid = sha512r.to_str();
-	  }
+	  return crypto::digest<crypto::SHA512>(chunk_data).to_str();
 	default:
 	  assert(0 == "unrecognized fingerprint type");
-	  break;
-      }
+	  return {};
+	}
+      }();
+      bufferlist in;
       if (fp_oid != tgt_soid.oid) {
 	// decrement old chunk's reference count 
 	ObjectOperation dec_op;
