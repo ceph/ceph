@@ -27,7 +27,7 @@ class CephReleases(Directive):
         env.note_dependency(filename)
         try:
             with open(filename, 'r') as fp:
-                releases = yaml.load(fp)
+                releases = yaml.safe_load(fp)
                 releases = releases["releases"]
         except Exception as e:
             return [document.reporter.warning(
@@ -118,7 +118,7 @@ class CephTimeline(Directive):
         env.note_dependency(filename)
         try:
             with open(filename, 'r') as fp:
-                releases = yaml.load(fp)
+                releases = yaml.safe_load(fp)
         except Exception as e:
             return [document.reporter.warning(
                 "Failed to open Ceph releases file {}: {}".format(filename, e),
