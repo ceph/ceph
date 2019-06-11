@@ -1449,6 +1449,24 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	pending_inc.old_blacklist.push_back(i.first);
       }
     }
+
+    if (osdmap.require_osd_release < ceph_release_t::octopus &&
+	tmp.require_osd_release >= ceph_release_t::octopus) {
+      dout(10) << __func__ << " first octopus+ epoch" << dendl;
+
+      // clear removed_snaps for every pool
+      for (auto& [poolid, pi] : tmp.pools) {
+	if (pi.removed_snaps.empty()) {
+	  continue;
+	}
+	if (pending_inc.new_pools.count(poolid) == 0) {
+	  pending_inc.new_pools[poolid] = pi;
+	}
+	dout(10) << __func__ << " clearing pool " << poolid << " removed_snaps"
+		 << dendl;
+	pending_inc.new_pools[poolid].removed_snaps.clear();
+      }
+    }
   }
 
   // tell me about it
@@ -3594,20 +3612,23 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
     for (vector<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
-      if (!pi.removed_snaps.contains(*q) &&
+      if (!_is_removed_snap(p->first, *q) &&
 	  (!pending_inc.new_pools.count(p->first) ||
 	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
 	pg_pool_t *newpi = pending_inc.get_new_pool(p->first, &pi);
-	newpi->removed_snaps.insert(*q);
+	if (osdmap.require_osd_release < ceph_release_t::octopus) {
+	  newpi->removed_snaps.insert(*q);
+	  dout(10) << " pool " << p->first << " removed_snaps added " << *q
+		   << " (now " << newpi->removed_snaps << ")" << dendl;
+	}
 	newpi->flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
-	dout(10) << " pool " << p->first << " removed_snaps added " << *q
-		 << " (now " << newpi->removed_snaps << ")" << dendl;
 	if (*q > newpi->get_snap_seq()) {
 	  dout(10) << " pool " << p->first << " snap_seq "
 		   << newpi->get_snap_seq() << " -> " << *q << dendl;
 	  newpi->set_snap_seq(*q);
 	}
 	newpi->set_snap_epoch(pending_inc.epoch);
+	dout(10) << " added pool " << p->first << "snap " << *q << " to removed_snaps queue" << dendl;
 	pending_inc.new_removed_snaps[p->first].insert(*q);
       }
     }
