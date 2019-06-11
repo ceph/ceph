@@ -209,7 +209,6 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 
   logger->set(l_mdc_num_recovering_processing, file_recovering.size());
   logger->inc(l_mdc_recovery_completed);
-  in->state_clear(CInode::STATE_RECOVERING);
 
   if (restart) {
     if (in->item_recover_queue.is_on_list()) {
@@ -225,6 +224,7 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     _start(in);
   } else if (!_is_in_any_recover_queue(in)) {
     // journal
+    in->state_clear(CInode::STATE_RECOVERING);
     mds->locker->check_inode_max_size(in, true, 0,  size, mtime);
     mds->locker->eval(in, CEPH_LOCK_IFILE);
     in->auth_unpin(this);
