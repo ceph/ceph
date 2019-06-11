@@ -66,9 +66,8 @@ def get_fake_obj(mock_args=None, attributes=None):
 
 
 class TestOpenStackBase(object):
-    def setup(self):
-        config.load()
-        config.libcloud = deepcopy(test_config)
+    def setup(self, conf=dict(), test_config=test_config):
+        config.load(conf or dict(libcloud=deepcopy(test_config)))
         self.start_patchers()
 
     def start_patchers(self):
