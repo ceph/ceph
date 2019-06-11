@@ -11,6 +11,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_cls.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -65,9 +66,9 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
   }
 }
 
-RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(RGWRados *_store, int num_threads)
+RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(CephContext *_cct, int num_threads)
   : cct(_cct), m_tp(cct, "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
-    req_throttle(store->ctx(), "rgw_async_rados_ops", num_threads * 2),
+    req_throttle(_cct, "rgw_async_rados_ops", num_threads * 2),
     req_wq(this, g_conf()->rgw_op_thread_timeout,
     g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
 }

@@ -247,7 +247,8 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   }
 
   finisher = _svc.finisher.get();
-  bi = _svc.bi_rados.get();
+  bi_rados = _svc.bi_rados.get();
+  bi = bi_rados;
   bucket = _svc.bucket.get();
   cls = _svc.cls.get();
   mdlog = _svc.mdlog.get();

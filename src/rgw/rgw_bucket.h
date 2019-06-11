@@ -16,6 +16,7 @@
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/RWLock.h"
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 #include "common/ceph_time.h"
@@ -210,7 +211,6 @@ public:
   static RGWBucketInstanceMetadataHandlerBase *alloc();
 };
 
-extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.

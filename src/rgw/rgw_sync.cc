@@ -29,6 +29,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
+#include "services/svc_cls.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -956,7 +957,7 @@ public:
             string s = *sections_iter + ":" + *iter;
             int shard_id;
             RGWRados *store = sync_env->store;
-            int ret = store->svc.meta->get_mgr()->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            int ret = store->ctl.meta.mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
               tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
               ret_status = ret;
@@ -1086,7 +1087,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->svc.meta->get_mgr()->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    int ret = store->ctl.meta.mgr->put(raw_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1138,7 +1139,7 @@ class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   string raw_key;
 protected:
   int _send_request() override {
-    int ret = store->svc.meta->get_mgr()->remove(raw_key);
+    int ret = store->ctl.meta.mgr->remove(raw_key);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1951,7 +1952,7 @@ public:
           // get the mdlog for the current period (may be empty)
           auto& period_id = sync_status.sync_info.period;
           auto realm_epoch = sync_status.sync_info.realm_epoch;
-          auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
+          auto mdlog = sync_env->store->svc.mdlog->get_log(period_id);
 
           tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
 
@@ -2112,7 +2113,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->period_puller->pull(info.period, period);
+  int r = store->svc.mdlog->pull_period(info.period, period);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;

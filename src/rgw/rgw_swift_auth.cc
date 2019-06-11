@@ -91,19 +91,21 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     if (uid.tenant.empty()) {
       const rgw_user tenanted_uid(uid.id, uid.id);
 
-      if (rgw_get_user_info_by_uid(store, tenanted_uid, uinfo) >= 0) {
+      if (user_ctl->get_info_by_uid(tenanted_uid, &uinfo) >= 0) {
         /* Succeeded. */
         bucket_tenant = uinfo.user_id.tenant;
         found = true;
       }
     }
 
-    if (!found && rgw_get_user_info_by_uid(store, uid, uinfo) < 0) {
+    if (!found && user_ctl->get_info_by_uid(uid, &uinfo) < 0) {
       throw -EPERM;
     } else {
       bucket_tenant = uinfo.user_id.tenant;
     }
   }
+
+  auto bucket_ctl = user_ctl->get_bucket_ctl();
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;

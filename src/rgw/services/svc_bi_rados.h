@@ -105,6 +105,9 @@ public:
 
   int read_stats(const RGWBucketInfo& bucket_info,
                  RGWBucketEnt *stats) override;
+
+  int get_reshard_status(const RGWBucketInfo& bucket_info,
+                         std::list<cls_rgw_bucket_instance_entry> *status);
 };
 
 
