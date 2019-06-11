@@ -8869,6 +8869,51 @@ out_scan:
 
 int BlueStore::reshard(const std::string& new_sharding)
 {
+  //special case if sharding goes
+  std::string curr_sharding;
+  std::vector<KeyValueDB::ColumnFamily> curr_cfs, new_cfs;
+  BlueStore_DB_Hash::ShardingSchema curr_shards, new_shards;
+
+  int r = read_meta("sharding", &curr_sharding);
+  if (!curr_sharding.empty()) {
+    r = parse_sharding(curr_sharding, curr_cfs, curr_shards);
+    ceph_assert(r == 0);
+    r = parse_sharding(new_sharding, new_cfs, new_shards);
+    if (r != 0) {
+      derr << "Sharding schema '" << new_sharding << "' invalid" << dendl;
+      return r;
+    }
+    if (curr_shards[PREFIX_ALLOC_BITMAP].shards != 0 &&
+        new_shards[PREFIX_ALLOC_BITMAP].shards != 0 &&
+        curr_shards[PREFIX_ALLOC_BITMAP].shards != new_shards[PREFIX_ALLOC_BITMAP].shards) {
+      //we change 'b' prefix sharding, we have to reduce 'b' to 0 first
+      map<string,string> cf_map;
+      get_str_map(new_sharding,
+                  &cf_map,
+                  " \t");
+      std::string new_sharding_without_b;
+      for (auto& i : cf_map) {
+        std::string prefix = i.first.substr(0, 1);
+        if (prefix == PREFIX_ALLOC_BITMAP) {
+          continue;
+        }
+        if (!new_sharding_without_b.empty())
+          new_sharding_without_b += " ";
+        new_sharding_without_b += i.first + "=" + i.second;
+      }
+      dout(5) << "Trimming 'b' prefix. Temporary sharding is: '" << new_sharding_without_b << "'" << dendl;
+      r = _reshard(new_sharding_without_b);
+      if (r != 0)
+        return r;
+    }
+  }
+  dout(5) << "Sharding to: '" << new_sharding << "'" << dendl;
+  r = _reshard(new_sharding);
+  return r;
+}
+
+int BlueStore::_reshard(const std::string& new_sharding)
+{
   KeyValueDB* source_db = nullptr;
   int r = _mount(true, false);
   if (r < 0)
@@ -8921,7 +8966,7 @@ int BlueStore::reshard(const std::string& new_sharding)
       dout(5) << "Create required column family '" << new_column.name <<
           "' with options '" << new_column.option << "'" << dendl;
       r = source_db->column_family_create(new_column.name, new_column.option);
-      assert(r == 0);
+      ceph_assert(r == 0);
     }
   }
 
