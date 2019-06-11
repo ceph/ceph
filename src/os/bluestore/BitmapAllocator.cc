@@ -36,7 +36,7 @@ int64_t BitmapAllocator::allocate(
   }
   for (auto e : *extents) {
     ldout(cct, 10) << __func__
-                   << " 0x" << std::hex << e.offset << "~" << e.length
+                   << " extent: 0x" << std::hex << e.offset << "~" << e.length
 		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		   << std::dec << dendl;
   }
