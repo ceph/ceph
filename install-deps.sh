@@ -75,8 +75,8 @@ function ensure_decent_gcc_on_ubuntu {
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
-deb [arch=amd64 lang=none] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
-deb [arch=amd64,i386 lang=none] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
+deb [arch=amd64 lang=none] http://mirror.nullivex.com/ppa/ubuntu-toolchain-r-test $codename main
+deb [arch=amd64 lang=none] http://deb.rug.nl/ppa/mirror/ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 EOF
 	# import PPA's signing key into APT's keyring
 	cat << ENDOFKEY | $SUDO apt-key add -
@@ -103,6 +103,8 @@ ENDOFKEY
             old=4.8;;
         xenial)
             old=5;;
+        bionic)
+            old=7;;
     esac
     $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
@@ -281,6 +283,7 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
+                ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
