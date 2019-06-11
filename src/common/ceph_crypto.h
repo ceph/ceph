@@ -5,6 +5,9 @@
 #include "acconfig.h"
 #include <stdexcept>
 
+#include "include/buffer.h"
+#include "include/types.h"
+
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
@@ -375,5 +378,19 @@ namespace ceph {
 // cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
+
+namespace ceph::crypto {
+template<class Digest>
+auto digest(const ceph::buffer::list& bl)
+{
+  unsigned char fingerprint[Digest::digest_size];
+  Digest gen;
+  for (auto& p : bl.buffers()) {
+    gen.Update((const unsigned char *)p.c_str(), p.length());
+  }
+  gen.Final(fingerprint);
+  return sha_digest_t<Digest::digest_size>{fingerprint};
+}
+}
 
 #endif

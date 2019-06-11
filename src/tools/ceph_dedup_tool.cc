@@ -19,14 +19,15 @@
 
 #include "acconfig.h"
 
-#include "common/config.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "common/Cond.h"
+#include "common/Formatter.h"
+#include "common/ceph_argparse.h"
+#include "common/ceph_crypto.h"
+#include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
 #include "common/obj_bencher.h"
+#include "global/global_init.h"
 
 #include <iostream>
 #include <fstream>
@@ -369,13 +370,13 @@ void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk)
 {
   string fp;
   if (fp_algo == "sha1") {
-    sha1_digest_t sha1_val = chunk.sha1();
+    sha1_digest_t sha1_val = crypto::digest<crypto::SHA1>(chunk);
     fp = sha1_val.to_str();
   } else if (fp_algo == "sha256") {
-    sha256_digest_t sha256_val = chunk.sha256();
+    sha256_digest_t sha256_val = crypto::digest<crypto::SHA256>(chunk);
     fp = sha256_val.to_str();
   } else if (fp_algo == "sha512") {
-    sha512_digest_t sha512_val = chunk.sha512();
+    sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
     fp = sha512_val.to_str();
   } else if (chunk_algo == "rabin") {
     uint64_t hash = rabin.gen_rabin_hash(chunk.c_str(), 0, chunk.length());
