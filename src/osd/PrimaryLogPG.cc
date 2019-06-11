@@ -4438,6 +4438,8 @@ int PrimaryLogPG::trim_object(
       // certain they need this, but let's be conservative here.
       dout(10) << coid << " filtering snapset on " << head_oid << dendl;
       snapset.filter(pool.info);
+    } else {
+      snapset.snaps.clear();
     }
     dout(10) << coid << " writing updated snapset on " << head_oid
 	     << ", snapset is " << snapset << dendl;
@@ -8095,7 +8097,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
   if (snapc.seq > ctx->new_snapset.seq) {
     // update snapset with latest snap context
     ctx->new_snapset.seq = snapc.seq;
-    ctx->new_snapset.snaps = snapc.snaps;
+    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+      ctx->new_snapset.snaps = snapc.snaps;
+    } else {
+      ctx->new_snapset.snaps.clear();
+    }
   }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
@@ -9515,7 +9521,11 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
     OpContextUPtr tctx = simple_opc_create(obc);
     tctx->at_version = get_next_version();
-    filter_snapc(tctx->new_snapset.snaps);
+    if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+      filter_snapc(tctx->new_snapset.snaps);
+    } else {
+      tctx->new_snapset.snaps.clear();
+    }
     vector<snapid_t> new_clones;
     map<snapid_t, vector<snapid_t>> new_clone_snaps;
     for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
@@ -9808,14 +9818,16 @@ int PrimaryLogPG::start_flush(
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
+  bool preoctopus_compat =
+    get_osdmap()->require_osd_release < ceph_release_t::octopus;
   SnapSet snapset;
-  if (get_osdmap()->require_osd_release >= ceph_release_t::octopus) {
-    // NOTE: change this to a const ref when we remove this compat code
-    snapset = obc->ssc->snapset;
-  } else {
+  if (preoctopus_compat) {
     // for pre-octopus compatibility, filter SnapSet::snaps.  not
     // certain we need this, but let's be conservative.
     snapset = obc->ssc->snapset.get_filtered(pool.info);
+  } else {
+    // NOTE: change this to a const ref when we remove this compat code
+    snapset = obc->ssc->snapset;
   }
 
   // verify there are no (older) check for dirty clones
