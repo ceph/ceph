@@ -49,6 +49,7 @@ class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
 class RGWSI_BucketIndex;
 class RGWSI_BucketIndex_RADOS;
+class RGWSI_BILog_RADOS;
 class RGWSI_Cls;
 class RGWSI_MDLog;
 class RGWSI_Meta;
@@ -76,6 +77,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
+  std::unique_ptr<RGWSI_BILog_RADOS> bilog_rados;
   std::unique_ptr<RGWSI_Cls> cls;
   std::unique_ptr<RGWSI_MDLog> mdlog;
   std::unique_ptr<RGWSI_Meta> meta;
@@ -112,6 +114,7 @@ struct RGWServices
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
   RGWSI_BucketIndex_RADOS *bi_rados{nullptr};
+  RGWSI_BILog_RADOS *bilog_rados{nullptr};
   RGWSI_Cls *cls{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
