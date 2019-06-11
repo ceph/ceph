@@ -7640,6 +7640,27 @@ void OSD::sched_scrub()
   dout(20) << "sched_scrub done" << dendl;
 }
 
+void OSD::resched_all_scrubs()
+{
+  dout(10) << __func__ << ": start" << dendl;
+  OSDService::ScrubJob scrub;
+  if (service.first_scrub_stamp(&scrub)) {
+    do {
+      dout(20) << __func__ << ": examine " << scrub.pgid << dendl;
+
+      PGRef pg = _lookup_lock_pg(scrub.pgid);
+      if (!pg)
+	continue;
+      if (!pg->scrubber.must_scrub && !pg->scrubber.need_auto) {
+        dout(20) << __func__ << ": reschedule " << scrub.pgid << dendl;
+        pg->on_info_history_change();
+      }
+      pg->unlock();
+    } while (service.next_scrub_stamp(scrub, &scrub));
+  }
+  dout(10) << __func__ << ": done" << dendl;
+}
+
 MPGStats* OSD::collect_pg_stats()
 {
   // This implementation unconditionally sends every is_primary PG's
@@ -8012,6 +8033,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap::Incremental inc;
       auto p = bl.cbegin();
       inc.decode(p);
+
       if (o->apply_incremental(inc) < 0) {
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
 	ceph_abort_msg("bad fsid");
@@ -8661,6 +8683,31 @@ bool OSD::advance_pg(
     pg->handle_advance_map(
       nextmap, lastmap, newup, up_primary,
       newacting, acting_primary, rctx);
+
+    auto oldpool = lastmap->get_pools().find(pg->pg_id.pool());
+    auto newpool = nextmap->get_pools().find(pg->pg_id.pool());
+    if (oldpool != lastmap->get_pools().end()
+        && newpool != nextmap->get_pools().end()) {
+      dout(20) << __func__
+	       << " new pool opts " << newpool->second.opts
+	       << " old pool opts " << oldpool->second.opts
+	       << dendl;
+
+      double old_min_interval = 0, new_min_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &old_min_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &new_min_interval);
+
+      double old_max_interval = 0, new_max_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &old_max_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &new_max_interval);
+
+      // Assume if an interval is change from set to unset or vice versa the actual config
+      // is different.  Keep it simple even if it is possible to call resched_all_scrub()
+      // unnecessarily.
+      if (old_min_interval != new_min_interval || old_max_interval != new_max_interval) {
+	pg->on_info_history_change();
+      }
+    }
 
     if (new_pg_num && old_pg_num != new_pg_num) {
       // check for split
@@ -9868,6 +9915,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_client_message_cap",
     "osd_heartbeat_min_size",
     "osd_heartbeat_interval",
+    "osd_scrub_min_interval",
+    "osd_scrub_max_interval",
     NULL
   };
   return KEYS;
@@ -9955,6 +10004,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     }
   }
 
+  if (changed.count("osd_scrub_min_interval") ||
+      changed.count("osd_scrub_max_interval")) {
+    resched_all_scrubs();
+    dout(0) << __func__ << ": scrub interval change" << dendl;
+  }
   check_config();
 }
 
