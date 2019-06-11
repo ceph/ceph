@@ -670,6 +670,7 @@ void MemStore::_do_transaction(Transaction& t)
     case Transaction::OP_NOP:
       break;
     case Transaction::OP_TOUCH:
+    case Transaction::OP_CREATE:
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
