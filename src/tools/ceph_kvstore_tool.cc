@@ -42,7 +42,7 @@ void usage(const char *pname)
     << "  set [column/]<prefix> <key> [ver <N>|in <file>]\n"
     << "  rm [column/]<prefix> <key>\n"
     << "  rm-prefix [column/]<prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
+    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...]\n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix [column/]<prefix>\n"
