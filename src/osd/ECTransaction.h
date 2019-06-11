@@ -193,7 +193,8 @@ namespace ECTransaction {
     map<shard_id_t, ObjectStore::Transaction> *transactions,
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
-    DoutPrefixProvider *dpp);
+    DoutPrefixProvider *dpp,
+    const ceph_release_t require_osd_release = ceph_release_t::unknown);
 };
 
 #endif
