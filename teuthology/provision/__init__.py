@@ -1,7 +1,7 @@
 import logging
 
 import teuthology.lock.query
-from ..misc import decanonicalize_hostname, get_distro, get_distro_version
+from teuthology.misc import decanonicalize_hostname, get_distro, get_distro_version
 
 import cloud
 import downburst

@@ -8,7 +8,7 @@ from teuthology.misc import get_archive_dir
 from teuthology.orchestra.cluster import Cluster
 from teuthology.orchestra import run
 
-from . import Task
+from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 

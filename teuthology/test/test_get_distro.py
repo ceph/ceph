@@ -1,4 +1,4 @@
-from ..misc import get_distro
+from teuthology.misc import get_distro
 
 
 class Mock:

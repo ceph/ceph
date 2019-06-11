@@ -5,12 +5,12 @@ import types
 
 from copy import deepcopy
 
-from .config import config as teuth_config
-from .exceptions import ConnectionLostError
-from .job_status import set_status
-from .misc import get_http_log_path
-from .sentry import get_client as get_sentry_client
-from .timer import Timer
+from teuthology.config import config as teuth_config
+from teuthology.exceptions import ConnectionLostError
+from teuthology.job_status import set_status
+from teuthology.misc import get_http_log_path
+from teuthology.sentry import get_client as get_sentry_client
+from teuthology.timer import Timer
 
 log = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def run_tasks(tasks, ctx):
 
         if ctx.config.get('interactive-on-error'):
             ctx.config['interactive-on-error'] = False
-            from .task import interactive
+            from teuthology.task import interactive
             log.warning('Saw failure during task execution, going into interactive mode...')
             interactive.task(ctx=ctx, config=None)
         # Throughout teuthology, (x,) = y has been used to assign values
@@ -173,7 +173,7 @@ def run_tasks(tasks, ctx):
                         exc_info = sys.exc_info()
 
                     if ctx.config.get('interactive-on-error'):
-                        from .task import interactive
+                        from tuethology.task import interactive
                         log.warning(
                             'Saw failure during task cleanup, going into interactive mode...')
                         interactive.task(ctx=ctx, config=None)

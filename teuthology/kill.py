@@ -8,10 +8,10 @@ import tempfile
 import logging
 import getpass
 
-from . import beanstalk
-from . import report
-from .config import config
-from . import misc
+from teuthology import beanstalk
+from teuthology import report
+from teuthology.config import config
+from teuthology import misc
 
 log = logging.getLogger(__name__)
 

@@ -9,14 +9,14 @@ import yaml
 from datetime import datetime
 
 from teuthology import setup_log_file, install_except_hook
-from . import beanstalk
-from . import report
-from . import safepath
-from .config import config as teuth_config
-from .config import set_config_attr
-from .exceptions import BranchNotFoundError, SkipJob, MaxWhileTries
-from .kill import kill_job
-from .repo_utils import fetch_qa_suite, fetch_teuthology
+from teuthology import beanstalk
+from teuthology import report
+from teuthology import safepath
+from teuthology.config import config as teuth_config
+from teuthology.config import set_config_attr
+from teuthology.exceptions import BranchNotFoundError, SkipJob, MaxWhileTries
+from teuthology.kill import kill_job
+from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
 
 log = logging.getLogger(__name__)
 start_time = datetime.utcnow()

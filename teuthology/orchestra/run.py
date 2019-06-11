@@ -11,9 +11,9 @@ import pipes
 import logging
 import shutil
 
-from ..contextutil import safe_while
-from ..exceptions import (CommandCrashedError, CommandFailedError,
-                          ConnectionLostError)
+from teuthology.contextutil import safe_while
+from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
+                                   ConnectionLostError)
 
 log = logging.getLogger(__name__)
 

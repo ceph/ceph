@@ -5,9 +5,9 @@ import subprocess
 from mock import patch, Mock, MagicMock
 from datetime import datetime, timedelta
 
-from .. import worker
+from teuthology import worker
 
-from ..contextutil import MaxWhileTries
+from teuthology.contextutil import MaxWhileTries
 
 
 class TestWorker(object):

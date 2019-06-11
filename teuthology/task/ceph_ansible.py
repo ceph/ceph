@@ -6,10 +6,10 @@ import yaml
 
 from cStringIO import StringIO
 
-from . import Task
+from teuthology.task import Task
 from tempfile import NamedTemporaryFile
-from ..config import config as teuth_config
-from ..misc import get_scratch_devices
+from teuthology.config import config as teuth_config
+from teuthology.misc import get_scratch_devices
 from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology import misc

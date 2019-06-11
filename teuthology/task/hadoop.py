@@ -3,8 +3,8 @@ import contextlib
 import logging
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from ..orchestra import run
-from ..exceptions import UnsupportedPackageTypeError
+from teuthology.orchestra import run
+from teuthology.exceptions import UnsupportedPackageTypeError
 
 log = logging.getLogger(__name__)
 

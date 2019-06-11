@@ -1,4 +1,4 @@
-from .. import safepath
+from teuthology import safepath
 
 class TestSafepath(object):
     def test_simple(self):

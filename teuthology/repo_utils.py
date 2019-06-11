@@ -6,9 +6,9 @@ import subprocess
 import time
 
 from teuthology.util.flock import FileLock
-from .config import config
-from .contextutil import MaxWhileTries, safe_while
-from .exceptions import BootstrapError, BranchNotFoundError, GitError
+from teuthology.config import config
+from teuthology.contextutil import MaxWhileTries, safe_while
+from teuthology.exceptions import BootstrapError, BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
 

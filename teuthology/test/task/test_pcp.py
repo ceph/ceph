@@ -12,7 +12,7 @@ from teuthology.orchestra.run import Raw
 from teuthology.task.pcp import (PCPDataSource, PCPArchive, PCPGrapher,
                                  GrafanaGrapher, GraphiteGrapher, PCP)
 
-from . import TestTask
+from teuthology.test.task import TestTask
 
 pcp_host = 'http://pcp.front.sepia.ceph.com:44323/'
 

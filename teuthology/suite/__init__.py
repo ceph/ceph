@@ -9,12 +9,12 @@ import time
 from distutils.util import strtobool
 
 import teuthology
-from ..config import config, YamlConfig
-from ..report import ResultsReporter
-from ..results import UNFINISHED_STATUSES
+from teuthology.config import config, YamlConfig
+from teuthology.report import ResultsReporter
+from teuthology.results import UNFINISHED_STATUSES
 
-from .run import Run
-from .util import schedule_fail
+from teuthology.suite.run import Run
+from teuthology.suite.util import schedule_fail
 
 log = logging.getLogger(__name__)
 

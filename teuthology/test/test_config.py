@@ -1,6 +1,6 @@
 import pytest
 
-from .. import config
+from teuthology import config
 
 
 class TestYamlConfig(object):

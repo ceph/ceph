@@ -13,7 +13,7 @@ from teuthology.lock.ops import unlock_one
 from teuthology.lock.query import is_vm, list_locks, \
     find_stale_locks, get_status
 from teuthology.lock.util import locked_since_seconds
-from .actions import (
+from teuthology.nuke.actions import (
     check_console, clear_firewall, shutdown_daemons, remove_installed_packages,
     reboot, remove_osd_mounts, remove_osd_tmpfs, kill_hadoop,
     remove_ceph_packages, synch_clocks, unlock_firmware_repo,
@@ -21,15 +21,15 @@ from .actions import (
     remove_ceph_data, remove_testing_tree, remove_yum_timedhosts,
     kill_valgrind,
 )
-from ..config import config, FakeNamespace
-from ..misc import (
+from teuthology.config import config, FakeNamespace
+from teuthology.misc import (
     canonicalize_hostname, config_file, decanonicalize_hostname, merge_configs,
     get_user, sh
 )
-from ..openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
-from ..orchestra.remote import Remote
-from ..parallel import parallel
-from ..task.internal import check_lock, add_remotes, connect
+from teuthology.openstack import OpenStack, OpenStackInstance, enforce_json_dictionary
+from teuthology.orchestra.remote import Remote
+from teuthology.parallel import parallel
+from teuthology.task.internal import check_lock, add_remotes, connect
 
 log = logging.getLogger(__name__)
 

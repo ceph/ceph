@@ -6,9 +6,9 @@ import shutil
 import subprocess
 import tempfile
 
-from ..exceptions import BranchNotFoundError
-from .. import repo_utils
-from .. import parallel
+from teuthology.exceptions import BranchNotFoundError
+from teuthology import repo_utils
+from teuthology import parallel
 repo_utils.log.setLevel(logging.WARNING)
 
 

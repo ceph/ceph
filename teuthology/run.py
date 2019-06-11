@@ -7,15 +7,15 @@ import logging
 
 import teuthology
 from teuthology import install_except_hook
-from . import report
-from .job_status import get_status
-from .misc import get_user, merge_configs
-from .nuke import nuke
-from .run_tasks import run_tasks
-from .repo_utils import fetch_qa_suite
-from .results import email_results
-from .config import FakeNamespace
-from .config import config as teuth_config
+from teuthology import report
+from teuthology.job_status import get_status
+from teuthology.misc import get_user, merge_configs
+from teuthology.nuke import nuke
+from teuthology.run_tasks import run_tasks
+from teuthology.repo_utils import fetch_qa_suite
+from teuthology.results import email_results
+from teuthology.config import FakeNamespace
+from teuthology.config import config as teuth_config
 
 log = logging.getLogger(__name__)
 

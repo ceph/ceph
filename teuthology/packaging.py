@@ -8,15 +8,15 @@ import urlparse
 from collections import OrderedDict
 from cStringIO import StringIO
 
-from . import repo_utils
+from teuthology import repo_utils
 
-from .config import config
-from .contextutil import safe_while
-from .exceptions import (VersionNotFoundError, CommitNotFoundError,
+from teuthology.config import config
+from teuthology.contextutil import safe_while
+from teuthology.exceptions import (VersionNotFoundError, CommitNotFoundError,
                          NoRemoteError)
-from .misc import sudo_write_file
-from .orchestra.opsys import OS, DEFAULT_OS_VERSION
-from .orchestra.run import Raw
+from teuthology.misc import sudo_write_file
+from teuthology.orchestra.opsys import OS, DEFAULT_OS_VERSION
+from teuthology.orchestra.run import Raw
 
 log = logging.getLogger(__name__)
 

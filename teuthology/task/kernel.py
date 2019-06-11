@@ -12,13 +12,13 @@ import urlparse
 from teuthology import misc as teuthology
 from teuthology.parallel import parallel
 from teuthology.config import config as teuth_config
-from ..orchestra import run
-from ..exceptions import (
+from teuthology.orchestra import run
+from teuthology.exceptions import (
     UnsupportedPackageTypeError,
     ConfigError,
     VersionNotFoundError,
 )
-from ..packaging import (
+from teuthology.packaging import (
     install_package,
     get_koji_build_info,
     get_kojiroot_base_url,
