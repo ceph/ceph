@@ -89,6 +89,10 @@ which are as follows:
 :command:`bucket unlink`
   Unlink bucket from specified user.
 
+:command:`bucket chown`
+  Link bucket to specified user and update object ACLs. 
+  Use --marker to resume if command gets interrupted.
+
 :command:`bucket stats`
   Returns bucket statistics.
 
@@ -915,6 +919,10 @@ Rename a bucket::
 Move a bucket from the old global tenant space to a specified tenant::
 
         $ radosgw-admin bucket link --bucket=/foo --uid=12345678$12345678'
+
+Link bucket to specified user and change object ACLs::
+
+        $ radosgw-admin bucket chown --bucket=/foo --uid=12345678$12345678'
 
 Show the logs of a bucket from April 1st, 2012::
 
