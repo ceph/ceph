@@ -29,6 +29,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
+#include "services/svc_cls.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -937,7 +938,7 @@ public:
             string s = *sections_iter + ":" + *iter;
             int shard_id;
             RGWRados *store = sync_env->store;
-            int ret = store->svc.meta->get_mgr()->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            int ret = store->ctl.meta.mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
             if (ret < 0) {
               tn->log(0, SSTR("ERROR: could not determine shard id for " << *sections_iter << ":" << *iter));
               ret_status = ret;
@@ -1067,7 +1068,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->svc.meta->get_mgr()->put(raw_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    int ret = store->ctl.meta.mgr->put(raw_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1119,7 +1120,7 @@ class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   string raw_key;
 protected:
   int _send_request() override {
-    int ret = store->svc.meta->get_mgr()->remove(raw_key);
+    int ret = store->ctl.meta.mgr->remove(raw_key);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1932,7 +1933,7 @@ public:
           // get the mdlog for the current period (may be empty)
           auto& period_id = sync_status.sync_info.period;
           auto realm_epoch = sync_status.sync_info.realm_epoch;
-          auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
+          auto mdlog = sync_env->store->svc.mdlog->get_log(period_id);
 
           tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
 
@@ -2093,7 +2094,7 @@ static RGWPeriodHistory::Cursor get_period_at(RGWRados* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->period_puller->pull(info.period, period);
+  int r = store->svc.mdlog->pull_period(info.period, period);
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
@@ -2483,6 +2484,10 @@ using Cursor = RGWPeriodHistory::Cursor;
 
 /// purge mdlogs from the oldest up to (but not including) the given realm_epoch
 class PurgePeriodLogsCR : public RGWCoroutine {
+  struct Svc {
+    RGWSI_Zone *zone;
+    RGWSI_MDLog *mdlog;
+  } svc;
   RGWRados *const store;
   RGWMetadataManager *const metadata;
   RGWObjVersionTracker objv;
@@ -2492,9 +2497,11 @@ class PurgePeriodLogsCR : public RGWCoroutine {
 
  public:
   PurgePeriodLogsCR(RGWRados *store, epoch_t realm_epoch, epoch_t *last_trim)
-    : RGWCoroutine(store->ctx()), store(store), metadata(store->svc.meta->get_mgr()),
-      realm_epoch(realm_epoch), last_trim_epoch(last_trim)
-  {}
+    : RGWCoroutine(store->ctx()), store(store), metadata(store->ctl.meta.mgr),
+      realm_epoch(realm_epoch), last_trim_epoch(last_trim) {
+    svc.zone = store->svc.zone;
+    svc.mdlog = store->svc.mdlog
+  }
 
   int operate() override;
 };
@@ -2503,7 +2510,7 @@ int PurgePeriodLogsCR::operate()
 {
   reenter(this) {
     // read our current oldest log period
-    yield call(metadata->read_oldest_log_period_cr(&cursor, &objv));
+    yield call(svc.mdlog->read_oldest_log_period_cr(&cursor, &objv));
     if (retcode < 0) {
       return set_cr_error(retcode);
     }
@@ -2517,7 +2524,7 @@ int PurgePeriodLogsCR::operate()
           << " period=" << cursor.get_period().get_id() << dendl;
       yield {
         const auto mdlog = metadata->get_log(cursor.get_period().get_id());
-        const auto& pool = store->svc.zone->get_zone_params().log_pool;
+        const auto& pool = svc.zone->get_zone_params().log_pool;
         auto num_shards = cct->_conf->rgw_md_log_max_shards;
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
       }
@@ -2530,7 +2537,7 @@ int PurgePeriodLogsCR::operate()
           << " period=" << cursor.get_period().get_id() << dendl;
 
       // update our mdlog history
-      yield call(metadata->trim_log_period_cr(cursor, &objv));
+      yield call(svc.mdlog->trim_log_period_cr(cursor, &objv));
       if (retcode == -ENOENT) {
         // must have raced to update mdlog history. return success and allow the
         // winner to continue purging
@@ -2821,7 +2828,7 @@ int MetaMasterTrimCR::operate()
 
       // if realm_epoch == current, trim mdlog based on markers
       if (epoch == env.current.get_epoch()) {
-        auto mdlog = store->svc.meta->get_mgr()->get_log(env.current.get_period().get_id());
+        auto mdlog = store->svc.mdlog->get_log(env.current.get_period().get_id());
         spawn(new MetaMasterTrimShardCollectCR(env, mdlog, min_status), true);
       }
     }
@@ -2953,7 +2960,7 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
       env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
   {
     meta_env.init(env.dpp, cct, env.store, env.store->svc.zone->get_master_conn(),
-                  env.store->get_async_rados(), env.http, nullptr,
+                  env.store->svc.rados->get_async_processor(), env.http, nullptr,
                   env.store->get_sync_tracer());
   }
 
@@ -3016,8 +3023,7 @@ int MetaPeerTrimCR::operate()
     // if realm_epoch == current, trim mdlog based on master's markers
     if (mdlog_info.realm_epoch == env.current.get_epoch()) {
       yield {
-        auto meta_mgr = env.store->svc.meta->get_mgr();
-        auto mdlog = meta_mgr->get_log(env.current.get_period().get_id());
+        auto mdlog = env.store->svc.mdlog->get_log(env.current.get_period().get_id());
         call(new MetaPeerTrimShardCollectCR(env, mdlog));
         // ignore any errors during purge/trim because we want to hold the lock open
       }
@@ -3057,7 +3063,7 @@ int MetaTrimPollCR::operate()
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc.rados->get_async_processor(), store,
                                           obj, name, cookie, interval.sec()));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
@@ -3070,7 +3076,7 @@ int MetaTrimPollCR::operate()
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->get_async_rados(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc.rados->get_async_processor(), store,
                                               obj, name, cookie));
       }
     }

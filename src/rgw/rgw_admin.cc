@@ -6736,7 +6736,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->meta_mgr->put(metadata_key, bl, RGWMetadataHandler::RGWMetadataHandler::APPLY_ALWAYS);
+    ret = store->meta_mgr->put(metadata_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7634,7 +7634,7 @@ next:
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                       [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });
@@ -7669,7 +7669,7 @@ next:
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                       [&] {
       return store->svc.cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
     });
@@ -7812,7 +7812,7 @@ next:
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
-                                  MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                  MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                   [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });

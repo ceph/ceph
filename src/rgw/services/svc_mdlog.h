@@ -47,9 +47,6 @@ class RGWSI_MDLog : public RGWServiceInstance
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log{nullptr};
 
-  /// find or create the metadata log for the given period
-  RGWMetadataLog* get_log(const std::string& period);
-
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
@@ -105,5 +102,10 @@ public:
   RGWPeriodHistory *get_period_history() {
     return period_history.get();
   }
+
+  int pull_period(const std::string& period_id, RGWPeriod& period);
+
+  /// find or create the metadata log for the given period
+  RGWMetadataLog* get_log(const std::string& period);
 };
 

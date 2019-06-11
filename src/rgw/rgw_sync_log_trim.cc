@@ -475,7 +475,7 @@ int BucketTrimInstanceCR::operate()
         ++p;
       }
       // in parallel, read the local bucket instance info
-      spawn(new RGWGetBucketInstanceInfoCR(store->get_async_rados(), store,
+      spawn(new RGWGetBucketInstanceInfoCR(store->svc.rados->get_async_processor(), store,
                                            bucket, &bucket_info),
             false);
     }
@@ -792,7 +792,7 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->get_async_rados(), store->svc.sysobj, obj,
+      yield call(new ReadStatus(store->svc.rados->get_async_processor(), store->svc.sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
         ldout(cct, 10) << "failed to read bilog trim status: "
@@ -827,7 +827,8 @@ int BucketTrimCR::operate()
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->get_async_rados(), store->svc.meta->get_mgr(),
+        call(new MetadataListCR(cct, store->svc.rados->get_async_processor(),
+                                store->ctl.meta.mgr,
                                 section, status.marker, cb));
       }
       if (retcode < 0) {
@@ -850,7 +851,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->get_async_rados(), store->svc.sysobj, obj,
+      yield call(new WriteStatus(store->svc.rados->get_async_processor(), store->svc.sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to write updated trim status: "
@@ -912,7 +913,7 @@ int BucketTrimPollCR::operate()
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc.rados->get_async_processor(), store,
                                           obj, name, cookie,
                                           config.trim_interval_sec));
       if (retcode < 0) {
@@ -925,7 +926,7 @@ int BucketTrimPollCR::operate()
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->get_async_rados(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc.rados->get_async_processor(), store,
                                               obj, name, cookie));
       }
     }

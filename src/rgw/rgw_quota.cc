@@ -635,7 +635,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
     return r;
   }
 
-  r = store->ctl.user->sync_user_stats(user, bucket_info);
+  r = store->ctl.bucket->sync_user_stats(user, bucket_info);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;

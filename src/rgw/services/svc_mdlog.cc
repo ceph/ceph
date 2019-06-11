@@ -367,3 +367,9 @@ int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const 
   ceph_assert(current_log); // must have called init()
   return current_log->add_entry(hash_key, section, key, bl);
 }
+
+int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
+{
+  return period_puller->pull(period_id, period);
+}
+

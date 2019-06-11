@@ -77,40 +77,11 @@ public:
   const char* name() const override { return "remove_metadata"; }
 };
 
-class RGWOp_Metadata_Lock : public RGWRESTOp {
-public:
-  RGWOp_Metadata_Lock() {}
-  ~RGWOp_Metadata_Lock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("metadata", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "lock_metadata_object";
-  }
-};
-
-class RGWOp_Metadata_Unlock : public RGWRESTOp {
-public:
-  RGWOp_Metadata_Unlock() {}
-  ~RGWOp_Metadata_Unlock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("metadata", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "unlock_metadata_object";
-  }
-};
-
 class RGWHandler_Metadata : public RGWHandler_Auth_S3 {
 protected:
   RGWOp *op_get() override;
   RGWOp *op_put() override;
   RGWOp *op_delete() override;
-  RGWOp *op_post() override;
 
   int read_permissions(RGWOp*) override {
     return 0;

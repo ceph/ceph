@@ -827,6 +827,10 @@ public:
     ctl.bucket = bucket_ctl;
   }
 
+  RGWBucketCtl *get_bucket_ctl() {
+    return ctl.bucket;
+  }
+
   struct GetParams {
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time *mtime{nullptr};

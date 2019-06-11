@@ -109,6 +109,7 @@ struct RGWServices
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
+  RGWSI_BucketIndex_RADOS *bi_rados{nullptr};
   RGWSI_Cls *cls{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
