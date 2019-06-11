@@ -1980,7 +1980,8 @@ bool ECBackend::try_reads_to_commit()
       &trans,
       &(op->temp_added),
       &(op->temp_cleared),
-      get_parent()->get_dpp());
+      get_parent()->get_dpp(),
+      get_osdmap()->require_osd_release);
   }
 
   dout(20) << __func__ << ": " << cache << dendl;
