@@ -1,5 +1,6 @@
 
 #include "svc_bi_rados.h"
+#include "svc_bilog_rados.h"
 #include "svc_zone.h"
 
 #include "rgw/rgw_zone.h"
@@ -15,10 +16,12 @@ RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_Bucke
 }
 
 void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
-                                   RGWSI_RADOS *rados_svc)
+                                   RGWSI_RADOS *rados_svc,
+                                   RGWSI_BILog_RADOS *bilog_svc)
 {
   svc.zone = zone_svc;
   svc.rados = rados_svc;
+  svc.bilog = bilog_svc;
 }
 
 int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
@@ -368,6 +371,36 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
     }
 
     status->push_back(entry);
+  }
+
+  return 0;
+}
+
+int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
+                                              const RGWBucketInfo& orig_info)
+{
+  if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
+    int shards_num = info.num_shards? info.num_shards : 1;
+    int shard_id = info.num_shards? 0 : -1;
+
+    int ret;
+    if (!info.datasync_flag_enabled()) {
+      ret = svc.bilog->log_stop(info, -1);
+    } else {
+      ret = svc.bilog->log_start(info, -1);
+    }
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed writing bilog (bucket=" << info.bucket << "); ret=" << ret << dendl;
+      return ret;
+    }
+
+    for (int i = 0; i < shards_num; ++i, ++shard_id) {
+      ret = store->data_log->add_entry(info.bucket, shard_id);
+      if (ret < 0) {
+        lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
+        return ret;
+      }
+    }
   }
 
   return 0;

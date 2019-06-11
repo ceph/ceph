@@ -7757,55 +7757,6 @@ int RGWRados::list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   return 0;
 }
 
-int RGWRados::trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& start_marker, string& end_marker)
-{
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-
-  BucketIndexShardsManager start_marker_mgr;
-  BucketIndexShardsManager end_marker_mgr;
-
-  int r = open_bucket_index(bucket_info, index_ctx, bucket_objs, shard_id);
-  if (r < 0) {
-    return r;
-  }
-
-  r = start_marker_mgr.from_string(start_marker, shard_id);
-  if (r < 0) {
-    return r;
-  }
-
-  r = end_marker_mgr.from_string(end_marker, shard_id);
-  if (r < 0) {
-    return r;
-  }
-
-  return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
-			      cct->_conf->rgw_bucket_index_max_aio)();
-}
-
-int RGWRados::resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
-{
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-  int r = open_bucket_index(bucket_info, index_ctx, bucket_objs, shard_id);
-  if (r < 0)
-    return r;
-
-  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
-}
-
-int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
-{
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-  int r = open_bucket_index(bucket_info, index_ctx, bucket_objs, shard_id);
-  if (r < 0)
-    return r;
-
-  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
-}
-
 int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                               rgw_bucket_dir_entry *dirent)
 {

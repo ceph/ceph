@@ -25,6 +25,8 @@
 
 struct rgw_bucket_dir_header;
 
+class RGWSI_BILog_RADOS;
+
 #define RGW_NO_SHARD -1
 
 #define RGW_SHARDS_PRIME_0 7877
@@ -32,6 +34,8 @@ struct rgw_bucket_dir_header;
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
+  friend class RGWSI_BILog_RADOS;
+
   int open_pool(const rgw_pool& pool,
                 RGWSI_RADOS::Pool *index_pool);
 
@@ -77,12 +81,14 @@ public:
   struct Svc {
     RGWSI_Zone *zone{nullptr};
     RGWSI_RADOS *rados{nullptr};
+    RGWSI_BILog_RADOS *bilog{nullptr};
   } svc;
 
   RGWSI_BucketIndex_RADOS(CephContext *cct);
 
   void init(RGWSI_Zone *zone_svc,
-            RGWSI_RADOS *rados_svc);
+            RGWSI_RADOS *rados_svc,
+            RGWSI_BILog_RADOS *bilog_svc);
 
   static int shards_max() {
     return RGW_SHARDS_PRIME_1;
@@ -107,6 +113,9 @@ public:
 
   int get_reshard_status(const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);
+
+  int handle_overwrite(const RGWBucketInfo& info,
+                       const RGWBucketInfo& orig_info);
 };
 
 

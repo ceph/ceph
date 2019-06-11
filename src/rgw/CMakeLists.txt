@@ -41,6 +41,7 @@ endfunction()
 set(librgw_common_srcs
   services/svc_finisher.cc
   services/svc_bi_rados.cc
+  services/svc_bilog_rados.cc
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
   services/svc_cls.cc
