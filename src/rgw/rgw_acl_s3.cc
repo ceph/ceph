@@ -34,6 +34,8 @@ void ACLPermission_S3::to_xml(ostream& out)
       out << "<Permission>READ_ACP</Permission>";
     if (flags & RGW_PERM_WRITE_ACP)
       out << "<Permission>WRITE_ACP</Permission>";
+    if (flags & RGW_PERM_OBJ_DEFAULT)
+      out << "<Permission>DEFAULT</Permission>";
   }
 }
 
@@ -55,6 +57,9 @@ xml_end(const char *el)
     return true;
   } else if (strcasecmp(s, "FULL_CONTROL") == 0) {
     flags |= RGW_PERM_FULL_CONTROL;
+    return true;
+  } else if (strcasecmp(s, "DEFAULT") == 0) {
+    flags |= RGW_PERM_OBJ_DEFAULT;
     return true;
   }
   return false;
@@ -370,7 +375,7 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
   owner_grant.set_canon(owner.get_id(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
   add_grant(&owner_grant);
 
-  if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
+  if (canned_acl.compare("private") == 0) {
     return 0;
   }
 
@@ -395,6 +400,9 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
     bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
     if (bid.compare(owner.get_id()) != 0)
       add_grant(&bucket_owner_grant);
+  }else if (canned_acl.size() == 0 || canned_acl.compare("default") == 0){
+    group_grant.set_group(ACL_GROUP_ALL_USERS,RGW_PERM_OBJ_DEFAULT);
+    add_grant(&group_grant);
   } else {
     return -EINVAL;
   }

@@ -122,6 +122,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
     { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSetError"}},
+    { ERR_SET_BUCKET_ACL_DEFAULT,{400, "acl of bucket can not setted as default"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -1341,7 +1342,13 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct req_state * 
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->auth.identity, s->perm_mask, perm);
+  bool ret = false; 
+  uint32_t obj_perm = object_acl->get_perm(dpp,*s->auth.identity, s->perm_mask|RGW_PERM_OBJ_DEFAULT,nullptr);
+  if (obj_perm & RGW_PERM_OBJ_DEFAULT){
+      ret = bucket_acl->verify_permission(dpp,*s->auth.identity, s->perm_mask, perm);
+  }else{
+      ret = object_acl->verify_permission(dpp,*s->auth.identity, s->perm_mask, perm);
+  }
   if (ret) {
     return true;
   }
@@ -1389,7 +1396,13 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return false;
   }
 
-  bool ret = object_acl->verify_permission(dpp, *s->auth.identity, s->perm_mask, perm);
+  bool ret = false;
+  uint32_t obj_perm = object_acl->get_perm(dpp,*s->auth.identity, s->perm_mask,nullptr);
+  if (obj_perm & RGW_PERM_OBJ_DEFAULT){
+      ret = bucket_acl->verify_permission(dpp,*s->auth.identity, s->perm_mask|RGW_PERM_OBJ_DEFAULT, perm);
+  }else{
+      ret = object_acl->verify_permission(dpp,*s->auth.identity, s->perm_mask, perm);
+  }
   if (ret) {
     return true;
   }

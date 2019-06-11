@@ -22,9 +22,10 @@
 #define RGW_PERM_WRITE_ACP       0x08
 #define RGW_PERM_READ_OBJS       0x10
 #define RGW_PERM_WRITE_OBJS      0x20
+#define RGW_PERM_OBJ_DEFAULT     0x40
 #define RGW_PERM_FULL_CONTROL    ( RGW_PERM_READ | RGW_PERM_WRITE | \
                                   RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP )
-#define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
+#define RGW_PERM_ALL_S3          (RGW_PERM_FULL_CONTROL | RGW_PERM_OBJ_DEFAULT)
 #define RGW_PERM_INVALID         0xFF00
 
 static constexpr char RGW_REFERER_WILDCARD[] = "*";

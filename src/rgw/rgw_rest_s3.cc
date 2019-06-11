@@ -1311,6 +1311,12 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
+  if (s->canned_acl.empty()){
+      s->canned_acl = "private";
+  }else if(s->canned_acl.compare("default") == 0){
+      return -ERR_SET_BUCKET_ACL_DEFAULT;
+  }  
+
   int r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
     return r;
@@ -2409,6 +2415,15 @@ int RGWPutACLs_ObjStore_S3::get_params()
     if (ret_auth < 0) {
       return ret_auth;
     }
+
+    if ( s->object.empty()){
+        if (s->canned_acl.empty()){
+          s->canned_acl = "private";
+        }else if(s->canned_acl.compare("default") == 0){
+          ret = -ERR_SET_BUCKET_ACL_DEFAULT;
+        }
+    }
+    
   }
   return ret;
 }
