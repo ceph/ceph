@@ -2827,6 +2827,47 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
   return 0;
 }
 
+int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
+                                   RGWBucketInfo *info,
+                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
+{
+  const rgw_bucket *b = &bucket;
+
+  std::optional<RGWBucketEntryPoint> ep;
+
+  if (b->bucket_id.empty()) {
+    ep.emplace();
+
+    int r = read_bucket_entrypoint_info(*b, &(*ep), nullopt);
+    if (r < 0) {
+      return r;
+    }
+
+    b = &ep->bucket;
+  }
+
+  auto& params = *_params;
+  int ret = bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
+    return svc.bucket->read_bucket_instance_info(ctx,
+                                                 RGWSI_Bucket::get_bi_meta_key(*b),
+                                                 info,
+                                                 params.mtime,
+                                                 params.attrs,
+                                                 params.cache_info,
+                                                 params.refresh_version);
+  });
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (params.objv_tracker) {
+    *params.objv_tracker = info->objv_tracker;
+  }
+
+  return 0;
+}
+
 int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,

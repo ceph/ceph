@@ -758,6 +758,15 @@ public:
                                   RGWBucketInfo& info,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params = std::nullopt);
 
+  /*
+   * bucket_id may or may not be provided
+   */
+  int read_bucket_info(const rgw_bucket& bucket,
+                       RGWBucketInfo *info,
+                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params);
+
+
+
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker);
