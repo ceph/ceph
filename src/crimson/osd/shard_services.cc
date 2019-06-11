@@ -36,7 +36,8 @@ ShardServices::ShardServices(
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
-      store(store) {
+      store(store)
+{
   perf = build_osd_logger(&cct);
   cct.get_perfcounters_collection()->add(perf);
 
@@ -67,7 +68,7 @@ seastar::future<> ShardServices::dispatch_context_transaction(
 }
 
 seastar::future<> ShardServices::dispatch_context_messages(
-  PeeringCtx &ctx)
+  BufferedRecoveryMessages &&ctx)
 {
   auto ret = seastar::when_all_succeed(
     seastar::parallel_for_each(std::move(ctx.notify_list),
@@ -105,13 +106,9 @@ seastar::future<> ShardServices::dispatch_context(
   PeeringCtx &&ctx)
 {
   ceph_assert(col || ctx.transaction.empty());
-  return seastar::do_with(
-    PeeringCtx{ctx},
-    [this, col](auto& todo) {
-      return seastar::when_all_succeed(
-	dispatch_context_messages(todo),
-	col ? dispatch_context_transaction(col, todo) : seastar::now());
-    });
+  return seastar::when_all_succeed(
+    dispatch_context_messages(BufferedRecoveryMessages(ctx)),
+    col ? dispatch_context_transaction(col, ctx) : seastar::now());
 }
 
 void ShardServices::queue_want_pg_temp(pg_t pgid,
@@ -190,6 +187,16 @@ void ShardServices::send_pg_temp()
   _sent_pg_temp();
 }
 
+void ShardServices::update_map(cached_map_t new_osdmap)
+{
+  osdmap = std::move(new_osdmap);
+}
+
+ShardServices::cached_map_t &ShardServices::get_osdmap()
+{
+  return osdmap;
+}
+
 seastar::future<> ShardServices::send_pg_created(pg_t pgid)
 {
   logger().debug(__func__);
@@ -224,6 +231,17 @@ void ShardServices::prune_pg_created()
       logger().debug(" keeping {}", __func__, *i);
       ++i;
     }
+  }
+}
+
+seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_request)
+{
+  logger().info("{}({})", __func__, epoch);
+  if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
+      force_request) {
+    return monc.renew_subs();
+  } else {
+    return seastar::now();
   }
 }
 
