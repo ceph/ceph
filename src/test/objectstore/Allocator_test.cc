@@ -321,9 +321,9 @@ TEST_P(AllocTest, test_alloc_bug_24598)
 
   EXPECT_EQ(static_cast<int64_t>(want_size),
 	    alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+  EXPECT_EQ(1u, tmp.size());
   EXPECT_EQ(0x4b00000u, tmp[0].offset);
   EXPECT_EQ(0x200000u, tmp[0].length);
-  EXPECT_EQ(1u, tmp.size());
 }
 
 INSTANTIATE_TEST_SUITE_P(
