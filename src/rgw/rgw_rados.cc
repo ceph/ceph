@@ -2473,12 +2473,12 @@ int RGWRados::Bucket::List::list_objects_ordered(
   string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
+    after_delim_s = after_delim(params.delim);
     /* if marker points at a common prefix, fast forward it into its
      * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
-      after_delim_s = after_delim(params.delim);
       s.append(after_delim_s);
       cur_marker = s;
     }
