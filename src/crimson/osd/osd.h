@@ -33,7 +33,6 @@ class MOSDMap;
 class MOSDOp;
 class OSDMap;
 class OSDMeta;
-class PG;
 class Heartbeat;
 
 namespace ceph::mon {
@@ -50,6 +49,8 @@ namespace ceph::os {
   class Transaction;
 }
 
+namespace ceph::osd {
+class PG;
 
 class OSD : public ceph::net::Dispatcher,
 	    private OSDMapService,
@@ -254,3 +255,5 @@ private:
   seastar::future<> send_beacon();
   void update_heartbeat_peers();
 };
+
+}

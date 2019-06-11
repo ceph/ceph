@@ -47,6 +47,8 @@ namespace {
 using ceph::common::local_conf;
 using ceph::os::FuturizedStore;
 
+namespace ceph::osd {
+
 OSD::OSD(int id, uint32_t nonce,
          ceph::net::Messenger& cluster_msgr,
          ceph::net::Messenger& public_msgr,
@@ -1204,4 +1206,6 @@ seastar::future<> OSD::advance_pg_to(Ref<PG> pg, epoch_t to)
 	      std::move(rctx)));
 	});
     });
+}
+
 }
