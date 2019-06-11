@@ -3819,7 +3819,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 
 void OSDMonitor::get_removed_snaps_range(
   epoch_t start, epoch_t end,
-  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
+  mempool::osdmap::map<int64_t,snap_interval_set_t> *gap_removed_snaps)
 {
   // we only care about pools that exist now.
   for (auto& p : osdmap.get_pools()) {
@@ -3830,7 +3830,7 @@ void OSDMonitor::get_removed_snaps_range(
       mon->store->get(OSD_SNAP_PREFIX, k, v);
       if (v.length()) {
 	auto q = v.cbegin();
-	OSDMap::snap_interval_set_t snaps;
+	snap_interval_set_t snaps;
 	decode(snaps, q);
 	t.union_of(snaps);
       }
@@ -6251,7 +6251,7 @@ bool OSDMonitor::try_prune_purged_snaps()
       continue;
     }
     dout(20) << __func__ << " pool " << p.first << " purged " << purged << dendl;
-    OSDMap::snap_interval_set_t to_prune;
+    snap_interval_set_t to_prune;
     unsigned maybe_pruned = actually_pruned;
     for (auto i = purged.begin(); i != purged.end(); ++i) {
       snapid_t begin = i.get_start();
@@ -6282,7 +6282,7 @@ bool OSDMonitor::try_prune_purged_snaps()
     if (!to_prune.empty()) {
       // PGs may still be reporting things as purged that we have already
       // pruned from removed_snaps_queue.
-      OSDMap::snap_interval_set_t actual;
+      snap_interval_set_t actual;
       auto r = osdmap.removed_snaps_queue.find(p.first);
       if (r != osdmap.removed_snaps_queue.end()) {
 	actual.intersection_of(to_prune, r->second);
