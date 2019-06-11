@@ -649,27 +649,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
 int RGWBucketReshard::get_status(list<cls_rgw_bucket_instance_entry> *status)
 {
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-
-  int r = store->open_bucket_index(bucket_info, index_ctx, bucket_objs);
-  if (r < 0) {
-    return r;
-  }
-
-  for (auto i : bucket_objs) {
-    cls_rgw_bucket_instance_entry entry;
-
-    int ret = cls_rgw_get_bucket_resharding(index_ctx, i.second, &entry);
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: " << __func__ << ": cls_rgw_get_bucket_resharding() returned ret=" << ret << dendl;
-      return ret;
-    }
-
-    status->push_back(entry);
-  }
-
-  return 0;
+  return store->svc.bi_rados->get_reshard_status(bucket_info, status);
 }
 
 
@@ -760,9 +740,9 @@ error_out:
       "RGWRados::clean_bucket_index returned " << ret2 << dendl;
   }
 
-  ret2 = rgw_bucket_instance_remove_entry(store->svc.meta,
-					  new_bucket_info.bucket.get_key(),
-					  nullptr);
+  ret2 = store->ctl.bucket->remove_bucket_instance_info(new_bucket_info.bucket,
+                                                        new_bucket_info,
+                                                        std::nullopt);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean bucket info object \"" <<

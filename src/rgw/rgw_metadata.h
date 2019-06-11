@@ -14,7 +14,6 @@
 #include "rgw_mdlog_types.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
-#include "common/RWLock.h"
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 
