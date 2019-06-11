@@ -9009,7 +9009,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     // verify snap hasn't been deleted
     vector<snapid_t>::iterator p = cop->results.snaps.begin();
     while (p != cop->results.snaps.end()) {
-      if (pool.info.is_removed_snap(*p)) {
+      // make best effort to sanitize snaps/clones.
+      if (get_osdmap()->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
 	dout(10) << __func__ << " clone snap " << *p << " has been deleted"
 		 << dendl;
 	for (vector<snapid_t>::iterator q = p + 1;
