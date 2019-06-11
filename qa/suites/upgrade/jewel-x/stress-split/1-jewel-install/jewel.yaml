@@ -3,7 +3,7 @@ meta:
 tasks:
 - install:
     branch: jewel
-    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-cephfs','python34-rados','python34-rbd','python34-rgw','python34-ceph-argparse','python3-cephfs','python3-rados']
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python36-cephfs','python36-rados','python36-rbd','python36-rgw','python36-ceph-argparse','python3-cephfs','python3-rados']
 - print: "**** done install jewel"
 - ceph:
     skip_mgr_daemons: true

@@ -50,7 +50,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
-
+%{!?python3_version: %global python3_version 3}
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
 
@@ -513,6 +513,7 @@ Group:		Development/Languages/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Provides: 	python3-rgw = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rgw
 This package contains Python 3 libraries for interacting with Cephs RADOS
 gateway.
@@ -535,6 +536,7 @@ Group:		Development/Languages/Python
 %endif
 Requires:	python%{python3_pkgversion}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-rados = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -615,6 +617,7 @@ Group:		Development/Languages/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-rbd = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rbd
 This package contains Python 3 libraries for interacting with Cephs RADOS
 block device.
@@ -670,6 +673,7 @@ Group:		Development/Languages/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
+Provides:	python3-cephfs = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-cephfs
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
@@ -679,6 +683,7 @@ Summary:	Python 3 utility libraries for Ceph CLI
 %if 0%{?suse_version}
 Group:		Development/Languages/Python
 %endif
+Provides:   python3-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-ceph-argparse
 This package contains types and routines for Python 3 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
@@ -833,7 +838,7 @@ cmake .. \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_MANPAGE=ON \
-    -DWITH_PYTHON3=ON \
+    -DWITH_PYTHON3=%{python3_version} \
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
