@@ -9456,18 +9456,25 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 
   if (r != -ENOENT && soid.is_snap()) {
     if (results->snaps.empty()) {
-      // we must have read "snap" content from the head object in
-      // the base pool.  use snap_seq to construct what snaps should
-      // be for this clone (what is was before we evicted the clean
-      // clone from this pool, and what it will be when we flush and
-      // the clone eventually happens in the base pool).
+      // we must have read "snap" content from the head object in the
+      // base pool.  use snap_seq to construct what snaps should be
+      // for this clone (what is was before we evicted the clean clone
+      // from this pool, and what it will be when we flush and the
+      // clone eventually happens in the base pool).  we want to use
+      // snaps in (results->snap_seq,soid.snap]
       SnapSet& snapset = obc->ssc->snapset;
-      vector<snapid_t>::iterator p = snapset.snaps.begin();
-      while (p != snapset.snaps.end() && *p > soid.snap)
-	++p;
-      while (p != snapset.snaps.end() && *p > results->snap_seq) {
-	results->snaps.push_back(*p);
-	++p;
+      for (auto p = snapset.clone_snaps.rbegin();
+	   p != snapset.clone_snaps.rend();
+	   ++p) {
+	for (auto snap : p->second) {
+	  if (snap > soid.snap) {
+	    continue;
+	  }
+	  if (snap <= results->snap_seq) {
+	    break;
+	  }
+	  results->snaps.push_back(snap);
+	}
       }
     }
 
