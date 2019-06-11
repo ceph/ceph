@@ -40,6 +40,8 @@ namespace {
   }
 }
 
+namespace ceph::osd {
+
 using ceph::common::local_conf;
 
 class RecoverablePredicate : public IsPGRecoverablePredicate {
@@ -64,7 +66,7 @@ PG::PG(
   pg_pool_t&& pool,
   std::string&& name,
   cached_map_t osdmap,
-  ceph::osd::ShardServices &shard_services,
+  ShardServices &shard_services,
   ec_profile_t profile)
   : pgid{pgid},
     pg_whoami{pg_shard},
@@ -405,4 +407,6 @@ seastar::future<> PG::handle_op(ceph::net::Connection* conn,
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
+}
+
 }

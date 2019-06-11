@@ -421,7 +421,7 @@ private:
 					     uint64_t limit);
 
 private:
-  ceph::osd::ShardServices &shard_services;
+  ShardServices &shard_services;
 
   cached_map_t osdmap;
   std::unique_ptr<PGBackend> backend;
