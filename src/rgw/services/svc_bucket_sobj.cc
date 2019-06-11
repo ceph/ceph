@@ -491,9 +491,9 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   if (orig_info && *orig_info && !exclusive) {
-    int r = handle_bucket_overwrite(ctx, key, info, *(orig_info.value()));
+    int r = svc.bi->handle_overwrite(info, *(orig_info.value()));
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: " << __func__ << "(): handle_bucket_overwrite() of key=" << key << " returned r=" << r << dendl;
+      ldout(cct, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
       return r;
     }
   }
@@ -518,38 +518,6 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   }
 
   return ret;
-}
-
-int RGWSI_Bucket_SObj::handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
-                                               const string& key,
-                                               const RGWBucketInfo& info,
-                                               const RGWBucketInfo& orig_info)
-{
-  if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
-    int shards_num = info.num_shards? info.num_shards : 1;
-    int shard_id = info.num_shards? 0 : -1;
-
-    int ret;
-    if (!info.datasync_flag_enabled()) {
-      ret = store->stop_bi_log_entries(info, -1);
-    } else {
-      ret = store->resync_bi_log_entries(info, -1);
-    }
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed writing bilog (key=" << key << "); ret=" << ret << dendl;
-      return ret;
-    }
-
-    for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = store->data_log->add_entry(info.bucket, shard_id);
-      if (ret < 0) {
-        lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
-        return ret;
-      }
-    }
-  }
-
-  return 0;
 }
 
 int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,

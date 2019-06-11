@@ -64,10 +64,6 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
                         RGWBucketEnt *ent,
                         optional_yield y);
 
-  int handle_bucket_overwrite(RGWSI_Bucket_BI_Ctx& ctx,
-                              const string& key,
-                              const RGWBucketInfo& info,
-                              const RGWBucketInfo& orig_info);
 public:
   struct Svc {
     RGWSI_Bucket_SObj *bucket{nullptr};

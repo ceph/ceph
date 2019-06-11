@@ -47,6 +47,7 @@ int RGWServices_Def::init(CephContext *cct,
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
+  bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct);
   meta = std::make_unique<RGWSI_Meta>(cct);
@@ -70,7 +71,8 @@ int RGWServices_Def::init(CephContext *cct,
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
   finisher->init();
-  bi_rados->init(zone.get(), rados.get());
+  bi_rados->init(zone.get(), rados.get(), bilog_rados.get());
+  bilog_rados->init(bi_rados.get());
   bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                bi_rados.get(), meta.get(), meta_be_sobj.get(),
                sync_modules.get());
@@ -249,6 +251,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   finisher = _svc.finisher.get();
   bi_rados = _svc.bi_rados.get();
   bi = bi_rados;
+  bilog_rados = _svc.bilog_rados.get();
   bucket_sobj = _svc.bucket_sobj.get();
   bucket = _svc.bucket.get();
   cls = _svc.cls.get();
