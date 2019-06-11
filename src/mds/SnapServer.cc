@@ -320,6 +320,9 @@ void SnapServer::check_osd_map(bool force)
   map<int32_t, vector<snapid_t> > all_purge;
   map<int32_t, vector<snapid_t> > all_purged;
 
+  // NOTE: this is only needed for support during upgrades from pre-octopus,
+  // since starting with octopus we now get an explicit ack after we remove a
+  // snap.
   mds->objecter->with_osdmap(
     [this, &all_purged, &all_purge](const OSDMap& osdmap) {
       for (const auto& p : need_to_purge) {
