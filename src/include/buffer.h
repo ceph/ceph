@@ -73,11 +73,6 @@ class packet;
 }
 #endif // HAVE_SEASTAR
 class deleter;
-template<uint8_t S>
-struct sha_digest_t;
-using sha1_digest_t = sha_digest_t<20>;
-using sha256_digest_t = sha_digest_t<32>;
-using sha512_digest_t = sha_digest_t<64>;
 
 template<typename T> class DencDumper;
 
@@ -1232,9 +1227,6 @@ inline namespace v14_2_0 {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
-    sha1_digest_t sha1();
-    sha256_digest_t sha256();
-    sha512_digest_t sha512();
 
     // These functions return a bufferlist with a pointer to a single
     // static buffer. They /must/ not outlive the memory they
