@@ -17,26 +17,30 @@
 
 #######################################################################
 
+function distro_id() {
+    source /etc/os-release
+    echo $ID
+}
+
 function install() {
     for package in "$@" ; do
         install_one $package
     done
-    return 0
 }
 
 function install_one() {
-    case $(lsb_release -si) in
-        Ubuntu|Debian|Devuan)
-            sudo apt-get install -y "$@"
+    case $(distro_id) in
+        ubuntu|debian|devuan)
+            sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"
             ;;
-        CentOS|Fedora|RedHatEnterpriseServer)
+        centos|fedora|rhel)
             sudo yum install -y "$@"
             ;;
-        *SUSE*)
+        opensuse*|suse|sles)
             sudo zypper --non-interactive install "$@"
             ;;
         *)
-            echo "$(lsb_release -si) is unknown, $@ will have to be installed manually."
+            echo "$(distro_id) is unknown, $@ will have to be installed manually."
             ;;
     esac
 }
