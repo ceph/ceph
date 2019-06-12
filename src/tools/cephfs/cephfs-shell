@@ -1007,13 +1007,11 @@ sub-directories, files')
         """
         Moves into the given local directory
         """
-
-        path = os.path.expanduser(args.path)
-        if os.path.isdir(path):
-            os.chdir(path)
-            # self.poutput(get_all_possible_paths(args.path))
-        else:
-            self.poutput("%s: no such directory" % path)
+        try:
+            os.chdir(os.path.expanduser(args.path))
+        except OSError as e:
+            self.perror("Cannot change to {}: {}".format(e.filename,
+                        e.strerror), False)
 
     def complete_lls(self, text, line, begidx, endidx):
         """
