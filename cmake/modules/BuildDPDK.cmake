@@ -111,6 +111,7 @@ function(build_dpdk dpdk_dir)
 
   foreach(c
       bus_pci
+      cmdline
       eal
       ethdev
       kvargs
