@@ -13,6 +13,8 @@
 
 #include "rgw_common.h"
 
+class RGWSI_SysObj;
+
 class RGWRados;
 class RGWSysObjectCtx;
 struct RGWObjVersionTracker;
@@ -58,7 +60,7 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
-int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker);
 
 const char *rgw_find_mime_by_ext(string& ext);

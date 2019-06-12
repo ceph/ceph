@@ -2500,7 +2500,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
     : RGWCoroutine(store->ctx()), store(store), metadata(store->ctl.meta.mgr),
       realm_epoch(realm_epoch), last_trim_epoch(last_trim) {
     svc.zone = store->svc.zone;
-    svc.mdlog = store->svc.mdlog
+    svc.mdlog = store->svc.mdlog;
   }
 
   int operate() override;

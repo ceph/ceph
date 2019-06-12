@@ -39,7 +39,7 @@ class TempURLEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  /* const */ RGWUserCtl* const user_ctl;
+  /* const */ RGWCtl* const ctl;
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
@@ -55,10 +55,10 @@ class TempURLEngine : public rgw::auth::Engine {
 
 public:
   TempURLEngine(CephContext* const cct,
-                /*const*/ RGWUserCtl* const user_ctl,
+                /*const*/ RGWCtl* const ctl,
                 const TempURLApplier::Factory* const apl_factory)
     : cct(cct),
-      user_ctl(user_ctl),
+      ctl(ctl),
       apl_factory(apl_factory) {
   }
 
@@ -76,7 +76,7 @@ class SignedTokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  RGWUserCtl* const user_ctl;
+  RGWCtl* const ctl;
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
@@ -87,11 +87,11 @@ class SignedTokenEngine : public rgw::auth::Engine {
 
 public:
   SignedTokenEngine(CephContext* const cct,
-                    /* const */RGWUserCtl* const user_ctl,
+                    /* const */RGWCtl* const ctl,
                     const rgw::auth::TokenExtractor* const extractor,
                     const rgw::auth::LocalApplier::Factory* const apl_factory)
     : cct(cct),
-      user_ctl(user_ctl),
+      ctl(ctl),
       extractor(extractor),
       apl_factory(apl_factory) {
   }
@@ -111,7 +111,7 @@ class ExternalTokenEngine : public rgw::auth::Engine {
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
-  RGWUserCtl* const user_ctl;
+  RGWCtl* const ctl;
   const rgw::auth::TokenExtractor* const extractor;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
@@ -122,11 +122,11 @@ class ExternalTokenEngine : public rgw::auth::Engine {
 
 public:
   ExternalTokenEngine(CephContext* const cct,
-                      /* const */RGWUserCtl* const user_ctl,
+                      /* const */RGWCtl* const ctl,
                       const rgw::auth::TokenExtractor* const extractor,
                       const rgw::auth::LocalApplier::Factory* const apl_factory)
     : cct(cct),
-      user_ctl(user_ctl),
+      ctl(ctl),
       extractor(extractor),
       apl_factory(apl_factory) {
   }
@@ -167,7 +167,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::RemoteApplier::Factory,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::swift::TempURLApplier::Factory {
-  RGWUserCtl* const user_ctl;
+  RGWCtl* const ctl;
 
   /* The engines. */
   const rgw::auth::swift::TempURLEngine tempurl_engine;
@@ -193,9 +193,9 @@ class DefaultStrategy : public rgw::auth::Strategy,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo &info) const override {
     auto apl = \
-      rgw::auth::add_3rdparty(user_ctl, s->account_name,
-        rgw::auth::add_sysreq(cct, user_ctl, s,
-          rgw::auth::RemoteApplier(cct, user_ctl, std::move(extra_acl_strategy), info,
+      rgw::auth::add_3rdparty(ctl, s->account_name,
+        rgw::auth::add_sysreq(cct, ctl, s,
+          rgw::auth::RemoteApplier(cct, ctl, std::move(extra_acl_strategy), info,
                                    cct->_conf->rgw_keystone_implicit_tenants)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -207,8 +207,8 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = \
-      rgw::auth::add_3rdparty(user_ctl, s->account_name,
-        rgw::auth::add_sysreq(cct, user_ctl, s,
+      rgw::auth::add_3rdparty(ctl, s->account_name,
+        rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -225,17 +225,17 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
 public:
   DefaultStrategy(CephContext* const cct,
-                  RGWUserCtl* const user_ctl)
-    : user_ctl(user_ctl),
+                  RGWCtl* const ctl)
+    : ctl(ctl),
       tempurl_engine(cct,
-                     user_ctl,
+                     ctl,
                      static_cast<rgw::auth::swift::TempURLApplier::Factory*>(this)),
       signed_engine(cct,
-                    user_ctl,
+                    ctl,
                     static_cast<rgw::auth::TokenExtractor*>(this),
                     static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       external_engine(cct,
-                      user_ctl,
+                      ctl,
                       static_cast<rgw::auth::TokenExtractor*>(this),
                       static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       anon_engine(cct,
@@ -292,7 +292,7 @@ public:
   ~RGWHandler_SWIFT_Auth() override {}
   RGWOp *op_get() override;
 
-  int init(RGWUserCtl *user_ctl, struct req_state *state, rgw::io::BasicClient *cio) override;
+  int init(RGWRados *store, struct req_state *state, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override { return 0; }
   int read_permissions(RGWOp *op) override { return 0; }

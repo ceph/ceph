@@ -824,7 +824,7 @@ class LDAPEngine : public AWSEngine {
   using result_t = rgw::auth::Engine::result_t;
 
 protected:
-  RGWRados* const store;
+  RGWCtl* const ctl;
   const rgw::auth::RemoteApplier::Factory* const apl_factory;
 
   acl_strategy_t get_acl_strategy() const;
@@ -840,11 +840,11 @@ protected:
                         const req_state* s) const override;
 public:
   LDAPEngine(CephContext* const cct,
-             RGWRados* const store,
+             RGWCtl* const ctl,
              const VersionAbstractor& ver_abstractor,
              const rgw::auth::RemoteApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      ctl(ctl),
       apl_factory(apl_factory) {
     init(cct);
   }
@@ -860,7 +860,7 @@ public:
 };
 
 class LocalEngine : public AWSEngine {
-  RGWRados* const store;
+  RGWCtl* const ctl;
   const rgw::auth::LocalApplier::Factory* const apl_factory;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
@@ -873,11 +873,11 @@ class LocalEngine : public AWSEngine {
                         const req_state* s) const override;
 public:
   LocalEngine(CephContext* const cct,
-              RGWRados* const store,
+              RGWCtl* const ctl,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      ctl(ctl),
       apl_factory(apl_factory) {
   }
 
@@ -889,7 +889,7 @@ public:
 };
 
 class STSEngine : public AWSEngine {
-  RGWRados* const store;
+  RGWCtl* const ctl;
   const rgw::auth::LocalApplier::Factory* const local_apl_factory;
   const rgw::auth::RemoteApplier::Factory* const remote_apl_factory;
   const rgw::auth::RoleApplier::Factory* const role_apl_factory;
@@ -913,13 +913,13 @@ class STSEngine : public AWSEngine {
                         const req_state* s) const override;
 public:
   STSEngine(CephContext* const cct,
-              RGWRados* const store,
+              RGWCtl* const ctl,
               const VersionAbstractor& ver_abstractor,
               const rgw::auth::LocalApplier::Factory* const local_apl_factory,
               const rgw::auth::RemoteApplier::Factory* const remote_apl_factory,
               const rgw::auth::RoleApplier::Factory* const role_apl_factory)
     : AWSEngine(cct, ver_abstractor),
-      store(store),
+      ctl(ctl),
       local_apl_factory(local_apl_factory),
       remote_apl_factory(remote_apl_factory),
       role_apl_factory(role_apl_factory) {
@@ -948,11 +948,11 @@ public:
 class S3AuthFactory : public rgw::auth::RemoteApplier::Factory,
                       public rgw::auth::LocalApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
-  RGWRados* const store;
+  RGWCtl* const ctl;
 
 public:
-  explicit S3AuthFactory(RGWRados* const store)
-    : store(store) {
+  explicit S3AuthFactory(RGWCtl* const ctl)
+    : ctl(ctl) {
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,
@@ -961,7 +961,7 @@ public:
                              const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
     return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store->ctl.user, std::move(acl_alg), info,
+      new rgw::auth::RemoteApplier(cct, ctl, std::move(acl_alg), info,
                                    cct->_conf->rgw_keystone_implicit_tenants));
   }
 

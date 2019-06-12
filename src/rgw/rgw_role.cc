@@ -38,8 +38,10 @@ int RGWRole::store_info(bool exclusive)
   bufferlist bl;
   encode(*this, bl);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, store->svc.zone->get_zone_params().roles_pool, oid,
+  auto svc = ctl->svc;
+
+  auto obj_ctx = ctl->svc->sysobj->init_obj_ctx();
+  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
                             bl, exclusive, NULL, real_time(), NULL);
 }
 
@@ -54,8 +56,10 @@ int RGWRole::store_name(bool exclusive)
   using ceph::encode;
   encode(nameToId, bl);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, store->svc.zone->get_zone_params().roles_pool, oid,
+  auto svc = ctl->svc;
+
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
+  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
               bl, exclusive, NULL, real_time(), NULL);
 }
 
@@ -63,9 +67,11 @@ int RGWRole::store_path(bool exclusive)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
+  auto svc = ctl->svc;
+
   bufferlist bl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  return rgw_put_system_obj(obj_ctx, store->svc.zone->get_zone_params().roles_pool, oid,
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
+  return rgw_put_system_obj(obj_ctx, svc->zone->get_zone_params().roles_pool, oid,
               bl, exclusive, NULL, real_time(), NULL);
 }
 
@@ -112,7 +118,9 @@ int RGWRole::create(bool exclusive)
   sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto svc = ctl->svc;
+
+  auto& pool = svc->zone->get_zone_params().roles_pool;
   ret = store_info(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing role info in pool: " << pool.name << ": "
@@ -127,7 +135,7 @@ int RGWRole::create(bool exclusive)
 
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = rgw_delete_system_obj(store, pool, oid, NULL);
+    int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
     if (info_ret < 0) {
       ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
@@ -141,14 +149,14 @@ int RGWRole::create(bool exclusive)
                   << path << ": " << cpp_strerror(-ret) << dendl;
     //Delete the role info that was stored in the previous call
     string oid = get_info_oid_prefix() + id;
-    int info_ret = rgw_delete_system_obj(store, pool, oid, NULL);
+    int info_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
     if (info_ret < 0) {
       ldout(cct, 0) << "ERROR: cleanup of role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-info_ret) << dendl;
     }
     //Delete role name that was stored in previous call
     oid = tenant + get_names_oid_prefix() + name;
-    int name_ret = rgw_delete_system_obj(store, pool, oid, NULL);
+    int name_ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
     if (name_ret < 0) {
       ldout(cct, 0) << "ERROR: cleanup of role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-name_ret) << dendl;
@@ -160,7 +168,8 @@ int RGWRole::create(bool exclusive)
 
 int RGWRole::delete_obj()
 {
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto svc = ctl->svc;
+  auto& pool = svc->zone->get_zone_params().roles_pool;
 
   int ret = read_name();
   if (ret < 0) {
@@ -178,7 +187,7 @@ int RGWRole::delete_obj()
 
   // Delete id
   string oid = get_info_oid_prefix() + id;
-  ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting role id from pool: " << pool.name << ": "
                   << id << ": " << cpp_strerror(-ret) << dendl;
@@ -186,7 +195,7 @@ int RGWRole::delete_obj()
 
   // Delete name
   oid = tenant + get_names_oid_prefix() + name;
-  ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;
@@ -194,7 +203,7 @@ int RGWRole::delete_obj()
 
   // Delete path
   oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
-  ret = rgw_delete_system_obj(store, pool, oid, NULL);
+  ret = rgw_delete_system_obj(svc->sysobj, pool, oid, NULL);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: deleting role path from pool: " << pool.name << ": "
                   << path << ": " << cpp_strerror(-ret) << dendl;
@@ -229,7 +238,7 @@ int RGWRole::get_by_id()
 
 int RGWRole::update()
 {
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto& pool = ctl->svc->zone->get_zone_params().roles_pool;
 
   int ret = store_info(false);
   if (ret < 0) {
@@ -305,10 +314,11 @@ void RGWRole::decode_json(JSONObj *obj)
 
 int RGWRole::read_id(const string& role_name, const string& tenant, string& role_id)
 {
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto svc = ctl->svc;
+  auto& pool = svc->zone->get_zone_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + role_name;
   bufferlist bl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
@@ -331,10 +341,11 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
 
 int RGWRole::read_info()
 {
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto svc = ctl->svc;
+  auto& pool = svc->zone->get_zone_params().roles_pool;
   string oid = get_info_oid_prefix() + id;
   bufferlist bl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
@@ -358,10 +369,11 @@ int RGWRole::read_info()
 
 int RGWRole::read_name()
 {
-  auto& pool = store->svc.zone->get_zone_params().roles_pool;
+  auto svc = ctl->svc;
+  auto& pool = svc->zone->get_zone_params().roles_pool;
   string oid = tenant + get_names_oid_prefix() + name;
   bufferlist bl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = svc->sysobj->init_obj_ctx();
 
   int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
@@ -478,7 +490,7 @@ int RGWRole::get_roles_by_path_prefix(RGWRados *store,
       //Get id from info oid prefix + id
       string id = it.substr(pos + role_oid_prefix.length());
 
-      RGWRole role(cct, store);
+      RGWRole role(cct, store->pctl);
       role.set_id(id);
       int ret = role.read_info();
       if (ret < 0) {

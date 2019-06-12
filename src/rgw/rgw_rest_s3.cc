@@ -1143,7 +1143,7 @@ static int create_s3_policy(struct req_state *s, RGWRados *store,
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(store, s->info.env, owner);
+    return s3policy.create_from_headers(store->ctl.user, s->info.env, owner);
   }
 
   return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
@@ -4377,7 +4377,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id = _access_key_id.to_string();
-  if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
+  if (rgw_get_user_info_by_access_key(ctl->user, access_key_id, user_info) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
@@ -4537,7 +4537,7 @@ rgw::auth::s3::STSEngine::authenticate(
   vector<string> role_policies;
   string role_name;
   if (! token.roleId.empty()) {
-    RGWRole role(s->cct, store, token.roleId);
+    RGWRole role(s->cct, ctl, token.roleId);
     if (role.get_by_id() < 0) {
       return result_t::deny(-EPERM);
     }
@@ -4558,7 +4558,7 @@ rgw::auth::s3::STSEngine::authenticate(
 
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
+    int ret = rgw_get_user_info_by_uid(ctl->user, token.user, user_info, NULL);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);
