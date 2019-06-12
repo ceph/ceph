@@ -2144,8 +2144,7 @@ private:
     std::map<ceph_tid_t, Op*>& need_resend,
     std::list<LingerOp*>& need_resend_linger,
     std::map<ceph_tid_t, CommandOp*>& need_resend_command,
-    shunique_lock& sul,
-    const mempool::osdmap::map<int64_t,snap_interval_set_t> *gap_removed_snaps);
+    shunique_lock& sul);
 
   int64_t get_object_hash_position(int64_t pool, const std::string& key,
 				   const std::string& ns);
