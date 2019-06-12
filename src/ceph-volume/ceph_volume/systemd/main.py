@@ -56,7 +56,6 @@ def get_block_volume(string):
     osd_id = string.split('-', 1)[0]
     osd_fsid = string.split('-', 1)[1]
     tags={'ceph.type':'block', 'ceph.osd_id':osd_id, 'ceph.osd_fsid':osd_fsid}
-    print tags
     block_volume = volumes.get(lv_tags=tags).as_dict()
     return block_volume
 
