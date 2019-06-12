@@ -608,7 +608,6 @@
    fun:_ZN10ProtocolV231handle_read_frame_epilogue_mainEOSt10unique_ptrIN4ceph6buffer7v14_2_08ptr_nodeENS4_8disposerEEi
    fun:_ZN10ProtocolV216run_continuationER2CtIS_E
    ...
-   fun:_ZN15AsyncConnection7processEv
    fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
    ...
 }
