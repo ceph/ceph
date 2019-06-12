@@ -618,6 +618,7 @@ void ImageFlushRequest<I>::send_request() {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()), 0, 0, false, 0);
+    image_ctx.journal->user_flushed();
 
     ctx = new FunctionContext(
       [&image_ctx, journal_tid, ctx](int r) {
