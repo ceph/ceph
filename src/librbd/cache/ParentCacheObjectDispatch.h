@@ -119,19 +119,8 @@ public:
 
 private:
 
-  class SharedPersistentObjectCacher {
-  public:
-
-    SharedPersistentObjectCacher(ImageCtxT *image_ctx);
-    ~SharedPersistentObjectCacher();
-
-    int read_object(std::string file_path, ceph::bufferlist* read_data,
-                    uint64_t offset, uint64_t length, Context *on_finish);
-
-  private:
-    ImageCtxT *m_image_ctx;
-  };
-
+  int read_object(std::string file_path, ceph::bufferlist* read_data,
+                  uint64_t offset, uint64_t length, Context *on_finish);
   void handle_read_cache(
          ceph::immutable_obj_cache::ObjectCacheRequest* ack,
          uint64_t read_off, uint64_t read_len,
@@ -143,7 +132,6 @@ private:
 
   ImageCtxT* m_image_ctx;
   CacheClient *m_cache_client;
-  SharedPersistentObjectCacher *m_object_store;
   bool m_initialized;
   std::atomic<bool> m_re_connecting;
   Mutex m_lock;

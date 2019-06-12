@@ -28,7 +28,7 @@ namespace cache {
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_object_store(nullptr), m_initialized(false), m_re_connecting(false),
+    m_initialized(false), m_re_connecting(false),
     m_lock("librbd::cache::ParentCacheObjectDispatch::m_lock") {
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
@@ -37,7 +37,6 @@ ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
 
 template <typename I>
 ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
-    delete m_object_store;
     delete m_cache_client;
 }
 
@@ -137,7 +136,7 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
   ceph_assert(file_path != "");
 
   // try to read from parent image cache
-  int r = m_object_store->read_object(file_path, read_data, read_off, read_len, on_dispatched);
+  int r = read_object(file_path, read_data, read_off, read_len, on_dispatched);
   if(r < 0) {
     // cache read error, fall back to read rados
     *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
@@ -153,9 +152,8 @@ int ParentCacheObjectDispatch<I>::handle_register_client(bool reg) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  if (reg) {
-    ldout(cct, 20) << "Parent cache open cache handler" << dendl;
-    m_object_store = new SharedPersistentObjectCacher(m_image_ctx);
+  if (!reg) {
+    lderr(cct) << "Parent cache register fails." << dendl;
   }
   return 0;
 }
@@ -179,7 +177,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
     [this, cct, register_ctx](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to connect RO daeomn." << dendl;
-      register_ctx->complete(-1);
+      register_ctx->complete(ret);
       return;
     }
 
@@ -205,18 +203,7 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
 }
 
 template <typename I>
-ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::SharedPersistentObjectCacher (
-   I *image_ctx) : m_image_ctx(image_ctx) {
-  auto *cct = m_image_ctx->cct;
-  ldout(cct, 20) << dendl;
-}
-
-template <typename I>
-ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::~SharedPersistentObjectCacher() {
-}
-
-template <typename I>
-int ParentCacheObjectDispatch<I>::SharedPersistentObjectCacher::read_object(
+int ParentCacheObjectDispatch<I>::read_object(
         std::string file_path, ceph::bufferlist* read_data, uint64_t offset,
         uint64_t length, Context *on_finish) {
 
