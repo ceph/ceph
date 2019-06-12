@@ -2,6 +2,7 @@ from cStringIO import StringIO
 import logging
 import json
 import requests
+import time
 
 from requests.packages.urllib3 import PoolManager
 from requests.packages.urllib3.util import Retry
@@ -70,12 +71,29 @@ def get_user_successful_ops(out, user):
         return 0
     return get_user_summary(out, user)['total']['successful_ops']
 
-def wait_for_radosgw(url):
+def wait_for_radosgw(url, remote):
     """ poll the given url until it starts accepting connections
 
     add_daemon() doesn't wait until radosgw finishes startup, so this is used
     to avoid racing with later tasks that expect radosgw to be up and listening
     """
-    # use a connection pool with retry/backoff to poll until it starts listening
-    http = PoolManager(retries=Retry(connect=8, backoff_factor=1))
-    http.request('GET', url)
+    # TODO: use '--retry-connrefused --retry 8' when teuthology is running on
+    # Centos 8 and other OS's with an updated version of curl
+    curl_cmd = ['curl',
+                url]
+    exit_status = 0
+    num_retries = 8
+    for seconds in range(num_retries):
+        proc = remote.run(
+            args=curl_cmd,
+            check_status=False,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            stdin=StringIO(),
+            )
+        exit_status = proc.exitstatus
+        if exit_status == 0:
+            break
+        time.sleep(2**seconds)
+
+    assert exit_status == 0
