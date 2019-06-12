@@ -7,3 +7,13 @@
   for more details on the background of this change.
 
 * Nautilus-based librbd clients can now open images on Jewel clusters.
+
+14.2.2
+------
+
+* The no{up,down,in,out} related commands has been revamped.
+  There are now 2 ways to set the no{up,down,in,out} flags:
+  the old 'ceph osd [un]set <flag>' command, which sets cluster-wide flags;
+  and the new 'ceph osd [un]set-group <flags> <who>' command,
+  which sets flags in batch at the granularity of any crush node,
+  or device class.
