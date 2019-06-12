@@ -1639,10 +1639,23 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
-	 << ", required " << m->required_features
-	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL)
-	 << dendl;
+    uint64_t missing = (m->required_features & ~CEPH_FEATURES_ALL);
+    if (!missing) {
+      // we are being informed we are missing features, but no particular
+      // feature. This is probably an unsupported release, and that we should
+      // upgrade.
+      derr << __func__ << " need to be upgraded before being"
+	   << " able to join the quorum (have features " << CEPH_FEATURES_ALL
+	   << ")" << dendl;
+    } else {
+      derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
+	   << ", required " << m->required_features
+	   << ", missing " << missing << dendl;
+    }
+    // we'll call it a permission denied because, well, we're not allowing it
+    // to do its thing; and because we couldn't find a better error code than
+    // '1'.
+    exit(EACCES);
     break;
   }
 }
