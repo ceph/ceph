@@ -1833,12 +1833,27 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " require release " << (int)m->mon_release << " > "
-	 << (int)ceph_release()
-	 << ", or missing features (have " << CEPH_FEATURES_ALL
-	 << ", required " << m->required_features
-	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
-	 << dendl;
+    // NOTE: needs a message that shows which features are actually missing,
+    // in layman terms, along with the numeric values. We will then need to
+    // exit the program. How we do this last part is still uncertain, but
+    // maybe a good old fashioned "exit(1)" will do it? - yeah, there's
+    // precedent.
+
+    if ((int)ceph_release() < (int)m->mon_release) {
+      derr << __func__ << " require release "
+	   << ceph_release_name((int)m->mon_release)
+	   << " to join quorum. This monitor should be upgraded before being"
+	   << " restarted." << dendl;
+    } else {
+      derr << __func__ << " missing features (have " << CEPH_FEATURES_ALL
+	   << ", required " << m->required_features
+	   << ", missing "
+	   << (m->required_features & ~CEPH_FEATURES_ALL) << ")" << dendl;
+    }
+    // we'll call it a permission denied because, well, we're not allowing it
+    // to do its thing; and because we couldn't find a better error code than
+    // '1'.
+    exit(EACCES);
     break;
   }
 }
@@ -1854,9 +1869,18 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   if ((m->mon_release > 0 && m->mon_release < monmap->min_mon_release) ||
       missing) {
     dout(1) << " peer " << m->get_source_addr()
-	    << " release " << (int)m->mon_release
-	    << " < min_mon_release " << (int)monmap->min_mon_release
-	    << ", or missing features " << missing << dendl;
+	    << " release " << ceph_release_name((int)m->mon_release)
+	    << " (" << (int)m->mon_release << ")"
+	    << " < min_mon_release "
+	    << ceph_release_name((int)monmap->min_mon_release)
+	    << " (" << (int)monmap->min_mon_release << ")";
+    if (missing) {
+      *_dout << ", or missing features (have "
+	     << get_quorum_con_features()
+	     << ", missing " << missing << ")";
+    }
+    *_dout << dendl;
+
     MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
 				 name, has_ever_joined, monmap->min_mon_release);
     m->required_features = required_features;
