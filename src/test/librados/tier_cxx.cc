@@ -63,6 +63,32 @@ void flush_evict_all(librados::Rados& cluster, librados::IoCtx& cache_ioctx)
   }
 }
 
+static string _get_required_osd_release(Rados& cluster)
+{
+  bufferlist inbl;
+  string cmd = string("{\"prefix\": \"osd dump\",\"format\":\"json\"}");
+  bufferlist outbl;
+  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  ceph_assert(r >= 0);
+  string outstr(outbl.c_str(), outbl.length());
+  json_spirit::Value v;
+  if (!json_spirit::read(outstr, v)) {
+    cerr <<" unable to parse json " << outstr << std::endl;
+    return "";
+  }
+
+  json_spirit::Object& o = v.get_obj();
+  for (json_spirit::Object::size_type i=0; i<o.size(); i++) {
+    json_spirit::Pair& p = o[i];
+    if (p.name_ == "require_osd_release") {
+      cout << "require_osd_release = " << p.value_.get_str() << std::endl;
+      return p.value_.get_str();
+    }
+  }
+  cerr << "didn't find require_osd_release in " << outstr << std::endl;
+  return "";
+}
+
 class LibRadosTwoPoolsPP : public RadosTestPP
 {
 public:
@@ -2410,7 +2436,6 @@ static int _get_pg_num(Rados& cluster, string pool_name)
   return -1;
 }
 
-
 TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
   int num_pg = _get_pg_num(cluster, pool_name);
   ceph_assert(num_pg > 0);
@@ -2954,16 +2979,9 @@ TEST_F(LibRadosTwoPoolsPP, SetRedirectRead) {
 
 TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
   // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "mimic") {
+    cout << "cluster is not yet mimic, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3032,16 +3050,9 @@ TEST_F(LibRadosTwoPoolsPP, SetChunkRead) {
 
 TEST_F(LibRadosTwoPoolsPP, ManifestPromoteRead) {
   // skip test if not yet mimic
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("mimic") == std::string::npos) {
-      cout << "cluster is not yet mimic, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "mimic") {
+    cout << "cluster is not yet mimic, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3236,16 +3247,9 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
 
 TEST_F(LibRadosTwoPoolsPP, ManifestUnset) {
   // skip test if not yet nautilus
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("nautilus") == std::string::npos) {
-      cout << "cluster is not yet nautilus, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "nautilus") {
+    cout << "cluster is not yet nautilus, skipping test" << std::endl;
+    return;
   }
 
   // create object
@@ -3387,17 +3391,11 @@ using ceph::crypto::SHA1;
 #include "rgw/rgw_common.h"
 TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   // skip test if not yet nautilus
-  {
-    bufferlist inbl, outbl;
-    ASSERT_EQ(0, cluster.mon_command(
-		"{\"prefix\": \"osd dump\"}",
-		inbl, &outbl, NULL));
-    string s(outbl.c_str(), outbl.length());
-    if (s.find("nautilus") == std::string::npos) {
-      cout << "cluster is not yet nautilus, skipping test" << std::endl;
-      return;
-    }
+  if (_get_required_osd_release(cluster) < "nautilus") {
+    cout << "cluster is not yet nautilus, skipping test" << std::endl;
+    return;
   }
+
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
 	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
