@@ -226,7 +226,7 @@ class Gateway(multisite.Gateway):
         """ (re)start the daemon """
         self.daemon.restart()
         # wait until startup completes
-        wait_for_radosgw(self.endpoint())
+        wait_for_radosgw(self.endpoint(), self.remote)
 
     def stop(self):
         """ stop the daemon """
