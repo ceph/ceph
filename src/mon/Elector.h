@@ -43,7 +43,7 @@ public:
   void start();
   void defer(int who);
   void end_election_period();
-  void handle_propose_logic(epoch_t mepoch, int from);
+  void receive_propose(epoch_t mepoch, int from);
   void receive_ack(int from, epoch_t from_epoch);
   bool receive_victory_claim(int from, epoch_t from_epoch);
   void declare_victory();
