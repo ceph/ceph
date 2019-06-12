@@ -117,6 +117,11 @@ void ElectionLogic::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
+  elector_bump_epoch();
+}
+
+void ElectionLogic::elector_bump_epoch()
+{
   elector->_bump_epoch();
 }
 

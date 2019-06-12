@@ -54,6 +54,7 @@ private:
   void persist_epoch(epoch_t e);
   epoch_t read_persisted_epoch();
   void validate_store();
+  void elector_bump_epoch();
   bool elector_is_current_member(int rank);
   void elector_trigger_new_election();
   int elector_my_rank();
