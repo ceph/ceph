@@ -327,6 +327,7 @@ void usage()
   cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
   cout << "   --max-concurrent-ios      maximum concurrent ios for orphans find (default: 32)\n";
+  cout << "   --detail                  detailed mode, log and stat head objects as well\n";
   cout << "\nOrphans list-jobs options:\n";
   cout << "   --extra-info              provide extra info in job list\n";
   cout << "\nRole options:\n";
@@ -2689,6 +2690,7 @@ int main(int argc, const char **argv)
   bool num_shards_specified = false;
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
+  int detail = false;
 
   std::string val;
   std::ostringstream errs;
@@ -3045,6 +3047,8 @@ int main(int argc, const char **argv)
       path_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--trim-delay-ms", (char*)NULL)) {
       trim_delay_ms = atoi(val.c_str());
+    } else if (ceph_argparse_binary_flag(args, i, &detail, NULL, "--detail", (char*)NULL)) {
+      // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -6312,7 +6316,7 @@ next:
     info.job_name = job_id;
     info.num_shards = num_shards;
 
-    int ret = search.init(job_id, &info);
+    int ret = search.init(job_id, &info, detail);
     if (ret < 0) {
       cerr << "could not init search, ret=" << ret << std::endl;
       return -ret;
