@@ -8,6 +8,7 @@ import sys
 import time
 import logging
 from ceph_volume import log, process
+from ceph_volume.api.lvm import Volumes
 from ceph_volume.exceptions import SuffixParsingError
 
 
@@ -48,6 +49,30 @@ def parse_osd_uuid(string):
     if not osd_uuid:
         raise SuffixParsingError('OSD uuid', string)
     return osd_uuid
+
+
+def get_block_volume(string):
+    volumes = Volumes()
+    osd_id = string.split('-', 1)[0]
+    osd_fsid = string.split('-', 1)[1]
+    tags={'ceph.type':'block', 'ceph.osd_id':osd_id, 'ceph.osd_fsid':osd_fsid}
+    print tags
+    block_volume = volumes.get(lv_tags=tags).as_dict()
+    return block_volume
+
+
+def get_wal_volume(wal_device):
+    volumes = Volumes()
+    tags={'ceph.type':'wal', 'ceph.wal_device':wal_device}
+    wal_volume = volumes.get(lv_tags=tags)
+    return wal_volume
+
+
+def get_db_volume(db_device):
+    volumes = Volumes()
+    tags={'ceph.type':'db', 'ceph.db_device':db_device}
+    db_volume = volumes.get(lv_tags=tags)
+    return db_volume
 
 
 def main(args=None):
@@ -94,8 +119,31 @@ def main(args=None):
 
     tries = os.environ.get('CEPH_VOLUME_SYSTEMD_TRIES', 30)
     interval = os.environ.get('CEPH_VOLUME_SYSTEMD_INTERVAL', 5)
+
+    block_volume = get_block_volume(extra_data)
+    wal_device = block_volume['tags']['ceph.wal_device']
+    db_device = block_volume['tags']['ceph.db_device']
+
     while tries > 0:
         try:
+            # Waiting for WAL/DB availability
+            if wal_device:
+                wal_volume = get_wal_volume(wal_device)
+                if not wal_volume:
+                    logger.warning('failed to find wal volume %s, retries left: %s', wal_device, tries)
+                    tries -= 1
+                    time.sleep(interval)
+                    continue
+                logger.info('successfully found wal volume')
+            if db_device:
+                db_volume = get_db_volume(db_device)
+                if not db_volume:
+                    logger.warning('failed to find wal volume %s, retries left: %s', db_device, tries)
+                    tries -= 1
+                    time.sleep(interval)
+                    continue
+                logger.info('successfully found db volume')
+
             # don't log any output to the terminal, just rely on stderr/stdout
             # going to logging
             process.run(command, terminal_logging=False)
