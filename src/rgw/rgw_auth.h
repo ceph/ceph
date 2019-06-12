@@ -16,7 +16,7 @@
 
 #define RGW_USER_ANON_ID "anonymous"
 
-class RGWUserCtl;
+class RGWCtl;
 
 namespace rgw {
 namespace auth {
@@ -355,17 +355,17 @@ class StrategyRegistry;
 class WebIdentityApplier : public IdentityApplier {
 protected:
   CephContext* const cct;
-  RGWUserCtl* const user_ctl;
+  RGWCtl* const ctl;
   rgw::web_idp::WebTokenClaims token_claims;
 
   string get_idp_url() const;
 
 public:
   WebIdentityApplier( CephContext* const cct,
-                      RGWUserCtl* const user_ctl,
+                      RGWCtl* const ctl,
                       const rgw::web_idp::WebTokenClaims& token_claims)
     : cct(cct),
-      user_ctl(user_ctl),
+      ctl(ctl),
       token_claims(token_claims) {
   }
 
@@ -457,7 +457,7 @@ protected:
   CephContext* const cct;
 
   /* Read-write is intensional here due to RGWUserInfo creation process. */
-  RGWUserCtl* const user_ctl;
+  RGWCtl* const ctl;
 
   /* Supplemental strategy for extracting permissions from ACLs. Its results
    * will be combined (ORed) with a default strategy that is responsible for
@@ -473,12 +473,12 @@ protected:
 
 public:
   RemoteApplier(CephContext* const cct,
-                RGWUserCtl* const user_ctl,
+                RGWCtl* const ctl,
                 acl_strategy_t&& extra_acl_strategy,
                 const AuthInfo& info,
                 const bool implicit_tenants)
     : cct(cct),
-      user_ctl(user_ctl),
+      ctl(ctl),
       extra_acl_strategy(std::move(extra_acl_strategy)),
       info(info),
       implicit_tenants(implicit_tenants) {

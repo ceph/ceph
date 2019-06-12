@@ -175,6 +175,9 @@ struct RGWCtlDef {
 };
 
 struct RGWCtl {
+  CephContext *cct{nullptr};
+  RGWServices *svc{nullptr};
+
   RGWCtlDef _ctl;
 
   struct _meta {
@@ -190,7 +193,7 @@ struct RGWCtl {
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices& svc);
+  int init(RGWServices *_svc);
 };
 
 #endif

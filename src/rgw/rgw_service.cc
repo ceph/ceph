@@ -5,6 +5,7 @@
 
 #include "services/svc_finisher.h"
 #include "services/svc_bi_rados.h"
+#include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
 #include "services/svc_cls.h"
 #include "services/svc_mdlog.h"
@@ -73,9 +74,9 @@ int RGWServices_Def::init(CephContext *cct,
   finisher->init();
   bi_rados->init(zone.get(), rados.get(), bilog_rados.get());
   bilog_rados->init(bi_rados.get());
-  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get(),
-               bi_rados.get(), meta.get(), meta_be_sobj.get(),
-               sync_modules.get());
+  bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
+                    bi_rados.get(), meta.get(), meta_be_sobj.get(),
+                    sync_modules.get());
   cls->init(zone.get(), rados.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
@@ -190,7 +191,7 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = bucket->start();
+  r = bucket_sobj->start();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
     return r;
@@ -253,7 +254,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   bi = bi_rados;
   bilog_rados = _svc.bilog_rados.get();
   bucket_sobj = _svc.bucket_sobj.get();
-  bucket = _svc.bucket.get();
+  bucket = bucket_sobj;
   cls = _svc.cls.get();
   mdlog = _svc.mdlog.get();
   meta = _svc.meta.get();
@@ -336,11 +337,14 @@ int RGWCtlDef::init(RGWServices& svc)
   return 0;
 }
 
-int RGWCtl::init(RGWServices& svc)
+int RGWCtl::init(RGWServices *_svc)
 {
-  int r = _ctl.init(svc);
+  svc = _svc;
+  cct = svc->cct;
+
+  int r = _ctl.init(*svc);
   if (r < 0) {
-    ldout(svc.cct, 0) << "ERROR: failed to start init ctls (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init ctls (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -356,25 +360,25 @@ int RGWCtl::init(RGWServices& svc)
 
   r = meta.user->attach(meta.mgr);
   if (r < 0) {
-    ldout(svc.cct, 0) << "ERROR: failed to start init meta.user ctl (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init meta.user ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = meta.bucket->attach(meta.mgr);
   if (r < 0) {
-    ldout(svc.cct, 0) << "ERROR: failed to start init meta.bucket ctl (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init meta.bucket ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = meta.bucket_instance->attach(meta.mgr);
   if (r < 0) {
-    ldout(svc.cct, 0) << "ERROR: failed to start init meta.bucket_instance ctl (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init meta.bucket_instance ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
   r = meta.otp->attach(meta.mgr);
   if (r < 0) {
-    ldout(svc.cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
 

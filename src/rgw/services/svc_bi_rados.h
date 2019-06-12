@@ -116,7 +116,7 @@ public:
                          std::list<cls_rgw_bucket_instance_entry> *status);
 
   int handle_overwrite(const RGWBucketInfo& info,
-                       const RGWBucketInfo& orig_info);
+                       const RGWBucketInfo& orig_info) override;
 };
 
 
