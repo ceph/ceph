@@ -353,10 +353,10 @@ void Elector::handle_propose(MonOpRequestRef op)
             << dendl;
     nak_old_peer(op);
   }
-  logic.handle_propose_logic(m->epoch, from);
+  logic.receive_propose(m->epoch, from);
 }
 
-void ElectionLogic::handle_propose_logic(epoch_t mepoch, int from)
+void ElectionLogic::receive_propose(epoch_t mepoch, int from)
 {
   if (mepoch > epoch) {
     bump_epoch(mepoch);
