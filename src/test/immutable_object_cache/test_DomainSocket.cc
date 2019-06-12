@@ -130,8 +130,6 @@ public:
 
   bool startup_lookupobject_testing(std::string pool_nspace, std::string object_id) {
     bool hit;
-    //auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
-    //    ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
     auto ctx = make_gen_lambda_context<ObjectCacheRequest*, std::function<void(ObjectCacheRequest*)>>
        ([this, &hit](ObjectCacheRequest* ack){
        hit = ack->type == RBDSC_READ_REPLY;

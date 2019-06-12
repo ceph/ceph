@@ -168,14 +168,11 @@ int ParentCacheObjectDispatch<I>::create_cache_session(Context* on_finish, bool 
   Context* register_ctx = new FunctionContext([this, cct, on_finish](int ret) {
     if (ret < 0) {
       lderr(cct) << "Parent cache fail to register client." << dendl;
-      handle_register_client(false);
-      on_finish->complete(-1);
-      return;
+    } else {
+      ceph_assert(m_cache_client->is_session_work());
     }
-    ceph_assert(m_cache_client->is_session_work());
-
-    handle_register_client(true);
-    on_finish->complete(0);
+    handle_register_client(ret < 0 ? false : true);
+    on_finish->complete(ret);
   });
 
   Context* connect_ctx = new FunctionContext(
