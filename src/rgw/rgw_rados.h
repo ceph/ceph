@@ -389,9 +389,6 @@ class RGWRados
 
   int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
 
-  void build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
-      string *marker);
-
   std::atomic<int64_t> max_req_id = { 0 };
   Mutex lock;
   SafeTimer *timer;
@@ -1349,8 +1346,6 @@ public:
 				bool (*force_check_filter)(const string& name) = nullptr);
   int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
-  int list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
-  int get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id, map<int, string>& max_marker);
 
   int bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh);
