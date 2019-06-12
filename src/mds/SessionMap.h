@@ -300,11 +300,17 @@ public:
   void touch_cap(Capability *cap) {
     caps.push_front(&cap->item_session_caps);
   }
+
   void touch_cap_bottom(Capability *cap) {
     caps.push_back(&cap->item_session_caps);
   }
+
   void touch_lease(ClientLease *r) {
     leases.push_back(&r->item_session_lease);
+  }
+
+  bool is_any_flush_waiter() {
+    return !waitfor_flush.empty();
   }
 
   // -- leases --
