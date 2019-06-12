@@ -9927,8 +9927,7 @@ int PrimaryLogPG::start_flush(
   SnapContext snapc, dsnapc;
   if (snapset.seq != 0) {
     if (soid.snap == CEPH_NOSNAP) {
-      snapc.seq = snapset.seq;
-      snapc.snaps = snapset.snaps;
+      snapc = snapset.get_ssc_as_of(snapset.seq);
     } else {
       snapid_t min_included_snap;
       auto p = snapset.clone_snaps.find(soid.snap);
