@@ -4,30 +4,31 @@
 
 .. index:: Ceph Block Device; Persistent Cache
 
-Shared Read-only Parent Image Cache
-===================================
+Shared, Read-only Parent Image Cache
+====================================
 
-Cloned RBD images(`rbd-snapshots`_) from one parent usually only modify a small
-portion of the image. E.g., in a VDI workload, the VMs are using the same cloned
-images with only hostname and IP address changed most likely. On the booting
-stage, all of these VMs would read the parent content from the RADOS cluster.
-If we have a local cache of the parent image, this will help to speed up the
-read process on one host as well as to save the south-north network traffic.
-RBD shared read-only parent image cache requires expeclictly enabling in
-ceph.conf. The ``ceph-immmutable-object-cache`` daemon is responsible for
-caching the parent content on local disk, and future reads on those contents
+`Cloned RBD images`_ from a parent usually only modify a small portion of
+the image. For example, in a VDI workload, the VMs are cloned from the same
+base image and initially only differ by hostname and IP address. During the
+booting stage, all of these VMs would re-read portions of duplicate parent
+image data from the RADOS cluster. If we have a local cache of the parent
+image, this will help to speed up the read process on one host, as well as
+to save the client to cluster network traffic.
+RBD shared read-only parent image cache requires explicitly enabling in
+``ceph.conf``. The ``ceph-immmutable-object-cache`` daemon is responsible for
+caching the parent content on the local disk, and future reads on that data
 will be serviced from the local cache.
 
 .. note:: RBD shared read-only parent image cache requires the Ceph Nautilus release or later.
 
 .. ditaa::  +--------------------------------------------------------+
-            |                       QEMU                             |
+            |                         QEMU                           |
             +--------------------------------------------------------+
-            |             librbd(cloned images)                      |
+            |                librbd (cloned images)                  |
             +-------------------+-+----------------------------------+
-            |      librados     | |    ceph-immutable-object-cache   |
+            |      librados     | |  ceph--immutable--object--cache  |
             +-------------------+ +----------------------------------+
-            |      OSDs/Mons    | |     Local cached parent image    |
+            |      OSDs/Mons    | |     local cached parent image    |
             +-------------------+ +----------------------------------+
 
 
@@ -35,8 +36,7 @@ Enable RBD Shared Read-only Parent Image Cache
 ----------------------------------------------
 
 To enable RBD shared read-only parent image cache, the following Ceph settings
-need to added in the ``[client]`` section `ceph-conf`_ of your ``ceph.conf``
-file.
+need to added in the ``[client]`` `section`_ of your ``ceph.conf`` file.
 
 ``rbd parent cache enabled = true``
 
@@ -49,28 +49,35 @@ image content within its local caching directory. For better performance it's
 recommended to use SSDs as the underlying storage.
 
 The key components of the daemon are:
-- domain socket based simple IPC
-- simple LRU policy based promotion/demotion on cache capacity management
-- simple file based caching store for RADOS objects
 
-On the opening of each cloned rbd image, librbd will try to connect to the
-cache daemon over domain socket based IPC. If it's successfully connected,
-librbd will automatically check with the daemon on the following reads.
-If there's read that's not cached, the daemon will promote the RADOS object
-to local caching directory. So the next read on that object will be serviced
-from local file. The daemon also maintains a simple LRU statics so if there's
+#. **Domain socket based IPC:** The daemon will listen on a local domain
+   socket on start up and wait for connections from librbd clients.
+
+#. **LRU based promotion/demotion policy:** The daemon will maintain
+   in-memory statistics of cache-hits on each cache file. It will demote the
+   cold cache if capacity reaches to the configured threshold.
+
+#. **File-based caching store:** The daemon will maintain a simple file
+   based cache store. On promotion the RADOS objects will be fetched from
+   RADOS cluster and stored in the local caching directory.
+
+On opening each cloned rbd image, ``librbd`` will try to connect to the
+cache daemon over its domain socket. If it's successfully connected,
+``librbd`` will automatically check with the daemon on the subsequent reads.
+If there's a read that's not cached, the daemon will promote the RADOS object
+to local caching directory, so the next read on that object will be serviced
+from local file. The daemon also maintains simple LRU statistics so if there's
 not enough capacity it will delete some cold cache files.
 
-Some important cache options correspond to the following settings.
-``immutable_object_cache_path``
-The immutable object cache data directory.
+Here are some important cache options correspond to the following settings:
 
-``immutable_object_cache_max_size``
-The max size for immutable cache.
+- ``immutable_object_cache_path`` The immutable object cache data directory.
 
-``immutable_object_cache_watermark``
-The watermark for the cache. If the capacity reaches to this watermark, the
-daemon will delete cache files based the LRU statics.
+- ``immutable_object_cache_max_size`` The max size for immutable cache.
+
+- ``immutable_object_cache_watermark`` The watermark for the cache. If the
+  capacity reaches to this watermark, the daemon will delete cold cache based
+  on the LRU statistics.
 
 The ``ceph-immutable-object-cache`` daemon is available within the optional
 ``ceph-immutable-object-cache`` distribution package.
@@ -82,7 +89,7 @@ The ``ceph-immutable-object-cache`` daemon is available within the optional
 To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
 command, user name, monitor caps, and OSD caps::
 
-  ceph auth get-or-create client.ceph-immutable-object-cache.{unique id} mon 'profile immutable-object-cache' osd 'profile rbd'
+  ceph auth get-or-create client.ceph-immutable-object-cache.{unique id} mon r osd 'profile rbd-read-only'
 
 The ``ceph-immutable-object-cache`` daemon can be managed by ``systemd`` by specifying the user
 ID as the daemon instance::
@@ -93,7 +100,7 @@ The ``ceph-immutable-object-cache`` can also be run in foreground by ``ceph-immu
 
   ceph-immutable-object-cache -f --log-file={log_path}
 
-.. _rbd-snapshots: ../rbd-snapshot
-.. _ceph-conf: ../../rados/configuration/ceph-conf/#configuration-sections
+.. _Cloned RBD Images: ../rbd-snapshot/#layering
+.. _section: ../../rados/configuration/ceph-conf/#configuration-sections
 .. _create a Ceph user: ../../rados/operations/user-management#add-a-user
 
