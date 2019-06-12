@@ -2053,8 +2053,14 @@ public:
         if (info.syncstopped) {
           call(new RGWRadosRemoveCR(store, obj));
         } else {
-          status.state = rgw_bucket_shard_sync_info::StateFullSync;
-          status.inc_marker.position = info.max_marker;
+          // whether or not to do full sync, incremental sync will follow anyway
+          if (sync_env->sync_module->should_full_sync()) {
+            status.state = rgw_bucket_shard_sync_info::StateFullSync;
+            status.inc_marker.position = info.max_marker;
+          } else {
+            status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
+            status.inc_marker.position = "";
+          }
           map<string, bufferlist> attrs;
           status.encode_all_attrs(attrs);
           call(new RGWSimpleRadosWriteAttrsCR(sync_env->async_rados, store->svc.sysobj, obj, attrs));
