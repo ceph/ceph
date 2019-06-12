@@ -488,6 +488,7 @@ public:
                pools_initialized(false),
                quota_handler(NULL),
                cr_registry(NULL),
+               pctl(&ctl),
                data_log(NULL), reshard(NULL) {}
 
   RGWRados& set_use_cache(bool status) {
@@ -537,6 +538,8 @@ public:
 
   RGWServices svc;
   RGWCtl ctl;
+
+  RGWCtl *pctl{nullptr};
 
   /**
    * AmazonS3 errors contain a HostId string, but is an opaque base64 blob; we

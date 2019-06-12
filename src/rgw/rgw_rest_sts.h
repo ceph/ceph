@@ -52,7 +52,7 @@ public:
 class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
-  RGWRados* const store;
+  RGWCtl* const ctl;
 
   /* The engine. */
   const WebTokenEngine web_token_engine;
@@ -67,15 +67,15 @@ class DefaultStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
                                     const rgw::web_idp::WebTokenClaims& token) const override {
-    auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::WebIdentityApplier(cct, store, token));
+    auto apl = rgw::auth::add_sysreq(cct, ctl, s,
+      rgw::auth::WebIdentityApplier(cct, ctl, token));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
 public:
   DefaultStrategy(CephContext* const cct,
-                  RGWRados* const store)
-    : store(store),
+                  RGWCtl* const ctl)
+    : ctl(ctl),
       web_token_engine(cct,
                         static_cast<rgw::auth::TokenExtractor*>(this),
                         static_cast<rgw::auth::WebIdentityApplier::Factory*>(this)) {

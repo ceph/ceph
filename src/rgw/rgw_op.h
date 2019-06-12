@@ -72,27 +72,24 @@ class StrategyRegistry;
 }
 
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-                                       RGWRados *store,
+                                       RGWUserCtl *user_ctl,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
 
 class RGWHandler {
 protected:
-  RGWRados* store;
-  struct req_state* s;
+  RGWRados *store{nullptr};
+  struct req_state *s{nullptr};
 
   int do_init_permissions();
   int do_read_permissions(RGWOp* op, bool only_bucket);
 
 public:
-  RGWHandler()
-    : store(nullptr),
-      s(nullptr) {
-  }
+  RGWHandler() {}
   virtual ~RGWHandler();
 
-  virtual int init(RGWRados* store,
+  virtual int init(RGWRados *store,
                    struct req_state* _s,
                    rgw::io::BasicClient* cio);
 
