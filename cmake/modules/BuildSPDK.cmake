@@ -22,7 +22,7 @@ macro(build_spdk)
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk
-    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR}
+    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
