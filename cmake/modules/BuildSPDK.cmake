@@ -31,7 +31,7 @@ macro(build_spdk)
     INSTALL_COMMAND "true")
   unset(make_cmd)
   ExternalProject_Get_Property(spdk-ext source_dir)
-  foreach(c nvme log lvol env_dpdk util)
+  foreach(c nvme log lvol env_dpdk sock util)
     add_library(spdk::${c} STATIC IMPORTED)
     add_dependencies(spdk::${c} spdk-ext)
     set_target_properties(spdk::${c} PROPERTIES
