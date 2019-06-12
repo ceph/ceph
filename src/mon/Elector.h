@@ -46,10 +46,10 @@ public:
   void receive_propose(epoch_t mepoch, int from);
   void receive_ack(int from, epoch_t from_epoch);
   bool receive_victory_claim(int from, epoch_t from_epoch);
-  void declare_victory();
 
   
 private:
+  void declare_victory();
   // call-outs
   void persist_epoch(epoch_t e);
   epoch_t read_persisted_epoch();
