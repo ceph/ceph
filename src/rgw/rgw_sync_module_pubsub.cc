@@ -36,6 +36,8 @@ config:
    "uid": <uid>,                   # default: "pubsub"
    "data_bucket_prefix": <prefix>  # default: "pubsub-"
    "data_oid_prefix": <prefix>     #
+   "events_retention_days": <int>  # default: 7
+   "start_with_full_sync" <bool>   # default: false
 
     # non-dynamic config
     "notifications": [
@@ -51,7 +53,7 @@ config:
             "name": <subscription-name>,
             "topic": <topic>,
             "push_endpoint": <endpoint>,
-            "args:" <arg list>.            # any push endpoint specific args (include all args)
+            "push_endpoint_args:" <arg list>.            # any push endpoint specific args (include all args)
             "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
             "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
             "s3_id": <id>                  # in case of S3 compatible notifications, the notification ID will be set here
@@ -104,7 +106,7 @@ struct PSSubConfig {
     encode_json("name", name, f);
     encode_json("topic", topic, f);
     encode_json("push_endpoint", push_endpoint_name, f);
-    encode_json("args", push_endpoint_args, f);
+    encode_json("push_endpoint_args", push_endpoint_args, f);
     encode_json("data_bucket_name", data_bucket_name, f);
     encode_json("data_oid_prefix", data_oid_prefix, f);
     encode_json("s3_id", s3_id, f);
@@ -199,6 +201,8 @@ struct PSConfig {
   std::map<std::string, PSSubConfigRef> subs;
   std::map<std::string, PSTopicConfigRef> topics;
   std::multimap<std::string, PSNotificationConfig> notifications;
+  
+  bool start_with_full_sync{false};
 
   void dump(Formatter *f) const {
     encode_json("id", id, f);
@@ -238,6 +242,7 @@ struct PSConfig {
         f->close_section();
       }
     }
+    encode_json("start_with_full_sync", start_with_full_sync, f);
   }
 
   void init(CephContext *cct, const JSONFormattable& config) {
@@ -265,6 +270,7 @@ struct PSConfig {
         iter->second->subs.insert(sc->name);
       }
     }
+    start_with_full_sync = config["start_with_full_sync"](false);
 
     ldout(cct, 5) << "pubsub: module config (parsed representation):\n" << json_str("config", *this, true) << dendl;
   }
@@ -1577,8 +1583,13 @@ RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *or
   return new RGWRESTMgr_PubSub_S3(orig);
 }
 
+bool RGWPSSyncModuleInstance::should_full_sync() const {
+   return data_handler->get_conf()->start_with_full_sync;
+}
+
 int RGWPSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
   instance->reset(new RGWPSSyncModuleInstance(cct, config));
   return 0;
 }
+
 

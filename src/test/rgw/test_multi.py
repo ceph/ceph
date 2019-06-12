@@ -19,6 +19,7 @@ from rgw_multi.zone_es import ESZoneConfig as ESZoneConfig
 from rgw_multi.zone_cloud import CloudZone as CloudZone
 from rgw_multi.zone_cloud import CloudZoneConfig as CloudZoneConfig
 from rgw_multi.zone_ps import PSZone as PSZone
+from rgw_multi.zone_ps import PSZoneConfig as PSZoneConfig
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
@@ -206,12 +207,16 @@ def init(parse_args):
 
     es_cfg = []
     cloud_cfg = []
+    ps_cfg = []
 
     for s in cfg.sections():
         if s.startswith('elasticsearch'):
             es_cfg.append(ESZoneConfig(cfg, s))
         elif s.startswith('cloud'):
             cloud_cfg.append(CloudZoneConfig(cfg, s))
+        elif s.startswith('pubsub'):
+            ps_cfg.append(PSZoneConfig(cfg, s))
+
 
     argv = []
 
@@ -247,8 +252,12 @@ def init(parse_args):
 
     num_es_zones = len(es_cfg)
     num_cloud_zones = len(cloud_cfg)
+    num_ps_zones_from_conf = len(ps_cfg)
 
-    num_zones = args.num_zones + num_es_zones + num_cloud_zones + args.num_ps_zones
+    num_ps_zones = args.num_ps_zones if num_ps_zones_from_conf == 0 else num_ps_zones_from_conf 
+    print 'num_ps_zones = ' + str(num_ps_zones)
+
+    num_zones = args.num_zones + num_es_zones + num_cloud_zones + num_ps_zones
 
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
@@ -302,7 +311,12 @@ def init(parse_args):
                                  ccfg.target_path, zonegroup, cluster)
             elif ps_zone:
                 zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
-                zone = PSZone(zone_name(zg, z), zonegroup, cluster)
+                if num_ps_zones_from_conf == 0:
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster)
+                else:
+                    pscfg = ps_cfg[zone_index]
+                    zone = PSZone(zone_name(zg, z), zonegroup, cluster,
+                                  full_sync=pscfg.full_sync, retention_days=pscfg.retention_days)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 

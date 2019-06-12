@@ -32,6 +32,9 @@ public:
   const JSONFormattable& get_effective_conf() {
     return effective_conf;
   }
+  // start with full sync based on configuration
+  // default to incremental only
+  virtual bool should_full_sync() const override;
 };
 
 #endif

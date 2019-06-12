@@ -15,6 +15,11 @@ log = logging.getLogger('rgw_multi.tests')
 
 class PSZone(Zone):  # pylint: disable=too-many-ancestors
     """ PubSub zone class """
+    def __init__(self, name, zonegroup=None, cluster=None, data=None, zone_id=None, gateways=None, full_sync='false', retention_days ='7'):
+        self.full_sync = full_sync
+        self.retention_days = retention_days
+        super(PSZone, self).__init__(name, zonegroup, cluster, data, zone_id, gateways)
+
     def is_read_only(self):
         return True
 
@@ -24,7 +29,8 @@ class PSZone(Zone):  # pylint: disable=too-many-ancestors
     def create(self, cluster, args=None, **kwargs):
         if args is None:
             args = ''
-        args += ['--tier-type', self.tier_type()]
+        tier_config = ','.join(['start_with_full_sync=' + self.full_sync, 'event_retention_days=' + self.retention_days])
+        args += ['--tier-type', self.tier_type(), '--tier-config', tier_config] 
         return self.json_command(cluster, 'create', args)
 
     def has_buckets(self):
@@ -259,3 +265,10 @@ class PSSubscription:
         """ ack events in a subscription """
         parameters = {'ack': None, 'event-id': event_id}
         return self.send_request('POST', parameters)
+
+
+class PSZoneConfig:
+    """ pubsub zone configuration """
+    def __init__(self, cfg, section):
+        self.full_sync = cfg.get(section, 'start_with_full_sync')
+        self.retention_days = cfg.get(section, 'retention_days')
