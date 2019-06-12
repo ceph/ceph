@@ -686,6 +686,7 @@ void ImageFlushRequest<I>::send_request() {
     ceph_assert(image_ctx.journal != NULL);
     journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()), 0, 0, false, 0);
+    image_ctx.journal->user_flushed();
   }
 
   auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
