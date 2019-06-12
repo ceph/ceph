@@ -1380,6 +1380,7 @@ public:
   int cls_obj_usage_log_read(const string& oid, const string& user, const string& bucket, uint64_t start_epoch,
                              uint64_t end_epoch, uint32_t max_entries, string& read_iter, map<rgw_user_bucket,
 			     rgw_usage_log_entry>& usage, bool *is_truncated);
+  int cls_rgw_usage_log_trim_repeat(rgw_rados_ref ref, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch);
   int cls_obj_usage_log_trim(const string& oid, const string& user, const string& bucket, uint64_t start_epoch,
                              uint64_t end_epoch);
   int cls_obj_usage_log_clear(string& oid);

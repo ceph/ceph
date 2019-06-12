@@ -380,18 +380,34 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
                    list<rgw_cls_bi_entry> *entries, bool *is_truncated);
 
 
-int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
-                            const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
+void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op,
+                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace);
-int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
-                                   const string& oid, const cls_rgw_obj_key& key, const string& op_tag,
+void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
+                                   const cls_rgw_obj_key& key, const string& op_tag,
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace);
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret *ret, int* op_ret);
+void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag);
+void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const string& olh_tag);
+
+// these overloads which call io_ctx.operate() should not be called in the rgw.
+// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
+#ifndef CLS_CLIENT_HIDE_IOCTX
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid,
+                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
+                            bool delete_marker, const string& op_tag, rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace);
+int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
+                                   const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
-                        const string& olh_tag,
-                        map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
-void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag);
-int cls_rgw_clear_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag);
+                        const string& olh_tag, rgw_cls_read_olh_log_ret *ret);
+int cls_rgw_clear_olh(librados::IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag);
+int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
+                           uint64_t start_epoch, uint64_t end_epoch);
+#endif
+
 
 /**
  * List the bucket with the starting object and filter prefix.
@@ -554,8 +570,7 @@ int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, const string& oid, const str
                            uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, string& read_iter,
 			   map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
 
-int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, const string& user, const string& bucket,
-                           uint64_t start_epoch, uint64_t end_epoch);
+void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch);
 
 void cls_rgw_usage_log_clear(librados::ObjectWriteOperation& op);
 void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_info& info);

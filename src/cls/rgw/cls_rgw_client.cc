@@ -357,9 +357,23 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
-                            const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, 
+                            const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace)
+{
+  librados::ObjectWriteOperation op;
+  cls_rgw_bucket_link_olh(op, key, olh_tag, delete_marker, op_tag, meta,
+                          olh_epoch, unmod_since, high_precision_time, log_op,
+                          zones_trace);
+
+  return io_ctx.operate(oid, &op);
+}
+
+
+void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key,
+                            bufferlist& olh_tag, bool delete_marker,
+                            const string& op_tag, rgw_bucket_dir_entry_meta *meta,
                             uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time, bool log_op, rgw_zone_set& zones_trace)
 {
   bufferlist in, out;
@@ -378,6 +392,14 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperat
   call.zones_trace = zones_trace;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_LINK_OLH, in);
+}
+
+int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
+                                   const cls_rgw_obj_key& key, const string& op_tag,
+                                   const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace)
+{
+  librados::ObjectWriteOperation op;
+  cls_rgw_bucket_unlink_instance(op, key, op_tag, olh_tag, olh_epoch, log_op, zones_trace);
   int r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
@@ -385,8 +407,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, librados::ObjectWriteOperat
   return 0;
 }
 
-int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op,
-                                   const string& oid,
+void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op, rgw_zone_set& zones_trace)
 {
@@ -400,46 +421,31 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, librados::ObjectWrit
   call.zones_trace = zones_trace;
   encode(call, in);
   op.exec(RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in);
-  int r = io_ctx.operate(oid, &op);
-  if (r < 0)
-    return r;
-
-  return 0;
 }
 
-int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
-                        const string& olh_tag,
-                        map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated)
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret *ret, int* op_ret)
 {
-  bufferlist in, out;
+  bufferlist in;
   rgw_cls_read_olh_log_op call;
   call.olh = olh;
   call.ver_marker = ver_marker;
   call.olh_tag = olh_tag;
   encode(call, in);
-  int op_ret;
-  op.exec(RGW_CLASS, RGW_BUCKET_READ_OLH_LOG, in, &out, &op_ret);
+  op.exec(RGW_CLASS, RGW_BUCKET_READ_OLH_LOG, in, new ClsBucketIndexOpCtx<rgw_cls_read_olh_log_ret>(ret, op_ret));
+}
+
+int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                        const string& olh_tag,
+                        rgw_cls_read_olh_log_ret *ret)
+{
+  int *op_ret;
+  cls_rgw_get_olh_log(op, olh, ver_marker, olh_tag, ret, op_ret);
   int r = io_ctx.operate(oid, &op, NULL);
   if (r < 0) {
     return r;
   }
   if (op_ret < 0) {
-    return op_ret;
-  }
-
-  rgw_cls_read_olh_log_ret ret;
-  try {
-    auto iter = out.cbegin();
-    decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  if (log) {
-    *log = ret.log;
-  }
-  if (is_truncated) {
-    *is_truncated = ret.is_truncated;
+    return *op_ret;
   }
 
  return r;
@@ -456,20 +462,22 @@ void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_
   op.exec(RGW_CLASS, RGW_BUCKET_TRIM_OLH_LOG, in);
 }
 
-int cls_rgw_clear_olh(IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
+int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
 {
-  bufferlist in, out;
+  librados::ObjectWriteOperation op;
+  cls_rgw_clear_olh(op, olh, olh_tag);
+
+  return io_ctx.operate(oid, &op);
+}
+
+void cls_rgw_clear_olh(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, const string& olh_tag)
+{
+  bufferlist in;
   rgw_cls_bucket_clear_olh_op call;
   call.key = olh;
   call.olh_tag = olh_tag;
   encode(call, in);
-  int op_ret;
-  op.exec(RGW_CLASS, RGW_BUCKET_CLEAR_OLH, in, &out, &op_ret);
-  int r = io_ctx.operate(oid, &op);
-  if (r < 0) {
-    return r;
-  }
-  return op_ret;
+  op.exec(RGW_CLASS, RGW_BUCKET_CLEAR_OLH, in);
 }
 
 void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
@@ -696,6 +704,19 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, const string& user,
   } while (!done);
 
   return 0;
+}
+
+void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch)
+{
+  bufferlist in;
+  rgw_cls_usage_log_trim_op call;
+  call.start_epoch = start_epoch;
+  call.end_epoch = end_epoch;
+  call.user = user;
+  call.bucket = bucket;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_USER_USAGE_LOG_TRIM, in);
 }
 
 void cls_rgw_usage_log_clear(ObjectWriteOperation& op)
