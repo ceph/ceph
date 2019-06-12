@@ -24,6 +24,9 @@ case $(distro_id) in
 	centos|fedora|rhel)
 		install gcc-c++.x86_64 gflags-devel snappy-devel zlib zlib-devel bzip2 bzip2-devel librados2-devel.x86_64
 		;;
+	opensuse*|suse|sles)
+		install gcc-c++ snappy-devel zlib-devel libbz2-devel
+		;;
 	*)
         echo "$(distro_id) is unknown, $@ will have to be installed manually."
         ;;
