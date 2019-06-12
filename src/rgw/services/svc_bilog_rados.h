@@ -42,5 +42,15 @@ public:
                int shard_id,
                std::string& start_marker,
                std::string& end_marker);
+  int log_list(const RGWBucketInfo& bucket_info,
+               int shard_id,
+               std::string& marker,
+               uint32_t max,
+               std::list<rgw_bi_log_entry>& result,
+               bool *truncated);
+
+  int get_log_status(const RGWBucketInfo& bucket_info,
+                     int shard_id,
+                     map<int, string> *markers);
 };
 
