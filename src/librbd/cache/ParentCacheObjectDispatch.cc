@@ -28,7 +28,8 @@ namespace cache {
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_object_store(nullptr), m_initialized(false), m_re_connecting(false) {
+    m_object_store(nullptr), m_initialized(false), m_re_connecting(false),
+    m_lock("librbd::cache::ParentCacheObjectDispatch::m_lock") {
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
@@ -79,17 +80,25 @@ bool ParentCacheObjectDispatch<I>::read(
   /* if RO daemon still don't startup, or RO daemon crash,
    * or session occur any error, try to re-connect daemon.*/
   if (!m_cache_client->is_session_work()) {
-    if(!m_re_connecting.load()) {
-      ldout(cct, 20) << "try to re-connct RO daemon. " << dendl;
+    {
+      Mutex::Locker locker(m_lock);
+      if (m_re_connecting.load()) {
+        ldout(cct, 5) << "Parent cache is re-connecting RO daemon, "
+                      << "dispatch current request to lower object layer " << dendl;
+        return false;
+      }
       m_re_connecting.store(true);
-
-      Context* on_finish = new FunctionContext([this](int ret) {
-        m_re_connecting.store(false);
-      });
-      create_cache_session(on_finish, true);
     }
 
-    ldout(cct, 5) << "session don't work, dispatch current request to lower object layer " << dendl;
+    ceph_assert(m_re_connecting.load());
+
+    Context* on_finish = new FunctionContext([this](int ret) {
+      m_re_connecting.store(false);
+    });
+    create_cache_session(on_finish, true);
+
+    ldout(cct, 5) << "Parent cache initiate re-connect to RO daemon. "
+                  << "dispatch current request to lower object layer" << dendl;
     return false;
   }
   ceph_assert(m_cache_client->is_session_work());
