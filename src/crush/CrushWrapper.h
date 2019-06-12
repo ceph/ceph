@@ -505,6 +505,12 @@ public:
       return 0;
     return get_class_name(p->second);
   }
+  int get_item_class_id(int t) const {
+    auto p = class_map.find(t);
+    if (p == class_map.end())
+      return -ENOENT;
+    return p->second;
+  }
   int set_item_class(int i, const string& name) {
     if (!is_valid_crush_name(name))
       return -EINVAL;

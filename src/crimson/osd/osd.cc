@@ -238,7 +238,7 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     if (osdmap->get_epoch() > newest - 1) {
       throw std::runtime_error("i am destroyed");
     }
-  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
+  } else if (osdmap->is_noup(whoami)) {
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
