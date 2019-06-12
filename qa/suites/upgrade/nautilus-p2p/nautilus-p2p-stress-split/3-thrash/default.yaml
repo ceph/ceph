@@ -9,6 +9,8 @@ overrides:
     - wrongly marked me down
     - objects unfound and apparently lost
     - log bound mismatch
+    ### ref: https://tracker.ceph.com/issues/40251
+    - failed to encode map
 tasks:
 - parallel:
   - stress-tasks

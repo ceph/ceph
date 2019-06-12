@@ -10,6 +10,8 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
+      ### ref: https://tracker.ceph.com/issues/40251
+      - failed to encode map
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
