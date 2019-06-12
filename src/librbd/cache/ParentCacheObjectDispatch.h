@@ -146,6 +146,7 @@ private:
   SharedPersistentObjectCacher *m_object_store;
   bool m_initialized;
   std::atomic<bool> m_re_connecting;
+  Mutex m_lock;
 };
 
 } // namespace cache
