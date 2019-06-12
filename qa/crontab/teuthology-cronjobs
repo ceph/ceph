@@ -89,9 +89,8 @@ CEPH_QA_EMAIL="ceph-qa@lists.ceph.com"
 
 ## upgrades suites for on luminous
 ## !!!! three suites below MUST use --suite-branch hammer, kraken OR jewel
-## --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4" == test only supported distro
-45 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-hammer -k distro -e $CEPH_QA_EMAIL --suite-branch hammer --filter "ubuntu_14.04"
-47 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4"
+## --filter "ubuntu_16.04,centos_7.4" == test only supported distro
+47 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter "ubuntu_16.04,centos_7.4"
 50 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/client-upgrade-kraken -k distro -e $CEPH_QA_EMAIL --suite-branch kraken
 ## point-to-point upgrades suites on luminous
 30 05 * * 7  CEPH_BRANCH=luminous; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -m $MACHINE_NAME -s upgrade/luminous-p2p -k distro -e $CEPH_QA_EMAIL
