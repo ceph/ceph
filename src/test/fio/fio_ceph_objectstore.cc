@@ -11,6 +11,7 @@
 #include <memory>
 #include <system_error>
 #include <vector>
+#include <fstream>
 
 #include "os/ObjectStore.h"
 #include "global/global_init.h"
@@ -35,6 +36,7 @@ namespace {
 struct Options {
   thread_data* td;
   char* conf;
+  char* perf_output_file;
   unsigned long long
     oi_attr_len_low,
     oi_attr_len_high,
@@ -69,6 +71,14 @@ static std::vector<fio_option> ceph_options{
     o.type   = FIO_OPT_STR_STORE;
     o.help   = "Path to a ceph configuration file";
     o.off1   = offsetof(Options, conf);
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "perf_output_file";
+    o.lname  = "perf output target";
+    o.type   = FIO_OPT_STR_STORE;
+    o.help   = "Path to which to write json formatted perf output";
+    o.off1   = offsetof(Options, perf_output_file);
+    o.def    = 0;
   }),
   make_option([] (fio_option& o) {
     o.name   = "oi_attr_len";
@@ -263,6 +273,9 @@ struct Engine {
   int ref_count;
   const bool unlink; //< unlink objects on destruction
 
+  // file to which to output formatted perf information
+  const std::optional<std::string> perf_output_file;
+
   explicit Engine(thread_data* td);
   ~Engine();
 
@@ -281,23 +294,23 @@ struct Engine {
     --ref_count;
     if (!ref_count) {
       ostringstream ostr;
-      Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+      Formatter* f = Formatter::create(
+	"json-pretty", "json-pretty", "json-pretty");
+      f->open_object_section("perf_output");
       cct->get_perfcounters_collection()->dump_formatted(f, false);
-      ostr << "FIO plugin ";
-      f->flush(ostr);
       if (g_conf()->rocksdb_perf) {
+	f->open_object_section("rocksdb_perf");
         os->get_db_statistics(f);
-        ostr << "FIO get_db_statistics ";
-        f->flush(ostr);
+	f->close_section();
       }
-      ostr << "Mempools: ";
-      f->open_object_section("mempools");
       mempool::dump(f);
+      {
+	f->open_object_section("db_histogram");
+	os->generate_db_histogram(f);
+	f->close_section();
+      }
       f->close_section();
-      f->flush(ostr);
       
-      ostr << "Generate db histogram: ";
-      os->generate_db_histogram(f);
       f->flush(ostr);
       delete f;
 
@@ -305,14 +318,30 @@ struct Engine {
 	destroy_collections(os, collections);
       }
       os->umount();
-      dout(0) <<  ostr.str() << dendl;
+      dout(0) << "FIO plugin perf dump:" << dendl;
+      dout(0) << ostr.str() << dendl;
+      if (perf_output_file) {
+	try {
+	  std::ofstream foutput(*perf_output_file);
+	  foutput << ostr.str() << std::endl;
+	} catch (std::exception &e) {
+	  std::cerr << "Unable to write formatted output to "
+		    << *perf_output_file
+		    << ", exception: " << e.what()
+		    << std::endl;
+	}
+      }
     }
   }
 };
 
 Engine::Engine(thread_data* td)
   : ref_count(0),
-    unlink(td->o.unlink)
+    unlink(td->o.unlink),
+    perf_output_file(
+      static_cast<Options*>(td->eo)->perf_output_file ?
+      std::make_optional(static_cast<Options*>(td->eo)->perf_output_file) :
+      std::nullopt)
 {
   // add the ceph command line arguments
   auto o = static_cast<Options*>(td->eo);
