@@ -2041,44 +2041,6 @@ void buffer::list::invalidate_crc()
   }
 }
 
-#include "common/ceph_crypto.h"
-using ceph::crypto::SHA1;
-using ceph::crypto::SHA256;
-using ceph::crypto::SHA512;
-
-sha1_digest_t buffer::list::sha1()
-{
-  unsigned char fingerprint[CEPH_CRYPTO_SHA1_DIGESTSIZE];
-  SHA1 sha1_gen;
-  for (auto& p : _buffers) {
-    sha1_gen.Update((const unsigned char *)p.c_str(), p.length());
-  }
-  sha1_gen.Final(fingerprint);
-  return sha1_digest_t(fingerprint);
-}
-
-sha256_digest_t buffer::list::sha256()
-{
-  unsigned char fingerprint[CEPH_CRYPTO_SHA256_DIGESTSIZE];
-  SHA256 sha256_gen;
-  for (auto& p : _buffers) {
-    sha256_gen.Update((const unsigned char *)p.c_str(), p.length());
-  }
-  sha256_gen.Final(fingerprint);
-  return sha256_digest_t(fingerprint);
-}
-
-sha512_digest_t buffer::list::sha512()
-{
-  unsigned char fingerprint[CEPH_CRYPTO_SHA512_DIGESTSIZE];
-  SHA512 sha512_gen;
-  for (auto& p : _buffers) {
-    sha512_gen.Update((const unsigned char *)p.c_str(), p.length());
-  }
-  sha512_gen.Final(fingerprint);
-  return sha512_digest_t(fingerprint);
-}
-
 /**
  * Binary write all contents to a C++ stream
  */
