@@ -78,7 +78,8 @@ class Device {
   const char* name;
   uint8_t  port_cnt = 0;
  public:
-  explicit Device(CephContext *c, ibv_device* d, struct ibv_context *dc);
+  explicit Device(CephContext *c, ibv_device* ib_dev);
+  explicit Device(CephContext *c, ibv_context *ib_ctx);
   ~Device() {
     if (active_port) {
       delete active_port;
@@ -102,16 +103,23 @@ class DeviceList {
   int num;
   Device** devices;
  public:
-  explicit DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)),
-                                device_context_list(rdma_get_devices(&num)) {
-    if (device_list == NULL || num == 0) {
-      lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      ceph_abort();
+  explicit DeviceList(CephContext *cct): device_list(nullptr), device_context_list(nullptr),
+                                         num(0), devices(nullptr) {
+    device_list = ibv_get_device_list(&num);
+    ceph_assert(device_list);
+    ceph_assert(num);
+    if (cct->_conf->ms_async_rdma_cm) {
+        device_context_list = rdma_get_devices(NULL);
+        ceph_assert(device_context_list);
     }
     devices = new Device*[num];
 
     for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i], device_context_list[i]);
+      if (cct->_conf->ms_async_rdma_cm) {
+         devices[i] = new Device(cct, device_context_list[i]);
+      } else {
+         devices[i] = new Device(cct, device_list[i]);
+      }
     }
   }
   ~DeviceList() {

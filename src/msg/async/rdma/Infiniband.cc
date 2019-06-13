@@ -103,24 +103,30 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 #endif
 }
 
-
-Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
-  : device(d), active_port(nullptr)
+Device::Device(CephContext *cct, ibv_device* ib_dev): device(ib_dev), active_port(nullptr)
 {
-  if (device == NULL) {
-    lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
-    ceph_abort();
-  }
+  ceph_assert(device);
+  ctxt = ibv_open_device(device);
+  ceph_assert(ctxt);
+
   name = ibv_get_device_name(device);
-  if (cct->_conf->ms_async_rdma_cm) {
-    ctxt = dc;
-  } else {
-    ctxt = ibv_open_device(device);
-  }
-  if (ctxt == NULL) {
-    lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
+
+  int r = ibv_query_device(ctxt, &device_attr);
+  if (r) {
+    lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
+}
+
+Device::Device(CephContext *cct, struct ibv_context *ib_ctx): device(ib_ctx->device),
+                                                              active_port(nullptr)
+{
+  ceph_assert(device);
+  ctxt = ib_ctx;
+  ceph_assert(ctxt);
+
+  name = ibv_get_device_name(device);
+
   int r = ibv_query_device(ctxt, &device_attr);
   if (r) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
