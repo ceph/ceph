@@ -4,7 +4,7 @@
 #include <fmt/ostream.h>
 
 #include "common/safe_io.h"
-
+#include "crimson/common/buffer_io.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "os/Transaction.h"
@@ -55,25 +55,22 @@ seastar::future<> CyanStore::mount()
 
 seastar::future<> CyanStore::umount()
 {
-  std::set<coll_t> collections;
-  for (auto& [col, ch] : coll_map) {
-    collections.insert(col);
-    ceph::bufferlist bl;
-    ceph_assert(ch);
-    ch->encode(bl);
-    std::string fn = fmt::format("{}/{}", path, col);
-    if (int r = bl.write_file(fn.c_str()); r < 0) {
-      throw std::runtime_error("write_file");
-    }
-  }
-
-  std::string fn = path + "/collections";
-  ceph::bufferlist bl;
-  ceph::encode(collections, bl);
-  if (int r = bl.write_file(fn.c_str()); r < 0) {
-    throw std::runtime_error("write_file");
-  }
-  return seastar::now();
+  return seastar::do_with(std::set<coll_t>{}, [this](auto& collections) {
+    return seastar::do_for_each(coll_map, [&collections, this](auto& coll) {
+      auto& [col, ch] = coll;
+      collections.insert(col);
+      ceph::bufferlist bl;
+      ceph_assert(ch);
+      ch->encode(bl);
+      std::string fn = fmt::format("{}/{}", path, col);
+      return ceph::buffer::write_file(std::move(bl), fn);
+    }).then([&collections, this] {
+      ceph::bufferlist bl;
+      ceph::encode(collections, bl);
+      std::string fn = fmt::format("{}/collections", path);
+      return ceph::buffer::write_file(std::move(bl), fn);
+    });
+  });
 }
 
 seastar::future<> CyanStore::mkfs()
@@ -96,12 +93,10 @@ seastar::future<> CyanStore::mkfs()
   ceph::bufferlist bl;
   std::set<coll_t> collections;
   ceph::encode(collections, bl);
-  r = bl.write_file(fn.c_str());
-  if (r < 0)
-    throw std::runtime_error("write_file");
-
-  write_meta("type", "memstore");
-  return seastar::now();
+  return ceph::buffer::write_file(std::move(bl), fn).then([this] {
+    write_meta("type", "memstore");
+    return seastar::now();
+  });
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
