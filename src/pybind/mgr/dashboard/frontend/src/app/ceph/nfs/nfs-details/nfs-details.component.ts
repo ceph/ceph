@@ -3,6 +3,7 @@ import { Component, Input, OnChanges } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
+import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
@@ -17,11 +18,35 @@ export class NfsDetailsComponent implements OnChanges {
   selectedItem: any;
   data: any;
 
-  constructor(private i18n: I18n) {}
+  clientsColumns: CdTableColumn[];
+  clients = [];
+
+  constructor(private i18n: I18n) {
+    this.clientsColumns = [
+      {
+        name: this.i18n('Addresses'),
+        prop: 'addresses',
+        flexGrow: 2
+      },
+      {
+        name: this.i18n('Access Type'),
+        prop: 'access_type',
+        flexGrow: 1
+      },
+      {
+        name: this.i18n('Squash'),
+        prop: 'squash',
+        flexGrow: 1
+      }
+    ];
+  }
 
   ngOnChanges() {
     if (this.selection.hasSelection) {
       this.selectedItem = this.selection.first();
+
+      this.clients = this.selectedItem.clients;
+
       this.data = {};
       this.data[this.i18n('Cluster')] = this.selectedItem.cluster_id;
       this.data[this.i18n('Daemons')] = this.selectedItem.daemons;
