@@ -38,8 +38,7 @@ public:
 
   ElectionLogic(Elector *e) : elector(e), epoch(0), participating(true),
 			      electing_me(false), leader_acked(-1) {}
-  void init();
-  void bump_epoch(epoch_t e);
+  void declare_standalone_victory();
   void start();
   void defer(int who);
   void end_election_period();
@@ -49,6 +48,8 @@ public:
 
   
 private:
+  void init();
+  void bump_epoch(epoch_t e);
   void declare_victory();
   // call-outs
   void persist_epoch(epoch_t e);
@@ -401,13 +402,8 @@ private:
    */
   epoch_t get_epoch() { return logic.epoch; }
 
-  /**
-   * advance_epoch
-   *
-   * increase election epoch by 1
-   */
-  void advance_epoch() {
-    logic.bump_epoch(logic.epoch + 1);
+  void declare_standalone_victory() {
+    logic.declare_standalone_victory();
   }
 
   /**
