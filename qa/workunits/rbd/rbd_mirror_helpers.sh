@@ -929,25 +929,43 @@ stress_write_image()
 	2> ${TEMPDIR}/rbd-mirror-random-write.log || true
 }
 
+show_diff()
+{
+    local file1=$1
+    local file2=$2
+
+    xxd ${file1} > ${file1}.xxd
+    xxd ${file2} > ${file2}.xxd
+    sdiff -s ${file1}.xxd ${file2}.xxd | head -n 64
+    rm -f ${file1}.xxd ${file2}.xxd
+}
+
 compare_images()
 {
     local pool=$1
     local image=$2
+    local ret=0
 
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
     rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${CLUSTER2} -p ${pool} export ${image} - | xxd > ${rmt_export}
-    rbd --cluster ${CLUSTER1} -p ${pool} export ${image} - | xxd > ${loc_export}
-    sdiff -s ${rmt_export} ${loc_export} | head -n 64
+    rbd --cluster ${CLUSTER2} -p ${pool} export ${image} ${rmt_export}
+    rbd --cluster ${CLUSTER1} -p ${pool} export ${image} ${loc_export}
+    if ! cmp ${rmt_export} ${loc_export}
+    then
+        show_diff ${rmt_export} ${loc_export}
+        ret=1
+    fi
     rm -f ${rmt_export} ${loc_export}
+    return ${ret}
 }
 
 compare_image_snapshots()
 {
     local pool=$1
     local image=$2
+    local ret=0
 
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
@@ -957,11 +975,16 @@ compare_image_snapshots()
                            $XMLSTARLET sel -t -v "//snapshot/name" | \
                            grep -E -v "^\.rbd-mirror\."); do
         rm -f ${rmt_export} ${loc_export}
-        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} - | xxd > ${rmt_export}
-        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} - | xxd > ${loc_export}
-        sdiff -s ${rmt_export} ${loc_export} | head -n 64
+        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
+        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
+        if ! cmp ${rmt_export} ${loc_export}
+        then
+            show_diff ${rmt_export} ${loc_export}
+            ret=1
+        fi
     done
     rm -f ${rmt_export} ${loc_export}
+    return ${ret}
 }
 
 demote_image()
