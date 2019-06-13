@@ -308,6 +308,13 @@ setup()
 
     setup_pools "${CLUSTER1}" "${CLUSTER2}"
     setup_pools "${CLUSTER2}" "${CLUSTER1}"
+
+    if [ -n "${RBD_MIRROR_MIN_COMPAT_CLIENT}" ]; then
+        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd \
+                 set-require-min-compat-client ${RBD_MIRROR_MIN_COMPAT_CLIENT}
+        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd \
+                 set-require-min-compat-client ${RBD_MIRROR_MIN_COMPAT_CLIENT}
+    fi
 }
 
 cleanup()
