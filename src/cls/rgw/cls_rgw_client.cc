@@ -207,20 +207,33 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   o.exec(RGW_CLASS, RGW_BUCKET_COMPLETE_OP, in);
 }
 
-static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
-    const string& oid, const cls_rgw_obj_key& start_obj, const string& filter_prefix,
-    uint32_t num_entries, bool list_versions, BucketIndexAioManager *manager,
-    struct rgw_cls_list_ret *pdata) {
+void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
+                            const cls_rgw_obj_key& start_obj,
+                            const std::string& filter_prefix,
+                            uint32_t num_entries,
+                            bool list_versions,
+                            rgw_cls_list_ret* result)
+{
   bufferlist in;
-  struct rgw_cls_list_op call;
+  rgw_cls_list_op call;
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
   ::encode(call, in);
 
+  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
+}
+
+static bool issue_bucket_list_op(librados::IoCtx& io_ctx, const string& oid,
+				 const cls_rgw_obj_key& start_obj,
+				 const string& filter_prefix,
+				 uint32_t num_entries, bool list_versions,
+				 BucketIndexAioManager *manager,
+				 rgw_cls_list_ret *pdata) {
   librados::ObjectReadOperation op;
-  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, new ClsBucketIndexOpCtx<struct rgw_cls_list_ret>(pdata, NULL));
+  cls_rgw_bucket_list_op(op, start_obj, filter_prefix,
+                         num_entries, list_versions, pdata);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
