@@ -1828,6 +1828,10 @@ public:
       /* inc sync */
       tn->log(20, "doing work for incremental sync");
       do {
+	tn->log(20,
+		SSTR("TEMP ERIC top of work loop, will compare " <<
+		     work_period_end <<
+		     " and " << ceph::coarse_mono_clock::now()));
         if (!rebiddable_lease_cr->is_locked()) {
           lost_lock = true;
           tn->log(10, "lost lease due to expiration");
