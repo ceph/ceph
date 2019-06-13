@@ -62,7 +62,6 @@ export class RgwUserFormComponent implements OnInit {
     this.s3keyLabel = this.i18n('S3 Key');
     this.capabilityLabel = this.i18n('capability');
     this.createForm();
-    this.listenToChanges();
   }
 
   createForm() {
@@ -133,39 +132,6 @@ export class RgwUserFormComponent implements OnInit {
           })
         ]
       ]
-    });
-  }
-
-  listenToChanges() {
-    // Reset the validation status of various controls, especially those that are using
-    // the 'requiredIf' validator. This is necessary because the controls itself are not
-    // validated again if the status of their prerequisites have been changed.
-    this.userForm.get('generate_key').valueChanges.subscribe(() => {
-      ['access_key', 'secret_key'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('user_quota_enabled').valueChanges.subscribe(() => {
-      ['user_quota_max_size', 'user_quota_max_objects'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('user_quota_max_size_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('user_quota_max_size').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('user_quota_max_objects_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('user_quota_max_objects').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('bucket_quota_enabled').valueChanges.subscribe(() => {
-      ['bucket_quota_max_size', 'bucket_quota_max_objects'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('bucket_quota_max_size_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('bucket_quota_max_size').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('bucket_quota_max_objects_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('bucket_quota_max_objects').updateValueAndValidity({ onlySelf: true });
     });
   }
 
