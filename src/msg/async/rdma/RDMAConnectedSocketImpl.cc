@@ -340,28 +340,30 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
 
 ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
 {
-  size_t read = 0, tmp = 0;
-  auto c = buffers.begin();
-  for (; c != buffers.end() ; ++c) {
-    tmp = (*c)->read(buf+read, len-read);
-    read += tmp;
-    ldout(cct, 25) << __func__ << " this iter read: " << tmp << " bytes." << " offset: " << (*c)->get_offset() << " ,bound: " << (*c)->get_bound()  << ". Chunk:" << *c  << dendl;
-    if ((*c)->get_size() == 0) {
-      (*c)->clear();
-      dispatcher->post_chunk_to_pool(*c);
+  size_t read_size = 0, tmp = 0;
+  auto pchunk = buffers.begin();
+  while (pchunk != buffers.end()) {
+    tmp = (*pchunk)->read(buf + read_size, len - read_size);
+    read_size += tmp;
+    ldout(cct, 25) << __func__ << " read chunk " << *pchunk << " bytes length" << tmp << " offset: "
+                   << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << dendl;
+
+    if ((*pchunk)->get_size() == 0) {
+      (*pchunk)->clear();
+      dispatcher->post_chunk_to_pool(*pchunk);
       update_post_backlog();
-      ldout(cct, 25) << __func__ << " one chunk over." << dendl;
+      ldout(cct, 25) << __func__ << " read over one chunk " << dendl;
+      pchunk++;
     }
-    if (read == len) {
+
+    if (read_size == len) {
       break;
     }
   }
 
-  if (c != buffers.end() && (*c)->get_size() == 0)
-    ++c;
-  buffers.erase(buffers.begin(), c);
-  ldout(cct, 25) << __func__ << " got " << read  << " bytes, buffers size: " << buffers.size() << dendl;
-  return read;
+  buffers.erase(buffers.begin(), pchunk);
+  ldout(cct, 25) << __func__ << " got " << read_size  << " bytes, buffers size: " << buffers.size() << dendl;
+  return read_size;
 }
 
 ssize_t RDMAConnectedSocketImpl::zero_copy_read(bufferptr &data)
