@@ -50,12 +50,9 @@ struct C_Flush : public Context {
 JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
                                  const std::string &object_oid_prefix,
                                  const JournalMetadataPtr& journal_metadata,
-                                 uint32_t flush_interval, uint64_t flush_bytes,
-                                 double flush_age,
                                  uint64_t max_in_flight_appends)
   : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
-    m_journal_metadata(journal_metadata), m_flush_interval(flush_interval),
-    m_flush_bytes(flush_bytes), m_flush_age(flush_age),
+    m_journal_metadata(journal_metadata),
     m_max_in_flight_appends(max_in_flight_appends), m_listener(this),
     m_object_handler(this), m_lock("JournalerRecorder::m_lock"),
     m_current_set(m_journal_metadata->get_active_set()) {
@@ -66,13 +63,14 @@ JournalRecorder::JournalRecorder(librados::IoCtx &ioctx,
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
   for (uint8_t splay_offset = 0; splay_offset < splay_width; ++splay_offset) {
-    m_object_locks.push_back(shared_ptr<Mutex>(
-                                          new Mutex("ObjectRecorder::m_lock::"+
-                                          std::to_string(splay_offset))));
+    shared_ptr<Mutex> object_lock(new Mutex(
+      "ObjectRecorder::m_lock::" + std::to_string(splay_offset)));
+    m_object_locks.push_back(object_lock);
+
     uint64_t object_number = splay_offset + (m_current_set * splay_width);
+    Mutex::Locker locker(*object_lock);
     m_object_ptrs[splay_offset] = create_object_recorder(
-                                                object_number,
-                                                m_object_locks[splay_offset]);
+      object_number, m_object_locks[splay_offset]);
   }
 
   m_journal_metadata->add_listener(&m_listener);
@@ -107,6 +105,27 @@ void JournalRecorder::shut_down(Context *on_safe) {
       }
     });
   flush(on_safe);
+}
+
+void JournalRecorder::set_append_batch_options(int flush_interval,
+                                               uint64_t flush_bytes,
+                                               double flush_age) {
+  ldout(m_cct, 5) << "flush_interval=" << flush_interval << ", "
+                  << "flush_bytes=" << flush_bytes << ", "
+                  << "flush_age=" << flush_age << dendl;
+
+  Mutex::Locker locker(m_lock);
+  m_flush_interval = flush_interval;
+  m_flush_bytes = flush_bytes;
+  m_flush_age = flush_age;
+
+  uint8_t splay_width = m_journal_metadata->get_splay_width();
+  for (uint8_t splay_offset = 0; splay_offset < splay_width; ++splay_offset) {
+    Mutex::Locker object_locker(*m_object_locks[splay_offset]);
+    auto object_recorder = get_object(splay_offset);
+    object_recorder->set_append_batch_options(flush_interval, flush_bytes,
+                                              flush_age);
+  }
 }
 
 Future JournalRecorder::append(uint64_t tag_tid,
@@ -286,8 +305,10 @@ ObjectRecorderPtr JournalRecorder::create_object_recorder(
   ObjectRecorderPtr object_recorder(new ObjectRecorder(
     m_ioctx, utils::get_object_name(m_object_oid_prefix, object_number),
     object_number, lock, m_journal_metadata->get_work_queue(),
-    &m_object_handler, m_journal_metadata->get_order(), m_flush_interval,
-    m_flush_bytes, m_flush_age, m_max_in_flight_appends));
+    &m_object_handler, m_journal_metadata->get_order(),
+    m_max_in_flight_appends));
+  object_recorder->set_append_batch_options(m_flush_interval, m_flush_bytes,
+                                            m_flush_age);
   return object_recorder;
 }
 

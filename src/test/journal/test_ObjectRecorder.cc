@@ -94,8 +94,13 @@ public:
   journal::ObjectRecorderPtr create_object(const std::string &oid,
                                            uint8_t order, shared_ptr<Mutex> lock) {
     journal::ObjectRecorderPtr object(new journal::ObjectRecorder(
-      m_ioctx, oid, 0, lock, m_work_queue, &m_handler, order, m_flush_interval,
-      m_flush_bytes, m_flush_age, m_max_in_flight_appends));
+      m_ioctx, oid, 0, lock, m_work_queue, &m_handler, order,
+      m_max_in_flight_appends));
+    {
+      Mutex::Locker locker(*lock);
+      object->set_append_batch_options(m_flush_interval, m_flush_bytes,
+                                       m_flush_age);
+    }
     m_object_recorders.push_back(object);
     m_object_recorder_locks.insert(std::make_pair(oid, lock));
     m_handler.object_lock = lock;

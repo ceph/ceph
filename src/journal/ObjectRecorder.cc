@@ -21,17 +21,13 @@ namespace journal {
 ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
                                uint64_t object_number, shared_ptr<Mutex> lock,
                                ContextWQ *work_queue, Handler *handler,
-                               uint8_t order, uint32_t flush_interval,
-                               uint64_t flush_bytes, double flush_age,
-                               int32_t max_in_flight_appends)
+                               uint8_t order, int32_t max_in_flight_appends)
   : RefCountedObject(NULL, 0), m_oid(oid), m_object_number(object_number),
     m_cct(NULL), m_op_work_queue(work_queue), m_handler(handler),
     m_order(order), m_soft_max_size(1 << m_order),
-    m_flush_interval(flush_interval), m_flush_bytes(flush_bytes),
-    m_flush_age(flush_age), m_max_in_flight_appends(max_in_flight_appends),
-    m_flush_handler(this), m_lock(lock), m_last_flush_time(ceph_clock_now()),
-    m_append_tid(0), m_overflowed(false), m_object_closed(false),
-    m_in_flight_flushes(false) {
+    m_max_in_flight_appends(max_in_flight_appends), m_flush_handler(this),
+    m_lock(lock), m_last_flush_time(ceph_clock_now()), m_append_tid(0),
+    m_overflowed(false), m_object_closed(false), m_in_flight_flushes(false) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   ceph_assert(m_handler != NULL);
@@ -43,6 +39,19 @@ ObjectRecorder::~ObjectRecorder() {
   ceph_assert(m_pending_buffers.empty());
   ceph_assert(m_in_flight_tids.empty());
   ceph_assert(m_in_flight_appends.empty());
+}
+
+void ObjectRecorder::set_append_batch_options(int flush_interval,
+                                              uint64_t flush_bytes,
+                                              double flush_age) {
+  ldout(m_cct, 5) << "flush_interval=" << flush_interval << ", "
+                  << "flush_bytes=" << flush_bytes << ", "
+                  << "flush_age=" << flush_age << dendl;
+
+  ceph_assert(m_lock->is_locked());
+  m_flush_interval = flush_interval;
+  m_flush_bytes = flush_bytes;
+  m_flush_age = flush_age;
 }
 
 bool ObjectRecorder::append(AppendBuffers &&append_buffers) {

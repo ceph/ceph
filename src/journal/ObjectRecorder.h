@@ -41,9 +41,11 @@ public:
   ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
                  uint64_t object_number, std::shared_ptr<Mutex> lock,
                  ContextWQ *work_queue, Handler *handler, uint8_t order,
-                 uint32_t flush_interval, uint64_t flush_bytes,
-                 double flush_age, int32_t max_in_flight_appends);
+                 int32_t max_in_flight_appends);
   ~ObjectRecorder() override;
+
+  void set_append_batch_options(int flush_interval, uint64_t flush_bytes,
+                                double flush_age);
 
   inline uint64_t get_object_number() const {
     return m_object_number;
@@ -115,9 +117,9 @@ private:
   uint8_t m_order;
   uint64_t m_soft_max_size;
 
-  uint32_t m_flush_interval;
-  uint64_t m_flush_bytes;
-  double m_flush_age;
+  uint32_t m_flush_interval = 0;
+  uint64_t m_flush_bytes = 0;
+  double m_flush_age = 0;
   int32_t m_max_in_flight_appends;
 
   FlushHandler m_flush_handler;
