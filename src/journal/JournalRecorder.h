@@ -27,6 +27,7 @@ public:
                   double flush_age, uint64_t max_in_flight_appends);
   ~JournalRecorder();
 
+  void shut_down(Context *on_safe);
   Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
 
@@ -95,6 +96,8 @@ private:
   std::vector<std::shared_ptr<Mutex>> m_object_locks;
 
   FutureImplPtr m_prev_future;
+
+  Context *m_on_object_set_advanced = nullptr;
 
   void open_object_set();
   bool close_object_set(uint64_t active_set);
