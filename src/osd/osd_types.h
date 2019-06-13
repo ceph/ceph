@@ -4209,6 +4209,7 @@ struct pg_missing_item {
   enum missing_flags_t {
     FLAG_NONE = 0,
     FLAG_DELETE = 1,
+    FLAG_CLEAN_REGIONS = 2, // for [de]encoding only
   } flags;
   pg_missing_item() : flags(FLAG_NONE) {}
   explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
@@ -4224,14 +4225,10 @@ struct pg_missing_item {
   void encode(ceph::buffer::list& bl, uint64_t features) const {
     using ceph::encode;
     if (HAVE_FEATURE(features, SERVER_OCTOPUS)) {
-      // encoding a zeroed eversion_t to differentiate between OSD_RECOVERY_DELETES、
-      // SERVER_OCTOPUS and legacy unversioned encoding - a need value of 0'0 is not
-      // possible. This can be replaced with the legacy encoding
       encode(eversion_t(), bl);
-      encode(eversion_t(-1, -1), bl);
       encode(need, bl);
       encode(have, bl);   
-      encode(static_cast<uint8_t>(flags), bl);
+      encode(static_cast<uint8_t>(flags & FLAG_CLEAN_REGIONS), bl);
       encode(clean_regions, bl);
     } else {
       encode(eversion_t(), bl);
@@ -4242,25 +4239,20 @@ struct pg_missing_item {
   }
   void decode(ceph::buffer::list::const_iterator& bl) {
     using ceph::decode;
-    eversion_t e, l;
-    decode(e, bl);
-    decode(l, bl);
-    if(l == eversion_t(-1, -1)) {
-      // support all
-      decode(need, bl);
-      decode(have, bl);
-      uint8_t f;
-      decode(f, bl);
-      flags = static_cast<missing_flags_t>(f);
+    eversion_t e;
+    decode(e, bl); // eversion_t() to differentiate between OSD_RECOVERY_DELETES
+                   // and legacy unversioned encoding
+    decode(need, bl);
+    decode(have, bl);
+    uint8_t f;
+    decode(f, bl);
+    if ((f & FLAG_CLEAN_REGIONS) == FLAG_CLEAN_REGIONS) {
+      f &= ~FLAG_CLEAN_REGIONS;
       decode(clean_regions, bl);
-     } else {
-      // support OSD_RECOVERY_DELETES
-      need = l;
-      decode(have, bl);
-      uint8_t f;
-      decode(f, bl);
-      flags = static_cast<missing_flags_t>(f); 
+    } else {
+      clean_regions.mark_fully_dirty();
     }
+    flags = static_cast<missing_flags_t>(f);
   }
 
   void set_delete(bool is_delete) {
