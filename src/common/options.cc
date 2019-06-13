@@ -6419,7 +6419,7 @@ std::vector<Option> get_rgw_options() {
     .add_see_also({"rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_obj_min_wait", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2_hr)
+    .set_default(300)
     .set_description("Garbage collection object expiration time")
     .set_long_description(
        "The length of time (in seconds) that the RGW collector will wait before purging "
@@ -6429,7 +6429,7 @@ std::vector<Option> get_rgw_options() {
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1_hr)
+    .set_default(600)
     .set_description("Length of time GC processor can lease shard")
     .set_long_description(
         "Garbage collection thread in RGW process holds a lease on its data shards. These "
@@ -6441,7 +6441,7 @@ std::vector<Option> get_rgw_options() {
     .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(1_hr)
+    .set_default(600)
     .set_description("Garbage collector cycle run time")
     .set_long_description(
         "The amount of time between the start of consecutive runs of the garbage collector "
