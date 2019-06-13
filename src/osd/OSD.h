@@ -503,7 +503,7 @@ public:
       f->dump_stream("pgid") << i.pgid;
       f->dump_stream("sched_time") << i.sched_time;
       f->dump_stream("deadline") << i.deadline;
-      f->dump_bool("forced", i.sched_time == i.deadline);
+      f->dump_bool("forced", i.sched_time == PG::Scrubber::scrub_must_stamp());
       f->close_section();
     }
     f->close_section();

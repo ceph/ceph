@@ -4474,6 +4474,11 @@ bool PG::sched_scrub()
   return ret;
 }
 
+bool PG::is_scrub_registered()
+{
+  return !scrubber.scrub_reg_stamp.is_zero();
+}
+
 void PG::reg_next_scrub()
 {
   if (!is_primary())
@@ -4483,7 +4488,7 @@ void PG::reg_next_scrub()
   bool must = false;
   if (scrubber.must_scrub) {
     // Set the smallest time that isn't utime_t()
-    reg_stamp = utime_t(0,1);
+    reg_stamp = Scrubber::scrub_must_stamp();
     must = true;
   } else if (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats) {
     reg_stamp = ceph_clock_now();
@@ -4496,7 +4501,7 @@ void PG::reg_next_scrub()
   double scrub_min_interval = 0, scrub_max_interval = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
   pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
-  ceph_assert(scrubber.scrub_reg_stamp == utime_t());
+  ceph_assert(!is_scrub_registered());
   scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
 					       reg_stamp,
 					       scrub_min_interval,
@@ -4504,15 +4509,13 @@ void PG::reg_next_scrub()
 					       must);
   dout(10) << __func__ << " pg " << pg_id << " register next scrub, scrub time "
       << scrubber.scrub_reg_stamp << ", must = " << (int)must << dendl;
-  scrub_registered = true;
 }
 
 void PG::unreg_next_scrub()
 {
-  if (scrub_registered) {
+  if (is_scrub_registered()) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
     scrubber.scrub_reg_stamp = utime_t();
-    scrub_registered = false;
   }
 }
 

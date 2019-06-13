@@ -418,6 +418,8 @@ public:
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+
+  bool is_scrub_registered();
   void reg_next_scrub();
   void unreg_next_scrub();
 
@@ -948,7 +950,6 @@ protected:
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
-  bool scrub_registered = false;
   bool scrub_queued;
   bool recovery_queued;
 
@@ -1703,6 +1704,8 @@ public:
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
+
+    static utime_t scrub_must_stamp() { return utime_t(0,1); }
 
     omap_stat_t omap_stats  = (const struct omap_stat_t){ 0 };
 
