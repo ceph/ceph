@@ -3657,6 +3657,10 @@ void RGWPutObj::execute()
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data));
 
+  // only atomic upload will upate version_id here
+  if (!multipart) 
+    version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor))->get_version_id();
+
   /* produce torrent */
   if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
   {
@@ -5390,7 +5394,6 @@ void RGWCompleteMultipart::execute()
   RGWMPObj mp;
   RGWObjManifest manifest;
   uint64_t olh_epoch = 0;
-  string version_id;
 
   op_ret = get_params();
   if (op_ret < 0)
@@ -5597,7 +5600,12 @@ void RGWCompleteMultipart::execute()
 
   target_obj.init(s->bucket, s->object.name);
   if (versioned_object) {
-    store->gen_rand_obj_instance_name(&target_obj);
+    if (!version_id.empty()) {
+      target_obj.key.set_instance(version_id);
+    } else {
+      store->gen_rand_obj_instance_name(&target_obj);
+      version_id = target_obj.key.get_instance();
+    }
   }
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
