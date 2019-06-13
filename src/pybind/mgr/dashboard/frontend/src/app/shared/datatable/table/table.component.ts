@@ -1,5 +1,6 @@
 import {
   AfterContentChecked,
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   EventEmitter,
@@ -31,7 +32,8 @@ import { CdUserConfig } from '../../models/cd-user-config';
 @Component({
   selector: 'cd-table',
   templateUrl: './table.component.html',
-  styleUrls: ['./table.component.scss']
+  styleUrls: ['./table.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
   @ViewChild(DatatableComponent)
@@ -163,6 +165,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
 
   ngOnInit() {
+    // ngx-datatable triggers calculations each time mouse enters a row,
+    // this will prevent that.
+    window.addEventListener(
+      'mouseenter',
+      function(event) {
+        event.stopPropagation();
+      },
+      true
+    );
+
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -382,9 +394,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.data) {
       return; // Wait for data
     }
-    this.rows = [...this.data];
     if (this.search.length > 0) {
       this.updateFilter();
+    } else {
+      this.rows = [...this.data];
     }
     this.reset();
     this.updateSelected();
