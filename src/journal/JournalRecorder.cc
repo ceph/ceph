@@ -134,7 +134,9 @@ Future JournalRecorder::append(uint64_t tag_tid,
 	 entry_bl);
   ceph_assert(entry_bl.length() <= m_journal_metadata->get_object_size());
 
-  bool object_full = object_ptr->append_unlock({{future, entry_bl}});
+  bool object_full = object_ptr->append({{future, entry_bl}});
+  m_object_locks[splay_offset]->Unlock();
+
   if (object_full) {
     ldout(m_cct, 10) << "object " << object_ptr->get_oid() << " now full"
                      << dendl;
@@ -245,12 +247,10 @@ void JournalRecorder::open_object_set() {
       ceph_assert(object_recorder->is_closed());
 
       // ready to close object and open object in active set
-      create_next_object_recorder_unlock(object_recorder);
-    } else {
-      uint8_t splay_offset = object_number % splay_width;
-      m_object_locks[splay_offset]->Unlock();
+      create_next_object_recorder(object_recorder);
     }
   }
+  unlock_object_recorders();
 }
 
 bool JournalRecorder::close_object_set(uint64_t active_set) {
@@ -286,13 +286,12 @@ ObjectRecorderPtr JournalRecorder::create_object_recorder(
   ObjectRecorderPtr object_recorder(new ObjectRecorder(
     m_ioctx, utils::get_object_name(m_object_oid_prefix, object_number),
     object_number, lock, m_journal_metadata->get_work_queue(),
-    m_journal_metadata->get_timer(), m_journal_metadata->get_timer_lock(),
     &m_object_handler, m_journal_metadata->get_order(), m_flush_interval,
     m_flush_bytes, m_flush_age, m_max_in_flight_appends));
   return object_recorder;
 }
 
-void JournalRecorder::create_next_object_recorder_unlock(
+void JournalRecorder::create_next_object_recorder(
     ObjectRecorderPtr object_recorder) {
   ceph_assert(m_lock.is_locked());
 
@@ -318,7 +317,7 @@ void JournalRecorder::create_next_object_recorder_unlock(
       new_object_recorder->get_object_number());
   }
 
-  new_object_recorder->append_unlock(std::move(append_buffers));
+  new_object_recorder->append(std::move(append_buffers));
   m_object_ptrs[splay_offset] = new_object_recorder;
 }
 

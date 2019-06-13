@@ -72,14 +72,12 @@ public:
     RadosTestFixture::TearDown();
   }
 
-  inline void set_flush_interval(uint32_t i) {
-    m_flush_interval = i;
-  }
-  inline void set_flush_bytes(uint64_t i) {
-    m_flush_bytes = i;
-  }
-  inline void set_flush_age(double i) {
-    m_flush_age = i;
+  inline void set_batch_options(uint32_t flush_interval, uint64_t flush_bytes,
+                                double flush_age, int max_in_flight) {
+    m_flush_interval = flush_interval;
+    m_flush_bytes = flush_bytes;
+    m_flush_age = flush_age;
+    m_max_in_flight_appends = max_in_flight;
   }
 
   journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
@@ -96,9 +94,8 @@ public:
   journal::ObjectRecorderPtr create_object(const std::string &oid,
                                            uint8_t order, shared_ptr<Mutex> lock) {
     journal::ObjectRecorderPtr object(new journal::ObjectRecorder(
-      m_ioctx, oid, 0, lock, m_work_queue, *m_timer, m_timer_lock, &m_handler,
-      order, m_flush_interval, m_flush_bytes, m_flush_age,
-      m_max_in_flight_appends));
+      m_ioctx, oid, 0, lock, m_work_queue, &m_handler, order, m_flush_interval,
+      m_flush_bytes, m_flush_age, m_max_in_flight_appends));
     m_object_recorders.push_back(object);
     m_object_recorder_locks.insert(std::make_pair(oid, lock));
     m_handler.object_lock = lock;
@@ -113,6 +110,7 @@ TEST_F(TestObjectRecorder, Append) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
+  set_batch_options(0, 0, 0, 0);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -121,15 +119,17 @@ TEST_F(TestObjectRecorder, Append) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
-  ASSERT_EQ(1U, object->get_pending_appends());
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
+  ASSERT_EQ(0U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
-  ASSERT_EQ(2U, object->get_pending_appends());
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
+  ASSERT_EQ(0U, object->get_pending_appends());
 
   C_SaferCond cond;
   append_buffer2.first->flush(&cond);
@@ -144,7 +144,7 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  set_flush_interval(2);
+  set_batch_options(2, 0, 0, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -153,14 +153,16 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(0U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -175,7 +177,7 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  set_flush_bytes(10);
+  set_batch_options(0, 10, 0, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -184,14 +186,16 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(1U, object->get_pending_appends());
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(0U, object->get_pending_appends());
 
   C_SaferCond cond;
@@ -206,7 +210,7 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  set_flush_age(0.1);
+  set_batch_options(0, 0, 0.1, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -215,13 +219,15 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               "payload");
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -245,13 +251,15 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
 
   journal::AppendBuffer append_buffer2 = create_append_buffer(234, 124,
                                                               payload);
   append_buffers = {append_buffer2};
   lock->Lock();
-  ASSERT_TRUE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_TRUE(object->append(std::move(append_buffers)));
+  lock->Unlock();
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -266,6 +274,7 @@ TEST_F(TestObjectRecorder, Flush) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
+  set_batch_options(0, 10, 0, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -274,7 +283,8 @@ TEST_F(TestObjectRecorder, Flush) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(1U, object->get_pending_appends());
 
   C_SaferCond cond1;
@@ -294,6 +304,7 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
+  set_batch_options(0, 10, 0, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -302,15 +313,13 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(1U, object->get_pending_appends());
 
   C_SaferCond cond;
   append_buffer.first->wait(&cond);
-  lock->Lock();
   object->flush(append_buffer.first);
-  ASSERT_TRUE(lock->is_locked());
-  lock->Unlock();
   ASSERT_TRUE(append_buffer.first->is_flush_in_progress() ||
               append_buffer.first->is_complete());
   ASSERT_EQ(0, cond.wait());
@@ -332,13 +341,11 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer};
 
-  lock->Lock();
   object->flush(append_buffer.first);
-  ASSERT_TRUE(lock->is_locked());
-  lock->Unlock();
   ASSERT_FALSE(append_buffer.first->is_flush_in_progress());
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
 
   // should automatically flush once its attached to the object
   C_SaferCond cond;
@@ -353,7 +360,7 @@ TEST_F(TestObjectRecorder, Close) {
   journal::JournalMetadataPtr metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
-  set_flush_interval(2);
+  set_batch_options(2, 0, 0, -1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
   journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
 
@@ -362,7 +369,8 @@ TEST_F(TestObjectRecorder, Close) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1};
   lock->Lock();
-  ASSERT_FALSE(object->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object->append(std::move(append_buffers)));
+  lock->Unlock();
   ASSERT_EQ(1U, object->get_pending_appends());
 
   lock->Lock();
@@ -402,7 +410,8 @@ TEST_F(TestObjectRecorder, Overflow) {
   journal::AppendBuffers append_buffers;
   append_buffers = {append_buffer1, append_buffer2};
   lock1->Lock();
-  ASSERT_TRUE(object1->append_unlock(std::move(append_buffers)));
+  ASSERT_TRUE(object1->append(std::move(append_buffers)));
+  lock1->Unlock();
 
   C_SaferCond cond;
   append_buffer2.first->wait(&cond);
@@ -433,7 +442,8 @@ TEST_F(TestObjectRecorder, Overflow) {
                                                               payload);
   append_buffers = {append_buffer3};
   lock2->Lock();
-  ASSERT_FALSE(object2->append_unlock(std::move(append_buffers)));
+  ASSERT_FALSE(object2->append(std::move(append_buffers)));
+  lock2->Unlock();
   append_buffer3.first->flush(NULL);
 
   overflowed = false;
