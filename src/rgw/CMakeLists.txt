@@ -214,7 +214,7 @@ target_link_libraries(rgw_a
   PRIVATE
   librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
-  cls_user_client ceph-common common_utf8 global
+  cls_user_client cls_queue_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
@@ -371,6 +371,7 @@ target_link_libraries(rgw_admin_user PRIVATE
   cls_timeindex_client
   cls_version_client
   cls_user_client
+  cls_queue_client
   global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
