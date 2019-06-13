@@ -76,11 +76,7 @@ class Elector {
    * @{
    */
   friend class ElectionLogic;
-  // FIXME!
-  public:
   ElectionLogic logic;
-  Elector *elector;
-  bool is_current_member(int rank);
 
    /**
    * @defgroup Elector_h_internal_types Internal Types
@@ -106,9 +102,11 @@ class Elector {
   /**
    * The Monitor instance associated with this class.
    */
+  // FIXME!
+public:
   Monitor *mon;
-
 private:
+
   /**
    * Event callback responsible for dealing with an expired election once a
    * timer runs out and fires up.
@@ -368,14 +366,16 @@ private:
   void handle_nak(MonOpRequestRef op);
   
  public:
+  Elector *elector;
+  bool is_current_member(int rank);
+  
   /**
    * Create an Elector class
    *
    * @param m A Monitor instance
    */
   explicit Elector(Monitor *m) : logic(this),
-				 elector(this),
-				 mon(m) {}
+				 mon(m), elector(this) {}
 
   /**
    * Initiate the Elector class.

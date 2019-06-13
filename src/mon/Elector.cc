@@ -28,7 +28,7 @@
 static ostream& _prefix(std::ostream *_dout, Elector* elector) {
   return *_dout << "mon." << elector->mon->name << "@" << elector->mon->rank
 		<< "(" << elector->mon->get_state_name()
-		<< ").elector(" << elector->logic.epoch << ") ";
+		<< ").elector(" << elector->get_epoch() << ") ";
 }
 
 void ElectionLogic::persist_epoch(epoch_t e)
