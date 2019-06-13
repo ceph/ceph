@@ -785,7 +785,8 @@ Infiniband::MemoryManager::MemoryManager(CephContext *c, Device *d, ProtectionDo
                   (c->_conf->ms_async_rdma_receive_buffers < 2 * c->_conf->ms_async_rdma_receive_queue_len ?
                    c->_conf->ms_async_rdma_receive_buffers :  2 * c->_conf->ms_async_rdma_receive_queue_len) :
                   // rx pool is infinite, we can set any initial size that we want
-                   2 * c->_conf->ms_async_rdma_receive_queue_len)
+                   2 * c->_conf->ms_async_rdma_receive_queue_len,
+                   device->device_attr.max_mr_size / (sizeof(Chunk) + cct->_conf->ms_async_rdma_buffer_size))
 {
 }
 
