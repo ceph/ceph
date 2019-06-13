@@ -5,6 +5,7 @@ Linter:
     flake8 --max-line-length=100
 """
 import logging
+import time
 import yaml
 
 from salt_manager import SaltManager
@@ -12,6 +13,7 @@ from scripts import Scripts
 from teuthology import misc
 from util import (
     copy_directory_recursively,
+    enumerate_osds,
     get_remote_for_role,
     get_rpm_pkg_version,
     introspect_roles,
@@ -1644,6 +1646,164 @@ class Script(DeepSea):
         pass
 
 
+class Toolbox(DeepSea):
+    """
+    A class that contains various miscellaneous routines. For example:
+
+    tasks:
+    - deepsea.toolbox:
+          foo:
+
+    Runs the "foo" tool without any options.
+    """
+
+    err_prefix = '(toolbox subtask) '
+
+    def __init__(self, ctx, config):
+        global deepsea_ctx
+        deepsea_ctx['logger_obj'] = log.getChild('toolbox')
+        self.name = 'deepsea.toolbox'
+        super(Toolbox, self).__init__(ctx, config)
+
+    def _assert_store(self, file_or_blue, teuth_role):
+        """
+        file_or_blue can be either 'bluestore' or 'filestore'
+        teuth_role is an 'osd' role uniquely specifying one of the storage nodes.
+        Enumerates the OSDs on the node and asserts that each of these OSDs is
+        either filestore or bluestore, as appropriate.
+        """
+        remote = get_remote_for_role(self.ctx, teuth_role)
+        osds = enumerate_osds(remote, self.log)
+        self.log.info("Checking if OSDs ->{}<- are ->{}<-".format(osds, file_or_blue))
+        all_green = True
+        for osd in osds:
+            store = remote.sh("sudo ceph osd metadata {} | jq -r .osd_objectstore"
+                              .format(osd)).rstrip()
+            self.log.info("OSD {} is ->{}<-.".format(osd, store))
+            if store != file_or_blue:
+                self.log.warning("OSD {} has objectstore ->{}<- which is not ->{}<-".
+                                 format(osd, store))
+                all_green = False
+        assert all_green, "One or more OSDs is not {}".format(file_or_blue)  
+
+    def _noout(self, add_or_rm, teuth_role):
+        """
+        add_or_rm is either 'add' or 'rm'
+        teuth_role is an 'osd' role uniquely specifying one of the storage nodes.
+        Enumerates the OSDs on the node and does 'add-noout' on each of them.
+        """
+        remote = get_remote_for_role(self.ctx, teuth_role)
+        osds = enumerate_osds(remote, self.log)
+        self.log.info("Running {}-noout for OSDs ->{}<-".format(add_or_rm, osds))
+        for osd in osds:
+            remote.sh("sudo ceph osd {}-noout osd.{}".format(add_or_rm, osd))
+
+    def add_noout(self, **kwargs):
+        """
+        Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
+        Enumerates the OSDs on this node and does 'add-noout' on each of them.
+        """
+        role = kwargs.keys()[0]
+        self._noout("add", role)
+
+    def assert_bluestore(self, **kwargs):
+        """
+        Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
+        Enumerates the OSDs on this node and asserts that each one is a bluestore OSD.
+        """
+        role = kwargs.keys()[0]
+        self._assert_store("bluestore", role)
+
+    def assert_filestore(self, **kwargs):
+        """
+        Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
+        Enumerates the OSDs on this node and asserts that each one is a filestore OSD.
+        """
+        role = kwargs.keys()[0]
+        self._assert_store("filestore", role)
+
+    def rm_noout(self, **kwargs):
+        """
+        Expects one key - a teuthology 'osd' role specifying one of the storage nodes.
+        Enumerates the OSDs on this node and does 'rm-noout' on each of them.
+        """
+        role = kwargs.keys()[0]
+        self._noout("rm", role)
+
+    def wait_for_health_ok(self, **kwargs):
+        """
+        Wait for HEALTH_OK - stop after HEALTH_OK is reached or timeout expires.
+        Timeout defaults to 120 minutes, but can be specified by providing a
+        configuration option. For example:
+
+        tasks:
+        - deepsea.toolbox
+            wait_for_health_ok:
+              timeout_minutes: 90
+        """
+        if kwargs:
+            self.log.info("wait_for_health_ok: Considering config dict ->{}<-".format(kwargs))
+            config_keys = len(kwargs)
+            if config_keys > 1:
+                raise ConfigError(
+                    self.err_prefix +
+                    "wait_for_health_ok config dictionary may contain only one key. "
+                    "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
+                    )
+            timeout_spec, timeout_minutes = kwargs.items()[0]
+        else:
+            timeout_minutes = 120
+        self.log.info("Waiting up to ->{}<- minutes for HEALTH_OK".format(timeout_minutes))
+        remote = get_remote_for_role(self.ctx, "client.salt_master")
+        cluster_status = ""
+        for minute in range(1, timeout_minutes+1):
+            remote.sh("sudo ceph status")
+            cluster_status = remote.sh(
+                "sudo ceph health detail --format json | jq -r '.status'"
+                ).rstrip()
+            if cluster_status == "HEALTH_OK":
+                break
+            self.log.info("Waiting for one minute for cluster to reach HEALTH_OK"
+                          "({} minutes left to timeout)"
+                          .format(timeout_minutes + 1 - minute))
+            time.sleep(60)
+        if cluster_status == "HEALTH_OK":
+            self.log.info(anchored("Cluster is healthy"))
+        else:
+            raise RuntimeError("Cluster still not healthy (current status ->{}<-) "
+                               "after reaching timeout"
+                               .format(cluster_status))
+
+    def begin(self):
+        if not self.config:
+            self.log.warning("empty config: nothing to do")
+            return None
+        self.log.info("Considering config dict ->{}<-".format(self.config))
+        config_keys = len(self.config)
+        if config_keys > 1:
+            raise ConfigError(
+                self.err_prefix +
+                "config dictionary may contain only one key. "
+                "You provided ->{}<- keys ({})".format(len(config_keys), config_keys)
+                )
+        tool_spec, kwargs = self.config.items()[0]
+        kwargs = {} if not kwargs else kwargs
+        method = getattr(self, tool_spec, None)
+        if method:
+            self.log.info("About to run tool ->{}<- from toolbox with config ->{}<-"
+                          .format(tool_spec, kwargs))
+            method(**kwargs)
+        else:
+            raise ConfigError(self.err_prefix + "No such tool ->{}<- in toolbox"
+                              .format(tool_spec))
+
+    def end(self):
+        pass
+
+    def teardown(self):
+        pass
+
+
 class Validation(DeepSea):
     """
     A container for "validation tests", which are understood to mean tests that
@@ -1829,4 +1989,5 @@ policy = Policy
 reboot = Reboot
 repository = Repository
 script = Script
+toolbox = Toolbox
 validation = Validation

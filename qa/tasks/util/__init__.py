@@ -1,3 +1,5 @@
+import json
+
 from teuthology import misc
 from teuthology.contextutil import safe_while
 from teuthology.exceptions import (
@@ -5,6 +7,20 @@ from teuthology.exceptions import (
     ConfigError,
     ConnectionLostError,
     )
+
+
+def enumerate_osds(remote, logger):
+    """
+    Given a remote, enumerates the OSDs (if any) running on the machine
+    associated with that role.
+    """
+    hostname = remote.hostname
+    logger.info("Enumerating OSDs on {}".format(hostname))
+    cmd = ("sudo ceph osd tree -f json | "
+           "jq -c '[.nodes[] | select(.name == \"{}\")][0].children'"
+           .format(hostname.split(".")[0]))
+    osds = json.loads(remote.sh(cmd))
+    return osds
 
 
 def get_remote(ctx, cluster, service_type, service_id):
