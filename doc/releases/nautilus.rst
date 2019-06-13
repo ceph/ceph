@@ -19,7 +19,7 @@ Notable Changes
   If possible, we recommend that you set the oldest allowed client to `hammer`
   or later.  You can tell what the current oldest allowed client is with::
 
-    ceph osd dump | min_compat_client
+    ceph osd dump | grep min_compat_client
 
   If the current value is older than hammer, you can tell whether it
   is safe to make this change by verifying that there are no clients
