@@ -1001,7 +1001,9 @@ int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
-    if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
+    size_t max_put_size;
+    max_put_size = s->cct->_conf.get_val<size_t>("rgw_max_put_size");
+    if (len > max_put_size) {
       return -ERR_TOO_LARGE;
     }
   }
@@ -1056,8 +1058,9 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 
     ACCOUNTING_IO(s)->set_account(false);
   }
-
-  if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
+  size_t max_put_size;
+  max_put_size = s->cct->_conf.get_val<size_t>("rgw_max_put_size");
+  if ((uint64_t)ofs + len > max_put_size) {
     return -ERR_TOO_LARGE;
   }
 
@@ -1378,7 +1381,9 @@ int RGWPostObj_ObjStore::verify_params()
     return -ERR_LENGTH_REQUIRED;
   }
   off_t len = atoll(s->length);
-  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
+  size_t max_put_size;
+  max_put_size = s->cct->_conf.get_val<size_t>("rgw_max_put_size");
+  if (len > max_put_size) {
     return -ERR_TOO_LARGE;
   }
 

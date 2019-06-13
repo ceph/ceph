@@ -1431,6 +1431,17 @@ int RGWRados::update_service_map(std::map<std::string, std::string>&& status)
   return 0;
 }
 
+void RGWRados::set_max_shards() 
+{ auto& zone = svc.zone->get_zone();
+  auto override_shards = cct->_conf.get_val<uint64_t>("rgw_override_bucket_index_max_shards");
+  bucket_index_max_shards = (override_shards ? override_shards : zone.bucket_index_max_shards);                        
+  if (bucket_index_max_shards > get_max_bucket_shards()) { 
+  	bucket_index_max_shards = get_max_bucket_shards();
+    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "<< get_max_bucket_shards() << dendl; 
+  }
+  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -1594,15 +1605,8 @@ int RGWRados::init_complete()
     lc->start_processor();
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
-
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone.bucket_index_max_shards);
-  if (bucket_index_max_shards > get_max_bucket_shards()) {
-    bucket_index_max_shards = get_max_bucket_shards();
-    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << get_max_bucket_shards() << dendl;
-  }
-  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+  
+  RGWRados::set_max_shards();
 
   binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
   binfo_cache->init(svc.cache);
@@ -10453,3 +10457,20 @@ int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *res
 
   return 0;
 }
+
+const char** RGWRados::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "rgw_override_bucket_index_max_shards",
+     nullptr
+  };
+  return keys;
+}
+
+void RGWRados::handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>& changed) 
+  {
+    if (changed.count("rgw_override_bucket_index_max_shards")) {
+      RGWRados::set_max_shards();
+    }
+  }

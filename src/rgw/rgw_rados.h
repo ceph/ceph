@@ -1150,7 +1150,7 @@ struct tombstone_entry {
 
 class RGWIndexCompletionManager;
 
-class RGWRados : public AdminSocketHook
+class RGWRados : public AdminSocketHook, public md_config_obs_t
 {
   friend class RGWGC;
   friend class RGWMetaNotifier;
@@ -1246,7 +1246,7 @@ class RGWRados : public AdminSocketHook
 
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
-
+  
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
@@ -1308,6 +1308,10 @@ public:
                quota_handler(NULL),
                cr_registry(NULL),
                meta_mgr(NULL), data_log(NULL), reshard(NULL) {}
+
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string>& changed) override;
 
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
@@ -1419,6 +1423,7 @@ public:
   int init_svc(bool raw);
   int init_rados();
   int init_complete();
+  void set_max_shards();
   int initialize();
   void finalize();
 

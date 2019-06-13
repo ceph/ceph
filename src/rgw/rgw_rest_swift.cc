@@ -1699,7 +1699,9 @@ RGWBulkUploadOp_ObjStore_SWIFT::create_stream()
       }
 
       curpos += read_len;
-      return curpos > s->cct->_conf->rgw_max_put_size ? -ERR_TOO_LARGE
+      size_t max_put_size;
+      max_put_size = s->cct->_conf.get_val<size_t>("rgw_max_put_size");
+      return curpos > max_put_size ? -ERR_TOO_LARGE
                                                       : read_len;
     }
 
