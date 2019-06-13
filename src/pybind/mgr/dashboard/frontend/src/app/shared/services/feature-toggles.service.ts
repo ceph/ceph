@@ -4,13 +4,11 @@ import { Injectable } from '@angular/core';
 import { Observable, timer } from 'rxjs';
 import { flatMap, shareReplay } from 'rxjs/operators';
 
-import { ServicesModule } from './services.module';
-
 export type FeatureTogglesMap = Map<string, boolean>;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class FeatureTogglesService {
   readonly API_URL: string = 'api/feature_toggles';

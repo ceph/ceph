@@ -10,7 +10,6 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { ApiModule } from '../../../shared/api/api.module';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { ServicesModule } from '../../../shared/services/services.module';
 import { RbdSnapshotFormComponent } from './rbd-snapshot-form.component';
 
 describe('RbdSnapshotFormComponent', () => {
@@ -22,7 +21,6 @@ describe('RbdSnapshotFormComponent', () => {
       ReactiveFormsModule,
       ComponentsModule,
       HttpClientTestingModule,
-      ServicesModule,
       ApiModule,
       ToastModule.forRoot(),
       RouterTestingModule
