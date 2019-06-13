@@ -133,7 +133,7 @@ private:
   ImageCtxT* m_image_ctx;
   CacheClient *m_cache_client;
   bool m_initialized;
-  std::atomic<bool> m_re_connecting;
+  std::atomic<bool> m_connecting;
   Mutex m_lock;
 };
 
