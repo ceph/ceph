@@ -522,6 +522,11 @@ void Infiniband::MemoryManager::Chunk::set_bound(uint32_t b)
   bound = b;
 }
 
+uint32_t Infiniband::MemoryManager::Chunk::get_size() const
+{
+  return bound - offset;
+}
+
 void Infiniband::MemoryManager::Chunk::prepare_read(uint32_t b)
 {
   offset = 0;
@@ -535,7 +540,7 @@ uint32_t Infiniband::MemoryManager::Chunk::get_bound()
 
 uint32_t Infiniband::MemoryManager::Chunk::read(char* buf, uint32_t len)
 {
-  uint32_t left = bound - offset;
+  uint32_t left = get_size();
   if (left >= len) {
     memcpy(buf, buffer+offset, len);
     offset += len;
@@ -565,11 +570,6 @@ uint32_t Infiniband::MemoryManager::Chunk::write(char* buf, uint32_t len)
 bool Infiniband::MemoryManager::Chunk::full()
 {
   return offset == bytes;
-}
-
-bool Infiniband::MemoryManager::Chunk::over()
-{
-  return Infiniband::MemoryManager::Chunk::offset == bound;
 }
 
 void Infiniband::MemoryManager::Chunk::clear()
