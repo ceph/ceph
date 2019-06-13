@@ -1,0 +1,10 @@
+{
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "stat_sum"
+    ],
+    "properties": {
+        "stat_sum": { "$ref": "object_stat_sum.json" }
+    }
+}

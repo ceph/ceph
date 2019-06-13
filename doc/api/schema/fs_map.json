@@ -1,0 +1,41 @@
+{
+    "definitions": {
+        "filesystem": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "mdsmap",
+                "id"
+            ],
+            "properties": {
+                "mdsmap": { "$ref": "mds_map.json" },
+                "id": { "type": "number" }
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "epoch",
+        "default_fscid",
+        "compat",
+        "feature_flags",
+        "standbys",
+        "filesystems"
+    ],
+    "properties": {
+        "epoch": {"type": "number"},
+        "default_fscid": {"type": "number"},
+        "compat": { "$ref": "base.json#/definitions/compatset" },
+        "feature_flags": {
+            "type": "object",
+            "additionalProperties": {"type": "boolean"}
+        },
+        "standbys": {
+            "type": "array"
+        },
+        "filesystems": {
+            "type": "array",
+            "items": { "$ref": "fs_map.json#/definitions/filesystem" }
+        }
+    }
+}

@@ -1,0 +1,45 @@
+{
+    "additionalProperties": false,
+    "required": [
+        "epoch",
+        "active_gid",
+        "active_name",
+        "active_addrs",
+        "available",
+        "standbys",
+        "modules",
+        "available_modules",
+        "services"
+    ],
+    "properties": {
+        "epoch": { "type": "number" },
+        "active_gid": { "type": "number" },
+        "active_name": { "type": "string" },
+        "active_addrs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "addrvec"
+            ],
+            "properties": {
+                "addrvec": {
+                    "type": "array"
+                }
+            }
+        },
+        "available": { "type": "boolean" },
+        "standbys": {
+            "type": "array"
+        },
+        "modules": {
+            "type": "array"
+        },
+        "available_modules": {
+            "type": "array"
+        },
+        "services": {
+            "additionalProperties": false,
+            "type": "object"
+        }
+    }
+}

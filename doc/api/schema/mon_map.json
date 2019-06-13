@@ -1,0 +1,55 @@
+{
+    "additionalProperties": false,
+    "required": [
+      "features",
+      "created",
+      "modified",
+      "epoch",
+      "mons",
+      "fsid"
+    ],
+    "properties": {
+        "features": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "optional",
+              "persistent"
+            ],
+            "properties": {
+                "optional": {
+                    "type": "array"
+                },
+                "persistent": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "created": { "$ref": "base.json#/definitions/datetime" },
+        "modified": { "$ref": "base.json#/definitions/datetime" },
+        "epoch": { "type": "number" },
+        "mons": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "public_addr",
+                  "name",
+                  "rank",
+                  "addr"
+                ],
+                "properties": {
+                    "public_addr": { "$ref": "base.json#/definitions/netaddr" },
+                    "name": { "type": "string" },
+                    "rank": { "type": "number" },
+                    "addr": { "$ref": "base.json#/definitions/netaddr" }
+                }
+            }
+        },
+        "fsid": { "$ref": "base.json#/definitions/uuid" }
+    }
+}

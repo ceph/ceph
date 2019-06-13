@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "stat_sum",
+    "log_size",
+    "ondisk_log_size",
+    "up",
+    "acting"
+  ],
+  "properties": {
+    "stat_sum": { "$ref": "object_stat_sum.json" },
+    "log_size": { "type": "integer" },
+    "ondisk_log_size": { "type": "integer" },
+    "up": { "type": "integer" },
+    "acting": { "type": "integer" }
+  }
+}
