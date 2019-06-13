@@ -1168,11 +1168,14 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
 template <typename I>
 void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
+
   m_journaler->start_append(
+    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_max_in_flight_appends"));
+  m_journaler->set_append_batch_options(
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
     m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
-    m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"),
-    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_max_in_flight_appends"));
+    m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"));
+
   transition_state(STATE_READY, 0);
 }
 

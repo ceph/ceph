@@ -396,7 +396,11 @@ public:
   }
 
   void expect_start_append(::journal::MockJournaler &mock_journaler) {
-    EXPECT_CALL(mock_journaler, start_append(_, _, _, _));
+    EXPECT_CALL(mock_journaler, start_append(_));
+  }
+
+  void expect_set_append_batch_options(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, set_append_batch_options(_, _, _));
   }
 
   void expect_stop_append(::journal::MockJournaler &mock_journaler, int r) {
@@ -518,6 +522,7 @@ public:
     expect_committed(mock_journaler, 0);
     expect_flush_commit_position(mock_journaler);
     expect_start_append(mock_journaler);
+    expect_set_append_batch_options(mock_journaler);
     ASSERT_EQ(0, when_open(mock_journal));
   }
 
@@ -585,6 +590,7 @@ TEST_F(TestMockJournal, StateTransitions) {
   expect_flush_commit_position(mock_journaler);
 
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
 
   ASSERT_EQ(0, when_open(mock_journal));
 
@@ -662,6 +668,7 @@ TEST_F(TestMockJournal, ReplayCompleteError) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, 0);
@@ -719,6 +726,7 @@ TEST_F(TestMockJournal, FlushReplayError) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, 0);
@@ -773,6 +781,7 @@ TEST_F(TestMockJournal, CorruptEntry) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, -EINVAL);
@@ -811,6 +820,7 @@ TEST_F(TestMockJournal, StopError) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   ASSERT_EQ(0, when_open(mock_journal));
 
   expect_stop_append(mock_journaler, -EINVAL);
@@ -876,6 +886,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPreFlushError) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
 
   C_SaferCond ctx;
   mock_journal.open(&ctx);
@@ -958,6 +969,7 @@ TEST_F(TestMockJournal, ReplayOnDiskPostFlushError) {
   expect_shut_down_replay(mock_image_ctx, mock_journal_replay, 0);
   expect_flush_commit_position(mock_journaler);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
 
   C_SaferCond ctx;
   mock_journal.open(&ctx);
@@ -1272,6 +1284,7 @@ TEST_F(TestMockJournal, ExternalReplay) {
   InSequence seq;
   expect_stop_append(mock_journaler, 0);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
@@ -1303,6 +1316,7 @@ TEST_F(TestMockJournal, ExternalReplayFailure) {
   InSequence seq;
   expect_stop_append(mock_journaler, -EINVAL);
   expect_start_append(mock_journaler);
+  expect_set_append_batch_options(mock_journaler);
   expect_shut_down_journaler(mock_journaler);
 
   C_SaferCond start_ctx;
