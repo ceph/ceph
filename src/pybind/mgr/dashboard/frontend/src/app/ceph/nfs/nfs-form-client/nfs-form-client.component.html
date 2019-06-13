@@ -60,7 +60,7 @@
                         name="access_type"
                         id="access_type"
                         formControlName="access_type">
-                  <option [value]="form.getValue('access_type')">{{ getNoAccessTypeDescr() }}</option>
+                  <option value="">{{ getNoAccessTypeDescr() }}</option>
                   <option *ngFor="let item of nfsAccessType"
                           [value]="item.value">{{ item.value }}</option>
                 </select>
@@ -81,7 +81,7 @@
                         name="squash"
                         id="squash"
                         formControlName="squash">
-                  <option [value]="form.getValue('squash')">{{ getNoSquashDescr() }}</option>
+                  <option value="">{{ getNoSquashDescr() }}</option>
                   <option *ngFor="let squash of nfsSquash"
                           [value]="squash">{{ squash }}</option>
                 </select>
