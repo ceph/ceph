@@ -1,4 +1,4 @@
-import { $, browser, protractor } from 'protractor';
+aimport { $, browser, protractor } from 'protractor';
 import { Helper } from '../helper.po';
 import { BucketsCreatePage, BucketsPage } from './bucketCreate.po';
 
