@@ -131,6 +131,12 @@ void Elector::_bump_epoch()
   mon->join_election();
 }
 
+void ElectionLogic::declare_standalone_victory()
+{
+  assert(elector_paxos_size() == 1 && elector_my_rank() == 0);
+  init();
+  bump_epoch(epoch+1);
+}
 
 void ElectionLogic::start()
 {

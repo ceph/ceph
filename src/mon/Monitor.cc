@@ -2095,8 +2095,7 @@ void Monitor::win_standalone_election()
 
   // bump election epoch, in case the previous epoch included other
   // monitors; we need to be able to make the distinction.
-  elector.logic.init();
-  elector.advance_epoch();
+  elector.declare_standalone_victory();
 
   rank = monmap->get_rank(name);
   ceph_assert(rank == 0);
