@@ -412,7 +412,7 @@ void Journaler::stop_append(Context *on_safe) {
       delete recorder;
       on_safe->complete(r);
     });
-  recorder->flush(on_safe);
+  recorder->shut_down(on_safe);
 }
 
 uint64_t Journaler::get_max_append_size() const {
