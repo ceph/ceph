@@ -106,6 +106,7 @@ enum {
   l_osdc_op_send_bytes,
   l_osdc_op_resend,
   l_osdc_op_reply,
+  l_osdc_oplen_avg,
 
   l_osdc_op,
   l_osdc_op_r,
@@ -250,6 +251,7 @@ void Objecter::init()
     pcb.add_u64_counter(l_osdc_op_send_bytes, "op_send_bytes", "Sent data", NULL, 0, unit_t(UNIT_BYTES));
     pcb.add_u64_counter(l_osdc_op_resend, "op_resend", "Resent operations");
     pcb.add_u64_counter(l_osdc_op_reply, "op_reply", "Operation reply");
+    pcb.add_u64_avg(l_osdc_oplen_avg, "oplen_avg", "Average length of operation vector");
 
     pcb.add_u64_counter(l_osdc_op, "op", "Operations");
     pcb.add_u64_counter(l_osdc_op_r, "op_r", "Read operations", "rd",
@@ -2236,6 +2238,7 @@ void Objecter::_send_op_account(Op *op)
 
   logger->inc(l_osdc_op_active);
   logger->inc(l_osdc_op);
+  logger->inc(l_osdc_oplen_avg, op->ops.size());
 
   if ((op->target.flags & (CEPH_OSD_FLAG_READ | CEPH_OSD_FLAG_WRITE)) ==
       (CEPH_OSD_FLAG_READ|CEPH_OSD_FLAG_WRITE))
