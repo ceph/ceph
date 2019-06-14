@@ -2731,23 +2731,25 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
       continue;  // no change
     
     session->mds_state = newstate;
-    if (old_inc != new_inc && newstate > MDSMap::STATE_RECONNECT) {
-      // missed reconnect close the session so that it can be reopened
-      _closed_mds_session(session);
-      continue;
-    }
     if (newstate == MDSMap::STATE_RECONNECT) {
       session->con = messenger->connect_to_mds(session->addrs);
       send_reconnect(session);
-    } else if (newstate >= MDSMap::STATE_ACTIVE) {
-      if (oldstate < MDSMap::STATE_ACTIVE) {
-	// kick new requests
-	kick_requests(session);
-	kick_flushing_caps(session);
-	signal_context_list(session->waiting_for_open);
-	wake_up_session_caps(session, true);
+    } else if (newstate > MDSMap::STATE_RECONNECT) {
+      if (oldstate < MDSMap::STATE_RECONNECT) {
+	ldout(cct, 1) << "we may miss the MDSMap::RECONNECT, close mds session ... " << dendl;
+	_closed_mds_session(session);
+	continue;
       }
-      connect_mds_targets(mds);
+      if (newstate >= MDSMap::STATE_ACTIVE) {
+	if (oldstate < MDSMap::STATE_ACTIVE) {
+	  // kick new requests
+	  kick_requests(session);
+	  kick_flushing_caps(session);
+	  signal_context_list(session->waiting_for_open);
+	  wake_up_session_caps(session, true);
+	}
+	connect_mds_targets(mds);
+      }
     } else if (newstate == MDSMap::STATE_NULL &&
 	       mds >= mdsmap->get_max_mds()) {
       _closed_mds_session(session);
