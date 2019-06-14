@@ -89,7 +89,7 @@ The ``ceph-immutable-object-cache`` daemon is available within the optional
 To `create a Ceph user`_, with ``ceph`` specify the ``auth get-or-create``
 command, user name, monitor caps, and OSD caps::
 
-  ceph auth get-or-create client.ceph-immutable-object-cache.{unique id} mon r osd 'profile rbd-read-only'
+  ceph auth get-or-create client.ceph-immutable-object-cache.{unique id} mon 'allow r' osd 'profile rbd-read-only'
 
 The ``ceph-immutable-object-cache`` daemon can be managed by ``systemd`` by specifying the user
 ID as the daemon instance::
