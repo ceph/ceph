@@ -380,37 +380,6 @@ Description: debugging symbols for ceph-osd
  .
  This package contains the debugging symbols for ceph-osd.
 
-# Crimson Package: ceph-crimson-osd
-# Crimson Architecture: linux-any
-# Crimson Depends: ceph-base (= ${binary:Version}),
-# Crimson          ceph-osd (= ${binary:Version}),
-# Crimson          lvm2,
-# Crimson          sudo,
-# Crimson          ${misc:Depends},
-# Crimson          ${python:Depends},
-# Crimson          ${shlibs:Depends},
-# Crimson Description: OSD server for the ceph storage system
-# Crimson  Ceph is a massively scalable, open-source, distributed
-# Crimson  storage system that runs on commodity hardware and delivers object,
-# Crimson  block and file system storage.
-# Crimson  .
-# Crimson  This package contains the Object Storage Daemon for the Ceph storage system.
-# Crimson  It is responsible for storing objects on a local file system
-# Crimson  and providing access to them over the network.
-
-# Crimson Package: ceph-crimson-osd-dbg
-# Crimson Architecture: linux-any
-# Crimson Section: debug
-# Crimson Priority: extra
-# Crimson Depends: ceph-crimson-osd (= ${binary:Version}),
-# Crimson          ${misc:Depends},
-# Crimson Description: debugging symbols for ceph-crimson-osd
-# Crimson  Ceph is a massively scalable, open-source, distributed
-# Crimson  storage system that runs on commodity hardware and delivers object,
-# Crimson  block and file system storage.
-# Crimson  .
-# Crimson  This package contains the debugging symbols for ceph-osd.
-
 Package: ceph-fuse
 Architecture: linux-any
 Depends: ${misc:Depends},
