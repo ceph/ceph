@@ -229,8 +229,9 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
       }
     } else {
       m_copied_objects.push(object_no);
-      while (!m_updating_progress && m_copied_objects.top() ==
-             (m_object_number ? *m_object_number + 1 : 0)) {
+      while (!m_updating_progress && !m_copied_objects.empty() &&
+             m_copied_objects.top() ==
+               (m_object_number ? *m_object_number + 1 : 0)) {
         m_object_number = m_copied_objects.top();
         m_copied_objects.pop();
         uint64_t progress_object_no = *m_object_number + 1;
