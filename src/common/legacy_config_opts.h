@@ -1080,6 +1080,7 @@ OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 OPTION(bluestore_debug_enforce_settings, OPT_STR)
 OPTION(bluestore_collection_list_min_prefetch, OPT_INT)
 OPTION(bluestore_collection_list_prefetch, OPT_INT)
+OPTION(bluestore_kv_sync_util_logging_s, OPT_INT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
