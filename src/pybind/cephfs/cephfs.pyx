@@ -158,6 +158,7 @@ class Error(Exception):
 
 class OSError(Error):
     def __init__(self, errno, strerror):
+        super(OSError, self).__init__(errno, strerror)
         self.errno = errno
         self.strerror = strerror
 
