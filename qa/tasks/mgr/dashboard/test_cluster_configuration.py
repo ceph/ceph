@@ -286,7 +286,6 @@ class ClusterConfigurationTest(DashboardTestCase):
         """
         This test case is intended to check the existence of all hard coded config options used by
         the dashboard.
-
         If you include further hard coded options in the dashboard, feel free to add them to the
         list.
         """
@@ -326,7 +325,8 @@ class ClusterConfigurationTest(DashboardTestCase):
             'osd_scrub_interval_randomize_ratio',  # osd-pg-scrub
             'osd_scrub_invalid_stats',  # osd-pg-scrub
             'osd_scrub_load_threshold',  # osd-pg-scrub
-            'osd_scrub_max_preemptions'  # osd-pg-scrub
+            'osd_scrub_max_preemptions',  # osd-pg-scrub
+            'mon_allow_pool_delete'  # pool-list
         ]
 
         for config_option in hard_coded_options:
