@@ -312,6 +312,53 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   return (timediff >= cmp);
 }
 
+static bool pass_object_lock_check(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, RGWObjectCtx& ctx)
+{
+  if (!bucket_info.obj_lock_enabled()) {
+    return true;
+  }
+  RGWRados::Object op_target(store, bucket_info, ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+  map<string, bufferlist> attrs;
+  read_op.params.attrs = &attrs;
+  int ret = read_op.prepare();
+  if (ret < 0) {
+    if (ret == -ENOENT) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+    if (iter != attrs.end()) {
+      RGWObjectRetention retention;
+      try {
+        decode(retention, iter->second);
+      } catch (buffer::error& err) {
+        ldout(store->ctx(), 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+        return false;
+      }
+      if (ceph::real_clock::to_time_t(retention.get_retain_until_date()) > ceph_clock_now()) {
+        return false;
+      }
+    }
+    iter = attrs.find(RGW_ATTR_OBJECT_LEGAL_HOLD);
+    if (iter != attrs.end()) {
+      RGWObjectLegalHold obj_legal_hold;
+      try {
+        decode(obj_legal_hold, iter->second);
+      } catch (buffer::error& err) {
+        ldout(store->ctx(), 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+        return false;
+      }
+      if (obj_legal_hold.is_enabled()) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
 int RGWLC::handle_multipart_expiration(
   RGWRados::Bucket *target, const multimap<string, lc_op>& prefix_map)
 {
@@ -717,7 +764,7 @@ public:
     bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
-    return is_expired;
+    return is_expired && pass_object_lock_check(oc.store, oc.bucket_info, oc.obj, oc.rctx);
   }
 
   int process(lc_op_ctx& oc) {

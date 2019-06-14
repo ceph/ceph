@@ -7541,7 +7541,7 @@ void RGWPutBucketObjectLock::execute()
   try {
     RGWXMLDecoder::decode_xml("ObjectLockConfiguration", obj_lock, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
-    ldout(s->cct, 5) << "unexpected xml:" << err.message << dendl;
+    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -7633,7 +7633,7 @@ void RGWPutObjRetention::execute()
   try {
     RGWXMLDecoder::decode_xml("Retention", obj_retention, &parser, true);
   } catch (RGWXMLDecoder::err& err) {
-    ldpp_dout(this, 5) << "unexpected xml:" << err.message << dendl;
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -7761,7 +7761,7 @@ void RGWPutObjLegalHold::execute() {
   try {
     RGWXMLDecoder::decode_xml("LegalHold", obj_legal_hold, &parser, true);
   } catch (RGWXMLDecoder::err &err) {
-    ldout(s->cct, 5) << "unexpected xml:" << err.message << dendl;
+    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
