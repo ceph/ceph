@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        bluestore warn on legacy statfs: false
+
 tasks:
 - mds_pre_upgrade:
 - print: "**** done mds pre-upgrade sequence"
