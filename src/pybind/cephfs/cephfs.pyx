@@ -147,6 +147,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_fsync(ceph_mount_info *cmount, int fd, int syncdataonly)
     int ceph_conf_parse_argv(ceph_mount_info *cmount, int argc, const char **argv)
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
 
@@ -1256,4 +1257,34 @@ cdef class LibCephFS(object):
             ret = ceph_umask(self.cluster, _mode)
         if ret < 0:
             raise make_ex(ret, "error in umask")
-        return ret        
+        return ret
+
+    def lseek(self, fd, offset, whence):
+        """
+        Set the file's current position.
+ 
+        :param fd : the file descriptor of the open file to read from.
+        :param offset : the offset in the file to read from.  If this value is negative, the
+                        function reads from the current offset of the file descriptor.
+        :param whence : the flag to indicate what type of seeking to performs:SEEK_SET, SEEK_CUR, SEEK_END
+        """     
+        self.require_state("mounted")
+        if not isinstance(fd, int):
+            raise TypeError('fd must be an int')
+        if not isinstance(offset, int):
+            raise TypeError('offset must be an int')
+        if not isinstance(whence, int):
+            raise TypeError('whence must be an int')
+
+        cdef:
+            int _fd = fd
+            int64_t _offset = offset
+            int64_t _whence = whence
+
+        with nogil:
+            ret = ceph_lseek(self.cluster, _fd, _offset, _whence)
+
+        if ret < 0:
+            raise make_ex(ret, "error in lseek")
+
+        return ret      
