@@ -172,16 +172,6 @@ weeks. These packages are faster-moving than the major releases.  Development
 packages have new features integrated quickly, while still undergoing several
 weeks of QA prior to release.
 
-The repository package installs the repository details on your local system for
-use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
-``{release}`` with the specific release of Ceph::
-
-    su -c 'rpm -Uvh https://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el7.noarch.rpm'
-
-You can download the RPMs directly from::
-
-     https://download.ceph.com/rpm-testing
-
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
 
