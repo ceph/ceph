@@ -12,6 +12,8 @@
  *
  */
 
+#pragma once
+
 #include <cstddef>
 #include <utility>
 #include <type_traits>
