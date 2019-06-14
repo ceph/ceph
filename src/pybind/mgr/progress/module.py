@@ -311,22 +311,26 @@ class Module(MgrModule):
             for ps in range(0, pool['pg_num']):
 
                 # Was this OSD affected by the OSD coming in/out?
+                # Compare old and new osds using
+                # data from the json dump
                 old_up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
                 old_osds = set(old_up_acting['acting'])
 
-                was_on_out_osd = osd_id in old_osds
-                if not was_on_out_osd:
+                new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
+                new_osds = set(new_up_acting['acting'])
+                
+                # Check the osd_id being in the acting set for both old
+                # and new maps to cover both out and in cases
+                was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
+                if not was_on_out_or_in_osd:
                     continue
-
+                
                 self.log.debug("pool_id, ps = {0}, {1}".format(
                     pool_id, ps
                 ))
 
                 self.log.debug(
                     "old_up_acting: {0}".format(json.dumps(old_up_acting, indent=2)))
-
-                new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
-                new_osds = set(new_up_acting['acting'])
 
                 # Has this OSD been assigned a new location?
                 # (it might not be if there is no suitable place to move
@@ -339,8 +343,8 @@ class Module(MgrModule):
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
                                                            indent=2)))
-
-                if was_on_out_osd and is_relocated:
+                
+                if was_on_out_or_in_osd and is_relocated:
                     # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
                 elif not is_relocated:
