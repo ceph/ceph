@@ -5019,6 +5019,14 @@ std::vector<Option> get_global_options() {
     .set_default(64_M)
     .set_description("Maximum RAM hybrid allocator should use before enabling bitmap supplement"),
 
+    Option("bluestore_kv_sync_util_logging_s", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10.0)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("KV sync thread utilization logging period")
+    .set_long_description("How often (in seconds) to print KV sync thread utilization, "
+      "not logged when set to 0 or when utilization is 0%"),
+
+
     // -----------------------------------------
     // kstore
 
