@@ -2207,9 +2207,9 @@ exit 0
 
 %files grafana-dashboards
 %if 0%{?suse_version}
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %else
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %endif
