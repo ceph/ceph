@@ -5437,10 +5437,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
         ceph_assert(i != ALL_CHOICES.end());
 	switch(*it) {
 	  case PG_NUM:
-	    f->dump_int("pg_num", p->get_pg_num());
+	    f->dump_int("pg_num", p->get_pg_num_target());
 	    break;
 	  case PGP_NUM:
-	    f->dump_int("pgp_num", p->get_pgp_num());
+	    f->dump_int("pgp_num", p->get_pgp_num_target());
 	    break;
 	  case SIZE:
 	    f->dump_int("size", p->get_size());
@@ -5595,10 +5595,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	choices_map_t::const_iterator i;
 	switch(*it) {
 	  case PG_NUM:
-	    ss << "pg_num: " << p->get_pg_num() << "\n";
+	    ss << "pg_num: " << p->get_pg_num_target() << "\n";
 	    break;
 	  case PGP_NUM:
-	    ss << "pgp_num: " << p->get_pgp_num() << "\n";
+	    ss << "pgp_num: " << p->get_pgp_num_target() << "\n";
 	    break;
 	  case SIZE:
 	    ss << "size: " << p->get_size() << "\n";
