@@ -29,9 +29,6 @@ public:
    * We will use the configuration stored inside the context. */
   int from_ceph_context(CephContext *cct);
 
-  /* Create an empty KeyRing */
-  static KeyRing *create_empty();
-
   std::map<EntityName, EntityAuth>& get_keys() { return keys; }  // yuck
 
   int load(CephContext *cct, const std::string &filename);

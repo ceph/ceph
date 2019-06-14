@@ -4,6 +4,7 @@ set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
+  common/buffer_io.cc
   common/config_proxy.cc
   common/perf_counters_collection.cc
   common/assert.cc

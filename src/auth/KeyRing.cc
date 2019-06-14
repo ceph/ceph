@@ -82,11 +82,6 @@ int KeyRing::from_ceph_context(CephContext *cct)
   return ret;
 }
 
-KeyRing *KeyRing::create_empty()
-{
-  return new KeyRing();
-}
-
 int KeyRing::set_modifier(const char *type,
 			  const char *val,
 			  EntityName& name,
