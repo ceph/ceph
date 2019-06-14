@@ -132,6 +132,17 @@ export class TableActionsComponent implements OnInit {
   }
 
   useClickAction(action: CdTableAction) {
-    return action.click && action.click();
+    /**
+     * In order to show tooltips for deactivated menu items, the class
+     * 'pointer-events: auto;' has been added to the .scss file which also
+     * re-activates the click-event.
+     * To prevent calling the click-event on deactivated elements we also have
+     * to check here if it's disabled.
+     */
+    return !this.disableSelectionAction(action) && action.click && action.click();
+  }
+
+  useDisableDesc(action: CdTableAction) {
+    return action.disableDesc && action.disableDesc();
   }
 }
