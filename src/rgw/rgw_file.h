@@ -1303,12 +1303,14 @@ public:
   uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
+  bool rcb_eof; // caller forced early stop in readdir cycle
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
+      rcb_eof(false) {
 
     using boost::get;
 
@@ -1381,6 +1383,7 @@ public:
 			      << " dirent=" << ent.bucket.name
 			      << " call count=" << ix
 			      << dendl;
+	rcb_eof = true;
 	return;
       }
       ++ix;
@@ -1414,7 +1417,7 @@ public:
 			     << " is_truncated: " << is_truncated
 			     << dendl;
     }
-    return !is_truncated;
+    return !is_truncated && !rcb_eof;
   }
 
 }; /* RGWListBucketsRequest */
@@ -1434,12 +1437,14 @@ public:
   uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
+  bool rcb_eof; // caller forced early stop in readdir cycle
 
   RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
+      rcb_eof(false) {
 
     using boost::get;
 
@@ -1550,12 +1555,13 @@ public:
 			     << " (" << sref << ")" << ""
 			     << dendl;
 
-      if(! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
+      if (! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "readdir rcb failed"
 			      << " dirent=" << sref.data()
 			      << " call count=" << ix
 			      << dendl;
+	rcb_eof = true;
 	return;
       }
       ++ix;
@@ -1596,7 +1602,15 @@ public:
 	return;
       }
 
-      this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
+      if (! this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "readdir rcb failed"
+			      << " dirent=" << sref.data()
+			      << " call count=" << ix
+			      << dendl;
+	rcb_eof = true;
+	return;
+      }
       ++ix;
     }
   }
@@ -1616,7 +1630,7 @@ public:
 			     << " is_truncated: " << is_truncated
 			     << dendl;
     }
-    return !is_truncated;
+    return !is_truncated && !rcb_eof;
   }
 
 }; /* RGWReaddirRequest */
