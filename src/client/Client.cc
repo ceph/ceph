@@ -10328,6 +10328,7 @@ Inode *Client::open_snapdir(Inode *diri)
     in->mode = diri->mode;
     in->uid = diri->uid;
     in->gid = diri->gid;
+    in->nlink = 1;
     in->mtime = diri->mtime;
     in->ctime = diri->ctime;
     in->btime = diri->btime;
