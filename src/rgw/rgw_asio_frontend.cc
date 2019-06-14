@@ -638,7 +638,11 @@ int AsioFrontend::run()
       // request warnings on synchronous librados calls in this thread
       is_asio_thread = true;
       boost::system::error_code ec;
-      context.run(ec);
+      try {
+        context.run();
+      } catch (std::exception& e) {
+        ldout(cct,0) << "ERROR: io_context.run() threw exception: " << e.what() << dendl;
+      }
     });
   }
   return 0;
