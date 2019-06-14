@@ -237,7 +237,7 @@ class LocalRemote(object):
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
-        if isinstance(args, str):
+        if isinstance(args, str) or isinstance(args, unicode):
             args = args.split()
 
         # We'll let sudo be a part of command even omit flag says otherwise in
