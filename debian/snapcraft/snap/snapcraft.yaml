@@ -1,0 +1,105 @@
+name: ceph
+version: latest
+version-script: cat $SNAPCRAFT_STAGE/version
+summary: Ceph
+description: Ceph is a distributed object, block, and file storage platform.
+  
+
+grade: stable
+confinement: classic
+
+architectures:
+  - build-on: amd64
+
+parts:
+  gnome:
+    plugin: nil
+    build-packages:
+      - software-properties-common
+    override-pull: |
+      add-apt-repository -y ppa:ubuntu-desktop/gnome-3-26
+      apt -y update
+      apt -y upgrade
+
+  ceph:
+    after:
+      - gnome
+    plugin: cmake
+    source:
+      # Ceph is only available for amd64 (x86_64),
+      # so fail the build on other architectures.
+      - on amd64: https://download.ceph.com/debian-luminous/pool/main/c/ceph/ceph_12.2.12ubuntu_x86_64.deb
+      
+    source-type: deb
+    override-build: |
+      ARCHITECTURE=$(dpkg --print-architecture)
+      if [ "${ARCHITECTURE}" = "amd64" ]; then
+        DEB_API="https://download.ceph.com/debian-luminous/pool/main/c/ceph/ceph_12.2.12ubuntu_x86_64.deb"
+      else
+        echo "ERROR! Ceph only produces debs for amd64. Failing the build here."
+        exit 1
+      fi
+
+      DEB_URL=$(curl -w "%{url_effective}\n" -I -L -s -S "${DEB_API}" -o /dev/null)
+      VERSION=$(echo "${DEB_URL}" | cut -d'_' -f2)
+      echo $VERSION > $SNAPCRAFT_STAGE/version
+
+      snapcraftctl build
+    build-packages:
+      - curl
+      - dpkg
+      - sed
+    stage-packages:
+      - libaio1
+      - libsnappy1
+      - libcurl3
+      - curl
+      - libgoogle-perftools4
+      - google-perftools
+      - libleveldb1
+      - fcitx-frontend-gtk3
+      - gvfs-libs
+      - libasound2
+      - libgconf-2-4
+      - libglib2.0-bin
+      - libgnome-keyring0
+      - libgtk-3-0
+      - libnotify4
+      - libnspr4
+      - libnss3
+      - libpcre3
+      - libpulse0
+      - libsecret-1-0
+      - libxss1
+      - libxtst6
+      - yad
+      - zlib1g
+    prime:
+      - -usr/share/doc
+      - -usr/share/fonts
+      - -usr/share/icons
+      - -usr/share/lintian
+      - -usr/share/man
+
+  wrapper:
+    after:
+      - ceph
+    plugin: dump
+    source: files/
+
+apps:
+  ceph:
+    command: bin/wrapper $SNAP/usr/share/ceph/bin/ceph
+    desktop: usr/share/applications/ceph.desktop
+    environment:
+      # Fallback to XWayland if running in a Wayland session.
+      DISABLE_WAYLAND: 1
+      GSETTINGS_SCHEMA_DIR: $SNAP/usr/share/glib-2.0/schemas
+
+  url-handler:
+    command: bin/wrapper $SNAP/usr/share/ceph/bin/ceph --open-url
+    desktop: usr/share/applications/ceph-url-handler.desktop
+    environment:
+      # Fallback to XWayland if running in a Wayland session.
+      DISABLE_WAYLAND: 1
+      GSETTINGS_SCHEMA_DIR: $SNAP/usr/share/glib-2.0/schemas
