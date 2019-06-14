@@ -513,27 +513,52 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
     return nullptr;
   }
 
+  return send_parent_cache(result);
+}
+
+template <typename I>
+Context* OpenRequest<I>::send_parent_cache(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
+    "rbd_parent_cache_enabled");
+
+  if (m_image_ctx->child == nullptr || !parent_cache_enabled) {
+    return send_init_cache(result);
+  }
+
+  auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
+  using klass = OpenRequest<I>;
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_parent_cache>(this);
+
+  parent_cache->init(ctx);
+  return nullptr;
+}
+
+template <typename I>
+Context* OpenRequest<I>::handle_parent_cache(int* result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(cct) << "failed to parent cache " << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
   return send_init_cache(result);
 }
 
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
   // cache is disabled or parent image context
-  CephContext *cct = m_image_ctx->cct;
-
   if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
-    // enable Parent cache for parent image
-    bool parent_cache_enabled = m_image_ctx->config.template get_val<bool>(
-      "rbd_parent_cache_enabled");
-
-    if (m_image_ctx->child != nullptr && parent_cache_enabled ) {
-      ldout(cct, 10) << this << " " << "setting up parent cache"<< dendl;
-      auto parent_cache = cache::ParentCacheObjectDispatch<I>::create(m_image_ctx);
-      parent_cache->init();
-    }
     return send_register_watch(result);
   }
 
+  CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   size_t max_dirty = m_image_ctx->config.template get_val<Option::size_t>(

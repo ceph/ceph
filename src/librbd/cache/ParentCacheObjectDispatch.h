@@ -34,7 +34,7 @@ public:
     return io::OBJECT_DISPATCH_LAYER_PARENT_CACHE;
   }
 
-  void init();
+  void init(Context* on_finish = nullptr);
   void shut_down(Context* on_finish) {
     m_image_ctx->op_work_queue->queue(on_finish, 0);
   }
@@ -134,7 +134,6 @@ private:
   CacheClient *m_cache_client;
   bool m_initialized;
   std::atomic<bool> m_connecting;
-  Mutex m_lock;
 };
 
 } // namespace cache

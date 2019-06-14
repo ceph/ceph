@@ -28,8 +28,7 @@ namespace cache {
 template <typename I>
 ParentCacheObjectDispatch<I>::ParentCacheObjectDispatch(
     I* image_ctx) : m_image_ctx(image_ctx), m_cache_client(nullptr),
-    m_initialized(false), m_connecting(false),
-    m_lock("librbd::cache::ParentCacheObjectDispatch::m_lock") {
+    m_initialized(false), m_connecting(false) {
   std::string controller_path =
     ((CephContext*)(m_image_ctx->cct))->_conf.get_val<std::string>("immutable_object_cache_sock");
   m_cache_client = new CacheClient(controller_path.c_str(), m_image_ctx->cct);
@@ -41,7 +40,7 @@ ParentCacheObjectDispatch<I>::~ParentCacheObjectDispatch() {
 }
 
 template <typename I>
-void ParentCacheObjectDispatch<I>::init() {
+void ParentCacheObjectDispatch<I>::init(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
@@ -50,13 +49,14 @@ void ParentCacheObjectDispatch<I>::init() {
     return;
   }
 
-  ceph_assert(m_connecting.load() == false);
-  m_connecting.store(true);
-  Context* create_session_ctx = new FunctionContext([this](int ret) {
-    Mutex::Locker locker(m_lock);
+  Context* create_session_ctx = new FunctionContext([this, on_finish](int ret) {
     m_connecting.store(false);
+    if (on_finish != nullptr) {
+      on_finish->complete(ret);
+    }
   });
 
+  m_connecting.store(true);
   create_cache_session(create_session_ctx, false);
 
   m_image_ctx->io_object_dispatcher->register_object_dispatch(this);
@@ -80,27 +80,28 @@ bool ParentCacheObjectDispatch<I>::read(
   /* if RO daemon still don't startup, or RO daemon crash,
    * or session occur any error, try to re-connect daemon.*/
   if (!m_cache_client->is_session_work()) {
-    {
-      Mutex::Locker locker(m_lock);
-      if (m_connecting.load()) {
-        ldout(cct, 5) << "Parent cache is re-connecting RO daemon, "
-                      << "dispatch current request to lower object layer " << dendl;
-        return false;
+    if (!m_connecting.exchange(true)) {
+      /* Since we don't have a giant lock protecting the full re-connect process,
+       * if thread A first passes the if (!m_cache_client->is_session_work()),
+       * thread B could have also passed it and reconnected
+       * before thread A resumes and executes if (!m_connecting.exchange(true)).
+       * This will result in thread A re-connecting a working session.
+       * So, we need to check if session is normal again. If session work,
+       * we need set m_connecting to false. */
+      if (!m_cache_client->is_session_work()) {
+        Context* on_finish = new FunctionContext([this](int ret) {
+          m_connecting.store(false);
+        });
+        create_cache_session(on_finish, true);
+      } else {
+        m_connecting.store(false);
       }
-      m_connecting.store(true);
     }
-
-    ceph_assert(m_connecting.load());
-
-    Context* on_finish = new FunctionContext([this](int ret) {
-      m_connecting.store(false);
-    });
-    create_cache_session(on_finish, true);
-
-    ldout(cct, 5) << "Parent cache initiate re-connect to RO daemon. "
+    ldout(cct, 5) << "Parent cache try to re-connect to RO daemon. "
                   << "dispatch current request to lower object layer" << dendl;
     return false;
   }
+
   ceph_assert(m_cache_client->is_session_work());
 
   CacheGenContextURef ctx = make_gen_lambda_context<ObjectCacheRequest*,
@@ -142,6 +143,7 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
     // cache read error, fall back to read rados
     *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
     on_dispatched->complete(0);
+    return;
   }
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
