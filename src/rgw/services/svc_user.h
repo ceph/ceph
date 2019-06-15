@@ -103,6 +103,7 @@ public:
 				   const rgw_user& user) = 0;
   virtual int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 				 const rgw_user& user) = 0;
-  virtual int read_stats(const rgw_user& user, RGWStorageStats *stats) = 0;
+  virtual int read_stats(RGWSI_MetaBackend::Context *ctx,
+			 const rgw_user& user, RGWStorageStats *stats) = 0;
 };
 

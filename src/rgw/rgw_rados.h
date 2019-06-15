@@ -491,7 +491,7 @@ public:
                quota_handler(NULL),
                cr_registry(NULL),
                pctl(&ctl),
-               data_log(NULL), reshard(NULL) {}
+               reshard(NULL) {}
 
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
@@ -548,8 +548,6 @@ public:
    * try to be more transparent. This has a wrapper so we can update it when zonegroup/zone are changed.
    */
   string host_id;
-
-  RGWDataChangesLog *data_log;
 
   RGWReshard *reshard;
   std::shared_ptr<RGWReshardWait> reshard_wait;

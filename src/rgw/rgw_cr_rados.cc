@@ -563,7 +563,7 @@ int RGWRadosBILogTrimCR::send_request()
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
-  return bs.index_ctx.aio_operate(bs.bucket_obj, cn->completion(), &op);
+  return bs.bucket_obj.aio_operate(cn->completion(), &op);
 }
 
 int RGWRadosBILogTrimCR::request_complete()

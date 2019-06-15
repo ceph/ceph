@@ -2062,7 +2062,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = store->ctl.user->get_stats(info.user_id, stats);
+    int ret = store->ctl.user->read_stats(info.user_id, &stats);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2573,7 +2573,7 @@ int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
   RGWUserInfo user_info;
 
   return get_info_by_uid(user_id, &user_info, RGWUserCtl::GetParams()
-                         .set_attrs(pattrs),
+                         .set_attrs(pattrs)
                          .set_objv_tracker(objv_tracker));
 }
 
@@ -2677,7 +2677,7 @@ int RGWUserCtl::reset_stats(const rgw_user& user)
 int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->reset_bucket_stats(op->ctx(), user, stats);
+    return svc.user->read_stats(op->ctx(), user, stats);
   });
 }
 

@@ -79,6 +79,7 @@ using namespace librados;
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_bucket.h"
 #include "services/svc_mdlog.h"
+#include "services/svc_datalog_rados.h"
 
 #include "compressor/Compressor.h"
 
@@ -477,13 +478,14 @@ public:
 
 int RGWDataNotifier::process()
 {
-  if (!store->data_log) {
+  auto data_log = store->svc.datalog_rados->get_log();
+  if (!data_log) {
     return 0;
   }
 
   map<int, set<string> > shards;
 
-  store->data_log->read_clear_modified(shards);
+  data_log->read_clear_modified(shards);
 
   if (shards.empty()) {
     return 0;
@@ -871,7 +873,7 @@ int RGWIndexCompletionThread::process()
       /* ignoring error, can't do anything about it */
       continue;
     }
-    r = store->data_log->add_entry(bs.bucket, bs.shard_id);
+    r = store->svc.datalog_rados->add_entry(bs.bucket, bs.shard_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -1076,7 +1078,6 @@ void RGWRados::finalize()
     data_notifier->stop();
     delete data_notifier;
   }
-  delete data_log;
   delete sync_tracer;
   
   delete lc;
@@ -1138,7 +1139,6 @@ int RGWRados::init_rados()
     return ret;
   }
 
-  data_log = new RGWDataChangesLog(cct, this);
   cr_registry = crs.release();
 
   std::swap(handles, rados);
@@ -1273,7 +1273,7 @@ int RGWRados::init_complete()
       ldout(cct, 0) << "ERROR: failed to start bucket trim manager" << dendl;
       return ret;
     }
-    data_log->set_observer(&*bucket_trim);
+    svc.datalog_rados->set_observer(&*bucket_trim);
 
     Mutex::Locker dl(data_sync_thread_lock);
     for (auto iter : svc.zone->get_zone_data_sync_from_map()) {
@@ -4675,7 +4675,7 @@ int RGWRados::Object::Delete::delete_obj()
     }
 
     if (target->bucket_info.datasync_flag_enabled()) {
-      r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+      r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
       if (r < 0) {
         lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
         return r;
@@ -5722,7 +5722,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 
   if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -5750,7 +5750,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
   ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace);
 
   if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -5778,7 +5778,7 @@ int RGWRados::Bucket::UpdateIndex::cancel()
    * have no way to tell that they're all caught up
    */
   if (target->bucket_info.datasync_flag_enabled()) {
-    int r = store->data_log->add_entry(bs->bucket, bs->shard_id);
+    int r = store->svc.datalog_rados->add_entry(bs->bucket, bs->shard_id);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
     }
@@ -6392,7 +6392,7 @@ int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjStat
   }
 
   if (log_data_change && bucket_info.datasync_flag_enabled()) {
-    data_log->add_entry(bs.bucket, bs.shard_id);
+    svc.datalog_rados->add_entry(bs.bucket, bs.shard_id);
   }
 
   return 0;

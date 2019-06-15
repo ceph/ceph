@@ -322,7 +322,7 @@ void RGWDeleteUserPolicy::execute()
 
       RGWObjVersionTracker objv_tracker;
       op_ret = store->ctl.user->store_info(info, RGWUserCtl::PutParams()
-                                                .set_old_info(&info),
+                                                .set_old_info(&info)
                                                 .set_objv_tracker(&objv_tracker)
                                                 .set_attrs(&uattrs));
       if (op_ret < 0) {

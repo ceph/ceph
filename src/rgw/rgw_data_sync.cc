@@ -28,6 +28,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sync_modules.h"
+#include "services/svc_datalog_rados.h"
 
 #include "include/random.h"
 
@@ -793,10 +794,10 @@ public:
             char buf[16];
             snprintf(buf, sizeof(buf), ":%d", i);
             s = key + buf;
-            yield entries_index->append(s, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+            yield entries_index->append(s, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
           }
         } else {
-          yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+          yield entries_index->append(key, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
         }
       }
       yield {
@@ -3635,7 +3636,7 @@ int DataLogTrimCR::operate()
             << " at marker=" << stable
             << " last_trim=" << last_trim[i] << dendl;
         using TrimCR = RGWSyncLogTrimCR;
-        spawn(new TrimCR(store, store->data_log->get_oid(i),
+        spawn(new TrimCR(store, store->svc.datalog_rados->get_oid(i),
                          stable, &last_trim[i]),
               true);
       }
@@ -3659,7 +3660,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->data_log->get_oid(0)),
+      lock_oid(store->svc.datalog_rados->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}

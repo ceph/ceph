@@ -1695,12 +1695,13 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
 }
 
 
-RGWDataChangesLog::RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
+RGWDataChangesLog::RGWDataChangesLog(RGWSI_Zone *zone_svc,
+                                     RGWSI_Cls *cls_svc) : cct(zone_svc->ctx()),
   lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
   changes(cct->_conf->rgw_data_log_changes_size)
 {
-  svc.zone = store->svc.zone;
-  svc.cls = store->svc.cls;
+  svc.zone = zone_svc;
+  svc.cls = cls_svc;
 
   num_shards = cct->_conf->rgw_data_log_num_shards;
 
@@ -1825,7 +1826,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
+int RGWDataChangesLog::add_entry(const rgw_bucket& bucket, int shard_id) {
   if (!svc.zone->need_to_log_data())
     return 0;
 
@@ -2036,6 +2037,9 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
   return 0;
 }
 
+#warning clean me up
+#if 0
+
 int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
   return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
 }
@@ -2043,6 +2047,7 @@ int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& z
 int RGWDataChangesLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   return store->unlock(store->svc.zone->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
 }
+#endif
 
 bool RGWDataChangesLog::going_down()
 {

@@ -459,7 +459,6 @@ struct BucketChangeObserver;
 
 class RGWDataChangesLog {
   CephContext *cct;
-  RGWRados *store;
   rgw::BucketChangeObserver *observer = nullptr;
 
   struct Svc {
@@ -518,12 +517,12 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store);
+  RGWDataChangesLog(RGWSI_Zone *zone_svc, RGWSI_Cls *cls_svc);
   ~RGWDataChangesLog();
 
   int choose_oid(const rgw_bucket_shard& bs);
   const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
-  int add_entry(rgw_bucket& bucket, int shard_id);
+  int add_entry(const rgw_bucket& bucket, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
@@ -536,8 +535,10 @@ public:
   int trim_entries(const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
+#if 0
   int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
+#endif
   struct LogMarker {
     int shard;
     string marker;

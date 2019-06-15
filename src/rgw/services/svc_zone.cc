@@ -886,9 +886,9 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, string *id) {
 
 bool RGWSI_Zone::need_to_sync() const
 {
-  return !(zonegroup.master_zone.empty() ||
+  return !(zonegroup->master_zone.empty() ||
 	   !rest_master_conn ||
-	   current_period.get_id().empty());
+	   current_period->get_id().empty());
 }
 
 bool RGWSI_Zone::need_to_log_data() const

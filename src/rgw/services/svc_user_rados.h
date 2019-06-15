@@ -171,6 +171,7 @@ public:
 
   int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 			 const rgw_user& user) override;
-  int read_stats(const rgw_user& user, RGWStorageStats *stats) override;
+  int read_stats(RGWSI_MetaBackend::Context *ctx,
+		 const rgw_user& user, RGWStorageStats *stats) override;
 };
 

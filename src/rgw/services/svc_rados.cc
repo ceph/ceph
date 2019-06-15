@@ -158,7 +158,7 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
 RGWSI_RADOS::Obj::Obj(Pool& pool, const string& oid) : rados_svc(pool.rados_svc), rados_handle(pool.rados_handle)
 {
   ref.pool = pool;
-  ref.obj = rgw_obj(pool.get_pool(), oid);
+  ref.obj = rgw_raw_obj(pool.get_pool(), oid);
 }
 
 void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
