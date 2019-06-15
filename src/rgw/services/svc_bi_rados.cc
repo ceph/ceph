@@ -1,6 +1,7 @@
 
 #include "svc_bi_rados.h"
 #include "svc_bilog_rados.h"
+#include "svc_datalog_rados.h"
 #include "svc_zone.h"
 
 #include "rgw/rgw_zone.h"
@@ -17,11 +18,13 @@ RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_Bucke
 
 void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
                                    RGWSI_RADOS *rados_svc,
-                                   RGWSI_BILog_RADOS *bilog_svc)
+                                   RGWSI_BILog_RADOS *bilog_svc,
+                                   RGWSI_DataLog_RADOS *datalog_rados_svc)
 {
   svc.zone = zone_svc;
   svc.rados = rados_svc;
   svc.bilog = bilog_svc;
+  svc.datalog_rados = datalog_rados_svc;
 }
 
 int RGWSI_BucketIndex_RADOS::open_pool(const rgw_pool& pool,
@@ -256,8 +259,9 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
                                                      int shard_id,
                                                      RGWSI_RADOS::Obj *bucket_obj)
 {
+  RGWSI_RADOS::Pool index_pool;
   string bucket_oid_base;
-  int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
+  int ret = open_bucket_index_base(bucket_info, &index_pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
                    << r << dendl;
@@ -269,7 +273,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   get_bucket_index_object(bucket_oid_base, bucket_info.num_shards,
                           shard_id, &oid);
 
-  *bucket_obj = svc.rados->obj(pool, oid);
+  *bucket_obj = svc.rados->obj(index_pool, oid);
 
   return 0;
 }
@@ -419,7 +423,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
     }
 
     for (int i = 0; i < shards_num; ++i, ++shard_id) {
-      ret = store->data_log->add_entry(info.bucket, shard_id);
+      ret = svc.datalog_rados->add_entry(info.bucket, shard_id);
       if (ret < 0) {
         lderr(cct) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << shard_id << ")" << dendl;
         return ret;

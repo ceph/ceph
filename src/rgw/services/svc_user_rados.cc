@@ -767,7 +767,7 @@ int RGWSI_User_RADOS::flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_User_RADOS::reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
-                                         const rgw_user& user) override
+                                         const rgw_user& user)
 {
   return cls_user_reset_stats(user);
 }
@@ -782,7 +782,7 @@ int RGWSI_User_RADOS::cls_user_reset_stats(const rgw_user& user)
   }
   librados::ObjectWriteOperation op;
   ::cls_user_reset_stats(op);
-  return rados_obj->operate(&op, null_yield);
+  return rados_obj.operate(&op, null_yield);
 }
 
 int RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
@@ -796,7 +796,7 @@ int RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
   }
   librados::ObjectWriteOperation op;
   ::cls_user_complete_stats_sync(op);
-  return rados_obj->operate(&op, null_yield);
+  return rados_obj.operate(&op, null_yield);
 }
 
 int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header *header)
@@ -811,10 +811,11 @@ int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header 
   bufferlist ibl;
   librados::ObjectReadOperation op;
   ::cls_user_get_header(op, header, &rc);
-  return rados_obj->operate(&op, &ibl, null_yield);
+  return rados_obj.operate(&op, &ibl, null_yield);
 }
 
-int RGWSI_User_RADOS::read_stats(const rgw_user& user, RGWStorageStats *stats)
+int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
+                                 const rgw_user& user, RGWStorageStats *stats)
 {
   string user_str = user.to_str();
 

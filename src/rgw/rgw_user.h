@@ -934,6 +934,7 @@ public:
 
   int flush_bucket_stats(const rgw_user& user,
                          const RGWBucketEnt& ent);
+  int complete_flush_stats(const rgw_user& user);
   int reset_stats(const rgw_user& user);
   int read_stats(const rgw_user& user, RGWStorageStats *stats);
 };

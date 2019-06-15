@@ -252,34 +252,6 @@ public:
   }
 };
 
-class RGWOp_DATALog_Lock : public RGWRESTOp {
-public:
-  RGWOp_DATALog_Lock() {}
-  ~RGWOp_DATALog_Lock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("datalog", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "lock_datalog_object";
-  }
-};
-
-class RGWOp_DATALog_Unlock : public RGWRESTOp {
-public:
-  RGWOp_DATALog_Unlock() {}
-  ~RGWOp_DATALog_Unlock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("datalog", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "unlock_datalog_object";
-  }
-};
-
 class RGWOp_DATALog_Notify : public RGWRESTOp {
 public:
   RGWOp_DATALog_Notify() {}
