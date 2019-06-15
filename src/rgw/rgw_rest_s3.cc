@@ -2415,7 +2415,7 @@ int RGWPutACLs_ObjStore_S3::get_params()
     if (ret_auth < 0) {
       return ret_auth;
     }
-
+    //bucket can not be setted as default permision
     if ( s->object.empty()){
         if (s->canned_acl.empty()){
           s->canned_acl = "private";
