@@ -1248,6 +1248,62 @@ private:
   // to be drained by consume_blacklist_events.
   bool blacklist_events_enabled = false;
   std::set<entity_addr_t> blacklist_events;
+  struct pg_mapping_t {
+    epoch_t epoch = 0;
+    std::vector<int> up;
+    int up_primary = -1;
+    std::vector<int> acting;
+    int acting_primary = -1;
+
+    pg_mapping_t() {}
+    pg_mapping_t(epoch_t epoch, std::vector<int> up, int up_primary,
+                 std::vector<int> acting, int acting_primary)
+               : epoch(epoch), up(up), up_primary(up_primary),
+                 acting(acting), acting_primary(acting_primary) {}
+  };
+  std::shared_mutex pg_mapping_lock;
+  // pool -> pg mapping
+  std::map<int64_t, std::vector<pg_mapping_t>> pg_mappings;
+
+  // convenient accessors
+  bool lookup_pg_mapping(const pg_t& pg, pg_mapping_t* pg_mapping) {
+    std::shared_lock l{pg_mapping_lock};
+    auto it = pg_mappings.find(pg.pool());
+    if (it == pg_mappings.end())
+      return false;
+    auto& mapping_array = it->second;
+    if (pg.ps() >= mapping_array.size())
+      return false;
+    if (mapping_array[pg.ps()].epoch != pg_mapping->epoch) // stale
+      return false;
+    *pg_mapping = mapping_array[pg.ps()];
+    return true;
+  }
+  void update_pg_mapping(const pg_t& pg, pg_mapping_t&& pg_mapping) {
+    std::lock_guard l{pg_mapping_lock};
+    auto& mapping_array = pg_mappings[pg.pool()];
+    ceph_assert(pg.ps() < mapping_array.size());
+    mapping_array[pg.ps()] = std::move(pg_mapping);
+  }
+  void prune_pg_mapping(const mempool::osdmap::map<int64_t,pg_pool_t>& pools) {
+    std::lock_guard l{pg_mapping_lock};
+    for (auto& pool : pools) {
+      auto& mapping_array = pg_mappings[pool.first];
+      size_t pg_num = pool.second.get_pg_num();
+      if (mapping_array.size() != pg_num) {
+        // catch both pg_num increasing & decreasing
+        mapping_array.resize(pg_num);
+      }
+    }
+    for (auto it = pg_mappings.begin(); it != pg_mappings.end(); ) {
+      if (!pools.count(it->first)) {
+        // pool is gone
+        pg_mappings.erase(it++);
+        continue;
+      }
+      it++;
+    }
+  }
 
 public:
   void maybe_request_map();
