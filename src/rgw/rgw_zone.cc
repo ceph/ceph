@@ -1343,7 +1343,7 @@ void RGWPeriod::fork()
 static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
 {
   // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(store, store->get_async_rados());
+  RGWMetaSyncStatusManager mgr(store, store->svc.rados->get_async_processor());
   int r = mgr.init();
   if (r < 0) {
     return r;

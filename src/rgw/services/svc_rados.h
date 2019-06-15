@@ -100,6 +100,10 @@ public:
     int lookup();
     int open(ceph::optional_ref_default<RGWSI_RADOS::OpenParams> params = std::nullopt);
 
+    const rgw_pool& get_pool() {
+      return pool;
+    }
+
     librados::IoCtx& ioctx() {
       return state.ioctx;
     }
@@ -152,7 +156,7 @@ public:
       init(_obj);
     }
 
-    Obj(Pool& pool, const rgw_raw_obj& obj);
+    Obj(Pool& pool, const string& oid);
 
   public:
     Obj() {}
@@ -209,8 +213,8 @@ public:
     return Obj(this, o);
   }
 
-  Obj obj(Pool& pool, const rgw_raw_obj& o) {
-    return Obj(pool, o);
+  Obj obj(Pool& pool, const string& oid) {
+    return Obj(pool, oid);
   }
 
   Pool pool() {

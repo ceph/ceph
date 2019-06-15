@@ -24,6 +24,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_common.h"
 #include "rgw_zone.h"
+#include "rgw_mdlog.h"
 
 #include "services/svc_zone.h"
 
@@ -100,7 +101,7 @@ void RGWOp_MDLog_List::execute() {
     }
   }
 
-  RGWMetadataLog meta_log{s->cct, store, period};
+  RGWMetadataLog meta_log{s->cct, store->svc.zone, store->svc.cls, period};
 
   meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
@@ -126,7 +127,7 @@ void RGWOp_MDLog_List::send_response() {
     for (list<cls_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
-      store->meta_mgr->dump_log_entry(entry, s->formatter);
+      store->ctl.meta.mgr->dump_log_entry(entry, s->formatter);
       flusher.flush();
     }
     s->formatter->close_section();
@@ -137,7 +138,7 @@ void RGWOp_MDLog_List::send_response() {
 
 void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
-  period = store->meta_mgr->read_oldest_log_period();
+  period = store->ctl.meta.mgr->read_oldest_log_period();
   http_ret = period.get_error();
 }
 
@@ -178,7 +179,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store, period};
+  RGWMetadataLog meta_log{s->cct, store->svc.zone, store->svc.ctl, period};
 
   http_ret = meta_log.get_info(shard_id, &info);
 }
@@ -237,7 +238,7 @@ void RGWOp_MDLog_Delete::execute() {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store, period};
+  RGWMetadataLog meta_log{s->cct, store->svc.zone, store->svc.ctl, period};
 
   http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
@@ -277,7 +278,7 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store, period};
+  RGWMetadataLog meta_log{s->cct, store->svc.zone, store->svc.ctl, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -324,7 +325,7 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store, period};
+  RGWMetadataLog meta_log{s->cct, store->svc.zone, store->svc.ctl, period};
   http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
 }
 
@@ -416,9 +417,9 @@ void RGWOp_BILog_List::execute() {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->list_bi_log_entries(bucket_info, shard_id,
-                                          marker, max_entries - count, 
-                                          entries, &truncated);
+    int ret = store->svc.bilog->log_list(bucket_info, shard_id,
+                                         marker, max_entries - count, 
+                                         entries, &truncated);
     if (ret < 0) {
       ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
       return;
@@ -557,7 +558,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   }
-  http_ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
+  http_ret = store->svc.bilog->log_trim(bucket_info, shard_id, start_marker, end_marker);
   if (http_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }

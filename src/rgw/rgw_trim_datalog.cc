@@ -175,7 +175,7 @@ int DataLogTrimPollCR::operate()
       // request a 'data_trim' lock that covers the entire wait interval to
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc.rados->get_async_processor(), store,
                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
                                           interval.sec()));

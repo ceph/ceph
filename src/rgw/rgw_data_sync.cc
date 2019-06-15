@@ -3430,7 +3430,7 @@ int RGWBucketSyncStatusManager::init()
 
   int effective_num_shards = (num_shards ? num_shards : 1);
 
-  auto async_rados = store->get_async_rados();
+  auto async_rados = store->svc.rados->get_async_processor();
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(this, store, this, async_rados, &http_manager);
@@ -3570,7 +3570,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
-  env.init(dpp, store->ctx(), store, nullptr, store->get_async_rados(),
+  env.init(dpp, store->ctx(), store, nullptr, store->svc.rados->get_async_processor(),
            nullptr, nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
