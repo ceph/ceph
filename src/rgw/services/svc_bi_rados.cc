@@ -224,31 +224,37 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket_info,
                                                      const string& obj_key,
-                                                     RGWSI_RADOS::Pool *index_pool,
-                                                     string *bucket_obj,
+                                                     RGWSI_RADOS::Obj *bucket_obj,
                                                      int *shard_id)
 {
   string bucket_oid_base;
-  int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
+
+  RGWSI_RADOS::Pool pool;
+
+  int ret = open_bucket_index_base(bucket_info, &pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
                    << r << dendl;
     return ret;
   }
 
+  string oid;
+
   ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.num_shards,
-        (RGWBucketInfo::BIShardsHashType)bucket_info.bucket_index_shard_hash_type, bucket_obj, shard_id);
+        (RGWBucketInfo::BIShardsHashType)bucket_info.bucket_index_shard_hash_type, &oid, shard_id);
   if (ret < 0) {
     ldout(cct, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
   }
+
+  *bucket_obj = svc.rados->obj(pool, oid);
+
   return 0;
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket_info,
                                                      int shard_id,
-                                                     RGWSI_RADOS::Pool *index_pool,
-                                                     string *bucket_obj)
+                                                     RGWSI_RADOS::Obj *bucket_obj)
 {
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
@@ -258,8 +264,13 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
     return ret;
   }
 
+  string oid;
+
   get_bucket_index_object(bucket_oid_base, bucket_info.num_shards,
-                          shard_id, bucket_obj);
+                          shard_id, &oid);
+
+  *bucket_obj = svc.rados->obj(pool, oid);
+
   return 0;
 }
 

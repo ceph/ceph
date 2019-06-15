@@ -764,11 +764,12 @@ public:
   /* bucket instance */
   int read_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo *info,
+                                  optional_yield y,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params = std::nullopt);
   int store_bucket_instance_info(const rgw_bucket& bucket,
-                                   RGWBucketInfo& info,
-                                   optional_yield y,
-                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
+                                 RGWBucketInfo& info,
+                                 optional_yield y,
+                                 ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   optional_yield y,
                                   RGWBucketInfo& info,

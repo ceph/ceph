@@ -2029,7 +2029,7 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
 
 static void get_md_sync_status(list<string>& status)
 {
-  RGWMetaSyncStatusManager sync(store, store->get_async_rados());
+  RGWMetaSyncStatusManager sync(store, store->svc.rados->get_async_processor());
 
   int ret = sync.init();
   if (ret < 0) {
@@ -2179,7 +2179,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     flush_ss(ss, status);
     return;
   }
-  RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
+  RGWDataSyncStatusManager sync(store, store->svc.rados->get_async_processor(), source_zone, nullptr);
 
   int ret = sync.init();
   if (ret < 0) {
@@ -6757,7 +6757,7 @@ next:
 	cerr << "ERROR: recalculate doesn't work on buckets" << std::endl;
 	return EINVAL;
       }
-      ret = store->cls_user_reset_stats(user_str);
+      ret = store->ctl.user->reset_bucket_stats(user_id);
       if (ret < 0) {
 	cerr << "ERROR: could not clear user stats: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -7025,7 +7025,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
-    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
+    RGWMetaSyncStatusManager sync(store, store->svc.rados->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7066,7 +7066,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_INIT) {
-    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
+    RGWMetaSyncStatusManager sync(store, store->svc.rados->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7082,7 +7082,7 @@ next:
 
 
   if (opt_cmd == OPT_METADATA_SYNC_RUN) {
-    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
+    RGWMetaSyncStatusManager sync(store, store->svc.rados->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7102,7 +7102,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(store, store->svc.rados->get_async_processor(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7166,7 +7166,7 @@ next:
       return EINVAL;
     }
 
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(store, store->svc.rados->get_async_processor(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7195,7 +7195,7 @@ next:
       return ret;
     }
 
-    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone, nullptr, sync_module);
+    RGWDataSyncStatusManager sync(store, store->svc.rados->get_async_processor(), source_zone, nullptr, sync_module);
 
     ret = sync.init();
     if (ret < 0) {

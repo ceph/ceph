@@ -91,7 +91,7 @@ int PurgePeriodLogsCR::operate()
       ldout(cct, 4) << "purging log shards for realm_epoch=" << cursor.get_epoch()
           << " period=" << cursor.get_period().get_id() << dendl;
       yield {
-        const auto mdlog = metadata->get_log(cursor.get_period().get_id());
+        const auto mdlog = svc.mdlog->get_log(cursor.get_period().get_id());
         const auto& pool = svc.zone->get_zone_params().log_pool;
         auto num_shards = cct->_conf->rgw_md_log_max_shards;
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));

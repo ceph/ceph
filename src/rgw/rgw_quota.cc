@@ -616,7 +616,7 @@ public:
 
 int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats)
 {
-  int r = store->get_user_stats(user, stats);
+  int r = store->ctl.user->get_user_stats(user, stats);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
     return r;

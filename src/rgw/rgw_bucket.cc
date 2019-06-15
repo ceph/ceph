@@ -3018,6 +3018,7 @@ int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
 
 int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo *info,
+                                            optional_yield y,
                                             ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
 {
   auto& params = *_params;

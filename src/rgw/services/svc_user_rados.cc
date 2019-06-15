@@ -766,3 +766,69 @@ int RGWSI_User_RADOS::flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
   return cls_user_flush_bucket_stats(obj, ent);
 }
 
+int RGWSI_User_RADOS::reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+                                         const rgw_user& user) override
+{
+  return cls_user_reset_stats(user);
+}
+
+int RGWSI_User_RADOS::cls_user_reset_stats(const rgw_user& user)
+{
+  rgw_raw_obj obj = get_buckets_obj(user);
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  ::cls_user_reset_stats(op);
+  return rados_obj->operate(&op, null_yield);
+}
+
+int RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
+                                           const rgw_user& user)
+{
+  rgw_raw_obj obj = get_buckets_obj(user);
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  ::cls_user_complete_stats_sync(op);
+  return rados_obj->operate(&op, null_yield);
+}
+
+int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header *header)
+{
+  rgw_raw_obj obj = get_buckets_obj(user);
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+  int rc;
+  bufferlist ibl;
+  librados::ObjectReadOperation op;
+  ::cls_user_get_header(op, header, &rc);
+  return rados_obj->operate(&op, &ibl, null_yield);
+}
+
+int RGWSI_User_RADOS::read_stats(const rgw_user& user, RGWStorageStats *stats)
+{
+  string user_str = user.to_str();
+
+  cls_user_header header;
+  int r = cls_user_get_header(user_str, &header);
+  if (r < 0)
+    return r;
+
+  const cls_user_stats& hs = header.stats;
+
+  stats->size = hs.total_bytes;
+  stats->size_rounded = hs.total_bytes_rounded;
+  stats->num_objects = hs.total_entries;
+
+  return 0;
+}
+
