@@ -752,8 +752,8 @@ public:
                                   RGWBucketInfo *info,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params = std::nullopt);
   int store_bucket_instance_info(const rgw_bucket& bucket,
-                                   RGWBucketInfo& info,
-                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
+				 RGWBucketInfo& info,
+				 ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params = std::nullopt);

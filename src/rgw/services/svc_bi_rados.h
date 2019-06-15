@@ -44,14 +44,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   int open_bucket_index_base(const RGWBucketInfo& bucket_info,
                              RGWSI_RADOS::Pool *index_pool,
                              string *bucket_oid_base);
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
-                        RGWSI_RADOS::Pool *index_pool,
-                        string *bucket_oid);
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
-                        std::optional<int> shard_id,
-                        RGWSI_RADOS::Pool *index_pool,
-                        map<int, string> *bucket_objs,
-                        map<int, string> *bucket_instance_ids);
 
   void get_bucket_index_object(const string& bucket_oid_base,
                                uint32_t num_shards,
@@ -60,16 +52,6 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
                               uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type,
                               string *bucket_obj, int *shard_id);
-
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
-                              const string& obj_key,
-                              RGWSI_RADOS::Pool *index_pool,
-                              string *bucket_obj,
-                              int *shard_id);
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
-                              int shard_id,
-                              RGWSI_RADOS::Pool *index_pool,
-                              string *bucket_obj);
 
   int cls_bucket_head(const RGWBucketInfo& bucket_info,
                       int shard_id,
@@ -108,6 +90,9 @@ public:
   int init_index(RGWBucketInfo& bucket_info);
   int clean_index(RGWBucketInfo& bucket_info);
 
+
+  /* RADOS specific */
+
   int read_stats(const RGWBucketInfo& bucket_info,
                  RGWBucketEnt *stats) override;
 
@@ -116,6 +101,25 @@ public:
 
   int handle_overwrite(const RGWBucketInfo& info,
                        const RGWBucketInfo& orig_info) override;
+
+  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+                              const string& obj_key,
+                              RGWSI_RADOS::Obj *bucket_obj,
+                              int *shard_id);
+
+  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+                              int shard_id,
+                              RGWSI_RADOS::Obj *bucket_obj);
+
+  int open_bucket_index(const RGWBucketInfo& bucket_info,
+                        RGWSI_RADOS::Pool *index_pool,
+                        string *bucket_oid);
+
+  int open_bucket_index(const RGWBucketInfo& bucket_info,
+                        std::optional<int> shard_id,
+                        RGWSI_RADOS::Pool *index_pool,
+                        map<int, string> *bucket_objs,
+                        map<int, string> *bucket_instance_ids);
 };
 
 

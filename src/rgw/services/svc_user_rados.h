@@ -84,6 +84,9 @@ class RGWSI_User_RADOS : public RGWSI_User
                             string * const out_marker,
                             bool * const truncated);
 
+  int cls_user_reset_stats(const rgw_user& user);
+  int cls_user_get_header(const rgw_user& user, cls_user_header *header);
+
   int do_start() override;
 public:
   struct Svc {
@@ -162,5 +165,12 @@ public:
   int flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
                          const rgw_user& user,
                          const RGWBucketEnt& ent) override;
+
+  int complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
+			   const rgw_user& user) override;
+
+  int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+			 const rgw_user& user) override;
+  int read_stats(const rgw_user& user, RGWStorageStats *stats) override;
 };
 

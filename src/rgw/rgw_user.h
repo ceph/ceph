@@ -112,19 +112,6 @@ extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
                                            RGWUserInfo& info,
                                            RGWObjVersionTracker* objv_tracker = nullptr,
                                            real_time* pmtime = nullptr);
-/**
- * Get all the custom metadata stored for user specified in @user_id
- * and put it into @attrs.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_get_user_attrs_by_uid(RGWUserCtl *user_ctl,
-                                     const rgw_user& user_id,
-                                     map<string, bufferlist>& attrs,
-                                     RGWObjVersionTracker *objv_tracker = nullptr);
-/**
- * Given an RGWUserInfo, deletes the user and its bucket ACLs.
- */
-extern int rgw_delete_user(RGWUserCtl *user_ctl, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
@@ -905,6 +892,10 @@ public:
   int get_info_by_swift(const string& swift_name, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
   int get_info_by_access_key(const string& access_key, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
 
+  int get_attrs_by_uid(const rgw_user& user_id,
+                       map<string, bufferlist> *attrs,
+                       RGWObjVersionTracker *objv_tracker = nullptr);
+
   int store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params);
   int remove_info(const RGWUserInfo& info, ceph::optional_ref_default<RemoveParams> params);
 
@@ -924,6 +915,8 @@ public:
 
   int flush_bucket_stats(const rgw_user& user,
                          const RGWBucketEnt& ent);
+  int reset_stats(const rgw_user& user);
+  int read_stats(const rgw_user& user, RGWStorageStats *stats);
 };
 
 class RGWUserMetaHandlerAllocator {

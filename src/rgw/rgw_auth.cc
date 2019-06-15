@@ -470,7 +470,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
-  int ret = user_ctl->store_info(user_info, RGWUserCtl::PutParams()
+  int ret = ctl->user->store_info(user_info, RGWUserCtl::PutParams()
                                                    .set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
@@ -501,13 +501,13 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
-    if (user_ctl->get_info_by_uid( tenanted_uid, &user_info) >= 0) {
+    if (ctl->user->get_info_by_uid( tenanted_uid, &user_info) >= 0) {
       /* Succeeded. */
       return;
     }
   }
 
-  if (user_ctl->get_info_by_uid( acct_user, &user_info) < 0) {
+  if (ctl->user->get_info_by_uid( acct_user, &user_info) < 0) {
     ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
     create_account(dpp, acct_user, user_info);
   }

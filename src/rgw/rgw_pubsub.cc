@@ -67,7 +67,7 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
 
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
-  int ret = rgw_delete_system_obj(store, obj.pool, obj.oid, objv_tracker);
+  int ret = rgw_delete_system_obj(store->svc.sysobj, obj.pool, obj.oid, objv_tracker);
   if (ret < 0) {
     return ret;
   }

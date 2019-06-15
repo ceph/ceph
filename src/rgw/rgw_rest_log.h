@@ -17,6 +17,7 @@
 #define RGW_REST_LOG_H
 
 #include "rgw_metadata.h"
+#include "rgw_mdlog.h"
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;

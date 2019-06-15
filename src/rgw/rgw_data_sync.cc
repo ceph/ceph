@@ -3360,7 +3360,7 @@ int RGWBucketSyncStatusManager::init()
 
   int effective_num_shards = (num_shards ? num_shards : 1);
 
-  auto async_rados = store->get_async_rados();
+  auto async_rados = store->svc.rados->get_async_processor();
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(this, store, this, async_rados, &http_manager);
@@ -3500,7 +3500,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
-  env.init(dpp, store->ctx(), store, nullptr, store->get_async_rados(),
+  env.init(dpp, store->ctx(), store, nullptr, store->svc.rados->get_async_processor(),
            nullptr, nullptr, nullptr, source_zone, module);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
@@ -3677,7 +3677,7 @@ int DataLogTrimPollCR::operate()
       // request a 'data_trim' lock that covers the entire wait interval to
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc.rados->get_async_processor(), store,
                                           rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
                                           interval.sec()));

@@ -100,7 +100,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
     }
   } while (is_truncated);
 
-  ret = store->complete_sync_user_stats(user_id);
+  ret = store->ctl.user->complete_flush_stats(user_id);
   if (ret < 0) {
     cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
     return ret;
@@ -109,7 +109,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
   return 0;
 }
 
-int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map)
+int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>& buckets_usage_map)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
@@ -227,29 +227,6 @@ extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
   return user_ctl->get_info_by_access_key(access_key, &info, RGWUserCtl::GetParams()
                                                       .set_objv_tracker(objv_tracker)
                                                       .set_mtime(pmtime));
-}
-
-int rgw_get_user_attrs_by_uid(RGWUserCtl *user_ctl,
-                              const rgw_user& user_id,
-                              map<string, bufferlist>& attrs,
-                              RGWObjVersionTracker *objv_tracker)
-{
-  RGWUserInfo user_info;
-
-  return user_ctl->get_info_by_uid(user_id, &user_info, RGWUserCtl::GetParams()
-                                            .set_objv_tracker(objv_tracker)
-                                            .set_attrs(&attrs));
-}
-
-/**
- * delete a user's presence from the RGW system.
- * First remove their bucket ACLs, then delete them
- * from the user and user email pools. This leaves the pools
- * themselves alone, as well as any ACLs embedded in object xattrs.
- */
-int rgw_delete_user(RGWUserCtl *user_ctl, RGWUserInfo& info, RGWObjVersionTracker& objv_tracker) {
-  return user_ctl->remove_info(info, RGWUserCtl::RemoveParams()
-                                     .set_objv_tracker(&objv_tracker));
 }
 
 static bool char_is_unreserved_url(char c)
@@ -1760,7 +1737,8 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   } while (is_truncated);
 
-  ret = rgw_delete_user(user_ctl, user_info, op_state.objv);
+  ret = user_ctl->remove_info(user_info, RGWUserCtl::RemoveParams()
+                                         .set_objv_tracker(&op_state.objv));
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -2084,7 +2062,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = store->get_user_stats(info.user_id, stats);
+    int ret = store->ctl.user->get_stats(info.user_id, stats);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2588,6 +2566,17 @@ int RGWUserCtl::get_info_by_access_key(const string& access_key,
   });
 }
 
+int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
+                                 map<string, bufferlist> *pattrs,
+                                 RGWObjVersionTracker *objv_tracker)
+{
+  RGWUserInfo user_info;
+
+  return get_info_by_uid(user_id, &user_info, RGWUserCtl::GetParams()
+                         .set_attrs(pattrs),
+                         .set_objv_tracker(objv_tracker));
+}
+
 int RGWUserCtl::store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params)
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
@@ -2668,6 +2657,27 @@ int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->flush_bucket_stats(op->ctx(), user, ent);
+  });
+}
+
+int RGWUserCtl::complete_flush_stats(const rgw_user& user)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->complete_flush_stats(op->ctx(), user);
+  });
+}
+
+int RGWUserCtl::reset_stats(const rgw_user& user)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->reset_bucket_stats(op->ctx(), user);
+  });
+}
+
+int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->reset_bucket_stats(op->ctx(), user, stats);
   });
 }
 
