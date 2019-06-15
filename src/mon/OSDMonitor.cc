@@ -1166,14 +1166,16 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     pending_inc.new_last_up_change = pending_inc.modified;
   }
   for (auto& i : pending_inc.new_weight) {
-    if (i.first > osdmap.max_osd) {
+    if (i.first >= osdmap.max_osd) {
       if (i.second) {
 	// new osd is already marked in
 	pending_inc.new_last_in_change = pending_inc.modified;
+        break;
       }
     } else if (!!i.second != !!osdmap.osd_weight[i.first]) {
       // existing osd marked in or out
       pending_inc.new_last_in_change = pending_inc.modified;
+      break;
     }
   }
 
