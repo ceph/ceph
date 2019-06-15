@@ -125,7 +125,7 @@ int DataLogTrimCR::operate()
         ldout(cct, 10) << "trimming log shard " << i
             << " at marker=" << m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(store, store->data_log->get_oid(i),
+        spawn(new TrimCR(store, store->svc.datalog_rados->get_oid(i),
                          m, &last_trim[i]),
               true);
       }
@@ -157,7 +157,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->data_log->get_oid(0)),
+      lock_oid(store->svc.datalog_rados->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}

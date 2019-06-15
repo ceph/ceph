@@ -8,6 +8,7 @@
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
 #include "services/svc_cls.h"
+#include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
@@ -50,6 +51,7 @@ int RGWServices_Def::init(CephContext *cct,
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
+  datalog_rados = std::make_unique<RGWSI_DataLog_RADOS>(cct);
   mdlog = std::make_unique<RGWSI_MDLog>(cct);
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
@@ -72,7 +74,7 @@ int RGWServices_Def::init(CephContext *cct,
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
   finisher->init();
-  bi_rados->init(zone.get(), rados.get(), bilog_rados.get());
+  bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
@@ -173,6 +175,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = datalog_rados->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   r = mdlog->start();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start mdlog service (" << cpp_strerror(-r) << dendl;
@@ -224,6 +232,8 @@ void RGWServices_Def::shutdown()
     return;
   }
 
+  datalog_rados->shutdown();
+
   sysobj->shutdown();
   sysobj_core->shutdown();
   notify->shutdown();
@@ -256,6 +266,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
   bucket_sobj = _svc.bucket_sobj.get();
   bucket = bucket_sobj;
   cls = _svc.cls.get();
+  datalog_rados = _svc.datalog_rados.get();
   mdlog = _svc.mdlog.get();
   meta = _svc.meta.get();
   meta_be_sobj = _svc.meta_be_sobj.get();

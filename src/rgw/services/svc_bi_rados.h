@@ -26,6 +26,7 @@
 struct rgw_bucket_dir_header;
 
 class RGWSI_BILog_RADOS;
+class RGWSI_DataLog_RADOS;
 
 #define RGW_NO_SHARD -1
 
@@ -65,13 +66,15 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_RADOS *rados{nullptr};
     RGWSI_BILog_RADOS *bilog{nullptr};
+    RGWSI_DataLog_RADOS *datalog_rados{nullptr};
   } svc;
 
   RGWSI_BucketIndex_RADOS(CephContext *cct);
 
   void init(RGWSI_Zone *zone_svc,
             RGWSI_RADOS *rados_svc,
-            RGWSI_BILog_RADOS *bilog_svc);
+            RGWSI_BILog_RADOS *bilog_svc,
+            RGWSI_DataLog_RADOS *datalog_rados_svc);
 
   static int shards_max() {
     return RGW_SHARDS_PRIME_1;
