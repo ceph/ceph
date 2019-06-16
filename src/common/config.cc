@@ -375,10 +375,14 @@ int md_config_t::parse_config_files(ConfigValues& values,
     cf.clear();
     string fn = *c;
 
-    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
+    ostringstream oss;
+    int ret = cf.parse_file(fn.c_str(), &oss);
     if (ret == 0)
       break;
-    else if (ret != -ENOENT)
+    if (ret) {
+      parse_errors.push_back(oss.str());
+    }
+    if (ret != -ENOENT)
       return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
@@ -426,12 +430,10 @@ int md_config_t::parse_config_files(ConfigValues& values,
 
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    const string &str(s->first);
-    if (((str.find("mds") == 0) || (str.find("mon") == 0) ||
-	 (str.find("osd") == 0)) && (str.size() > 3) && (str[3] != '.')) {
-      old_style_section_names.push_back(str);
+  for (auto& [name, section] : cf) {
+    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
+	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
+      old_style_section_names.push_back(name);
     }
   }
   if (!old_style_section_names.empty()) {
@@ -1240,9 +1242,9 @@ void md_config_t::_get_my_sections(const ConfigValues& values,
 // Return a list of all sections
 int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    sections.push_back(s->first);
+  for (auto [section_name, section] : cf) {
+    sections.push_back(section_name);
+    std::ignore = section;
   }
   return 0;
 }
