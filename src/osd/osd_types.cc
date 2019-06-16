@@ -2979,7 +2979,7 @@ void store_statfs_t::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
-      << "store_statfs(0x" << s.available
+      << " store_statfs(0x" << s.available
       << "/0x"  << s.internally_reserved
       << "/0x"  << s.total
       << ", data 0x" << s.data_stored
