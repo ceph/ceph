@@ -552,80 +552,75 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     goto update;
   } else if (prefix == "config assimilate-conf") {
     ConfFile cf;
-    deque<string> errors;
     bufferlist bl = m->get_data();
-    err = cf.parse_bufferlist(&bl, &errors, &ss);
+    err = cf.parse_bufferlist(&bl, &ss);
     if (err < 0) {
-      ss << "parse errors: " << errors;
       goto reply;
     }
     bool updated = false;
     ostringstream newconf;
-    for (auto i = cf.sections_begin(); i != cf.sections_end(); ++i) {
-      string section = i->first;
-      const ConfSection& s = i->second;
+    for (auto& [section, s] : cf) {
       dout(20) << __func__ << " [" << section << "]" << dendl;
       bool did_section = false;
-      for (auto& j : s.lines) {
+      for (auto& [key, val] : s) {
 	Option::value_t real_value;
 	string value;
 	string errstr;
-	if (!j.key.size()) {
+	if (key.empty()) {
 	  continue;
 	}
 	// a known and worthy option?
-	const Option *o = g_conf().find_option(j.key);
+	const Option *o = g_conf().find_option(key);
 	if (!o) {
-	  o = mon->mgrmon()->find_module_option(j.key);
+	  o = mon->mgrmon()->find_module_option(key);
 	}
 	if (!o ||
 	    o->flags & Option::FLAG_NO_MON_UPDATE) {
 	  goto skip;
 	}
 	// normalize
-	err = o->parse_value(j.val, &real_value, &errstr, &value);
+	err = o->parse_value(val, &real_value, &errstr, &value);
 	if (err < 0) {
-	  dout(20) << __func__ << " failed to parse " << j.key << " = '"
-		   << j.val << "'" << dendl;
+	  dout(20) << __func__ << " failed to parse " << key << " = '"
+		   << val << "'" << dendl;
 	  goto skip;
 	}
 	// does it conflict with an existing value?
 	{
 	  const Section *s = config_map.find_section(section);
 	  if (s) {
-	    auto k = s->options.find(j.key);
+	    auto k = s->options.find(key);
 	    if (k != s->options.end()) {
 	      if (value != k->second.raw_value) {
-		dout(20) << __func__ << " have " << j.key
+		dout(20) << __func__ << " have " << key
 			 << " = " << k->second.raw_value
 			 << " (not " << value << ")" << dendl;
 		goto skip;
 	      }
-	      dout(20) << __func__ << " already have " << j.key
+	      dout(20) << __func__ << " already have " << key
 		       << " = " << k->second.raw_value << dendl;
 	      continue;
 	    }
 	  }
 	}
-	dout(20) << __func__ << "  add " << j.key << " = " << value
-		 << " (" << j.val << ")" << dendl;
+	dout(20) << __func__ << "  add " << key << " = " << value
+		 << " (" << val << ")" << dendl;
 	{
-	  string key = section + "/" + j.key;
 	  bufferlist bl;
 	  bl.append(value);
-	  pending[key] = bl;
+	  pending[section + "/" + key] = bl;
 	  updated = true;
 	}
 	continue;
 
        skip:
-	dout(20) << __func__ << " skip " << j.key << " = " << value
-		 << " (" << j.val << ")" << dendl;
+	dout(20) << __func__ << " skip " << key << " = " << value
+		 << " (" << val << ")" << dendl;
 	if (!did_section) {
 	  newconf << "\n[" << section << "]\n";
 	  did_section = true;
 	}
-	newconf << "\t" << j.key << " = " << j.val << "\n";
+	newconf << "\t" << key << " = " << val << "\n";
       }
     }
     odata.append(newconf.str());

@@ -254,12 +254,10 @@ int main(int argc, const char **argv)
   }
   if (!caps_fn.empty()) {
     ConfFile cf;
-    std::deque<std::string> parse_errors;
-    if (cf.parse_file(caps_fn, &parse_errors, &cerr) != 0) {
+    if (cf.parse_file(caps_fn, &cerr) != 0) {
       cerr << "could not parse caps file " << caps_fn << std::endl;
       exit(1);
     }
-    complain_about_parse_errors(g_ceph_context, &parse_errors);
     map<string, bufferlist> caps;
     const char *key_names[] = { "mon", "osd", "mds", "mgr", NULL };
     for (int i=0; key_names[i]; i++) {
