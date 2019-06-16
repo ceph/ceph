@@ -9,7 +9,7 @@ grade: stable
 confinement: classic
 
 architectures:
-  - build-on: arm64
+  - build-on: amd64
 
 parts:
   gnome:
@@ -26,17 +26,17 @@ parts:
       - gnome
     plugin: cmake
     source:
-      # Ceph is only available for arm64 (x86_64),
+      # Ceph is only available for amd64 (x86_64),
       # so fail the build on other architectures.
-      - on arm64: https://download.ceph.com/debian-luminous/pool/main/c/ceph/ceph_12.2.12ubuntu_x86_64.deb
+      - on amd64: https://download.ceph.com/debian-luminous/pool/main/c/ceph/ceph_12.2.12ubuntu_x86_64.deb
       
     source-type: deb
     override-build: |
       ARCHITECTURE=$(dpkg --print-architecture)
-      if [ "${ARCHITECTURE}" = "arm64" ]; then
+      if [ "${ARCHITECTURE}" = "amd64" ]; then
         DEB_API="https://download.ceph.com/debian-luminous/pool/main/c/ceph/ceph_12.2.12ubuntu_x86_64.deb"
       else
-        echo "ERROR! Ceph only produces debs for arm64. Failing the build here."
+        echo "ERROR! Ceph only produces debs for amd64. Failing the build here."
         exit 1
       fi
 
