@@ -56,6 +56,28 @@ class SubVolume(object):
             except cephfs.Error as e:
                 raise VolumeException(e.args[0], e.args[1])
 
+    def _get_single_dir_entry(self, dir_path, exclude=[]):
+        """
+        Return a directory entry in a given directory exclusing passed
+        in entries.
+        """
+        try:
+            dir_handle = self.fs.opendir(dir_path)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        exclude.extend([".", ".."])
+
+        d = self.fs.readdir(dir_handle)
+        d_name = None
+        while d:
+            if not d.d_name.decode('utf-8') in exclude and d.is_dir():
+                d_name = d.d_name.decode('utf-8')
+                break
+            d = self.fs.readdir(dir_handle)
+        self.fs.closedir(dir_handle)
+        return d_name
+
     ### basic subvolume operations
 
     def create_subvolume(self, spec, size=None, namespace_isolated=True, mode=0o755, pool=None):
@@ -99,8 +121,8 @@ class SubVolume(object):
     def remove_subvolume(self, spec, force):
         """
         Make a subvolume inaccessible to guests.  This function is idempotent.
-        This is the fast part of tearing down a subvolume: you must also later
-        call purge_subvolume, which is the slow part.
+        This is the fast part of tearing down a subvolume. The subvolume will
+        get purged in the background.
 
         :param spec: subvolume path specification
         :param force: flag to ignore non-existent path (never raise exception)
@@ -114,7 +136,10 @@ class SubVolume(object):
         trashdir = spec.trash_dir
         self._mkdir_p(trashdir)
 
-        trashpath = spec.trash_path
+        # mangle the trash directroy entry to a random string so that subsequent
+        # subvolume create and delete with same name moves the subvolume directory
+        # to a unique trash dir (else, rename() could fail if the trash dir exist).
+        trashpath = spec.unique_trash_path
         try:
             self.fs.rename(subvolpath, trashpath)
         except cephfs.ObjectNotFound:
@@ -124,10 +149,9 @@ class SubVolume(object):
         except cephfs.Error as e:
             raise VolumeException(e.args[0], e.args[1])
 
-    def purge_subvolume(self, spec):
+    def purge_subvolume(self, spec, should_cancel):
         """
-        Finish clearing up a subvolume that was previously passed to delete_subvolume.  This
-        function is idempotent.
+        Finish clearing up a subvolume from the trash directory.
         """
 
         def rmtree(root_path):
@@ -139,7 +163,7 @@ class SubVolume(object):
             except cephfs.Error as e:
                 raise VolumeException(e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
-            while d:
+            while d and not should_cancel():
                 d_name = d.d_name.decode('utf-8')
                 if d_name not in [".", ".."]:
                     # Do not use os.path.join because it is sensitive
@@ -153,7 +177,10 @@ class SubVolume(object):
 
                 d = self.fs.readdir(dir_handle)
             self.fs.closedir(dir_handle)
-            self.fs.rmdir(root_path)
+            # remove the directory only if we were not asked to cancel
+            # (else we would fail to remove this anyway)
+            if not should_cancel():
+                self.fs.rmdir(root_path)
 
         trashpath = spec.trash_path
         rmtree(trashpath)
@@ -251,6 +278,16 @@ class SubVolume(object):
     def remove_group_snapshot(self, spec, snapname, force):
         snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
         return self._snapshot_delete(snappath, force)
+
+    def get_trash_entry(self, spec, exclude):
+        try:
+            trashdir = spec.trash_dir
+            return self._get_single_dir_entry(trashdir, exclude)
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT:
+                # trash dir does not exist yet, signal success
+                return None
+            raise
 
     ### context manager routines
 
