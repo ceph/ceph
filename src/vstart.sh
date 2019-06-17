@@ -360,7 +360,8 @@ case $1 in
         shift
         ;;
     -o )
-        extra_conf="$extra_conf	$2"
+        extra_conf="$extra_conf	$2
+"
         shift
         ;;
     --cache )
