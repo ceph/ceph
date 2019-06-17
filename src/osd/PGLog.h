@@ -1405,7 +1405,7 @@ public:
 	  if (item.is_delete()) {
 	    ceph_assert(missing.may_include_deletes);
 	  }
-	  missing.add(oid, item.need, item.have, item.is_delete());
+	  missing.add(oid, std::move(item));
 	} else if (p->key().substr(0, 4) == string("dup_")) {
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
@@ -1653,7 +1653,7 @@ public:
 	if (item.is_delete()) {
 	  ceph_assert(missing.may_include_deletes);
 	}
-	missing.add(oid, item.need, item.have, item.is_delete());
+	missing.add(oid, std::move(item));
       } else if (p.first.substr(0, 4) == string("dup_")) {
 	pg_log_dup_t dup;
 	decode(dup, bp);
