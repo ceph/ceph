@@ -132,7 +132,7 @@ describe('Checks that a bucket was deleted', () => {
       page.navigateTo();
     });
 
-    it('Should select the bucket and delete it', () => {
+    it('should select the bucket and delete it', () => {
       // Checks if the buttons required to delete the buckets are present and if
       // the pop-up menu is present, then clicks the appropriate buttons to delete
       // the bucket. Also checks if the bucket has been deleted by comparing the
