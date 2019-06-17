@@ -53,7 +53,7 @@ describe('Create bucket from the Create page', () => {
       expect(Helper.getBreadcrumbText()).toEqual('Create');
     });
 
-    it('Should set owner', () => {
+    it('should set owner', () => {
       // Sets the owner of the bucket (which is 'testid') and checks if the owner
       // was set. Also checks if we are on the Create page
       page.navigateTo();
