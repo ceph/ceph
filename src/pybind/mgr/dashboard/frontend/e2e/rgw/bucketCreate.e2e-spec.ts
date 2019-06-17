@@ -63,7 +63,7 @@ describe('Create bucket from the Create page', () => {
       expect(Helper.getBreadcrumbText()).toEqual('Create');
     });
 
-    it('Should click Create Bucket button', () => {
+    it('should click Create Bucket button', () => {
       // Clicks the Create button and checks if its the correct button
       page.navigateTo();
       expect(page.getCreateButton().getText()).toEqual('Create Bucket');
