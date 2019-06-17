@@ -1711,9 +1711,9 @@ public:
 
   snapid_t snap_exists(const char *s) const;
   void add_snap(const char *n, utime_t stamp);
-  void add_unmanaged_snap(uint64_t& snapid);
+  uint64_t add_unmanaged_snap(bool preoctopus_compat);
   void remove_snap(snapid_t s);
-  void remove_unmanaged_snap(snapid_t s);
+  void remove_unmanaged_snap(snapid_t s, bool preoctopus_compat);
 
   SnapContext get_snap_context() const;
 
