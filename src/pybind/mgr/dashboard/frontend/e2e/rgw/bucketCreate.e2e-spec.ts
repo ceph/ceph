@@ -96,7 +96,7 @@ describe('Checks that bucket was made', () => {
       page.navigateTo();
     });
 
-    it('Should check the name of the bucket is correct', () => {
+    it('should check the name of the bucket is correct', () => {
       // Makes sure that the buckets in the table are clickable, then checks if
       // testbucket is in the list
       page.navigateTo();
