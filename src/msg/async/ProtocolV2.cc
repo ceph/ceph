@@ -2712,6 +2712,12 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
           ceph_assert(exproto->state == NONE);
 
           exproto->state = SESSION_ACCEPTING;
+          // we have called shutdown_socket above
+          ceph_assert(existing->last_tick_id == 0);
+          // restart timer since we are going to re-build connection
+          existing->last_connect_started = ceph::coarse_mono_clock::now();
+          existing->last_tick_id = existing->center->create_time_event(
+            existing->connect_timeout_us, existing->tick_handler);
           existing->state = AsyncConnection::STATE_CONNECTION_ESTABLISHED;
           existing->center->create_file_event(existing->cs.fd(), EVENT_READABLE,
                                               existing->read_handler);

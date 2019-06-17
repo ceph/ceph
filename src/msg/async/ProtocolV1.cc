@@ -2295,6 +2295,12 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
             if (exproto->state == CLOSED) return;
             ceph_assert(exproto->state == NONE);
 
+            // we have called shutdown_socket above
+            ceph_assert(existing->last_tick_id == 0);
+            // restart timer since we are going to re-build connection
+            existing->last_connect_started = ceph::coarse_mono_clock::now();
+            existing->last_tick_id = existing->center->create_time_event(
+              existing->connect_timeout_us, existing->tick_handler);
             existing->state = AsyncConnection::STATE_CONNECTION_ESTABLISHED;
             exproto->state = ACCEPTING;
 
