@@ -14,7 +14,7 @@ describe('RGW Buckets Page', () => {
       page.navigateTo();
     });
 
-    it('Should click the Create button', () => {
+    it('should click the Create button', () => {
       // Checks the breadcrumb at the Buckets page, clicks the create button and then
       // checks the breadcrumb again to see if we moved to the Create page
       page.navigateTo();
