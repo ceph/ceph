@@ -107,7 +107,7 @@ describe('Checks that bucket was made', () => {
         expect(bucketList).toMatch('testbucket');
       });
     });
-    it('Should check the owner of the bucket is correct', () => {
+    it('should check the owner of the bucket is correct', () => {
       // Checks if the owner of the bucket is correct
       page.navigateTo();
       page
