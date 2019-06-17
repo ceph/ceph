@@ -12802,8 +12802,8 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_CREATE_UNMANAGED_SNAP:
     {
-      uint64_t snapid;
-      pp.add_unmanaged_snap(snapid);
+      uint64_t snapid = pp.add_unmanaged_snap(
+	osdmap.require_osd_release < ceph_release_t::octopus);
       encode(snapid, reply_data);
       changed = true;
     }
@@ -12815,7 +12815,9 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
         _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
         return false;
       }
-      pp.remove_unmanaged_snap(m->snapid);
+      pp.remove_unmanaged_snap(
+	m->snapid,
+	osdmap.require_osd_release < ceph_release_t::octopus);
       pending_inc.new_removed_snaps[m->pool].insert(m->snapid);
       changed = true;
     }
