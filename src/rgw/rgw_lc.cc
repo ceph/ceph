@@ -141,6 +141,9 @@ int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
   if (rule_map.find(id) != rule_map.end()) {  //id shouldn't be the same 
     return -EINVAL;
   }
+  if (rule.get_filter().has_tags() && (rule.get_dm_expiration() || !rule.get_mp_expiration().empty())) {
+    return -ERR_INVALID_REQUEST;
+  }
   rule_map.insert(pair<string, LCRule>(id, rule));
 
   if (!_add_rule(rule)) {
