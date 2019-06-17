@@ -12679,6 +12679,21 @@ bool OSDMonitor::_is_removed_snap(int64_t pool, snapid_t snap)
   return false;
 }
 
+bool OSDMonitor::_is_pending_removed_snap(int64_t pool, snapid_t snap)
+{
+  if (pending_inc.old_pools.count(pool)) {
+    dout(10) << __func__ << " pool " << pool << " snap " << snap
+	     << " - pool pending deletion" << dendl;
+    return true;
+  }
+  if (pending_inc.in_new_removed_snaps(pool, snap)) {
+    dout(10) << __func__ << " pool " << pool << " snap " << snap
+	     << " - in pending new_removed_snaps" << dendl;
+    return true;
+  }
+  return false;
+}
+
 bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -12810,7 +12825,8 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     break;
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
-    if (!_is_removed_snap(m->pool, m->snapid)) {
+    if (!_is_removed_snap(m->pool, m->snapid) &&
+	!_is_pending_removed_snap(m->pool, m->snapid)) {
       if (m->snapid > pp.get_snap_seq()) {
         _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
         return false;

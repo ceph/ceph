@@ -499,6 +499,13 @@ public:
       return true;
     }
 
+    bool in_new_removed_snaps(int64_t pool, snapid_t snap) const {
+      auto p = new_removed_snaps.find(pool);
+      if (p == new_removed_snaps.end()) {
+	return false;
+      }
+      return p->second.contains(snap);
+    }
   };
   
 private:
