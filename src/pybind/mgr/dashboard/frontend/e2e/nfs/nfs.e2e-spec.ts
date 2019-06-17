@@ -18,7 +18,7 @@ describe('Nfs page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('NFS');
+      expect(NfsPage.getBreadcrumbText()).toEqual('NFS');
     });
   });
 });
