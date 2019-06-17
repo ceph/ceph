@@ -8,6 +8,7 @@ import contextlib
 import logging
 import os
 
+from distutils.version import LooseVersion
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.config import config as teuth_config
@@ -231,14 +232,20 @@ def task(ctx, config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
-    clients = config.keys()
-
-    log.info('clients={c}'.format(c=clients))
 
     testswift_conf = {}
-    for client in clients:
+    clients = []
+    for client in config.keys():
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 'swift: no rgw endpoint for {}'.format(client)
+
+        # http://tracker.ceph.com/issues/40304 can't bootstrap on rhel 7.6+
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        if remote.os.name == 'rhel' and LooseVersion(remote.os.version) >= LooseVersion('7.6'):
+            log.warning('Swift tests cannot run on rhel 7.6+, skipping client {client}'.format(client))
+            continue
+
+        clients.append(client)
 
         testswift_conf[client] = ConfigObj(
                 indent_type='',
@@ -252,6 +259,7 @@ def task(ctx, config):
                     }
                 )
 
+    log.info('clients={c}'.format(c=config.keys()))
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
