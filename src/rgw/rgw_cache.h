@@ -928,9 +928,9 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
       mydout(0) << "Error cache_aio_read failed err=" << r << dendl;
     }
   } else if (d->deterministic_hash_is_local(read_obj.oid)){
-    mydout(20) << "rados->get_obj_iterate_cb oid=" << oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
+    mydout(20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
     op.read(read_ofs, len, pbl, NULL);
-    r = io_ctx.aio_operate(oid, c, &op, NULL);
+    r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
     mydout(20) << "rados->aio_operate r=" << r << " bl.length=" << pbl->length() << dendl;
     if (r < 0) {
       mydout(0) << "rados->aio_operate r=" << r << dendl;
@@ -940,7 +940,7 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
     librados::L2CacheRequest *cc;
     d->add_l2_request(&cc, pbl, read_obj.oid, obj_ofs, read_ofs, len, key, c);
 //    r = d->add_cache_notifier(oid, c);
-     r = io_ctx.cache_aio_notifier(read_obj.oid, cc); 
+    r = io_ctx.cache_aio_notifier(read_obj.oid, cc); 
     data_cache.push_l2_request(cc);
   }
 
