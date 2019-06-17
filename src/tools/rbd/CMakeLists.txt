@@ -1,3 +1,6 @@
+set(CURSES_NEED_NCURSES TRUE)
+find_package(Curses REQUIRED)
+
 set(rbd_srcs
   rbd.cc
   ArgumentTypes.cc
@@ -52,7 +55,7 @@ target_link_libraries(rbd librbd librados
   cls_journal_client cls_rbd_client
   rbd_types
   journal
-  ceph-common global ncurses
+  ceph-common global ${CURSES_LIBRARIES}
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_KRBD)
   target_link_libraries(rbd 
