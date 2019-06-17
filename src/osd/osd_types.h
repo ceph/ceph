@@ -4522,6 +4522,12 @@ public:
     tracker.changed(oid);
   }
 
+  void add(const hobject_t& oid, pg_missing_item&& item) {
+    rmissing[item.need.version] = oid;
+    missing.insert({oid, std::move(item)});
+    tracker.changed(oid);
+  }
+
   void rm(const hobject_t& oid, eversion_t v) {
     std::map<hobject_t, item>::iterator p = missing.find(oid);
     if (p != missing.end() && p->second.need <= v)
