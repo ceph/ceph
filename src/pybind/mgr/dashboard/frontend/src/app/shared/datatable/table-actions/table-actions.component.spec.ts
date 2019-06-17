@@ -20,7 +20,7 @@ describe('TableActionsComponent', () => {
   let scenario;
   let permissionHelper: PermissionHelper;
 
-  const setUpTableActions = () => {
+  const getTableActionComponent = (): TableActionsComponent => {
     component.tableActions = [
       addAction,
       editAction,
@@ -29,10 +29,6 @@ describe('TableActionsComponent', () => {
       copyAction,
       deleteAction
     ];
-  };
-
-  const getTableActionComponent = (): TableActionsComponent => {
-    setUpTableActions();
     component.ngOnInit();
     return component;
   };
@@ -236,7 +232,7 @@ describe('TableActionsComponent', () => {
       permissionHelper.testScenarios(scenario);
     });
 
-    it('should not get any button with no permissions', () => {
+    it('should not get any button with no permissions, except the true action', () => {
       hiddenScenario();
       permissionHelper.setPermissionsAndGetActions(0, 0, 0);
       permissionHelper.testScenarios(scenario);
@@ -244,7 +240,7 @@ describe('TableActionsComponent', () => {
 
     it('should not get any button if only a drop down should be shown', () => {
       hiddenScenario();
-      component.onlyDropDown = 'Drop down label';
+      component.dropDownOnly = 'Drop down label that is shown';
       permissionHelper.setPermissionsAndGetActions(1, 1, 1);
       permissionHelper.testScenarios(scenario);
     });
@@ -269,13 +265,56 @@ describe('TableActionsComponent', () => {
     });
   });
 
-  describe('with drop down only', () => {
-    beforeEach(() => {
-      component.onlyDropDown = 'displayMe';
+  describe('all visible actions with all different permissions', () => {
+    it('with create, update and delete', () => {
+      permissionHelper.setPermissionsAndGetActions(1, 1, 1);
+      expect(component.dropDownActions).toEqual([
+        addAction,
+        editAction,
+        unprotectAction,
+        copyAction,
+        deleteAction
+      ]);
     });
 
-    it('should not return any button with getCurrentButton', () => {
-      expect(component.getCurrentButton()).toBeFalsy();
+    it('with create and delete', () => {
+      permissionHelper.setPermissionsAndGetActions(1, 0, 1);
+      expect(component.dropDownActions).toEqual([addAction, copyAction, deleteAction]);
+    });
+
+    it('with create and update', () => {
+      permissionHelper.setPermissionsAndGetActions(1, 1, 0);
+      expect(component.dropDownActions).toEqual([
+        addAction,
+        editAction,
+        unprotectAction,
+        copyAction
+      ]);
+    });
+
+    it('with create', () => {
+      permissionHelper.setPermissionsAndGetActions(1, 0, 0);
+      expect(component.dropDownActions).toEqual([addAction, copyAction]);
+    });
+
+    it('with update and delete', () => {
+      permissionHelper.setPermissionsAndGetActions(0, 1, 1);
+      expect(component.dropDownActions).toEqual([editAction, unprotectAction, deleteAction]);
+    });
+
+    it('with update', () => {
+      permissionHelper.setPermissionsAndGetActions(0, 1, 0);
+      expect(component.dropDownActions).toEqual([editAction, unprotectAction]);
+    });
+
+    it('with delete', () => {
+      permissionHelper.setPermissionsAndGetActions(0, 0, 1);
+      expect(component.dropDownActions).toEqual([deleteAction]);
+    });
+
+    it('without any', () => {
+      permissionHelper.setPermissionsAndGetActions(0, 0, 0);
+      expect(component.dropDownActions).toEqual([]);
     });
   });
 
