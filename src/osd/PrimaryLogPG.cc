@@ -2942,6 +2942,7 @@ struct C_ProxyChunkRead : public Context {
 	  ceph_assert(req_total_len);
 	  bufferlist list;
 	  bufferptr bptr(req_total_len);
+	  bptr.zero();
 	  list.push_back(std::move(bptr));
 	  prdop->ops[op_index].outdata.append(list);
 	}
@@ -6868,6 +6869,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 			 raw_pg.ps(), raw_pg.pool(),
 			 tgt_oloc.nspace);
 	bool need_reference = (osd_op.op.flags & CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+	bool using_content = (osd_op.op.flags & CEPH_OSD_OP_FLAG_USING_ORIG_CONTENT);
 	bool has_reference = (oi.manifest.chunk_map.find(src_offset) != oi.manifest.chunk_map.end()) &&
 			     (oi.manifest.chunk_map[src_offset].flags & chunk_info_t::FLAG_HAS_REFERENCE);
 	if (has_reference) {
@@ -6875,7 +6877,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(5) << " the object is already a manifest " << dendl;
 	  break;
 	}
-	if (op_finisher == nullptr && need_reference) {
+	if (op_finisher == nullptr && need_reference &&
+	     !using_content) {
 	  // start
 	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
 	    new SetManifestFinisher(osd_op));
@@ -6905,10 +6908,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  if (need_reference && pool.info.get_fingerprint_type() != pg_pool_t::TYPE_FINGERPRINT_NONE) {
 	    oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_HAS_FINGERPRINT);
+	    if (using_content) {
+	      oi.manifest.chunk_map[src_offset].clear_flag(chunk_info_t::FLAG_MISSING);
+	      oi.manifest.chunk_map[src_offset].set_flag(chunk_info_t::FLAG_DIRTY);
+	    }
 	  }
 	  ctx->modify = true;
 
-	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
+	  dout(10) << " set-chunked oid: " << oi.soid << " user_version: " << oi.user_version 
 		   << " chunk_info: " << chunk_info << dendl;
 	  if (op_finisher) {
 	    ctx->op_finishers.erase(ctx->current_osd_subop_num);

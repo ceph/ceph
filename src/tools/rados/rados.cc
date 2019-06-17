@@ -127,7 +127,7 @@ void usage(ostream& out)
 "                                    set allocation hint for an object\n"
 "   set-redirect <object A> --target-pool <caspool> <target object A> [--with-reference]\n"
 "                                    set redirect target\n"
-"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference] [--using-orig-content]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
@@ -1877,6 +1877,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string omap_key;
   std::string omap_key_pretty;
   bool with_reference = false;
+  bool using_content = false;
 
   Rados rados;
   IoCtx io_ctx;
@@ -2104,6 +2105,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("with-reference");
   if (i != opts.end()) {
     with_reference = true;
+  }
+  i = opts.find("using-orig-content");
+  if (i != opts.end()) {
+    using_content = true;
   }
 
   i = opts.find("pgid");
@@ -3702,7 +3707,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     uint64_t length;
     uint64_t tgt_offset;
     string tgt_oid;
-    if (nargs.size() < 6) {
+    if (nargs.size() < 4) {
       usage(cerr);
       return 1;
     } else {
@@ -3714,22 +3719,26 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       }
       length = strtoull(nargs[3], &endptr, 10);
       if (*endptr) {
-	cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+	cerr << "Invalid value for size: '" << nargs[3] << "'" << std::endl;
 	return 1;
       }
-      tgt_oid = string(nargs[4]);
-      tgt_offset = strtoull(nargs[5], &endptr, 10);
-      if (*endptr) {
-	cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
-	return 1;
+      if (nargs.size() > 4) {
+	tgt_oid = string(nargs[4]);
+	tgt_offset = strtoull(nargs[5], &endptr, 10);
+	if (*endptr) {
+	 cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+	 return 1;
+	}
       }
     }
 
     IoCtx target_ctx;
     ret = rados.ioctx_create(target, target_ctx);
     ObjectWriteOperation op;
-    if (with_reference) {
+    if (with_reference && !using_content) {
       op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else if (with_reference && using_content) {
+      op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE | CEPH_OSD_OP_FLAG_USING_ORIG_CONTENT);
     } else {
       op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
     }

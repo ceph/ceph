@@ -471,6 +471,7 @@ enum {
 	CEPH_OSD_OP_FLAG_FADVISE_NOCACHE   = 0x40, /* data will be accessed only once by this client */
 	CEPH_OSD_OP_FLAG_WITH_REFERENCE   = 0x80, /* need reference couting */
 	CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE = 0x100, /* bypass ObjectStore cache, mainly for deep-scrub */
+	CEPH_OSD_OP_FLAG_USING_ORIG_CONTENT   = 0x200, /* a new oid will be generated via using original content */
 };
 
 #define EOLDSNAPC    85  /* ORDERSNAP flag set; writer has old snapc*/
