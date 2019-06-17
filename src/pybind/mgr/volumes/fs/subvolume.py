@@ -33,11 +33,8 @@ class SubVolume(object):
     """
 
 
-    def __init__(self, mgr, fs_name=None):
-        self.fs = None
-        self.fs_name = fs_name
-        self.connected = False
-
+    def __init__(self, mgr, fs_handle):
+        self.fs = fs_handle
         self.rados = mgr.rados
 
     def _mkdir_p(self, path, mode=0o755):
@@ -257,29 +254,8 @@ class SubVolume(object):
 
     ### context manager routines
 
-    def connect(self):
-        log.debug("Connecting to cephfs...")
-        self.fs = cephfs.LibCephFS(rados_inst=self.rados)
-        log.debug("CephFS initializing...")
-        self.fs.init()
-        log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
-        log.debug("Connection to cephfs complete")
-
-    def disconnect(self):
-        log.info("disconnect")
-        if self.fs:
-            log.debug("Disconnecting cephfs...")
-            self.fs.shutdown()
-            self.fs = None
-            log.debug("Disconnecting cephfs complete")
-
     def __enter__(self):
-        self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.disconnect()
-
-    def __del__(self):
-        self.disconnect()
+        pass
