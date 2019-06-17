@@ -2795,7 +2795,8 @@ void Client::send_reconnect(MetaSession *session)
     auto it = in->caps.find(mds);
     if (it != in->caps.end()) {
       if (allow_multi &&
-	  m->get_approx_size() >= (std::numeric_limits<int>::max() >> 1)) {
+	  m->get_approx_size() >=
+	  static_cast<size_t>((std::numeric_limits<int>::max() >> 1))) {
 	m->mark_more();
 	session->con->send_message2(std::move(m));
 
