@@ -16,6 +16,7 @@ import orchestrator
 from .subvolspec import SubvolumeSpec
 from .subvolume import SubVolume
 from .exception import VolumeException
+from .purge_queue import ThreadPoolPurgeQueueMixin
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +161,8 @@ class VolumeClient(object):
     def __init__(self, mgr):
         self.mgr = mgr
         self.connection_pool = ConnectionPool(self.mgr)
+        # TODO: make thread pool size configurable
+        self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
 
     def gen_pool_names(self, volname):
         """
@@ -273,6 +276,7 @@ class VolumeClient(object):
         """
         delete the given module (tear down mds, remove filesystem)
         """
+        self.purge_queue.cancel_purge_job(volname)
         self.connection_pool.del_fs_handle(volname)
         # Tear down MDS daemons
         try:
@@ -390,7 +394,7 @@ class VolumeClient(object):
                 spec = SubvolumeSpec(subvolname, groupname)
                 if self.group_exists(sv, spec):
                     sv.remove_subvolume(spec, force)
-                    sv.purge_subvolume(spec)
+                    self.purge_queue.queue_purge_job(volname)
                 elif not force:
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, cannot remove " \
@@ -542,6 +546,36 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, cannot " \
                         "remove it".format(groupname))
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    @connection_pool_wrap
+    def get_subvolume_trash_entry(self, fs_handle, **kwargs):
+        ret = None
+        volname = kwargs['vol_name']
+        exclude = kwargs.get('exclude_entries', [])
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec("", "")
+                path = sv.get_trash_entry(spec, exclude)
+                ret = 0, path, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    @connection_pool_wrap
+    def purge_subvolume_trash_entry(self, fs_handle, **kwargs):
+        ret = 0, "", ""
+        volname = kwargs['vol_name']
+        purge_dir = kwargs['purge_dir']
+        should_cancel = kwargs.get('should_cancel', lambda: False)
+
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec(purge_dir, "")
+                sv.purge_subvolume(spec, should_cancel)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

@@ -1,4 +1,5 @@
 import os
+import uuid
 
 class SubvolumeSpec(object):
     """
@@ -63,6 +64,13 @@ class SubvolumeSpec(object):
         return the trash path from subvolume specification
         """
         return os.path.join(self.subvolume_prefix, "_deleting", self.subvolumeid)
+
+    @property
+    def unique_trash_path(self):
+        """
+        return a unique trash directory entry path
+        """
+        return os.path.join(self.subvolume_prefix, "_deleting", str(uuid.uuid4()))
 
     @property
     def fs_namespace(self):
