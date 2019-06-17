@@ -8,7 +8,7 @@ import contextlib
 import logging
 import os
 
-from packaging import version
+from distutils.version import LooseVersion
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.config import config as teuth_config
@@ -241,8 +241,7 @@ def task(ctx, config):
 
         # http://tracker.ceph.com/issues/40304 can't bootstrap on rhel 7.6+
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        os_version = version.parse(remote.os.version):
-        if remote.os.type == 'rhel' and os_version >= version.Version('7.6'):
+        if remote.os.name == 'rhel' and LooseVersion(remote.os.version) >= LooseVersion('7.6'):
             log.warning('Swift tests cannot run on rhel 7.6+, skipping client {client}'.format(client))
             continue
 
