@@ -22,6 +22,7 @@
 #include "OSDCap.h"
 #include "Watch.h"
 #include "OSDMap.h"
+#include "PeeringState.h"
 
 //#define PG_DEBUG_REFS
 
@@ -147,6 +148,10 @@ struct Session : public RefCountedObject {
   map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
+
+  // for heartbeat connections only
+  int peer = -1;
+  HeartbeatStampsRef stamps;
 
   explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
