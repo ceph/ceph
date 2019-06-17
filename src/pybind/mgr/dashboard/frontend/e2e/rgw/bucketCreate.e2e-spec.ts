@@ -44,7 +44,7 @@ describe('Create bucket from the Create page', () => {
       expect(Helper.getBreadcrumbText()).toEqual('Create');
     });
 
-    it('Should type name of bucket', () => {
+    it('should type name of bucket', () => {
       // Types in the name of the bucket (which is 'testbucket'), checks we are
       // still on the Create page
       page.navigateTo();
