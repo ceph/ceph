@@ -22,6 +22,8 @@ class ThreadPool;
 
 namespace journal {
 
+struct CacheManagerHandler;
+
 class JournalMetadata;
 class JournalPlayer;
 class JournalRecorder;
@@ -52,10 +54,12 @@ public:
 				       const std::string &journal_id);
 
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, const Settings &settings);
+	    const std::string &client_id, const Settings &settings,
+            CacheManagerHandler *cache_manager_handler);
   Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
             librados::IoCtx &header_ioctx, const std::string &journal_id,
-	    const std::string &client_id, const Settings &settings);
+	    const std::string &client_id, const Settings &settings,
+            CacheManagerHandler *cache_manager_handler);
   ~Journaler();
 
   void exists(Context *on_finish) const;
@@ -138,6 +142,7 @@ private:
   librados::IoCtx m_data_ioctx;
   CephContext *m_cct;
   std::string m_client_id;
+  CacheManagerHandler *m_cache_manager_handler;
 
   std::string m_header_oid;
   std::string m_object_oid_prefix;

@@ -4,19 +4,19 @@
 #include <boost/range/adaptor/map.hpp>
 
 #include "common/Formatter.h"
+#include "common/PriorityCache.h"
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "journal/Types.h"
 #include "librbd/ImageCtx.h"
+#include "perfglue/heap_profiler.h"
 #include "Mirror.h"
 #include "ServiceDaemon.h"
 #include "Threads.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
-#undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::Mirror: " << this << " " \
-                           << __func__ << ": "
 
 using std::list;
 using std::map;
@@ -118,7 +118,150 @@ private:
   Mirror *mirror;
 };
 
+#undef dout_prefix
+#define dout_prefix *_dout << "rbd::mirror::PriCache: " << this << " " \
+                           << m_name << " " << __func__ << ": "
+
+struct PriCache : public PriorityCache::PriCache {
+  std::string m_name;
+  int64_t m_base_cache_max_size;
+  int64_t m_extra_cache_max_size;
+
+  PriorityCache::Priority m_base_cache_pri = PriorityCache::Priority::PRI10;
+  PriorityCache::Priority m_extra_cache_pri = PriorityCache::Priority::PRI10;
+  int64_t m_base_cache_bytes = 0;
+  int64_t m_extra_cache_bytes = 0;
+  int64_t m_committed_bytes = 0;
+  double m_cache_ratio = 0;
+
+  PriCache(const std::string &name, uint64_t min_size, uint64_t max_size)
+    : m_name(name), m_base_cache_max_size(min_size),
+      m_extra_cache_max_size(max_size - min_size) {
+    ceph_assert(max_size >= min_size);
+  }
+
+  void prioritize() {
+    if (m_base_cache_pri == PriorityCache::Priority::PRI0) {
+      return;
+    }
+    auto pri = static_cast<uint8_t>(m_base_cache_pri);
+    m_base_cache_pri = static_cast<PriorityCache::Priority>(--pri);
+
+    dout(30) << m_base_cache_pri << dendl;
+  }
+
+  int64_t request_cache_bytes(PriorityCache::Priority pri,
+                              uint64_t total_cache) const override {
+    int64_t cache_bytes = 0;
+
+    if (pri == m_base_cache_pri) {
+      cache_bytes += m_base_cache_max_size;
+    }
+    if (pri == m_extra_cache_pri) {
+      cache_bytes += m_extra_cache_max_size;
+    }
+
+    dout(30) << cache_bytes << dendl;
+
+    return cache_bytes;
+  }
+
+  int64_t get_cache_bytes(PriorityCache::Priority pri) const override {
+    int64_t cache_bytes = 0;
+
+    if (pri == m_base_cache_pri) {
+      cache_bytes += m_base_cache_bytes;
+    }
+    if (pri == m_extra_cache_pri) {
+      cache_bytes += m_extra_cache_bytes;
+    }
+
+    dout(30) << "pri=" << pri << " " << cache_bytes << dendl;
+
+    return cache_bytes;
+  }
+
+  int64_t get_cache_bytes() const override {
+    auto cache_bytes = m_base_cache_bytes + m_extra_cache_bytes;
+
+    dout(30) << m_base_cache_bytes << "+" << m_extra_cache_bytes << "="
+             << cache_bytes << dendl;
+
+    return cache_bytes;
+  }
+
+  void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) override {
+    ceph_assert(bytes >= 0);
+    ceph_assert(pri == m_base_cache_pri || pri == m_extra_cache_pri ||
+                bytes == 0);
+
+    dout(30) << "pri=" << pri << " " << bytes << dendl;
+
+    if (pri == m_base_cache_pri) {
+      m_base_cache_bytes = std::min(m_base_cache_max_size, bytes);
+      bytes -= std::min(m_base_cache_bytes, bytes);
+    }
+
+    if (pri == m_extra_cache_pri) {
+      m_extra_cache_bytes = bytes;
+    }
+  }
+
+  void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) override {
+    ceph_assert(bytes >= 0);
+    ceph_assert(pri == m_base_cache_pri || pri == m_extra_cache_pri);
+
+    dout(30) << "pri=" << pri << " " << bytes << dendl;
+
+    if (pri == m_base_cache_pri) {
+      ceph_assert(m_base_cache_bytes <= m_base_cache_max_size);
+
+      auto chunk = std::min(m_base_cache_max_size - m_base_cache_bytes, bytes);
+      m_base_cache_bytes += chunk;
+      bytes -= chunk;
+    }
+
+    if (pri == m_extra_cache_pri) {
+      m_extra_cache_bytes += bytes;
+    }
+  }
+
+  int64_t commit_cache_size(uint64_t total_cache) override {
+    m_committed_bytes = p2roundup<int64_t>(get_cache_bytes(), 4096);
+
+    dout(30) << m_committed_bytes << dendl;
+
+    return m_committed_bytes;
+  }
+
+  int64_t get_committed_size() const override {
+    dout(30) << m_committed_bytes << dendl;
+
+    return m_committed_bytes;
+  }
+
+  double get_cache_ratio() const override {
+    dout(30) << m_cache_ratio << dendl;
+
+    return m_cache_ratio;
+  }
+
+  void set_cache_ratio(double ratio) override {
+    dout(30) << m_cache_ratio << dendl;
+
+    m_cache_ratio = ratio;
+  }
+
+  std::string get_cache_name() const override {
+    return m_name;
+  }
+};
+
 } // anonymous namespace
+
+#undef dout_prefix
+#define dout_prefix *_dout << "rbd::mirror::Mirror: " << this << " " \
+                           << __func__ << ": "
 
 class MirrorAdminSocketHook : public AdminSocketHook {
 public:
@@ -197,11 +340,152 @@ private:
   Commands commands;
 };
 
+class CacheManagerHandler : public journal::CacheManagerHandler {
+public:
+  CacheManagerHandler(CephContext *cct)
+    : m_cct(cct), m_lock("rbd::mirror::CacheManagerHandler") {
+
+    if (!m_cct->_conf.get_val<bool>("rbd_mirror_memory_autotune")) {
+      return;
+    }
+
+    uint64_t base = m_cct->_conf.get_val<Option::size_t>(
+        "rbd_mirror_memory_base");
+    double fragmentation = m_cct->_conf.get_val<double>(
+        "rbd_mirror_memory_expected_fragmentation");
+    uint64_t target = m_cct->_conf.get_val<Option::size_t>(
+        "rbd_mirror_memory_target");
+    uint64_t min = m_cct->_conf.get_val<Option::size_t>(
+        "rbd_mirror_memory_cache_min");
+    uint64_t max = min;
+
+    // When setting the maximum amount of memory to use for cache, first
+    // assume some base amount of memory for the daemon and then fudge in
+    // some overhead for fragmentation that scales with cache usage.
+    uint64_t ltarget = (1.0 - fragmentation) * target;
+    if (ltarget > base + min) {
+      max = ltarget - base;
+    }
+
+    m_next_balance = ceph_clock_now();
+    m_next_resize = ceph_clock_now();
+
+    m_cache_manager = std::make_unique<PriorityCache::Manager>(
+      m_cct, min, max, target, false);
+  }
+
+  ~CacheManagerHandler() {
+    Mutex::Locker locker(m_lock);
+
+    ceph_assert(m_caches.empty());
+  }
+
+  void register_cache(const std::string &cache_name,
+                      uint64_t min_size, uint64_t max_size,
+                      journal::CacheRebalanceHandler* handler) override {
+    if (!m_cache_manager) {
+      handler->handle_cache_rebalanced(max_size);
+      return;
+    }
+
+    dout(20) << cache_name << " min_size=" << min_size << " max_size="
+             << max_size << " handler=" << handler << dendl;
+
+    Mutex::Locker locker(m_lock);
+
+    auto p = m_caches.insert(
+        {cache_name, {cache_name, min_size, max_size, handler}});
+    ceph_assert(p.second == true);
+
+    m_cache_manager->insert(cache_name, p.first->second.pri_cache, false);
+    m_next_balance = ceph_clock_now();
+  }
+
+  void unregister_cache(const std::string &cache_name) override {
+    if (!m_cache_manager) {
+      return;
+    }
+
+    dout(20) << cache_name << dendl;
+
+    Mutex::Locker locker(m_lock);
+
+    auto it = m_caches.find(cache_name);
+    ceph_assert(it != m_caches.end());
+
+    m_cache_manager->erase(cache_name);
+    m_caches.erase(it);
+    m_next_balance = ceph_clock_now();
+  }
+
+  void run_cache_manager() {
+    if (!m_cache_manager) {
+      return;
+    }
+
+    Mutex::Locker locker(m_lock);
+
+    // Before we trim, check and see if it's time to rebalance/resize.
+    auto autotune_interval = m_cct->_conf.get_val<double>(
+        "rbd_mirror_memory_cache_autotune_interval");
+    auto resize_interval = m_cct->_conf.get_val<double>(
+        "rbd_mirror_memory_cache_resize_interval");
+
+    utime_t now = ceph_clock_now();
+
+    if (autotune_interval > 0 && m_next_balance <= now) {
+      dout(20) << "balance" << dendl;
+      m_cache_manager->balance();
+
+      for (auto &it : m_caches) {
+        auto pri_cache = static_cast<PriCache *>(it.second.pri_cache.get());
+        auto new_cache_bytes = pri_cache->get_cache_bytes();
+        it.second.handler->handle_cache_rebalanced(new_cache_bytes);
+        pri_cache->prioritize();
+      }
+
+      m_next_balance = ceph_clock_now();
+      m_next_balance += autotune_interval;
+    }
+
+    if (resize_interval > 0 && m_next_resize < now) {
+      if (ceph_using_tcmalloc()) {
+        dout(20) << "tune memory" << dendl;
+        m_cache_manager->tune_memory();
+      }
+
+      m_next_resize = ceph_clock_now();
+      m_next_resize += resize_interval;
+    }
+  }
+
+private:
+  struct Cache {
+    std::shared_ptr<PriorityCache::PriCache> pri_cache;
+    journal::CacheRebalanceHandler *handler;
+
+    Cache(const std::string name, uint64_t min_size, uint64_t max_size,
+          journal::CacheRebalanceHandler *handler)
+      : pri_cache(new PriCache(name, min_size, max_size)), handler(handler) {
+    }
+  };
+
+  CephContext *m_cct;
+
+  mutable Mutex m_lock;
+  std::unique_ptr<PriorityCache::Manager> m_cache_manager;
+  std::map<std::string, Cache> m_caches;
+
+  utime_t m_next_balance;
+  utime_t m_next_resize;
+};
+
 Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_cct(cct),
   m_args(args),
   m_lock("rbd::mirror::Mirror"),
   m_local(new librados::Rados()),
+  m_cache_manager_handler(new CacheManagerHandler(cct)),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
   m_threads =
@@ -252,15 +536,26 @@ int Mirror::init()
 void Mirror::run()
 {
   dout(20) << "enter" << dendl;
+
+  utime_t next_refresh_pools = ceph_clock_now();
+
   while (!m_stopping) {
-    m_local_cluster_watcher->refresh_pools();
+    utime_t now = ceph_clock_now();
+    bool refresh_pools = next_refresh_pools <= now;
+    if (refresh_pools) {
+      m_local_cluster_watcher->refresh_pools();
+      next_refresh_pools = ceph_clock_now();
+      next_refresh_pools += m_cct->_conf.get_val<uint64_t>(
+          "rbd_mirror_pool_replayers_refresh_interval");
+    }
     Mutex::Locker l(m_lock);
     if (!m_manual_stop) {
-      update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
+      if (refresh_pools) {
+        update_pool_replayers(m_local_cluster_watcher->get_pool_peers());
+      }
+      m_cache_manager_handler->run_cache_manager();
     }
-    m_cond.WaitInterval(
-      m_lock,
-      utime_t(m_cct->_conf.get_val<uint64_t>("rbd_mirror_pool_replayers_refresh_interval"), 0));
+    m_cond.WaitInterval(m_lock, {1, 0});
   }
 
   // stop all pool replayers in parallel
@@ -411,8 +706,10 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
-        unique_ptr<PoolReplayer<>> pool_replayer(new PoolReplayer<>(
-	  m_threads, m_service_daemon.get(), kv.first, peer, m_args));
+        unique_ptr<PoolReplayer<>> pool_replayer(
+            new PoolReplayer<>(m_threads, m_service_daemon.get(),
+                               m_cache_manager_handler.get(), kv.first, peer,
+                               m_args));
 
         // TODO: make async
         pool_replayer->init();

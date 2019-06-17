@@ -109,7 +109,8 @@ void PrepareRemoteImageRequest<I>::get_client() {
   *m_remote_journaler = new Journaler(m_threads->work_queue, m_threads->timer,
                                       &m_threads->timer_lock, m_remote_io_ctx,
                                       *m_remote_image_id, m_local_mirror_uuid,
-                                      m_journal_settings);
+                                      m_journal_settings,
+                                      m_cache_manager_handler);
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<

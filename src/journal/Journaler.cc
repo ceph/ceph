@@ -73,9 +73,10 @@ Journaler::Threads::~Threads() {
 
 Journaler::Journaler(librados::IoCtx &header_ioctx,
                      const std::string &journal_id,
-                     const std::string &client_id, const Settings &settings)
+                     const std::string &client_id, const Settings &settings,
+                     CacheManagerHandler *cache_manager_handler)
     : m_threads(new Threads(reinterpret_cast<CephContext*>(header_ioctx.cct()))),
-      m_client_id(client_id) {
+      m_client_id(client_id), m_cache_manager_handler(cache_manager_handler) {
   set_up(m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
          header_ioctx, journal_id, settings);
 }
@@ -83,8 +84,9 @@ Journaler::Journaler(librados::IoCtx &header_ioctx,
 Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
                      Mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
-		     const std::string &client_id, const Settings &settings)
-    : m_client_id(client_id) {
+		     const std::string &client_id, const Settings &settings,
+                     CacheManagerHandler *cache_manager_handler)
+    : m_client_id(client_id), m_cache_manager_handler(cache_manager_handler) {
   set_up(work_queue, timer, timer_lock, header_ioctx, journal_id,
          settings);
 }
@@ -436,7 +438,7 @@ void Journaler::flush_append(Context *on_safe) {
 void Journaler::create_player(ReplayHandler *replay_handler) {
   ceph_assert(m_player == nullptr);
   m_player = new JournalPlayer(m_data_ioctx, m_object_oid_prefix, m_metadata,
-                               replay_handler);
+                               replay_handler, m_cache_manager_handler);
 }
 
 void Journaler::get_metadata(uint8_t *order, uint8_t *splay_width,

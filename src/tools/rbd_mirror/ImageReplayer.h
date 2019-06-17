@@ -33,6 +33,8 @@ class PerfCounters;
 
 namespace journal {
 
+struct CacheManagerHandler;
+
 class Journaler;
 class ReplayHandler;
 
@@ -63,10 +65,12 @@ class ImageReplayer {
 public:
   static ImageReplayer *create(
     Threads<ImageCtxT> *threads, InstanceWatcher<ImageCtxT> *instance_watcher,
-    RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
+    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
+    const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
-    return new ImageReplayer(threads, instance_watcher, local,
-                             local_mirror_uuid, local_pool_id, global_image_id);
+    return new ImageReplayer(threads, instance_watcher, cache_manager_handler,
+                             local, local_mirror_uuid, local_pool_id,
+                             global_image_id);
   }
   void destroy() {
     delete this;
@@ -74,6 +78,7 @@ public:
 
   ImageReplayer(Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
+                journal::CacheManagerHandler *cache_manager_handler,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
   virtual ~ImageReplayer();
@@ -267,6 +272,7 @@ private:
 
   Threads<ImageCtxT> *m_threads;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
+  journal::CacheManagerHandler *m_cache_manager_handler;
 
   Peers m_peers;
   RemoteImage m_remote_image;

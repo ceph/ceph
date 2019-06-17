@@ -157,7 +157,7 @@ void CreateImageRequest<I>::get_remote_parent_client_state() {
                                      &m_threads->timer_lock,
                                      m_remote_parent_io_ctx,
                                      m_remote_parent_spec.image_id,
-                                     m_local_parent_mirror_uuid, {});
+                                     m_local_parent_mirror_uuid, {}, nullptr);
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
