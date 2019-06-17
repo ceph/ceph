@@ -524,6 +524,18 @@ int AsyncConnection::send_message(Message *m)
 		      << this
 		      << dendl;
 
+  auto cct = async_msgr->cct;
+  if ((cct->_conf->ms_blackhole_mon && peer_type == CEPH_ENTITY_TYPE_MON)||
+      (cct->_conf->ms_blackhole_osd && peer_type == CEPH_ENTITY_TYPE_OSD)||
+      (cct->_conf->ms_blackhole_mds && peer_type == CEPH_ENTITY_TYPE_MDS)||
+      (cct->_conf->ms_blackhole_client &&
+       peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
+    lgeneric_subdout(cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
+				 << " blackhole " << *m << dendl;
+    m->put();
+    return 0;
+  }
+
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
     m->set_priority(async_msgr->get_default_send_priority());
