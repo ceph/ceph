@@ -14,6 +14,7 @@ import fnmatch
 import math
 import re
 import shlex
+import stat
 
 if sys.version_info.major < 3:
     raise RuntimeError("cephfs-shell is only compatible with python3")
@@ -1152,16 +1153,25 @@ sub-directories, files')
             for i in dir_trav:
                 try:
                     i_path = os.path.normpath(i)
-                    if (i != '.') and (i_path[0] == '/'):
+                    if (i is not '.') and (i_path[0] is '/'):
                         i = '.' + i_path
 
-                    xattr = cephfs.getxattr(i_path,
-                                            'ceph.dir.rbytes')
-                    self.poutput('{:10s} {}'.format(humansize(int(
-                                 xattr.decode('utf-8'))), i.decode('utf-8'))
+                    st = cephfs.lstat(i_path)
+
+                    if stat.S_ISDIR(st.st_mode):
+                        dusage = int(cephfs.getxattr(i_path,
+                            'ceph.dir.rbytes').decode('utf-8'))
+                    elif stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+                        dusage = st.st_size
+
+                    self.poutput('{:10s} {}'.format(humansize(dusage),
+                                 i.decode('utf-8')))
+                    # Assigning dusage None to avoid cases where its value
+                    # from previous iterations ends up being reused.
+                    dusage = None
                 except (libcephfs.Error, OSError):
-                    self.perror('{}: no such directory exists'.format(dir_),
-                                False)
+                    self.perror('{}: no such directory exists'.format(
+                                dir_), False)
                     continue
             else:
                 dir_ = os.path.normpath(dir_)
