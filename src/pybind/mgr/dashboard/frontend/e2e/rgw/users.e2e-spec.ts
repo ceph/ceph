@@ -18,7 +18,7 @@ describe('RGW users page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Users');
+      expect(UsersPage.getBreadcrumbText()).toEqual('Users');
     });
   });
 });

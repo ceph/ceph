@@ -18,19 +18,19 @@ describe('OSDs page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('OSDs');
+      expect(OSDsPage.getBreadcrumbText()).toEqual('OSDs');
     });
 
     it('should show two tabs', () => {
-      expect(Helper.getTabsCount()).toEqual(2);
+      expect(OSDsPage.getTabsCount()).toEqual(2);
     });
 
     it('should show OSDs list tab at first', () => {
-      expect(Helper.getTabText(0)).toEqual('OSDs List');
+      expect(OSDsPage.getTabText(0)).toEqual('OSDs List');
     });
 
     it('should show overall performance as a second tab', () => {
-      expect(Helper.getTabText(1)).toEqual('Overall Performance');
+      expect(OSDsPage.getTabText(1)).toEqual('Overall Performance');
     });
   });
 });

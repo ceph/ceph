@@ -18,7 +18,7 @@ describe('CRUSH map page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('CRUSH map');
+      expect(CrushMapPage.getBreadcrumbText()).toEqual('CRUSH map');
     });
   });
 });

@@ -1,7 +1,8 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class PoolsPage {
-  navigateTo() {
-    return browser.get('/#/pool');
-  }
+export class PoolPageHelper extends PageHelper {
+  pages = {
+    index: '/#/pool',
+    create: '/#/pool/create'
+  };
 }

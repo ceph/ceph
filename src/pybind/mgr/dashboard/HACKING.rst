@@ -184,6 +184,29 @@ Note::
    In case you have a somewhat particular environment, you might need to adapt
    `protractor.conf.js` to point to the appropriate destination.
 
+Making code reuseable
+"""""""""""""""""""""
+
+In order to make some code reuseable, you just need to put it in a derived
+class of the ``PageHelper``. If you create a new class derived from the
+``PageHelper``, please also register it in the ``Helper`` class, so that it can
+automatically be used by all other classes. To do so, you just need to create a
+new attribute on the ``Helper`` class and ensure it's instantiated in the
+constructor of the ``Helper`` class.
+
+.. code:: TypeScript
+
+   class Helper {
+      // ...
+      pools: PoolPageHelper;
+
+      constructor() {
+         this.pools = new PoolPageHelper();
+      }
+
+      // ...
+   }
+
 Further Help
 ~~~~~~~~~~~~
 

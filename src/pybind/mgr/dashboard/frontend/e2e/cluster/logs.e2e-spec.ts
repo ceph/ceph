@@ -18,19 +18,19 @@ describe('Logs page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Logs');
+      expect(LogsPage.getBreadcrumbText()).toEqual('Logs');
     });
 
     it('should show two tabs', () => {
-      expect(Helper.getTabsCount()).toEqual(2);
+      expect(LogsPage.getTabsCount()).toEqual(2);
     });
 
     it('should show cluster logs tab at first', () => {
-      expect(Helper.getTabText(0)).toEqual('Cluster Logs');
+      expect(LogsPage.getTabText(0)).toEqual('Cluster Logs');
     });
 
     it('should show audit logs as a second tab', () => {
-      expect(Helper.getTabText(1)).toEqual('Audit Logs');
+      expect(LogsPage.getTabText(1)).toEqual('Audit Logs');
     });
   });
 });
