@@ -120,8 +120,7 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace(
-                '+', '_plus').replace('::', '_').replace(' ', '_')
+            result = re.sub(r'[./\s]|::', '_', path).replace('+', '_plus')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
@@ -852,6 +851,9 @@ class Module(MgrModule):
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
 
+                path, label_names, labels = self._perfpath_to_path_labels(
+                    daemon, path)
+
                 # Get the value of the counter
                 value = self._perfvalue_to_value(
                     counter_info['type'], counter_info['value'])
@@ -864,9 +866,9 @@ class Module(MgrModule):
                             stattype,
                             _path,
                             counter_info['description'] + ' Total',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(value, (daemon,))
+                    self.metrics[_path].set(value, labels)
 
                     _path = path + '_count'
                     if _path not in self.metrics:
@@ -874,18 +876,18 @@ class Module(MgrModule):
                             'counter',
                             _path,
                             counter_info['description'] + ' Count',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(counter_info['count'], (daemon,))
+                    self.metrics[_path].set(counter_info['count'], labels,)
                 else:
                     if path not in self.metrics:
                         self.metrics[path] = Metric(
                             stattype,
                             path,
                             counter_info['description'],
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[path].set(value, (daemon,))
+                    self.metrics[path].set(value, labels)
 
         self.get_rbd_stats()
 
