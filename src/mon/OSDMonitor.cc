@@ -1090,6 +1090,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
+    // clean inappropriate pg_upmap/pg_upmap_items (if any)
+    tmp.clean_pg_upmaps(cct, &pending_inc);
+
     if (tmp.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // remove any legacy osdmap nearfull/full flags
       {
@@ -1409,9 +1412,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
     }
   }
-
-  // clean inappropriate pg_upmap/pg_upmap_items (if any)
-  osdmap.maybe_remove_pg_upmaps(cct, osdmap, &pending_inc);
 
   // features for osdmap and its incremental
   uint64_t features;

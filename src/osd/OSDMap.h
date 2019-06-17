@@ -997,9 +997,7 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
-  void maybe_remove_pg_upmaps(CephContext *cct,
-                              const OSDMap& osdmap,
-                              Incremental *pending_inc);
+  bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
   int apply_incremental(const Incremental &inc);
 
@@ -1312,10 +1310,6 @@ public:
 
     return calc_pg_role(osd, group, group.size()) >= 0;
   }
-
-  int clean_pg_upmaps(
-    CephContext *cct,
-    Incremental *pending_inc) const;
 
   bool try_pg_upmap(
     CephContext *cct,
