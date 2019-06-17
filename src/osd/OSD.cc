@@ -8086,8 +8086,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	client_messenger->get_myaddrs().get_ports(&avoid_ports);
 #endif
 	cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
-	hb_back_server_messenger->get_myaddrs().get_ports(&avoid_ports);
-	hb_front_server_messenger->get_myaddrs().get_ports(&avoid_ports);
 
 	int r = cluster_messenger->rebind(avoid_ports);
 	if (r != 0) {
@@ -8097,22 +8095,8 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
                   << " rebind cluster_messenger failed" << dendl;
         }
 
-	r = hb_back_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          dout(0) << __func__ << " marked down:"
-                  << " rebind hb_back_server_messenger failed" << dendl;
-        }
-
-	r = hb_front_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          dout(0) << __func__ << " marked down:" 
-                  << " rebind hb_front_server_messenger failed" << dendl;
-        }
-
+	hb_back_server_messenger->mark_down_all();
+	hb_front_server_messenger->mark_down_all();
 	hb_front_client_messenger->mark_down_all();
 	hb_back_client_messenger->mark_down_all();
 
