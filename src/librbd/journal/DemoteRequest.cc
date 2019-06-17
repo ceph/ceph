@@ -45,7 +45,7 @@ void DemoteRequest<I>::open_journaler() {
   ldout(cct, 20) << dendl;
 
   m_journaler = new Journaler(m_image_ctx.md_ctx, m_image_ctx.id,
-                              Journal<>::IMAGE_CLIENT_ID, {});
+                              Journal<>::IMAGE_CLIENT_ID, {}, nullptr);
   auto ctx = create_async_context_callback(
     m_image_ctx, create_context_callback<
       DemoteRequest<I>, &DemoteRequest<I>::handle_open_journaler>(this));
