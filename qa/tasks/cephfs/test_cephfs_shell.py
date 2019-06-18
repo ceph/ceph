@@ -2,6 +2,7 @@ import os
 import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
+import math
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -9,6 +10,15 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+def humansize(nbytes):
+    suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
+    i = 0
+    while nbytes >= 1024 and i < len(suffixes)-1:
+        nbytes /= 1024.
+        i += 1
+    nbytes = math.ceil(nbytes)
+    f = ('%d' % nbytes).rstrip('.')
+    return '%s%s' % (f, suffixes[i])
 
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
