@@ -125,6 +125,63 @@ describe('RbdFormComponent', () => {
       ]);
     });
 
+    describe('test edit form flags', () => {
+      const prepare = (pool: string, image: string, enabledFeatures: string[]): void => {
+        const rbdService = TestBed.get(RbdService);
+        spyOn(rbdService, 'get').and.returnValue(
+          of({
+            name: image,
+            pool_name: pool,
+            features_name: enabledFeatures
+          })
+        );
+        spyOn(rbdService, 'defaultFeatures').and.returnValue(of(defaultFeatures));
+        component.router = { url: `/block/rbd/edit/${pool}/${image}` } as Router;
+        fixture.detectChanges();
+        [
+          deepFlatten,
+          layering,
+          exclusiveLock,
+          objectMap,
+          journaling,
+          fastDiff
+        ] = getFeatureNativeElements();
+      };
+
+      it('should have the interlock feature for flags disabled, if one feature is not set', () => {
+        prepare('rbd', 'foobar', ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']);
+
+        expect(objectMap.disabled).toBe(false);
+        expect(fastDiff.disabled).toBe(false);
+
+        expect(objectMap.checked).toBe(true);
+        expect(fastDiff.checked).toBe(false);
+
+        fastDiff.click();
+        fastDiff.click();
+
+        expect(objectMap.checked).toBe(true); // Shall not be disabled by `fast-diff`!
+      });
+
+      it('should not disable object-map when fast-diff is unchecked', () => {
+        prepare('rbd', 'foobar', ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']);
+
+        fastDiff.click();
+        fastDiff.click();
+
+        expect(objectMap.checked).toBe(true); // Shall not be disabled by `fast-diff`!
+      });
+
+      it('should not enable fast-diff when object-map is checked', () => {
+        prepare('rbd', 'foobar', ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']);
+
+        objectMap.click();
+        objectMap.click();
+
+        expect(fastDiff.checked).toBe(false); // Shall not be disabled by `fast-diff`!
+      });
+    });
+
     describe('test create form flags', () => {
       beforeEach(() => {
         const rbdService = TestBed.get(RbdService);
