@@ -921,7 +921,7 @@ int RGWDataCache<T>::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 
   if (data_cache.get(read_obj.oid)) {
     librados::L1CacheRequest *cc;
-    d->add_l1_request(&cc, pbl, oid, len, obj_ofs, read_ofs, key, c);
+    d->add_l1_request(&cc, pbl, read_obj.oid, len, obj_ofs, read_ofs, key, c);
     r = io_ctx.cache_aio_notifier(read_obj.oid, cc);
     r = d->submit_l1_aio_read(cc);
     if (r != 0 ){
