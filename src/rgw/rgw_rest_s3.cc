@@ -758,9 +758,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
-     encode_json("TotalBytes", header.stats.total_bytes, formatter);
-     encode_json("TotalBytesRounded", header.stats.total_bytes_rounded, formatter);
-     encode_json("TotalEntries", header.stats.total_entries, formatter);
+     encode_json("TotalBytes", stats.size, formatter);
+     encode_json("TotalBytesRounded", stats.size_rounded, formatter);
+     encode_json("TotalEntries", stats.num_objects, formatter);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
