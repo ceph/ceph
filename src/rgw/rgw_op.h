@@ -688,6 +688,7 @@ protected:
   map<string, rgw_usage_log_entry> summary_map;
   map<string, cls_user_bucket_entry> buckets_usage;
   cls_user_header header;
+  RGWStorageStats stats;
 public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }

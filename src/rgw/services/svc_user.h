@@ -104,6 +104,8 @@ public:
   virtual int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 				 const rgw_user& user) = 0;
   virtual int read_stats(RGWSI_MetaBackend::Context *ctx,
-			 const rgw_user& user, RGWStorageStats *stats) = 0;
+			 const rgw_user& user, RGWStorageStats *stats,
+			 ceph::real_time *last_stats_sync,         /* last time a full stats sync completed */
+			 ceph::real_time *last_stats_update) = 0;  /* last time a stats update was done */
 };
 

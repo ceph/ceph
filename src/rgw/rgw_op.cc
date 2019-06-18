@@ -2305,8 +2305,7 @@ void RGWGetUsage::execute()
     return;
   }
 
-  string user_str = s->user->user_id.to_str();
-  op_ret = store->cls_user_get_header(user_str, &header);
+  op_ret = store->ctl.user->read_stats(s->user->user_id, &stats);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;

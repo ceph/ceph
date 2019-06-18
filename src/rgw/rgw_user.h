@@ -917,7 +917,9 @@ public:
                          const RGWBucketEnt& ent);
   int complete_flush_stats(const rgw_user& user);
   int reset_stats(const rgw_user& user);
-  int read_stats(const rgw_user& user, RGWStorageStats *stats);
+  int read_stats(const rgw_user& user, RGWStorageStats *stats,
+		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
+		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
 };
 
 class RGWUserMetaHandlerAllocator {

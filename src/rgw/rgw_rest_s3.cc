@@ -631,9 +631,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
-     formatter->dump_int("TotalBytes", header.stats.total_bytes);
-     formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
-     formatter->dump_int("TotalEntries", header.stats.total_entries);
+     formatter->dump_int("TotalBytes", stats.size);
+     formatter->dump_int("TotalBytesRounded", stats.size_rounded);
+     formatter->dump_int("TotalEntries", stats.num_objects);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats

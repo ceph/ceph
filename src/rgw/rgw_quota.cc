@@ -646,21 +646,24 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 
 int RGWUserStatsCache::sync_user(const rgw_user& user)
 {
-  cls_user_header header;
   string user_str = user.to_str();
-  int ret = store->cls_user_get_header(user_str, &header);
+  RGWStorageStats stats;
+  ceph::real_time last_stats_sync;
+  ceph::real_time last_stats_update;
+
+  int ret = store->ctl.user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
   if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
-      header.last_stats_update < header.last_stats_sync) {
+      last_stats_update < last_stats_sync) {
     ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
   }
 
-  real_time when_need_full_sync = header.last_stats_sync;
+  real_time when_need_full_sync = last_stats_sync;
   when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync

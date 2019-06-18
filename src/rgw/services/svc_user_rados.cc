@@ -804,7 +804,9 @@ int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header 
 }
 
 int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
-                                 const rgw_user& user, RGWStorageStats *stats)
+                                 const rgw_user& user, RGWStorageStats *stats,
+                                 ceph::real_time *last_stats_sync,
+                                 ceph::real_time *last_stats_update)
 {
   string user_str = user.to_str();
 
@@ -818,6 +820,14 @@ int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
   stats->size = hs.total_bytes;
   stats->size_rounded = hs.total_bytes_rounded;
   stats->num_objects = hs.total_entries;
+
+  if (last_stats_sync) {
+    *last_stats_sync = header.last_stats_sync;
+  }
+
+  if (last_stats_update) {
+   *last_stats_update = header.last_stats_update;
+  }
 
   return 0;
 }

@@ -172,6 +172,8 @@ public:
   int reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
 			 const rgw_user& user) override;
   int read_stats(RGWSI_MetaBackend::Context *ctx,
-		 const rgw_user& user, RGWStorageStats *stats) override;
+		 const rgw_user& user, RGWStorageStats *stats,
+		 ceph::real_time *last_stats_sync,              /* last time a full stats sync completed */
+		 ceph::real_time *last_stats_update) override;  /* last time a stats update was done */
 };
 

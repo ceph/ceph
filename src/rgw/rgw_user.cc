@@ -2674,10 +2674,13 @@ int RGWUserCtl::reset_stats(const rgw_user& user)
   });
 }
 
-int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats)
+int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
+			   ceph::real_time *last_stats_sync,
+			   ceph::real_time *last_stats_update)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats(op->ctx(), user, stats);
+    return svc.user->read_stats(op->ctx(), user, stats,
+				last_stats_sync, last_stats_update);
   });
 }
 
