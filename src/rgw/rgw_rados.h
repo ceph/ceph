@@ -5,6 +5,7 @@
 #define CEPH_RGWRADOS_H
 
 #include <functional>
+#include <boost/container/flat_map.hpp>
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
@@ -2222,11 +2223,15 @@ public:
                            ceph::real_time& removed_mtime, list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
+
+  using ent_map_t =
+    boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
+
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info, int shard_id,
 			      const rgw_obj_index_key& start,
 			      const string& prefix,
 			      uint32_t num_entries, bool list_versions,
-			      map<string, rgw_bucket_dir_entry>& m,
+			      ent_map_t& m,
 			      bool *is_truncated,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
