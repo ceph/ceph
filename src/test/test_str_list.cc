@@ -26,7 +26,7 @@ struct SplitTest : ::testing::Test {
   }
 };
 
-TYPED_TEST_CASE(SplitTest, Types);
+TYPED_TEST_SUITE(SplitTest, Types);
 
 TYPED_TEST(SplitTest, Get)
 {
