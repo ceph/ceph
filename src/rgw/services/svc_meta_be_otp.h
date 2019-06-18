@@ -49,8 +49,6 @@ public:
   struct Context_OTP : public RGWSI_MetaBackend_SObj::Context_SObj {
     otp_devices_list_t devices;
 
-    void init(RGWSI_MetaBackend_Handler *h) override;
-
     Context_OTP(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc) {}
   };
 

@@ -229,10 +229,6 @@ extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, 
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
-extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs,
-                                RGWObjVersionTracker *objv_tracker,
-                                optional_yield y);
 extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
                                const rgw_obj& obj, const char* attr_name,
                                bufferlist& out_bl, optional_yield y);
@@ -781,7 +777,8 @@ public:
    */
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
-                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params);
+                       optional_yield y,
+                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params = std::nullopt);
 
 
 

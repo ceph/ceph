@@ -2849,10 +2849,10 @@ public:
 
 int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
                                              string& entry,
-                                            RGWMetadataObject *obj,
-                                            RGWObjVersionTracker& objv_tracker,
-                                            optional_yield y,
-                                            RGWMDLogSyncType type)
+                                             RGWMetadataObject *obj,
+                                             RGWObjVersionTracker& objv_tracker,
+                                             optional_yield y,
+                                             RGWMDLogSyncType type)
 {
   RGWMetadataHandlerPut_BucketInstance put_op(svc.bucket->ctx(), this, op, entry, obj,
                                               objv_tracker, y, type);
@@ -2874,7 +2874,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
   if (!exists || old_bci->info.bucket.bucket_id != bci.info.bucket.bucket_id) {
     /* a new bucket, we need to select a new bucket placement for it */
     auto key(entry);
+#warning why was this needed?
+#if 0
     rgw_bucket_instance_oid_to_key(key);
+#endif
     string tenant_name;
     string bucket_name;
     string bucket_instance;
@@ -3058,6 +3061,7 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
 
 int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    RGWBucketInfo *info,
+                                   optional_yield y,
                                    ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
 {
   const rgw_bucket *b = &bucket;
@@ -3083,7 +3087,8 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                                  params.mtime,
                                                  params.attrs,
                                                  params.cache_info,
-                                                 params.refresh_version);
+                                                 params.refresh_version,
+                                                 y);
   });
 
   if (ret < 0) {
