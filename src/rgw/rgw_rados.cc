@@ -2248,13 +2248,12 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
 {
   ref->obj = obj;
 
-  int r;
-
   if (ref->obj.oid.empty()) {
     ref->obj.oid = obj.pool.to_str();
     ref->obj.pool = svc.zone->get_zone_params().domain_root;
   }
   ref->pool = svc.rados->pool(obj.pool);
+  int r = ref->pool.open();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed opening pool (pool=" << obj.pool << "); r=" << r << dendl;
     return r;
