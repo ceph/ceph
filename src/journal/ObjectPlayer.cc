@@ -172,6 +172,8 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
       m_invalid_ranges.insert(invalid_start_off,
                               invalid_end_off - invalid_start_off);
       invalid = false;
+
+      m_read_bl_off = invalid_end_off;
     }
 
     EntryKey entry_key(std::make_pair(entry.get_tag_tid(),
