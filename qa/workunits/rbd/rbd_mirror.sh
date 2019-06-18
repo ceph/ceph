@@ -298,6 +298,7 @@ done
 
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
 for i in ${image2} ${image4}; do
+  enable_journaling ${CLUSTER2} ${POOL} ${i}
   wait_for_image_present ${CLUSTER1} ${POOL} ${i} 'present'
   wait_for_snap_present ${CLUSTER1} ${POOL} ${i} 'snap2'
   wait_for_image_replay_started ${CLUSTER1} ${POOL} ${i}
@@ -324,6 +325,7 @@ fi
 start_mirrors ${CLUSTER1}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted'
 set_pool_mirror_mode ${CLUSTER2} ${POOL} 'pool'
+enable_journaling ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
