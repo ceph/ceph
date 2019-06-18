@@ -40,7 +40,7 @@ typedef ::testing::Types<
   ErasureCodeJerasureBlaumRoth,
   ErasureCodeJerasureLiber8tion
 > JerasureTypes;
-TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
+TYPED_TEST_SUITE(ErasureCodeTest, JerasureTypes);
 
 TYPED_TEST(ErasureCodeTest, sanity_check_k)
 {
