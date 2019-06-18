@@ -163,6 +163,14 @@ class VolumeClient(object):
         self.connection_pool = ConnectionPool(self.mgr)
         # TODO: make thread pool size configurable
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
+        # on startup, queue purge job for available volumes to kickstart
+        # purge for leftover subvolume entries in trash. note that, if the
+        # trash directory does not exist or if there are no purge entries
+        # available for a volume, the volume is removed from the purge
+        # job list.
+        fs_map = self.mgr.get('fs_map')
+        for fs in fs_map['filesystems']:
+            self.purge_queue.queue_purge_job(fs['mdsmap']['fs_name'])
 
     def gen_pool_names(self, volname):
         """
