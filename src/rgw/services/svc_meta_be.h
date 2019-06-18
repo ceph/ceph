@@ -142,6 +142,10 @@ public:
 
   virtual int call(std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
 
+  virtual int get_shard_id(RGWSI_MetaBackend::Context *ctx,
+			   const std::string& key,
+			   int *shard_id) = 0;
+
   /* higher level */
   virtual int get(Context *ctx,
                   const std::string& key,
@@ -205,6 +209,10 @@ public:
     }
     int list_get_marker(string *marker) {
       return be->list_get_marker(be_ctx, marker);
+    }
+
+    int get_shard_id(const std::string& key, int *shard_id) {
+      return be->get_shard_id(be_ctx, key, shard_id);
     }
   };
 

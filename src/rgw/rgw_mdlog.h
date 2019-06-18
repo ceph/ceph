@@ -101,6 +101,7 @@ public:
   }
 
   int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
+  int get_shard_id(const string& hash_key, int *shard_id);
   int store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {

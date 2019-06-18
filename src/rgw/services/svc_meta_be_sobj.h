@@ -160,6 +160,10 @@ public:
   int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                       string *marker) override;
 
+  int get_shard_id(RGWSI_MetaBackend::Context *ctx,
+		   const std::string& key,
+		   int *shard_id) override;
+
   int call(std::function<int(RGWSI_MetaBackend::Context *)> f) override;
 };
 

@@ -78,6 +78,10 @@ public:
 
   virtual string get_marker(void *handle) = 0;
 
+  virtual int get_shard_id(const string& entry, int *shard_id) {
+    *shard_id = 0;
+    return 0;
+  }
   virtual int attach(RGWMetadataManager *manager);
 };
 
@@ -147,6 +151,8 @@ public:
   int get(string& entry, RGWMetadataObject **obj) override;
   int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) override;
   int remove(string& entry, RGWObjVersionTracker& objv_tracker) override;
+
+  int get_shard_id(const string& entry, int *shard_id) override;
 
   int list_keys_init(const std::string& marker, void **phandle) override;
   int list_keys_next(void *handle, int max, std::list<string>& keys, bool *truncated) override;
@@ -222,6 +228,8 @@ public:
   void get_sections(list<string>& sections);
 
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
+
+  int get_shard_id(const string& section, const string& key, int *shard_id);
 };
 
 class RGWMetadataHandlerPut_SObj : public RGWMetadataHandler_GenericMetaBE::Put
