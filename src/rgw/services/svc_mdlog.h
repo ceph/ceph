@@ -99,6 +99,8 @@ public:
 
   int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
+  int get_shard_id(const string& hash_key, int *shard_id);
+
   RGWPeriodHistory *get_period_history() {
     return period_history.get();
   }
