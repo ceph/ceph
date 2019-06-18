@@ -340,7 +340,7 @@ def task(ctx, config):
                 'rgw':
                     {
                     'port'      : endpoint.port,
-                    'is_secure' : 'yes' if endpoint.cert else 'no',
+                    'is_secure' : endpoint.cert is not None,
                     },
                 'fixtures' : {},
                 'user system'  : {},
