@@ -2029,7 +2029,6 @@ private:
     ceph::condition_variable cond;
     ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
-    uint64_t autotune_cache_size = 0;
     std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
     std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
 
