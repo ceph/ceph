@@ -544,7 +544,8 @@ private:
     CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS |
     CEPH_FEATUREMASK_SERVER_LUMINOUS |
     CEPH_FEATUREMASK_SERVER_MIMIC |
-    CEPH_FEATUREMASK_SERVER_NAUTILUS;
+    CEPH_FEATUREMASK_SERVER_NAUTILUS |
+    CEPH_FEATUREMASK_SERVER_OCTOPUS;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
