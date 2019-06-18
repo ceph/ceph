@@ -598,7 +598,7 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_list || write_list) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const auto r = swift_policy.create(store,
+    const auto r = swift_policy.create(store->ctl.user,
                                        s->user->user_id,
                                        s->user->display_name,
                                        read_list,
@@ -1061,7 +1061,7 @@ static int get_swift_account_settings(req_state * const s,
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
     RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    const bool r = swift_acct_policy.create(store,
+    const bool r = swift_acct_policy.create(store->ctl.user,
                                      s->user->user_id,
                                      s->user->display_name,
                                      string(acl_attr));
@@ -2078,6 +2078,8 @@ void RGWFormPost::get_owner_info(const req_state* const s,
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
   const string& bucket_name = s->init_state.url_bucket;
 
+  auto user_ctl = store->ctl.user;
+
   /* TempURL in Formpost only requires that bucket name is specified. */
   if (bucket_name.empty()) {
     throw -EPERM;
@@ -2092,14 +2094,14 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     if (uid.tenant.empty()) {
       const rgw_user tenanted_uid(uid.id, uid.id);
 
-      if (rgw_get_user_info_by_uid(store, tenanted_uid, uinfo) >= 0) {
+      if (user_ctl->get_info_by_uid(tenanted_uid, &uinfo) >= 0) {
         /* Succeeded. */
         bucket_tenant = uinfo.user_id.tenant;
         found = true;
       }
     }
 
-    if (!found && rgw_get_user_info_by_uid(store, uid, uinfo) < 0) {
+    if (!found && user_ctl->get_info_by_uid(uid, &uinfo) < 0) {
       throw -EPERM;
     } else {
       bucket_tenant = uinfo.user_id.tenant;
@@ -2118,7 +2120,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
   ldpp_dout(this, 20) << "temp url user (bucket owner): " << bucket_info.owner
                  << dendl;
 
-  if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
+  if (user_ctl->get_info_by_uid(bucket_info.owner, &owner_info) < 0) {
     throw -EPERM;
   }
 }

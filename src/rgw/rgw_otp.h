@@ -42,8 +42,9 @@ class RGWOTPCtl
   
 public:
   RGWOTPCtl(RGWSI_Zone *zone_svc,
-             RGWSI_OTP *otp_svc,
-             RGWOTPMetadataHandler *_meta_handler);
+	    RGWSI_OTP *otp_svc);
+
+  void init(RGWOTPMetadataHandler *_meta_handler);
 
   struct GetParams {
     RGWObjVersionTracker *objv_tracker{nullptr};

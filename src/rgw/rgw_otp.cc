@@ -150,6 +150,19 @@ public:
 };
 
 
+RGWOTPCtl::RGWOTPCtl(RGWSI_Zone *zone_svc,
+		     RGWSI_OTP *otp_svc)
+{
+  svc.zone = zone_svc;
+  svc.otp = otp_svc;
+}
+
+
+void RGWOTPCtl::init(RGWOTPMetadataHandler *_meta_handler)
+{
+  meta_handler = _meta_handler;
+  be_handler = meta_handler->get_be_handler();
+}
 
 int RGWOTPCtl::read_all(const rgw_user& uid,
                         RGWOTPInfo *info,
