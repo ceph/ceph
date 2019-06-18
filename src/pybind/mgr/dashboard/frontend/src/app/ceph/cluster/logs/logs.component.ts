@@ -1,3 +1,4 @@
+import { DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { LogsService } from '../../../shared/api/logs.service';
@@ -28,7 +29,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   selectedDate: Date;
   startTime: Date = new Date();
   endTime: Date = new Date();
-  constructor(private logsService: LogsService) {
+  constructor(private logsService: LogsService, private datePipe: DatePipe) {
     this.startTime.setHours(0, 0);
     this.endTime.setHours(23, 59);
   }
@@ -81,8 +82,9 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   filterExecutor(logs: Array<any>, filters: any): Array<any> {
     return logs.filter((line) => {
-      const hour = parseInt(line.stamp.slice(11, 13), 10);
-      const minutes = parseInt(line.stamp.slice(14, 16), 10);
+      const localDate = this.datePipe.transform(line.stamp, 'mediumTime');
+      const hour = parseInt(localDate.split(':')[0], 10);
+      const minutes = parseInt(localDate.split(':')[1], 10);
       let prio: string, y_m_d: string, timeSpan: number;
 
       prio = filters.priority === 'All' ? line.priority : filters.priority;

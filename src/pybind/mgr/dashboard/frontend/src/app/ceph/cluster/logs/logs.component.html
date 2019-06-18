@@ -6,7 +6,7 @@
   <div class="well">
     <div *ngIf="clog">
       <p *ngFor="let line of clog">
-        <span class="timestamp">{{ line.stamp }}</span>
+        <span class="timestamp">{{ line.stamp | cdDate }}</span>
         <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
         <span class="message">{{ line.message }}</span>
       </p>
@@ -22,7 +22,7 @@
   <div class="well">
     <div *ngIf="audit_log">
       <p *ngFor="let line of audit_log">
-        <span class="timestamp">{{ line.stamp }}</span>
+        <span class="timestamp">{{ line.stamp | cdDate }}</span>
         <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
         <span class="message">{{ line.message }}</span>
       </p>
@@ -42,7 +42,7 @@
       <select class="form-control"
               [(ngModel)]="priority"
               (ngModelChange)="filterLogs()">
-        <option class="form-control" 
+        <option class="form-control"
                 *ngFor="let prio of prioritys"
                 [value]="prio.value">{{ prio.name }}</option>
       </select>
