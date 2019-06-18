@@ -1,12 +1,15 @@
-import os
+from os import path
 import crypt
 import logging
 from tempfile import mkstemp as tempfile_mkstemp
 import math
+from sys import version_info as sys_version_info
+from re import search as re_search
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
+from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -313,6 +316,25 @@ class TestCD(TestCephFSShell):
         script = 'cd {}\ncwd\n'.format(path)
         output = self.get_cephfs_shell_script_output(script)
         self.assertEqual(output, expected_cwd)
+
+class TestDU(TestCephFSShell):
+    CLIENTS_REQUIRED = 1
+
+    def test_du_works_for_regfiles(self):
+        regfilename = 'some_regfile'
+        regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
+        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+
+        size = humansize(self.mount_a.stat(regfile_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format(size, " +", regfilename)
+
+        du_output = self.get_cephfs_shell_cmd_output('du ' + regfilename)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
 
 #    def test_ls(self):
 #        """
