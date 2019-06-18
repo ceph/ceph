@@ -5,6 +5,7 @@ from tempfile import mkstemp as tempfile_mkstemp
 import math
 from sys import version_info as sys_version_info
 from re import search as re_search
+from time import sleep
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -329,6 +330,44 @@ class TestDU(TestCephFSShell):
         expected_output = r'{}{}{}'.format(size, " +", regfilename)
 
         du_output = self.get_cephfs_shell_cmd_output('du ' + regfilename)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
+
+    def test_du_works_for_non_empty_dirs(self):
+        dirname = 'some_directory'
+        dir_abspath = path.join(self.mount_a.mountpoint, dirname)
+        regfilename = 'some_regfile'
+        regfile_abspath = path.join(dir_abspath, regfilename)
+        self.mount_a.run_shell('mkdir ' + dir_abspath)
+        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+
+        # XXX: we stat `regfile_abspath` here because ceph du reports a non-empty
+        # directory's size as sum of sizes of all files under it.
+        size = humansize(self.mount_a.stat(regfile_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format(size, " +", dirname)
+
+        sleep(10)
+        du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
+
+    def test_du_works_for_empty_dirs(self):
+        dirname = 'some_directory'
+        dir_abspath = path.join(self.mount_a.mountpoint, dirname)
+        self.mount_a.run_shell('mkdir ' + dir_abspath)
+
+        size = humansize(self.mount_a.stat(dir_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format(size, " +", dirname)
+
+        du_output = self.get_cephfs_shell_cmd_output('du ' + dirname)
         if sys_version_info.major >= 3:
             self.assertRegex(expected_output, du_output)
         elif sys_version_info.major < 3:
