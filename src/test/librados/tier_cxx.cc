@@ -3519,6 +3519,84 @@ TEST_F(LibRadosTwoPoolsPP, ManifestDedupRefRead) {
   cluster.wait_for_latest_osdmap();
 }
 
+TEST_F(LibRadosTwoPoolsPP, DedupUsingOrigContent) {
+  // skip test if not yet nautilus
+  {
+    bufferlist inbl, outbl;
+    ASSERT_EQ(0, cluster.mon_command(
+		"{\"prefix\": \"osd dump\"}",
+		inbl, &outbl, NULL));
+    string s(outbl.c_str(), outbl.length());
+    if (s.find("nautilus") == std::string::npos) {
+      cout << "cluster is not yet nautilus, skipping test" << std::endl;
+      return;
+    }
+  }
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+	    set_pool_str(pool_name, "fingerprint_algorithm", "sha1"),
+	    inbl, NULL, NULL));
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABCD");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk-1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("1234");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("bar-chunk-2", &op));
+  }
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // set-chunk (dedup)
+  {
+    ObjectWriteOperation op;
+    op.set_chunk(0, 4, cache_ioctx, "bar-chunk-1", 0, 
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE | 
+		CEPH_OSD_OP_FLAG_USING_ORIG_CONTENT);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // set-chunk (dedup)
+  {
+    ObjectWriteOperation op;
+    op.set_chunk(4, 4, cache_ioctx, "bar-chunk-2", 0, 
+		CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(8, ioctx.read("foo", bl, 8, 0));
+    ASSERT_TRUE(string(bl.c_str()) == string("hi there"));
+  }
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
