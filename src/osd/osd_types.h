@@ -2631,7 +2631,7 @@ struct pg_history_t {
   epoch_t last_interval_clean = 0;; // first epoch of last_epoch_clean interval
   epoch_t last_epoch_split = 0;;    // as parent or child
   epoch_t last_epoch_marked_full = 0;;  // pool or cluster
-  
+
   /**
    * In the event of a map discontinuity, same_*_since may reflect the first
    * map the osd has seen in the new map sequence rather than the actual start
@@ -2648,6 +2648,9 @@ struct pg_history_t {
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
+
+  /// upper bound on how long prior interval readable (relative to encode time)
+  ceph::timespan prior_readable_until_ub = ceph::timespan::zero();
 
   friend bool operator==(const pg_history_t& l, const pg_history_t& r) {
     return
@@ -2666,7 +2669,8 @@ struct pg_history_t {
       l.last_deep_scrub == r.last_deep_scrub &&
       l.last_scrub_stamp == r.last_scrub_stamp &&
       l.last_deep_scrub_stamp == r.last_deep_scrub_stamp &&
-      l.last_clean_scrub_stamp == r.last_clean_scrub_stamp;
+      l.last_clean_scrub_stamp == r.last_clean_scrub_stamp &&
+      l.prior_readable_until_ub == r.prior_readable_until_ub;
   }
 
   pg_history_t() {}
@@ -2699,6 +2703,15 @@ struct pg_history_t {
     }
     if (last_interval_started < other.last_interval_started) {
       last_interval_started = other.last_interval_started;
+      // if we are learning about a newer *started* interval, our
+      // readable_until_ub is obsolete
+      prior_readable_until_ub = other.prior_readable_until_ub;
+      modified = true;
+    } else if (other.last_interval_started == last_interval_started &&
+	       other.prior_readable_until_ub < prior_readable_until_ub) {
+      // if other is the *same* interval, than pull our upper bound in
+      // if they have a tighter bound.
+      prior_readable_until_ub = other.prior_readable_until_ub;
       modified = true;
     }
     if (last_epoch_clean < other.last_epoch_clean) {
@@ -2748,12 +2761,16 @@ struct pg_history_t {
 WRITE_CLASS_ENCODER(pg_history_t)
 
 inline std::ostream& operator<<(std::ostream& out, const pg_history_t& h) {
-  return out << "ec=" << h.epoch_created << "/" << h.epoch_pool_created
-	     << " lis/c=" << h.last_interval_started
-	     << "/" << h.last_interval_clean
-	     << " les/c/f=" << h.last_epoch_started << "/" << h.last_epoch_clean
-	     << "/" << h.last_epoch_marked_full
-	     << " sis=" << h.same_interval_since;
+  out << "ec=" << h.epoch_created << "/" << h.epoch_pool_created
+      << " lis/c=" << h.last_interval_started
+      << "/" << h.last_interval_clean
+      << " les/c/f=" << h.last_epoch_started << "/" << h.last_epoch_clean
+      << "/" << h.last_epoch_marked_full
+      << " sis=" << h.same_interval_since;
+  if (h.prior_readable_until_ub != ceph::timespan::zero()) {
+    out << " pruub=" << h.prior_readable_until_ub;
+  }
+  return out;
 }
 
 
