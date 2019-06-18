@@ -727,7 +727,7 @@ public:
     if (log.roll_forward_to(
 	  roll_forward_to,
 	  h))
-      dirty_log = false;
+      dirty_log = true;
   }
 
   eversion_t get_can_rollback_to() const {
