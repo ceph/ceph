@@ -33,6 +33,8 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
+class RGWGetUserStats_CB;
+
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
@@ -920,6 +922,7 @@ public:
   int read_stats(const rgw_user& user, RGWStorageStats *stats,
 		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
+  int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
 };
 
 class RGWUserMetaHandlerAllocator {

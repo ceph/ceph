@@ -417,7 +417,7 @@ public:
 int UserAsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for user=" << user << dendl;
-  int r = store->get_user_stats_async(user, this);
+  int r = store->ctl.user->read_stats_async(user, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for user=" << user << dendl;
 

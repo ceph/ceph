@@ -803,6 +803,25 @@ int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header 
   return rados_obj.operate(&op, &ibl, null_yield);
 }
 
+int RGWSI_User_RADOS::cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb)
+{
+  rgw_raw_obj obj = get_buckets_obj(user);
+  auto rados_obj = svc.rados->obj(obj);
+  int r = rados_obj.open();
+  if (r < 0) {
+    return r;
+  }
+
+  auto& ref = rados_obj.get_ref();
+
+  r = ::cls_user_get_header_async(ref.pool.ioctx(), ref.obj.oid, cb);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
                                  const rgw_user& user, RGWStorageStats *stats,
                                  ceph::real_time *last_stats_sync,
@@ -827,6 +846,47 @@ int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
 
   if (last_stats_update) {
    *last_stats_update = header.last_stats_update;
+  }
+
+  return 0;
+}
+
+class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
+  RGWGetUserStats_CB *cb;
+
+public:
+  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
+    : cb(cb) {}
+
+  void handle_response(int r, cls_user_header& header) override {
+    const cls_user_stats& hs = header.stats;
+    if (r >= 0) {
+      RGWStorageStats stats;
+
+      stats.size = hs.total_bytes;
+      stats.size_rounded = hs.total_bytes_rounded;
+      stats.num_objects = hs.total_entries;
+
+      cb->set_response(stats);
+    }
+
+    cb->handle_response(r);
+
+    cb->put();
+  }
+};
+
+int RGWSI_User_RADOS::read_stats_async(RGWSI_MetaBackend::Context *ctx,
+                                       const rgw_user& user, RGWGetUserStats_CB *_cb)
+{
+  string user_str = user.to_str();
+
+  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
+  int r = cls_user_get_header_async(user_str, cb);
+  if (r < 0) {
+    _cb->put();
+    delete cb;
+    return r;
   }
 
   return 0;

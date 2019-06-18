@@ -7176,46 +7176,6 @@ int RGWRados::get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, R
   return r;
 }
 
-class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
-  RGWGetUserStats_CB *cb;
-
-public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
-    : cb(cb) {}
-
-  void handle_response(int r, cls_user_header& header) override {
-    const cls_user_stats& hs = header.stats;
-    if (r >= 0) {
-      RGWStorageStats stats;
-
-      stats.size = hs.total_bytes;
-      stats.size_rounded = hs.total_bytes_rounded;
-      stats.num_objects = hs.total_entries;
-
-      cb->set_response(stats);
-    }
-
-    cb->handle_response(r);
-
-    cb->put();
-  }
-};
-
-int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx)
-{
-  string user_str = user.to_str();
-
-  RGWGetUserStatsContext *get_ctx = new RGWGetUserStatsContext(ctx);
-  int r = cls_user_get_header_async(user_str, get_ctx);
-  if (r < 0) {
-    ctx->put();
-    delete get_ctx;
-    return r;
-  }
-
-  return 0;
-}
-
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
@@ -8314,25 +8274,6 @@ int RGWRados::cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_
     }
   }
   return r;
-}
-
-int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx)
-{
-  string buckets_obj_id;
-  rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_raw_obj obj(svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
-
-  rgw_rados_ref ref;
-  int r = get_raw_obj_ref(obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-
-  r = ::cls_user_get_header_async(ref.pool.ioctx(), ref.obj.oid, ctx);
-  if (r < 0)
-    return r;
-
-  return 0;
 }
 
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
