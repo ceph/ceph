@@ -4359,7 +4359,8 @@ void PG::requeue_map_waiters()
 bool PG::sched_scrub()
 {
   ceph_assert(is_locked());
-  if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
+  ceph_assert(!is_scrubbing());
+  if (!(is_primary() && is_active() && is_clean())) {
     return false;
   }
 

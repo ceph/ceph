@@ -7626,6 +7626,18 @@ void OSD::sched_scrub()
       PGRef pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
+      // This has already started, so go on to the next scrub job
+      if (pg->scrubber.active) {
+	pg->unlock();
+	dout(30) << __func__ << ": already in progress pgid " << scrub.pgid << dendl;
+	continue;
+      }
+      // If it is reserving, let it resolve before going to the next scrub job
+      if (pg->scrubber.reserved) {
+	pg->unlock();
+	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
+	break;
+      }
       dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 	       << (pg->get_must_scrub() ? ", explicitly requested" :
 		   (load_is_low ? ", load_is_low" : " deadline < now"))
