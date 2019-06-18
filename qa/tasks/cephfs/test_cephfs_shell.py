@@ -375,6 +375,25 @@ class TestDU(TestCephFSShell):
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
                    expected_output, du_output)
 
+    def test_du_works_for_hardlinks(self):
+        regfilename = 'some_regfile'
+        regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
+        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        hlinkname = 'some_hardlink'
+        hlink_abspath = path.join(self.mount_a.mountpoint, hlinkname)
+        self.mount_a.run_shell(['ln', regfile_abspath, hlink_abspath])
+
+        size = humansize(self.mount_a.stat(hlink_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format(size, " +", hlinkname)
+
+        du_output = self.get_cephfs_shell_cmd_output('du ' + hlinkname)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
