@@ -813,7 +813,8 @@ COMMAND("osd require-osd-release "\
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
 COMMAND("osd down " \
-	"type=CephString,name=ids,n=N", \
+	"name=ids,type=CephString,n=N "
+	"name=definitely_dead,type=CephBool,req=false",	\
 	"set osd(s) <id> [<id>...] down, " \
         "or use <any|all> to set all osds down", \
         "osd", "rw")

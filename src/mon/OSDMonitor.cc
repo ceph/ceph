@@ -10780,9 +10780,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool any = false;
     bool stop = false;
     bool verbose = true;
+    bool definitely_dead = false;
 
     vector<string> idvec;
     cmd_getval(cct, cmdmap, "ids", idvec);
+    cmd_getval(cct, cmdmap, "definitely_dead", definitely_dead);
+    derr << "definitely_dead " << (int)definitely_dead << dendl;
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
       set<int> osds;
 
@@ -10820,6 +10823,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
 	    ss << "marked down osd." << osd << ". ";
 	    any = true;
+	  }
+	  if (definitely_dead) {
+	    if (!pending_inc.new_xinfo.count(osd)) {
+	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	    }
+	    if (pending_inc.new_xinfo[osd].dead_epoch < pending_inc.epoch) {
+	      any = true;
+	    }
+	    pending_inc.new_xinfo[osd].dead_epoch = pending_inc.epoch;
 	  }
         } else if (prefix == "osd out") {
 	  if (osdmap.is_out(osd)) {
