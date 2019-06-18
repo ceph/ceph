@@ -2738,13 +2738,11 @@ WRITE_CLASS_ENCODER(pg_history_t)
 
 inline std::ostream& operator<<(std::ostream& out, const pg_history_t& h) {
   return out << "ec=" << h.epoch_created << "/" << h.epoch_pool_created
-	     << " lis/c " << h.last_interval_started
+	     << " lis/c=" << h.last_interval_started
 	     << "/" << h.last_interval_clean
-	     << " les/c/f " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << " les/c/f=" << h.last_epoch_started << "/" << h.last_epoch_clean
 	     << "/" << h.last_epoch_marked_full
-	     << " " << h.same_up_since
-	     << "/" << h.same_interval_since
-	     << "/" << h.same_primary_since;
+	     << " sis=" << h.same_interval_since;
 }
 
 
