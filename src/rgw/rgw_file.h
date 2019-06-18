@@ -238,15 +238,7 @@ namespace rgw {
     };
 
     void clear_state();
-
-    void advance_mtime() {
-      /* intended for use on directories, fast-forward mtime so as to
-       * ensure a new, higher value for the change attribute */
-      lock_guard guard(mtx);
-      /* sets ctime as well as mtime, to avoid masking updates should
-       * ctime inexplicably hold a higher value */
-      set_times(real_clock::now());
-    }
+    void advance_mtime();
 
     boost::variant<file, directory> variant_type;
 
