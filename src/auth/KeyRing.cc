@@ -17,6 +17,7 @@
 #include <memory>
 #include <sstream>
 #include <algorithm>
+#include <boost/algorithm/string/replace.hpp>
 #include "auth/KeyRing.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -256,6 +257,7 @@ void KeyRing::print(ostream& out)
       string caps;
       using ceph::decode;
       decode(caps, dataiter);
+      boost::replace_all(caps, "\"", "\\\"");
       out << "\tcaps " << q->first << " = \"" << caps << '"' << std::endl;
     }
   }
