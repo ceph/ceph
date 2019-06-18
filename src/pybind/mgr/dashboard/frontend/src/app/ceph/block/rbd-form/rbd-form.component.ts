@@ -385,6 +385,34 @@ export class RbdFormComponent implements OnInit {
   }
 
   interlockCheck(key, checked) {
+    // Adds a compatibility layer for Ceph cluster where the feature interlock of features hasn't
+    // been implemented yet. It disables the feature interlock for images which only have one of
+    // both interlocked features (at the time of this writing: object-map and fast-diff) enabled.
+    const feature = this.featuresList.find((f) => f.key === key);
+    if (this.response) {
+      // Ignore `create` page
+      const hasInterlockedFeature = feature.interlockedWith != null;
+      const dependentInterlockedFeature = this.featuresList.find(
+        (f) => f.interlockedWith === feature.key
+      );
+      const isOriginFeatureEnabled = !!this.response.features_name.find((e) => e === feature.key); // in this case: fast-diff
+      if (hasInterlockedFeature) {
+        const isLinkedEnabled = !!this.response.features_name.find(
+          (e) => e === feature.interlockedWith
+        ); // depends: object-map
+        if (isOriginFeatureEnabled !== isLinkedEnabled) {
+          return; // Ignore incompatible setting because it's from a previous cluster version
+        }
+      } else if (dependentInterlockedFeature) {
+        const isOtherInterlockedFeatureEnabled = !!this.response.features_name.find(
+          (e) => e === dependentInterlockedFeature.key
+        );
+        if (isOtherInterlockedFeatureEnabled !== isOriginFeatureEnabled) {
+          return; // Ignore incompatible setting because it's from a previous cluster version
+        }
+      }
+    }
+
     if (checked) {
       _.filter(this.features, (f) => f.interlockedWith === key).forEach((f) =>
         this.rbdForm.get(f.key).setValue(true, { emitEvent: false })
