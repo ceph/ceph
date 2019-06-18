@@ -122,7 +122,7 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 
