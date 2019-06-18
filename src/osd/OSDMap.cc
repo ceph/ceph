@@ -133,6 +133,7 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_int("features", features);
   f->dump_unsigned("old_weight", old_weight);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_int("dead_epoch", dead_epoch);
 }
 
 void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
@@ -150,6 +151,7 @@ void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
   encode(old_weight, bl);
   if (v >= 4) {
     encode(last_purged_snaps_scrub, bl);
+    encode(dead_epoch, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -172,6 +174,9 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
     old_weight = 0;
   if (struct_v >= 4) {
     decode(last_purged_snaps_scrub, bl);
+    decode(dead_epoch, bl);
+  } else {
+    dead_epoch = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -192,7 +197,8 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 	     << " laggy_probability " << xi.laggy_probability
 	     << " laggy_interval " << xi.laggy_interval
 	     << " old_weight " << xi.old_weight
-	     << " last_purged_snaps_scrub " << xi.last_purged_snaps_scrub;
+	     << " last_purged_snaps_scrub " << xi.last_purged_snaps_scrub
+	     << " dead_epoch " << xi.dead_epoch;
 }
 
 // ----------------------------------
