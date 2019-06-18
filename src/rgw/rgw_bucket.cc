@@ -612,7 +612,13 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   RGWBucketInfo bucket_info;
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, &attrs);
+
+  auto bucket_ctl = store->ctl.bucket;
+
+#warning need to pass obj_ctx
+  int r = bucket_ctl->read_bucket_instance_info(bucket, &bucket_info, RGWBucketCtl::BucketInstance::GetParams()
+                                                                      .set_attrs(&attrs)
+                                                                      .set_objv_tracker(&objv_tracker));
   if (r < 0) {
     return r;
   }
@@ -643,40 +649,41 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     }
     policy.create_default(user_info.user_id, display_name);
 
-    owner = policy.get_owner();
-    r = store->set_bucket_owner(bucket_info.bucket, owner);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to set bucket owner: " + cpp_strerror(-r));
-      return r;
-    }
+    bucket_info.owner = user_info.user_id;
 
     // ...and encode the acl
-    aclbl.clear();
-    policy.encode(aclbl);
+    policy.encode(attrs[RGW_ATTR_ACL]);
 
-    auto sysobj = obj_ctx.get_obj(obj);
-    r = sysobj.wop()
-              .set_objv_tracker(&objv_tracker)
-              .write_attr(RGW_ATTR_ACL, aclbl);
+    r = bucket_ctl->store_bucket_instance_info(bucket, bucket_info, RGWBucketCtl::BucketInstance::PutParams()
+                                                                    .set_attrs(&attrs)
+                                                                    .set_objv_tracker(&objv_tracker));
     if (r < 0) {
       return r;
     }
 
-    RGWAccessControlPolicy policy_instance;
-    policy_instance.create_default(user_info.user_id, display_name);
-    aclbl.clear();
-    policy_instance.encode(aclbl);
+    /* update entrypoint */
 
-    rgw_raw_obj obj_bucket_instance;
-    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
-    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
-    r = inst_sysobj.wop()
-                   .set_objv_tracker(&objv_tracker)
-                   .write_attr(RGW_ATTR_ACL, aclbl);
+    RGWBucketEntryPoint be;
+    map<string, bufferlist> be_attrs;
+    RGWObjVersionTracker be_ot;
+    r = bucket_ctl->read_bucket_entrypoint_info(bucket, &be, RGWBucketCtl::Bucket::GetParams()
+                                                             .set_objv_tracker(&be_ot)
+                                                             .set_attrs(&be_attrs));
     if (r < 0) {
       return r;
     }
 
+    be.owner = bucket_info.owner;
+    be_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+
+    r = bucket_ctl->store_bucket_entrypoint_info(bucket, be, RGWBucketCtl::Bucket::PutParams()
+                                                             .set_objv_tracker(&be_ot)
+                                                             .set_attrs(&be_attrs));
+    if (r < 0) {
+      return r;
+    }
+
+    /* link to user */
     r = store->ctl.bucket->link_bucket(user_info.user_id,
                                        bucket_info.bucket,
                                        ceph::real_time());
