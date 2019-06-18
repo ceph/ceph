@@ -155,21 +155,25 @@ TYPED_TEST(TestObjectPlayer, FetchCorrupt) {
 
   journal::Entry entry1(234, 123, this->create_payload(std::string(24, '1')));
   journal::Entry entry2(234, 124, this->create_payload(std::string(24, '2')));
+  journal::Entry entry3(234, 125, this->create_payload(std::string(24, '3')));
 
   bufferlist bl;
   ::encode(entry1, bl);
-  ::encode(this->create_payload("corruption"), bl);
+  ::encode(this->create_payload("corruption" + std::string(1024, 'X')), bl);
   ::encode(entry2, bl);
+  ::encode(this->create_payload("corruption" + std::string(1024, 'Y')), bl);
+  ::encode(entry3, bl);
   ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 
   journal::ObjectPlayerPtr object = this->create_object(oid, 14);
   ASSERT_EQ(-EBADMSG, this->fetch(object));
+  ASSERT_EQ(0, this->fetch(object));
 
   journal::ObjectPlayer::Entries entries;
   object->get_entries(&entries);
-  ASSERT_EQ(2U, entries.size());
+  ASSERT_EQ(3U, entries.size());
 
-  journal::ObjectPlayer::Entries expected_entries = {entry1, entry2};
+  journal::ObjectPlayer::Entries expected_entries = {entry1, entry2, entry3};
   ASSERT_EQ(expected_entries, entries);
 }
 
