@@ -460,7 +460,7 @@ The following HTTP response may be returned:
 
 
 Put Object Retention
---------------
+--------------------
 Places an Object Retention configuration on an object.
 
 Syntax
@@ -485,7 +485,7 @@ Request Entities
 
 
 Get Object Retention
---------------
+--------------------
 Gets an Object Retention configuration on an object.
 
 
@@ -497,7 +497,7 @@ Syntax
     GET /{bucket}/{object}?retention&versionId= HTTP/1.1
 
 Response Entities
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 +---------------------+-------------+-------------------------------------------------------------------------------+------------+
 | Name                | Type        | Description                                                                   |  Required  |
@@ -511,7 +511,7 @@ Response Entities
 
 
 Put Object Legal Hold
---------------
+---------------------
 Applies a Legal Hold configuration to the specified object.
 
 Syntax
@@ -534,7 +534,7 @@ Request Entities
 
 
 Get Object Legal Hold
---------------
+---------------------
 Gets an object's current Legal Hold status.
 
 Syntax
@@ -545,7 +545,7 @@ Syntax
     GET /{bucket}/{object}?legal-hold&versionId= HTTP/1.1
 
 Response Entities
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 +----------------+-------------+----------------------------------------------------------------------------------------+------------+
 | Name           | Type        | Description                                                                            |  Required  |
