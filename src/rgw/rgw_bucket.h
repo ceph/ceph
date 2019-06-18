@@ -229,10 +229,6 @@ extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bu
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max);
 
-extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs,
-                                RGWObjVersionTracker *objv_tracker);
-
 extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
 
 struct RGWBucketAdminOpState {
@@ -764,7 +760,7 @@ public:
    */
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
-                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params);
+                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params = std::nullopt);
 
 
 

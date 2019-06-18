@@ -3169,8 +3169,8 @@ void RGWCreateBucket::execute()
       s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
 
       /* This will also set the quota on the bucket. */
-      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-                                    &s->bucket_info.objv_tracker);
+      op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							    &s->bucket_info.objv_tracker);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -4324,8 +4324,8 @@ void RGWPutMetadataBucket::execute()
       /* Setting attributes also stores the provided bucket info. Due
        * to this fact, the new quota settings can be serialized with
        * the same call. */
-      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				    &s->bucket_info.objv_tracker);
+      op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							    &s->bucket_info.objv_tracker);
       return op_ret;
     });
 }
@@ -5124,7 +5124,8 @@ void RGWPutACLs::execute()
   } else {
     attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							  &s->bucket_info.objv_tracker);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
@@ -5221,8 +5222,8 @@ void RGWDeleteLC::execute()
 {
   map<string, bufferlist> attrs = s->bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
+  op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							&s->bucket_info.objv_tracker);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
         << s->bucket.name << " returned err=" << op_ret << dendl;
@@ -5278,7 +5279,8 @@ void RGWPutCORS::execute()
   op_ret = retry_raced_bucket_write(store, s, [this] {
       map<string, bufferlist> attrs = s->bucket_attrs;
       attrs[RGW_ATTR_CORS] = cors_bl;
-      return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      return store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							  &s->bucket_info.objv_tracker);
     });
 }
 
@@ -5303,8 +5305,8 @@ void RGWDeleteCORS::execute()
 
       map<string, bufferlist> attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_CORS);
-      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
+      op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							    &s->bucket_info.objv_tracker);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket.name
 			 << " returned err=" << op_ret << dendl;
@@ -6971,8 +6973,8 @@ void RGWSetAttrs::execute()
     for (auto& iter : attrs) {
       s->bucket_attrs[iter.first] = std::move(iter.second);
     }
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, s->bucket_attrs,
-				  &s->bucket_info.objv_tracker);
+    op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							  &s->bucket_info.objv_tracker);
   }
 }
 
@@ -7193,8 +7195,8 @@ void RGWPutBucketPolicy::execute()
 	auto attrs = s->bucket_attrs;
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				      &s->bucket_info.objv_tracker);
+	op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							      &s->bucket_info.objv_tracker);
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7268,8 +7270,8 @@ void RGWDeleteBucketPolicy::execute()
   op_ret = retry_raced_bucket_write(store, s, [this] {
       auto attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_IAM_POLICY);
-      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				    &s->bucket_info.objv_tracker);
+      op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
+							    &s->bucket_info.objv_tracker);
       return op_ret;
     });
 }

@@ -943,7 +943,7 @@ namespace rgw {
     }
 
     int authorize(RGWRados* store) {
-      int ret = rgw_get_user_info_by_access_key(store, key.id, user);
+      int ret = store->ctl.user->get_info_by_access_key(key.id, &user);
       if (ret == 0) {
 	RGWAccessKey* key0 = user.get_key0();
 	if (!key0 ||
@@ -963,8 +963,8 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (rgw_get_user_info_by_uid(store, token.id, user) < 0) {
-	    int ret = rgw_store_user_info(store, user, NULL, NULL, real_time(),
+	  if (store->ctl.user->get_info_by_uid(token.id, &user) < 0) {
+	    int ret = rgw_store_user_info(store->ctl.user, user, NULL, NULL, real_time(),
 					  true);
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
@@ -1239,7 +1239,8 @@ namespace rgw {
 
     void update_user() {
       RGWUserInfo _user = user;
-      int ret = rgw_get_user_info_by_access_key(rgwlib.get_store(), key.id, user);
+      auto user_ctl = rgwlib.get_store()->ctl.user;
+      int ret = user_ctl->get_info_by_access_key(key.id, &user);
       if (ret != 0)
         user = _user;
     }

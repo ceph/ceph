@@ -307,7 +307,7 @@ static int create_new_bucket_instance(RGWRados *store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = 0;
 
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
+  int ret = store->svc.bi->init_index(new_bucket_info);
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -704,7 +704,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // best effort and don't report out an error; the lock isn't needed
   // at this point since all we're using a best effor to to remove old
   // shard objects
-  ret = store->clean_bucket_index(bucket_info, bucket_info.num_shards);
+  ret = store->svc.bi->clean_index(bucket_info);
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
@@ -734,8 +734,7 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->clean_bucket_index(new_bucket_info,
-				       new_bucket_info.num_shards);
+  int ret2 = store->svc.bi->clean_index(new_bucket_info);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<

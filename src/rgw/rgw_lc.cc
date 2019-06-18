@@ -1352,7 +1352,8 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
 {
   map<string, bufferlist> attrs = bucket_attrs;
   config->encode(attrs[RGW_ATTR_LC]);
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs, &bucket_info.objv_tracker);
+  int ret = store->ctl.bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker);
   if (ret < 0)
     return ret;
 
@@ -1372,8 +1373,8 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 {
   map<string, bufferlist> attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs,
-				&bucket_info.objv_tracker);
+  int ret = store->ctl.bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker);
 
   rgw_bucket& bucket = bucket_info.bucket;
 

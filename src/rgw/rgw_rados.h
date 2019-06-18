@@ -623,8 +623,6 @@ public:
 
   int create_pool(const rgw_pool& pool);
 
-  int init_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
-  int clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool);

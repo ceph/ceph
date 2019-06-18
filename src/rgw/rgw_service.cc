@@ -332,7 +332,7 @@ int RGWCtlDef::init(RGWServices& svc)
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
                                 svc.bi));
-  otp.reset(new RGWOTPCtl(svc.zone, svc.otp, (RGWOTPMetadataHandler *)meta.otp.get()));
+  otp.reset(new RGWOTPCtl(svc.zone, svc.otp));
 
   RGWBucketMetadataHandlerBase *bucket_meta_handler = static_cast<RGWBucketMetadataHandlerBase *>(meta.bucket.get());
   RGWBucketInstanceMetadataHandlerBase *bi_meta_handler = static_cast<RGWBucketInstanceMetadataHandlerBase *>(meta.bucket_instance.get());
@@ -344,6 +344,8 @@ int RGWCtlDef::init(RGWServices& svc)
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
                (RGWBucketInstanceMetadataHandler *)bi_meta_handler);
+
+  otp->init((RGWOTPMetadataHandler *)meta.otp.get());
 
   return 0;
 }

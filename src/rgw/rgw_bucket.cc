@@ -2640,9 +2640,9 @@ public:
 
 int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
                                              string& entry,
-                                            RGWMetadataObject *obj,
-                                            RGWObjVersionTracker& objv_tracker,
-                                            RGWMDLogSyncType type)
+                                             RGWMetadataObject *obj,
+                                             RGWObjVersionTracker& objv_tracker,
+                                             RGWMDLogSyncType type)
 {
   RGWMetadataHandlerPut_BucketInstance put_op(svc.bucket->ctx(), this, op, entry, obj,
                                               objv_tracker, type);
@@ -2664,7 +2664,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
   if (!exists || old_bci->info.bucket.bucket_id != bci.info.bucket.bucket_id) {
     /* a new bucket, we need to select a new bucket placement for it */
     auto key(entry);
+#warning why was this needed?
+#if 0
     rgw_bucket_instance_oid_to_key(key);
+#endif
     string tenant_name;
     string bucket_name;
     string bucket_instance;
