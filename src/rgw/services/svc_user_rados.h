@@ -34,6 +34,9 @@ struct rgw_cache_entry_info;
 
 class RGWUserBuckets;
 
+class RGWGetUserHeader_CB;
+class RGWGetUserStats_CB;
+
 template <class T>
 class RGWChainedCacheImpl;
 
@@ -88,6 +91,7 @@ class RGWSI_User_RADOS : public RGWSI_User
 
   int cls_user_reset_stats(const rgw_user& user);
   int cls_user_get_header(const rgw_user& user, cls_user_header *header);
+  int cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb);
 
   int do_start() override;
 public:
@@ -183,5 +187,8 @@ public:
 		 const rgw_user& user, RGWStorageStats *stats,
 		 ceph::real_time *last_stats_sync,              /* last time a full stats sync completed */
 		 ceph::real_time *last_stats_update) override;  /* last time a stats update was done */
+
+  int read_stats_async(RGWSI_MetaBackend::Context *ctx,
+		       const rgw_user& user, RGWGetUserStats_CB *cb) override;
 };
 
