@@ -1544,7 +1544,6 @@ void print_osd_utilization(const OSDMap& osdmap,
                            std::ostream& out,
                            ceph::Formatter *f,
                            bool tree,
-                           const std::string& class_name,
-                           const std::string& item_name);
+                           const std::string& filter);
 
 #endif
