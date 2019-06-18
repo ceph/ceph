@@ -372,7 +372,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
   void *handle;
   int max = 1000;
   string section = "bucket.instance";
-  int ret = store->meta_mgr->list_keys_init(section, &handle);
+  int ret = store->ctl.meta.mgr->list_keys_init(section, &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
     return -ret;
@@ -389,7 +389,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   do {
     list<string> keys;
-    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->ctl.meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return -ret;
@@ -419,7 +419,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
     lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
     return ret;
   }
-  store->meta_mgr->list_keys_complete(handle);
+  store->ctl.meta.mgr->list_keys_complete(handle);
 
   return 0;
 }

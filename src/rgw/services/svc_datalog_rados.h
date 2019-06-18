@@ -21,6 +21,7 @@
 
 class RGWDataChangesLog;
 class RGWDataChangesLogInfo;
+struct RGWDataChangesLogMarker;
 struct rgw_data_change_log_entry;
 
 namespace rgw {
@@ -63,6 +64,8 @@ public:
 		   const string& marker,
 		   string *out_marker,
 		   bool *truncated);
+  int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
+		   list<rgw_data_change_log_entry>& entries, RGWDataChangesLogMarker& marker, bool *ptruncated);
   int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
   int trim_entries(const real_time& start_time, const real_time& end_time,
