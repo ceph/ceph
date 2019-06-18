@@ -186,7 +186,7 @@ int main(int argc, const char **argv)
   };
 
   g_conf().apply_changes(nullptr);
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  g_conf().complain_about_parse_error(g_ceph_context);
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize

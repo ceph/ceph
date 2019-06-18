@@ -167,7 +167,7 @@ void global_pre_init(
   conf.do_argv_commands();
 
   // Now we're ready to complain about config file parse errors
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  g_conf().complain_about_parse_error(g_ceph_context);
 }
 
 boost::intrusive_ptr<CephContext>
@@ -349,7 +349,7 @@ global_init(const std::map<std::string,std::string> *defaults,
   }
 
   // Now we're ready to complain about config file parse errors
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  g_conf().complain_about_parse_error(g_ceph_context);
 
   // test leak checking
   if (g_conf()->debug_deliberately_leak_memory) {

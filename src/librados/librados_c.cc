@@ -244,14 +244,14 @@ extern "C" int _rados_conf_read_file(rados_t cluster, const char *path_list)
   if (ret) {
     if (warnings.tellp() > 0)
       lderr(client->cct) << warnings.str() << dendl;
-    client->cct->_conf.complain_about_parse_errors(client->cct);
+    client->cct->_conf.complain_about_parse_error(client->cct);
     tracepoint(librados, rados_conf_read_file_exit, ret);
     return ret;
   }
   conf.parse_env(client->cct->get_module_type()); // environment variables override
 
   conf.apply_changes(nullptr);
-  client->cct->_conf.complain_about_parse_errors(client->cct);
+  client->cct->_conf.complain_about_parse_error(client->cct);
   tracepoint(librados, rados_conf_read_file_exit, 0);
   return 0;
 }
