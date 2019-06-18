@@ -119,6 +119,11 @@ class Pool(RESTController):
         def set_key(key, value):
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
 
+        quotas = {}
+        quotas['max_objects'] = kwargs.pop('quota_max_objects', None)
+        quotas['max_bytes'] = kwargs.pop('quota_max_bytes', None)
+        self._set_quotas(pool, quotas)
+
         for key, value in kwargs.items():
             if key == 'pool':
                 update_name = True
@@ -129,6 +134,12 @@ class Pool(RESTController):
                     set_key('pgp_num', value)
         if update_name:
             CephService.send_command('mon', 'osd pool rename', srcpool=pool, destpool=destpool)
+
+    def _set_quotas(self, pool, quotas):
+        for field, value in quotas.items():
+            if value is not None:
+                CephService.send_command('mon', 'osd pool set-quota',
+                                         pool=pool, field=field, val=str(value))
 
     def _handle_update_compression_args(self, options, kwargs):
         if kwargs.get('compression_mode') == 'unset' and options is not None:
