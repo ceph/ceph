@@ -1438,6 +1438,23 @@ namespace rgw {
     }
   }
 
+  void RGWFileHandle::advance_mtime() {
+    /* intended for use on directories, fast-forward mtime so as to
+     * ensure a new, higher value for the change attribute */
+    lock_guard guard(mtx);
+    /* advance mtime only if stored mtime is older than the
+     * configured namespace expiration */
+    auto now = real_clock::now();
+    auto cmptime = state.mtime;
+    cmptime.tv_sec +=
+      fs->get_context()->_conf->rgw_nfs_namespace_expire_secs;
+    if (cmptime < real_clock::to_timespec(now)) {
+      /* sets ctime as well as mtime, to avoid masking updates should
+       * ctime inexplicably hold a higher value */
+      set_times(now);
+    }
+  }
+
   void RGWFileHandle::invalidate() {
     RGWLibFS *fs = get_fs();
     if (fs->invalidate_cb) {
