@@ -453,6 +453,13 @@ namespace rgw {
 struct BucketChangeObserver;
 }
 
+struct RGWDataChangesLogMarker {
+  int shard;
+  string marker;
+
+  RGWDataChangesLogMarker() : shard(0) {}
+};
+
 class RGWDataChangesLog {
   CephContext *cct;
   rgw::BucketChangeObserver *observer = nullptr;
@@ -535,12 +542,9 @@ public:
   int lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 #endif
-  struct LogMarker {
-    int shard;
-    string marker;
 
-    LogMarker() : shard(0) {}
-  };
+  using LogMarker = RGWDataChangesLogMarker;
+
   int list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 

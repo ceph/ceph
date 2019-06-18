@@ -57,6 +57,9 @@ extern "C" {
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
+#include "services/svc_bilog_rados.h"
+#include "services/svc_datalog_rados.h"
+#include "services/svc_mdlog.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1638,13 +1641,13 @@ int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_n
   int shard_id = bucket_info.num_shards? 0 : -1;
 
   if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    r = store->stop_bi_log_entries(bucket_info, -1);
+    r = store->svc.bilog_rados->log_stop(bucket_info, -1);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
       return r;
     }
   } else {
-    r = store->resync_bi_log_entries(bucket_info, -1);
+    r = store->svc.bilog_rados->log_start(bucket_info, -1);
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
       return r;
@@ -2603,7 +2606,7 @@ int create_new_bucket_instance(RGWRados *store,
   new_bucket_info.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
 
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
+  int ret = store->svc.bi->init_index(new_bucket_info);
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return -ret;
@@ -3408,10 +3411,6 @@ int main(int argc, const char **argv)
       source_zone = source_zone_name;
     }
   }
-
-  rgw_user_init(store);
-  rgw_bucket_init(store->meta_mgr);
-  rgw_otp_init(store);
 
   rgw_http_client_init(g_ceph_context);
 
@@ -5153,7 +5152,7 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, path, assume_role_doc, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, path, assume_role_doc, tenant);
       ret = role.create(true);
       if (ret < 0) {
         return -ret;
@@ -5167,7 +5166,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.delete_obj();
       if (ret < 0) {
         return -ret;
@@ -5181,7 +5180,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5209,7 +5208,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5257,7 +5256,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5276,7 +5275,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5296,7 +5295,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       int ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5320,7 +5319,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      RGWRole role(g_ceph_context, store, role_name, tenant);
+      RGWRole role(g_ceph_context, store->pctl, role_name, tenant);
       ret = role.get();
       if (ret < 0) {
         return -ret;
@@ -5383,7 +5382,7 @@ int main(int argc, const char **argv)
     } else {
       /* list users in groups of max-keys, then perform user-bucket
        * limit-check on each group */
-     ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+     ret = store->ctl.meta.mgr->list_keys_init(metadata_key, &handle);
       if (ret < 0) {
 	cerr << "ERROR: buckets limit check can't get user metadata_key: "
 	     << cpp_strerror(-ret) << std::endl;
@@ -5391,7 +5390,7 @@ int main(int argc, const char **argv)
       }
 
       do {
-	ret = store->meta_mgr->list_keys_next(handle, max, user_ids,
+	ret = store->ctl.meta.mgr->list_keys_next(handle, max, user_ids,
 					      &truncated);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "ERROR: buckets limit check lists_keys_next(): "
@@ -5407,7 +5406,7 @@ int main(int argc, const char **argv)
 	}
 	user_ids.clear();
       } while (truncated);
-      store->meta_mgr->list_keys_complete(handle);
+      store->ctl.meta.mgr->list_keys_complete(handle);
     }
     return -ret;
   } /* OPT_BUCKET_LIMIT_CHECK */
@@ -6669,13 +6668,12 @@ next:
       return EINVAL;
     }
 
-    string user_str = user_id.to_str();
     if (reset_stats) {
       if (!bucket_name.empty()){
 	cerr << "ERROR: recalculate doesn't work on buckets" << std::endl;
 	return EINVAL;
       }
-      ret = store->ctl.user->reset_bucket_stats(user_id);
+      ret = store->ctl.user->reset_stats(user_id);
       if (ret < 0) {
 	cerr << "ERROR: could not clear user stats: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -6690,7 +6688,7 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        int ret = store->ctl.bucket->sync_user_stats(user_id, bucket_info);
+        ret = store->ctl.bucket->sync_user_stats(user_id, bucket_info);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -6704,8 +6702,10 @@ next:
       }
     }
 
-    cls_user_header header;
-    int ret = store->cls_user_get_header(user_str, &header);
+    RGWStorageStats stats;
+    ceph::real_time last_stats_sync;
+    ceph::real_time last_stats_update;
+    int ret = store->ctl.user->read_stats(user_id, &stats, last_stats_sync, last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -6715,12 +6715,17 @@ next:
       return -ret;
     }
 
-    encode_json("header", header, formatter);
-    formatter->flush(cout);
+
+    {
+      Formatter::ObjectSection os(*formatter, "result");
+      encode_json("stats", stats, formatter);
+      encode_json("last_stats_sync", last_stats_sync, formatter);
+      encode_json("last_stats_update", last_stats_update, formatter);
+    }
   }
 
   if (opt_cmd == OPT_METADATA_GET) {
-    int ret = store->meta_mgr->get(metadata_key, formatter);
+    int ret = store->ctl.meta.mgr->get(metadata_key, formatter);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6736,7 +6741,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->meta_mgr->put(metadata_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
+    ret = store->ctl.meta.mgr->put(metadata_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6744,7 +6749,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_RM) {
-    int ret = store->meta_mgr->remove(metadata_key);
+    int ret = store->ctl.meta.mgr->remove(metadata_key);
     if (ret < 0) {
       cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6757,7 +6762,7 @@ next:
     }
     void *handle;
     int max = 1000;
-    int ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
+    int ret = store->ctl.meta.mgr->list_keys_init(metadata_key, marker, &handle);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6775,7 +6780,7 @@ next:
     do {
       list<string> keys;
       left = (max_entries_specified ? max_entries - count : max);
-      ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
+      ret = store->ctl.meta.mgr->list_keys_next(handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6794,13 +6799,13 @@ next:
       encode_json("truncated", truncated, formatter);
       encode_json("count", count, formatter);
       if (truncated) {
-        encode_json("marker", store->meta_mgr->get_marker(handle), formatter);
+        encode_json("marker", store->ctl.meta.mgr->get_marker(handle), formatter);
       }
       formatter->close_section();
     }
     formatter->flush(cout);
 
-    store->meta_mgr->list_keys_complete(handle);
+    store->ctl.meta.mgr->list_keys_complete(handle);
   }
 
   if (opt_cmd == OPT_MDLOG_LIST) {
@@ -6824,7 +6829,7 @@ next:
       std::cerr << "No --period given, using current period="
           << period_id << std::endl;
     }
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
+    RGWMetadataLog *meta_log = store->svc.mdlog->get_log(period_id);
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
@@ -6843,7 +6848,7 @@ next:
 
         for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
-          store->meta_mgr->dump_log_entry(entry, formatter);
+          store->ctl.meta.mgr->dump_log_entry(entry, formatter);
         }
         formatter->flush(cout);
       } while (truncated);
@@ -6870,7 +6875,7 @@ next:
       std::cerr << "No --period given, using current period="
           << period_id << std::endl;
     }
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
+    RGWMetadataLog *meta_log = store->svc.mdlog->get_log(period_id);
 
     formatter->open_array_section("entries");
 
@@ -6891,7 +6896,7 @@ next:
 
   if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
     // need a full history for purging old mdlog periods
-    store->meta_mgr->init_oldest_log_period();
+    store->svc.mdlog->init_oldest_log_period();
 
     RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
@@ -6929,7 +6934,7 @@ next:
       std::cerr << "missing --period argument" << std::endl;
       return EINVAL;
     }
-    RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
+    RGWMetadataLog *meta_log = store->svc.mdlog->get_log(period_id);
 
     ret = meta_log->trim(shard_id, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
     if (ret < 0) {
@@ -7280,7 +7285,7 @@ next:
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->list_bi_log_entries(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = store->svc.bilog_rados->log_list(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -7418,7 +7423,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
+    ret = store->svc.bilog_rados->trim_entries(bucket_info, shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7437,7 +7442,7 @@ next:
       return -ret;
     }
     map<int, string> markers;
-    ret = store->get_bi_log_status(bucket_info, shard_id, markers);
+    ret = store->svc.bilog_rados->get_log_status(bucket_info, shard_id, &markers);
     if (ret < 0) {
       cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7631,7 +7636,7 @@ next:
     real_time mtime = real_clock::now();
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
-    int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+    int ret = store->ctl.meta.mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                       MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                       [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
@@ -7666,7 +7671,7 @@ next:
     real_time mtime = real_clock::now();
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
-    int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+    int ret = store->ctl.meta.mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                       MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                       [&] {
       return store->svc.cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
@@ -7809,7 +7814,7 @@ next:
     real_time mtime = real_clock::now();
     string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
-    ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+    ret = store->ctl.meta.mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                   MDLOG_STATUS_WRITE, RGWMDLogSyncType::APPLY_ALWAYS,
                                   [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);

@@ -68,6 +68,13 @@ int RGWSI_DataLog_RADOS::list_entries(int shard, const real_time& start_time, co
                            entries, marker, out_marker, truncated);
 }
 
+int RGWSI_DataLog_RADOS::list_entries(const real_time& start_time, const real_time& end_time, int max_entries,
+				      list<rgw_data_change_log_entry>& entries, RGWDataChangesLogMarker& marker, bool *ptruncated)
+{
+  return log->list_entries(start_time, end_time, max_entries,
+			   entries, marker, ptruncated);
+}
+
 int RGWSI_DataLog_RADOS::trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                                       const string& start_marker, const string& end_marker)
 {
