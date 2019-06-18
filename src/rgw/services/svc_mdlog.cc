@@ -373,6 +373,12 @@ int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const 
   return current_log->add_entry(hash_key, section, key, bl);
 }
 
+int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
+{
+  ceph_assert(current_log); // must have called init()
+  return current_log->get_shard_id(hash_key, shard_id);
+}
+
 int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
 {
   return period_puller->pull(period_id, period);

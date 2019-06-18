@@ -116,6 +116,14 @@ int RGWMetadataLog::add_entry(const string& hash_key, const string& section, con
   return svc.cls->timelog.add(oid, now, section, key, bl, null_yield);
 }
 
+int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
+{
+  string oid;
+
+  rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, shard_id);
+  return 0;
+}
+
 int RGWMetadataLog::store_entries_in_shard(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion)
 {
   string oid;
@@ -492,6 +500,13 @@ int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker
   });
 }
 
+int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry, int *shard_id)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return op->get_shard_id(entry, shard_id);
+  });
+}
+
 int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void **phandle)
 {
   std::unique_ptr<RGWSI_MetaBackend_Handler::Op> op(be_handler->alloc_op());
@@ -699,6 +714,16 @@ int RGWMetadataManager::remove(string& metadata_key)
   delete obj;
 
   return handler->remove(entry, objv_tracker);
+}
+
+int RGWMetadataManager::get_shard_id(const string& section, const string& entry, int *shard_id)
+{
+  RGWMetadataHandler *handler = get_handler(section);
+  if (!handler) {
+    return -EINVAL;
+  }
+
+  return handler->get_shard_id(entry, shard_id);
 }
 
 struct list_keys_handle {

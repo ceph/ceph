@@ -85,6 +85,15 @@ int RGWSI_MetaBackend_SObj::post_modify(RGWSI_MetaBackend::Context *_ctx,
   return RGWSI_MetaBackend::post_modify(ctx, key, log_data, objv_tracker, ret, y);
 }
 
+int RGWSI_MetaBackend_SObj::get_shard_id(RGWSI_MetaBackend::Context *_ctx,
+					 const std::string& key,
+					 int *shard_id)
+{
+  auto ctx = static_cast<Context_SObj *>(_ctx);
+  *shard_id = mdlog_svc->get_shard_id(ctx->module->get_hash_key(key), shard_id);
+  return 0;
+}
+
 int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
 {
   RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
