@@ -394,6 +394,44 @@ class TestDU(TestCephFSShell):
                    "expected_output -\n{}\ndu_output -\n{}\n".format(
                    expected_output, du_output)
 
+    def test_du_works_for_softlinks_to_files(self):
+        regfilename = 'some_regfile'
+        regfile_abspath = path.join(self.mount_a.mountpoint, regfilename)
+        sudo_write_file(self.mount_a.client_remote, regfile_abspath, 'somedata')
+        slinkname = 'some_softlink'
+        slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
+        self.mount_a.run_shell(['ln', '-s', regfile_abspath, slink_abspath])
+
+        size = humansize(self.mount_a.lstat(slink_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format((size), " +", slinkname)
+
+        du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
+
+    def test_du_works_for_softlinks_to_dirs(self):
+        dirname = 'some_directory'
+        dir_abspath = path.join(self.mount_a.mountpoint, dirname)
+        self.mount_a.run_shell('mkdir ' + dir_abspath)
+        slinkname = 'some_softlink'
+        slink_abspath = path.join(self.mount_a.mountpoint, slinkname)
+        self.mount_a.run_shell(['ln', '-s', dir_abspath, slink_abspath])
+
+        size = humansize(self.mount_a.lstat(slink_abspath)['st_size'])
+        expected_output = r'{}{}{}'.format(size, " +", slinkname)
+
+        du_output = self.get_cephfs_shell_cmd_output('du ' + slinkname)
+        if sys_version_info.major >= 3:
+            self.assertRegex(expected_output, du_output)
+        elif sys_version_info.major < 3:
+            assert re_search(expected_output, du_output) != None, "\n" + \
+                   "expected_output -\n{}\ndu_output -\n{}\n".format(
+                   expected_output, du_output)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
