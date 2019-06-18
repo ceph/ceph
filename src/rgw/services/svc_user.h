@@ -22,6 +22,7 @@
 #include "rgw/rgw_service.h"
 
 class RGWUserBuckets;
+class RGWGetUserStats_CB;
 
 class RGWSI_User : public RGWServiceInstance
 {
@@ -113,5 +114,8 @@ public:
 			 const rgw_user& user, RGWStorageStats *stats,
 			 ceph::real_time *last_stats_sync,         /* last time a full stats sync completed */
 			 ceph::real_time *last_stats_update) = 0;  /* last time a stats update was done */
+
+  virtual int read_stats_async(RGWSI_MetaBackend::Context *ctx,
+			       const rgw_user& user, RGWGetUserStats_CB *cb) = 0;
 };
 

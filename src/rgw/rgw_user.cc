@@ -2733,6 +2733,13 @@ int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
   });
 }
 
+int RGWUserCtl::read_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return svc.user->read_stats_async(op->ctx(), user, cb);
+  });
+}
+
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
   return new RGWUserMetadataHandler(user_svc);
 }
