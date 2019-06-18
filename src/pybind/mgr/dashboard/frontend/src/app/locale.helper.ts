@@ -4,9 +4,12 @@ import locale_en from '@angular/common/locales/en';
 import locale_es from '@angular/common/locales/es';
 import locale_fr from '@angular/common/locales/fr';
 import locale_id from '@angular/common/locales/id';
+import locale_it from '@angular/common/locales/it';
+import locale_ja from '@angular/common/locales/ja';
 import locale_pl from '@angular/common/locales/pl';
-import locale_pt_PT from '@angular/common/locales/pt-PT';
+import locale_pt from '@angular/common/locales/pt';
 import locale_zh_Hans from '@angular/common/locales/zh-Hans';
+import locale_zh_Hant from '@angular/common/locales/zh-Hant';
 import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
 
 declare const require;
@@ -27,10 +30,16 @@ export class LocaleHelper {
       return 'fr-FR';
     } else if (lang.includes('id')) {
       return 'id-ID';
+    } else if (lang.includes('it')) {
+      return 'it-IT';
+    } else if (lang.includes('ja')) {
+      return 'ja-JP';
     } else if (lang.includes('pl')) {
       return 'pl-PL';
     } else if (lang.includes('pt')) {
-      return 'pt-PT';
+      return 'pt-BR';
+    } else if (lang.includes('zh-TW')) {
+      return 'zh-TW';
     } else if (lang.includes('zh')) {
       return 'zh-CN';
     } else {
@@ -64,14 +73,23 @@ export class LocaleHelper {
       case 'id-ID':
         localeData = locale_id;
         break;
-      case 'pt-PT':
-        localeData = locale_pt_PT;
+      case 'it-IT':
+        localeData = locale_it;
+        break;
+      case 'ja-JP':
+        localeData = locale_ja;
         break;
       case 'pl-PL':
         localeData = locale_pl;
         break;
+      case 'pt-BR':
+        localeData = locale_pt;
+        break;
       case 'zh-CN':
         localeData = locale_zh_Hans;
+        break;
+      case 'zh-TW':
+        localeData = locale_zh_Hant;
         break;
     }
     return localeData;
