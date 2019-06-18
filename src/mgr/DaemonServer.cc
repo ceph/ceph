@@ -1216,30 +1216,18 @@ bool DaemonServer::_handle_command(
       return true;
     }
   } else if (prefix == "osd df") {
-    string method;
+    string method, filter;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
-    string filter_by;
-    string filter;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter_by", filter_by);
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter", filter);
-    if (filter_by.empty() != filter.empty()) {
-      cmdctx->reply(-EINVAL, "you must specify both 'filter_by' and 'filter'");
-      return true;
-    }
     stringstream rs;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
         // sanity check filter(s)
-        if (filter_by == "class") {
-          if (!osdmap.crush->class_exists(filter)) {
-            rs << "specified class '" << filter << "' does not exist";
-            return -EINVAL;
-          }
-        }
-        if (filter_by == "name") {
-          if (!osdmap.crush->name_exists(filter)) {
-            rs << "specified name '" << filter << "' does not exist";
-            return -EINVAL;
-          }
+        if (!filter.empty() &&
+             osdmap.lookup_pg_pool_name(filter) < 0 &&
+            !osdmap.crush->class_exists(filter) &&
+            !osdmap.crush->name_exists(filter)) {
+          rs << "'" << filter << "' not a pool, crush node or device class name";
+          return -EINVAL;
         }
 	print_osd_utilization(osdmap, pgmap, ss,
                               f.get(), method == "tree", filter);

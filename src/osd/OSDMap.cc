@@ -4991,6 +4991,15 @@ public:
     } else if (osdmap->crush->class_exists(filter)) {
       // filter by device class
       class_id = osdmap->crush->get_class_id(filter);
+    } else if (auto pool_id = osdmap->lookup_pg_pool_name(filter);
+               pool_id >= 0) {
+      // filter by pool
+      auto crush_rule = osdmap->get_pool_crush_rule(pool_id);
+      set<int> roots;
+      osdmap->crush->find_takes_by_rule(crush_rule, &roots);
+      allowed = roots;
+      for (auto r : roots)
+        osdmap->crush->get_all_children(r, &allowed);
     }
     average_util = average_utilization();
   }
