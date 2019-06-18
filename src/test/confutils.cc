@@ -474,17 +474,17 @@ TEST(ConfUtils, Overrides) {
 
   conf->name.set(CEPH_ENTITY_TYPE_MON, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "global_log");
 
   conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "mds_log");
 
   conf->name.set(CEPH_ENTITY_TYPE_OSD, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "osd0_log");
 }
 
@@ -495,7 +495,7 @@ TEST(ConfUtils, DupKey) {
 
   conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(dup_key_config_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, string("3"));
 }
 
