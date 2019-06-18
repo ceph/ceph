@@ -28,7 +28,7 @@ public:
 };
 
 typedef ::testing::Types<TestParams<2> > BitVectorTypes;
-TYPED_TEST_CASE(BitVectorTest, BitVectorTypes);
+TYPED_TEST_SUITE(BitVectorTest, BitVectorTypes);
 
 TYPED_TEST(BitVectorTest, resize) {
   typename TestFixture::bit_vector_t bit_vector;

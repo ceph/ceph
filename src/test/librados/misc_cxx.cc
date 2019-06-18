@@ -714,7 +714,7 @@ typedef ::testing::Types<
 			   Checksummer::crc32c, uint32_t>
   > LibRadosChecksumTypes;
 
-TYPED_TEST_CASE(LibRadosChecksum, LibRadosChecksumTypes);
+TYPED_TEST_SUITE(LibRadosChecksum, LibRadosChecksumTypes);
 
 TYPED_TEST(LibRadosChecksum, Subset) {
   uint32_t chunk_size = 1024;
