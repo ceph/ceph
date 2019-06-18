@@ -374,13 +374,11 @@ int md_config_t::parse_config_files(ConfigValues& values,
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-
     ostringstream oss;
     int ret = cf.parse_file(fn.c_str(), &oss);
-    if (ret == 0)
+    parse_error = oss.str();
+    if (ret == 0) {
       break;
-    if (ret) {
-      parse_errors.push_back(oss.str());
     }
     if (ret != -ENOENT)
       return ret;
@@ -1472,7 +1470,7 @@ void md_config_t::diff(
   });
 }
 
-void md_config_t::complain_about_parse_errors(CephContext *cct)
+void md_config_t::complain_about_parse_error(CephContext *cct)
 {
-  ::complain_about_parse_errors(cct, &parse_errors);
+  ::complain_about_parse_error(cct, parse_error);
 }
