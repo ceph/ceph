@@ -185,24 +185,26 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.service_cache.remove_outdated()
         if not self.service_cache.any_outdated() and not refresh:
             # Let's hope the services are complete.
-            services = [orchestrator.ServiceDescription.from_json(d[1]) for d in self.service_cache.items_filtered([node_name])]
+            node_filter = [node_name] if node_name else None
+            services_by_node = [d[1].data for d in self.service_cache.items_filtered(node_filter)]
+            services = [orchestrator.ServiceDescription.from_json(s) for services in services_by_node for s in services]
             services = [s for s in services if
-                        (True if s.service_type is None else s.service_type == service_type) and
-                        (True if s.service_id is None else s.service_id == service_id)]
+                        (True if service_type is None else s.service_type == service_type) and
+                        (True if service_id is None else s.service_instance == service_id)]
             return orchestrator.TrivialReadCompletion(services)
-
 
         def process_result(event_data):
             result = []
             if event_data['success']:
                 for node_name, service_info in event_data["return"].items():
+                    node_service_cache = []
                     for service_type, service_instance in service_info.items():
                         desc = orchestrator.ServiceDescription(nodename=node_name,
                                                                service_instance=service_instance,
                                                                service_type=service_type)
                         result.append(desc)
-                for service in result:
-                    self.service_cache[service.nodename] = orchestrator.OutdatableData(service.to_json())
+                        node_service_cache.append(desc.to_json())
+                    self.service_cache[node_name] = orchestrator.OutdatableData(node_service_cache)
             else:
                 self.log.error(event_data['return'])
             return result
