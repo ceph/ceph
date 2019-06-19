@@ -1192,7 +1192,9 @@ int RGWRados::init_complete()
 
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
-  run_sync_thread = !svc.zone->need_to_sync();
+  if (!svc.zone->need_to_sync()) {
+    run_sync_thread = false;
+  }
 
   if (svc.zone->is_meta_master()) {
     auto md_log = svc.mdlog->get_log(current_period.get_id());
