@@ -180,7 +180,6 @@ Infiniband::QueuePair::QueuePair(
     lderr(cct) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
-  pd = infiniband.pd->pd;
 }
 
 int Infiniband::QueuePair::init()
@@ -354,23 +353,6 @@ int Infiniband::QueuePair::get_state() const
   return qpa.qp_state;
 }
 
-/**
- * Return true if the queue pair is in an error state, false otherwise.
- */
-bool Infiniband::QueuePair::is_error() const
-{
-  ibv_qp_attr qpa;
-
-  int r = get_state();
-  if (r) {
-    lderr(cct) << __func__ << " failed to get state: "
-      << cpp_strerror(errno) << dendl;
-    return true;
-  }
-  return qpa.qp_state == IBV_QPS_ERR;
-}
-
-
 Infiniband::CompletionChannel::CompletionChannel(CephContext *c, Infiniband &ib)
   : cct(c), infiniband(ib), channel(NULL), cq(NULL), cq_events_that_need_ack(0)
 {
@@ -509,19 +491,9 @@ Infiniband::MemoryManager::Chunk::~Chunk()
 {
 }
 
-void Infiniband::MemoryManager::Chunk::set_offset(uint32_t o)
-{
-  offset = o;
-}
-
 uint32_t Infiniband::MemoryManager::Chunk::get_offset()
 {
   return offset;
-}
-
-void Infiniband::MemoryManager::Chunk::set_bound(uint32_t b)
-{
-  bound = b;
 }
 
 uint32_t Infiniband::MemoryManager::Chunk::get_size() const

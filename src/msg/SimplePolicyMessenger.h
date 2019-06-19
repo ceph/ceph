@@ -30,8 +30,7 @@ private:
 
 public:
 
-  SimplePolicyMessenger(CephContext *cct, entity_name_t name,
-			string mname, uint64_t _nonce)
+  SimplePolicyMessenger(CephContext *cct, entity_name_t name)
     : Messenger(cct, name)
     {
     }

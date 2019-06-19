@@ -315,10 +315,10 @@ void RDMADispatcher::polling()
 
         struct pollfd channel_poll[2];
         channel_poll[0].fd = tx_cc->get_fd();
-        channel_poll[0].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+        channel_poll[0].events = POLLIN;
         channel_poll[0].revents = 0;
         channel_poll[1].fd = rx_cc->get_fd();
-        channel_poll[1].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+        channel_poll[1].events = POLLIN;
         channel_poll[1].revents = 0;
         r = 0;
         perf_logger->set(l_msgr_rdma_polling, 0);

@@ -206,9 +206,7 @@ class Infiniband {
       Chunk(ibv_mr* m, uint32_t bytes, char* buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0);
       ~Chunk();
 
-      void set_offset(uint32_t o);
       uint32_t get_offset();
-      void set_bound(uint32_t b);
       uint32_t get_size() const;
       void prepare_read(uint32_t b);
       uint32_t get_bound();
@@ -476,10 +474,6 @@ class Infiniband {
      * Get the state of a QueuePair.
      */
     int get_state() const;
-    /**
-     * Return true if the queue pair is in an error state, false otherwise.
-     */
-    bool is_error() const;
     void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
     void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
     uint32_t get_tx_wr() const { return tx_wr_inflight; }
