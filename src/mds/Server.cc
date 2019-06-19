@@ -850,11 +850,6 @@ void Server::find_idle_sessions()
     return;
   }
 
-  if (mds->sessionmap.get_sessions().size() == 1 && mds->mdsmap->get_num_in_mds() == 1) {
-    dout(20) << "skipping client eviction because there is only one" << dendl;
-    return;
-  }
-
   // Collect a list of sessions exceeding the autoclose threshold
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
   if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
