@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class DaemonsPage {
-  navigateTo() {
-    return browser.get('/#/rgw/daemon');
-  }
+export class DaemonsPage extends PageHelper {
+  pages = { index: '/#/rgw/daemon' };
 }

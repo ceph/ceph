@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class MirroringPage {
-  navigateTo() {
-    return browser.get('/#/block/mirroring');
-  }
+export class MirroringPage extends PageHelper {
+  pages = { index: '/#/block/mirroring' };
 }

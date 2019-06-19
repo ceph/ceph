@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class BucketsPage {
-  navigateTo() {
-    return browser.get('/#/rgw/bucket');
-  }
+export class BucketsPage extends PageHelper {
+  pages = { index: '/#/rgw/bucket' };
 }

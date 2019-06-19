@@ -139,13 +139,13 @@ There are a few ways how you can try to resolve this:
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Protractor <http://www.protractortest.org/>`__ to run our frontend e2e
+We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
 tests.
 
 Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
 installed and run the tests if either is found.
 
-Start all frontend e2e tests by running::
+Start all frontend E2E tests by running::
 
   $ ./run-frontend-e2e-tests.sh
 
@@ -173,12 +173,39 @@ Note:
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-When writing e2e tests you don't want to recompile every time from scratch to
-try out if your test has succeeded. As usual you have your development server
-open (``npm start``) which already has compiled all files. To attach
-`Protractor <http://www.protractortest.org/>`__ to this process, instead of
-spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
-or just ``npm run e2e:dev`` which is equivalent.
+When writing E2E tests, it is not necessary to compile the frontend code on
+each change of the test files. When your development environment is running
+(``npm start``), you can point Protractor to just use this environment.  To
+attach `Protractor <http://www.protractortest.org/>`__ to this process, run
+``npm run e2e:dev``.
+
+Note::
+
+   In case you have a somewhat particular environment, you might need to adapt
+   `protractor.conf.js` to point to the appropriate destination.
+
+Making code reuseable
+"""""""""""""""""""""
+
+In order to make some code reuseable, you just need to put it in a derived
+class of the ``PageHelper``. If you create a new class derived from the
+``PageHelper``, please also register it in the ``Helper`` class, so that it can
+automatically be used by all other classes. To do so, you just need to create a
+new attribute on the ``Helper`` class and ensure it's instantiated in the
+constructor of the ``Helper`` class.
+
+.. code:: TypeScript
+
+   class Helper {
+      // ...
+      pools: PoolPageHelper;
+
+      constructor() {
+         this.pools = new PoolPageHelper();
+      }
+
+      // ...
+   }
 
 Further Help
 ~~~~~~~~~~~~

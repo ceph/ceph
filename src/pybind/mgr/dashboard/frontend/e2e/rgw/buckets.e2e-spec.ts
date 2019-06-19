@@ -18,7 +18,7 @@ describe('RGW buckets page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Buckets');
+      expect(BucketsPage.getBreadcrumbText()).toEqual('Buckets');
     });
   });
 });

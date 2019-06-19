@@ -18,7 +18,7 @@ describe('Monitors page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Monitors');
+      expect(MonitorsPage.getBreadcrumbText()).toEqual('Monitors');
     });
   });
 });

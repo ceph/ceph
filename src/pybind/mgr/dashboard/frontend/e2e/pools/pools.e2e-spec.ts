@@ -1,11 +1,11 @@
 import { Helper } from '../helper.po';
-import { PoolsPage } from './pools.po';
+import { PoolPageHelper } from './pools.po';
 
 describe('Pools page', () => {
-  let page: PoolsPage;
+  let page: PoolPageHelper;
 
   beforeAll(() => {
-    page = new PoolsPage();
+    page = new PoolPageHelper();
   });
 
   afterEach(() => {
@@ -18,19 +18,19 @@ describe('Pools page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Pools');
+      expect(PoolPageHelper.getBreadcrumbText()).toEqual('Pools');
     });
 
     it('should show two tabs', () => {
-      expect(Helper.getTabsCount()).toEqual(2);
+      expect(PoolPageHelper.getTabsCount()).toEqual(2);
     });
 
     it('should show pools list tab at first', () => {
-      expect(Helper.getTabText(0)).toEqual('Pools List');
+      expect(PoolPageHelper.getTabText(0)).toEqual('Pools List');
     });
 
     it('should show overall performance as a second tab', () => {
-      expect(Helper.getTabText(1)).toEqual('Overall Performance');
+      expect(PoolPageHelper.getTabText(1)).toEqual('Overall Performance');
     });
   });
 });

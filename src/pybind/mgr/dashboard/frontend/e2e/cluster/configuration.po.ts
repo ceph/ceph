@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class ConfigurationPage {
-  navigateTo() {
-    return browser.get('/#/configuration');
-  }
+export class ConfigurationPage extends PageHelper {
+  pages = { index: '/#/configuration' };
 }
