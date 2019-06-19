@@ -24,8 +24,21 @@
 #include "mon/mon_types.h"
 
 class Monitor;
-
 class Elector;
+class ElectionOwner {
+public:
+  virtual void persist_epoch(epoch_t e) = 0;
+  virtual epoch_t read_persisted_epoch() = 0;
+  virtual void validate_store() = 0;
+  virtual void notify_bump_epoch() = 0;
+  virtual void trigger_new_election() = 0;
+  virtual int get_my_rank() = 0;
+  virtual void propose_to_peers(epoch_t e) = 0;
+  virtual void reset_election() = 0;
+  virtual bool ever_participated() = 0;
+  virtual unsigned paxos_size() = 0;
+  virtual ~ElectionOwner() = 0;
+};
 
 class ElectionLogic {
 public:
@@ -51,18 +64,6 @@ private:
   void init();
   void bump_epoch(epoch_t e);
   void declare_victory();
-  // call-outs
-  void persist_epoch(epoch_t e);
-  epoch_t read_persisted_epoch();
-  void validate_store();
-  void elector_bump_epoch();
-  bool elector_is_current_member(int rank);
-  void elector_trigger_new_election();
-  int elector_my_rank();
-  void elector_propose_to_peers(epoch_t e);
-  void elector_reset();
-  bool elector_ever_participated();
-  unsigned elector_paxos_size();
 };
 
 /**
@@ -105,6 +106,16 @@ class Elector {
   // FIXME!
 public:
   Monitor *mon;
+  void persist_epoch(epoch_t e);
+  epoch_t read_persisted_epoch();
+  void validate_store();
+  void trigger_new_election();
+  int get_my_rank();
+  void propose_to_peers(epoch_t e);
+  void reset_election();
+  bool ever_participated();
+  unsigned paxos_size();
+
 private:
 
   /**
@@ -200,7 +211,7 @@ private:
    *
    * @param e Epoch to which we will update our epoch
    */
-  void _bump_epoch();
+  void notify_bump_epoch();
 
   /**
    * Start new elections by proposing ourselves as the new Leader.
