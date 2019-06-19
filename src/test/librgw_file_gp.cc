@@ -187,12 +187,13 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
   ASSERT_EQ(ret, 0);
 }
 
 extern "C" {
   static bool r2_cb(const char* name, void *arg, uint64_t offset,
+		    struct stat *st, uint32_t st_mask,
 		    uint32_t flags) {
     // don't need arg--it would point to fids
     fids.push_back(fid_type(name, offset, nullptr));
@@ -222,7 +223,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 TEST(LibRGW, LOOKUP_OBJECT) {
   if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-			RGW_LOOKUP_FLAG_CREATE);
+			 nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
     ASSERT_EQ(ret, 0);
   }
 }

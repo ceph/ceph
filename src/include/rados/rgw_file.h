@@ -101,7 +101,8 @@ void rgwfile_version(int *major, int *minor, int *extra);
 
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
-	      struct rgw_file_handle **fh, uint32_t flags);
+	      struct rgw_file_handle **fh,
+	      struct stat *st, uint32_t mask, uint32_t flags);
 
 /*
   lookup object by handle (NFS style)
@@ -211,6 +212,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
     read  directory content
 */
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
+			       struct stat *st, uint32_t mask,
 			       uint32_t flags);
 
 #define RGW_READDIR_FLAG_NONE      0x0000
