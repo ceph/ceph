@@ -14,6 +14,11 @@ RGWSI_MetaBackend_OTP::RGWSI_MetaBackend_OTP(CephContext *cct) : RGWSI_MetaBacke
 RGWSI_MetaBackend_OTP::~RGWSI_MetaBackend_OTP() {
 }
 
+string RGWSI_MetaBackend_OTP::get_meta_key(const rgw_user& user)
+{
+  return string("otp:user:") + user.to_str();
+}
+
 RGWSI_MetaBackend_Handler *RGWSI_MetaBackend_OTP::alloc_be_handler()
 {
   return new RGWSI_MetaBackend_Handler_OTP(this);
