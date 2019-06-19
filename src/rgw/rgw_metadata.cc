@@ -332,6 +332,14 @@ public:
     return -ENOTSUP;
   }
 
+  int mutate(const string& entry,
+             const ceph::real_time& mtime,
+             RGWObjVersionTracker *objv_tracker,
+             RGWMDLogStatus op_type,
+             std::function<int()> f) {
+    return -ENOTSUP;
+  }
+
   int list_keys_init(const string& marker, void **phandle) override {
     iter_data *data = new iter_data;
     list<string> sections;
@@ -505,6 +513,21 @@ int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return do_remove(op, entry, objv_tracker, y);
+  });
+}
+
+int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
+                                             const ceph::real_time& mtime,
+                                             RGWObjVersionTracker *objv_tracker,
+                                             RGWMDLogStatus op_type,
+                                             std::function<int()> f)
+{
+  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    RGWSI_MetaBackend::MutateParams params(mtime, op_type);
+    return op->mutate(entry,
+                      params,
+                      objv_tracker,
+                      f);
   });
 }
 
