@@ -163,7 +163,7 @@ RGWSI_RADOS::Obj::Obj(Pool& pool, const string& oid) : rados_svc(pool.rados_svc)
 
 void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
 {
-  ref.pool = RGWSI_RADOS::Pool(rados_svc, ref.obj.pool, rados_handle);
+  ref.pool = RGWSI_RADOS::Pool(rados_svc, obj.pool, rados_handle);
   ref.obj = obj;
 }
 

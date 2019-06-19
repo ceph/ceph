@@ -379,13 +379,6 @@ RGWMetadataManager::RGWMetadataManager(RGWSI_Meta *_meta_svc)
 
 RGWMetadataManager::~RGWMetadataManager()
 {
-  map<string, RGWMetadataHandler *>::iterator iter;
-
-  for (iter = handlers.begin(); iter != handlers.end(); ++iter) {
-    delete iter->second;
-  }
-
-  handlers.clear();
 }
 
 int RGWMetadataHandler::attach(RGWMetadataManager *manager)
