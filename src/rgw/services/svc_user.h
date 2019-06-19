@@ -26,9 +26,6 @@ class RGWGetUserStats_CB;
 
 class RGWSI_User : public RGWServiceInstance
 {
-protected:
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
-
 public:
   RGWSI_User(CephContext *cct);
   virtual ~RGWSI_User();
@@ -41,9 +38,7 @@ public:
     return rgw_user(key);
   }
 
-  RGWSI_MetaBackend_Handler *get_be_handler() {
-    return be_handler;
-  }
+  virtual RGWSI_MetaBackend_Handler *get_be_handler() = 0;
 
   /* base svc_user interfaces */
 

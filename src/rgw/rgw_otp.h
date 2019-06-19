@@ -10,6 +10,7 @@
 #include "services/svc_meta_be_otp.h"
 
 #include "rgw_basic_types.h"
+#include "rgw_metadata.h"
 
 
 class RGWObjVersionTracker;
@@ -18,6 +19,14 @@ class RGWOTPMetadataHandler;
 class RGWSI_Zone;
 class RGWSI_OTP;
 class RGWSI_MetaBackend;
+
+class RGWOTPMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
+public:
+  virtual ~RGWOTPMetadataHandlerBase() {}
+  virtual int init(RGWSI_Zone *zone,
+		   RGWSI_MetaBackend *_meta_be,
+		   RGWSI_OTP *_otp) = 0;
+};
 
 class RGWOTPMetaHandlerAllocator {
 public:
