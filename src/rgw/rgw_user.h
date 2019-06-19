@@ -805,7 +805,7 @@ class RGWUserCtl
   } ctl;
 
   RGWUserMetadataHandler *umhandler;
-  RGWSI_MetaBackend_Handler *be_handler;
+  RGWSI_MetaBackend_Handler *be_handler{nullptr};
   
 public:
   RGWUserCtl(RGWSI_Zone *zone_svc,

@@ -15,8 +15,13 @@ public:
                                                      zone_svc(_zone_svc) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    *pool = zone_svc->get_zone_params().otp_pool;
-    *oid = key;
+    if (pool) {
+      *pool = zone_svc->get_zone_params().otp_pool;
+    }
+
+    if (oid) {
+      *oid = key;
+    }
   }
 
   const string& get_oid_prefix() override {

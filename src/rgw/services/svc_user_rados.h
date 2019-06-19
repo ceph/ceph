@@ -113,6 +113,10 @@ public:
             RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules);
 
+  RGWSI_MetaBackend_Handler *get_be_handler() override {
+    return be_handler;
+  }
+
   int read_user_info(RGWSI_MetaBackend::Context *ctx,
                      const rgw_user& user,
                      RGWUserInfo *info,

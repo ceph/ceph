@@ -241,7 +241,7 @@ public:
   class Op_ManagedCtx : public Op {
     std::unique_ptr<RGWSI_MetaBackend::Context> pctx;
   public:
-    Op_ManagedCtx(RGWSI_MetaBackend *_be);
+    Op_ManagedCtx(RGWSI_MetaBackend_Handler *handler);
   };
 
   RGWSI_MetaBackend_Handler(RGWSI_MetaBackend *_be) : be(_be) {}
