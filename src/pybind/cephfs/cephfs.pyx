@@ -293,11 +293,13 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
-        return val.encode(encoding)
     else:
-        raise TypeError('%s must be a string' % name)
-
+        try:
+            v = val.encode(encoding)
+        except:
+            raise TypeError('%s must be encodeable as a bytearray' % name)
+        assert isinstance(v, bytes)
+        return v
 
 def cstr_list(list_str, name, encoding="utf-8"):
     return [cstr(s, name) for s in list_str]
