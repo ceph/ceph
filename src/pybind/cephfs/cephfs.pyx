@@ -139,6 +139,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
+    void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_chdir(ceph_mount_info *cmount, const char *path)
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
@@ -281,8 +282,54 @@ StatResult = namedtuple('StatResult',
                          "st_blocks", "st_atime", "st_mtime", "st_ctime"])
 
 cdef class DirResult(object):
-    cdef ceph_dir_result *handler
+    cdef LibCephFS lib
+    cdef ceph_dir_result* handle
 
+# Bug in older Cython instances prevents this from being a static method.
+#    @staticmethod
+#    cdef create(LibCephFS lib, ceph_dir_result* handle):
+#        d = DirResult()
+#        d.lib = lib
+#        d.handle = handle
+#        return d
+
+    def __dealloc__(self):
+        self.close()
+
+    def __enter__(self):
+        if not self.handle:
+            raise make_ex(errno.EBADF, "dir is not open")
+        self.lib.require_state("mounted")
+        with nogil:
+            ceph_rewinddir(self.lib.cluster, self.handle)
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.close()
+        return False
+
+    def readdir(self):
+        self.lib.require_state("mounted")
+
+        with nogil:
+            dirent = ceph_readdir(self.lib.cluster, self.handle)
+        if not dirent:
+            return None
+
+        return DirEntry(d_ino=dirent.d_ino,
+                        d_off=dirent.d_off,
+                        d_reclen=dirent.d_reclen,
+                        d_type=dirent.d_type,
+                        d_name=dirent.d_name)
+
+    def close(self):
+        if self.handle:
+            self.lib.require_state("mounted")
+            with nogil:
+                ret = ceph_closedir(self.lib.cluster, self.handle)
+            if ret < 0:
+                raise make_ex(ret, "closedir failed")
+            self.handle = NULL
 
 def cstr(val, name, encoding="utf-8", opt=False):
     """
@@ -696,60 +743,47 @@ cdef class LibCephFS(object):
         
         :param path: the path name of the directory to open.  Must be either an absolute path
                      or a path relative to the current working directory.
-        :param dir_handler: the directory result pointer structure to fill in.
+        :rtype handle: the open directory stream handle
         """
         self.require_state("mounted")
 
         path = cstr(path, 'path')
         cdef:
             char* _path = path
-            ceph_dir_result *dir_handler
+            ceph_dir_result* handle
         with nogil:
-            ret = ceph_opendir(self.cluster, _path, &dir_handler);
+            ret = ceph_opendir(self.cluster, _path, &handle);
         if ret < 0:
             raise make_ex(ret, "opendir failed")
         d = DirResult()
-        d.handler = dir_handler
+        d.lib = self
+        d.handle = handle
         return d
 
-    def readdir(self, DirResult dir_handler):
+    def readdir(self, DirResult handle):
         """
         Get the next entry in an open directory.
         
-        :param dir_handler: the directory stream pointer from an opendir holding the state of the
-                            next entry to return.
-        :rtype dir_handler: the next directory entry or NULL if at the end of the directory (or the directory is empty.
-                            This pointer should not be freed by the caller, and is only safe to access between return and
-                            the next call to readdir or closedir.
+        :param handle: the open directory stream handle
+        :rtype dentry: the next directory entry or None if at the end of the
+                       directory (or the directory is empty.  This pointer
+                       should not be freed by the caller, and is only safe to
+                       access between return and the next call to readdir or
+                       closedir.
         """
         self.require_state("mounted")
 
-        cdef ceph_dir_result *_dir_handler = dir_handler.handler
-        with nogil:
-            dirent = ceph_readdir(self.cluster, _dir_handler)
-        if not dirent:
-            return None
+        return handle.readdir()
 
-        return DirEntry(d_ino=dirent.d_ino,
-                        d_off=dirent.d_off,
-                        d_reclen=dirent.d_reclen,
-                        d_type=dirent.d_type,
-                        d_name=dirent.d_name)
-
-    def closedir(self, DirResult dir_handler):
+    def closedir(self, DirResult handle):
         """
         Close the open directory.
         
-        :param dir_handler: the directory result pointer (set by ceph_opendir) to close
+        :param handle: the open directory stream handle
         """
         self.require_state("mounted")
-        cdef:
-            ceph_dir_result *_dir_handler = dir_handler.handler
 
-        with nogil:
-            ret = ceph_closedir(self.cluster, _dir_handler)
-        if ret < 0:
-            raise make_ex(ret, "closedir failed")
+        return handle.close()
 
     def mkdir(self, path, mode):
         """
