@@ -117,8 +117,9 @@ def ls(path, opts=''):
                 elif almost_all and dent.d_name in (b'.', b'..'):
                     continue
                 yield dent
-    except cephfs.ObjectNotFound:
-        return []
+    except libcephfs.ObjectNotFound:
+        perror('{}: no such directory exists'.format(path), end='\n',
+               apply_style=True)
 
 
 def glob(path, pattern):
