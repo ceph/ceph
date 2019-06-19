@@ -87,9 +87,6 @@ int main(const int argc, const char **argv)
     return EIO;
   }
 
-  rgw_user_init(store);
-  rgw_bucket_init(store->meta_mgr);
-
   /* Guard to not forget about closing the rados store. */
   StoreDestructor store_dtor(store);
 
