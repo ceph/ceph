@@ -111,43 +111,6 @@ class TestMisc(CephFSTestCase):
                                             self.fs.metadata_pool_name,
                                             data_pool_name)
 
-    def test_evict_client(self):
-        """
-        Check that a slow client session won't get evicted if it's the
-        only session
-        """
-
-        session_autoclose = self.fs.get_var("session_autoclose")
-
-        self.mount_b.umount_wait()
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
-
-        mount_a_client_id = self.mount_a.get_global_id()
-        self.mount_a.kill()
-        self.mount_a.kill_cleanup()
-
-        time.sleep(session_autoclose * 1.5)
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
-
-        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
-
-        ls_data = self._session_list()
-        self.assert_session_count(2, ls_data)
-
-        self.mount_a.kill()
-        self.mount_a.kill_cleanup()
-
-        time.sleep(session_autoclose * 1.5)
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
-
     def test_cap_revoke_nonresponder(self):
         """
         Check that a client is evicted if it has not responded to cap revoke
