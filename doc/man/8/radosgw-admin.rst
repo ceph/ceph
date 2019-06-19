@@ -35,6 +35,9 @@ which are as follows:
   Display information of a user, and any potentially available
   subusers and keys.
 
+:command:`user rename`
+  Renames a user.
+
 :command:`user rm`
   Remove a user.
 
@@ -467,6 +470,10 @@ Options
 
    The radosgw user ID.
 
+.. option:: --new-uid=uid
+
+   ID of the new user. Used with 'user rename' command.
+
 .. option:: --subuser=<name>
 
 	Name of the subuser.
@@ -895,6 +902,10 @@ Generate a new user::
 Remove a user::
 
         $ radosgw-admin user rm --uid=johnny
+
+Rename a user::
+
+        $ radosgw-admin user rename --uid=johny --new-uid=joe
         
 Remove a user and all associated buckets with their contents::
 
