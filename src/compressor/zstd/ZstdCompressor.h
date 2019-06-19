@@ -48,7 +48,7 @@ class ZstdCompressor : public Compressor {
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
       left -= inbuf.size;
       ZSTD_EndDirective const zed = (left==0) ? ZSTD_e_end : ZSTD_e_continue;
-      size_t r = ZSTD_compress_generic(s, &outbuf, &inbuf, zed);
+      size_t r = ZSTD_compressStream2(s, &outbuf, &inbuf, zed);
       if (ZSTD_isError(r)) {
 	return -EINVAL;
       }
