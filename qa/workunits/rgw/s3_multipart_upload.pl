@@ -48,7 +48,7 @@ Pod::Usage::pod2usage(-verbose => 1) && exit if ($help);
 #== local variables ===
 my $s3;
 my $hostdom  = $ENV{RGW_FQDN}||hostfqdn();
-my $port     = $ENV{RGW_PORT}||7280;
+my $port     = $ENV{RGW_PORT}||80;
 our $hostname = "$hostdom:$port";
 our $testfileloc;
 our $mytestfilename;

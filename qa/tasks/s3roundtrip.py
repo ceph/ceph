@@ -262,9 +262,10 @@ def task(ctx, config):
                 secret_key: mysecretkey
 
     """
+    assert hasattr(ctx, 'rgw'), 's3roundtrip must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task s3tests only supports a list or dictionary for configuration"
+        "task s3roundtrip only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
@@ -280,11 +281,14 @@ def task(ctx, config):
         config[client].setdefault('s3', {})
         config[client].setdefault('roundtrip', {})
 
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 's3roundtrip: no rgw endpoint for {}'.format(client)
+
         s3tests_conf[client] = ({
                 'DEFAULT':
                     {
-                    'port'      : 7280,
-                    'is_secure' : False,
+                    'port'      : endpoint.port,
+                    'is_secure' : endpoint.cert is not None,
                     },
                 'roundtrip' : config[client]['roundtrip'],
                 's3'  : config[client]['s3'],
