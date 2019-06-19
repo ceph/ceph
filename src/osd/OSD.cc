@@ -4565,7 +4565,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	if (is_active()) {
 	  ConnectionRef con = service.get_con_osd_cluster(from, curmap->get_epoch());
 	  if (con) {
-	    service.maybe_share_map(con.get(), get_osdmap(), m->map_epoch);
+	    service.maybe_share_map(con.get(), curmap, m->map_epoch);
 	  }
 	}
       } else if (!curmap->exists(from) ||
@@ -4659,7 +4659,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	if (is_active()) {
 	  ConnectionRef con = service.get_con_osd_cluster(from, curmap->get_epoch());
 	  if (con) {
-	    service.maybe_share_map(con.get(), get_osdmap(), m->map_epoch);
+	    service.maybe_share_map(con.get(), curmap, m->map_epoch);
 	  }
 	}
       }
