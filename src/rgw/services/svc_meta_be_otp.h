@@ -59,6 +59,8 @@ public:
     return MDBE_OTP;
   }
 
+  static string get_meta_key(const rgw_user& user);
+
   void init(RGWSI_SysObj *_sysobj_svc,
             RGWSI_MDLog *_mdlog_svc,
 	    RGWSI_Cls *_cls_svc) {
