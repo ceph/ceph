@@ -713,8 +713,6 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
 
-      bool need_db = dev_target_id == BlueFS::BDEV_NEWDB;
-
       BlueStore bluestore(cct.get(), path);
       int r = bluestore.migrate_to_existing_bluefs_device(
 	src_dev_ids,
@@ -727,8 +725,9 @@ int main(int argc, char **argv)
 	  }
 	}
       } else {
+        bool need_db = dev_target_id == BlueFS::BDEV_DB;
 	cerr << "failed to migrate to existing BlueFS device: "
-	     << (need_db ? BlueFS::BDEV_DB : BlueFS::BDEV_DB)
+	     << (need_db ? BlueFS::BDEV_DB : BlueFS::BDEV_WAL)
 	     << " " << dev_target
 	     << cpp_strerror(r)
 	     << std::endl;
