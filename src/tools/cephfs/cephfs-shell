@@ -100,27 +100,20 @@ def get_chunks(file_size):
 def to_bytes(string):
     return bytes(string, encoding='utf-8')
 
-
-def list_items(dir_name=''):
-    d = None
-    if not isinstance(dir_name, bytes):
-        dir_name = to_bytes(dir_name)
-    if dir_name == '':
-        d = cephfs.opendir(cephfs.getcwd())
-    else:
-        try:
-            d = cephfs.opendir(dir_name)
-        except libcephfs.Error:
-            dir_name = dir_name.decode('utf-8')
-            return []
-    dent = cephfs.readdir(d)
-    items = []
-    while dent:
-        items.append(dent)
-        dent = cephfs.readdir(d)
-    cephfs.closedir(d)
-    return items
-
+def ls(path, opts=''):
+    # opts tries to be like /bin/ls opts
+    almost_all = 'A' in opts
+    try:
+        with cephfs.opendir(path) as d:
+            while True:
+                dent = cephfs.readdir(d)
+                if dent is None:
+                    return
+                elif almost_all and dent.d_name in (b'.', b'..'):
+                    continue
+                yield dent
+    except cephfs.ObjectNotFound:
+        return []
 
 def glob(dir_name, pattern):
     if isinstance(dir_name, bytes):
@@ -131,7 +124,7 @@ def glob(dir_name, pattern):
         parent_dir = '/'
     if dir_name == '/' or is_dir_exists(os.path.basename(dir_name),
                                         parent_dir):
-        for i in list_items(dir_name)[2:]:
+        for i in ls(dir_name, opts='A'):
             if fnmatch.fnmatch(i.d_name, pattern):
                 paths.append(os.path.join(dir_name, i.d_name))
     return paths
@@ -315,7 +308,7 @@ def dirwalk(dir_name):
     walk a directory tree, using a generator
     """
     dir_name = os.path.normpath(dir_name)
-    for item in list_items(dir_name)[2:]:
+    for item in ls(dir_name, opts='A'):
         fullpath = os.path.join(dir_name, item.d_name.decode('utf-8'))
         src_path = fullpath.rsplit('/', 1)[0]
 
@@ -369,24 +362,24 @@ class CephFSShell(Cmd):
     def complete_filenames(self, text, line, begidx, endidx):
         if not text:
             completions = [x.d_name.decode('utf-8') + '/' * int(x.is_dir())
-                           for x in list_items(cephfs.getcwd())[2:]]
+                           for x in ls(b".", opts='A')]
         else:
             if text.count('/') > 0:
                 completions = [text.rsplit('/', 1)[0] + '/'
                                + x.d_name.decode('utf-8') + '/'
-                               * int(x.is_dir()) for x in list_items('/'
-                               + text.rsplit('/', 1)[0])[2:]
+                               * int(x.is_dir()) for x in ls('/'
+                               + text.rsplit('/', 1)[0], opts='A')
                                if x.d_name.decode('utf-8').startswith(
                                    text.rsplit('/', 1)[1])]
             else:
                 completions = [x.d_name.decode('utf-8') + '/'
-                               * int(x.is_dir()) for x in list_items()[2:]
+                               * int(x.is_dir()) for x in ls(b".", opts='A')
                                if x.d_name.decode('utf-8').startswith(text)]
             if len(completions) == 1 and completions[0][-1] == '/':
                 dir_, file_ = completions[0].rsplit('/', 1)
                 completions.extend([dir_ + '/' + x.d_name.decode('utf-8')
                                     + '/' * int(x.is_dir()) for x in
-                                    list_items('/' + dir_)[2:]
+                                    ls('/' + dir_, opts='A')
                                     if x.d_name.decode('utf-8').startswith(file_)])
             return self.delimiter_complete(text, line, begidx, endidx, completions, '/')
         return completions
@@ -725,7 +718,7 @@ exists.')
                     dir_name = '/'
                 dirs = []
                 for i in all_items:
-                    for item in list_items(dir_name):
+                    for item in ls(dir_name):
                         d_name = item.d_name.decode('utf-8')
                         if os.path.basename(i) == d_name:
                             if item.is_dir():
@@ -741,7 +734,7 @@ exists.')
                 if dir_name != '' and dir_name != cephfs.getcwd().decode(
                         'utf-8') and len(directories) > 1:
                     self.poutput(dir_name, ':\n')
-                items = sorted(list_items(dir_name),
+                items = sorted(ls(dir_name),
                                key=lambda item: item.d_name)
             if not args.all:
                 items = [i for i in items if not i.d_name.startswith(b'.')]
@@ -811,7 +804,7 @@ sub-directories, files')
                     dir_path = '/'
                 dirs = []
                 for i in all_items:
-                    for item in list_items(dir_path):
+                    for item in ls(dir_path):
                         d_name = item.d_name
                         if os.path.basename(i) == d_name:
                             if item.is_dir():
@@ -1058,7 +1051,7 @@ sub-directories, files')
         """
         Display the amount of available disk space for file systems
         """
-        for index, i in enumerate(list_items(cephfs.getcwd())[2:]):
+        for index, i in enumerate(ls(".", opts='A')):
             if index == 0:
                 self.poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
                     "1K-blocks", "Used", "Available", "Use%", "Stored on"))
