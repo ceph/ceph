@@ -18,17 +18,17 @@ describe('Mirroring page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Mirroring');
+      expect(MirroringPage.getBreadcrumbText()).toEqual('Mirroring');
     });
 
     it('should show three tabs', () => {
-      expect(Helper.getTabsCount()).toEqual(3);
+      expect(MirroringPage.getTabsCount()).toEqual(3);
     });
 
     it('should show text for all tabs', () => {
-      expect(Helper.getTabText(0)).toEqual('Issues');
-      expect(Helper.getTabText(1)).toEqual('Syncing');
-      expect(Helper.getTabText(2)).toEqual('Ready');
+      expect(MirroringPage.getTabText(0)).toEqual('Issues');
+      expect(MirroringPage.getTabText(1)).toEqual('Syncing');
+      expect(MirroringPage.getTabText(2)).toEqual('Ready');
     });
   });
 });
