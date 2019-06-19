@@ -31,29 +31,24 @@ static ostream& _prefix(std::ostream *_dout, Elector* elector) {
 		<< ").elector(" << elector->get_epoch() << ") ";
 }
 
-void ElectionLogic::persist_epoch(epoch_t e)
+void Elector::persist_epoch(epoch_t e)
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_epoch", e);
-  elector->mon->store->apply_transaction(t);
+  mon->store->apply_transaction(t);
 }
 
-epoch_t ElectionLogic::read_persisted_epoch()
+epoch_t Elector::read_persisted_epoch()
 {
-  return elector->mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
+  return mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
 }
 
-void ElectionLogic::validate_store()
+void Elector::validate_store()
 {
   auto t(std::make_shared<MonitorDBStore::Transaction>());
   t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
-  int r = elector->mon->store->apply_transaction(t);
+  int r = mon->store->apply_transaction(t);
   ceph_assert(r >= 0);
-}
-
-bool ElectionLogic::elector_is_current_member(int rank)
-{
-  return elector->is_current_member(rank);
 }
 
 bool Elector::is_current_member(int rank)
@@ -61,35 +56,35 @@ bool Elector::is_current_member(int rank)
   return mon->quorum.count(rank);
 }
 
-void ElectionLogic::elector_trigger_new_election()
+void Elector::trigger_new_election()
 {
-  elector->mon->start_election();
+  mon->start_election();
 }
 
-int ElectionLogic::elector_my_rank()
+int Elector::get_my_rank()
 {
-  return elector->mon->rank;
+  return mon->rank;
 }
 
-void ElectionLogic::elector_reset()
+void Elector::reset_election()
 {
-  elector->mon->bootstrap();
+  mon->bootstrap();
 }
 
-bool ElectionLogic::elector_ever_participated()
+bool Elector::ever_participated()
 {
-  return elector->mon->has_ever_joined;
+  return mon->has_ever_joined;
 }
 
-unsigned ElectionLogic::elector_paxos_size()
+unsigned Elector::paxos_size()
 {
-  return (unsigned)elector->mon->monmap->size();
+  return (unsigned)mon->monmap->size();
 }
 
 
 void ElectionLogic::init()
 {
-  epoch = read_persisted_epoch();
+  epoch = elector->read_persisted_epoch();
   if (!epoch) {
     dout(1) << "init, first boot, initializing epoch at 1 " << dendl;
     epoch = 1;
@@ -97,7 +92,7 @@ void ElectionLogic::init()
     dout(1) << "init, last seen epoch " << epoch
 	    << ", mid-election, bumping" << dendl;
     ++epoch;
-    persist_epoch(epoch);
+    elector->persist_epoch(epoch);
   } else {
     dout(1) << "init, last seen epoch " << epoch << dendl;
   }
@@ -113,19 +108,14 @@ void ElectionLogic::bump_epoch(epoch_t e)
   dout(10) << __func__ << epoch << " to " << e << dendl;
   ceph_assert(epoch <= e);
   epoch = e;
-  validate_store();
+  elector->validate_store();
   // clear up some state
   electing_me = false;
   acked_me.clear();
-  elector_bump_epoch();
+  elector->notify_bump_epoch();
 }
 
-void ElectionLogic::elector_bump_epoch()
-{
-  elector->_bump_epoch();
-}
-
-void Elector::_bump_epoch()
+void Elector::notify_bump_epoch()
 {
   peer_info.clear();
   mon->join_election();
@@ -133,7 +123,7 @@ void Elector::_bump_epoch()
 
 void ElectionLogic::declare_standalone_victory()
 {
-  assert(elector_paxos_size() == 1 && elector_my_rank() == 0);
+  assert(elector->paxos_size() == 1 && elector->get_my_rank() == 0);
   init();
   bump_epoch(epoch+1);
 }
@@ -153,26 +143,26 @@ void ElectionLogic::start()
   if (epoch % 2 == 0) {
     bump_epoch(epoch+1);  // odd == election cycle
   } else {
-    validate_store();
+    elector->validate_store();
   }
   electing_me = true;
-  acked_me.insert(elector_my_rank());
+  acked_me.insert(elector->get_my_rank());
   leader_acked = -1;
 
-  elector_propose_to_peers(epoch);
+  elector->propose_to_peers(epoch);
   elector->_start();
 }
 
-void ElectionLogic::elector_propose_to_peers(epoch_t e)
+void Elector::propose_to_peers(epoch_t e)
 {
   // bcast to everyone else
-  for (unsigned i=0; i<elector->mon->monmap->size(); ++i) {
-    if ((int)i == elector->mon->rank) continue;
+  for (unsigned i=0; i<mon->monmap->size(); ++i) {
+    if ((int)i == mon->rank) continue;
     MMonElection *m =
-      new MMonElection(MMonElection::OP_PROPOSE, e, elector->mon->monmap);
+      new MMonElection(MMonElection::OP_PROPOSE, e, mon->monmap);
     m->mon_features = ceph::features::mon::get_supported();
     m->mon_release = ceph_release();
-    elector->mon->send_mon_message(m, i);
+    mon->send_mon_message(m, i);
   }  
 }
 
@@ -254,15 +244,15 @@ void ElectionLogic::end_election_period()
   
   // did i win?
   if (electing_me &&
-      acked_me.size() > (elector_paxos_size() / 2)) {
+      acked_me.size() > (elector->paxos_size() / 2)) {
     // i win
     declare_victory();
   } else {
     // whoever i deferred to didn't declare victory quickly enough.
-    if (elector_ever_participated())
+    if (elector->ever_participated())
       start();
     else
-      elector_reset();
+      elector->reset_election();
   }
 }
 
@@ -374,19 +364,19 @@ void ElectionLogic::receive_propose(epoch_t mepoch, int from)
   } else if (mepoch < epoch) {
     // got an "old" propose,
     if (epoch % 2 == 0 &&    // in a non-election cycle
-	!elector_is_current_member(from)) {  // from someone outside the quorum
+	!elector->is_current_member(from)) {  // from someone outside the quorum
       // a mon just started up, call a new election so they can rejoin!
       dout(5) << " got propose from old epoch, "
 	      << from << " must have just started" << dendl;
       // we may be active; make sure we reset things in the monitor appropriately.
-      elector_trigger_new_election();
+      elector->trigger_new_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
       return;
     }
   }
 
-  if (elector_my_rank() < from) {
+  if (elector->get_my_rank() < from) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
       ceph_assert(leader_acked < from);  // and they still win, of course
@@ -394,7 +384,7 @@ void ElectionLogic::receive_propose(epoch_t mepoch, int from)
     } else {
       // wait, i should win!
       if (!electing_me) {
-	elector_trigger_new_election();
+	elector->trigger_new_election();
       }
     }
   } else {
@@ -422,7 +412,7 @@ void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
   // is that _everyone_?
   if (electing_me) {
     acked_me.insert(from);
-    if (acked_me.size() == elector_paxos_size()) {
+    if (acked_me.size() == elector->paxos_size()) {
       // if yes, shortcut to election finish
       declare_victory();
     }
@@ -483,7 +473,7 @@ void Elector::handle_ack(MonOpRequestRef op)
 
 bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
-  ceph_assert(from < elector_my_rank());
+  ceph_assert(from < elector->get_my_rank());
   ceph_assert(from_epoch % 2 == 0);  
 
   leader_acked = -1;
