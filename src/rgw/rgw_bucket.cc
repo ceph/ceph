@@ -1070,7 +1070,7 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
 
 int RGWBucket::sync(RGWBucketAdminOpState& op_state, std::string *err_msg)
 {
-  if (!store->getRados()->is_meta_master()) {
+  if (!store->getRados()->svc.zone->is_meta_master()) {
     set_err_msg(err_msg, "ERROR: failed to update bucket sync: only allowed on meta master zone");
     return EINVAL;
   }
