@@ -22,56 +22,16 @@
 #include "include/Context.h"
 #include "mon/MonOpRequest.h"
 #include "mon/mon_types.h"
+#include "mon/ElectionLogic.h"
 
 class Monitor;
-class Elector;
-class ElectionOwner {
-public:
-  virtual void persist_epoch(epoch_t e) = 0;
-  virtual epoch_t read_persisted_epoch() = 0;
-  virtual void validate_store() = 0;
-  virtual void notify_bump_epoch() = 0;
-  virtual void trigger_new_election() = 0;
-  virtual int get_my_rank() = 0;
-  virtual void propose_to_peers(epoch_t e) = 0;
-  virtual void reset_election() = 0;
-  virtual bool ever_participated() = 0;
-  virtual unsigned paxos_size() = 0;
-  virtual ~ElectionOwner() = 0;
-};
-
-class ElectionLogic {
-public:
-  Elector *elector;
-  epoch_t epoch;
-  bool participating;
-  bool electing_me;
-  set<int> acked_me;
-  int leader_acked;
-
-  ElectionLogic(Elector *e) : elector(e), epoch(0), participating(true),
-			      electing_me(false), leader_acked(-1) {}
-  void declare_standalone_victory();
-  void start();
-  void defer(int who);
-  void end_election_period();
-  void receive_propose(epoch_t mepoch, int from);
-  void receive_ack(int from, epoch_t from_epoch);
-  bool receive_victory_claim(int from, epoch_t from_epoch);
-
-  
-private:
-  void init();
-  void bump_epoch(epoch_t e);
-  void declare_victory();
-};
 
 /**
  * This class is responsible for maintaining the local state when electing
  * a new Leader. We may win or we may lose. If we win, it means we became the
  * Leader; if we lose, it means we are a Peon.
  */
-class Elector {
+class Elector : public ElectionOwner {
   /**
    * @defgroup Elector_h_class Elector
    * @{
@@ -385,8 +345,8 @@ private:
    *
    * @param m A Monitor instance
    */
-  explicit Elector(Monitor *m) : logic(this),
-				 mon(m), elector(this) {}
+  explicit Elector(Monitor *m);
+  virtual ~Elector() {}
 
   /**
    * Initiate the Elector class.
