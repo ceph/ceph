@@ -80,6 +80,7 @@ int RGWServices_Def::init(CephContext *cct,
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
                     sync_modules.get());
   cls->init(zone.get(), rados.get());
+  datalog_rados->init(zone.get(), cls.get());
   mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
@@ -129,12 +130,18 @@ int RGWServices_Def::init(CephContext *cct,
       ldout(cct, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
       return r;
     }
-  }
 
-  r = sync_modules->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start sync modules service (" << cpp_strerror(-r) << dendl;
-    return r;
+    r = mdlog->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start mdlog service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+
+    r = sync_modules->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start sync modules service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   r = cls->start();
@@ -175,46 +182,42 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
-  r = datalog_rados->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+  if (!raw) {
+    r = datalog_rados->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
-  r = mdlog->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start mdlog service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+    r = meta_be_sobj->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start meta_be_sobj service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
-  r = meta_be_sobj->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start meta_be_sobj service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+    r = meta->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start meta service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
-  r = meta->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start meta service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+    r = bucket_sobj->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
-  r = bucket_sobj->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+    r = user_rados->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start user_rados service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
 
-  r = user_rados->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start user_rados service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  r = otp->start();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
-    return r;
+    r = otp->start();
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
+      return r;
+    }
   }
 
   /* cache or core services will be started by sysobj */
