@@ -170,22 +170,22 @@ def humansize(nbytes):
     return '%s%s' % (f, suffixes[i])
 
 
-def print_long(file_name, is_dir, human_readable):
-    if not isinstance(file_name, bytes):
-        file_name = to_bytes(file_name)
-    info = cephfs.stat(file_name)
-    file_name = os.path.basename(file_name.decode('utf-8'))
+def print_long(path, is_dir, human_readable):
+    if not isinstance(path, bytes):
+        path = to_bytes(path)
+    info = cephfs.stat(path)
+    pretty = os.path.basename(path.decode('utf-8'))
     if is_dir:
-        file_name = colorama.Style.BRIGHT + colorama.Fore.CYAN + file_name + '/' + colorama.Style.RESET_ALL
+        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/' + colorama.Style.RESET_ALL
     if human_readable:
         poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
             humansize(info.st_size), info.st_uid,
-            info.st_gid, info.st_mtime, file_name, sep='\t'))
+            info.st_gid, info.st_mtime, pretty, sep='\t'))
     else:
         poutput('{} {:12d} {} {} {} {}'.format(
             mode_notation(info.st_mode), info.st_size, info.st_uid,
-            info.st_gid, info.st_mtime, file_name, sep='\t'))
+            info.st_gid, info.st_mtime, pretty, sep='\t'))
 
 
 def word_len(word):
@@ -255,7 +255,7 @@ def copy_from_local(local_path, remote_path):
             return
         stdin = 1
     try:
-        fd = cephfs.open(to_bytes(remote_path), 'w', 0o666)
+        fd = cephfs.open(remote_path, 'w', 0o666)
     except libcephfs.Error:
         poutput("error: no permission to write remote file %s" % remote_path)
         return
@@ -286,7 +286,7 @@ def copy_to_local(remote_path, local_path):
         if len(dir_list) > 2 and dir_list[1] == '':
             return
         fd = open(local_path, 'wb+')
-    file_ = cephfs.open(to_bytes(remote_path), 'r')
+    file_ = cephfs.open(remote_path, 'r')
     file_size = cephfs.stat(remote_path).st_size
     if file_size <= 0:
         return
@@ -493,9 +493,7 @@ exists.')
         """
         Create directory.
         """
-        for dir_name in args.dirs:
-            path = to_bytes(dir_name)
-
+        for path in args.dirs:
             if args.mode:
                 permission = int(args.mode, 8)
             else:
@@ -581,13 +579,13 @@ exists.')
                 if args.force and dst_dir != '/' and not is_dir_exists(
                         dst_dir[:-1]) and not locate_file(dst_dir):
                     try:
-                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                        cephfs.mkdirs(dst_dir, 0o777)
                     except libcephfs.Error:
                         pass
                 if (not args.force) and dst_dir != '/' and not is_dir_exists(
                         dst_dir) and not os.path.isfile(root_src_dir):
                     try:
-                        cephfs.mkdirs(to_bytes(dst_dir), 0o777)
+                        cephfs.mkdirs(dst_dir, 0o777)
                     except libcephfs.Error:
                         pass
 
@@ -595,7 +593,7 @@ exists.')
                     dir_name = os.path.join(dst_dir, dir_)
                     if not is_dir_exists(dir_name):
                         try:
-                            cephfs.mkdirs(to_bytes(dir_name), 0o777)
+                            cephfs.mkdirs(dir_name, 0o777)
                         except libcephfs.Error:
                             pass
 
@@ -740,8 +738,8 @@ exists.')
                 items = [i for i in items if not i.d_name.startswith(b'.')]
 
             if args.S:
-                items = sorted(items, key=lambda item: cephfs.stat(to_bytes(
-                    dir_name + '/' + item.d_name.decode('utf-8'))).st_size)
+                items = sorted(items, key=lambda item: cephfs.stat(
+                    dir_name + '/' + item.d_name.decode('utf-8')).st_size)
 
             if args.reverse:
                 items = reversed(items)
@@ -823,12 +821,12 @@ sub-directories, files')
                     path = os.path.normpath(path)
                     if path[1:] != dir_path:
                         try:
-                            cephfs.rmdir(to_bytes(path))
+                            cephfs.rmdir(path)
                         except libcephfs.Error:
-                            cephfs.unlink(to_bytes(path))
+                            cephfs.unlink(path)
             if not is_pattern and dir_path != os.path.normpath(path):
                 try:
-                    cephfs.rmdir(to_bytes(dir_path))
+                    cephfs.rmdir(dir_path)
                 except libcephfs.Error:
                     self.poutput('error: no such directory "%s"' % dir_path)
 
@@ -853,7 +851,7 @@ sub-directories, files')
                     file_path) if is_file_exists(i)])
             else:
                 try:
-                    cephfs.unlink(to_bytes(file_path))
+                    cephfs.unlink(file_path)
                 except libcephfs.Error:
                     self.poutput('%s: no such file' % file_path)
 
@@ -874,7 +872,7 @@ sub-directories, files')
         Rename a file or Move a file from source path to the destination
         """
         try:
-            cephfs.rename(to_bytes(args.src_path), to_bytes(args.dest_path))
+            cephfs.rename(args.src_path, args.dest_path)
         except libcephfs.Error:
             self.poutput("error: need a file name to move to")
 
@@ -898,12 +896,12 @@ sub-directories, files')
         if args.dir_name == '..':
             dir_name = cephfs.getcwd().decode('utf-8').rsplit('/', 1)[0]
             if dir_name != '':
-                cephfs.chdir(to_bytes(dir_name))
+                cephfs.chdir(dir_name)
             else:
                 cephfs.chdir(b'/')
         else:
             try:
-                cephfs.chdir(to_bytes(args.dir_name))
+                cephfs.chdir(args.dir_name)
             except libcephfs.Error:
                 self.poutput("%s: no such directory" % args.dir_name)
         self.working_dir = cephfs.getcwd().decode('utf-8')
@@ -1161,12 +1159,12 @@ sub-directories, files')
             if args.max_bytes >= 0:
                 max_bytes = to_bytes(str(args.max_bytes))
                 try:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                    cephfs.setxattr(args.dir, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_CREATE)
                     self.poutput('max_bytes set to %d' % args.max_bytes)
                 except libcephfs.Error:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_bytes',
+                    cephfs.setxattr(args.dir, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
                     self.poutput('max_bytes reset to %d' % args.max_bytes)
@@ -1174,12 +1172,12 @@ sub-directories, files')
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
                 try:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                    cephfs.setxattr(args.dir, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_CREATE)
                     self.poutput('max_files set to %d' % args.max_files)
                 except libcephfs.Error:
-                    cephfs.setxattr(to_bytes(args.dir), 'ceph.quota.max_files',
+                    cephfs.setxattr(args.dir, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
                     self.poutput('max_files reset to %d' % args.max_files)
@@ -1187,7 +1185,7 @@ sub-directories, files')
             max_bytes = '0'
             max_files = '0'
             try:
-                max_bytes = cephfs.getxattr(to_bytes(args.dir),
+                max_bytes = cephfs.getxattr(args.dir,
                                             'ceph.quota.max_bytes')
                 self.poutput('max_bytes: %s' % max_bytes)
             except libcephfs.Error:
@@ -1195,7 +1193,7 @@ sub-directories, files')
                 pass
 
             try:
-                max_files = cephfs.getxattr(to_bytes(args.dir),
+                max_files = cephfs.getxattr(args.dir,
                                             'ceph.quota.max_files')
                 self.poutput('max_files: %s' % max_files)
             except libcephfs.Error:
