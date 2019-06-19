@@ -691,8 +691,14 @@ int main(int argc, char **argv)
     for (auto& s :  devs_source) {
       auto i = cur_devs_map.find(s);
       if (i != cur_devs_map.end()) {
-	src_devs.emplace(*i);
-	src_dev_ids.emplace(i->second);
+        if (s == dev_target) {
+	  cerr << "Device " << dev_target
+	       << " is present in both source and target lists, omitted."
+	       << std::endl;
+        } else {
+	  src_devs.emplace(*i);
+	  src_dev_ids.emplace(i->second);
+	}
       } else {
 	cerr << "can't migrate " << s << ", not a valid bluefs volume "
 	      << std::endl;
