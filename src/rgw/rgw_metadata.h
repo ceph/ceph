@@ -236,6 +236,12 @@ public:
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f);
 
+  int mutate(const string& metadata_key,
+	     const ceph::real_time& mtime,
+	     RGWObjVersionTracker *objv_tracker,
+	     RGWMDLogStatus op_type,
+	     std::function<int()> f);
+
   int list_keys_init(const string& section, void **phandle);
   int list_keys_init(const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
