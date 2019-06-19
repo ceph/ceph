@@ -67,21 +67,21 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
-int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
-                              const string& key,
-                              const ceph::real_time& mtime,
-                              RGWObjVersionTracker *objv_tracker,
-                              RGWMDLogStatus op_type,
-                              std::function<int()> f,
-                              bool generic_prepare,
-                              optional_yield y)
+int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
+				 const string& key,
+				 const ceph::real_time& mtime,
+				 RGWObjVersionTracker *objv_tracker,
+				 RGWMDLogStatus op_type,
+				 std::function<int()> f,
+				 bool generic_prepare,
+                                 optional_yield y)
 {
   int ret;
 
   if (generic_prepare) {
     ret = prepare_mutate(ctx, key, mtime, objv_tracker, y);
     if (ret < 0 ||
-        ret == STATUS_NO_APPLY) {
+	ret == STATUS_NO_APPLY) {
       return ret;
     }
   }
@@ -104,25 +104,25 @@ int RGWSI_MetaBackend::mutate(RGWSI_MetaBackend::Context *ctx,
 }
 
 int RGWSI_MetaBackend::get(Context *ctx,
-                           const string& key,
-                           GetParams& params,
-                           RGWObjVersionTracker *objv_tracker,
+			   const string& key,
+			   GetParams& params,
+			   RGWObjVersionTracker *objv_tracker,
                            optional_yield y)
 {
   return get_entry(ctx, key, params, objv_tracker, y);
 }
 
 int RGWSI_MetaBackend::put(Context *ctx,
-                           const string& key,
-                           PutParams& params,
-                           RGWObjVersionTracker *objv_tracker,
+			   const string& key,
+			   PutParams& params,
+			   RGWObjVersionTracker *objv_tracker,
                            optional_yield y)
 {
   std::function<int()> f = [&]() {
     return put_entry(ctx, key, params, objv_tracker, y);
   };
 
-  return mutate(ctx, key, params.mtime, objv_tracker,
+  return do_mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_WRITE,
                 f,
                 false,
@@ -139,13 +139,24 @@ int RGWSI_MetaBackend::remove(Context *ctx,
     return remove_entry(ctx, key, params, objv_tracker, y);
   };
 
-  return mutate(ctx, key, params.mtime, objv_tracker,
+  return do_mutate(ctx, key, params.mtime, objv_tracker,
                 MDLOG_STATUS_REMOVE,
                 f,
                 false,
                 y);
 }
 
+int RGWSI_MetaBackend::mutate(Context *ctx,
+			      const std::string& key,
+			      MutateParams& params,
+			      RGWObjVersionTracker *objv_tracker,
+			      std::function<int()> f)
+{
+  return do_mutate(ctx, key, params.mtime, objv_tracker,
+		   params.op_type,
+		   f,
+		   false);
+}
 
 int RGWSI_MetaBackend_Handler::call(std::function<int(Op *)> f)
 {
