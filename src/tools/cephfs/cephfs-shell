@@ -479,7 +479,8 @@ exists.')
         Create directory.
         """
         for dir_name in args.dirs:
-            path = to_bytes('/' + dir_name)
+            path = to_bytes(dir_name)
+
             if args.mode:
                 permission = int(args.mode, 8)
             else:
