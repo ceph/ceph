@@ -1187,7 +1187,11 @@ inline namespace v14_2_0 {
 
     reserve_t obtain_contiguous_space(unsigned len);
 
+    // appends static, zero-filled bufferptrs. This method is unsuitable
+    // when bufferptr contents change. Caller is OBLIGED to ensure this
+    // restriction.
     void append_zero_static(unsigned len);
+    // as above, but it also pre-conditions the crc cache for that bufferptr
     void append_zero_static_precalc_crc(unsigned len, unsigned crc);
     
     /*
