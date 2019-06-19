@@ -134,9 +134,13 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                 return orchestrator.TrivialReadCompletion(
                     orchestrator.InventoryNode.from_nested_items(self.inventory_cache.items()))
             elif node_filter.labels is None:
-                return orchestrator.TrivialReadCompletion(
-                    orchestrator.InventoryNode.from_nested_items(
-                        self.inventory_cache.items_filtered(node_filter.nodes)))
+                try:
+                    return orchestrator.TrivialReadCompletion(
+                        orchestrator.InventoryNode.from_nested_items(
+                            self.inventory_cache.items_filtered(node_filter.nodes)))
+                except KeyError:
+                    # items_filtered() will raise KeyError if passed a node name that doesn't exist
+                    return orchestrator.TrivialReadCompletion([])
 
         def process_result(event_data):
             result = []
@@ -185,13 +189,17 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.service_cache.remove_outdated()
         if not self.service_cache.any_outdated() and not refresh:
             # Let's hope the services are complete.
-            node_filter = [node_name] if node_name else None
-            services_by_node = [d[1].data for d in self.service_cache.items_filtered(node_filter)]
-            services = [orchestrator.ServiceDescription.from_json(s) for services in services_by_node for s in services]
-            services = [s for s in services if
-                        (True if service_type is None else s.service_type == service_type) and
-                        (True if service_id is None else s.service_instance == service_id)]
-            return orchestrator.TrivialReadCompletion(services)
+            try:
+                node_filter = [node_name] if node_name else None
+                services_by_node = [d[1].data for d in self.service_cache.items_filtered(node_filter)]
+                services = [orchestrator.ServiceDescription.from_json(s) for services in services_by_node for s in services]
+                services = [s for s in services if
+                            (True if service_type is None else s.service_type == service_type) and
+                            (True if service_id is None else s.service_instance == service_id)]
+                return orchestrator.TrivialReadCompletion(services)
+            except KeyError:
+                # items_filtered() will raise KeyError if passed a node name that doesn't exist
+                return orchestrator.TrivialReadCompletion([])
 
         def process_result(event_data):
             result = []
