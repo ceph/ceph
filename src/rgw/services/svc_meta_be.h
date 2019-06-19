@@ -45,7 +45,7 @@ protected:
                      const ceph::real_time& mtime,
                      RGWObjVersionTracker *objv_tracker);
 
-  virtual int mutate(Context *ctx,
+  virtual int do_mutate(Context *ctx,
                      const std::string& key,
                      const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
                      RGWMDLogStatus op_type,
@@ -106,6 +106,16 @@ public:
     ceph::real_time mtime;
   };
 
+  struct MutateParams {
+    ceph::real_time mtime;
+    RGWMDLogStatus op_type;
+
+    MutateParams() {}
+    MutateParams(const ceph::real_time& _mtime,
+		 RGWMDLogStatus _op_type) : mtime(_mtime), op_type(_op_type) {}
+    virtual ~MutateParams() {}
+  };
+
   enum Type {
     MDBE_SOBJ = 0,
     MDBE_OTP  = 1,
@@ -162,6 +172,11 @@ public:
                      RemoveParams& params,
                      RGWObjVersionTracker *objv_tracker);
 
+  virtual int mutate(Context *ctx,
+                     const std::string& key,
+                     MutateParams& params,
+		     RGWObjVersionTracker *objv_tracker,
+                     std::function<int()> f);
 };
 
 class RGWSI_MetaBackend_Handler {
@@ -198,6 +213,13 @@ public:
                RGWSI_MetaBackend::RemoveParams& params,
                RGWObjVersionTracker *objv_tracker) {
       return be->remove(be_ctx, key, params, objv_tracker);
+    }
+
+    int mutate(const std::string& key,
+	       RGWSI_MetaBackend::MutateParams& params,
+	       RGWObjVersionTracker *objv_tracker,
+	       std::function<int()> f) {
+      return be->mutate(be_ctx, key, params, objv_tracker, f);
     }
 
     int list_init(const string& marker) {
