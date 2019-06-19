@@ -27,9 +27,9 @@ def to_bytes(param):
     Helper method that returns byte representation of the given parameter.
     '''
     if isinstance(param, str):
-        return param.encode()
+        return param.encode('utf-8')
     else:
-        return str(param).encode()
+        return str(param).encode('utf-8')
 
 class RadosError(Exception):
     """
