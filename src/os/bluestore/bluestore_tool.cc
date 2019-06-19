@@ -733,7 +733,7 @@ int main(int argc, char **argv)
 	     << cpp_strerror(r)
 	     << std::endl;
       }
-      ceph_assert(r == 0);
+      return r;
     } else {
       // Migrate to a new BlueFS volume
       // via creating either DB or WAL volume
