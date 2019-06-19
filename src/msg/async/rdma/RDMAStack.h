@@ -228,7 +228,6 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   virtual void shutdown() override;
   virtual void close() override;
   virtual int fd() const override { return notify_fd; }
-  virtual int socket_fd() const override { return tcp_fd; }
   void fault();
   const char* get_qp_state() { return Infiniband::qp_state_string(qp->get_state()); }
   ssize_t submit(bool more);
@@ -325,7 +324,6 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
   virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   virtual void abort_accept() override;
   virtual int fd() const override { return server_setup_socket; }
-  int get_fd() { return server_setup_socket; }
 };
 
 class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
