@@ -72,6 +72,12 @@ public:
   virtual int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
   virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
+  virtual int mutate(const string& entry,
+		     const ceph::real_time& mtime,
+		     RGWObjVersionTracker *objv_tracker,
+		     RGWMDLogStatus op_type,
+		     std::function<int()> f) = 0;
+
   virtual int list_keys_init(const string& marker, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
@@ -154,6 +160,12 @@ public:
   int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) override;
   int remove(string& entry, RGWObjVersionTracker& objv_tracker) override;
 
+  int mutate(const string& entry,
+	     const ceph::real_time& mtime,
+	     RGWObjVersionTracker *objv_tracker,
+	     RGWMDLogStatus op_type,
+	     std::function<int()> f) override;
+
   int get_shard_id(const string& entry, int *shard_id) override;
 
   int list_keys_init(const std::string& marker, void **phandle) override;
@@ -217,6 +229,12 @@ public:
           RGWMDLogSyncType sync_mode,
           obj_version *existing_version = NULL);
   int remove(string& metadata_key, optional_yield y);
+
+  int mutate(const string& metadata_key,
+	     const ceph::real_time& mtime,
+	     RGWObjVersionTracker *objv_tracker,
+	     RGWMDLogStatus op_type,
+	     std::function<int()> f);
 
   int list_keys_init(const string& section, void **phandle);
   int list_keys_init(const string& section, const string& marker, void **phandle);
