@@ -877,7 +877,7 @@ class InventoryNode(object):
     @classmethod
     def from_nested_items(cls, hosts):
         devs = InventoryDevice.from_ceph_volume_inventory_list
-        return [cls(item[0], devs(item[1])) for item in hosts]
+        return [cls(item[0], devs(item[1].data)) for item in hosts]
 
 
 def _mk_orch_methods(cls):
@@ -1002,7 +1002,7 @@ class OutdatableData(object):
             timestr = None
 
         return {
-            "data": self.data,
+            "data": self._data,
             "last_refresh": timestr,
         }
 
@@ -1036,7 +1036,7 @@ class OutdatableData(object):
         return self.last_refresh < cutoff
 
     def __repr__(self):
-        return 'OutdatableData(data={}, last_refresh={})'.format(self.data, self.last_refresh)
+        return 'OutdatableData(data={}, last_refresh={})'.format(self._data, self.last_refresh)
 
 
 class OutdatableDictMixin(object):
@@ -1062,13 +1062,13 @@ class OutdatableDictMixin(object):
 
     def items_filtered(self, keys=None):
         if keys:
-            return [(host, self[keys]) for host in keys]
+            return [(host, self[host]) for host in keys]
         else:
             return list(self.items())
 
     def any_outdated(self, timeout=None):
         items = self.items()
-        if not items:
+        if not list(items):
             return True
         return any([i[1].outdated(timeout) for i in items])
 
