@@ -21,8 +21,8 @@ Linux Kernel
   For RBD, if you choose to *track* long-term kernels, we currently recommend
   4.x-based "longterm maintenance" kernel series:
 
+  - 4.19.z
   - 4.14.z
-  - 4.9.z
 
   For CephFS, see `CephFS best practices`_ for kernel version guidance.
 
@@ -38,6 +38,31 @@ The charts below show how Ceph's requirements map onto various Linux
 platforms.  Generally speaking, there is very little dependence on
 specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
+
+Nautilus (14.2.z)
+-----------------
+
++----------+----------+--------------------+--------------+---------+------------+
+| Distro   | Release  | Code Name          | Kernel       | Notes   | Testing    |
++==========+==========+====================+==============+=========+============+
+| CentOS   | 7        | N/A                | linux-3.10.0 | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 8.0      | Jessie             | linux-3.16.0 | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Debian   | 9.0      | Stretch            | linux-4.9    | 1, 2    | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| RHEL     | 7        | Maipo              | linux-3.10.0 |         | B, I       |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 16.04    | Xenial Xerus       | linux-4.4.0  | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 18.04    | Bionic Beaver      | linux-4.15   | 3       | B, I, C    |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE | 15.1     | Leap               | linux-4.12   |         |            |
++----------+----------+--------------------+--------------+---------+------------+
+| openSUSE |          | Tumbleweed         | linux-5.1.7  |         |            |
++----------+----------+--------------------+--------------+---------+------------+
 
 Luminous (12.2.z)
 -----------------
