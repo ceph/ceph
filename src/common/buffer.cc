@@ -1569,10 +1569,10 @@ static ceph::spinlock debug_lock;
   {
     while (len) {
       const auto block_size = std::min<size_t>(len, sizeof(static_zeros));
-      ptr bp(buffer::create_static(block_size, static_zeros));
-      unsigned part_crc = ceph_crc32c_zeros(crc, block_size);
-      bp.get_raw()->set_crc(make_pair(0, block_size), make_pair(crc, part_crc));
-      append(std::move(bp));
+      const unsigned part_crc = ceph_crc32c_zeros(crc, block_size);
+      auto zero_raw = buffer::create_static(block_size, static_zeros);
+      zero_raw->set_crc(make_pair(0, block_size), make_pair(crc, part_crc));
+      push_back(std::move(zero_raw));
       len -= block_size;
     }
   }
