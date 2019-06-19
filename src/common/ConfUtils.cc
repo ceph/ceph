@@ -32,6 +32,7 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 #include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/trim_all.hpp>
 #include <boost/spirit/include/qi.hpp>
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/spirit/include/support_line_pos_iterator.hpp>
@@ -286,58 +287,6 @@ int ConfFile::read(const std::string& section_name,
   return -ENOENT;
 }
 
-void ConfFile::
-trim_whitespace(std::string &str, bool strip_internal)
-{
-  // strip preceding
-  const char *in = str.c_str();
-  while (true) {
-    char c = *in;
-    if ((!c) || (!isspace(c)))
-      break;
-    ++in;
-  }
-  char output[strlen(in) + 1];
-  strcpy(output, in);
-
-  // strip trailing
-  char *o = output + strlen(output);
-  while (true) {
-    if (o == output)
-      break;
-    --o;
-    if (!isspace(*o)) {
-      ++o;
-      *o = '\0';
-      break;
-    }
-  }
-
-  if (!strip_internal) {
-    str.assign(output);
-    return;
-  }
-
-  // strip internal
-  char output2[strlen(output) + 1];
-  char *out2 = output2;
-  bool prev_was_space = false;
-  for (char *u = output; *u; ++u) {
-    char c = *u;
-    if (isspace(c)) {
-      if (!prev_was_space)
-	*out2++ = c;
-      prev_was_space = true;
-    }
-    else {
-      *out2++ = c;
-      prev_was_space = false;
-    }
-  }
-  *out2++ = '\0';
-  str.assign(output2);
-}
-
 /* Normalize a key name.
  *
  * Normalized key names have no leading or trailing whitespace, and all
@@ -345,15 +294,10 @@ trim_whitespace(std::string &str, bool strip_internal)
  * normal form is so that in common/config.cc, we can use a macro to stringify
  * the field names of md_config_t and get a key in normal form.
  */
-std::string ConfFile::
-normalize_key_name(std::string_view key)
+std::string ConfFile::normalize_key_name(std::string_view key)
 {
   std::string k{key};
-  if (k.find_first_of(" \t\r\n\f\v\xa0") == k.npos) {
-    return k;
-  }
-  ConfFile::trim_whitespace(k, true);
-  std::replace(k.begin(), k.end(), ' ', '_');
+  boost::algorithm::trim_fill_if(k, "_", isspace);
   return k;
 }
 

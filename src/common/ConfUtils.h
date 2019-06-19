@@ -72,7 +72,6 @@ public:
   int parse_bufferlist(ceph::bufferlist *bl, std::ostream *warnings);
   int read(const std::string& section, std::string_view key,
 	   std::string &val) const;
-  static void trim_whitespace(std::string &str, bool strip_internal);
   static std::string normalize_key_name(std::string_view key);
 private:
   bool load_from_buffer(std::string_view buf, std::ostream* warning);
