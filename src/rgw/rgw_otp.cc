@@ -54,7 +54,7 @@ public:
 };
 
 
-class RGWOTPMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
+class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
   friend class RGWOTPCtl;
 
   struct Svc {
@@ -66,6 +66,7 @@ class RGWOTPMetadataHandler : public RGWMetadataHandler_GenericMetaBE {
   int init(RGWSI_Zone *zone,
            RGWSI_MetaBackend *_meta_be,
            RGWSI_OTP *_otp) {
+    base_init(zone->ctx(), _otp->get_be_handler().get());
     svc.zone = zone;
     svc.meta_be = _meta_be;
     svc.otp = _otp;

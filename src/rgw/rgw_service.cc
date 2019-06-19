@@ -343,6 +343,9 @@ int RGWCtlDef::init(RGWServices& svc)
   bucket_meta_handler->init(svc.bucket, bucket.get());
   bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
 
+  RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
+  otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
+
   user->init(bucket.get());
   bucket->init(user.get(),
                (RGWBucketMetadataHandler *)bucket_meta_handler,
