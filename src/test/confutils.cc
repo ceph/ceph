@@ -256,44 +256,6 @@ const char dup_key_config_1[] = "\
         log_file = 3\n\
 ";
 
-TEST(ConfUtils, Whitespace) {
-  std::string test0("");
-  ConfFile::trim_whitespace(test0, false);
-  ASSERT_EQ(test0, "");
-
-  std::string test0a("");
-  ConfFile::trim_whitespace(test0a, true);
-  ASSERT_EQ(test0a, "");
-
-  std::string test0b("          ");
-  ConfFile::trim_whitespace(test0b, false);
-  ASSERT_EQ(test0b, "");
-
-  std::string test0c("          ");
-  ConfFile::trim_whitespace(test0c, true);
-  ASSERT_EQ(test0c, "");
-
-  std::string test1(" abc             ");
-  ConfFile::trim_whitespace(test1, false);
-  ASSERT_EQ(test1, "abc");
-
-  std::string test2(" abc        d     ");
-  ConfFile::trim_whitespace(test2, true);
-  ASSERT_EQ(test2, "abc d");
-
-  std::string test3(" abc        d     ");
-  ConfFile::trim_whitespace(test3, false);
-  ASSERT_EQ(test3, "abc        d");
-
-  std::string test4("abcd");
-  ConfFile::trim_whitespace(test4, false);
-  ASSERT_EQ(test4, "abcd");
-
-  std::string test5("abcd");
-  ConfFile::trim_whitespace(test5, true);
-  ASSERT_EQ(test5, "abcd");
-}
-
 TEST(ConfUtils, ParseFiles0) {
   std::string val;
 
