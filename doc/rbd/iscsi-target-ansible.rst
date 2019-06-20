@@ -43,7 +43,8 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 The ``ceph-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
 directory called ``iscsigws.yml.sample``. Create a copy of this sample file named
 ``iscsigws.yml``. Review the following Ansible variables and descriptions,
-and update accordingly.
+and update accordingly. See the ``iscsigws.yml.sample`` for a full list of
+advanced variables.
 
 +--------------------------------------+--------------------------------------+
 | Variable                             | Meaning/Purpose                      |
@@ -71,6 +72,26 @@ and update accordingly.
 |                                      | set to true for at least the first   |
 |                                      | run to ensure multipathd and lvm are |
 |                                      | configured properly.                 |
++--------------------------------------+--------------------------------------+
+| ``api_user``                         | The user name for the API. The       |
+|                                      | default is `admin`.                  |
++--------------------------------------+--------------------------------------+
+| ``api_password``                     | The password for using the API. The  |
+|                                      | default is `admin`.                  |
++--------------------------------------+--------------------------------------+
+| ``api_port``                         | The TCP port number for using the    |
+|                                      | API. The default is `5000`.          |
++--------------------------------------+--------------------------------------+
+| ``api_secure``                       | True if TLS must be used. The        |
+|                                      | default is `false`. If true the user |
+|                                      | must create the necessary            |
+|                                      | certificate and key files. See the   |
+|                                      | gwcli man file for details.          |
++--------------------------------------+--------------------------------------+
+| ``trusted_ip_list``                  | A list of IPv4 or IPv6 addresses     |
+|                                      | who have access to the API. By       |
+|                                      | default, only the iSCSI gateway      |
+|                                      | nodes have access.                   |
 +--------------------------------------+--------------------------------------+
 
 **Deploying:**
