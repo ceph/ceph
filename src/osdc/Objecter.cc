@@ -2943,9 +2943,16 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->pg_num = pg_num;
     t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
-    osdmap->get_primary_shard(
-      pg_t(ceph_stable_mod(pgid.ps(), t->pg_num, t->pg_num_mask), pgid.pool()),
-      &t->actual_pgid);
+    spg_t spgid(actual_pgid);
+    if (pi->is_erasure()) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
+        if (acting[i] == acting_primary) {
+          spgid.reset_shard(shard_id_t(i));
+          break;
+        }
+      }
+    }
+    t->actual_pgid = spgid;
     t->sort_bitwise = sort_bitwise;
     t->recovery_deletes = recovery_deletes;
     ldout(cct, 10) << __func__ << " "

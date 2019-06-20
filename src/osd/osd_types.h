@@ -539,6 +539,9 @@ struct spg_t {
   uint64_t pool() const {
     return pgid.pool();
   }
+  void reset_shard(shard_id_t s) {
+    shard = s;
+  }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
   char *calc_name(char *buf, const char *suffix_backwords) const;
