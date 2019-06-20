@@ -1109,9 +1109,14 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
-  std::list<Session*> victims;
+  bool prenautilus = mds->objecter->with_osdmap(
+      [&](const OSDMap& o) {
+	return o.require_osd_release < CEPH_RELEASE_NAUTILUS;
+      });
+
+  std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
-  for (const auto& p : sessions)  {
+  for (const auto& p : sessions) {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
@@ -1119,8 +1124,19 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     }
 
     Session *s = p.second;
-    if (blacklist.count(s->info.inst.addr)) {
+    auto inst_addr = s->info.inst.addr;
+    // blacklist entries are always TYPE_ANY for nautilus+
+    inst_addr.set_type(entity_addr_t::TYPE_ANY);
+    if (blacklist.count(inst_addr)) {
       victims.push_back(s);
+      continue;
+    }
+    if (prenautilus) {
+      // ...except pre-nautilus, they were TYPE_LEGACY
+      inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
+      if (blacklist.count(inst_addr)) {
+	victims.push_back(s);
+      }
     }
   }
 
@@ -1942,7 +1958,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &re
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
-    if (client_inst.name.is_client()) {
+    if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
     perf_gather_op_latency(req, lat);
@@ -1958,7 +1974,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &re
   mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
-  if (!(client_inst.name.is_mds() || !session)) {
+  if (session && !client_inst.name.is_mds()) {
     // send reply.
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) {
