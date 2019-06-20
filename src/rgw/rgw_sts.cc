@@ -277,7 +277,7 @@ int STSService::storeARN(string& arn)
   info.assumed_role_arn = arn;
 
   RGWObjVersionTracker objv_tracker;
-  if (rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
+  if (ret = rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
           false); ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
