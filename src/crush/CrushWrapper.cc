@@ -408,9 +408,11 @@ void CrushWrapper::update_choose_args(CephContext *cct)
 {
   for (auto& i : choose_args) {
     crush_choose_arg_map &arg_map = i.second;
+    assert(arg_map.size == (unsigned)crush->max_buckets);
     unsigned positions = get_choose_args_positions(arg_map);
     for (int j = 0; j < crush->max_buckets; ++j) {
       crush_bucket *b = crush->buckets[j];
+      assert(j < (int)arg_map.size);
       auto& carg = arg_map.args[j];
       // strip out choose_args for any buckets that no longer exist
       if (!b || b->alg != CRUSH_BUCKET_STRAW2) {
@@ -2344,21 +2346,22 @@ int CrushWrapper::add_bucket(
   int pos = -1 - *idout;
   for (auto& p : choose_args) {
     crush_choose_arg_map& cmap = p.second;
+    unsigned new_size = crush->max_buckets;
     if (cmap.args) {
-      if ((int)cmap.size <= pos) {
+      if ((int)cmap.size < crush->max_buckets) {
 	cmap.args = (crush_choose_arg*)realloc(
 	  cmap.args,
-	  sizeof(crush_choose_arg) * (pos + 1));
+	  sizeof(crush_choose_arg) * new_size);
         assert(cmap.args);
 	memset(&cmap.args[cmap.size], 0,
-	       sizeof(crush_choose_arg) * (pos + 1 - cmap.size));
-	cmap.size = pos + 1;
+	       sizeof(crush_choose_arg) * (new_size - cmap.size));
+	cmap.size = new_size;
       }
     } else {
       cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					    pos + 1);
+							new_size);
       assert(cmap.args);
-      cmap.size = pos + 1;
+      cmap.size = new_size;
     }
     if (size > 0) {
       int positions = get_choose_args_positions(cmap);
@@ -2374,6 +2377,7 @@ int CrushWrapper::add_bucket(
 	}
       }
     }
+    assert(crush->max_buckets == (int)cmap.size);
   }
   return r;
 }
@@ -2607,8 +2611,8 @@ int CrushWrapper::device_class_clone(
   // set up choose_args for the new bucket.
   for (auto& w : choose_args) {
     crush_choose_arg_map& cmap = w.second;
-    if (-1-bno >= (int)cmap.size) {
-      unsigned new_size = -1-bno + 1;
+    if (crush->max_buckets > (int)cmap.size) {
+      unsigned new_size = crush->max_buckets;
       cmap.args = (crush_choose_arg*)realloc(cmap.args,
 					     new_size * sizeof(cmap.args[0]));
       assert(cmap.args);
