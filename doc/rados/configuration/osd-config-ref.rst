@@ -915,8 +915,29 @@ perform well in a degraded state.
               requests will accelerate recovery, but the requests places an
               increased load on the cluster.
 
+	      This value is only used if it is non-zero. Normally it
+	      is ``0``, which means that the ``hdd`` or ``ssd`` values
+	      (below) are used, depending on the type of the primary
+	      device backing the OSD.
+
+:Type: 32-bit Integer
+:Default: ``0``
+
+``osd recovery max active hdd``
+
+:Description: The number of active recovery requests per OSD at one time, if the
+	      primary device is rotational.
+
 :Type: 32-bit Integer
 :Default: ``3``
+
+``osd recovery max active ssd``
+
+:Description: The number of active recovery requests per OSD at one time, if the
+	      priary device is non-rotational (i.e., an SSD).
+
+:Type: 32-bit Integer
+:Default: ``10``
 
 
 ``osd recovery max chunk``
