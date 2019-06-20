@@ -264,8 +264,8 @@ class LocalRemote(object):
         # the desired effect.
         errmsg = 'The entire command to executed as other user should be a ' +\
                  'single argument.\nargs - %s' % (args)
-        if ('sudo' in args or 'python' in args or 'python2' in args or
-           'python3' in args) and '-c' in args:
+        if 'sudo' in args and '-u' in args and '-c' in args and \
+           args.count('-c') == 1:
             if args.index('-c') != len(args) - 2 and \
                args[args.index('-c') + 2].find('-') == -1:
                 raise RuntimeError(errmsg)
