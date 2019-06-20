@@ -3646,6 +3646,49 @@ void Client::_flushed_cap_snap(Inode *in, snapid_t seq)
   flush_snaps(in);
 }
 
+void Client::send_flush_snap(Inode *in, MetaSession *session,
+			     snapid_t follows, CapSnap& capsnap)
+{
+  MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP,
+				   in->ino, in->snaprealm->ino, 0,
+				   in->auth_cap->mseq, cap_epoch_barrier);
+  m->caller_uid = capsnap.cap_dirtier_uid;
+  m->caller_gid = capsnap.cap_dirtier_gid;
+
+  m->set_client_tid(capsnap.flush_tid);
+  m->head.snap_follows = follows;
+
+  m->head.caps = capsnap.issued;
+  m->head.dirty = capsnap.dirty;
+
+  m->head.uid = capsnap.uid;
+  m->head.gid = capsnap.gid;
+  m->head.mode = capsnap.mode;
+  m->btime = capsnap.btime;
+
+  m->size = capsnap.size;
+
+  m->head.xattr_version = capsnap.xattr_version;
+  encode(capsnap.xattrs, m->xattrbl);
+
+  m->ctime = capsnap.ctime;
+  m->btime = capsnap.btime;
+  m->mtime = capsnap.mtime;
+  m->atime = capsnap.atime;
+  m->time_warp_seq = capsnap.time_warp_seq;
+  m->change_attr = capsnap.change_attr;
+
+  if (capsnap.dirty & CEPH_CAP_FILE_WR) {
+    m->inline_version = in->inline_version;
+    m->inline_data = in->inline_data;
+  }
+
+  ceph_assert(!session->flushing_caps_tids.empty());
+  m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
+
+  session->con->send_message(m);
+}
+
 void Client::flush_snaps(Inode *in, bool all_again)
 {
   ldout(cct, 10) << "flush_snaps on " << *in << " all_again " << all_again << dendl;
@@ -3654,7 +3697,6 @@ void Client::flush_snaps(Inode *in, bool all_again)
   // pick auth mds
   assert(in->auth_cap);
   MetaSession *session = in->auth_cap->session;
-  int mseq = in->auth_cap->mseq;
 
   for (auto &p : in->cap_snaps) {
     CapSnap &capsnap = p.second;
@@ -3681,47 +3723,9 @@ void Client::flush_snaps(Inode *in, bool all_again)
       session->flushing_caps_tids.insert(capsnap.flush_tid);
     }
 
-    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
-				     cap_epoch_barrier);
-    m->caller_uid = capsnap.cap_dirtier_uid;
-    m->caller_gid = capsnap.cap_dirtier_gid;
-
-    m->set_client_tid(capsnap.flush_tid);
-    m->head.snap_follows = p.first;
-
-    m->head.caps = capsnap.issued;
-    m->head.dirty = capsnap.dirty;
-
-    m->head.uid = capsnap.uid;
-    m->head.gid = capsnap.gid;
-    m->head.mode = capsnap.mode;
-    m->btime = capsnap.btime;
-
-    m->size = capsnap.size;
-
-    m->head.xattr_version = capsnap.xattr_version;
-    encode(capsnap.xattrs, m->xattrbl);
-
-    m->ctime = capsnap.ctime;
-    m->btime = capsnap.btime;
-    m->mtime = capsnap.mtime;
-    m->atime = capsnap.atime;
-    m->time_warp_seq = capsnap.time_warp_seq;
-    m->change_attr = capsnap.change_attr;
-
-    if (capsnap.dirty & CEPH_CAP_FILE_WR) {
-      m->inline_version = in->inline_version;
-      m->inline_data = in->inline_data;
-    }
-
-    assert(!session->flushing_caps_tids.empty());
-    m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
-
-    session->con->send_message(m);
+    send_flush_snap(in, session, p.first, capsnap);
   }
 }
-
-
 
 void Client::wait_on_list(list<Cond*>& ls)
 {

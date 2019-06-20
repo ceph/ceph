@@ -654,9 +654,11 @@ protected:
   void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
+
   void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
+  void send_flush_snap(Inode *in, MetaSession *session, snapid_t follows, CapSnap& capsnap);
 
   /* Flags for check_caps() */
 #define CHECK_CAPS_NODELAY	(0x1)
