@@ -1408,6 +1408,12 @@ int cls_cxx_truncate(cls_method_context_t hctx, int ofs) {
   return ctx->io_ctx_impl->truncate(ctx->oid, ofs, ctx->snapc);
 }
 
+int cls_cxx_write_zero(cls_method_context_t hctx, int ofs, int len) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->zero(ctx->oid, len, ofs, ctx->snapc);
+}
+
 int cls_cxx_list_watchers(cls_method_context_t hctx,
 			  obj_list_watch_response_t *watchers) {
   librados::TestClassHandler::MethodContext *ctx =
