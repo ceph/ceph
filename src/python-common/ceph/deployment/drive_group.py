@@ -16,19 +16,26 @@ class DeviceSelection(object):
     specification structure.
     """
 
-    def __init__(self, paths=None, id_model=None, size=None, rotates=None, count=None):
-        # type: (List[str], str, str, bool, int) -> None
+    def __init__(self,
+                 paths=None,  # type: Optional[List[str]]
+                 id_model=None,  # type: Optional[str]
+                 size=None,  # type: Optional[str]
+                 rotates=None,  # type: Optional[bool]
+                 count=None,  # type: Optional[int]
+                 vendor=None,  # type: Optional[str]
+                 all_devices=False  # type: bool
+                 ):
         """
         ephemeral drive group device specification
         """
-        if paths is None:
-            paths = []
-
         #: List of absolute paths to the devices.
-        self.paths = paths  # type: List[str]
+        self.paths = [] if paths is None else paths  # type: List[str]
 
         #: A wildcard string. e.g: "SDD*"
         self.id_model = id_model
+
+        #: Match on the VENDOR property of the drive
+        self.vendor = vendor
 
         #: Size specification of format LOW:HIGH.
         #: Can also take the the form :HIGH, LOW:
@@ -38,16 +45,27 @@ class DeviceSelection(object):
         #: is the drive rotating or not
         self.rotates = rotates
 
-        #: if this is present limit the number of drives to this number.
+        #: If this is present, limit the number of drives to this number.
         self.count = count
+
+        #: Matches all devices. Can only be used for
+        #: :ref:`ceph.deployment.drive_group.DriveGroupSpec.data_devices`
+        self.all_devices = all_devices
+
         self.validate()
 
     def validate(self):
-        props = [self.id_model, self.size, self.rotates, self.count]
+        props = [self.id_model, self.vendor, self.size, self.rotates, self.count]
         if self.paths and any(p is not None for p in props):
-            raise DriveGroupValidationError('DeviceSelection: `paths` and other parameters are mutually exclusive')
-        if not any(p is not None for p in [self.paths] + props):
+            raise DriveGroupValidationError(
+                'DeviceSelection: `paths` and other parameters are mutually exclusive')
+        is_empty = not any(p is not None for p in [self.paths] + props)
+        if not self.all_devices and is_empty:
             raise DriveGroupValidationError('DeviceSelection cannot be empty')
+
+        if self.all_devices and not is_empty:
+            raise DriveGroupValidationError(
+                'DeviceSelection `all_devices` and other parameters are mutually exclusive')
 
     @classmethod
     def from_json(cls, device_spec):
@@ -55,8 +73,14 @@ class DeviceSelection(object):
 
 
 class DriveGroupValidationError(Exception):
+    """
+    Defining an exception here is a bit problematic, cause you cannot properly catch it,
+    if it was raised in a different mgr module.
+    """
+
     def __init__(self, msg):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
+
 
 class DriveGroupSpec(object):
     """
@@ -77,6 +101,8 @@ class DriveGroupSpec(object):
                  db_slots=None,  # type: Optional[int]
                  wal_slots=None,  # type: Optional[int]
                  osd_id_claims=None,  # type: Optional[Dict[str, DeviceSelection]]
+                 block_db_size=None,  # type: Optional[int]
+                 block_wal_size=None,  # type: Optional[int]
                  ):
 
         # concept of applying a drive group to a (set) of hosts is tightly
@@ -96,6 +122,12 @@ class DriveGroupSpec(object):
 
         #: A :class:`orchestrator.DeviceSelection`
         self.journal_devices = journal_devices
+
+        #: Set (or override) the "bluestore_block_wal_size" value, in bytes
+        self.block_wal_size = block_wal_size
+
+        #: Set (or override) the "bluestore_block_db_size" value, in bytes
+        self.block_db_size = block_db_size
 
         #: Number of osd daemons per "DATA" device.
         #: To fully utilize nvme devices multiple osds are required.
@@ -122,7 +154,8 @@ class DriveGroupSpec(object):
         self.osd_id_claims = osd_id_claims
 
     @classmethod
-    def from_json(self, json_drive_group):
+    def from_json(cls, json_drive_group):
+        # type: (dict) -> DriveGroupSpec
         """
         Initialize 'Drive group' structure
 
@@ -143,6 +176,10 @@ class DriveGroupSpec(object):
         specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
         for s in filter(None, specs):
             s.validate()
+        for s in filter(None, [self.db_devices, self.wal_devices, self.journal_devices]):
+            if s.all_devices:
+                raise DriveGroupValidationError("`all_devices` is only allowed for data_devices")
+
         if self.objectstore not in ('filestore', 'bluestore'):
             raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
         if not self.hosts(all_hosts):
