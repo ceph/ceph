@@ -671,7 +671,7 @@ public:
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
 
-  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
+  void send_cap(Inode *in, MetaSession *session, Cap *cap, int flags,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
 
