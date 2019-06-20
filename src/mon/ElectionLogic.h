@@ -34,35 +34,37 @@ public:
   virtual void _start() = 0;
   virtual void _defer_to(int who) = 0;
   virtual void message_victory(const set<int>& quorum) = 0;
-  virtual bool is_current_member(int rank) = 0;
+  virtual bool is_current_member(int ) = 0;
   virtual ~ElectionOwner() {}
 };
 
 class ElectionLogic {
-public:
   ElectionOwner *elector;
   CephContext *cct;
   epoch_t epoch = 0;
+  int leader_acked;
+public:
   bool participating;
   bool electing_me;
   set<int> acked_me;
-  int leader_acked;
 
   ElectionLogic(ElectionOwner *e, CephContext *c) : elector(e), cct(c),
+						    leader_acked(-1),
 						    participating(true),
-						    electing_me(false), leader_acked(-1) {}
+						    electing_me(false) {}
   void declare_standalone_victory();
   void start();
-  void defer(int who);
   void end_election_period();
   void receive_propose(epoch_t mepoch, int from);
   void receive_ack(int from, epoch_t from_epoch);
   bool receive_victory_claim(int from, epoch_t from_epoch);
+  epoch_t get_epoch() { return epoch; }
 
   
 private:
   void init();
   void bump_epoch(epoch_t e);
+  void defer(int who);
   void declare_victory();
 };
 
