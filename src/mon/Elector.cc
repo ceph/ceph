@@ -92,7 +92,6 @@ void Elector::shutdown()
 
 void Elector::notify_bump_epoch()
 {
-  peer_info.clear();
   mon->join_election();
 }
 
@@ -168,7 +167,6 @@ void Elector::cancel_timer()
 
 void Elector::message_victory(const set<int>& quorum)
 {
-
   uint64_t cluster_features = CEPH_FEATURES_ALL;
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   map<int,Metadata> metadata;
