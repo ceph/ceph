@@ -146,7 +146,7 @@ On the Ansible installer node, perform the following steps.
    ::
 
        # cd /usr/share/ceph-ansible
-       # ansible-playbook iscsigws.yml
+       # ansible-playbook site.yml --limit iscsigws
 
    .. note::
     The Ansible playbook will handle RPM dependencies, RBD creation
@@ -264,7 +264,7 @@ change across the iSCSI gateway nodes.
 
 ::
 
-    # ansible-playbook iscsigws.yml
+    # ansible-playbook site.yml --limit iscsigws
 
 **Removing the Configuration:**
 
