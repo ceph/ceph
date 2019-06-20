@@ -36,7 +36,6 @@ class Elector : public ElectionOwner {
    * @defgroup Elector_h_class Elector
    * @{
    */
-  friend class ElectionLogic;
   ElectionLogic logic;
 
    /**
@@ -63,20 +62,7 @@ class Elector : public ElectionOwner {
   /**
    * The Monitor instance associated with this class.
    */
-  // FIXME!
-public:
   Monitor *mon;
-  void persist_epoch(epoch_t e);
-  epoch_t read_persisted_epoch();
-  void validate_store();
-  void trigger_new_election();
-  int get_my_rank();
-  void propose_to_peers(epoch_t e);
-  void reset_election();
-  bool ever_participated();
-  unsigned paxos_size();
-
-private:
 
   /**
    * Event callback responsible for dealing with an expired election once a
@@ -159,86 +145,6 @@ private:
    * @}
    */
  
-  /**
-   * Update our epoch.
-   *
-   * If we come across a higher epoch, we simply update ours, also making
-   * sure we are no longer being elected (even though we could have been,
-   * we no longer are since we no longer are on that old epoch).
-   *
-   * @pre Our epoch is lower than @p e
-   * @post Our epoch equals @p e
-   *
-   * @param e Epoch to which we will update our epoch
-   */
-  void notify_bump_epoch();
-
-  /**
-   * Start new elections by proposing ourselves as the new Leader.
-   *
-   * Basically, send propose messages to all the monitors in the MonMap and
-   * then reset the expire_event timer so we can limit the amount of time we 
-   * will be going at it.
-   *
-   * @pre   participating is true
-   * @post  epoch is an odd value
-   * @post  electing_me is true
-   * @post  we sent propose messages to all the monitors in the MonMap
-   * @post  we reset the expire_event timer
-   */
-  void _start();
-  /**
-   * Defer the current election to some other monitor.
-   *
-   * This means that we will ack some other monitor and drop out from the run
-   * to become the Leader. We will only defer an election if the monitor we
-   * are deferring to outranks us.
-   *
-   * @pre   @p who outranks us (i.e., who < our rank)
-   * @pre   @p who outranks any other monitor we have deferred to in the past
-   * @post  electing_me is false
-   * @post  leader_acked equals @p who
-   * @post  we sent an ack message to @p who
-   * @post  we reset the expire_event timer
-   *
-   * @param who Some other monitor's numeric identifier. 
-   */
-  void _defer_to(int who);
-  /**
-   * The election has taken too long and has expired.
-   *
-   * This will happen when no one declared victory or started a new election
-   * during the time span allowed by the expire_event timer.
-   *
-   * When the election expires, we will check if we were the ones who won, and
-   * if so we will declare victory. If that is not the case, then we assume
-   * that the one we deferred to didn't declare victory quickly enough (in fact,
-   * as far as we know, we may even be dead); so, just propose ourselves as the
-   * Leader.
-   */
-  //  void expire();
-  /**
-   * Declare Victory.
-   * 
-   * We won. Or at least we believe we won, but for all intentions and purposes
-   * that does not matter. What matters is that we Won.
-   *
-   * That said, we must now bump our epoch to reflect that the election is over
-   * and then we must let everybody in the quorum know we are their brand new
-   * Leader. And we will also cancel our expire_event timer.
-   *
-   * Actually, the quorum will be now defined as the group of monitors that
-   * acked us during the election process.
-   *
-   * @pre   Election is on-going
-   * @pre   electing_me is true
-   * @post  electing_me is false
-   * @post  epoch is bumped up into an even value
-   * @post  Election is not on-going
-   * @post  We have a quorum, composed of the monitors that acked us
-   * @post  We sent a message of type OP_VICTORY to each quorum member.
-   */
-  void message_victory(const set<int>& quorum);
   /**
    * Handle a message from some other node proposing itself to become it
    * the Leader.
@@ -337,6 +243,97 @@ private:
   void handle_nak(MonOpRequestRef op);
   
  public:
+  /**
+   * Update our epoch.
+   *
+   * If we come across a higher epoch, we simply update ours, also making
+   * sure we are no longer being elected (even though we could have been,
+   * we no longer are since we no longer are on that old epoch).
+   *
+   * @pre Our epoch is lower than @p e
+   * @post Our epoch equals @p e
+   *
+   * @param e Epoch to which we will update our epoch
+   */
+  void notify_bump_epoch();
+
+  /**
+   * Start new elections by proposing ourselves as the new Leader.
+   *
+   * Basically, send propose messages to all the monitors in the MonMap and
+   * then reset the expire_event timer so we can limit the amount of time we 
+   * will be going at it.
+   *
+   * @pre   participating is true
+   * @post  epoch is an odd value
+   * @post  electing_me is true
+   * @post  we sent propose messages to all the monitors in the MonMap
+   * @post  we reset the expire_event timer
+   */
+  void _start();
+  /**
+   * Defer the current election to some other monitor.
+   *
+   * This means that we will ack some other monitor and drop out from the run
+   * to become the Leader. We will only defer an election if the monitor we
+   * are deferring to outranks us.
+   *
+   * @pre   @p who outranks us (i.e., who < our rank)
+   * @pre   @p who outranks any other monitor we have deferred to in the past
+   * @post  electing_me is false
+   * @post  leader_acked equals @p who
+   * @post  we sent an ack message to @p who
+   * @post  we reset the expire_event timer
+   *
+   * @param who Some other monitor's numeric identifier. 
+   */
+  void _defer_to(int who);
+  /**
+   * The election has taken too long and has expired.
+   *
+   * This will happen when no one declared victory or started a new election
+   * during the time span allowed by the expire_event timer.
+   *
+   * When the election expires, we will check if we were the ones who won, and
+   * if so we will declare victory. If that is not the case, then we assume
+   * that the one we deferred to didn't declare victory quickly enough (in fact,
+   * as far as we know, we may even be dead); so, just propose ourselves as the
+   * Leader.
+   */
+  //  void expire();
+  /**
+   * Declare Victory.
+   * 
+   * We won. Or at least we believe we won, but for all intentions and purposes
+   * that does not matter. What matters is that we Won.
+   *
+   * That said, we must now bump our epoch to reflect that the election is over
+   * and then we must let everybody in the quorum know we are their brand new
+   * Leader. And we will also cancel our expire_event timer.
+   *
+   * Actually, the quorum will be now defined as the group of monitors that
+   * acked us during the election process.
+   *
+   * @pre   Election is on-going
+   * @pre   electing_me is true
+   * @post  electing_me is false
+   * @post  epoch is bumped up into an even value
+   * @post  Election is not on-going
+   * @post  We have a quorum, composed of the monitors that acked us
+   * @post  We sent a message of type OP_VICTORY to each quorum member.
+   */
+  void message_victory(const set<int>& quorum);
+
+  void persist_epoch(epoch_t e);
+  epoch_t read_persisted_epoch();
+  void validate_store();
+  void trigger_new_election();
+  int get_my_rank();
+  void propose_to_peers(epoch_t e);
+  void reset_election();
+  bool ever_participated();
+  unsigned paxos_size();
+
   Elector *elector;
   bool is_current_member(int rank);
   
