@@ -670,13 +670,16 @@ public:
   void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
+
   void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
 
+  void send_flush_snap(Inode *in, MetaSession *session, snapid_t follows, CapSnap& capsnap);
+
+  void flush_snaps(Inode *in, bool all_again=false);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, bool all_again=false);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
