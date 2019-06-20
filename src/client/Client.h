@@ -651,7 +651,7 @@ public:
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
-  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
+  void kick_flushing_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
@@ -677,7 +677,7 @@ public:
 
   void send_flush_snap(Inode *in, MetaSession *session, snapid_t follows, CapSnap& capsnap);
 
-  void flush_snaps(Inode *in, bool all_again=false);
+  void flush_snaps(Inode *in);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
