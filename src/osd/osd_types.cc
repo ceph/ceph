@@ -6595,9 +6595,17 @@ int prepare_info_keymap(
   if (logger)
     logger->inc(l_osd_pg_info);
 
-  // try to do info efficiently?
-  if (!dirty_big_info && try_fast_info &&
+  if (info.last_update < last_written_info.last_update) {
+    // last_update rewound, fast_info probably no longer valid.
+    // compulsively  update fast_info and info togather.
+    pg_fast_info_t fast;
+    fast.last_update = info.last_update;
+    encode(fast, (*km)[string(fastinfo_key)]);
+    if (logger)
+       logger->inc(l_osd_pg_fastinfo);
+  } else if (!dirty_big_info && try_fast_info &&
       info.last_update > last_written_info.last_update) {
+    // try to do info efficiently
     pg_fast_info_t fast;
     fast.populate_from(info);
     bool did = fast.try_apply_to(&last_written_info);
