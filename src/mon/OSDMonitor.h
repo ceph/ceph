@@ -221,6 +221,7 @@ public:
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
+  map<int64_t,set<snapid_t>> pending_pseudo_purged_snaps;
 
   map<int,double> osd_weight;
 
