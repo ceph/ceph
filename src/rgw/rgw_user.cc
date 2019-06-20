@@ -2559,10 +2559,10 @@ int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                        ceph::optional_ref_default<GetParams> params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->get_user_info_by_swift(op->ctx(), access_key,
-                                            info,
-                                            params->objv_tracker,
-                                            params->mtime);
+    return svc.user->get_user_info_by_access_key(op->ctx(), access_key,
+                                                 info,
+                                                 params->objv_tracker,
+                                                 params->mtime);
   });
 }
 
