@@ -7,6 +7,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_sync_module_pubsub_rest.h"
+#include "rgw_pubsub_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
@@ -1547,8 +1548,7 @@ public:
   PSConfigRef& get_conf() { return conf; }
 };
 
-RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
-{
+RGWPSSyncModuleInstance::RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config) {
   data_handler = std::unique_ptr<RGWPSDataSyncModule>(new RGWPSDataSyncModule(cct, config));
   string jconf = json_str("conf", *data_handler->get_conf());
   JSONParser p;
@@ -1571,8 +1571,7 @@ RGWPSSyncModuleInstance::~RGWPSSyncModuleInstance() {
 #endif
 }
 
-RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler()
-{
+RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler() {
   return data_handler.get();
 }
 
@@ -1580,7 +1579,9 @@ RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *or
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  return new RGWRESTMgr_PubSub_S3(orig);
+  // sync module support both compliant and non-compliant pubsub handlers
+  s3_compliant_mgr.reset(new RGWRESTMgr_PubSub_S3(orig));
+  return new RGWRESTMgr_PubSub(s3_compliant_mgr.get());
 }
 
 bool RGWPSSyncModuleInstance::should_full_sync() const {

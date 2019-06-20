@@ -17,10 +17,13 @@ public:
 
 class RGWPSDataSyncModule;
 class RGWRESTConn;
+class RGWRESTMgr;
 
 class RGWPSSyncModuleInstance : public RGWSyncModuleInstance {
   std::unique_ptr<RGWPSDataSyncModule> data_handler;
   JSONFormattable effective_conf;
+  std::unique_ptr<RGWRESTMgr> s3_compliant_mgr;
+
 public:
   RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
   ~RGWPSSyncModuleInstance();
@@ -29,7 +32,7 @@ public:
   bool supports_user_writes() override {
     return true;
   }
-  const JSONFormattable& get_effective_conf() {
+  const JSONFormattable& get_effective_conf() const {
     return effective_conf;
   }
   // start with full sync based on configuration

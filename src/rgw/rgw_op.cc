@@ -9,6 +9,7 @@
 #include <sstream>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/hex.hpp>
 #include <boost/bind.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
@@ -48,6 +49,7 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_crypt.h"
 #include "rgw_perf_counters.h"
+#include "rgw_pubsub.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -3629,6 +3631,38 @@ static CompressorRef get_compressor_plugin(const req_state *s,
     return nullptr;
   }
   return Compressor::create(s->cct, alg);
+}
+
+[[maybe_unused]] static void populate_record_from_request(const req_state *s, 
+        const ceph::real_time& mtime, 
+        const std::string& etag, 
+        const std::string& event_type, 
+        rgw_pubsub_s3_record& record) {
+  record.eventVersion = "2.1";
+  record.eventSource = "aws:s3";
+  record.eventTime = mtime;
+  record.eventName = event_type;
+  record.userIdentity = s->user->user_id.id;    // user that triggered the change
+  record.sourceIPAddress = "";                  // IP address of client that triggered the change: TODO
+  record.x_amz_request_id = s->req_id;          // request ID of the original change
+  record.x_amz_id_2 = s->host_id;               // RGW on which the change was made
+  record.s3SchemaVersion = "1.0";
+  // configurationId is filled from subscription configuration
+  record.bucket_name = s->bucket_name;
+  record.bucket_ownerIdentity = s->bucket_owner.get_id().id;
+  record.bucket_arn = to_string(rgw::ARN(s->bucket));
+  record.object_key = s->object.name;
+  record.object_size = s->obj_size;
+  record.object_etag = etag;
+  record.object_versionId = s->object.instance;
+  // use timestamp as per key sequence id (hex encoded)
+  const utime_t ts(real_clock::now());
+  boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
+          std::back_inserter(record.object_sequencer));
+  // event ID is rgw extension (not in the S3 spec), used for acking the event
+  // same format is used in both S3 compliant and Ceph specific events
+  // not used in case of push-only mode
+  record.id = "";
 }
 
 void RGWPutObj::execute()

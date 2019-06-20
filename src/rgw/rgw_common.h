@@ -28,6 +28,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
+#include "rgw_env.h"
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "cls/version/cls_version_types.h"
@@ -367,50 +368,6 @@ class RGWHTTPArgs {
 const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
 int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
 bool rgw_conf_get_bool(const map<string, string, ltstr_nocase>& conf_map, const char *name, bool def_val);
-
-class RGWEnv;
-
-class RGWConf {
-  friend class RGWEnv;
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
-  void init(CephContext *cct);
-public:
-  RGWConf()
-    : enable_ops_log(1),
-      enable_usage_log(1),
-      defer_to_bucket_acls(0) {
-  }
-};
-
-class RGWEnv {
-  std::map<string, string, ltstr_nocase> env_map;
-  RGWConf conf;
-public:
-  void init(CephContext *cct);
-  void init(CephContext *cct, char **envp);
-  void set(std::string name, std::string val);
-  const char *get(const char *name, const char *def_val = nullptr) const;
-  int get_int(const char *name, int def_val = 0) const;
-  bool get_bool(const char *name, bool def_val = 0);
-  size_t get_size(const char *name, size_t def_val = 0) const;
-  bool exists(const char *name) const;
-  bool exists_prefix(const char *prefix) const;
-  void remove(const char *name);
-  const std::map<string, string, ltstr_nocase>& get_map() const { return env_map; }
-  int get_enable_ops_log() const {
-    return conf.enable_ops_log;
-  }
-
-  int get_enable_usage_log() const {
-    return conf.enable_usage_log;
-  }
-
-  int get_defer_to_bucket_acls() const {
-    return conf.defer_to_bucket_acls;
-  }
-};
 
 // return true if the connection is secure. this either means that the
 // connection arrived via ssl, or was forwarded as https by a trusted proxy
