@@ -1239,6 +1239,7 @@ class RGWRados : public AdminSocketHook
 
   double inject_notify_timeout_probability = 0;
   unsigned max_notify_retries = 0;
+  uint64_t bucket_index_max_aio = cct->_conf.get_val<uint64_t>("rgw_bucket_index_max_aio");
 
   friend class RGWWatcher;
 

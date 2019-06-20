@@ -2740,7 +2740,7 @@ int RGWRados::init_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
 
   return CLSRGWIssueBucketIndexInit(index_ctx,
 				    bucket_objs,
-				    cct->_conf->rgw_bucket_index_max_aio)();
+				    bucket_index_max_aio)();
 }
 
 int RGWRados::clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
@@ -2760,7 +2760,7 @@ int RGWRados::clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
 
   return CLSRGWIssueBucketIndexClean(index_ctx,
 				     bucket_objs,
-				     cct->_conf->rgw_bucket_index_max_aio)();
+				     bucket_index_max_aio)();
 }
 
 void RGWRados::create_bucket_id(string *bucket_id)
@@ -2875,7 +2875,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 	/* remove bucket index objects asynchronously by best effort */
 	(void) CLSRGWIssueBucketIndexClean(index_ctx,
 					   bucket_objs,
-					   cct->_conf->rgw_bucket_index_max_aio)();
+					   bucket_index_max_aio)();
       }
       /* ret == -ENOENT here */
     }
@@ -5045,7 +5045,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
    /* remove bucket index objects asynchronously by best effort */
     (void) CLSRGWIssueBucketIndexClean(index_ctx,
 				       bucket_objs,
-				       cct->_conf->rgw_bucket_index_max_aio)();
+				       bucket_index_max_aio)();
   }
 
   return 0;
@@ -5313,7 +5313,7 @@ int RGWRados::bucket_check_index(RGWBucketInfo& bucket_info,
       return ret;
   }
 
-  ret = CLSRGWIssueBucketCheck(index_ctx, oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
+  ret = CLSRGWIssueBucketCheck(index_ctx, oids, bucket_objs_ret, bucket_index_max_aio)();
   if (ret < 0) {
       return ret;
   }
@@ -5338,7 +5338,7 @@ int RGWRados::bucket_rebuild_index(RGWBucketInfo& bucket_info)
     return r;
   }
 
-  return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs, bucket_index_max_aio)();
 }
 
 int RGWRados::bucket_set_reshard(const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry)
@@ -5351,7 +5351,7 @@ int RGWRados::bucket_set_reshard(const RGWBucketInfo& bucket_info, const cls_rgw
     return r;
   }
 
-  return CLSRGWIssueSetBucketResharding(index_ctx, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueSetBucketResharding(index_ctx, bucket_objs, entry, bucket_index_max_aio)();
 }
 
 int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj)
@@ -8683,7 +8683,7 @@ int RGWRados::list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   if (r < 0)
     return r;
  
-  r = CLSRGWIssueBILogList(index_ctx, marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueBILogList(index_ctx, marker_mgr, max, oids, bi_log_lists, bucket_index_max_aio)();
   if (r < 0)
     return r;
 
@@ -8782,7 +8782,7 @@ int RGWRados::trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   }
 
   return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
-			      cct->_conf->rgw_bucket_index_max_aio)();
+			      bucket_index_max_aio)();
 }
 
 int RGWRados::resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
@@ -8793,7 +8793,7 @@ int RGWRados::resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   if (r < 0)
     return r;
 
-  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs, bucket_index_max_aio)();
 }
 
 int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
@@ -8804,7 +8804,7 @@ int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   if (r < 0)
     return r;
 
-  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, bucket_index_max_aio)();
 }
 
 int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -9084,7 +9084,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_
   if (r < 0)
     return r;
 
-  return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
+  return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs, bucket_index_max_aio, timeout)();
 }
 
 
@@ -9116,7 +9116,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
   cls_rgw_obj_key start_key(start.name, start.instance);
   r = CLSRGWIssueBucketList(index_ctx, start_key, prefix, num_entries,
 			    list_versions, oids, list_results,
-			    cct->_conf->rgw_bucket_index_max_aio)();
+			    bucket_index_max_aio)();
   if (r < 0)
     return r;
 
@@ -9582,7 +9582,7 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
     return r;
   }
 
-  r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results, bucket_index_max_aio)();
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
                    << r << dendl;
