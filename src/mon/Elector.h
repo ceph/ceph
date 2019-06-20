@@ -368,7 +368,7 @@ class Elector : public ElectionOwner {
    *
    * @returns Our current epoch number
    */
-  epoch_t get_epoch() { return logic.epoch; }
+  epoch_t get_epoch() { return logic.get_epoch(); }
 
   void declare_standalone_victory() {
     logic.declare_standalone_victory();

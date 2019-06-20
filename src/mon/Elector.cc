@@ -120,7 +120,7 @@ void Elector::_start()
 
 void Elector::_defer_to(int who)
 {
-  MMonElection *m = new MMonElection(MMonElection::OP_ACK, logic.epoch, mon->monmap);
+  MMonElection *m = new MMonElection(MMonElection::OP_ACK, get_epoch(), mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
   m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
@@ -192,7 +192,7 @@ void Elector::message_victory(const set<int>& quorum)
        p != quorum.end();
        ++p) {
     if (*p == mon->rank) continue;
-    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, logic.epoch,
+    MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, get_epoch(),
 				       mon->monmap);
     m->quorum = quorum;
     m->quorum_features = cluster_features;
@@ -203,7 +203,7 @@ void Elector::message_victory(const set<int>& quorum)
   }
 
   // tell monitor
-  mon->win_election(logic.epoch, quorum,
+  mon->win_election(get_epoch(), quorum,
                     cluster_features, mon_features, min_mon_release,
 		    metadata);
 }
@@ -257,7 +257,7 @@ void Elector::handle_ack(MonOpRequestRef op)
   dout(5) << "handle_ack from " << m->get_source() << dendl;
   int from = m->get_source().num();
 
-  ceph_assert(m->epoch == logic.epoch);
+  ceph_assert(m->epoch == get_epoch());
   uint64_t required_features = mon->get_required_features();
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
@@ -315,7 +315,7 @@ void Elector::handle_victory(MonOpRequestRef op)
     return;
   }
 
-  mon->lose_election(logic.epoch, m->quorum, from,
+  mon->lose_election(get_epoch(), m->quorum, from,
                      m->quorum_features, m->mon_features, m->mon_release);
 
   // cancel my timer
@@ -443,7 +443,7 @@ void Elector::dispatch(MonOpRequestRef op)
 	return;
       }
 
-      if (em->epoch < logic.epoch) {
+      if (em->epoch < get_epoch()) {
 	dout(5) << "old epoch, dropping" << dendl;
 	break;
       }
