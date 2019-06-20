@@ -3585,17 +3585,16 @@ void Client::check_caps(Inode *in, unsigned flags)
     }
 
   ack:
-    // re-send old cap/snapcap flushes first.
-    if (session->mds_state >= MDSMap::STATE_RECONNECT &&
-	session->mds_state < MDSMap::STATE_ACTIVE &&
-	session->early_flushing_caps.count(in) == 0) {
-      ldout(cct, 20) << " reflushing caps (check_caps) on " << *in
-		     << " to mds." << session->mds_num << dendl;
-      session->early_flushing_caps.insert(in);
-      if (in->cap_snaps.size())
-	flush_snaps(in, true);
-      if (in->flushing_caps)
-	flush_caps(in, session, flags & CHECK_CAPS_SYNCHRONOUS);
+    if (&cap == in->auth_cap) {
+      if (in->flags & I_KICK_FLUSH) {
+	ldout(cct, 20) << " reflushing caps (check_caps) on " << *in
+		       << " to mds." << mds << dendl;
+	in->flags &= ~I_KICK_FLUSH;
+	if (in->cap_snaps.size())
+	  flush_snaps(in, true);
+	if (in->flushing_caps)
+	  flush_caps(in, session, flags & CHECK_CAPS_SYNCHRONOUS);
+      }
     }
 
     int flushing;
@@ -4455,22 +4454,19 @@ void Client::kick_flushing_caps(MetaSession *session)
 
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    if (session->early_flushing_caps.count(in))
+    if (!(in->flags & I_KICK_FLUSH))
       continue;
+    in->flags &= ~I_KICK_FLUSH;
     ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
     if (in->cap_snaps.size())
       flush_snaps(in, true);
     if (in->flushing_caps)
       flush_caps(in, session);
   }
-
-  session->early_flushing_caps.clear();
 }
 
 void Client::early_kick_flushing_caps(MetaSession *session)
 {
-  session->early_flushing_caps.clear();
-
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
     Cap *cap = in->auth_cap;
@@ -4479,13 +4475,15 @@ void Client::early_kick_flushing_caps(MetaSession *session)
     // if flushing caps were revoked, we re-send the cap flush in client reconnect
     // stage. This guarantees that MDS processes the cap flush message before issuing
     // the flushing caps to other client.
-    if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps)
+    if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps) {
+      in->flags |= I_KICK_FLUSH;
       continue;
+    }
 
     ldout(cct, 20) << " reflushing caps (early_kick) on " << *in
 		   << " to mds." << session->mds_num << dendl;
 
-    session->early_flushing_caps.insert(in);
+    in->flags &= ~I_KICK_FLUSH;
 
     // send_reconnect() also will reset these sequence numbers. make sure
     // sequence numbers in cap flush message match later reconnect message.
@@ -4894,8 +4892,9 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<
   if (realm)
     put_snap_realm(realm);
   
-  if (in->auth_cap && in->auth_cap->session->mds_num == mds) {
+  if (in->auth_cap && in->auth_cap->session == session) {
     // reflush any/all caps (if we are now the auth_cap)
+    in->flags &= ~I_KICK_FLUSH;
     if (in->cap_snaps.size())
       flush_snaps(in, true);
     if (in->flushing_caps)
