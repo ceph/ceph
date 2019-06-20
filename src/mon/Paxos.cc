@@ -1414,53 +1414,49 @@ void Paxos::dispatch(MonOpRequestRef op)
 {
   ceph_assert(op->is_type_paxos());
   op->mark_paxos_event("dispatch");
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+
+  if (op->get_req()->get_type() != MSG_MON_PAXOS) {
+    dout(0) << "Got unexpected message type " << op->get_req()->get_type()
+	    << " in Paxos::dispatch, aborting!" << dendl;
+    ceph_abort();
+  }
+  
+  auto *req = op->get_req<MMonPaxos>();
+
   // election in progress?
   if (!mon->is_leader() && !mon->is_peon()) {
-    dout(5) << "election in progress, dropping " << *m << dendl;
+    dout(5) << "election in progress, dropping " << *req << dendl;
     return;    
   }
 
   // check sanity
   ceph_assert(mon->is_leader() || 
-	 (mon->is_peon() && m->get_source().num() == mon->get_leader()));
-  
-  switch (m->get_type()) {
+	      (mon->is_peon() && req->get_source().num() == mon->get_leader()));  
 
-  case MSG_MON_PAXOS:
-    {
-      MMonPaxos *pm = reinterpret_cast<MMonPaxos*>(m);
-
-      // NOTE: these ops are defined in messages/MMonPaxos.h
-      switch (pm->op) {
-	// learner
-      case MMonPaxos::OP_COLLECT:
-	handle_collect(op);
-	break;
-      case MMonPaxos::OP_LAST:
-	handle_last(op);
-	break;
-      case MMonPaxos::OP_BEGIN:
-	handle_begin(op);
-	break;
-      case MMonPaxos::OP_ACCEPT:
-	handle_accept(op);
-	break;		
-      case MMonPaxos::OP_COMMIT:
-	handle_commit(op);
-	break;
-      case MMonPaxos::OP_LEASE:
-	handle_lease(op);
-	break;
-      case MMonPaxos::OP_LEASE_ACK:
-	handle_lease_ack(op);
-	break;
-      default:
-	ceph_abort();
-      }
-    }
+  // NOTE: these ops are defined in messages/MMonPaxos.h
+  switch (req->op) {
+    // learner
+  case MMonPaxos::OP_COLLECT:
+    handle_collect(op);
     break;
-    
+  case MMonPaxos::OP_LAST:
+    handle_last(op);
+    break;
+  case MMonPaxos::OP_BEGIN:
+    handle_begin(op);
+    break;
+  case MMonPaxos::OP_ACCEPT:
+    handle_accept(op);
+    break;		
+  case MMonPaxos::OP_COMMIT:
+    handle_commit(op);
+    break;
+  case MMonPaxos::OP_LEASE:
+    handle_lease(op);
+    break;
+  case MMonPaxos::OP_LEASE_ACK:
+    handle_lease_ack(op);
+    break;
   default:
     ceph_abort();
   }
