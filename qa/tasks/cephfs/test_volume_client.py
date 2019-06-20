@@ -14,11 +14,12 @@ class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
-    py_version = 'python'
+    default_py_version = 'python'
 
     def setUp(self):
         CephFSTestCase.setUp(self)
-        self.py_version = self.ctx.config.get('overrides', {}).get('python', 'python')
+        self.py_version = self.ctx.config.get('overrides', {}).\
+                          get('python', TestVolumeClient.default_py_version)
         log.info("using python version: {python_version}".format(
             python_version=self.py_version
         ))
