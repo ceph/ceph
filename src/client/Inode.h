@@ -113,6 +113,7 @@ struct CapSnap {
 #define I_DIR_ORDERED	2
 #define I_CAP_DROPPED	4
 #define I_SNAPDIR_OPEN	8
+#define I_KICK_FLUSH	16
 
 struct Inode {
   Client *client;
