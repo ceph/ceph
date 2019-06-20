@@ -111,19 +111,19 @@ On the Ansible installer node, perform the following steps.
 **Service Management:**
 
 The ``ceph-iscsi`` package installs the configuration management
-logic and a Systemd service called ``rbd-target-gw``. When the Systemd
-service is enabled, the ``rbd-target-gw`` will start at boot time and
+logic and a Systemd service called ``rbd-target-api``. When the Systemd
+service is enabled, the ``rbd-target-api`` will start at boot time and
 will restore the Linux IO state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
-interacting with the ``rbd-target-gw`` Systemd service.
+interacting with the ``rbd-target-api`` Systemd service.
 
 ::
 
-    # systemctl <start|stop|restart|reload> rbd-target-gw
+    # systemctl <start|stop|restart|reload> rbd-target-api
 
 -  ``reload``
 
-   A reload request will force ``rbd-target-gw`` to reread the
+   A reload request will force ``rbd-target-api`` to reread the
    configuration and apply it to the current running environment. This
    is normally not required, since changes are deployed in parallel from
    Ansible to all iSCSI gateway nodes
