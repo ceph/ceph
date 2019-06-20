@@ -1332,6 +1332,12 @@ public:
     ceph_assert(p != pools.end());
     return p->second.get_type();
   }
+  int get_pool_crush_rule(int64_t pool_id) const {
+    auto pool = get_pg_pool(pool_id);
+    if (!pool)
+      return -ENOENT;
+    return pool->get_crush_rule();
+  }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
@@ -1544,7 +1550,6 @@ void print_osd_utilization(const OSDMap& osdmap,
                            std::ostream& out,
                            ceph::Formatter *f,
                            bool tree,
-                           const std::string& class_name,
-                           const std::string& item_name);
+                           const std::string& filter);
 
 #endif
