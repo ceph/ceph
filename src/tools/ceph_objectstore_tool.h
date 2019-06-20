@@ -24,7 +24,7 @@ class ObjectStoreTool : public RadosDump
       : RadosDump(file_fd, dry_run)
     {}
 
-    int dump_import(Formatter *formatter);
+    int dump_export(Formatter *formatter);
     int do_import(ObjectStore *store, OSDSuperblock& sb, bool force,
 		  std::string pgidstr,
 		  ObjectStore::Sequencer &osr);
