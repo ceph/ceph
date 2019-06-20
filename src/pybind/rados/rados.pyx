@@ -1157,26 +1157,23 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         cdef:
-            char *ret_buf
-            size_t buf_len = 37
-            PyObject* ret_s = NULL
+            char *ret_buf = NULL
+            size_t buf_len = 64
 
-        ret_s = PyBytes_FromStringAndSize(NULL, buf_len)
         try:
-            ret_buf = PyBytes_AsString(ret_s)
-            with nogil:
-                ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
-            if ret < 0:
-                raise make_ex(ret, "error getting cluster fsid")
-            if ret != <int>buf_len:
-                _PyBytes_Resize(&ret_s, ret)
-            return <object>ret_s
+            while True:
+                ret_buf = <char *>realloc_chk(ret_buf, buf_len)
+                with nogil:
+                    ret = rados_cluster_fsid(self.cluster, ret_buf, buf_len)
+                if ret == -errno.ERANGE:
+                    buf_len = buf_len * 2
+                elif ret < 0:
+                    raise make_ex(ret, "error getting cluster fsid")
+                else:
+                    break
+            return decode_cstr(ret_buf)
         finally:
-            # We DECREF unconditionally: the cast to object above will have
-            # INCREFed if necessary. This also takes care of exceptions,
-            # including if _PyString_Resize fails (that will free the string
-            # itself and set ret_s to NULL, hence XDECREF).
-            ref.Py_XDECREF(ret_s)
+            free(ret_buf)
 
     @requires(('ioctx_name', str_type))
     def open_ioctx(self, ioctx_name):
