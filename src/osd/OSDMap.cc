@@ -4974,23 +4974,32 @@ public:
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
                        const PGMap& pgmap_, bool tree_,
-                       const string& class_name_,
-                       const string& item_name_) :
+                       const string& filter) :
     Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgmap(pgmap_),
     tree(tree_),
-    class_name(class_name_),
-    item_name(item_name_),
     min_var(-1),
     max_var(-1),
     stddev(0),
     sum(0) {
-    if (osdmap->crush->name_exists(item_name)) {
-      // filter out items we are allowed to dump
-      auto item_id = osdmap->crush->get_item_id(item_name);
+    if (osdmap->crush->name_exists(filter)) {
+      // filter by crush node
+      auto item_id = osdmap->crush->get_item_id(filter);
       allowed.insert(item_id);
       osdmap->crush->get_all_children(item_id, &allowed);
+    } else if (osdmap->crush->class_exists(filter)) {
+      // filter by device class
+      class_id = osdmap->crush->get_class_id(filter);
+    } else if (auto pool_id = osdmap->lookup_pg_pool_name(filter);
+               pool_id >= 0) {
+      // filter by pool
+      auto crush_rule = osdmap->get_pool_crush_rule(pool_id);
+      set<int> roots;
+      osdmap->crush->find_takes_by_rule(crush_rule, &roots);
+      allowed = roots;
+      for (auto r : roots)
+        osdmap->crush->get_all_children(r, &allowed);
     }
     average_util = average_utilization();
   }
@@ -5000,18 +5009,17 @@ protected:
   bool should_dump(int id) const {
     if (!allowed.empty() && !allowed.count(id)) // filter by name
       return false;
-    if (id >= 0 && !class_name.empty()) {
-      const char* item_class_name = osdmap->crush->get_item_class(id);
-      if (!item_class_name || // not bound to a class yet
-           item_class_name != class_name) // or already bound to
-                                          // a different class
+    if (id >= 0 && class_id >= 0) {
+      auto item_class_id = osdmap->crush->get_item_class_id(id);
+      if (item_class_id < 0 || // not bound to a class yet
+          item_class_id != class_id) // or already bound to a different class
         return false;
     }
     return true;
   }
 
   set<int> get_dumped_osds() {
-    if (class_name.empty() && item_name.empty()) {
+    if (allowed.empty() && class_id < 0) {
       // old way, all
       return {};
     }
@@ -5165,13 +5173,12 @@ protected:
   const OSDMap *osdmap;
   const PGMap& pgmap;
   bool tree;
-  const string class_name;
-  const string item_name;
   double average_util;
   double min_var;
   double max_var;
   double stddev;
   double sum;
+  int class_id = -1;
   set<int> allowed;
   set<int> dumped_osds;
 };
@@ -5183,9 +5190,8 @@ public:
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
                             const PGMap& pgmap, bool tree,
-                            const string& class_name,
-                            const string& item_name) :
-    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
+                            const string& filter) :
+    Parent(crush, osdmap, pgmap, tree, filter) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -5320,9 +5326,8 @@ public:
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
                              const PGMap& pgmap, bool tree,
-                             const string& class_name,
-                             const string& item_name) :
-    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
+                             const string& filter) :
+    Parent(crush, osdmap, pgmap, tree, filter) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -5398,21 +5403,18 @@ void print_osd_utilization(const OSDMap& osdmap,
                            ostream& out,
                            Formatter *f,
                            bool tree,
-                           const string& class_name,
-                           const string& item_name)
+                           const string& filter)
 {
   const CrushWrapper *crush = osdmap.crush.get();
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree,
-                                 class_name, item_name);
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree, filter);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree,
-                                class_name, item_name);
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree, filter);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";
