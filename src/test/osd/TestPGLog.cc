@@ -2930,6 +2930,7 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
     _merge_object_divergent_entries(log, hoid,
                                     orig_entries, oinfo,
                                     log.get_can_rollback_to(),
+                                    log.get_can_rollback_to(),
                                     missing, &rollbacker,
                                     this);
     // No core dump
@@ -2955,6 +2956,7 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
     LogHandler rollbacker;
     _merge_object_divergent_entries(log, hoid,
                                     orig_entries, oinfo,
+                                    log.get_can_rollback_to(),
                                     log.get_can_rollback_to(),
                                     missing, &rollbacker,
                                     this);
