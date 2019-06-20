@@ -118,6 +118,7 @@ class RDMADispatcher {
   void notify_pending_workers();
   void handle_tx_event(ibv_wc *cqe, int n);
   void post_tx_buffer(std::vector<Chunk*> &chunks);
+  void handle_rx_event(ibv_wc *cqe, int rx_number);
 
   std::atomic<uint64_t> inflight = {0};
 
