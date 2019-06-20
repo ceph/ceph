@@ -6588,9 +6588,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     int64_t new_pgs = n - p.get_pg_num();
     if (new_pgs > g_conf->mon_osd_max_split_count * expected_osds) {
       ss << "specified pg_num " << n << " is too large (creating "
-	 << new_pgs << " new PGs on ~" << expected_osds
-	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
-	 << ')';
+         << new_pgs << " new PGs on ~" << expected_osds
+         << " OSDs would exceed the per-OSD max of " << g_conf->mon_osd_max_split_count
+         << " given by mon_osd_max_split_count); please increase the pg_num in smaller steps";
       return -E2BIG;
     }
     p.set_pg_num(n);
