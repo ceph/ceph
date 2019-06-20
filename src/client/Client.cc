@@ -3481,8 +3481,6 @@ void Client::check_caps(Inode *in, unsigned flags)
       used &= ~CEPH_CAP_FILE_CACHE;
   }
 
-  if (!in->cap_snaps.empty())
-    flush_snaps(in);
 
   for (auto &it : in->caps) {
     mds_rank_t mds = it.first;
@@ -3543,12 +3541,11 @@ void Client::check_caps(Inode *in, unsigned flags)
       if (in->flags & I_KICK_FLUSH) {
 	ldout(cct, 20) << " reflushing caps (check_caps) on " << *in
 		       << " to mds." << mds << dendl;
-	in->flags &= ~I_KICK_FLUSH;
-	if (in->cap_snaps.size())
-	  flush_snaps(in, true);
-	if (in->flushing_caps)
-	  flush_caps(in, session, flags & CHECK_CAPS_SYNCHRONOUS);
+	kick_flushing_caps(in, session);
       }
+      if (!in->cap_snaps.empty() &&
+	  in->cap_snaps.rbegin()->second.flush_tid == 0)
+	flush_snaps(in);
     }
 
     int flushing;
@@ -3689,10 +3686,10 @@ void Client::send_flush_snap(Inode *in, MetaSession *session,
   session->con->send_message(m);
 }
 
-void Client::flush_snaps(Inode *in, bool all_again)
+void Client::flush_snaps(Inode *in)
 {
-  ldout(cct, 10) << "flush_snaps on " << *in << " all_again " << all_again << dendl;
-  assert(in->cap_snaps.size());
+  ldout(cct, 10) << "flush_snaps on " << *in << dendl;
+  ceph_assert(in->cap_snaps.size());
 
   // pick auth mds
   assert(in->auth_cap);
@@ -3700,11 +3697,9 @@ void Client::flush_snaps(Inode *in, bool all_again)
 
   for (auto &p : in->cap_snaps) {
     CapSnap &capsnap = p.second;
-    if (!all_again) {
-      // only flush once per session
-      if (capsnap.flush_tid > 0)
-	continue;
-    }
+    // only do new flush
+    if (capsnap.flush_tid > 0)
+      continue;
 
     ldout(cct, 10) << "flush_snaps mds." << session->mds_num
 	     << " follows " << p.first
@@ -3714,14 +3709,13 @@ void Client::flush_snaps(Inode *in, bool all_again)
 	     << " writing=" << capsnap.writing
 	     << " on " << *in << dendl;
     if (capsnap.dirty_data || capsnap.writing)
-      continue;
+      break;
     
-    if (capsnap.flush_tid == 0) {
-      capsnap.flush_tid = ++last_flush_tid;
-      if (!in->flushing_cap_item.is_on_list())
-	session->flushing_caps.push_back(&in->flushing_cap_item);
-      session->flushing_caps_tids.insert(capsnap.flush_tid);
-    }
+    capsnap.flush_tid = ++last_flush_tid;
+    session->flushing_caps_tids.insert(capsnap.flush_tid);
+    in->flushing_cap_tids[capsnap.flush_tid] = 0;
+    if (!in->flushing_cap_item.is_on_list())
+      session->flushing_caps.push_back(&in->flushing_cap_item);
 
     send_flush_snap(in, session, p.first, capsnap);
   }
@@ -4076,10 +4070,9 @@ void Client::remove_session_caps(MetaSession *s)
 
   while (s->caps.size()) {
     Cap *cap = *s->caps.begin();
-    Inode *in = cap->inode;
-    bool dirty_caps = false, cap_snaps = false;
+    InodeRef in(cap->inode);
+    bool dirty_caps = false;
     if (in->auth_cap == cap) {
-      cap_snaps = !in->cap_snaps.empty();
       dirty_caps = in->dirty_caps | in->flushing_caps;
       in->wanted_max_size = 0;
       in->requested_max_size = 0;
@@ -4087,10 +4080,7 @@ void Client::remove_session_caps(MetaSession *s)
     if (cap->wanted | cap->issued)
       in->flags |= I_CAP_DROPPED;
     remove_cap(cap, false);
-    if (cap_snaps) {
-      InodeRef tmp_ref(in);
-      in->cap_snaps.clear();
-    }
+    in->cap_snaps.clear();
     if (dirty_caps) {
       lderr(cct) << __func__ << " still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
@@ -4099,7 +4089,7 @@ void Client::remove_session_caps(MetaSession *s)
       }
       in->flushing_caps = 0;
       in->mark_caps_clean();
-      put_inode(in);
+      put_inode(in.get());
     }
     signal_cond_list(in->waitfor_caps);
   }
@@ -4352,28 +4342,6 @@ void Client::flush_caps_sync()
   }
 }
 
-void Client::flush_caps(Inode *in, MetaSession *session, bool sync)
-{
-  ldout(cct, 10) << __func__ << " " << in << " mds." << session->mds_num << dendl;
-  Cap *cap = in->auth_cap;
-  assert(cap->session == session);
-
-  for (map<ceph_tid_t,int>::iterator p = in->flushing_cap_tids.begin();
-       p != in->flushing_cap_tids.end();
-       ++p) {
-    bool req_sync = false;
-
-    /* If this is a synchronous request, then flush the journal on last one */
-    if (sync && (p->first == in->flushing_cap_tids.rbegin()->first))
-      req_sync = true;
-
-    send_cap(in, session, cap, req_sync,
-	     (get_caps_used(in) | in->caps_dirty()),
-	     in->caps_wanted(), (cap->issued | cap->implemented),
-	     p->second, p->first);
-  }
-}
-
 void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
 {
   while (in->flushing_caps) {
@@ -4407,6 +4375,30 @@ void Client::wait_sync_caps(ceph_tid_t want)
   }
 }
 
+void Client::kick_flushing_caps(Inode *in, MetaSession *session)
+{
+  in->flags &= ~I_KICK_FLUSH;
+
+  Cap *cap = in->auth_cap;
+  ceph_assert(cap->session == session);
+
+  int wanted = in->caps_wanted();
+  int used = get_caps_used(in) | in->caps_dirty();
+  auto it = in->cap_snaps.begin();
+  for (auto& p : in->flushing_cap_tids) {
+    if (p.second) {
+      send_cap(in, session, cap, false,
+	       used, wanted, (cap->issued | cap->implemented),
+	       p.second, p.first);
+    } else {
+      ceph_assert(it != in->cap_snaps.end());
+      ceph_assert(it->second.flush_tid == p.first);
+      send_flush_snap(in, session, it->first, it->second);
+      ++it;
+    }
+  }
+}
+
 void Client::kick_flushing_caps(MetaSession *session)
 {
   mds_rank_t mds = session->mds_num;
@@ -4414,14 +4406,10 @@ void Client::kick_flushing_caps(MetaSession *session)
 
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    if (!(in->flags & I_KICK_FLUSH))
-      continue;
-    in->flags &= ~I_KICK_FLUSH;
-    ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
-    if (in->cap_snaps.size())
-      flush_snaps(in, true);
-    if (in->flushing_caps)
-      flush_caps(in, session);
+    if (in->flags & I_KICK_FLUSH) {
+      ldout(cct, 20) << " reflushing caps on " << *in << " to mds." << mds << dendl;
+      kick_flushing_caps(in, session);
+    }
   }
 }
 
@@ -4429,26 +4417,27 @@ void Client::early_kick_flushing_caps(MetaSession *session)
 {
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    assert(in->auth_cap);
+    Cap *cap = in->auth_cap;
+    ceph_assert(cap);
 
     // if flushing caps were revoked, we re-send the cap flush in client reconnect
     // stage. This guarantees that MDS processes the cap flush message before issuing
     // the flushing caps to other client.
-    if ((in->flushing_caps & in->auth_cap->issued) == in->flushing_caps) {
+    if ((in->flushing_caps & cap->issued) == in->flushing_caps) {
       in->flags |= I_KICK_FLUSH;
       continue;
     }
 
     ldout(cct, 20) << " reflushing caps (early_kick) on " << *in
 		   << " to mds." << session->mds_num << dendl;
+    // send_reconnect() also will reset these sequence numbers. make sure
+    // sequence numbers in cap flush message match later reconnect message.
+    cap->seq = 0;
+    cap->issue_seq = 0;
+    cap->mseq = 0;
+    cap->issued = cap->implemented;
 
-    in->flags &= ~I_KICK_FLUSH;
-
-    if (in->cap_snaps.size())
-      flush_snaps(in, true);
-    if (in->flushing_caps)
-      flush_caps(in, session);
-
+    kick_flushing_caps(in, session);
   }
 }
 
@@ -4867,11 +4856,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   
   if (in->auth_cap && in->auth_cap->session == session) {
     // reflush any/all caps (if we are now the auth_cap)
-    in->flags &= ~I_KICK_FLUSH;
-    if (in->cap_snaps.size())
-      flush_snaps(in, true);
-    if (in->flushing_caps)
-      flush_caps(in, session);
+    kick_flushing_caps(in, session);
   }
 }
 
@@ -4953,6 +4938,11 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
                    << " expected is " << it->first << dendl;
   }
   for (; it != in->flushing_cap_tids.end(); ) {
+    if (!it->second) {
+      // cap snap
+      ++it;
+      continue;
+    }
     if (it->first == flush_ack_tid)
       cleaned = it->second;
     if (it->first <= flush_ack_tid) {
@@ -4993,7 +4983,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
       if (in->flushing_caps == 0) {
 	ldout(cct, 10) << " " << *in << " !flushing" << dendl;
 	num_flushing_caps--;
-	if (in->cap_snaps.empty())
+       if (in->flushing_cap_tids.empty())
 	  in->flushing_cap_item.remove_myself();
       }
       if (!in->caps_dirty())
@@ -5007,24 +4997,29 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 
 void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCaps *m)
 {
+  ceph_tid_t flush_ack_tid = m->get_client_tid();
   mds_rank_t mds = session->mds_num;
   assert(in->caps.count(mds));
   snapid_t follows = m->get_snap_follows();
 
-  if (in->cap_snaps.count(follows)) {
-    CapSnap &capsnap = in->cap_snaps.at(follows);
-    if (m->get_client_tid() != capsnap.flush_tid) {
-      ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
+  if (auto it = in->cap_snaps.find(follows); it != in->cap_snaps.end()) {
+    auto& capsnap = it->second;
+    if (flush_ack_tid != capsnap.flush_tid) {
+      ldout(cct, 10) << " tid " << flush_ack_tid << " != " << capsnap.flush_tid << dendl;
     } else {
+      InodeRef tmp_ref(in);
       ldout(cct, 5) << __func__ << " mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
-      InodeRef tmp_ref;
-      if (in->get_num_ref() == 1)
-	tmp_ref = in; // make sure inode not get freed while erasing item from in->cap_snaps
-      if (in->flushing_caps == 0 && in->cap_snaps.empty())
-	in->flushing_cap_item.remove_myself();
       session->flushing_caps_tids.erase(capsnap.flush_tid);
-      in->cap_snaps.erase(follows);
+      in->flushing_cap_tids.erase(capsnap.flush_tid);
+      if (in->flushing_caps == 0 && in->flushing_cap_tids.empty())
+	in->flushing_cap_item.remove_myself();
+      in->cap_snaps.erase(it);
+
+      signal_cond_list(in->waitfor_caps);
+      if (session->flushing_caps_tids.empty() ||
+	  *session->flushing_caps_tids.begin() > flush_ack_tid)
+	sync_cond.Signal();
     }
   } else {
     ldout(cct, 5) << __func__ << " DUP(?) mds." << mds << " flushed snap follows " << follows
