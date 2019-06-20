@@ -510,6 +510,11 @@ void OSDService::start_shutdown()
     Mutex::Locker l(recovery_sleep_lock);
     recovery_sleep_timer.shutdown();
   }
+
+  {
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
+  }
 }
 
 void OSDService::shutdown_reserver()
@@ -528,11 +533,6 @@ void OSDService::shutdown()
   objecter->shutdown();
   objecter_finisher.wait_for_empty();
   objecter_finisher.stop();
-
-  {
-    Mutex::Locker l(recovery_request_lock);
-    recovery_request_timer.shutdown();
-  }
 
   {
     Mutex::Locker l(snap_sleep_lock);
