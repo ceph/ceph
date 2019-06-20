@@ -51,10 +51,10 @@ namespace ceph::os {
 
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-class OSD : public ceph::net::Dispatcher,
-	    private OSDMapService,
-	    private ceph::common::AuthHandler,
-	    private ceph::mgr::WithStats {
+class OSD final : public ceph::net::Dispatcher,
+		  private OSDMapService,
+		  private ceph::common::AuthHandler,
+		  private ceph::mgr::WithStats {
   seastar::gate gate;
   const int whoami;
   const uint32_t nonce;
@@ -91,13 +91,13 @@ class OSD : public ceph::net::Dispatcher,
   OSDSuperblock superblock;
 
   // Dispatcher methods
-  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) override;
-  seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
-  seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
+  seastar::future<> ms_dispatch(ceph::net::Connection* conn, MessageRef m) final;
+  seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) final;
+  seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) final;
 
   // mgr::WithStats methods
-  MessageRef get_stats() override;
+  MessageRef get_stats() final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
@@ -113,7 +113,7 @@ public:
       ceph::net::Messenger& client_msgr,
       ceph::net::Messenger& hb_front_msgr,
       ceph::net::Messenger& hb_back_msgr);
-  ~OSD() override;
+  ~OSD() final;
 
   seastar::future<> mkfs(uuid_d osd_uuid, uuid_d cluster_fsid);
 
@@ -133,8 +133,8 @@ private:
   seastar::future<> _send_alive();
 
   // OSDMapService methods
-  seastar::future<cached_map_t> get_map(epoch_t e) override;
-  cached_map_t get_map() const override;
+  seastar::future<cached_map_t> get_map(epoch_t e) final;
+  cached_map_t get_map() const final;
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   void store_map_bl(ceph::os::Transaction& t,
