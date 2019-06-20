@@ -132,27 +132,102 @@ void RDMADispatcher::handle_async_event()
       return;
     }
     perf_logger->inc(l_msgr_rdma_total_async_events);
-    // FIXME: Currently we must ensure no other factor make QP in ERROR state,
-    // otherwise this qp can't be deleted in current cleanup flow.
-    if (async_event.event_type == IBV_EVENT_QP_LAST_WQE_REACHED) {
-      perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
-      uint64_t qpn = async_event.element.qp->qp_num;
-      ldout(cct, 10) << __func__ << " event associated qp=" << async_event.element.qp
+    switch (async_event.event_type) {
+      /***********************CQ events********************/
+      case IBV_EVENT_CQ_ERR:
+        lderr(cct) << __func__ << " CQ Overflow, dev = " << get_stack()->get_infiniband().get_device()->ctxt
+                   << " Need destroy and recreate resource " << dendl;
+        break;
+      /***********************QP events********************/
+      case IBV_EVENT_QP_FATAL:
+        /* Error occurred on a QP and it transitioned to error state */
+        lderr(cct) << __func__ << " Error occurred on a QP and it transitioned to error state, dev = "
+                   << get_stack()->get_infiniband().get_device()->ctxt << " Need destroy and recreate resource " << dendl;
+        break;
+      case IBV_EVENT_QP_LAST_WQE_REACHED:
+        /* Last WQE Reached on a QP associated with and SRQ */
+        {
+          // FIXME: Currently we must ensure no other factor make QP in ERROR state,
+          // otherwise this qp can't be deleted in current cleanup flow.
+          perf_logger->inc(l_msgr_rdma_async_last_wqe_events);
+          uint64_t qpn = async_event.element.qp->qp_num;
+          lderr(cct) << __func__ << " event associated qp=" << async_event.element.qp
                      << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
-      std::lock_guard l{lock};
-      RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
-      if (!conn) {
-        ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
-      } else {
-        ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
-        conn->fault();
-        if (!cct->_conf->ms_async_rdma_cm)
-          erase_qpn_lockless(qpn);
-      }
-    } else {
-      ldout(cct, 1) << __func__ << " ibv_get_async_event: dev=" << get_stack()->get_infiniband().get_device()->ctxt
-                    << " evt: " << ibv_event_type_str(async_event.event_type)
-                    << dendl;
+          std::lock_guard l{lock};
+          RDMAConnectedSocketImpl *conn = get_conn_lockless(qpn);
+          if (!conn) {
+            ldout(cct, 1) << __func__ << " missing qp_num=" << qpn << " discard event" << dendl;
+          } else {
+            ldout(cct, 1) << __func__ << " it's not forwardly stopped by us, reenable=" << conn << dendl;
+            conn->fault();
+            if (!cct->_conf->ms_async_rdma_cm)
+              erase_qpn_lockless(qpn);
+          }
+        }
+        break;
+      case IBV_EVENT_QP_REQ_ERR:
+        /* Invalid Request Local Work Queue Error */
+        [[fallthrough]];
+      case IBV_EVENT_QP_ACCESS_ERR:
+        /* Local access violation error */
+        [[fallthrough]];
+      case IBV_EVENT_COMM_EST:
+        /* Communication was established on a QP */
+        [[fallthrough]];
+      case IBV_EVENT_SQ_DRAINED:
+        /* Send Queue was drained of outstanding messages in progress */
+        [[fallthrough]];
+      case IBV_EVENT_PATH_MIG:
+        /* A connection has migrated to the alternate path */
+        [[fallthrough]];
+      case IBV_EVENT_PATH_MIG_ERR:
+        /* A connection failed to migrate to the alternate path */
+        [[fallthrough]];
+
+      /***********************SRQ events*******************/
+      case IBV_EVENT_SRQ_ERR:
+        /* Error occurred on an SRQ */
+        // fall through #TODO
+        [[fallthrough]];
+      case IBV_EVENT_SRQ_LIMIT_REACHED:
+        /* SRQ limit was reached */
+        [[fallthrough]];
+        // fall through #TODO
+
+      /***********************Port events******************/
+      case IBV_EVENT_PORT_ACTIVE:
+        /* Link became active on a port */
+        [[fallthrough]];
+        // fall through #TODO
+      case IBV_EVENT_PORT_ERR:
+        /* Link became unavailable on a port */
+        [[fallthrough]];
+      case IBV_EVENT_LID_CHANGE:
+        /* LID was changed on a port */
+        [[fallthrough]];
+      case IBV_EVENT_PKEY_CHANGE:
+        /* P_Key table was changed on a port */
+        [[fallthrough]];
+      case IBV_EVENT_SM_CHANGE:
+        /* SM was changed on a port */
+        [[fallthrough]];
+      case IBV_EVENT_CLIENT_REREGISTER:
+        /* SM sent a CLIENT_REREGISTER request to a port */
+        [[fallthrough]];
+      case IBV_EVENT_GID_CHANGE:
+        /* GID table was changed on a port */
+        [[fallthrough]];
+
+      /***********************CA events******************/
+      //CA events:
+      case IBV_EVENT_DEVICE_FATAL:
+        /* CA is in FATAL state */
+        ldout(cct, 1) << __func__ << " ibv_get_async_event: dev = " << get_stack()->get_infiniband().get_device()->ctxt
+                      << " evt: " << ibv_event_type_str(async_event.event_type) << dendl;
+	break;
+      default:
+        lderr(cct) << __func__ << " ibv_get_async_event: dev = " << get_stack()->get_infiniband().get_device()->ctxt
+                   << " unknown event: " << async_event.event_type << dendl;
     }
     ibv_ack_async_event(&async_event);
   }
