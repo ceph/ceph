@@ -247,6 +247,21 @@ function TEST_backfill_test_multi() {
     fi
 
     ceph pg dump pgs
+    ceph status
+
+    ceph status --format=json-pretty > $dir/stat.json
+
+    eval SEV=$(jq '.health.checks.PG_BACKFILL_FULL.severity' $dir/stat.json)
+    if [ "$SEV" != "HEALTH_WARN" ]; then
+      echo "PG_BACKFILL_FULL severity $SEV not HEALTH_WARN"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+    eval MSG=$(jq '.health.checks.PG_BACKFILL_FULL.summary.message' $dir/stat.json)
+    if [ "$MSG" != "Low space hindering backfill (add storage if this doesn't resolve itself): 4 pgs backfill_toofull" ]; then
+      echo "PG_BACKFILL_FULL message '$MSG' mismatched"
+      ERRORS="$(expr $ERRORS + 1)"
+    fi
+    rm -f $dir/stat.json
 
     if [ $ERRORS != "0" ];
     then
