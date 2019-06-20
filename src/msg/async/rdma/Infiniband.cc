@@ -616,27 +616,14 @@ void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk*> &ck)
   }
 }
 
-int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks, size_t bytes)
+int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks, size_t block_size)
 {
-  uint32_t num = bytes / buffer_size + 1;
-  if (bytes % buffer_size == 0)
-    --num;
-  int r = num;
   std::lock_guard l{lock};
-  if (free_chunks.empty())
-    return 0;
-  if (!bytes) {
-    r = free_chunks.size();
-    for (auto c : free_chunks)
-      chunks.push_back(c);
-    free_chunks.clear();
-    return r;
-  }
-  if (free_chunks.size() < num) {
-    num = free_chunks.size();
-    r = num;
-  }
-  for (uint32_t i = 0; i < num; ++i) {
+  uint32_t chunk_buffer_number = (block_size + buffer_size - 1) / buffer_size;
+  chunk_buffer_number = free_chunks.size() < chunk_buffer_number ? free_chunks.size(): chunk_buffer_number;
+  uint32_t r = 0;
+
+  for (r = 0; r < chunk_buffer_number; ++r) {
     chunks.push_back(free_chunks.back());
     free_chunks.pop_back();
   }
