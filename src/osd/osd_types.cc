@@ -4339,11 +4339,41 @@ void pg_log_t::generate_test_instances(list<pg_log_t*>& o)
     o.back()->log.push_back(**p);
 }
 
-void pg_log_t::copy_after(const pg_log_t &other, eversion_t v) 
+static void _handle_dups(CephContext* cct, pg_log_t &target, const pg_log_t &other, unsigned maxdups)
+{
+  auto earliest_dup_version =
+	        target.head.version < maxdups ? 0u : target.head.version - maxdups + 1;
+  lgeneric_subdout(cct, osd, 20) << "copy_up_to/copy_after earliest_dup_version " << earliest_dup_version << dendl;
+
+  for (auto d = other.dups.cbegin(); d != other.dups.cend(); ++d) {
+    if (d->version.version >= earliest_dup_version) {
+      lgeneric_subdout(cct, osd, 20)
+	      << "copy_up_to/copy_after copy dup version "
+	      << d->version << dendl;
+      target.dups.push_back(pg_log_dup_t(*d));
+    }
+  }
+
+  for (auto i = other.log.cbegin(); i != other.log.cend(); ++i) {
+    ceph_assert(i->version > other.tail);
+    if (i->version > target.tail)
+      break;
+    if (i->version.version >= earliest_dup_version) {
+      lgeneric_subdout(cct, osd, 20)
+		<< "copy_up_to/copy_after copy dup from log version "
+		<< i->version << dendl;
+      target.dups.push_back(pg_log_dup_t(*i));
+    }
+  }
+}
+
+
+void pg_log_t::copy_after(CephContext* cct, const pg_log_t &other, eversion_t v)
 {
   can_rollback_to = other.can_rollback_to;
   head = other.head;
   tail = other.tail;
+  lgeneric_subdout(cct, osd, 20) << __func__ << " v " << v << dendl;
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        ++i) {
@@ -4353,45 +4383,31 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
       tail = i->version;
       break;
     }
+    lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
     log.push_front(*i);
   }
+  _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
 }
 
-void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
-{
-  can_rollback_to = other.can_rollback_to;
-  list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
-  assert(i != other.log.rend());
-  while (i->version > to) {
-    ++i;
-    assert(i != other.log.rend());
-  }
-  assert(i->version == to);
-  head = to;
-  for ( ; i != other.log.rend(); ++i) {
-    if (i->version <= from) {
-      tail = i->version;
-      break;
-    }
-    log.push_front(*i);
-  }
-}
-
-void pg_log_t::copy_up_to(const pg_log_t &other, int max)
+void pg_log_t::copy_up_to(CephContext* cct, const pg_log_t &other, int max)
 {
   can_rollback_to = other.can_rollback_to;
   int n = 0;
   head = other.head;
   tail = other.tail;
+  lgeneric_subdout(cct, osd, 20) << __func__ << " max " << max << dendl;
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
        i != other.log.rend();
        ++i) {
+    ceph_assert(i->version > other.tail);
     if (n++ >= max) {
       tail = i->version;
       break;
     }
+    lgeneric_subdout(cct, osd, 20) << __func__ << " copy log version " << i->version << dendl;
     log.push_front(*i);
   }
+  _handle_dups(cct, *this, other, cct->_conf->osd_pg_log_dups_tracked);
 }
 
 ostream& pg_log_t::print(ostream& out) const
