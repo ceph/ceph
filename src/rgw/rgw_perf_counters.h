@@ -33,6 +33,8 @@ enum {
   l_rgw_keystone_token_cache_hit,
   l_rgw_keystone_token_cache_miss,
 
+  l_rgw_gc_retire,
+
   l_rgw_pubsub_event_triggered,
   l_rgw_pubsub_event_lost,
   l_rgw_pubsub_store_ok,
