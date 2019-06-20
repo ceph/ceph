@@ -2119,6 +2119,8 @@ private:
   float get_osd_recovery_sleep();
   float get_osd_delete_sleep();
 
+  int get_recovery_max_active();
+
   void probe_smart(const string& devid, ostream& ss);
 
 public:
