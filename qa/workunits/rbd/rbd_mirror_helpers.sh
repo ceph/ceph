@@ -731,6 +731,15 @@ create_image()
 	--image-feature layering,exclusive-lock,journaling $@ ${image}
 }
 
+enable_journaling()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} -p ${pool} feature enable ${image} journaling
+}
+
 set_image_meta()
 {
     local cluster=$1
