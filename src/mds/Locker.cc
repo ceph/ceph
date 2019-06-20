@@ -1961,7 +1961,7 @@ void Locker::issue_caps_set(set<CInode*>& inset)
     issue_caps(*p);
 }
 
-bool Locker::issue_caps(CInode *in, Capability *only_cap)
+int Locker::issue_caps(CInode *in, Capability *only_cap)
 {
   // allowed caps are determined by the lock mode.
   int all_allowed = in->get_caps_allowed_by_type(CAP_ANY);
@@ -2086,7 +2086,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
       break;
   }
 
-  return (nissued == 0);  // true if no re-issued, no callbacks
+  return nissued;
 }
 
 void Locker::issue_truncate(CInode *in)
