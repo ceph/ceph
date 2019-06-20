@@ -30,19 +30,19 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
       ::
 
-          [ceph-iscsi-gw]
+          [iscsigws]
           ceph-igw-1
           ceph-igw-2
 
 .. note::
   If co-locating the iSCSI gateway with an OSD node, then add the OSD node to the
-  ``[ceph-iscsi-gw]`` section.
+  ``[iscsigws]`` section.
 
 **Configuring:**
 
 The ``ceph-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
-directory called ``ceph-iscsi-gw.sample``. Create a copy of this sample file named
-``ceph-iscsi-gw.yml``. Review the following Ansible variables and descriptions,
+directory called ``iscsigws.yml.sample``. Create a copy of this sample file named
+``iscsigws.yml``. Review the following Ansible variables and descriptions,
 and update accordingly.
 
 +--------------------------------------+--------------------------------------+
@@ -85,7 +85,7 @@ and update accordingly.
 |                                      | the access point for iSCSI traffic.  |
 |                                      | Each IP should correspond to an IP   |
 |                                      | available on the hosts defined in    |
-|                                      | the ``ceph-iscsi-gw`` host group in  |
+|                                      | the ``iscsigws`` host group in  |
 |                                      | ``/etc/ansible/hosts``.              |
 +--------------------------------------+--------------------------------------+
 | ``rbd_devices``                      | This section defines the RBD images  |
@@ -146,7 +146,7 @@ On the Ansible installer node, perform the following steps.
    ::
 
        # cd /usr/share/ceph-ansible
-       # ansible-playbook ceph-iscsi-gw.yml
+       # ansible-playbook iscsigws.yml
 
    .. note::
     The Ansible playbook will handle RPM dependencies, RBD creation
@@ -200,7 +200,7 @@ interacting with the ``rbd-target-gw`` Systemd service.
 
 **Administration:**
 
-Within the ``/usr/share/ceph-ansible/group_vars/ceph-iscsi-gw`` file
+Within the ``/usr/share/ceph-ansible/group_vars/iscsigws.yml`` file
 there are a number of operational workflows that the Ansible playbook
 supports.
 
@@ -210,7 +210,7 @@ supports.
   the operating system.
 
 +--------------------------------------+--------------------------------------+
-| I want to…​                          | Update the ``ceph-iscsi-gw`` file    |
+| I want to…​                          | Update the ``iscsisgwi.yml`` file    |
 |                                      | by…​                                 |
 +======================================+======================================+
 | Add more RBD images                  | Adding another entry to the          |
@@ -264,7 +264,7 @@ change across the iSCSI gateway nodes.
 
 ::
 
-    # ansible-playbook ceph-iscsi-gw.yml
+    # ansible-playbook iscsigws.yml
 
 **Removing the Configuration:**
 
