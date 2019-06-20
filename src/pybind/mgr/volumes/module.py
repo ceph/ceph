@@ -46,8 +46,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolumegroup create '
                    'name=vol_name,type=CephString '
-                   'name=group_name,type=CephString ',
-            'desc': "Create a CephFS subvolume group in a volume",
+                   'name=group_name,type=CephString '
+                   'name=pool_layout,type=CephString,req=false ',
+            'desc': "Create a CephFS subvolume group in a volume, and optionally, "
+                    "with a specific data pool layout",
             'perm': 'rw'
         },
         {
@@ -63,10 +65,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
                    'name=size,type=CephInt,req=false '
-                   'name=group_name,type=CephString,req=false ',
+                   'name=group_name,type=CephString,req=false '
+                   'name=pool_layout,type=CephString,req=false ',
             'desc': "Create a CephFS subvolume in a volume, and optionally, "
-                    "with a specific size (in bytes) and in a specific "
-                    "subvolume group",
+                    "with a specific size (in bytes), a specific data pool layout "
+                    "and in a specific subvolume group",
             'perm': 'rw'
         },
         {
@@ -197,8 +200,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """
         vol_name = cmd['vol_name']
         group_name = cmd['group_name']
+        pool_layout = cmd.get('pool_layout', None)
 
-        return self.vc.create_subvolume_group(vol_name, group_name)
+        return self.vc.create_subvolume_group(vol_name, group_name, pool=pool_layout)
 
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
         """
@@ -218,8 +222,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         sub_name = cmd['sub_name']
         size = cmd.get('size', None)
         group_name = cmd.get('group_name', None)
+        pool_layout = cmd.get('pool_layout', None)
 
-        return self.vc.create_subvolume(vol_name, sub_name, group_name, size)
+        return self.vc.create_subvolume(vol_name, sub_name, group_name, size, pool=pool_layout)
 
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
         """

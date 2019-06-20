@@ -61,7 +61,7 @@ class SubVolume(object):
 
     ### basic subvolume operations
 
-    def create_subvolume(self, spec, size=None, namespace_isolated=True, mode=0o755):
+    def create_subvolume(self, spec, size=None, namespace_isolated=True, mode=0o755, pool=None):
         """
         Set up metadata, pools and auth for a subvolume.
 
@@ -71,6 +71,7 @@ class SubVolume(object):
         :param spec: subvolume path specification
         :param size: In bytes, or None for no size limit
         :param namespace_isolated: If true, use separate RADOS namespace for this subvolume
+        :param pool: the RADOS pool where the data objects of the subvolumes will be stored
         :return: None
         """
         subvolpath = spec.subvolume_path
@@ -81,12 +82,15 @@ class SubVolume(object):
         if size is not None:
             self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
 
+        if pool:
+            self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+
         xattr_key = xattr_val = None
         if namespace_isolated:
             # enforce security isolation, use separate namespace for this subvolume
             xattr_key = 'ceph.dir.layout.pool_namespace'
             xattr_val = spec.fs_namespace
-        else:
+        elif not pool:
             # If subvolume's namespace layout is not set, then the subvolume's pool
             # layout remains unset and will undesirably change with ancestor's
             # pool layout changes.
@@ -169,9 +173,12 @@ class SubVolume(object):
 
     ### group operations
 
-    def create_group(self, spec, mode=0o755):
+    def create_group(self, spec, mode=0o755, pool=None):
         path = spec.group_path
         self._mkdir_p(path, mode)
+        if not pool:
+            pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
+        self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
 
     def remove_group(self, spec, force):
         path = spec.group_path
@@ -197,12 +204,7 @@ class SubVolume(object):
         on the requested path, keep checking parents until we find it.
         """
         try:
-            result = self.fs.getxattr(path, attr).decode('utf-8')
-            if result == "":
-                # Annoying!  cephfs gives us empty instead of an error when attr not found
-                raise cephfs.NoData()
-            else:
-                return result
+            return self.fs.getxattr(path, attr).decode('utf-8')
         except cephfs.NoData:
             if path == "/":
                 raise

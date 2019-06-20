@@ -171,7 +171,7 @@ class VolumeClient(object):
 
     ### subvolume operations
 
-    def create_subvolume(self, volname, subvolname, groupname, size):
+    def create_subvolume(self, volname, subvolname, groupname, size, pool=None):
         ret = 0, "", ""
         try:
             if not self.volume_exists(volname):
@@ -184,7 +184,7 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
                         "`ceph fs subvolumegroup create` before creating subvolumes".format(groupname))
-                sv.create_subvolume(spec, size)
+                sv.create_subvolume(spec, size, pool=pool)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -284,7 +284,7 @@ class VolumeClient(object):
 
     ### group operations
 
-    def create_subvolume_group(self, volname, groupname):
+    def create_subvolume_group(self, volname, groupname, pool=None):
         ret = 0, "", ""
         try:
             if not self.volume_exists(volname):
@@ -295,7 +295,7 @@ class VolumeClient(object):
             # TODO: validate that subvol size fits in volume size
             with SubVolume(self.mgr, fs_name=volname) as sv:
                 spec = SubvolumeSpec("", groupname)
-                sv.create_group(spec)
+                sv.create_group(spec, pool=pool)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
