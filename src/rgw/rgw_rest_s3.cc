@@ -627,11 +627,11 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
       continue;
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("Entry");
-    formatter->dump_string("Category", uiter->first);
-    formatter->dump_int("BytesSent", usage.bytes_sent);
-    formatter->dump_int("BytesReceived", usage.bytes_received);
-    formatter->dump_int("Ops", usage.ops);
-    formatter->dump_int("SuccessfulOps", usage.successful_ops);
+    encode_json("Category", uiter->first, formatter);
+    encode_json("BytesSent", usage.bytes_sent, formatter);
+    encode_json("BytesReceived", usage.bytes_received, formatter);
+    encode_json("Ops", usage.ops, formatter);
+    encode_json("SuccessfulOps", usage.successful_ops, formatter);
     formatter->close_section(); // Entry
   }
   formatter->close_section(); // Category
@@ -640,9 +640,9 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const cls_user_bucket_entry& entry)
 {
   formatter->open_object_section("Entry");
-  formatter->dump_string("Bucket", name);
-  formatter->dump_int("Bytes", entry.size);
-  formatter->dump_int("Bytes_Rounded", entry.size_rounded);
+  encode_json("Bucket", name, formatter);
+  encode_json("Bytes", entry.size, formatter);
+  encode_json("Bytes_Rounded", entry.size_rounded, formatter);
   formatter->close_section(); // entry
 }
 
@@ -715,10 +715,10 @@ void RGWGetUsage_ObjStore_S3::send_response()
        rgw_usage_data total_usage;
        entry.sum(total_usage, categories);
        formatter->open_object_section("Total");
-       formatter->dump_int("BytesSent", total_usage.bytes_sent);
-       formatter->dump_int("BytesReceived", total_usage.bytes_received);
-       formatter->dump_int("Ops", total_usage.ops);
-       formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
+       encode_json("BytesSent", total_usage.bytes_sent, formatter);
+       encode_json("BytesReceived", total_usage.bytes_received, formatter);
+       encode_json("Ops", total_usage.ops, formatter);
+       encode_json("SuccessfulOps", total_usage.successful_ops, formatter);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }
@@ -727,9 +727,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
-     formatter->dump_int("TotalBytes", header.stats.total_bytes);
-     formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
-     formatter->dump_int("TotalEntries", header.stats.total_entries);
+     encode_json("TotalBytes", header.stats.total_bytes, formatter);
+     encode_json("TotalBytesRounded", header.stats.total_bytes_rounded, formatter);
+     encode_json("TotalEntries", header.stats.total_entries, formatter);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
