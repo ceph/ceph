@@ -15,6 +15,9 @@ import math
 import re
 import shlex
 
+if sys.version_info.major < 3:
+   raise RuntimeError("cephfs-shell is only compatible with python3")
+
 try:
     from cmd2 import with_argparser
 except ImportError:

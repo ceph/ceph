@@ -11,12 +11,6 @@ log = logging.getLogger(__name__)
 
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
-    py_version = 'python'
-
-    def setUp(self):
-        CephFSTestCase.setUp(self)
-        self.py_version = self.ctx.config.get('overrides', {}).get('python', 'python')
-        log.info("using python version: {}".format(self.py_version))
 
     def _cephfs_shell(self, cmd, opts=None, stdin=None):
         args = ["cephfs-shell", "-c", self.mount_a.config_path]
