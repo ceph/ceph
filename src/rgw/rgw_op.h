@@ -1656,6 +1656,7 @@ public:
 class RGWSetRequestPayment : public RGWOp {
 protected:
   bool requester_pays;
+  bufferlist in_data;
 public:
  RGWSetRequestPayment() : requester_pays(false) {}
 
