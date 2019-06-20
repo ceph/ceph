@@ -161,7 +161,7 @@ int rgw_store_user_info(RGWUserCtl *user_ctl,
 {
   map<string, bufferlist> attrs;
   return user_ctl->store_info(info, RGWUserCtl::PutParams()
-                                    .set_old_info(&info)
+                                    .set_old_info(old_info)
                                     .set_objv_tracker(objv_tracker)
                                     .set_mtime(mtime)
                                     .set_exclusive(exclusive)
@@ -2440,7 +2440,7 @@ public:
   RGWMetadataHandlerPut_User(RGWUserMetadataHandler *_handler,
                              RGWSI_MetaBackend_Handler::Op *op, string& entry,
                              RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(handler, op, entry, obj, objv_tracker, type),
+                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, type),
                                                                 handler(_handler) {
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }

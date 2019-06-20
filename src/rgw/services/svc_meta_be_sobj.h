@@ -120,7 +120,7 @@ public:
 
   void init(RGWSI_SysObj *_sysobj_svc,
             RGWSI_MDLog *_mdlog_svc) {
-    base_init(mdlog_svc);
+    base_init(_mdlog_svc);
     sysobj_svc = _sysobj_svc;
   }
 
