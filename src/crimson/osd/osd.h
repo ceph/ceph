@@ -124,6 +124,7 @@ private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
+  seastar::future<> _add_me_to_crush();
 
   seastar::future<Ref<PG>> make_pg(cached_map_t create_map, spg_t pgid);
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
