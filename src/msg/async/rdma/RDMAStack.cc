@@ -569,17 +569,15 @@ void RDMAWorker::initialize()
 int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
 		       const SocketOptions &opt,ServerSocket *sock)
 {
-  get_stack()->get_infiniband().init();
+  Infiniband &ib = stack->get_infiniband();
+  ib.init();
   dispatcher->polling_start();
+
   RDMAServerSocketImpl *p;
   if (cct->_conf->ms_async_rdma_type == "iwarp") {
-    p = new RDMAIWARPServerSocketImpl(
-      cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this,
-      sa, addr_slot);
+    p = new RDMAIWARPServerSocketImpl(cct, &ib, dispatcher, this, sa, addr_slot);
   } else {
-    p = new RDMAServerSocketImpl(cct, &get_stack()->get_infiniband(),
-				 &get_stack()->get_dispatcher(), this, sa,
-				 addr_slot);
+    p = new RDMAServerSocketImpl(cct, &ib, dispatcher, this, sa, addr_slot);
   }
   int r = p->listen(sa, opt);
   if (r < 0) {
@@ -593,14 +591,15 @@ int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
 
 int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
 {
-  get_stack()->get_infiniband().init();
+  Infiniband &ib = stack->get_infiniband();
+  ib.init();
   dispatcher->polling_start();
 
   RDMAConnectedSocketImpl* p;
   if (cct->_conf->ms_async_rdma_type == "iwarp") {
-    p = new RDMAIWARPConnectedSocketImpl(cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this);
+    p = new RDMAIWARPConnectedSocketImpl(cct, &ib, dispatcher, this);
   } else {
-    p = new RDMAConnectedSocketImpl(cct, &get_stack()->get_infiniband(), &get_stack()->get_dispatcher(), this);
+    p = new RDMAConnectedSocketImpl(cct, &ib, dispatcher, this);
   }
   int r = p->try_connect(addr, opts);
 
@@ -617,11 +616,10 @@ int RDMAWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, Co
 int RDMAWorker::get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes)
 {
   ceph_assert(center.in_thread());
-  int r = get_stack()->get_infiniband().get_tx_buffers(c, bytes);
-  ceph_assert(r >= 0);
-  size_t got = get_stack()->get_infiniband().get_memory_manager()->get_tx_buffer_size() * r;
+  int r = stack->get_infiniband().get_tx_buffers(c, bytes);
+  size_t got = stack->get_infiniband().get_memory_manager()->get_tx_buffer_size() * r;
   ldout(cct, 30) << __func__ << " need " << bytes << " bytes, reserve " << got << " registered  bytes, inflight " << dispatcher->inflight << dendl;
-  stack->get_dispatcher().inflight += r;
+  dispatcher->inflight += r;
   if (got >= bytes)
     return r;
 
