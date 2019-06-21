@@ -4407,7 +4407,7 @@ void OSD::clear_temp_objects()
       ceph_assert(ch);
       store->collection_list(ch, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
-			     &objects, &next);
+			     &objects, &next, 0);
       if (objects.empty())
 	break;
       vector<ghobject_t>::iterator q;
@@ -4463,7 +4463,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
   while (true) {
     objects.clear();
     store->collection_list(ch, next, ghobject_t::get_max(),
-      max, &objects, &next);
+      max, &objects, &next, 0);
     generic_dout(10) << __func__ << " " << objects << dendl;
     if (objects.empty())
       break;

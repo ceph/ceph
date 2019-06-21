@@ -3835,7 +3835,8 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
     ghobject_t::get_max(),
     max,
     &olist,
-    &next);
+    &next,
+    0);
   dout(20) << __func__ << " " << olist << dendl;
 
   OSDriver::OSTransaction _t(osdriver.get_transaction(&t));

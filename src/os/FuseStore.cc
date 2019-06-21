@@ -507,7 +507,7 @@ static int os_readdir(const char *path,
       while (true) {
 	vector<ghobject_t> ls;
 	int r = fs->store->collection_list(
-	  ch, next, last, 1000, &ls, &next);
+	  ch, next, last, 1000, &ls, &next, 0);
 	if (r < 0)
 	  return r;
 	for (auto p : ls) {

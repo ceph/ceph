@@ -4943,7 +4943,7 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
   ghobject_t max;
   while (!max.is_max()) {
     r = collection_list(cid, max, ghobject_t::get_max(),
-			300, &objects, &max);
+			300, &objects, &max, 0);
     if (r < 0)
       return r;
     for (vector<ghobject_t>::iterator i = objects.begin();
@@ -5140,7 +5140,7 @@ int FileStore::collection_list(const coll_t& c,
 			       const ghobject_t& orig_start,
 			       const ghobject_t& end,
 			       int max,
-			       vector<ghobject_t> *ls, ghobject_t *next)
+			       vector<ghobject_t> *ls, ghobject_t *next, int flags)
 {
   ghobject_t start = orig_start;
   if (start.is_max())
@@ -5180,7 +5180,7 @@ int FileStore::collection_list(const coll_t& c,
     if (start < sep) {
       dout(10) << __FUNC__ << ": first checking temp pool" << dendl;
       coll_t temp = c.get_temp();
-      int r = collection_list(temp, start, end, max, ls, next);
+      int r = collection_list(temp, start, end, max, ls, next, flags);
       if (r < 0)
 	return r;
       if (*next != ghobject_t::get_max())
@@ -5908,7 +5908,8 @@ int FileStore::_merge_collection(const coll_t& cid,
 	next, ghobject_t::get_max(),
 	get_ideal_list_max(),
 	&objects,
-	&next);
+	&next,
+	0);
       if (objects.empty())
 	break;
       for (vector<ghobject_t>::iterator i = objects.begin();
@@ -5991,7 +5992,8 @@ int FileStore::_split_collection(const coll_t& cid,
 	next, ghobject_t::get_max(),
 	get_ideal_list_max(),
 	&objects,
-	&next);
+	&next,
+	0);
       if (objects.empty())
 	break;
       for (vector<ghobject_t>::iterator i = objects.begin();
@@ -6010,7 +6012,8 @@ int FileStore::_split_collection(const coll_t& cid,
 	next, ghobject_t::get_max(),
 	get_ideal_list_max(),
 	&objects,
-	&next);
+	&next,
+	0);
       if (objects.empty())
 	break;
       for (vector<ghobject_t>::iterator i = objects.begin();

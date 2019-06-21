@@ -10357,7 +10357,7 @@ int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
   vector<ghobject_t> ls;
   ghobject_t next;
   int r = collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1,
-			  &ls, &next);
+			  &ls, &next, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
          << dendl;
@@ -10379,16 +10379,17 @@ int BlueStore::collection_bits(CollectionHandle& ch)
 
 int BlueStore::collection_list(
   CollectionHandle &c_, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  vector<ghobject_t> *ls, ghobject_t *pnext, int flags)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   c->flush();
   dout(15) << __func__ << " " << c->cid
-           << " start " << start << " end " << end << " max " << max << dendl;
+           << " start " << start << " end " << end << " max " << max
+	   << " flags " << flags << dendl;
   int r;
   {
     std::shared_lock l(c->lock);
-    r = _collection_list(c, start, end, max, ls, pnext);
+    r = _collection_list(c, start, end, max, ls, pnext, flags);
   }
 
   dout(10) << __func__ << " " << c->cid
@@ -10400,7 +10401,7 @@ int BlueStore::collection_list(
 
 int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
+  vector<ghobject_t> *ls, ghobject_t *pnext, int flags)
 {
 
   if (!c->exists)
@@ -15024,7 +15025,8 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     // then check if all of them are marked as non-existent.
     // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
-                         nonexistent_count + 1, &ls, &next);
+                         nonexistent_count + 1, &ls, &next,
+			 CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     if (r >= 0) {
       // If true mean collecton has more objects than nonexistent_count,
       // so bypass check.
