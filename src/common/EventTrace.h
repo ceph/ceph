@@ -44,7 +44,7 @@
 
 #endif
 
-#define LOG_LEVEL 1
+#define LOG_LEVEL 30
 
 class EventTrace {
 private:
