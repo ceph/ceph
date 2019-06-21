@@ -4,6 +4,6 @@ set(osdc_files
   Objecter.cc
   Striper.cc)
 add_library(osdc STATIC ${osdc_files})
-if(WITH_LTTNG AND WITH_EVENTTRACE)
+if(WITH_EVENTTRACE)
   add_dependencies(osdc eventtrace_tp)
 endif()

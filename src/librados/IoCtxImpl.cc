@@ -728,7 +728,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->is_read = true;
@@ -763,7 +763,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
     return -EROFS;
 
   Context *oncomplete = new C_aio_Complete(c);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
 
@@ -797,7 +797,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_READ_OP_BEGIN");
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->is_read = true;
@@ -827,7 +827,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_READ_OP_BEGIN");
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->is_read = true;
@@ -873,7 +873,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   Context *nested = new C_aio_Complete(c);
   C_ObjectOperation *onack = new C_ObjectOperation(nested);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) nested)->oid = oid;
 #endif
   c->is_read = true;
@@ -954,7 +954,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   ZTracer::Trace trace;
@@ -986,7 +986,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
     return -EROFS;
 
   Context *oncomplete = new C_aio_Complete(c);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
 
@@ -1016,7 +1016,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
     return -EROFS;
 
   Context *oncomplete = new C_aio_Complete(c);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
 
@@ -1051,7 +1051,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->io = this;
@@ -1078,7 +1078,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, i
 
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->io = this;
@@ -1321,7 +1321,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->is_read = true;
@@ -1343,7 +1343,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
   c->is_read = true;
@@ -1971,7 +1971,7 @@ void librados::IoCtxImpl::C_aio_Complete::finish(int r)
     c->io->complete_aio_write(c);
   }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_OP_COMPLETE");
 #endif
   c->put_unlock();

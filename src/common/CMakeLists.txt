@@ -120,9 +120,7 @@ elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 endif()
 
-if(WITH_LTTNG AND WITH_EVENTTRACE)
-  message(STATUS " Using EventTrace class.")
-  add_definitions("-DWITH_EVENTTRACE")
+if(WITH_EVENTTRACE)
   list(APPEND common_srcs EventTrace.cc)
 endif()
 
