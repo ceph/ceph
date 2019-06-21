@@ -15,7 +15,7 @@ class TestVolumeClient(CephFSTestCase):
     # One for looking at the global filesystem, one for being
     # the VolumeClient, two for mounting the created shares
     CLIENTS_REQUIRED = 4
-    default_py_version = 'python'
+    default_py_version = 'python3'
 
     def setUp(self):
         CephFSTestCase.setUp(self)
@@ -966,6 +966,29 @@ vc.disconnect()
             obj_name = obj_name,
             obj_data = obj_data
         )))
+
+    def test_put_object_versioned(self):
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+        self._configure_vc_auth(vc_mount, "manila")
+
+        obj_data = 'test_data'
+        obj_name = 'test_vc_obj'
+        pool_name = self.fs.get_data_pool_names()[0]
+        self.fs.rados(['put', obj_name, '-'], pool=pool_name, stdin_data=obj_data)
+
+        self._volume_client_python(vc_mount, dedent("""
+            data, version_before = vc.get_object_and_version("{pool_name}", "{obj_name}")
+
+            if sys_version_info.major < 3:
+                data = data + 'modification1'
+            elif sys_version_info.major > 3:
+                data = str.encode(data.decode() + 'modification1')
+
+            vc.put_object_versioned("{pool_name}", "{obj_name}", data, version_before)
+            data, version_after = vc.get_object_and_version("{pool_name}", "{obj_name}")
+            assert version_after == version_before + 1
+        """).format(pool_name=pool_name, obj_name=obj_name))
 
     def test_version_check_for_put_object_versioned(self):
         vc_mount = self.mounts[1]
