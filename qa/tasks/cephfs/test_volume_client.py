@@ -34,6 +34,7 @@ class TestVolumeClient(CephFSTestCase):
         return client.run_python("""
 from __future__ import print_function
 from ceph_volume_client import CephFSVolumeClient, VolumePath
+from sys import version_info as sys_version_info
 import logging
 log = logging.getLogger("ceph_volume_client")
 log.addHandler(logging.StreamHandler())
@@ -1001,9 +1002,19 @@ vc.disconnect()
         with self.assertRaises(CommandFailedError):
             self._volume_client_python(vc_mount, dedent("""
                 data, version = vc.get_object_and_version("{pool_name}", "{obj_name}")
-                data += 'm1'
+
+                if sys_version_info.major < 3:
+                    data = data + 'm1'
+                elif sys_version_info.major > 3:
+                    data = str.encode(data.decode('utf-8') + 'm1')
+
                 vc.put_object("{pool_name}", "{obj_name}", data)
-                data += 'm2'
+
+                if sys_version_info.major < 3:
+                    data = data + 'm2'
+                elif sys_version_info.major > 3:
+                    data = str.encode(data.decode('utf-8') + 'm2')
+
                 vc.put_object_versioned("{pool_name}", "{obj_name}", data, version)
             """).format(pool_name=pool_name, obj_name=obj_name))
 
