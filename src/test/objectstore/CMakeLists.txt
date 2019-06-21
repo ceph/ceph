@@ -83,6 +83,10 @@ add_executable(unittest_rocksdb_option
 add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
+if(WITH_EVENTTRACE)
+  add_dependencies(os eventtrace_tp)
+endif()
+
 if(WITH_BLUESTORE)
 
   add_executable(unittest_alloc

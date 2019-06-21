@@ -531,7 +531,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                    << (rc ? " continuely." : " done.") << dendl;
   }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
@@ -1366,7 +1366,7 @@ CtPtr ProtocolV2::handle_message() {
   ldout(cct, 20) << __func__ << dendl;
   ceph_assert(state == THROTTLE_DONE);
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   ltt_recv_stamp = ceph_clock_now();
 #endif
   recv_stamp = ceph_clock_now();
@@ -1455,7 +1455,7 @@ CtPtr ProtocolV2::handle_message() {
     }
   }
 
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+#if defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
     utime_t ltt_processed_stamp = ceph_clock_now();
