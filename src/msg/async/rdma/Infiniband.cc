@@ -168,13 +168,12 @@ Infiniband::QueuePair::QueuePair(
   cm_id(cid),
   txcq(txcq),
   rxcq(rxcq),
-  initial_psn(0),
+  initial_psn(lrand48() & PSN_MSK),
   max_send_wr(tx_queue_len),
   max_recv_wr(rx_queue_len),
   q_key(q_key),
   dead(false)
 {
-  initial_psn = lrand48() & PSN_MSK;
   if (type != IBV_QPT_RC && type != IBV_QPT_UD && type != IBV_QPT_RAW_PACKET) {
     lderr(cct) << __func__ << " invalid queue pair type" << cpp_strerror(errno) << dendl;
     ceph_abort();
