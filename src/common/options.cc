@@ -4676,6 +4676,18 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Enables Linux io_uring API instead of libaio"),
 
+    Option("bluestore_collection_list_min_prefetch", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Number of additional entries prefetched during collection listing")
+    .set_long_description("Number of additional entries prefetched during collection listing. Applied if listing boundaries aren't specified"),
+
+    Option("bluestore_collection_list_prefetch", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(512)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Number of additional entries prefetched during collection listing")
+    .set_long_description("Number of additional entries prefetched during collection listing. Applied if listing boundaries aren't specified"),
+
     // -----------------------------------------
     // kstore
 
