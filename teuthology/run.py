@@ -226,9 +226,13 @@ def get_initial_tasks(lock, config, machine_type):
         init_tasks.extend([
             {'pcp': None},
             {'selinux': None},
-            {'ansible.cephlab': None},
-            {'clock': None}
         ])
+    if config.get('ceph_cm_ansible', True):
+        init_tasks.append({'ansible.cephlab': None})
+
+    # clock_sync_task: 'clock' or 'clock.check'
+    clock_sync_task = config.get('clock_sync_task', 'clock')
+    init_tasks.append({clock_sync_task: None})
 
     if 'redhat' in config:
         init_tasks.extend([
