@@ -1512,20 +1512,6 @@ public:
     }
 #endif
 
-    utime_t log_state_latency(PerfCounters *logger, int state) {
-      utime_t lat, now = ceph_clock_now();
-      lat = now - last_stamp;
-      logger->tinc(state, lat);
-#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
-      if (state >= l_bluestore_state_prepare_lat && state <= l_bluestore_state_done_lat) {
-        double usecs = (now.to_nsec()-last_stamp.to_nsec())/1000;
-        OID_ELAPSED("", usecs, get_state_latency_name(state));
-      }
-#endif
-      last_stamp = now;
-      return lat;
-    }
-
     CollectionRef ch;
     OpSequencerRef osr;  // this should be ch->osr
     boost::intrusive::list_member_hook<> sequencer_item;
@@ -1597,6 +1583,49 @@ public:
       store->txc_aio_finish(this);
     }
   };
+
+
+  class BlueStoreThrottle {
+    Throttle throttle_bytes;           ///< submit to commit
+    Throttle throttle_deferred_bytes;  ///< submit to deferred complete
+
+
+  public:
+    BlueStoreThrottle(CephContext *cct) :
+      throttle_bytes(cct, "bluestore_throttle_bytes",
+		     cct->_conf->bluestore_throttle_bytes),
+      throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
+			      cct->_conf->bluestore_throttle_bytes +
+			      cct->_conf->bluestore_throttle_deferred_bytes)
+    {}
+
+
+    utime_t log_state_latency(
+      TransContext &txc, PerfCounters *logger, int state);
+    bool try_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point);
+    void finish_start_transaction(
+      KeyValueDB &db,
+      TransContext &txc,
+      mono_clock::time_point);
+    void release_kv_throttle(uint64_t cost) {
+      throttle_bytes.put(cost);
+    }
+    void release_deferred_throttle(uint64_t cost) {
+      throttle_deferred_bytes.put(cost);
+    }
+    bool should_submit_deferred() {
+      return throttle_deferred_bytes.past_midpoint();
+    }
+    void reset_throttle(const ConfigProxy &conf) {
+      throttle_bytes.reset_max(conf->bluestore_throttle_bytes);
+      throttle_deferred_bytes.reset_max(
+	conf->bluestore_throttle_bytes +
+	conf->bluestore_throttle_deferred_bytes);
+    }
+  } bsthrottle;
 
   typedef boost::intrusive::list<
     TransContext,
@@ -1837,9 +1866,6 @@ private:
   std::atomic<uint64_t> nid_max = {0};
   std::atomic<uint64_t> blobid_last = {0};
   std::atomic<uint64_t> blobid_max = {0};
-
-  Throttle throttle_bytes;          ///< submit to commit
-  Throttle throttle_deferred_bytes;  ///< submit to deferred complete
 
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
@@ -2202,7 +2228,7 @@ public:
 private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t);
-  void _txc_applied_kv(TransContext *txc);
+  void _txc_apply_kv(TransContext *txc, bool sync_submit_transaction);
   void _txc_committed_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
