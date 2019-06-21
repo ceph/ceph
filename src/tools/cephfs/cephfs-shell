@@ -129,8 +129,9 @@ def glob(path, pattern):
     if path == '/' or is_dir_exists(os.path.basename(path),
                                         parent_dir):
         for i in ls(path, opts='A'):
-            if fnmatch.fnmatch(i.d_name, pattern):
-                paths.append(os.path.join(path, i.d_name))
+            dname = i.d_name.decode('utf-8')
+            if fnmatch.fnmatch(dname, pattern):
+                paths.append(os.path.join(path, dname))
     return paths
 
 
