@@ -4939,6 +4939,17 @@ std::vector<Option> get_global_options() {
     .set_description("Enforces specific hw profile settings")
     .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
 
+    Option("bluestore_collection_list_min_prefetch", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Number of additional entries prefetched during collection listing")
+    .set_long_description("Number of additional entries prefetched during collection listing. Applied if listing boundaries aren't specified"),
+
+    Option("bluestore_collection_list_prefetch", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(512)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Number of additional entries prefetched during collection listing")
+    .set_long_description("Number of additional entries prefetched during collection listing. Applied if listing boundaries aren't specified"),
 
     // -----------------------------------------
     // kstore
