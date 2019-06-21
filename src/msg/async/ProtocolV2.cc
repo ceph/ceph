@@ -1367,7 +1367,7 @@ CtPtr ProtocolV2::handle_message() {
   ceph_assert(state == THROTTLE_DONE);
 
 #if defined(WITH_EVENTTRACE)
-  ltt_recv_stamp = ceph_clock_now();
+  utime_t ltt_recv_stamp = ceph_clock_now();
 #endif
   recv_stamp = ceph_clock_now();
 
