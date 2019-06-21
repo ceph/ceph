@@ -4,19 +4,15 @@
 #ifndef CEPH_CRUSH_LOCATION_H
 #define CEPH_CRUSH_LOCATION_H
 
+#include <iosfwd>
 #include <map>
-#include <mutex>
 #include <string>
+
+#include "common/ceph_mutex.h"
 
 class CephContext;
 
 class CrushLocation {
-  CephContext *cct;
-  std::multimap<std::string,std::string> loc;
-  std::mutex lock;
-
-  int _parse(const std::string& s);
-
 public:
   explicit CrushLocation(CephContext *c) : cct(c) {
     init_on_startup();
@@ -26,10 +22,15 @@ public:
   int update_from_hook();  ///< call hook, if present
   int init_on_startup();
 
-  std::multimap<std::string,std::string> get_location() {
-    std::lock_guard<std::mutex> l(lock);
-    return loc;
-  }
+  std::multimap<std::string,std::string> get_location() const;
+
+private:
+  int _parse(const std::string& s);
+  CephContext *cct;
+  std::multimap<std::string,std::string> loc;
+  mutable ceph::mutex lock = ceph::make_mutex("CrushLocation");
 };
+
+std::ostream& operator<<(std::ostream& os, const CrushLocation& loc);
 
 #endif

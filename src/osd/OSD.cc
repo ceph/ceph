@@ -3589,21 +3589,13 @@ int OSD::update_crush_location()
 		      double(1ull << 40 /* TB */)));
   }
 
-  std::multimap<string,string> loc = cct->crush_location.get_location();
-  dout(10) << __func__ << " crush location is " << loc << dendl;
+  dout(10) << __func__ << " crush location is " << cct->crush_location << dendl;
 
   string cmd =
     string("{\"prefix\": \"osd crush create-or-move\", ") +
-    string("\"id\": ") + stringify(whoami) + string(", ") +
-    string("\"weight\":") + weight + string(", ") +
-    string("\"args\": [");
-  for (multimap<string,string>::iterator p = loc.begin(); p != loc.end(); ++p) {
-    if (p != loc.begin())
-      cmd += ", ";
-    cmd += "\"" + p->first + "=" + p->second + "\"";
-  }
-  cmd += "]}";
-
+    string("\"id\": ") + stringify(whoami) + ", " +
+    string("\"weight\":") + weight + ", " +
+    string("\"args\": [") + stringify(cct->crush_location) + "]}";
   return mon_cmd_maybe_osd_create(cmd);
 }
 
