@@ -4,10 +4,12 @@
 #include <fmt/ostream.h>
 
 #include "common/safe_io.h"
+#include "os/Transaction.h"
+
 #include "crimson/common/buffer_io.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "os/Transaction.h"
 
 namespace {
   seastar::logger& logger() {
@@ -97,6 +99,15 @@ seastar::future<> CyanStore::mkfs()
     write_meta("type", "memstore");
     return seastar::now();
   });
+}
+
+store_statfs_t CyanStore::stat() const
+{
+  logger().debug("{}", __func__);
+  store_statfs_t st;
+  st.total = ceph::common::local_conf().get_val<Option::size_t>("memstore_device_bytes");
+  st.available = st.total - used_bytes;
+  return st;
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
