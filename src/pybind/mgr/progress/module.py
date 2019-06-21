@@ -419,26 +419,28 @@ class Module(MgrModule):
         self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
 
-        if len(affected_pgs) > 0:
-            ev = PgRecoveryEvent(
-               "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
-               refs=[("osd", osd_id)],
-               which_pgs=affected_pgs,
-               evacuate_osds=[osd_id]
-            )
-            ev.pg_update(self.get("pg_dump"), self.log)
-            self._events[ev.id] = ev
-            
+           
         # In the case of the osd coming back in, we might need to cancel 
         # previous recovery event for that osd
         if marked == "in":
-            for ev_id, ev in self._events.items():
+            for ev_id in list(self._events):
+                ev = self._events[ev_id]
                 if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
                     self.log.info("osd.{0} came back in, cancelling event".format(
                         osd_id
                     ))
                     self._complete(ev)
 
+        if len(affected_pgs) > 0:
+            ev = PgRecoveryEvent(
+                    "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
+                    refs=[("osd", osd_id)],
+                    which_pgs=affected_pgs,
+                    evacuate_osds=[osd_id]
+                    )
+            ev.pg_update(self.get("pg_dump"), self.get("pg_ready"), self.log)
+            self._events[ev.id] = ev
+                 
     def _osdmap_changed(self, old_osdmap, new_osdmap):
         old_dump = old_osdmap.dump()
         new_dump = new_osdmap.dump()
