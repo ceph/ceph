@@ -707,13 +707,13 @@ public:
   int collection_bits(CollectionHandle& c) override;
   int collection_list(CollectionHandle& c,
 		      const ghobject_t& start, const ghobject_t& end, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next) override {
+		      vector<ghobject_t> *ls, ghobject_t *next, int flags) override {
     c->flush();
-    return collection_list(c->cid, start, end, max, ls, next);
+    return collection_list(c->cid, start, end, max, ls, next, flags);
   }
   int collection_list(const coll_t& cid,
 		      const ghobject_t& start, const ghobject_t& end, int max,
-		      vector<ghobject_t> *ls, ghobject_t *next);
+		      vector<ghobject_t> *ls, ghobject_t *next, int flags);
   int list_collections(vector<coll_t>& ls) override;
   int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_stat(const coll_t& c, struct stat *st);

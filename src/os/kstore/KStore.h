@@ -495,7 +495,7 @@ public:
   int collection_list(
     CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
     int max,
-    vector<ghobject_t> *ls, ghobject_t *next) override;
+    vector<ghobject_t> *ls, ghobject_t *next, int flags) override;
 
   using ObjectStore::omap_get;
   int omap_get(

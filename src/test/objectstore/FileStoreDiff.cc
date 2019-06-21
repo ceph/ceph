@@ -138,14 +138,14 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
   int err;
   std::vector<ghobject_t> b_objects, a_objects;
   err = b_store->collection_list(coll, ghobject_t(), ghobject_t::get_max(),
-				 INT_MAX, &b_objects, NULL);
+				 INT_MAX, &b_objects, NULL, 0);
   if (err < 0) {
     cout << "diff_objects list on verify coll " << coll.to_str()
 	    << " returns " << err << std::endl;
     return true;
   }
   err = a_store->collection_list(coll, ghobject_t(), ghobject_t::get_max(),
-				 INT_MAX, &a_objects, NULL);
+				 INT_MAX, &a_objects, NULL, 0);
   if (err < 0) {
     cout << "diff_objects list on store coll " << coll.to_str()
               << " returns " << err << std::endl;
