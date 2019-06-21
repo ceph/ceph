@@ -124,12 +124,17 @@ Sizing
 ======
 When using a :ref:`mixed spinning and solid drive setup
 <bluestore-mixed-device-config>` it is important to make a large-enough
-``block.db`` logical volume for Bluestore. Generally, ``block.db`` should have
-*as large as possible* logical volumes.
+``block.db`` logical volume for Bluestore.
 
-It is recommended that the ``block.db`` size isn't smaller than 4% of
-``block``. For example, if the ``block`` size is 1TB, then ``block.db``
-shouldn't be less than 40GB.
+Due to the internals of RocksDB useful ``block.db`` sizes are roughly in
+magnitudes of 3GB (e.g. 3GB, 30GB, 300GB).
+
+3GB should suffice for very small spinning disks up to a few hundred GB,
+for bigger disks you should partition 30GB for ``block.db``.
+
+``block`` sizes of 6TB and more can benefit from 300GB ``block.db`` size,
+but at that point it is proably adviceable to use 30GB and use the excess
+fast storage in another storage class.
 
 If *not* using a mix of fast and slow devices, it isn't required to create
 separate logical volumes for ``block.db`` (or ``block.wal``). Bluestore will
