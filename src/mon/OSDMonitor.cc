@@ -6471,9 +6471,8 @@ bool OSDMonitor::try_prune_purged_snaps()
 		 << "~" << (pend - pbegin) << dendl;
 	break;  // next pool
       }
-      if (pbegin && pbegin < end) {
+      if (pbegin && pbegin > begin && pbegin < end) {
 	// the tail of [begin,end) is purged; shorten the range
-	ceph_assert(pbegin > begin);
 	end = pbegin;
       }
       to_prune.insert(begin, end - begin);
