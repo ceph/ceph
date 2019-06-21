@@ -242,7 +242,7 @@ def task(ctx, config):
         # http://tracker.ceph.com/issues/40304 can't bootstrap on rhel 7.6+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         if remote.os.name == 'rhel' and LooseVersion(remote.os.version) >= LooseVersion('7.6'):
-            log.warning('Swift tests cannot run on rhel 7.6+, skipping client {client}'.format(client))
+            log.warning('Swift tests cannot run on rhel 7.6+, skipping client {}'.format(client))
             continue
 
         clients.append(client)
