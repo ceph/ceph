@@ -62,6 +62,8 @@ public:
   virtual seastar::future<> umount() = 0;
 
   virtual seastar::future<> mkfs() = 0;
+  virtual store_statfs_t stat() const = 0;
+
   using CollectionRef = boost::intrusive_ptr<Collection>;
   virtual seastar::future<ceph::bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
