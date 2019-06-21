@@ -213,6 +213,8 @@ seastar::future<> OSD::start()
     return seastar::when_all_succeed(monc->start(),
                                      mgrc->start());
   }).then([this] {
+    return _add_me_to_crush();
+  }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -286,6 +288,40 @@ seastar::future<> OSD::_send_boot()
                                   cluster_msgr.get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc->send_message(m);
+}
+
+seastar::future<> OSD::_add_me_to_crush()
+{
+  if (!local_conf().get_val<bool>("osd_crush_update_on_start")) {
+    return seastar::now();
+  }
+  const double weight = [this] {
+    if (auto w = local_conf().get_val<double>("osd_crush_initial_weight");
+	w >= 0) {
+      return w;
+    } else {
+      auto total = store->stat().total;
+      return std::max(.00001, double(total) / double(1ull << 40)); // TB
+    }
+  }();
+  const CrushLocation loc{make_unique<CephContext>().get()};
+  logger().info("{} crush location is {}", __func__, loc);
+  string cmd = fmt::format(R"({{
+    "prefix": "osd crush create-or-move",
+    "id": {},
+    "weight": {:.4f},
+    "args": [{}]
+  }})", whoami, weight, loc);
+  return monc->run_command({cmd}, {}).then(
+    [this](int32_t code, string message, bufferlist) {
+      if (code) {
+	logger().warn("fail to add to crush: {} ({})", message, code);
+	throw std::runtime_error("fail to add to crush");
+      } else {
+	logger().info("added to crush: {}", message);
+      }
+      return seastar::now();
+    });
 }
 
 seastar::future<> OSD::_send_alive()
