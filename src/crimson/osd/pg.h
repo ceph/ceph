@@ -88,29 +88,7 @@ public:
     bool dirty_info,
     bool dirty_big_info,
     bool need_write_epoch,
-    ObjectStore::Transaction &t) final {
-    std::map<string,bufferlist> km;
-    if (dirty_big_info || dirty_info) {
-      int ret = prepare_info_keymap(
-	shard_services.get_cct(),
-	&km,
-	peering_state.get_osdmap()->get_epoch(),
-	info,
-	last_written_info,
-	past_intervals,
-	dirty_big_info,
-	need_write_epoch,
-	true,
-	nullptr,
-	this);
-      ceph_assert(ret == 0);
-    }
-    pglog.write_log_and_missing(
-      t, &km, coll, pgmeta_oid,
-      peering_state.get_pool().info.require_rollback());
-    if (!km.empty())
-      t.omap_setkeys(coll, pgmeta_oid, km);
-  }
+    ObjectStore::Transaction &t) final;
 
   void on_info_history_change() final {
     // Not needed yet -- mainly for scrub scheduling
@@ -236,10 +214,7 @@ public:
   void on_activate(interval_set<snapid_t> to_trim) final {
     // Not needed yet (will be needed for IO unblocking)
   }
-  void on_activate_complete() final {
-    active_promise.set_value();
-    active_promise = {};
-  }
+  void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
   }

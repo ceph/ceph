@@ -98,6 +98,40 @@ PG::PG(
     new RecoverablePredicate());
 }
 
+void PG::prepare_write(
+  pg_info_t &info,
+  pg_info_t &last_written_info,
+  PastIntervals &past_intervals,
+  PGLog &pglog,
+  bool dirty_info,
+  bool dirty_big_info,
+  bool need_write_epoch,
+  ObjectStore::Transaction &t)
+{
+  std::map<string,bufferlist> km;
+  if (dirty_big_info || dirty_info) {
+    int ret = prepare_info_keymap(
+      shard_services.get_cct(),
+      &km,
+      peering_state.get_osdmap()->get_epoch(),
+      info,
+      last_written_info,
+      past_intervals,
+      dirty_big_info,
+      need_write_epoch,
+      true,
+      nullptr,
+      this);
+    ceph_assert(ret == 0);
+  }
+  pglog.write_log_and_missing(
+    t, &km, coll, pgmeta_oid,
+    peering_state.get_pool().info.require_rollback());
+  if (!km.empty()) {
+    t.omap_setkeys(coll, pgmeta_oid, km);
+  }
+}
+
 bool PG::try_flush_or_schedule_async() {
 // FIXME once there's a good way to schedule an "async" peering event
 #if 0
@@ -117,6 +151,12 @@ bool PG::try_flush_or_schedule_async() {
   return false;
 #endif
   return true;
+}
+
+void PG::on_activate_complete()
+{
+  active_promise.set_value();
+  active_promise = {};
 }
 
 void PG::log_state_enter(const char *state) {
