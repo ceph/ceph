@@ -74,10 +74,9 @@ public:
   OperationRegistry registry;
 
   template <typename T, typename... Args>
-  typename T::IRef start_operation(Args&&... args) {
+  auto start_operation(Args&&... args) {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
-    op->start();
-    return op;
+    return std::make_pair(op, op->start());
   }
 
   // Loggers

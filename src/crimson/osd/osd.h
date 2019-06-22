@@ -189,7 +189,6 @@ public:
   blocking_future<Ref<PG>> wait_for_pg(
     spg_t pgid);
 
-  seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();
@@ -197,6 +196,7 @@ public:
   seastar::future<> send_beacon();
   void update_heartbeat_peers();
 
+  friend class PGAdvanceMap;
 };
 
 }

@@ -71,6 +71,14 @@ public:
 
   ~PG();
 
+  const pg_shard_t &get_pg_whoami() const {
+    return pg_whoami;
+  }
+
+  const spg_t&get_pgid() const {
+    return pgid;
+  }
+
   // EpochSource
   epoch_t get_osdmap_epoch() const final {
     return peering_state.get_osdmap_epoch();
@@ -437,6 +445,7 @@ private:
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
   friend class PeeringEvent;
+  friend class PGAdvanceMap;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
