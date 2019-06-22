@@ -665,6 +665,7 @@ protected:
   off_t copy_source_range_lst;
   string etag;
   bool chunked_upload;
+  bufferlist chunk_data_remains;
   RGWAccessControlPolicy policy;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;

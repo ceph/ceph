@@ -1014,9 +1014,10 @@ int RGWPutObj_ObjStore::get_padding_last_aws4_chunk_encoded(bufferlist &bl, uint
 
   while (1) {
 
-    /* check available metadata */
+    /* save incomplete header */
     if (budget < chunk_str_min_len) {
-      return -ERR_SIGNATURE_NO_MATCH;
+      bl.splice(bl.length() - budget, budget, &chunk_data_remains);
+      return 0; 
     }
 
     chunk_offset = 0;
@@ -1057,19 +1058,25 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     cl = chunk_size;
   }
 
-  int len = 0;
+  int total_read = 0;
   if (cl) {
     bufferptr bp(cl);
 
+    int remains_len = chunk_data_remains.length();
+    if (remains_len) 
+      bl.claim_append(chunk_data_remains);
+    
+
     int read_len; /* cio->read() expects int * */
-    int r = STREAM_IO(s)->read(bp.c_str(), cl, &read_len,
+    int r = STREAM_IO(s)->read(bp.c_str() + remains_len, cl - remains_len, &read_len,
                                s->aws4_auth_needs_complete);
     if (r < 0) {
       return r;
     }
+    total_read += read_len;
 
-    len = read_len;
-    bl.append(bp, 0, len);
+    int len = read_len + remains_len;
+    bl.append(bp, remains_len, read_len);
 
     /* read last aws4 chunk padding */
     if (s->aws4_auth_streaming_mode && len == (int)chunk_size) {
@@ -1086,24 +1093,26 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
         if (r < 0) {
           return r;
         }
+        total_read += read_len;
+
         if (read_len != len_padding) {
           return -ERR_SIGNATURE_NO_MATCH;
         }
         bl.append(bp_extra.c_str(), len_padding);
         bl.rebuild();
       }
-    }
+    } 
 
   }
 
-  if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
+  if ((uint64_t)ofs + total_read > s->cct->_conf->rgw_max_put_size) {
     return -ERR_TOO_LARGE;
   }
 
   if (!ofs)
     supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
-  return len;
+  return bl.length();
 }
 
 int RGWPostObj_ObjStore::verify_params()
