@@ -86,3 +86,13 @@
   parsing date or time values from the unstructured human-readable
   output should be modified to parse the structured output instead, as
   the human-readable output may change without notice.
+
+* The ``osd_recovery_max_active`` option now has
+  ``osd_recovery_max_active_hdd`` and ``osd_recovery_max_active_ssd``
+  variants, each with different default values for HDD and SSD-backed
+  OSDs, respectively.  By default ``osd_recovery_max_active`` now
+  defaults to zero, which means that the OSD will conditionally use
+  the HDD or SSD option values.  Administrators who have customized
+  this value may want to consider whether they have set this to a
+  value similar to the new defaults (3 for HDDs and 10 for SSDs) and,
+  if so, remove the option from their configuration entirely.
