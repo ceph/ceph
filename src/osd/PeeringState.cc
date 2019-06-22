@@ -1594,7 +1594,7 @@ void PeeringState::calc_replicated_acting(
   }
 }
 
-bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
+bool PeeringState::recoverable(const vector<int> &want) const
 {
   unsigned num_want_acting = 0;
   set<pg_shard_t> have;
@@ -1607,23 +1607,25 @@ bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
           pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
-  // We go incomplete if below min_size for ec_pools since backfill
-  // does not currently maintain rollbackability
-  // Otherwise, we will go "peered", but not "active"
-  if (num_want_acting < pool.info.min_size &&
-      (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
-    psdout(10) << __func__ << " failed, below min size" << dendl;
+
+  if (num_want_acting < pool.info.min_size) {
+    const bool recovery_ec_pool_below_min_size=
+      HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
+
+    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
+      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
+      return false;
+    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+      psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
+      return false;
+    }
+  }
+  if (missing_loc.get_recoverable_predicate()(have)) {
+    return true;
+  } else {
+    psdout(10) << __func__ << " failed, not recoverable " << dendl;
     return false;
   }
-
-  /* Check whether we have enough acting shards to later perform recovery */
-  if (!missing_loc.get_recoverable_predicate()(have)) {
-    psdout(10) << __func__ << " failed, not recoverable" << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 void PeeringState::choose_async_recovery_ec(
@@ -1685,7 +1687,7 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable_and_ge_min_size(candidate_want)) {
+    if (recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
@@ -1852,7 +1854,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
       ss);
   psdout(10) << ss.str() << dendl;
 
-  if (!recoverable_and_ge_min_size(want)) {
+  if (!recoverable(want)) {
     want_acting.clear();
     return false;
   }
