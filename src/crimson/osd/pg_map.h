@@ -11,6 +11,7 @@
 #include "include/types.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/pg.h"
 #include "osd/osd_types.h"
 
 namespace ceph::osd {

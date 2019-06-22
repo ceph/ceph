@@ -20,15 +20,19 @@ namespace ceph::osd {
 
 enum class OperationTypeCode {
   client_request = 0,
-  peering_event,
-  compound_peering_request,
-  last_op
+  peering_event = 1,
+  compound_peering_request = 2,
+  pg_advance_map = 3,
+  pg_creation = 4,
+  last_op = 5
 };
 
 static constexpr const char* const OP_NAMES[] = {
-  "client_write",
+  "client_request",
   "peering_event",
-  "compound_peering_request"
+  "compound_peering_request",
+  "pg_advance_map",
+  "pg_creation",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:

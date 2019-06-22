@@ -14,6 +14,7 @@ add_executable(crimson-osd
   osd_operations/client_request.cc
   osd_operations/peering_event.cc
   osd_operations/compound_peering_request.cc
+  osd_operations/pg_advance_map.cc
   osdmap_gate.cc
   pg_map.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc

@@ -85,22 +85,23 @@ std::vector<OperationRef> handle_pg_create(
 	q->second.first);
     } else {
       auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
-	state,
-	osd,
-	conn,
-	osd.get_shard_services(),
-	pg_shard_t(),
-	pgid,
-	m->epoch,
-	m->epoch,
-	NullEvt(),
-	true,
-	new PGCreateInfo(
+	  state,
+	  osd,
+	  conn,
+	  osd.get_shard_services(),
+	  pg_shard_t(),
 	  pgid,
 	  m->epoch,
-	  q->second.first,
-	  q->second.second,
-	  true));
+	  m->epoch,
+	  NullEvt(),
+	  true,
+	  new PGCreateInfo(
+	    pgid,
+	    m->epoch,
+	    q->second.first,
+	    q->second.second,
+	    true)).first;
+      ret.push_back(op);
     }
   }
   return ret;
@@ -141,8 +142,7 @@ std::vector<OperationRef> handle_pg_notify(
       pg_notify.query_epoch,
       notify,
       true, // requires_pg
-      create_info);
-    op->start();
+      create_info).first;
     ret.push_back(op);
   }
   return ret;
@@ -173,7 +173,7 @@ std::vector<OperationRef> handle_pg_info(
 	pgid,
 	pg_notify.epoch_sent,
 	pg_notify.query_epoch,
-	std::move(info));
+	std::move(info)).first;
     ret.push_back(op);
   }
   return ret;
@@ -213,15 +213,15 @@ std::vector<OperationRef> handle_pg_query(
 		 pg_query, pg_query.epoch_sent};
     logger().debug("handle_pg_query on {} from {}", pgid, from);
     auto op = osd.get_shard_services().start_operation<QuerySubEvent>(
-      state,
-      osd,
-      conn,
-      osd.get_shard_services(),
-      pg_shard_t(from, pg_query.from),
-      pgid,
-      pg_query.epoch_sent,
-      pg_query.epoch_sent,
-      std::move(query));
+	state,
+	osd,
+	conn,
+	osd.get_shard_services(),
+	pg_shard_t(from, pg_query.from),
+	pgid,
+	pg_query.epoch_sent,
+	pg_query.epoch_sent,
+	std::move(query)).first;
     ret.push_back(op);
   }
   return ret;
@@ -305,7 +305,7 @@ seastar::future<> CompoundPeeringRequest::start()
   add_blocker(blocker.get());
   IRef ref = this;
   logger().info("{}: about to fork future", *this);
-  state->promise.get_future().then(
+  return state->promise.get_future().then(
     [this, blocker=std::move(blocker)](auto &&ctx) {
       clear_blocker(blocker.get());
       logger().info("{}: sub events complete", *this);
@@ -313,9 +313,6 @@ seastar::future<> CompoundPeeringRequest::start()
     }).then([this, ref=std::move(ref)] {
       logger().info("{}: complete", *this);
     });
-
-  logger().info("{}: forked, returning", *this);
-  return seastar::now();
 }
 
 } // namespace ceph::osd

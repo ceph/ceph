@@ -48,7 +48,7 @@ seastar::future<> ClientRequest::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  with_blocking_future(handle.enter(cp().await_map))
+  return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {
       return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_map_epoch()));
     }).then([this](epoch_t epoch) {
@@ -70,7 +70,6 @@ seastar::future<> ClientRequest::start()
 	});
       });
     });
-  return seastar::make_ready_future();
 }
 
 }

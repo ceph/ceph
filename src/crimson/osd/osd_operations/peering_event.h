@@ -29,6 +29,7 @@ public:
       "PeeringEvent::PGPipeline::process"
     };
     friend class PeeringEvent;
+    friend class PGAdvanceMap;
   };
 
 protected:
