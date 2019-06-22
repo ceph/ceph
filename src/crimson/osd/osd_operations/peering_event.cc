@@ -51,7 +51,7 @@ seastar::future<> PeeringEvent::start()
   logger().debug("{}: start", *this);
 
   IRef ref = this;
-  get_pg().then([this](Ref<PG> pg) {
+  return get_pg().then([this](Ref<PG> pg) {
     if (!pg) {
       logger().debug("{}: pg absent, did not create", *this);
       on_pg_absent();
@@ -74,7 +74,6 @@ seastar::future<> PeeringEvent::start()
   }).then([this, ref=std::move(ref)] {
     logger().debug("{}: complete", *this);
   });
-  return seastar::make_ready_future();
 }
 
 void PeeringEvent::on_pg_absent()

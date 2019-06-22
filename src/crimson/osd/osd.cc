@@ -34,6 +34,7 @@
 #include "osd/PeeringState.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/client_request.h"
 
 namespace {
@@ -638,19 +639,11 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	    false,
 	    rctx.transaction);
 
-	  pg->handle_initialize(rctx);
-	  pg->handle_activate_map(rctx);
-
-	  logger().info("{} new pg {}", __func__, *pg);
-	  pg_map.pg_created(info->pgid, pg);
-
-	  return seastar::when_all_succeed(
-	    advance_pg_to(pg, osdmap->get_epoch()),
-	    pg->get_need_up_thru() ? _send_alive() : seastar::now(),
-	    shard_services.dispatch_context(
-	      pg->get_collection_ref(),
-	      std::move(rctx)).then(
-		[pg]() { return seastar::make_ready_future<Ref<PG>>(pg); }));
+	  return shard_services.start_operation<PGAdvanceMap>(
+	    *this, pg, pg->get_osdmap_epoch(),
+	    osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
+	      return seastar::make_ready_future<Ref<PG>>(pg);
+	    });
 	});
     });
 }
@@ -898,7 +891,8 @@ seastar::future<> OSD::consume_map(epoch_t epoch)
   // todo: m-to-n: broadcast this news to all shards
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(pgs.begin(), pgs.end(), [=](auto& pg) {
-    return advance_pg_to(pg.second, epoch);
+    return shard_services.start_operation<PGAdvanceMap>(
+      *this, pg.second, pg.second->get_osdmap_epoch(), epoch).second;
   }).then([epoch, this] {
     osdmap_gate.got_map(epoch);
     return seastar::make_ready_future();
@@ -924,32 +918,6 @@ blocking_future<Ref<PG>> OSD::wait_for_pg(
   spg_t pgid)
 {
   return pg_map.get_pg(pgid).first;
-}
-
-seastar::future<> OSD::advance_pg_to(Ref<PG> pg, epoch_t to)
-{
-  auto from = pg->get_osdmap_epoch();
-  // todo: merge/split support
-  return seastar::do_with(
-    PeeringCtx{},
-    [this, pg, from, to](auto &rctx) {
-      return seastar::do_for_each(
-	boost::make_counting_iterator(from + 1),
-	boost::make_counting_iterator(to + 1),
-	[this, pg, &rctx](epoch_t next_epoch) {
-	  return get_map(next_epoch).then(
-	    [pg, this, &rctx] (cached_map_t&& next_map) {
-	      pg->handle_advance_map(next_map, rctx);
-	    });
-	}).then([this, &rctx, pg] {
-	  pg->handle_activate_map(rctx);
-	  return seastar::when_all_succeed(
-	    pg->get_need_up_thru() ? _send_alive() : seastar::now(),
-	    shard_services.dispatch_context(
-	      pg->get_collection_ref(),
-	      std::move(rctx)));
-	});
-    });
 }
 
 }
