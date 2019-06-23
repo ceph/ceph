@@ -256,10 +256,7 @@ public:
   void on_activate(interval_set<snapid_t> to_trim) final {
     // Not needed yet (will be needed for IO unblocking)
   }
-  void on_activate_complete() final {
-    active_promise.set_value();
-    active_promise = {};
-  }
+  void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
   }

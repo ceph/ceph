@@ -124,6 +124,41 @@ bool PG::try_flush_or_schedule_async() {
   return false;
 }
 
+void PG::on_activate_complete()
+{
+  active_promise.set_value();
+  active_promise = {};
+
+  if (peering_state.needs_recovery()) {
+    shard_services.start_operation<LocalPeeringEvent>(
+      this,
+      shard_services,
+      pg_whoami,
+      pgid,
+      get_osdmap_epoch(),
+      get_osdmap_epoch(),
+      PeeringState::DoRecovery{});
+  } else if (peering_state.needs_backfill()) {
+    shard_services.start_operation<LocalPeeringEvent>(
+      this,
+      shard_services,
+      pg_whoami,
+      pgid,
+      get_osdmap_epoch(),
+      get_osdmap_epoch(),
+      PeeringState::RequestBackfill{});
+  } else {
+    shard_services.start_operation<LocalPeeringEvent>(
+      this,
+      shard_services,
+      pg_whoami,
+      pgid,
+      get_osdmap_epoch(),
+      get_osdmap_epoch(),
+      PeeringState::AllReplicasRecovered{});
+  }
+}
+
 void PG::log_state_enter(const char *state) {
   logger().info("Entering state: {}", state);
 }
