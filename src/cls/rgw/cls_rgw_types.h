@@ -456,6 +456,7 @@ enum OLHLogOp {
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
+  CLS_RGW_OLH_OP_REMOVE_PENDING  = 4,
 };
 
 struct rgw_bucket_olh_log_entry {

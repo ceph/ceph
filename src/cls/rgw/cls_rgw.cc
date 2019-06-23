@@ -1499,8 +1499,10 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
     if (removing) {
       olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    } else {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_PENDING, op.op_tag, op.key, false, op.olh_epoch);
     }
-    return 0;
+    return olh.write();
   }
 
   if (olh_found) {
@@ -1656,9 +1658,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
     if (!obj.is_delete_marker()) {
       olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    } else {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_PENDING, op.op_tag, op.key, false, op.olh_epoch);
     }
-
-    return 0;
+    return olh.write();
   }
 
   rgw_bucket_olh_entry& olh_entry = olh.get_entry();

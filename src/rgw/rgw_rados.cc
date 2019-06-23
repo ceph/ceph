@@ -7507,6 +7507,8 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const RGW
         need_to_remove = true;
         need_to_link = false;
         break;
+      case CLS_RGW_OLH_OP_REMOVE_PENDING:
+        break;
       default:
         ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
         return -EIO;
