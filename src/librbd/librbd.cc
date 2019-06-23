@@ -2230,7 +2230,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    if (len > std::numeric_limits<int32_t>::max()) {
+    if (len > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
         tracepoint(librbd, discard_exit, -EINVAL);
         return -EINVAL;
     }
@@ -2247,7 +2247,7 @@ namespace librbd {
                ictx->read_only, ofs, len, bl.length() <= 0 ? NULL : bl.c_str(), bl.length(),
                op_flags);
     if (bl.length() <= 0 || len % bl.length() ||
-        len > std::numeric_limits<int>::max()) {
+        len > static_cast<size_t>(std::numeric_limits<int>::max())) {
       tracepoint(librbd, writesame_exit, -EINVAL);
       return -EINVAL;
     }
@@ -5147,7 +5147,7 @@ extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  if (len > std::numeric_limits<int>::max()) {
+  if (len > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
     tracepoint(librbd, discard_exit, -EINVAL);
     return -EINVAL;
   }
@@ -5166,7 +5166,7 @@ extern "C" ssize_t rbd_writesame(rbd_image_t image, uint64_t ofs, size_t len,
              ictx->read_only, ofs, len, data_len == 0 ? NULL : buf, data_len, op_flags);
 
   if (data_len == 0 || len % data_len ||
-      len > std::numeric_limits<int>::max()) {
+      len > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
     tracepoint(librbd, writesame_exit, -EINVAL);
     return -EINVAL;
   }

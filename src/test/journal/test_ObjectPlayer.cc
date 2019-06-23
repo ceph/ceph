@@ -69,7 +69,7 @@ struct TestObjectPlayerParams {
 
 typedef ::testing::Types<TestObjectPlayerParams<0>,
                          TestObjectPlayerParams<10> > TestObjectPlayerTypes;
-TYPED_TEST_CASE(TestObjectPlayer, TestObjectPlayerTypes);
+TYPED_TEST_SUITE(TestObjectPlayer, TestObjectPlayerTypes);
 
 TYPED_TEST(TestObjectPlayer, Fetch) {
   std::string oid = this->get_temp_oid();
