@@ -157,6 +157,14 @@ void PG::on_activate_complete()
 {
   active_promise.set_value();
   active_promise = {};
+
+  if (peering_state.needs_recovery()) {
+    do_peering_event(PeeringState::DoRecovery{}, nullptr);
+  } else if (peering_state.needs_backfill()) {
+    do_peering_event(PeeringState::RequestBackfill{}, nullptr);
+  } else {
+    do_peering_event(PeeringState::AllReplicasRecovered{}, nullptr);
+  }
 }
 
 void PG::log_state_enter(const char *state) {
