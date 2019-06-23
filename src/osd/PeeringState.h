@@ -1476,10 +1476,21 @@ public:
     PeeringListener *pl);
 
   /// Process evt
+  void process_event(const boost::statechart::event_base& evt) {
+    machine.process_event(evt);
+  }
+
+  template<typename Func>
+  void with_peering_context(PeeringCtx* rctx, Func&& func) {
+    start_handle(rctx);
+    std::move(func)();
+    end_handle();
+  }
+
   void handle_event(const boost::statechart::event_base &evt,
 		    PeeringCtx *rctx) {
     start_handle(rctx);
-    machine.process_event(evt);
+    process_event(evt);
     end_handle();
   }
 
@@ -1487,7 +1498,7 @@ public:
   void handle_event(PGPeeringEventRef evt,
 		    PeeringCtx *rctx) {
     start_handle(rctx);
-    machine.process_event(evt->get_event());
+    process_event(evt->get_event());
     end_handle();
   }
 
