@@ -363,14 +363,16 @@ public:
   seastar::future<> read_state(ceph::os::FuturizedStore* store);
 
   void do_peering_event(
-    PGPeeringEvent& evt, PeeringCtx &rctx);
+    const PGPeeringEvent& evt,
+    PeeringCtx& rctx);
+
   void do_peering_event(
     std::unique_ptr<PGPeeringEvent> evt,
     PeeringCtx &rctx) {
     return do_peering_event(*evt, rctx);
   }
   void do_peering_event(
-    PGPeeringEventRef evt,
+    std::shared_ptr<PGPeeringEvent> evt,
     PeeringCtx &rctx) {
     return do_peering_event(*evt, rctx);
   }
@@ -385,7 +387,7 @@ public:
 private:
   void do_peering_event(
     const boost::statechart::event_base &evt,
-    PeeringCtx &rctx);
+    PeeringCtx *rctx);
   seastar::future<Ref<MOSDOpReply>> do_osd_ops(Ref<MOSDOp> m);
   seastar::future<> do_osd_op(
     ObjectState& os,
@@ -402,6 +404,9 @@ private:
   std::unique_ptr<PGBackend> backend;
 
   PeeringState peering_state;
+
+  using event_ptr = boost::intrusive_ptr<const boost::statechart::event_base>;
+  std::queue<event_ptr> pending_peering_events;
 
   seastar::shared_promise<> active_promise;
   seastar::future<> wait_for_active();

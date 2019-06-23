@@ -234,20 +234,30 @@ seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
 }
 
 void PG::do_peering_event(
-  const boost::statechart::event_base &evt,
-  PeeringCtx &rctx)
+  const boost::statechart::event_base &event,
+  PeeringCtx *ctx)
 {
-  peering_state.handle_event(
-    evt,
-    &rctx);
+  auto evt = event.intrusive_from_this();
+  pending_peering_events.push(std::move(evt));
+  if (pending_peering_events.size() > 1) {
+    return;
+  }
+  peering_state.with_peering_context(ctx, [this] {
+    while (!pending_peering_events.empty()) {
+      auto evt = pending_peering_events.front();
+      peering_state.process_event(*evt);
+      pending_peering_events.pop();
+    }
+  });
 }
 
 void PG::do_peering_event(
-  PGPeeringEvent& evt, PeeringCtx &rctx)
+  const PGPeeringEvent& evt,
+  PeeringCtx &rctx)
 {
   if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
     logger().debug("{} handling {}", __func__, evt.get_desc());
-    return do_peering_event(evt.get_event(), rctx);
+    do_peering_event(evt.get_event(), &rctx);
   } else {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
   }
