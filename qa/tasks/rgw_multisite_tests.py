@@ -65,11 +65,14 @@ class RGWMultisiteTests(Task):
         # run nose tests in the rgw_multi.tests module
         conf = nose.config.Config(stream=get_log_stream(), verbosity=2)
         result = nose.run(defaultTest=tests.__name__, argv=argv, config=conf)
+        ps_result = nose.run(defaultTest=tests_ps.__name__, argv=argv, config=conf)
+        error_msg = ''
         if not result:
-            raise RuntimeError('rgw multisite test failures')
-        result = nose.run(defaultTest=tests_ps.__name__, argv=argv, config=conf)
+            error_msg += 'rgw multisite, '
         if not result:
-            raise RuntimeError('rgw multisite pubsub test failures')
+            error_msg += 'rgw multisite pubsub, '
+        if error_msg:
+            raise RuntimeError(error_msg + 'test failures')
 
 
 def get_log_stream():
