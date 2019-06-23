@@ -38,7 +38,7 @@ typedef ::testing::Types<
 	       boost::container::flat_map<IntervalValueType,IntervalValueType>>
   > IntervalSetTypes;
 
-TYPED_TEST_CASE(IntervalSetTest, IntervalSetTypes);
+TYPED_TEST_SUITE(IntervalSetTest, IntervalSetTypes);
 
 TYPED_TEST(IntervalSetTest, compare) {
   typedef typename TestFixture::ISet ISet;

@@ -143,7 +143,7 @@ public:
 
 typedef ::testing::Types<TestJournalPlayerParams<0>,
                          TestJournalPlayerParams<16> > TestJournalPlayerTypes;
-TYPED_TEST_CASE(TestJournalPlayer, TestJournalPlayerTypes);
+TYPED_TEST_SUITE(TestJournalPlayer, TestJournalPlayerTypes);
 
 TYPED_TEST(TestJournalPlayer, Prefetch) {
   std::string oid = this->get_temp_oid();

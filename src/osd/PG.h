@@ -595,8 +595,6 @@ public:
 protected:
   CephContext *cct;
 
-  const PGPool &pool;
-
   // locking and reference counting.
   // I destroy myself when the reference count hits zero.
   // lock() should be called before doing anything.
@@ -1488,9 +1486,10 @@ protected:
 protected:
   PeeringState recovery_state;
 
-  /**
-   * Ref to pg_info_t in Peering state
-   */
+  // ref to recovery_state.pool
+  const PGPool &pool;
+
+  // ref to recovery_state.info
   const pg_info_t &info;
 };
 

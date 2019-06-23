@@ -1194,7 +1194,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       // which is obviously the hard part TBD..
       vector<pg_t> pgs_to_check;
       tmp.get_upmap_pgs(&pgs_to_check);
-      if (pgs_to_check.size() < g_conf()->mon_clean_pg_upmaps_per_chunk * 2) {
+      if (pgs_to_check.size() <
+	  static_cast<uint64_t>(g_conf()->mon_clean_pg_upmaps_per_chunk * 2)) {
         // not enough pgs, do it inline
         tmp.clean_pg_upmaps(cct, &pending_inc);
       } else {

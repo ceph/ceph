@@ -146,7 +146,7 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests
     auto &merged_requests = it.second;
 
     auto ctx = new FunctionContext(
-        [this, requests=std::move(merged_requests.requests), latency_stats,
+        [requests=std::move(merged_requests.requests), latency_stats,
          latency_stats_lock, start_time=ceph_clock_now()](int r) {
           if (latency_stats) {
             Mutex::Locker locker(*latency_stats_lock);

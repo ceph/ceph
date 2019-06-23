@@ -244,7 +244,7 @@ namespace immutable_obj_cache {
     }
 
     ceph_assert(current_request != nullptr);
-    auto process_reply = new FunctionContext([this, current_request, reply]
+    auto process_reply = new FunctionContext([current_request, reply]
       (bool dedicated) {
        if (dedicated) {
          // dedicated thrad to execute this context.
