@@ -169,9 +169,16 @@ class VolumeClient(object):
         # at the time of subvolume, snapshot and other create operations).
         return spec.is_default_group() or sv.get_group_path(spec)
 
+    @staticmethod
+    def octal_str_to_decimal_int(mode):
+        try:
+            return int(mode, 8)
+        except ValueError:
+            raise VolumeException(-errno.EINVAL, "Invalid mode '{0}'".format(mode))
+
     ### subvolume operations
 
-    def create_subvolume(self, volname, subvolname, groupname, size, pool=None):
+    def create_subvolume(self, volname, subvolname, groupname, size, mode='755', pool=None):
         ret = 0, "", ""
         try:
             if not self.volume_exists(volname):
@@ -184,7 +191,7 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume group '{0}' not found, create it with " \
                         "`ceph fs subvolumegroup create` before creating subvolumes".format(groupname))
-                sv.create_subvolume(spec, size, pool=pool)
+                sv.create_subvolume(spec, size, pool=pool, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
@@ -284,7 +291,7 @@ class VolumeClient(object):
 
     ### group operations
 
-    def create_subvolume_group(self, volname, groupname, pool=None):
+    def create_subvolume_group(self, volname, groupname, mode='755', pool=None):
         ret = 0, "", ""
         try:
             if not self.volume_exists(volname):
@@ -295,7 +302,7 @@ class VolumeClient(object):
             # TODO: validate that subvol size fits in volume size
             with SubVolume(self.mgr, fs_name=volname) as sv:
                 spec = SubvolumeSpec("", groupname)
-                sv.create_group(spec, pool=pool)
+                sv.create_group(spec, pool=pool, mode=self.octal_str_to_decimal_int(mode))
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
