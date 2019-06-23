@@ -168,7 +168,7 @@ class SubVolume(object):
         except cephfs.ObjectNotFound:
             return None
         except cephfs.Error as e:
-            raise VolumeException(e.args[0]. e.args[1])
+            raise VolumeException(e.args[0], e.args[1])
         return path
 
     ### group operations
