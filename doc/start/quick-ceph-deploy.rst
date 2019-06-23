@@ -7,6 +7,8 @@ If you haven't completed your `Preflight Checklist`_, do that first. This
 on your admin node. Create a three Ceph Node cluster so you can
 explore Ceph functionality.
 
+**N.B.: All commands are issued on the chosen admin node unless otherwise specifically indicated.**
+
 .. include:: quick-common.rst
 
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and three
@@ -45,7 +47,7 @@ during a previous installation.
 Create a Cluster
 ================
 
-On your admin node from the directory you created for holding your
+On your *admin node* from the directory you created for holding your
 configuration details, perform the following steps using ``ceph-deploy``.
 
 #. Create the cluster. ::
@@ -125,7 +127,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
      ceph-deploy mgr create node1  *Required only for luminous+ builds, i.e >= 12.x builds*
 
 #. Add three OSDs. For the purposes of these instructions, we assume you have an
-   unused disk in each node called ``/dev/vdb``.  *Be sure that the device is not currently in use and does not contain any important data.* ::
+   unused disk in each node called ``/dev/vdb``.  *Be sure that the device is not currently in use and does not contain any important data.* (These devices do not need special formatting or need to be currently mounted.)::
 
      ceph-deploy osd create --data {device} {ceph-node}
 
@@ -139,7 +141,9 @@ configuration details, perform the following steps using ``ceph-deploy``.
       ``--data`` *must* be ``volume_group/lv_name``, rather than the path to
       the volume's block device.
 
-#. Check your cluster's health. ::
+#. Check your cluster's health::
+
+   Log into any one of your *non-admin* nodes and execute:
 
      ssh node1 sudo ceph health
 
