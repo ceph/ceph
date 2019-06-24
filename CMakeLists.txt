@@ -608,7 +608,7 @@ endif()
 
 option(WITH_UBSAN "build with UBSAN" OFF)
 if(WITH_UBSAN)
-  list(APPEND sanitizers "undefined-behavior")
+  list(APPEND sanitizers "undefined_behavior")
 endif()
 
 if(sanitizers)
