@@ -116,7 +116,7 @@ def ls(path, opts=''):
                 elif almost_all and dent.d_name in (b'.', b'..'):
                     continue
                 yield dent
-    except cephfs.ObjectNotFound:
+    except libcephfs.ObjectNotFound:
         return []
 
 def glob(path, pattern):
@@ -824,20 +824,18 @@ exists.')
                 continue
             else:
                 is_pattern = False
-            path = ''
-            path = os.path.normpath(os.path.join(
-                cephfs.getcwd().decode('utf-8'), path))
+            path = os.path.normpath(os.path.join(cephfs.getcwd().decode(
+                                    'utf-8'), path))
             if args.parent:
-                files = reversed(
-                    sorted(set(dirwalk(path))))
-                for path in files:
-                    path = os.path.normpath(path)
-                    if path[1:] != path:
+                files = reversed(sorted(set(dirwalk(path))))
+                for filepath in files:
+                    filepath = os.path.normpath(filepath)
+                    if filepath[1:] != path:
                         try:
-                            cephfs.rmdir(path)
+                            cephfs.rmdir(filepath)
                         except libcephfs.Error:
-                            cephfs.unlink(path)
-            if not is_pattern and path != os.path.normpath(path):
+                            cephfs.unlink(filepath)
+            if not is_pattern and path != os.path.normpath(''):
                 try:
                     cephfs.rmdir(path)
                 except libcephfs.Error:
