@@ -10,6 +10,7 @@
 #include "BlockDevice.h"
 #include "Allocator.h"
 #include "include/assert.h"
+#include "common/admin_socket.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluefs
@@ -25,6 +26,8 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReader, bluefs_file_reader, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileLock, bluefs_file_lock, bluefs);
 
 
+std::atomic_int BlueFS::File::num_files{0};
+
 BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
@@ -32,10 +35,44 @@ BlueFS::BlueFS(CephContext* cct)
     block_all(MAX_BDEV),
     block_total(MAX_BDEV, 0)
 {
+  auto dump_files = [this](Formatter* f) -> bool {
+    std::unique_lock<std::mutex> l(lock);
+    size_t nfiles = 0;
+    f->open_array_section("dirs");
+    for (auto &d : dir_map) {
+      f->open_array_section("dir");
+      f->dump_string("name", d.first.c_str());
+      for (auto &r : d.second->file_map) {
+	nfiles++;
+	f->open_object_section("file");
+	f->dump_string("name", r.first.c_str());
+	f->dump_string("refs", to_string(r.second->refs));
+	f->dump_string("locked", to_string(r.second->locked));
+	f->dump_string("deleted", to_string(r.second->deleted));
+	f->dump_string("readers", to_string(r.second->num_readers.load()));
+	f->dump_string("writers", to_string(r.second->num_writers.load()));
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->dump_string("File objects created", to_string(File::num_files.load()));
+    f->dump_string("files in dir hierarchy", to_string(nfiles));
+    return true;
+  };
+  AdminSocket *admin_socket = nullptr;
+  admin_socket = g_ceph_context->get_admin_socket();
+  if (admin_socket)
+    admin_socket->register_inspect("perf inspect bluefs files", to_string(uintptr_t(this)), dump_files);
 }
 
 BlueFS::~BlueFS()
 {
+  AdminSocket *admin_socket = nullptr;
+  admin_socket = g_ceph_context->get_admin_socket();
+  if (admin_socket)
+    admin_socket->unregister_inspect("perf inspect bluefs files", to_string(uintptr_t(this)));
+  
   for (auto p : ioc) {
     if (p)
       p->aio_wait();

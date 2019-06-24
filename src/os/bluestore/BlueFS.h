@@ -64,7 +64,7 @@ public:
 
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
-
+    static std::atomic_int num_files;
     File()
       : RefCountedObject(NULL, 0),
 	refs(0),
@@ -74,12 +74,13 @@ public:
 	num_readers(0),
 	num_writers(0),
 	num_reading(0)
-      {}
+    { num_files++; }
     ~File() override {
       assert(num_readers.load() == 0);
       assert(num_writers.load() == 0);
       assert(num_reading.load() == 0);
       assert(!locked);
+      num_files--;
     }
 
     friend void intrusive_ptr_add_ref(File *f) {
