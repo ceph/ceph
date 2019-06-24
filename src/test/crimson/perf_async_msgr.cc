@@ -8,7 +8,6 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
-#include "messages/MOSDOpReply.h"
 
 #include "auth/DummyAuth.h"
 
