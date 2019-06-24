@@ -626,8 +626,11 @@ void ProtocolV2::write_event() {
       } else if (r < 0) {
         ldout(cct, 1) << __func__ << " send msg failed" << dendl;
         break;
-      } else if (r > 0)
+      } else if (r > 0) {
+	// Outbound message in-progress, thread will be re-awoken
+	// when the outbound socket is writeable again
         break;
+      }
     } while (can_write);
     write_in_progress = false;
 
