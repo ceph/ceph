@@ -3241,11 +3241,7 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_update, bl);
   encode(last_complete, bl);
   encode(log_tail, bl);
-  if (last_backfill_bitwise && !last_backfill.is_max()) {
-    encode(hobject_t(), bl);
-  } else {
-    encode(last_backfill, bl);
-  }
+  encode(hobject_t(), bl);  // old (nibblewise) last_backfill
   encode(stats, bl);
   history.encode(bl);
   encode(purged_snaps, bl);
@@ -3254,7 +3250,7 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(hit_set, bl);
   encode(pgid.shard, bl);
   encode(last_backfill, bl);
-  encode(last_backfill_bitwise, bl);
+  encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
   ENCODE_FINISH(bl);
 }
@@ -3278,7 +3274,13 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   decode(hit_set, bl);
   decode(pgid.shard, bl);
   decode(last_backfill, bl);
-  decode(last_backfill_bitwise, bl);
+  {
+    bool last_backfill_bitwise;
+    decode(last_backfill_bitwise, bl);
+    // note: we may see a false value here since the default value for
+    // the member was false, so it often didn't get set to true until
+    // peering progressed.
+  }
   if (struct_v >= 32) {
     decode(last_interval_started, bl);
   } else {
@@ -3297,7 +3299,6 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
-  f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -3338,7 +3339,6 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
-  o.back()->last_backfill_bitwise = true;
   {
     list<pg_stat_t*> s;
     pg_stat_t::generate_test_instances(s);
