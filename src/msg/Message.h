@@ -186,9 +186,6 @@
 #define MSG_CRC_HEADER         (1 << 1)
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
-// Xio Testing
-//#define MSG_DATA_PING		  0x602
-// Xio intends to define messages 0x603..0x606
 
 // Special
 #define MSG_NOP                   0x607
@@ -218,18 +215,6 @@
 // ======================================================
 
 // abstract Message class
-
-// XioMessenger conditional trace flags
-#define MSG_MAGIC_XIO          0x0002
-#define MSG_MAGIC_TRACE_XCON   0x0004
-#define MSG_MAGIC_TRACE_DTOR   0x0008
-#define MSG_MAGIC_TRACE_HDR    0x0010
-#define MSG_MAGIC_TRACE_XIO    0x0020
-#define MSG_MAGIC_TRACE_XMSGR  0x0040
-#define MSG_MAGIC_TRACE_CTR    0x0080
-
-// XioMessenger diagnostic "ping pong" flag (resend msg when send completes)
-#define MSG_MAGIC_REDUPE       0x0100
 
 class Message : public RefCountedObject {
 protected:
