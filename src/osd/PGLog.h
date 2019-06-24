@@ -1188,7 +1188,6 @@ public:
   template <typename missing_type>
   static bool append_log_entries_update_missing(
     const hobject_t &last_backfill,
-    bool last_backfill_bitwise,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     bool maintain_rollback,
     IndexedLog *log,
@@ -1232,12 +1231,10 @@ public:
   }
   bool append_new_log_entries(
     const hobject_t &last_backfill,
-    bool last_backfill_bitwise,
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     LogEntryHandler *rollbacker) {
     bool invalidate_stats = append_log_entries_update_missing(
       last_backfill,
-      last_backfill_bitwise,
       entries,
       true,
       &log,

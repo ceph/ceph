@@ -95,15 +95,6 @@ bool MissingLoc::add_source_info(
 		     << " < needed " << need << ")" << dendl;
       continue;
     }
-    if (!oinfo.last_backfill.is_max() &&
-	!oinfo.last_backfill_bitwise) {
-      ldout(cct, 10) << "search_for_missing " << soid << " " << need
-		     << " also missing on osd." << fromosd
-		     << " (last_backfill " << oinfo.last_backfill
-		     << " but with wrong sort order)"
-		     << dendl;
-      continue;
-    }
     if (p->first >= oinfo.last_backfill) {
       // FIXME: this is _probably_ true, although it could conceivably
       // be in the undefined region!  Hmm!
