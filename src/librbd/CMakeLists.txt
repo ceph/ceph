@@ -36,6 +36,7 @@ set(librbd_internal_srcs
   api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
+  cache/ParentCacheObjectDispatch.cc
   cache/ObjectCacherWriteback.cc
   cache/PassthroughImageCache.cc
   cache/WriteAroundObjectDispatch.cc
@@ -155,6 +156,7 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
+  ceph_immutable_object_cache_lib
   osdc)
 
 add_library(librbd ${CEPH_SHARED}
