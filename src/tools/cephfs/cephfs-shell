@@ -843,9 +843,10 @@ sub-directories, files')
         """
         Remove a specific file
         """
-        for path in args.paths:
+        file_paths = args.paths
+        for path in file_paths:
             if path.count('*') > 0:
-                files.extend([i for i in get_all_possible_paths(
+                file_paths.extend([i for i in get_all_possible_paths(
                     path) if is_file_exists(i)])
             else:
                 try:
