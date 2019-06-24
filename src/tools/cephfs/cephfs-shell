@@ -58,6 +58,10 @@ def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
 
+def perror(msg):
+    shell.perror(msg, end='\n', apply_style=True)
+
+
 def setup_cephfs(config_file):
     """
     Mouting a cephfs
@@ -319,7 +323,7 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
-        self.poutput('Unrecognized command')
+        self.perror('Unrecognized command', end='\n', apply_style=True)
 
     def set_prompt(self):
         self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX
@@ -385,11 +389,11 @@ class CephFSShell(Cmd):
                 self.set_prompt()
             return res
         except ConnectionError as e:
-            self.poutput('***', e)
+            self.perror('***\n{}'.format(e), end='\n', apply_style=True)
         except KeyboardInterrupt:
-            self.poutput('Command aborted')
+            self.perror('Command aborted', end='\n', apply_style=True)
         except Exception as e:
-            self.poutput(e)
+            self.perror(e, end='\n', apply_style=True)
             traceback.print_exc(file=sys.stdout)
 
     class path_to_bytes(argparse.Action):
@@ -504,8 +508,9 @@ exists.')
                 try:
                     cephfs.mkdir(path, permission)
                 except libcephfs.Error:
-                    self.poutput("directory missing in the path; "
-                                 "you may want to pass the -p argument")
+                    self.perror('directory missing in the path; '
+                                'you may want to pass the -p argument',
+                                end='\n', apply_style=True)
                     return
 
     def complete_put(self, text, line, begidx, endidx):
@@ -555,7 +560,8 @@ exists.')
                     else:
                         root_dst_dir = a[0]
             else:
-                self.poutput("error: no filename specified for destination")
+                self.perror('error: no filename specified for destination',
+                            end='\n', apply_style=True)
                 return
 
         if root_dst_dir[-1] != b'/':
@@ -885,7 +891,7 @@ sub-directories, files')
         try:
             cephfs.rename(args.src_path, args.dest_path)
         except libcephfs.Error:
-            self.poutput("error: need a file name to move to")
+            self.perror('error: invalid file name', end='\n', apply_style=True)
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -1014,7 +1020,7 @@ sub-directories, files')
             os.chdir(os.path.expanduser(args.path))
         except OSError as e:
             self.perror("Cannot change to {}: {}".format(e.filename,
-                        e.strerror), False)
+                        e.strerror), end='\n', apply_style=True)
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1042,7 +1048,8 @@ sub-directories, files')
                     self.poutput("{}:".format(path.decode('utf-8')))
                     print_list(items)
                 except OSError as e:
-                    self.perror("'{}': {}".format(e.filename, e.strerror), False)
+                    self.perror("'{}': {}".format(e.filename, e.strerror),
+                                end='\n', apply_style=True)
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1167,8 +1174,8 @@ sub-directories, files')
 
         if args.op == 'set':
             if (args.max_bytes == -1) and (args.max_files == -1):
-                self.poutput('please specify either --max_bytes or '
-                             '--max_files or both')
+                self.perror('please specify either --max_bytes or '
+                            '--max_files or both', end='\n', apply_style=True)
                 return
 
             if args.max_bytes >= 0:
@@ -1182,7 +1189,8 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
-                    self.poutput('max_bytes reset to %d' % args.max_bytes)
+                    self.perror('max_bytes reset to %d' % args.max_bytes,
+                                end='\n', apply_style=True)
 
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
@@ -1195,7 +1203,8 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
-                    self.poutput('max_files reset to %d' % args.max_files)
+                    self.perror('max_files reset to %d' % args.max_files,
+                                end='\n', apply_style=True)
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
@@ -1204,7 +1213,7 @@ sub-directories, files')
                                             'ceph.quota.max_bytes')
                 self.poutput('max_bytes: %s' % max_bytes)
             except libcephfs.Error:
-                self.poutput('max_bytes is not set')
+                self.perror('max_bytes is not set', end='\n', apply_style=True)
                 pass
 
             try:
@@ -1212,7 +1221,7 @@ sub-directories, files')
                                             'ceph.quota.max_files')
                 self.poutput('max_files: %s' % max_files)
             except libcephfs.Error:
-                self.poutput('max_files is not set')
+                self.perror('max_files is not set', end='\n', apply_style=True)
                 pass
 
     def do_help(self, line):
