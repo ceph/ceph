@@ -45,7 +45,7 @@ void ElectionLogic::bump_epoch(epoch_t e)
   ldout(cct, 10) << __func__ << epoch << " to " << e << dendl;
   ceph_assert(epoch <= e);
   epoch = e;
-  elector->validate_store();
+  elector->persist_epoch(epoch);
   // clear up some state
   electing_me = false;
   acked_me.clear();
