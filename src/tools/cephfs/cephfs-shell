@@ -1090,8 +1090,8 @@ sub-directories, files')
 
     du_parser = argparse.ArgumentParser(
         description='Disk Usage of a Directory')
-    du_parser.add_argument(
-        'dirs', type=str, help='Name of the directory.', nargs='?', default='.')
+    du_parser.add_argument('dirs', type=str, help='Name of the directory.',
+                           nargs='*', default='')
     du_parser.add_argument('-r', action='store_true',
                            help='Recursive Disk usage of all directories.')
 
@@ -1100,23 +1100,36 @@ sub-directories, files')
         """
         Disk Usage of a Directory
         """
+        dir_passed = args.dirs
         if args.dirs == '':
-            args.dirs = cephfs.getcwd().decode('utf-8')
-        for dir_ in args.dirs:
-            if args.r:
-                for i in reversed(sorted(set(dirwalk(dir_)))):
-                    i = os.path.normpath(i)
-                    try:
-                        xattr = cephfs.getxattr(to_bytes(i), 'ceph.dir.rbytes')
-                        self.poutput('{:10s} {}'.format(
-                            humansize(int(xattr.decode('utf-8'))), '.' + i))
-                    except libcephfs.Error:
-                        continue
+            dir_passed = cephfs.getcwd().decode('utf-8')
+            if len(dir_passed) > 1:
+                dir_passed = dir_passed.split()
+
+        for dir_ in dir_passed:
+            dir_trav = sorted(set(dirwalk(dir_)))
+            if args.dirs and not dir_trav:
+                dir_trav.append(dir_)
             else:
-                dir_ = os.path.normpath(dir_)
-                self.poutput('{:10s} {}'.format(humansize(int(cephfs.getxattr(
-                    to_bytes(dir_), 'ceph.dir.rbytes').decode('utf-8'))), '.'
-                    + dir_))
+                dir_trav.append('.')
+
+            if args.r:
+                dir_trav = reversed(dir_trav)
+
+            for i in dir_trav:
+                try:
+                    i_path = os.path.normpath(i)
+                    if (i != '.') and (i_path[0] == '/'):
+                        i = '.' + i_path
+
+                    xattr = cephfs.getxattr(to_bytes(i_path),
+                                            'ceph.dir.rbytes')
+                    self.poutput('{:10s} {}'.format(humansize(int(
+                                 xattr.decode('utf-8'))), i))
+                except (libcephfs.Error, OSError):
+                    self.perror('{}: no such directory exists'.format(dir_),
+                                False)
+                    continue
 
     quota_parser = argparse.ArgumentParser(
         description='Quota management for a Directory')
