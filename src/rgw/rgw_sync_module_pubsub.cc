@@ -7,7 +7,6 @@
 #include "rgw_data_sync.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_sync_module_pubsub_rest.h"
-#include "rgw_pubsub_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
@@ -1579,9 +1578,7 @@ RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *or
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  // sync module support both compliant and non-compliant pubsub handlers
-  s3_compliant_mgr.reset(new RGWRESTMgr_PubSub_S3(orig));
-  return new RGWRESTMgr_PubSub(s3_compliant_mgr.get());
+  return new RGWRESTMgr_PubSub();
 }
 
 bool RGWPSSyncModuleInstance::should_full_sync() const {

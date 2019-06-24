@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include "rgw_base_pubsub_rest.h"
+#include "rgw_pubsub_rest.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_sync_module_pubsub_rest.h"
@@ -475,6 +476,11 @@ public:
   virtual ~RGWHandler_REST_PSNotifs() = default;
 };
 
+// sync module support both s3 compliant and non-compliant pubsub handlers
+// the original handler is not passed in, since regular operation are not permitted in the sync module
+// the s3 compliant handler is owned by the non-compliant handler
+RGWRESTMgr_PubSub::RGWRESTMgr_PubSub() : s3_compliant_mgr(new RGWRESTMgr_PubSub_S3(nullptr)) {}
+
 // factory for ceph specific PubSub REST handlers 
 RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(struct req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
@@ -494,8 +500,8 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(struct req_state* const s,
     handler = new RGWHandler_REST_PSSub(auth_registry);
   } else if (s->init_state.url_bucket == "notifications") {
     handler = new RGWHandler_REST_PSNotifs(auth_registry);
-  } else if (next) {
-      handler = next->get_handler(s, auth_registry, frontend_prefix);
+  } else {
+      handler = s3_compliant_mgr->get_handler(s, auth_registry, frontend_prefix);
   }
 
   ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;

@@ -4,9 +4,9 @@
 #include "rgw_rest.h"
 
 class RGWRESTMgr_PubSub : public RGWRESTMgr {
-  RGWRESTMgr *next;
+  std::unique_ptr<RGWRESTMgr> s3_compliant_mgr;
 public:
-  explicit RGWRESTMgr_PubSub(RGWRESTMgr *_next) : next(_next) {}
+  RGWRESTMgr_PubSub();
 
   RGWHandler_REST *get_handler(struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
