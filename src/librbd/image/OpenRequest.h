@@ -61,6 +61,9 @@ private:
    *            V2_GET_DATA_POOL --------------> REFRESH
    *                                                |
    *                                                v
+   *                                             INIT_PARENT_CACHE(skip if
+   *                                                |               disable)
+   *                                                v
    *                                             INIT_CACHE
    *                                                |
    *                                                v
@@ -119,6 +122,9 @@ private:
 
   void send_refresh();
   Context *handle_refresh(int *result);
+
+  Context* send_parent_cache(int *result);
+  Context* handle_parent_cache(int *result);
 
   Context *send_init_cache(int *result);
 

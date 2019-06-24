@@ -106,8 +106,8 @@ public:
   void test_register_client(uint64_t random_index) {
     ASSERT_TRUE(m_cache_client_vec[random_index] == nullptr);
 
-    auto ctx = new FunctionContext([](bool ret){
-       ASSERT_TRUE(ret);
+    auto ctx = new FunctionContext([](int ret){
+       ASSERT_TRUE(ret == 0);
     });
     auto session = create_session(random_index);
     session->register_client(ctx);
@@ -120,13 +120,13 @@ public:
                           uint64_t request_num, bool is_last) {
 
     for (uint64_t i = 0; i < request_num; i++) {
-      auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
-        ObjectCacheRequest*>([this](ObjectCacheRequest* ack) {
+      auto ctx = make_gen_lambda_context<ObjectCacheRequest*,
+            std::function<void(ObjectCacheRequest*)>>([this](ObjectCacheRequest* ack) {
         m_recv_ack_index++;
       });
       m_send_request_index++;
       // here just for concurrently testing register + lookup, so fix object id.
-      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, "1234", ctx);
+      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, "1234", std::move(ctx));
     }
 
     if (is_last) {
