@@ -58,6 +58,10 @@ BlueFS::BlueFS(CephContext* cct)
     f->close_section();
     f->dump_string("File objects created", to_string(File::num_files.load()));
     f->dump_string("files in dir hierarchy", to_string(nfiles));
+    f->dump_string("pending delete size WAL", to_string(pending_release[0].size()));
+    f->dump_string("pending delete size DB", to_string(pending_release[1].size()));
+    f->dump_string("pending delete size SLOW", to_string(pending_release[2].size()));
+
     return true;
   };
   AdminSocket *admin_socket = nullptr;
