@@ -60,7 +60,7 @@ def poutput(s, end='\n'):
 
 def setup_cephfs(config_file):
     """
-    Mouting a cephfs
+    Mounting a cephfs
     """
     global cephfs
     cephfs = libcephfs.LibCephFS(conffile=config_file)
