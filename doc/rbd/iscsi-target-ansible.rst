@@ -30,20 +30,21 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
       ::
 
-          [ceph-iscsi-gw]
+          [iscsigws]
           ceph-igw-1
           ceph-igw-2
 
 .. note::
   If co-locating the iSCSI gateway with an OSD node, then add the OSD node to the
-  ``[ceph-iscsi-gw]`` section.
+  ``[iscsigws]`` section.
 
 **Configuring:**
 
 The ``ceph-ansible`` package places a file in the ``/usr/share/ceph-ansible/group_vars/``
-directory called ``ceph-iscsi-gw.sample``. Create a copy of this sample file named
-``ceph-iscsi-gw.yml``. Review the following Ansible variables and descriptions,
-and update accordingly.
+directory called ``iscsigws.yml.sample``. Create a copy of this sample file named
+``iscsigws.yml``. Review the following Ansible variables and descriptions,
+and update accordingly. See the ``iscsigws.yml.sample`` for a full list of
+advanced variables.
 
 +--------------------------------------+--------------------------------------+
 | Variable                             | Meaning/Purpose                      |
@@ -72,70 +73,26 @@ and update accordingly.
 |                                      | run to ensure multipathd and lvm are |
 |                                      | configured properly.                 |
 +--------------------------------------+--------------------------------------+
-| ``gateway_iqn``                      | This is the iSCSI IQN that all the   |
-|                                      | gateways will expose to clients.     |
-|                                      | This means each client will see the  |
-|                                      | gateway group as a single subsystem. |
+| ``api_user``                         | The user name for the API. The       |
+|                                      | default is `admin`.                  |
 +--------------------------------------+--------------------------------------+
-| ``gateway_ip_list``                  | The ip list defines the IP addresses |
-|                                      | that will be used on the front end   |
-|                                      | network for iSCSI traffic. This IP   |
-|                                      | will be bound to the active target   |
-|                                      | portal group on each node, and is    |
-|                                      | the access point for iSCSI traffic.  |
-|                                      | Each IP should correspond to an IP   |
-|                                      | available on the hosts defined in    |
-|                                      | the ``ceph-iscsi-gw`` host group in  |
-|                                      | ``/etc/ansible/hosts``.              |
+| ``api_password``                     | The password for using the API. The  |
+|                                      | default is `admin`.                  |
 +--------------------------------------+--------------------------------------+
-| ``rbd_devices``                      | This section defines the RBD images  |
-|                                      | that will be controlled and managed  |
-|                                      | within the iSCSI gateway             |
-|                                      | configuration. Parameters like       |
-|                                      | ``pool`` and ``image`` are self      |
-|                                      | explanatory. Here are the other      |
-|                                      | parameters: ``size`` = This defines  |
-|                                      | the size of the RBD. You may         |
-|                                      | increase the size later, by simply   |
-|                                      | changing this value, but shrinking   |
-|                                      | the size of an RBD is not supported  |
-|                                      | and is ignored. ``host`` = This is   |
-|                                      | the iSCSI gateway host name that     |
-|                                      | will be responsible for the rbd      |
-|                                      | allocation/resize. Every defined     |
-|                                      | ``rbd_device`` entry must have a     |
-|                                      | host assigned. ``state`` = This is   |
-|                                      | typical Ansible syntax for whether   |
-|                                      | the resource should be defined or    |
-|                                      | removed. A request with a state of   |
-|                                      | absent will first be checked to      |
-|                                      | ensure the rbd is not mapped to any  |
-|                                      | client. If the RBD is unallocated,   |
-|                                      | it will be removed from the iSCSI    |
-|                                      | gateway and deleted from the         |
-|                                      | configuration.                       |
+| ``api_port``                         | The TCP port number for using the    |
+|                                      | API. The default is `5000`.          |
 +--------------------------------------+--------------------------------------+
-| ``client_connections``               | This section defines the iSCSI       |
-|                                      | client connection details together   |
-|                                      | with the LUN (RBD image) masking.    |
-|                                      | Currently only CHAP is supported as  |
-|                                      | an authentication mechanism. Each    |
-|                                      | connection defines an ``image_list`` |
-|                                      | which is a comma separated list of   |
-|                                      | the form                             |
-|                                      | ``pool.rbd_image[,pool.rbd_image]``. |
-|                                      | RBD images can be added and removed  |
-|                                      | from this list, to change the client |
-|                                      | masking. Note that there are no      |
-|                                      | checks done to limit RBD sharing     |
-|                                      | across client connections.           |
+| ``api_secure``                       | True if TLS must be used. The        |
+|                                      | default is `false`. If true the user |
+|                                      | must create the necessary            |
+|                                      | certificate and key files. See the   |
+|                                      | gwcli man file for details.          |
 +--------------------------------------+--------------------------------------+
-
-.. note::
-  When using the ``gateway_iqn`` variable, and for Red Hat Enterprise Linux
-  clients, installing the ``iscsi-initiator-utils`` package is required for
-  retrieving the gateway’s IQN name. The iSCSI initiator name is located in the
-  ``/etc/iscsi/initiatorname.iscsi`` file.
+| ``trusted_ip_list``                  | A list of IPv4 or IPv6 addresses     |
+|                                      | who have access to the API. By       |
+|                                      | default, only the iSCSI gateway      |
+|                                      | nodes have access.                   |
++--------------------------------------+--------------------------------------+
 
 **Deploying:**
 
@@ -146,11 +103,14 @@ On the Ansible installer node, perform the following steps.
    ::
 
        # cd /usr/share/ceph-ansible
-       # ansible-playbook ceph-iscsi-gw.yml
+       # ansible-playbook site.yml --limit iscsigws
 
    .. note::
-    The Ansible playbook will handle RPM dependencies, RBD creation
-    and Linux IO configuration.
+    The Ansible playbook will handle RPM dependencies, setting up daemons,
+    and installing gwcli so it can be used to create iSCSI targets and export
+    RBD images as LUNs. In past versions, ``iscsigws.yml`` could define the
+    iSCSI target and other objects like clients, images and LUNs, but this is
+    no longer supported.
 
 #. Verify the configuration from an iSCSI gateway node:
 
@@ -159,9 +119,8 @@ On the Ansible installer node, perform the following steps.
        # gwcli ls
 
    .. note::
-    For more information on using the ``gwcli`` command to install and configure
-    a Ceph iSCSI gateway, see the `Configuring the iSCSI Target using the Command Line Interface`_
-    section.
+    See the `Configuring the iSCSI Target using the Command Line Interface`_
+    section to create gateways, LUNs, and clients using the `gwcli` tool.
 
    .. important::
     Attempting to use the ``targetcli`` tool to change the configuration will
@@ -173,19 +132,19 @@ On the Ansible installer node, perform the following steps.
 **Service Management:**
 
 The ``ceph-iscsi`` package installs the configuration management
-logic and a Systemd service called ``rbd-target-gw``. When the Systemd
-service is enabled, the ``rbd-target-gw`` will start at boot time and
+logic and a Systemd service called ``rbd-target-api``. When the Systemd
+service is enabled, the ``rbd-target-api`` will start at boot time and
 will restore the Linux IO state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
-interacting with the ``rbd-target-gw`` Systemd service.
+interacting with the ``rbd-target-api`` Systemd service.
 
 ::
 
-    # systemctl <start|stop|restart|reload> rbd-target-gw
+    # systemctl <start|stop|restart|reload> rbd-target-api
 
 -  ``reload``
 
-   A reload request will force ``rbd-target-gw`` to reread the
+   A reload request will force ``rbd-target-api`` to reread the
    configuration and apply it to the current running environment. This
    is normally not required, since changes are deployed in parallel from
    Ansible to all iSCSI gateway nodes
@@ -197,74 +156,6 @@ interacting with the ``rbd-target-gw`` Systemd service.
    the kernel. This returns the iSCSI gateway to a clean state. When
    clients are disconnected, active I/O is rescheduled to the other
    iSCSI gateways by the client side multipathing layer.
-
-**Administration:**
-
-Within the ``/usr/share/ceph-ansible/group_vars/ceph-iscsi-gw`` file
-there are a number of operational workflows that the Ansible playbook
-supports.
-
-.. warning::
-  Before removing RBD images from the iSCSI gateway configuration,
-  follow the standard procedures for removing a storage device from
-  the operating system.
-
-+--------------------------------------+--------------------------------------+
-| I want to…​                          | Update the ``ceph-iscsi-gw`` file    |
-|                                      | by…​                                 |
-+======================================+======================================+
-| Add more RBD images                  | Adding another entry to the          |
-|                                      | ``rbd_devices`` section with the new |
-|                                      | image.                               |
-+--------------------------------------+--------------------------------------+
-| Resize an existing RBD image         | Updating the size parameter within   |
-|                                      | the ``rbd_devices`` section. Client  |
-|                                      | side actions are required to pick up |
-|                                      | the new size of the disk.            |
-+--------------------------------------+--------------------------------------+
-| Add a client                         | Adding an entry to the               |
-|                                      | ``client_connections`` section.      |
-+--------------------------------------+--------------------------------------+
-| Add another RBD to a client          | Adding the relevant RBD              |
-|                                      | ``pool.image`` name to the           |
-|                                      | ``image_list`` variable for the      |
-|                                      | client.                              |
-+--------------------------------------+--------------------------------------+
-| Remove an RBD from a client          | Removing the RBD ``pool.image`` name |
-|                                      | from the clients ``image_list``      |
-|                                      | variable.                            |
-+--------------------------------------+--------------------------------------+
-| Remove an RBD from the system        | Changing the RBD entry state         |
-|                                      | variable to ``absent``. The RBD      |
-|                                      | image must be unallocated from the   |
-|                                      | operating system first for this to   |
-|                                      | succeed.                             |
-+--------------------------------------+--------------------------------------+
-| Change the clients CHAP credentials  | Updating the relevant CHAP details   |
-|                                      | in ``client_connections``. This will |
-|                                      | need to be coordinated with the      |
-|                                      | clients. For example, the client     |
-|                                      | issues an iSCSI logout, the          |
-|                                      | credentials are changed by the       |
-|                                      | Ansible playbook, the credentials    |
-|                                      | are changed at the client, then the  |
-|                                      | client performs an iSCSI login.      |
-+--------------------------------------+--------------------------------------+
-| Remove a client                      | Updating the relevant                |
-|                                      | ``client_connections`` item with a   |
-|                                      | state of ``absent``. Once the        |
-|                                      | Ansible playbook is ran, the client  |
-|                                      | will be purged from the system, but  |
-|                                      | the disks will remain defined to     |
-|                                      | Linux IO for potential reuse.        |
-+--------------------------------------+--------------------------------------+
-
-Once a change has been made, rerun the Ansible playbook to apply the
-change across the iSCSI gateway nodes.
-
-::
-
-    # ansible-playbook ceph-iscsi-gw.yml
 
 **Removing the Configuration:**
 
