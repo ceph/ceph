@@ -231,12 +231,6 @@ const char illegal_conf4[] = "\
         keyring = osd_keyring          ; osd's keyring\n\
 ";
 
-// illegal because it has a backslash at the very end
-const char illegal_conf5[] = "\
-[global]\n\
-        keyring = something awful\\\\\n\
-";
-
 // unicode config file
 const char unicode_config_1[] = "\
 [global]\n\
@@ -262,108 +256,75 @@ const char dup_key_config_1[] = "\
         log_file = 3\n\
 ";
 
-TEST(ConfUtils, Whitespace) {
-  std::string test0("");
-  ConfFile::trim_whitespace(test0, false);
-  ASSERT_EQ(test0, "");
-
-  std::string test0a("");
-  ConfFile::trim_whitespace(test0a, true);
-  ASSERT_EQ(test0a, "");
-
-  std::string test0b("          ");
-  ConfFile::trim_whitespace(test0b, false);
-  ASSERT_EQ(test0b, "");
-
-  std::string test0c("          ");
-  ConfFile::trim_whitespace(test0c, true);
-  ASSERT_EQ(test0c, "");
-
-  std::string test1(" abc             ");
-  ConfFile::trim_whitespace(test1, false);
-  ASSERT_EQ(test1, "abc");
-
-  std::string test2(" abc        d     ");
-  ConfFile::trim_whitespace(test2, true);
-  ASSERT_EQ(test2, "abc d");
-
-  std::string test3(" abc        d     ");
-  ConfFile::trim_whitespace(test3, false);
-  ASSERT_EQ(test3, "abc        d");
-
-  std::string test4("abcd");
-  ConfFile::trim_whitespace(test4, false);
-  ASSERT_EQ(test4, "abcd");
-
-  std::string test5("abcd");
-  ConfFile::trim_whitespace(test5, true);
-  ASSERT_EQ(test5, "abcd");
-}
-
 TEST(ConfUtils, ParseFiles0) {
-  std::deque<std::string> err;
   std::string val;
-  std::ostringstream warn;
 
-  std::string trivial_conf_1_f(next_tempfile(trivial_conf_1));
-  ConfFile cf1;
-  ASSERT_EQ(cf1.parse_file(trivial_conf_1_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
-
-  std::string trivial_conf_2_f(next_tempfile(trivial_conf_2));
-  ConfFile cf2;
-  ASSERT_EQ(cf2.parse_file(trivial_conf_2_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
-
-  bufferlist bl3;
-  bl3.append(trivial_conf_3, strlen(trivial_conf_3));
-  ConfFile cf3;
-  ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
-  ASSERT_EQ(cf3.read("global", "log dir", val), 0);
-  ASSERT_EQ(val, "barfoo");
-
-  std::string trivial_conf_4_f(next_tempfile(trivial_conf_4));
-  ConfFile cf4;
-  ASSERT_EQ(cf4.parse_file(trivial_conf_4_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
-  ASSERT_EQ(cf4.read("global", "log dir", val), 0);
-  ASSERT_EQ(val, "barbaz");
+  {
+    std::ostringstream err;
+    std::string trivial_conf_1_f(next_tempfile(trivial_conf_1));
+    ConfFile cf1;
+    ASSERT_EQ(cf1.parse_file(trivial_conf_1_f.c_str(), &err), 0);
+    ASSERT_EQ(err.tellp(), 0U);
+  }
+  {
+    std::ostringstream err;
+    std::string trivial_conf_2_f(next_tempfile(trivial_conf_2));
+    ConfFile cf2;
+    ASSERT_EQ(cf2.parse_file(trivial_conf_2_f.c_str(), &err), -EINVAL);
+    ASSERT_GT(err.tellp(), 0U);
+  }
+  {
+    std::ostringstream err;
+    bufferlist bl3;
+    bl3.append(trivial_conf_3, strlen(trivial_conf_3));
+    ConfFile cf3;
+    ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err), 0);
+    ASSERT_EQ(err.tellp(), 0U);
+    ASSERT_EQ(cf3.read("global", "log dir", val), 0);
+    ASSERT_EQ(val, "barfoo");
+  }
+  {
+    std::ostringstream err;
+    std::string trivial_conf_4_f(next_tempfile(trivial_conf_4));
+    ConfFile cf4;
+    ASSERT_EQ(cf4.parse_file(trivial_conf_4_f.c_str(), &err), 0);
+    ASSERT_EQ(err.tellp(), 0U);
+    ASSERT_EQ(cf4.read("global", "log dir", val), 0);
+    ASSERT_EQ(val, "barbaz");
+  }
 }
 
 TEST(ConfUtils, ParseFiles1) {
-  std::deque<std::string> err;
-  std::ostringstream warn;
+  std::ostringstream err;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
   ConfFile cf1;
-  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   std::string simple_conf_2_f(next_tempfile(simple_conf_1));
   ConfFile cf2;
-  ASSERT_EQ(cf2.parse_file(simple_conf_2_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf2.parse_file(simple_conf_2_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   bufferlist bl3;
   bl3.append(simple_conf_1, strlen(simple_conf_1));
   ConfFile cf3;
-  ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf3.parse_bufferlist(&bl3, &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   bufferlist bl4;
   bl4.append(simple_conf_2, strlen(simple_conf_2));
   ConfFile cf4;
-  ASSERT_EQ(cf4.parse_bufferlist(&bl4, &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf4.parse_bufferlist(&bl4, &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 }
 
 TEST(ConfUtils, ReadFiles1) {
-  std::deque<std::string> err;
-  std::ostringstream warn;
+  std::ostringstream err;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
   ConfFile cf1;
-  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf1.parse_file(simple_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   std::string val;
   ASSERT_EQ(cf1.read("global", "keyring", val), 0);
@@ -380,8 +341,8 @@ TEST(ConfUtils, ReadFiles1) {
   bufferlist bl2;
   bl2.append(simple_conf_2, strlen(simple_conf_2));
   ConfFile cf2;
-  ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
   ASSERT_EQ(cf2.read("osd0", "keyring", val), 0);
   ASSERT_EQ(val, "osd_keyring");
 
@@ -391,13 +352,12 @@ TEST(ConfUtils, ReadFiles1) {
 }
 
 TEST(ConfUtils, ReadFiles2) {
-  std::deque<std::string> err;
-  std::ostringstream warn;
+  std::ostringstream err;
   std::string conf3_f(next_tempfile(conf3));
   ConfFile cf1;
   std::string val;
-  ASSERT_EQ(cf1.parse_file(conf3_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf1.parse_file(conf3_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
   ASSERT_EQ(cf1.read("global", "log file", val), 0);
   ASSERT_EQ(val, "/quite/a/long/path/for/a/log/file");
   ASSERT_EQ(cf1.read("global", "pid file", val), 0);
@@ -405,50 +365,51 @@ TEST(ConfUtils, ReadFiles2) {
 
   std::string unicode_config_1f(next_tempfile(unicode_config_1));
   ConfFile cf2;
-  ASSERT_EQ(cf2.parse_file(unicode_config_1f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf2.parse_file(unicode_config_1f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
   ASSERT_EQ(cf2.read("global", "log file", val), 0);
   ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
 }
 
 TEST(ConfUtils, IllegalFiles) {
-  std::deque<std::string> err;
-  std::ostringstream warn;
-  std::string illegal_conf1_f(next_tempfile(illegal_conf1));
-  ConfFile cf1;
-  ASSERT_EQ(cf1.parse_file(illegal_conf1_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
-
-  bufferlist bl2;
-  bl2.append(illegal_conf2, strlen(illegal_conf2));
-  ConfFile cf2;
-  ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
-
-  std::string illegal_conf3_f(next_tempfile(illegal_conf3));
-  ConfFile cf3;
-  ASSERT_EQ(cf3.parse_file(illegal_conf3_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
-
-  std::string illegal_conf4_f(next_tempfile(illegal_conf4));
-  ConfFile cf4;
-  ASSERT_EQ(cf4.parse_file(illegal_conf4_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
-
-  std::string illegal_conf5_f(next_tempfile(illegal_conf5));
-  ConfFile cf5;
-  ASSERT_EQ(cf5.parse_file(illegal_conf5_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 1U);
+  {
+    std::ostringstream err;
+    ConfFile cf1;
+    std::string illegal_conf1_f(next_tempfile(illegal_conf1));
+    ASSERT_EQ(cf1.parse_file(illegal_conf1_f.c_str(), &err), -EINVAL);
+    ASSERT_GT(err.tellp(), 0U);
+  }
+  {
+    std::ostringstream err;
+    bufferlist bl2;
+    bl2.append(illegal_conf2, strlen(illegal_conf2));
+    ConfFile cf2;
+    ASSERT_EQ(cf2.parse_bufferlist(&bl2, &err), -EINVAL);
+    ASSERT_GT(err.tellp(), 0U);
+  }
+  {
+    std::ostringstream err;
+    std::string illegal_conf3_f(next_tempfile(illegal_conf3));
+    ConfFile cf3;
+    ASSERT_EQ(cf3.parse_file(illegal_conf3_f.c_str(), &err), -EINVAL);
+    ASSERT_GT(err.tellp(), 0U);
+  }
+  {
+    std::ostringstream err;
+    std::string illegal_conf4_f(next_tempfile(illegal_conf4));
+    ConfFile cf4;
+    ASSERT_EQ(cf4.parse_file(illegal_conf4_f.c_str(), &err), -EINVAL);
+    ASSERT_GT(err.tellp(), 0U);
+  }
 }
 
 TEST(ConfUtils, EscapingFiles) {
-  std::deque<std::string> err;
-  std::ostringstream warn;
+  std::ostringstream err;
   std::string escaping_conf_1_f(next_tempfile(escaping_conf_1));
   ConfFile cf1;
   std::string val;
-  ASSERT_EQ(cf1.parse_file(escaping_conf_1_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf1.parse_file(escaping_conf_1_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   ASSERT_EQ(cf1.read("global", "log file", val), 0);
   ASSERT_EQ(val, "the \"scare quotes\"");
@@ -459,8 +420,8 @@ TEST(ConfUtils, EscapingFiles) {
 
   std::string escaping_conf_2_f(next_tempfile(escaping_conf_2));
   ConfFile cf2;
-  ASSERT_EQ(cf2.parse_file(escaping_conf_2_f.c_str(), &err, &warn), 0);
-  ASSERT_EQ(err.size(), 0U);
+  ASSERT_EQ(cf2.parse_file(escaping_conf_2_f.c_str(), &err), 0);
+  ASSERT_EQ(err.tellp(), 0U);
 
   ASSERT_EQ(cf2.read("apple ][", "log file", val), 0);
   ASSERT_EQ(val, "floppy disk");
@@ -475,17 +436,17 @@ TEST(ConfUtils, Overrides) {
 
   conf->name.set(CEPH_ENTITY_TYPE_MON, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "global_log");
 
   conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "mds_log");
 
   conf->name.set(CEPH_ENTITY_TYPE_OSD, "0");
   conf.parse_config_files(override_conf_1_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, "osd0_log");
 }
 
@@ -496,7 +457,7 @@ TEST(ConfUtils, DupKey) {
 
   conf->name.set(CEPH_ENTITY_TYPE_MDS, "a");
   conf.parse_config_files(dup_key_config_f.c_str(), &warn, 0);
-  ASSERT_EQ(conf.num_parse_errors(), 0U);
+  ASSERT_FALSE(conf.has_parse_error());
   ASSERT_EQ(conf->log_file, string("3"));
 }
 

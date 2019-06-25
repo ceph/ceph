@@ -319,11 +319,11 @@ public:
     return config.parse_config_files(values, obs_mgr,
 				     conf_files, warnings, flags);
   }
-  size_t num_parse_errors() const {
-    return config.parse_errors.size();
+  bool has_parse_error() const {
+    return !config.parse_error.empty();
   }
-  void complain_about_parse_errors(CephContext *cct) {
-    return config.complain_about_parse_errors(cct);
+  void complain_about_parse_error(CephContext *cct) {
+    return config.complain_about_parse_error(cct);
   }
   void do_argv_commands() const {
     std::lock_guard l{lock};
