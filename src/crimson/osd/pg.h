@@ -114,7 +114,7 @@ public:
       int ret = prepare_info_keymap(
 	shard_services.get_cct(),
 	&km,
-	peering_state.get_osdmap()->get_epoch(),
+	get_osdmap_epoch(),
 	info,
 	last_written_info,
 	past_intervals,

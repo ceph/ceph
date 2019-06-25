@@ -111,7 +111,7 @@ bool PG::try_flush_or_schedule_async() {
   shard_services.get_store().do_transaction(
     coll_ref,
     ObjectStore::Transaction()).then(
-      [this, epoch=peering_state.get_osdmap()->get_epoch()]() {
+      [this, epoch=get_osdmap_epoch()]() {
 	return shard_services.start_operation<LocalPeeringEvent>(
 	  this,
 	  shard_services,
