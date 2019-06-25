@@ -774,7 +774,7 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, true);
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << oc.bucket_info.bucket << ":" << o.key << "error code: " << std::to_string(r) << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (non-current expiration)" << dendl;
