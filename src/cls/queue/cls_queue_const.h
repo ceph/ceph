@@ -2,8 +2,10 @@
 #define CEPH_CLS_QUEUE_CONSTS_H
 
 #define QUEUE_CLASS "queue"
+#define RGW_QUEUE_CLASS "rgw_queue"
 
 #define CREATE_QUEUE "create_queue"
+#define INIT_QUEUE "init_queue"
 #define GET_QUEUE_SIZE "get_queue_size"
 #define ENQUEUE "enqueue"
 #define DEQUEUE "dequeue"
@@ -16,6 +18,7 @@
 #define QUEUE_CAN_URGENT_DATA_FIT "queue_can_urgent_data_fit"
 
 #define GC_CREATE_QUEUE "gc_create_queue"
+#define GC_INIT_QUEUE "gc_init_queue"
 #define GC_ENQUEUE "gc_enqueue"
 #define GC_DEQUEUE "gc_dequeue"
 #define GC_QUEUE_LIST_ENTRIES "gc_queue_list_entries"

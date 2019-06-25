@@ -10,9 +10,8 @@ void cls_queue_head::dump(Formatter *f) const
   f->dump_bool("is_empty", is_empty);
   f->dump_unsigned("front", front);
   f->dump_unsigned("tail", tail);
-  f->dump_unsigned("size", size);
+  f->dump_unsigned("size", queue_size);
   f->dump_unsigned("has_urgent_data", front);
-  f->dump_unsigned("bl_urgent_data", size);
 }
 
 void cls_queue_head::generate_test_instances(list<cls_queue_head*>& ls)
