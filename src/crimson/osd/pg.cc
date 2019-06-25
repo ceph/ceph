@@ -24,21 +24,26 @@
 
 #include "osd/OSDMap.h"
 
+#include "os/Transaction.h"
+
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
-#include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
+#include "crimson/os/cyan_store.h"
+
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
-
-#include "pg_backend.h"
+#include "crimson/osd/pg_backend.h"
+#include "crimson/osd/osd_operations/peering_event.h"
 
 namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
   }
 }
+
+namespace ceph::osd {
 
 using ceph::common::local_conf;
 
@@ -64,12 +69,13 @@ PG::PG(
   pg_pool_t&& pool,
   std::string&& name,
   cached_map_t osdmap,
-  ceph::osd::ShardServices &shard_services,
+  ShardServices &shard_services,
   ec_profile_t profile)
   : pgid{pgid},
     pg_whoami{pg_shard},
     coll_ref(shard_services.get_store().open_collection(coll)),
     pgmeta_oid{pgid.make_pgmeta_oid()},
+    osdmap_gate("PG::osdmap_gate", std::nullopt),
     shard_services{shard_services},
     osdmap{osdmap},
     backend(
@@ -96,27 +102,26 @@ PG::PG(
   peering_state.set_backend_predicates(
     new ReadablePredicate(pg_whoami),
     new RecoverablePredicate());
+  osdmap_gate.got_map(osdmap->get_epoch());
 }
 
+PG::~PG() {}
+
 bool PG::try_flush_or_schedule_async() {
-// FIXME once there's a good way to schedule an "async" peering event
-#if 0
   shard_services.get_store().do_transaction(
     coll_ref,
     ObjectStore::Transaction()).then(
-      [this, epoch=peering_state.get_osdmap()->get_epoch()](){
-	if (!peering_state.pg_has_reset_since(epoch)) {
-	  PeeringCtx rctx;
-	  auto evt = PeeringState::IntervalFlush();
-	  do_peering_event(evt, rctx);
-	  return shard_services.dispatch_context(std::move(rctx));
-	} else {
-	  return seastar::now();
-	}
+      [this, epoch=peering_state.get_osdmap()->get_epoch()]() {
+	return shard_services.start_operation<LocalPeeringEvent>(
+	  this,
+	  shard_services,
+	  pg_whoami,
+	  pgid,
+	  epoch,
+	  epoch,
+	  PeeringState::IntervalFlush());
       });
   return false;
-#endif
-  return true;
 }
 
 void PG::log_state_enter(const char *state) {
@@ -230,6 +235,7 @@ void PG::handle_advance_map(
     newacting,
     acting_primary,
     rctx);
+  osdmap_gate.got_map(next_map->get_epoch());
 }
 
 void PG::handle_activate_map(PeeringCtx &rctx)
@@ -405,4 +411,6 @@ seastar::future<> PG::handle_op(ceph::net::Connection* conn,
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
+}
+
 }
