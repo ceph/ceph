@@ -237,7 +237,7 @@ public:
 	    std::string name = {}) const;
 
   /// print/log warnings/errors from parsing the config
-  void complain_about_parse_errors(CephContext *cct);
+  void complain_about_parse_error(CephContext *cct);
 
 private:
   // we use this to avoid variable expansion loops
@@ -330,7 +330,7 @@ private:
   // The configuration file we read, or NULL if we haven't read one.
   ConfFile cf;
 public:
-  std::deque<std::string> parse_errors;
+  std::string parse_error;
 private:
 
   // This will be set to true when it is safe to start threads.

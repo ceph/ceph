@@ -518,7 +518,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   // disable unnecessary librbd cache
   cct->_conf.set_val_or_die("rbd_cache", "false");
   cct->_conf.apply_changes(nullptr);
-  cct->_conf.complain_about_parse_errors(cct);
+  cct->_conf.complain_about_parse_error(cct);
 
   r = (*rados_ref)->init_with_context(cct);
   ceph_assert(r == 0);

@@ -168,7 +168,7 @@ extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
   if (ret == 0) {
     conf.parse_env(client->cct()->get_module_type());
     conf.apply_changes(NULL);
-    conf.complain_about_parse_errors(client->cct());
+    conf.complain_about_parse_error(client->cct());
   } else if (ret == -ENOENT) {
     // ignore missing client config
     return 0;
