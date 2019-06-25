@@ -15,13 +15,9 @@ smaller than 2GB because ceph-volume creates vgs with PE = 1GB.
 
 """
 
-# TODO what happens if we pass --wal or --db and there is no such partition?
 # TODO  stderr: WARNING: Maximum supported pool metadata size is 16.00 GiB.
 # TODO  stderr: WARNING: recovery of pools without pool metadata spare LV is not automated.
 # TODO do we want a spare partition or not?
-# TODO add error handling at every step
-# TODO what happens on disk failures?
-# TODO make sure nothing breaks on filestore/non-LVM bluestore
 # TODO add cache size to `cache info`
 # TODO in documentation make sure to mention the ratio of metadata to data from man lvmcache
 
@@ -58,11 +54,11 @@ A: The cache LVs still exist, and 'cache info' still shows them as being availab
     We won't be able to uncache as LVM will try to flush the cache (as it is in
     writeback mode), which will fail since the origin LV's device is gone. We're now
     in a situation where the origin LV exists, but its backing device doesn't.
-    The procedure to fix this is to use pvs and locate the devices that are associated
-    with the origin LV, and remove them using 'pvremove /dev/<device or partition>'.
-    Do the same for the cache's partitions.
-    Hopefully that will make the origin LV as well as the cache LVs disappear.
-    You can also use dd if=/dev/zero of=/dev/<device or partition> to wipe them out
+    The procedure to fix this is to use the `pvs` command and locate the devices
+    that are associated with the origin LV. We can then remove them using
+    'pvremove /dev/<device or partition>'. The same can be done for the cache's
+    partitions. This procedure should make the origin LV as well as the cache LVs
+    disappear. We can also use dd if=/dev/zero of=/dev/<device or partition> to wipe them out
     before using 'pvremove'.
 """
 
@@ -457,28 +453,15 @@ $> ceph-volume lvmcache dump
     name = 'lvmcache'
 
     def __init__(self, argv=sys.argv):
-        self.mapper = {
-        }
         self.argv = argv
 
-    
+
     def help(self):
         return self._help
 
 
-    def _get_split_args(self):
-        subcommands = self.mapper.keys()
-        slice_on_index = len(self.argv) + 1
-        pruned_args = self.argv[1:]
-        for count, arg in enumerate(pruned_args):
-            if arg in subcommands:
-                slice_on_index = count
-                break
-        return pruned_args[:slice_on_index], pruned_args[slice_on_index:]
-
-
     def main(self, argv=None):
-        main_args, subcommand_args = self._get_split_args()
+        main_args = self.argv[1:]
         parser = argparse.ArgumentParser(
             prog='lvmcache',
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -599,6 +582,8 @@ $> ceph-volume lvmcache dump
         elif self.argv[0] == 'stats':
             print_cache_stats(args.osd_id)
             return
+        elif self.argv[0] == 'help' or self.argv[0] == '-h' or self.argv[0] == '--help':
+            parser.print_help()
         else:
             terminal.error('Unknown command ' + self.argv[0])
 
