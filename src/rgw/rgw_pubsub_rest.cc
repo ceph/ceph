@@ -171,7 +171,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     // (1) topics cannot be shared between different S3 notifications because they hold the filter information
     // (2) make topic clneaup easier, when notification is removed
     const auto unique_topic_name = topic_to_unique(topic_name, sub_name);
-    // generate the internal topic, no need to store destination info
+    // generate the internal topic, no need to store destination info in thr unique topic
     // ARN is cached to make the "GET" method faster
     op_ret = ups->create_topic(unique_topic_name, rgw_pubsub_sub_dest(), topic_info.topic.arn);
     if (op_ret < 0) {
@@ -190,7 +190,8 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       ups->remove_topic(unique_topic_name);
       return;
     }
-    
+   
+    // generate the subscription with destination information from the original topic
     rgw_pubsub_sub_dest dest = topic_info.topic.dest;
     dest.bucket_name = data_bucket_prefix + s->owner.get_id().to_str() + "-" + unique_topic_name;
     dest.oid_prefix = data_oid_prefix + sub_name + "/";
