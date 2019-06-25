@@ -453,37 +453,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_stateful_service_rule(self, service_type, stateful_service_spec,
-                                  placement_spec):
-        """
-        Stateful service rules serve two purposes:
-         - Optionally delegate device selection to the orchestrator
-         - Enable the orchestrator to auto-assimilate new hardware if it
-           matches the placement spec, without any further calls from ceph-mgr.
-
-        To create a confidence-inspiring UI workflow, use test_stateful_service_rule
-        beforehand to show the user where stateful services will be placed
-        if they proceed.
-        """
-        raise NotImplementedError()
-
-    def test_stateful_service_rule(self, service_type, stateful_service_spec,
-                                   placement_spec):
-        """
-        See add_stateful_service_rule.
-        """
-        raise NotImplementedError()
-
-    def remove_stateful_service_rule(self, service_type, id_):
-        """
-        This will remove the *rule* but not the services that were
-        created as a result.  Those should be converted into statically
-        placed services as if they had been created with add_stateful_service,
-        so that they can be removed with remove_stateless_service
-        if desired.
-        """
-        raise NotImplementedError()
-
 
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
