@@ -163,6 +163,14 @@ the *hot-storage* and benefit from its flexibility and speed.
 More information can be found in the `cache tiering
 <../cache-tiering>`_ documentation.
 
+Erasure coded pool recovery
+---------------------------
+
+Erasure coded pools could not recover when there were less than min_size
+shards available. This restriction has been removed in Octopus, which means
+that as long as there are enough shards available for data to be recovered,
+we will allow recovery to proceed below min_size.
+
 Glossary
 --------
 
