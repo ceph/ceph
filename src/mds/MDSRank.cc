@@ -316,6 +316,17 @@ private:
     Context *timer_task = nullptr;
   };
 
+  std::pair<bool, uint64_t> do_trim() {
+    auto p = mdcache->trim(UINT64_MAX);
+    auto& throttled = p.first;
+    auto& count = p.second;
+    dout(10) << __func__
+             << (throttled ? " (throttled)" : "")
+             << " trimmed " << count << " caps" << dendl;
+    dentries_trimmed += count;
+    return std::make_pair(throttled, count);
+  }
+
   void recall_client_state() {
     dout(20) << __func__ << dendl;
     auto now = mono_clock::now();
@@ -331,16 +342,22 @@ private:
 
     caps_recalled += count;
     if ((throttled || count > 0) && (recall_timeout == 0 || duration < recall_timeout)) {
-      auto timer = new FunctionContext([this](int _) {
-        recall_client_state();
-      });
-      mds->timer.add_event_after(1.0, timer);
+      C_ContextTimeout *ctx = new C_ContextTimeout(
+        mds, 1, new FunctionContext([this](int r) {
+          recall_client_state();
+      }));
+      ctx->start_timer();
+      gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
+      gather->activate();
+      mdlog->flush(); /* use down-time to incrementally flush log */
+      do_trim(); /* use down-time to incrementally trim cache */
     } else {
       if (!gather->has_subs()) {
         delete gather;
         return handle_recall_client_state(0);
       } else if (recall_timeout > 0 && duration > recall_timeout) {
-        delete gather;
+        gather->set_finisher(new C_MDSInternalNoop);
+        gather->activate();
         return handle_recall_client_state(-ETIMEDOUT);
       } else {
         uint64_t remaining = (recall_timeout == 0 ? 0 : recall_timeout-duration);
@@ -402,13 +419,9 @@ private:
   void trim_cache() {
     dout(20) << __func__ << dendl;
 
-    auto p = mdcache->trim(UINT64_MAX);
+    auto p = do_trim();
     auto& throttled = p.first;
     auto& count = p.second;
-    dout(10) << __func__
-             << (throttled ? " (throttled)" : "")
-             << " trimmed " << count << " caps" << dendl;
-    dentries_trimmed += count;
     if (throttled && count > 0) {
       auto timer = new FunctionContext([this](int _) {
         trim_cache();

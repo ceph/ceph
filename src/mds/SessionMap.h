@@ -120,6 +120,8 @@ private:
   mutable DecayCounter release_caps;
   // throttle on caps recalled
   mutable DecayCounter recall_caps_throttle;
+  // second order throttle that prevents recalling too quickly
+  mutable DecayCounter recall_caps_throttle2o;
   // New limit in SESSION_RECALL
   uint32_t recall_limit = 0;
 
@@ -179,6 +181,9 @@ public:
   uint64_t notify_recall_sent(size_t new_limit);
   double get_recall_caps_throttle() const {
     return recall_caps_throttle.get(ceph_clock_now());
+  }
+  double get_recall_caps_throttle2o() const {
+    return recall_caps_throttle2o.get(ceph_clock_now());
   }
   double get_recall_caps() const {
     return recall_caps.get(ceph_clock_now());
@@ -385,6 +390,7 @@ public:
     recall_caps(ceph_clock_now(), g_conf->get_val<double>("mds_recall_warning_decay_rate")),
     release_caps(ceph_clock_now(), g_conf->get_val<double>("mds_recall_warning_decay_rate")),
     recall_caps_throttle(ceph_clock_now(), g_conf->get_val<double>("mds_recall_max_decay_rate")),
+    recall_caps_throttle2o(ceph_clock_now(), 0.5),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),

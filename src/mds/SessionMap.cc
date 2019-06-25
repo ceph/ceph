@@ -887,6 +887,7 @@ uint64_t Session::notify_recall_sent(size_t new_limit)
    * throttle future RECALL messages).
    */
   recall_caps_throttle.hit(ceph_clock_now(), count);
+  recall_caps_throttle2o.hit(ceph_clock_now(), count);
   recall_caps.hit(ceph_clock_now(), count);
   return new_change;
 }
