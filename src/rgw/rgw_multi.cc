@@ -198,8 +198,11 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   do {
     ret = list_multipart_parts(store, bucket_info, cct, mp_obj.get_upload_id(), mp_obj.get_meta(), 1000,
       marker, obj_parts, &marker, &truncated);
-    if (ret < 0)
+    if (ret < 0) {
+      ldout(cct, 20) << __func__ << ": list_multipart_parts returned " <<
+	ret << dendl;
       return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
+    }
     for (auto obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
       rgw_obj obj;
@@ -228,7 +231,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   /* use upload id as tag */
   ret = store->send_chain_to_gc(chain, mp_obj.get_upload_id() , false);  // do it async
   if (ret < 0) {
-    ldout(cct, 5) << "gc->send_chain() returned " << ret << dendl;
+    ldout(cct, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
     return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
   }
   RGWRados::Object del_target(store, bucket_info, *obj_ctx, meta_obj);
@@ -242,6 +245,10 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
 
   // and also remove the metadata obj
   ret = del_op.delete_obj();
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
+      ret << dendl;
+  }
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
@@ -276,8 +283,17 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
 				max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
+      ldout(store->ctx(), 0) << __func__ <<
+	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
+	"; bucket=\"" << bucket_info.bucket << "\"; prefix=\"" <<
+	prefix << "\"; delim=\"" << delim << "\"" << dendl;
       return ret;
     }
+    ldout(store->ctx(), 20) << __func__ <<
+      " INFO: aborting and cleaning up multipart upload(s); bucket=\"" <<
+      bucket_info.bucket << "\"; objs.size()=" << objs.size() <<
+      "; is_truncated=" << is_truncated << dendl;
+
     if (!objs.empty()) {
       RGWMPObj mp;
       for (const auto& obj : objs) {
@@ -285,16 +301,30 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
         if (!mp.from_meta(key.name))
           continue;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
-        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
-          return ret;
+        if (ret < 0) {
+	  // we're doing a best-effort; if something cannot be found,
+	  // log it and keep moving forward
+	  if (ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
+	    ldout(store->ctx(), 0) << __func__ <<
+	      " ERROR : failed to abort and clean-up multipart upload \"" <<
+	      key.get_oid() << "\"" << dendl;
+	    return ret;
+	  } else {
+	    ldout(store->ctx(), 10) << __func__ <<
+	      " NOTE : unable to find part(s) of "
+	      "aborted multipart upload of \"" << key.get_oid() <<
+	      "\" for cleaning up" << dendl;
+	  }
         }
         num_deleted++;
       }
       if (num_deleted) {
-        ldout(store->ctx(),0) << "WARNING : aborted " << num_deleted << " incomplete multipart uploads" << dendl;
+        ldout(store->ctx(), 0) << __func__ <<
+	  " WARNING : aborted " << num_deleted <<
+	  " incomplete multipart uploads" << dendl;
       }
     }
   } while (is_truncated);
 
-  return ret;
+  return 0;
 }
