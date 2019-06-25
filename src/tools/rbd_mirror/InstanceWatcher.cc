@@ -1193,6 +1193,9 @@ void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
         if (r == 0) {
           notify_sync_start(instance_id, sync_id);
         }
+        if (r == -ENOENT) {
+          r = 0;
+        }
         on_finish->complete(r);
       }));
   m_image_sync_throttler->start_op(sync_id, on_start);
