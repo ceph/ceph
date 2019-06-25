@@ -419,8 +419,6 @@ RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
 
 int RGWMetadataHandlerPut_SObj::put_pre()
 {
-#warning what about attrs?
-  map<string, bufferlist> attrs;
   int ret = get(&old_obj);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
