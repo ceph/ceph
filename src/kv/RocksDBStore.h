@@ -43,6 +43,8 @@ enum {
   l_rocksdb_write_memtable_time,
   l_rocksdb_write_delay_time,
   l_rocksdb_write_pre_and_post_process_time,
+  l_rocksdb_oldest_active_iterator,
+  l_rocksdb_iterator_age,
   l_rocksdb_last,
 };
 
@@ -103,6 +105,22 @@ class RocksDBStore : public KeyValueDB {
   void compact_range_async(const string& start, const string& end);
 
 public:
+  struct TrackedIterator {
+    rocksdb::Iterator* iterator;
+    utime_t created;
+    TrackedIterator(rocksdb::Iterator* iterator,
+		    utime_t& created)
+    : iterator(iterator), created(created) { }
+  };
+private:
+  static Mutex iterator_lock;
+  static std::vector<uint64_t> iterators_histogram; //in miliseconds [0]=<0..1), [1]=<1..2), [2]=<2..4)
+  static std::list<TrackedIterator> tracked_iterators;
+  std::list<TrackedIterator>::iterator iterator_created(rocksdb::Iterator* it);
+  void iterator_deleted(std::list<TrackedIterator>::iterator);
+  friend class CFIteratorImpl;
+  static bool dump_iterators(Formatter* f);
+public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
@@ -129,23 +147,7 @@ public:
     compact_range_async(combine_strings(prefix, start), combine_strings(prefix, end));
   }
 
-  RocksDBStore(CephContext *c, const string &path, void *p) :
-    cct(c),
-    logger(NULL),
-    path(path),
-    priv(p),
-    db(NULL),
-    env(static_cast<rocksdb::Env*>(p)),
-    dbstats(NULL),
-    compact_queue_lock("RocksDBStore::compact_thread_lock"),
-    compact_queue_stop(false),
-    compact_thread(this),
-    compact_on_mount(false),
-    disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
-    high_pri_watermark(0)
-  {}
-
+  RocksDBStore(CephContext *c, const string &path, void *p);
   ~RocksDBStore() override;
 
   static bool check_omap_dir(string &omap_dir);
@@ -319,14 +321,29 @@ public:
     bufferlist *out) override;
 
 
+  class RocksDBWholeSpaceIteratorImpl;
+  class IteratorTracker;
+  friend class IteratorTracker;
+
+  class IteratorTracker {
+    RocksDBStore& db;
+    std::list<TrackedIterator>::iterator it_it;
+  public:
+    IteratorTracker(RocksDBStore& db, rocksdb::Iterator* it) : db(db) {
+      it_it = db.iterator_created(it);
+    }
+    ~IteratorTracker() {
+      db.iterator_deleted(it_it);
+    }
+  };
+
   class RocksDBWholeSpaceIteratorImpl :
-    public KeyValueDB::WholeSpaceIteratorImpl {
+    public KeyValueDB::WholeSpaceIteratorImpl, public IteratorTracker {
   protected:
     rocksdb::Iterator *dbiter;
   public:
-    explicit RocksDBWholeSpaceIteratorImpl(rocksdb::Iterator *iter) :
-      dbiter(iter) { }
-    //virtual ~RocksDBWholeSpaceIteratorImpl() { }
+    explicit RocksDBWholeSpaceIteratorImpl(RocksDBStore& db, rocksdb::Iterator *iter) :
+      IteratorTracker(db, iter), dbiter(iter) { }
     ~RocksDBWholeSpaceIteratorImpl() override;
 
     int seek_to_first() override;

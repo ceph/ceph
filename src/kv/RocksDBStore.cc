@@ -30,6 +30,7 @@ using std::string;
 #include "RocksDBStore.h"
 
 #include "common/debug.h"
+#include "common/admin_socket.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb
@@ -48,8 +49,14 @@ static rocksdb::SliceParts prepare_sliceparts(const bufferlist &bl,
   return rocksdb::SliceParts(slices->data(), slices->size());
 }
 
+Mutex RocksDBStore::iterator_lock("static iterator tracker");
+std::vector<uint64_t> RocksDBStore::iterators_histogram; //in miliseconds [0]=<0..1), [1]=<1..2), [2]=<2..4)
+std::list<RocksDBStore::TrackedIterator> RocksDBStore::tracked_iterators;
+
 //
 // One of these per rocksdb instance, implements the merge operator prefix stuff
+// One of these for the default rocksdb column family, routing each prefix
+// to the appropriate MergeOperator.
 //
 class RocksDBStore::MergeOperatorRouter : public rocksdb::AssociativeMergeOperator {
   RocksDBStore& store;
@@ -389,6 +396,28 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   plb.add_time_avg(l_rocksdb_write_delay_time, "rocksdb_write_delay_time", "Rocksdb write delay time");
   plb.add_time_avg(l_rocksdb_write_pre_and_post_process_time, 
       "rocksdb_write_pre_and_post_time", "total time spent on writing a record, excluding write process");
+  plb.add_time(l_rocksdb_oldest_active_iterator,
+      "rocksdb_oldest_active_iterator", "age of oldest active RocksDB iterator");
+  PerfHistogramCommon::axis_config_d op_hist_x_axis_config{
+    "Latency (usec)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Latency in logarithmic scale
+    0,                               ///< Start at 0
+    100000,                          ///< Quantization unit is 100usec
+    32,                              ///< Enough to cover much longer than slow requests
+  };
+  PerfHistogramCommon::axis_config_d collapsed_dimension{
+    "----",
+    PerfHistogramCommon::SCALE_LINEAR, ///< Request size in logarithmic scale
+    0,                               ///< Start at 0
+    1,                               ///< Quantization unit is 1
+    1,                               ///< One range
+  };
+
+  plb.add_u64_counter_histogram(l_rocksdb_iterator_age,
+      "rocksdb_iterator_age",
+      op_hist_x_axis_config, collapsed_dimension,
+      "Histogram of how long did RocksDB iterators lived");
+
   logger = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 
@@ -411,8 +440,35 @@ int RocksDBStore::_test_init(const string& dir)
   return status.ok() ? 0 : -EIO;
 }
 
+RocksDBStore::RocksDBStore(CephContext *c, const string &path, void *p) :
+    cct(c),
+    logger(NULL),
+    path(path),
+    priv(p),
+    db(NULL),
+    env(static_cast<rocksdb::Env*>(p)),
+    dbstats(NULL),
+    compact_queue_lock("RocksDBStore::compact_thread_lock"),
+    compact_queue_stop(false),
+    compact_thread(this),
+    compact_on_mount(false),
+    disableWAL(false),
+    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
+    high_pri_watermark(0)
+{
+  AdminSocket *admin_socket = nullptr;
+  admin_socket = g_ceph_context->get_admin_socket();
+  if (admin_socket)
+    admin_socket->register_inspect("perf inspect rocksdb", "rocksdb", dump_iterators);
+}
+
 RocksDBStore::~RocksDBStore()
 {
+  AdminSocket *admin_socket = nullptr;
+  admin_socket = g_ceph_context->get_admin_socket();
+  if (admin_socket)
+    admin_socket->unregister_inspect("perf inspect rocksdb", "rocksdb");
+
   close();
   delete logger;
 
@@ -1115,6 +1171,54 @@ string RocksDBStore::past_prefix(const string &prefix)
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
 {
   return std::make_shared<RocksDBWholeSpaceIteratorImpl>(
-        db->NewIterator(rocksdb::ReadOptions()));
+    *this, db->NewIterator(rocksdb::ReadOptions()));
 }
 
+std::list<RocksDBStore::TrackedIterator>::iterator RocksDBStore::iterator_created(rocksdb::Iterator* it)
+{
+  utime_t t = ceph_clock_now();
+  Mutex::Locker l(iterator_lock);
+  tracked_iterators.emplace_front(it, t);
+  return tracked_iterators.begin();
+}
+
+void RocksDBStore::iterator_deleted(std::list<TrackedIterator>::iterator iterator)
+{
+  double elapsed = ceph_clock_now() - iterator->created;
+  int exp;
+  frexp(elapsed * 1000, &exp);
+  if (exp < 0) 
+    exp = 0;
+  Mutex::Locker l(iterator_lock);
+  if ((int)iterators_histogram.size() <= exp) 
+    iterators_histogram.resize(exp + 1);
+  iterators_histogram[exp]++;
+  tracked_iterators.erase(iterator);
+}
+
+bool RocksDBStore::dump_iterators(Formatter* f)
+{
+  Mutex::Locker l(iterator_lock);
+  utime_t now = ceph_clock_now();
+  f->open_array_section("iterators");
+  for(auto& it : tracked_iterators) {
+    f->open_object_section("iterator");
+    char ptr[30];
+    snprintf(ptr, 30, "%p", it.iterator);
+    f->dump_string("rocksdb::Iterator", ptr);
+    f->dump_float("age(s)", (double)(now - it.created));
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("histogram");
+  for(uint64_t i=0; i<iterators_histogram.size(); i++) {
+    std::stringstream ss;
+    ss << "range-" << (1 << i)/2 << "ms-" << (1 << i) << "ms";
+    f->open_object_section("range");
+    f->dump_string("range", ss.str().c_str());
+    f->dump_int("value", iterators_histogram[i]);
+    f->close_section();
+  }
+  f->close_section();
+  return true;
+}
