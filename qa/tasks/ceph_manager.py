@@ -713,8 +713,10 @@ class Thrasher:
                 pool_type = pool_json['type']  # 1 for rep, 3 for ec
                 min_size = pool_json['min_size']
                 self.log("pool {pool} min_size is {min_size}".format(pool=pool,min_size=min_size))
-                ec_profile = self.ceph_manager.get_pool_property(pool, "erasure_code_profile")
-                if pool_type == 3:
+                try:
+                    ec_profile = self.ceph_manager.get_pool_property(pool, 'erasure_code_profile')
+                    if pool_type != PoolType.ERASURE_CODED:
+                        continue
                     ec_profile = pool_json['erasure_code_profile']
                     ec_profile_json = self.ceph_manager.raw_cluster_cmd(
                         'osd',
@@ -726,13 +728,16 @@ class Thrasher:
                     local_k = int(ec_json['k'])
                     local_m = int(ec_json['m'])
                     self.log("pool {pool} local_k={k} local_m={m}".format(pool=pool,
-                                                                      k=local_k, m=local_m))
+                                                                          k=local_k, m=local_m))
                     if local_k > k:
                         self.log("setting k={local_k} from previous {k}".format(local_k=local_k, k=k))
                         k = local_k
                     if local_m < m:
                         self.log("setting m={local_m} from previous {m}".format(local_m=local_m, m=m))
                         m = local_m
+                except CommandFailedError:
+                    self.log("failed to read erasure_code_profile. %s was likely removed", pool)
+                    continue
 
             if has_pools :
                 self.log("using k={k}, m={m}".format(k=k,m=m))
