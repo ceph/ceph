@@ -4470,7 +4470,7 @@ bool PG::sched_scrub()
       clear_scrub_reserved();
       scrub_unreserve_replicas();
       return false;
-    } else if (scrubber.reserved_peers.size() == acting.size()) {
+    } else if (scrubber.reserved_peers.size() == actingset.size()) {
       dout(20) << __func__ << ": success, reserved self and replicas" << dendl;
       if (scrubber.time_for_deep) {
 	dout(10) << __func__ << ": scrub will be deep" << dendl;
@@ -4743,8 +4743,8 @@ void PG::clear_scrub_reserved()
 void PG::scrub_reserve_replicas()
 {
   ceph_assert(backfill_targets.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
@@ -4760,8 +4760,8 @@ void PG::scrub_reserve_replicas()
 void PG::scrub_unreserve_replicas()
 {
   ceph_assert(backfill_targets.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
