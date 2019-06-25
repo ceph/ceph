@@ -42,6 +42,8 @@ public:
   seastar::future<> umount() final;
 
   seastar::future<> mkfs() final;
+  store_statfs_t stat() const final;
+
   seastar::future<ceph::bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
 				   uint64_t offset,
