@@ -2528,15 +2528,6 @@ class RGWBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler
                                                  pmtime, &bi->attrs);
   }
 
-  int remove_bucket_instance_entry(RGWSI_Bucket_BI_Ctx& ctx,
-                                   const string& entry,
-                                   RGWObjVersionTracker *objv_tracker,
-                                   const ceph::real_time& mtime) {
-#warning mtime?
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, objv_tracker);
-  }
-
-
 public:
   struct Svc {
     RGWSI_Zone *zone{nullptr};
