@@ -34,7 +34,7 @@ int CrushLocation::_parse(const std::string& s)
 	       << loc << dendl;
     return -EINVAL;
   }
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   loc.swap(new_crush_location);
   lgeneric_dout(cct, 10) << "crush_location is " << loc << dendl;
   return 0;
@@ -115,10 +115,30 @@ int CrushLocation::init_on_startup()
       break;
     }
   }
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   loc.clear();
   loc.insert(std::make_pair<std::string,std::string>("host", hostname));
   loc.insert(std::make_pair<std::string,std::string>("root", "default"));
   lgeneric_dout(cct, 10) << "crush_location is (default) " << loc << dendl;
   return 0;
+}
+
+std::multimap<std::string,std::string> CrushLocation::get_location() const
+{
+  std::lock_guard l(lock);
+  return loc;
+}
+
+std::ostream& operator<<(std::ostream& os, const CrushLocation& loc)
+{
+  bool first = true;
+  for (auto& [type, pos] : loc.get_location()) {
+    if (first) {
+      first = false;
+    } else {
+      os << ", ";
+    }
+    os << '"' << type << '=' << pos << '"';
+  }
+  return os;
 }
