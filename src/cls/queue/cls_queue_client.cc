@@ -3,6 +3,7 @@
 #include <errno.h>
 
 #include "cls/rgw/cls_rgw_ops.h"
+#include "cls/queue/cls_rgw_queue_ops.h"
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_client.h"
 
@@ -14,10 +15,22 @@ void cls_rgw_gc_create_queue(ObjectWriteOperation& op, string& queue_name, uint6
 {
   bufferlist in;
   cls_gc_create_queue_op call;
+  call.name = queue_name;
   call.size = size;
   call.num_urgent_data_entries = num_urgent_data_entries;
   encode(call, in);
-  op.exec(QUEUE_CLASS, GC_CREATE_QUEUE, in);
+  op.exec(RGW_QUEUE_CLASS, GC_CREATE_QUEUE, in);
+}
+
+void cls_rgw_gc_init_queue(ObjectWriteOperation& op, string& queue_name, uint64_t& size, uint64_t& num_urgent_data_entries)
+{
+  bufferlist in;
+  cls_gc_create_queue_op call;
+  call.name = queue_name;
+  call.size = size;
+  call.num_urgent_data_entries = num_urgent_data_entries;
+  encode(call, in);
+  op.exec(RGW_QUEUE_CLASS, GC_INIT_QUEUE, in);
 }
 
 int cls_rgw_gc_get_queue_size(IoCtx& io_ctx, string& oid, uint64_t& size)
@@ -44,14 +57,14 @@ void cls_rgw_gc_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_
   call.expiration_secs = expiration_secs;
   call.info = info;
   encode(call, in);
-  op.exec(QUEUE_CLASS, GC_ENQUEUE, in);
+  op.exec(RGW_QUEUE_CLASS, GC_ENQUEUE, in);
 }
 
 int cls_rgw_gc_dequeue(IoCtx& io_ctx, string& oid, cls_rgw_gc_obj_info& info)
 {
   bufferlist in, out;
 
-  int r = io_ctx.exec(oid, QUEUE_CLASS, GC_DEQUEUE, in, out);
+  int r = io_ctx.exec(oid, RGW_QUEUE_CLASS, GC_DEQUEUE, in, out);
   if (r < 0)
     return r;
 
@@ -75,7 +88,7 @@ int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t m
   op.expired_only = expired_only;
   encode(op, in);
 
-  int r = io_ctx.exec(oid, QUEUE_CLASS, GC_QUEUE_LIST_ENTRIES, in, out);
+  int r = io_ctx.exec(oid, RGW_QUEUE_CLASS, GC_QUEUE_LIST_ENTRIES, in, out);
   if (r < 0)
     return r;
 
@@ -97,14 +110,14 @@ int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t m
   return 0;
 }
 
-void cls_rgw_gc_remove_queue(ObjectWriteOperation& op, string& marker, uint32_t num_entries)
+void cls_rgw_gc_remove_entries_queue(ObjectWriteOperation& op, string& marker, uint32_t num_entries)
 {
   bufferlist in, out;
   cls_rgw_gc_queue_remove_op rem_op;
   rem_op.marker = marker;
   rem_op.num_entries = num_entries;
   encode(rem_op, in);
-  op.exec(QUEUE_CLASS, GC_QUEUE_REMOVE_ENTRIES, in);
+  op.exec(RGW_QUEUE_CLASS, GC_QUEUE_REMOVE_ENTRIES, in);
 }
 
 void cls_rgw_gc_defer_entry_queue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
@@ -114,5 +127,5 @@ void cls_rgw_gc_defer_entry_queue(ObjectWriteOperation& op, uint32_t expiration_
   defer_op.expiration_secs = expiration_secs;
   defer_op.info = info;
   encode(defer_op, in);
-  op.exec(QUEUE_CLASS, GC_QUEUE_UPDATE_ENTRY, in);
+  op.exec(RGW_QUEUE_CLASS, GC_QUEUE_UPDATE_ENTRY, in);
 }
