@@ -11185,7 +11185,11 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 
   if (obc->requeue_scrub_on_unblock) {
     obc->requeue_scrub_on_unblock = false;
-    requeue_scrub();
+    // only requeue if we are still active: we may be unblocking
+    // because we are resetting for a new peering interval
+    if (is_active()) {
+      requeue_scrub();
+    }
   }
 }
 
