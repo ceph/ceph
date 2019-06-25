@@ -78,6 +78,27 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   }
   auto get_last_keepalive() const { return last_keepalive; }
   auto get_last_keepalive_ack() const { return last_keepalive_ack; }
+
+  seastar::shared_ptr<Connection> get_shared() {
+    return shared_from_this();
+  }
+
+  struct user_private_t {
+    virtual ~user_private_t() = default;
+  };
+private:
+  unique_ptr<user_private_t> user_private;
+public:
+  bool has_user_private() const {
+    return user_private != nullptr;
+  }
+  void set_user_private(unique_ptr<user_private_t> new_user_private) {
+    user_private = std::move(new_user_private);
+  }
+  user_private_t &get_user_private() {
+    ceph_assert(user_private);
+    return *user_private;
+  }
 };
 
 inline ostream& operator<<(ostream& out, const Connection& conn) {

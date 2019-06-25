@@ -14,12 +14,16 @@
 #include "common/dout.h"
 #include "crimson/net/Fwd.h"
 #include "os/Transaction.h"
-#include "crimson/osd/shard_services.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 #include "osd/PeeringState.h"
 
-template<typename T> using Ref = boost::intrusive_ptr<T>;
+#include "crimson/common/type_helpers.h"
+#include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/shard_services.h"
+#include "crimson/osd/osdmap_gate.h"
+
 class OSDMap;
 class MQuery;
 class PGBackend;
@@ -36,6 +40,9 @@ namespace ceph::os {
   class FuturizedStore;
 }
 
+namespace ceph::osd {
+class ClientRequest;
+
 class PG : public boost::intrusive_ref_counter<
   PG,
   boost::thread_unsafe_counter>,
@@ -44,6 +51,9 @@ class PG : public boost::intrusive_ref_counter<
 {
   using ec_profile_t = std::map<std::string,std::string>;
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+
+  ClientRequest::PGPipeline client_request_pg_pipeline;
+  PeeringEvent::PGPipeline peering_request_pg_pipeline;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
@@ -56,8 +66,18 @@ public:
      pg_pool_t&& pool,
      std::string&& name,
      cached_map_t osdmap,
-     ceph::osd::ShardServices &shard_services,
+     ShardServices &shard_services,
      ec_profile_t profile);
+
+  ~PG();
+
+  const pg_shard_t &get_pg_whoami() const {
+    return pg_whoami;
+  }
+
+  const spg_t&get_pgid() const {
+    return pgid;
+  }
 
   // EpochSource
   epoch_t get_osdmap_epoch() const final {
@@ -187,7 +207,7 @@ public:
     t.register_on_commit(
       new LambdaContext([this, on_commit](){
 	PeeringCtx rctx;
-        do_peering_event(on_commit, rctx);
+        do_peering_event(*on_commit, rctx);
 	shard_services.dispatch_context(std::move(rctx));
     }));
   }
@@ -389,16 +409,6 @@ public:
 
   void do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
-  void do_peering_event(
-    std::unique_ptr<PGPeeringEvent> evt,
-    PeeringCtx &rctx) {
-    return do_peering_event(*evt, rctx);
-  }
-  void do_peering_event(
-    PGPeeringEventRef evt,
-    PeeringCtx &rctx) {
-    return do_peering_event(*evt, rctx);
-  }
 
   void handle_advance_map(cached_map_t next_map, PeeringCtx &rctx);
   void handle_activate_map(PeeringCtx &rctx);
@@ -421,7 +431,8 @@ private:
 					     uint64_t limit);
 
 private:
-  ceph::osd::ShardServices &shard_services;
+  OSDMapGate osdmap_gate;
+  ShardServices &shard_services;
 
   cached_map_t osdmap;
   std::unique_ptr<PGBackend> backend;
@@ -432,6 +443,11 @@ private:
   seastar::future<> wait_for_active();
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
+  friend class ClientRequest;
+  friend class PeeringEvent;
+  friend class PGAdvanceMap;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
+
+}

@@ -53,16 +53,16 @@ public:
     }
     desc = out.str();
   }
-  epoch_t get_epoch_sent() {
+  epoch_t get_epoch_sent() const {
     return epoch_sent;
   }
-  epoch_t get_epoch_requested() {
+  epoch_t get_epoch_requested() const {
     return epoch_requested;
   }
-  const boost::statechart::event_base &get_event() {
+  const boost::statechart::event_base &get_event() const {
     return *evt;
   }
-  const std::string& get_desc() {
+  const std::string& get_desc() const {
     return desc;
   }
 };
