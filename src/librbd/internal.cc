@@ -1839,7 +1839,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << __func__ << " " << ictx << " numcomp = " << numcomp
                    << dendl;
     int i = 0;
-    while (i < numcomp && ictx->completed_reqs.pop(comps[i])) {
+    while (i < numcomp && ictx->event_socket_completions.pop(comps[i])) {
       ++i;
     }
 
