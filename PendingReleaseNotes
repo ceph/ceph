@@ -17,3 +17,9 @@
   and the new 'ceph osd [un]set-group <flags> <who>' command,
   which sets flags in batch at the granularity of any crush node,
   or device class.
+
+* RGW: radosgw-admin introduces two subcommands that allow the
+  managing of expire-stale objects that might be left behind after a
+  bucket reshard in earlier versions of RGW. One subcommand lists such
+  objects and the other deletes them. Read the troubleshooting section
+  of the dynamic resharding docs for details.
