@@ -550,10 +550,9 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mon_health_to_clog") ||
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
-    std::set<std::string> c2(changed);
-    finisher.queue(new C_MonContext(this, [this, c2](int) {
+    finisher.queue(new C_MonContext(this, [this, changed](int) {
       Mutex::Locker l(lock);
-      health_to_clog_update_conf(c2);
+      health_to_clog_update_conf(changed);
     }));
   }
 
