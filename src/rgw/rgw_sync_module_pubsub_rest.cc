@@ -67,6 +67,7 @@ public:
     // bucket to store events/records will be set only when subscription is created
     dest.bucket_name = "";
     dest.oid_prefix = "";
+    dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
         store->svc.zone->get_zonegroup().get_name(),
@@ -354,6 +355,7 @@ public:
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
     dest.push_endpoint_args = s->info.args.get_str();
+    dest.arn_topic = topic_name;
 
     return 0;
   }

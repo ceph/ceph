@@ -81,6 +81,7 @@ struct PSSubConfig {
   std::string data_bucket_name;
   std::string data_oid_prefix;
   std::string s3_id;
+  std::string arn_topic;
   RGWPubSubEndpoint::Ptr push_endpoint;
 
   void from_user_conf(CephContext *cct, const rgw_pubsub_sub_config& uc) {
@@ -90,10 +91,11 @@ struct PSSubConfig {
     data_bucket_name = uc.dest.bucket_name;
     data_oid_prefix = uc.dest.oid_prefix;
     s3_id = uc.s3_id;
+    arn_topic = uc.dest.arn_topic;
     if (!push_endpoint_name.empty()) {
       push_endpoint_args = uc.dest.push_endpoint_args;
       try {
-        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args), cct);
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, arn_topic, string_to_args(push_endpoint_args), cct);
         ldout(cct, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
           ldout(cct, 1) << "ERROR: failed to create push endpoint: " 
@@ -122,10 +124,11 @@ struct PSSubConfig {
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
     data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
     s3_id = config["s3_id"];
+    arn_topic = config["arn_topic"];
     if (!push_endpoint_name.empty()) {
       push_endpoint_args = config["push_endpoint_args"];
       try {
-        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args), cct);
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, arn_topic, string_to_args(push_endpoint_args), cct);
         ldout(cct, 20) << "push endpoint created: " << push_endpoint->to_str() << dendl;
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
         ldout(cct, 1) << "ERROR: failed to create push endpoint: " 
