@@ -428,11 +428,37 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_array_section("alerts");
   ::dump(f, os_alerts);
   f->close_section();
+  // Call to update ping times?
+  f->open_array_section("network_ping_times");
+  for (auto &i : hb_pingtime) {
+    f->open_object_section("osd");
+    f->dump_int("osd", i.first);
+
+    f->open_array_section("interfaces");
+    f->open_object_section("interface");
+    f->dump_string("interface", "back");
+    f->dump_int("1min", i.second.back_pingtime[0]);
+    f->dump_int("5min", i.second.back_pingtime[1]);
+    f->dump_int("15min", i.second.back_pingtime[2]);
+    f->close_section();
+
+    if (i.second.front_pingtime[0] != 0) {
+      f->open_object_section("interface");
+      f->dump_string("interface", "front");
+      f->dump_int("1min", i.second.front_pingtime[0]);
+      f->dump_int("5min", i.second.front_pingtime[1]);
+      f->dump_int("15min", i.second.front_pingtime[2]);
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(13, 2, bl);
+  ENCODE_START(14, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -467,6 +493,18 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(num_osds, bl);
   encode(num_per_pool_osds, bl);
   encode(num_per_pool_omap_osds, bl);
+
+  // hb_pingtime map
+  encode((int)hb_pingtime.size(), bl);
+  for (auto i : hb_pingtime) {
+    encode(i.first, bl); // osd
+    encode(i.second.back_pingtime[0], bl);
+    encode(i.second.back_pingtime[1], bl);
+    encode(i.second.back_pingtime[2], bl);
+    encode(i.second.front_pingtime[0], bl);
+    encode(i.second.front_pingtime[1], bl);
+    encode(i.second.front_pingtime[2], bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -474,7 +512,7 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(13, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -546,6 +584,23 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     num_per_pool_omap_osds = 0;
   }
+  hb_pingtime.clear();
+  if (struct_v >= 14) {
+    int count;
+    decode(count, bl);
+    for (int i = 0 ; i < count ; i++) {
+      int osd;
+      decode(osd, bl);
+      struct Interfaces ifs;
+      decode(ifs.back_pingtime[0],bl);
+      decode(ifs.back_pingtime[1], bl);
+      decode(ifs.back_pingtime[2], bl);
+      decode(ifs.front_pingtime[0], bl);
+      decode(ifs.front_pingtime[1], bl);
+      decode(ifs.front_pingtime[2], bl);
+      hb_pingtime[osd] = ifs;
+    }
+  }
   DECODE_FINISH(bl);
 }
 
@@ -565,6 +620,10 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
     "some alert", "some alert details");
   o.back()->os_alerts[1].emplace(
     "some alert2", "some alert2 details");
+  struct Interfaces gen_interfaces = { { 1000, 995, 990 }, {980, 985, 990} };
+  o.back()->hb_pingtime[20] = gen_interfaces;
+  gen_interfaces = { { 700, 800, 900 } };
+  o.back()->hb_pingtime[30] = gen_interfaces;
 }
 
 // -- pg_t --
