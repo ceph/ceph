@@ -8,6 +8,10 @@ add_executable(unittest_seastar_denc
 add_ceph_unittest(unittest_seastar_denc)
 target_link_libraries(unittest_seastar_denc crimson GTest::Main)
 
+add_executable(unittest_seastar_socket test_socket.cc)
+add_ceph_unittest(unittest_seastar_socket)
+target_link_libraries(unittest_seastar_socket crimson)
+
 add_executable(unittest_seastar_messenger test_messenger.cc)
 add_ceph_unittest(unittest_seastar_messenger)
 target_link_libraries(unittest_seastar_messenger crimson)

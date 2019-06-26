@@ -43,6 +43,10 @@ const std::error_category& net_category()
           return "connection reset";
         case error::corrupted_message:
           return "corrupted message";
+        case error::invalid_argument:
+          return "invalid argument";
+        case error::address_in_use:
+          return "address in use";
         default:
           return "unknown";
       }
@@ -59,6 +63,10 @@ const std::error_category& net_category()
           return std::errc::connection_refused;
         case error::connection_reset:
           return std::errc::connection_reset;
+        case error::invalid_argument:
+          return std::errc::invalid_argument;
+        case error::address_in_use:
+          return std::errc::address_in_use;
         default:
           return std::error_condition(ev, *this);
       }
@@ -78,6 +86,12 @@ const std::error_category& net_category()
         case error::connection_reset:
           return cond == std::errc::connection_reset
               || cond == std::error_condition(ECONNRESET, std::system_category());
+        case error::invalid_argument:
+          return cond == std::errc::invalid_argument
+              || cond == std::error_condition(EINVAL, std::system_category());
+        case error::address_in_use:
+          return cond == std::errc::address_in_use
+              || cond == std::error_condition(EADDRINUSE, std::system_category());
         default:
           return false;
       }
@@ -97,6 +111,12 @@ const std::error_category& net_category()
         case error::connection_reset:
           return code == std::errc::connection_reset
               || code == std::error_code(ECONNRESET, std::system_category());
+        case error::invalid_argument:
+          return code == std::errc::invalid_argument
+              || code == std::error_code(EINVAL, std::system_category());
+        case error::address_in_use:
+          return code == std::errc::address_in_use
+              || code == std::error_code(EADDRINUSE, std::system_category());
         default:
           return false;
       }

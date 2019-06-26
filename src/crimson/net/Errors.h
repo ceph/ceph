@@ -29,6 +29,8 @@ enum class error {
   connection_refused,
   connection_reset,
   corrupted_message,
+  invalid_argument,
+  address_in_use,
 };
 
 /// net error category
