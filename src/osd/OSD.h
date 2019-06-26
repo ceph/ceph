@@ -1518,6 +1518,16 @@ private:
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
 
+    utime_t hb_interval_start;
+    uint32_t hb_average_count = 0;
+    uint32_t hb_index = 0;
+
+    uint32_t hb_total_back = 0;
+    vector<uint32_t> hb_back_pingtime;
+
+    uint32_t hb_total_front = 0;
+    vector<uint32_t> hb_front_pingtime;
+
     bool is_unhealthy(utime_t now) {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
@@ -1556,7 +1566,12 @@ private:
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   double daily_loadavg;
-  
+
+  const uint32_t hb_avg = 60;
+  // Track ping repsonse times using vector as a circular buffer
+  // MUST BE A POWER OF 2
+  const uint32_t hb_vector_size = 16;
+
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
