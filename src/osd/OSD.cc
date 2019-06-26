@@ -4810,6 +4810,7 @@ void OSD::_add_heartbeat_peer(int p)
     hi = &heartbeat_peers[p];
     hi->peer = p;
     RefCountedPtr s{new HeartbeatSession{p}, false};
+    hi->hb_interval_start = ceph_clock_now();
     hi->con_back = cons.first.get();
     hi->con_back->set_priv(s);
     if (cons.second) {
@@ -5111,6 +5112,71 @@ void OSD::handle_osd_ping(MOSDPing *m)
                      << " , erase pending ping(sent at " << m->stamp << ")"
                      << " and older pending ping(s)"
                      << dendl;
+
+#define ROUND_S_TO_USEC(sec) (uint32_t)((sec) * 1000 * 1000 + 0.5)
+	    ++i->second.hb_average_count;
+	    uint32_t back_pingtime = ROUND_S_TO_USEC(i->second.last_rx_back - m->stamp);
+	    i->second.hb_total_back += back_pingtime;
+	    uint32_t front_pingtime = ROUND_S_TO_USEC(i->second.last_rx_front - m->stamp);
+	    i->second.hb_total_front += front_pingtime;
+
+	    ceph_assert(i->second.hb_interval_start != utime_t());
+	    if (i->second.hb_interval_start == utime_t())
+	      i->second.hb_interval_start = now;
+	    if (now - i->second.hb_interval_start >=  utime_t(hb_avg, 0)) {
+              uint32_t back_pingtime = i->second.hb_total_back / i->second.hb_average_count;
+              uint32_t front_pingtime = i->second.hb_total_front / i->second.hb_average_count;
+
+	      // Reset for new interval
+	      i->second.hb_average_count = 0;
+	      i->second.hb_interval_start = now;
+	      i->second.hb_total_back = 0;
+	      i->second.hb_total_front = 0;
+
+	      // Record per osd interace ping times
+	      // Based on osd_heartbeat_interval ignoring that it is randomly short than this interval
+	      if (i->second.hb_back_pingtime.size() < hb_vector_size) {
+		ceph_assert(i->second.hb_front_pingtime.size() == i->second.hb_back_pingtime.size());
+	        i->second.hb_back_pingtime.push_back(back_pingtime);
+	        i->second.hb_front_pingtime.push_back(front_pingtime);
+	      } else {
+	        i->second.hb_back_pingtime[i->second.hb_index & (hb_vector_size - 1)] = back_pingtime;
+	        i->second.hb_front_pingtime[i->second.hb_index & (hb_vector_size - 1)] = front_pingtime;
+	      }
+	      ++i->second.hb_index;
+
+	      {
+		std::lock_guard l(service.stat_lock);
+		uint32_t total = 0;
+		uint32_t count = 0;
+		uint32_t which = 0;
+		uint32_t size = (uint32_t)i->second.hb_back_pingtime.size();
+		for (int32_t k = size - 1 ; k >= 0; --k) {
+		  ++count;
+		  total += i->second.hb_back_pingtime[(i->second.hb_index + k) % size];
+		  if (count == 1 || count == 5 || count == 15) {
+		    service.osd_stat.hb_pingtime[from].back_pingtime[which++] = total / count;
+		    if (count == 15)
+		      break;
+		  }
+		}
+
+                if (i->second.con_front != NULL) {
+		  total = 0;
+		  count = 0;
+		  which = 0;
+		  for (int32_t k = size - 1 ; k >= 0; --k) {
+		    ++count;
+		    total += i->second.hb_front_pingtime[(i->second.hb_index + k) % size];
+		    if (count == 1 || count == 5 || count == 15) {
+		      service.osd_stat.hb_pingtime[from].front_pingtime[which++] = total / count;
+		      if (count == 15)
+		        break;
+		    }
+		  }
+		}
+	      }
+	    }
             i->second.ping_history.erase(i->second.ping_history.begin(), ++acked);
           }
 
@@ -5287,6 +5353,8 @@ void OSD::heartbeat()
       i->second.first_tx = now;
     i->second.ping_history[now] = make_pair(deadline,
       HeartbeatInfo::HEARTBEAT_MAX_CONN);
+    if (i->second.hb_interval_start == utime_t())
+      i->second.hb_interval_start = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
 					  service.get_osdmap_epoch(),
