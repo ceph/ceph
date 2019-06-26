@@ -481,8 +481,9 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
 
-#warning uinfo_cache needs to add index to lookup
-  if (auto e = uinfo_cache->find(key)) {
+  string cache_key = pool.to_str() + "/" + key;
+
+  if (auto e = uinfo_cache->find(cache_key)) {
     *info = e->info;
     if (objv_tracker)
       *objv_tracker = e->objv_tracker;
@@ -515,7 +516,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
     return -EIO;
   }
 
-  uinfo_cache->put(svc.cache, key, &e, { &cache_info });
+  uinfo_cache->put(svc.cache, cache_key, &e, { &cache_info });
 
   *info = e.info;
   if (objv_tracker)
