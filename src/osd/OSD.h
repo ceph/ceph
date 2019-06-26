@@ -2132,6 +2132,7 @@ private:
 
   int get_recovery_max_active();
 
+  void scrub_purged_snaps();
   void probe_smart(const string& devid, ostream& ss);
 
 public:
