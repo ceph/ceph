@@ -92,16 +92,17 @@ struct osd_xinfo_t {
   __u32 laggy_interval;    ///< average interval between being marked laggy and recovering
   uint64_t features;       ///< features supported by this osd we should know about
   __u32 old_weight;        ///< weight prior to being auto marked out
+  utime_t last_purged_snaps_scrub; ///< last scrub of purged_snaps
 
   osd_xinfo_t() : laggy_probability(0), laggy_interval(0),
                   features(0), old_weight(0) {}
 
   void dump(ceph::Formatter *f) const;
-  void encode(ceph::buffer::list& bl) const;
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   static void generate_test_instances(std::list<osd_xinfo_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_xinfo_t)
+WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
 std::ostream& operator<<(std::ostream& out, const osd_xinfo_t& xi);
 
