@@ -5053,7 +5053,7 @@ void RGWGetCORS::execute()
 
   if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    op_ret = -ENOENT;
+    op_ret = -ERR_NO_CORS_FOUND;
     return;
   }
 }

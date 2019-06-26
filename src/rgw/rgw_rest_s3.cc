@@ -2369,6 +2369,23 @@ int RGWPutCORS_ObjStore_S3::get_params()
     return -EINVAL;
   }
 
+#define CORS_RULES_MAX_NUM      100
+  int max_num = s->cct->_conf->rgw_cors_rules_max_num;
+  if (max_num < 0) {
+    max_num = CORS_RULES_MAX_NUM;
+  }
+  int cors_rules_num = cors_config->get_rules().size();
+  if (cors_rules_num > max_num) {
+    ldout(s->cct, 4) << "An cors config can have up to "
+                     << max_num
+                     << " rules, request cors rules num: "
+                     << cors_rules_num << dendl;
+    op_ret = -ERR_INVALID_CORS_RULES_ERROR;
+    s->err.message = "The number of CORS rules should not exceed allowed limit of "
+                     + std::to_string(max_num) + " rules.";
+    return -ERR_INVALID_REQUEST;
+  }
+
   // forward bucket cors requests to meta master zone
   if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
