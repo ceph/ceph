@@ -1175,6 +1175,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
 
+    Option("mon_warn_on_slow_ping_time", Option::TYPE_UINT, Option::LEVEL_BASIC)
+    .set_default(1000000)
+    .add_service("mgr")
+    .set_description("Issue a health warning if heartbeat ping longer than specified microseconds"),
+
     Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
     .set_description(""),
@@ -2431,9 +2436,10 @@ std::vector<Option> get_global_options() {
     .set_default(entity_addr_t())
     .set_description(""),
 
-    Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(6)
-    .set_description(""),
+    .set_min_max(1, 60)
+    .set_description("Interval (in seconds) between peer pings"),
 
     Option("osd_heartbeat_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(20)
