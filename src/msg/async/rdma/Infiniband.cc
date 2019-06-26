@@ -549,16 +549,10 @@ uint32_t Infiniband::MemoryManager::Chunk::read(char* buf, uint32_t len)
 
 uint32_t Infiniband::MemoryManager::Chunk::write(char* buf, uint32_t len)
 {
-  uint32_t left = bytes - offset;
-  if (left >= len) {
-    memcpy(buffer+offset, buf, len);
-    offset += len;
-    return len;
-  } else {
-    memcpy(buffer+offset, buf, left);
-    offset = bytes;
-    return left;
-  }
+  uint32_t write_len = (bytes - offset) <= len ? (bytes - offset) : len;
+  memcpy(buffer + offset, buf, write_len);
+  offset += write_len;
+  return write_len;
 }
 
 bool Infiniband::MemoryManager::Chunk::full()
