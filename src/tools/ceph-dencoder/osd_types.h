@@ -1,6 +1,6 @@
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
-TYPE(osd_xinfo_t)
+TYPE_FEATUREFUL(osd_xinfo_t)
 TYPE_FEATUREFUL_NOCOPY(OSDMap)
 TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
