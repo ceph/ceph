@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "svc_meta_be_params.h"
+
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_mdlog_types.h"
 
@@ -157,7 +159,12 @@ public:
   virtual int list_get_marker(RGWSI_MetaBackend::Context *ctx,
                               string *marker) = 0;
 
-  virtual int call(std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
+  int call(std::function<int(RGWSI_MetaBackend::Context *)> f) {
+    return call(nullopt, f);
+  }
+
+  virtual int call(std::optional<RGWSI_MetaBackend_CtxParams> opt,
+                   std::function<int(RGWSI_MetaBackend::Context *)> f) = 0;
 
   virtual int get_shard_id(RGWSI_MetaBackend::Context *ctx,
 			   const std::string& key,
@@ -257,7 +264,12 @@ public:
   RGWSI_MetaBackend_Handler(RGWSI_MetaBackend *_be) : be(_be) {}
   virtual ~RGWSI_MetaBackend_Handler() {}
 
-  virtual int call(std::function<int(Op *)> f);
+  int call(std::function<int(Op *)> f) {
+    return call(nullopt, f);
+  }
+
+  virtual int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
+                   std::function<int(Op *)> f);
   virtual Op *alloc_op();
 };
 
