@@ -61,8 +61,15 @@ seastar::future<> SocketMessenger::bind(const entity_addrvec_t& addrs)
   }
   logger().info("listening on {}", my_addrs.front().in4_addr());
   return container().invoke_on_all([my_addrs](auto& msgr) {
-      msgr.do_bind(my_addrs);
-    });
+    msgr.do_bind(my_addrs);
+  }).handle_exception_type([this] (const std::system_error& e) {
+    if (e.code() == error::address_in_use) {
+      throw e;
+    } else {
+      logger().error("{} bind: unexpected error {}", *this, e);
+      ceph_abort();
+    }
+  });
 }
 
 seastar::future<>
@@ -84,6 +91,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
               logger().info("{}: try_bind: done", *this);
               return stop_t::yes;
             }).handle_exception_type([this, max_port, &port] (const std::system_error& e) {
+              ceph_assert(e.code() == error::address_in_use);
               logger().debug("{}: try_bind: {} already used", *this, port);
               if (port == max_port) {
                 throw e;
@@ -161,10 +169,15 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
               });
           });
       }).handle_exception_type([this] (const std::system_error& e) {
-        // stop gracefully on connection_aborted
-        if (e.code() != error::connection_aborted) {
+        // stop gracefully on connection_aborted and invalid_argument
+        if (e.code() != error::connection_aborted &&
+            e.code() != error::invalid_argument) {
           logger().error("{} unexpected error during accept: {}", *this, e);
+          ceph_abort();
         }
+      }).handle_exception([this] (auto eptr) {
+        logger().error("{} unexpected exception during accept: {}", *this, eptr);
+        ceph_abort();
       }).then([this] () { return accepting_complete.set_value(); });
   } else {
     accepting_complete.set_value();
