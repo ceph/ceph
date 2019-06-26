@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_LIBRBD_CLS_RBD_CLIENT_H
@@ -6,12 +6,12 @@
 
 #include "cls/lock/cls_lock_types.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/types.h"
 #include "librbd/Types.h"
 
 class Context;
+namespace ceph { template <uint8_t> class BitVector; }
 namespace librados {
   class ObjectReadOperation;
   class IoCtx;
