@@ -2246,18 +2246,6 @@ int RGWDataChangesLog::trim_entries(const real_time& start_time, const real_time
   return 0;
 }
 
-#warning clean me up
-#if 0
-
-int RGWDataChangesLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
-  return store->lock_exclusive(store->svc.zone->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
-}
-
-int RGWDataChangesLog::unlock(int shard_id, string& zone_id, string& owner_id) {
-  return store->unlock(store->svc.zone->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
-}
-#endif
-
 bool RGWDataChangesLog::going_down()
 {
   return down_flag;
