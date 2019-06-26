@@ -1563,6 +1563,14 @@ private:
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
 
+    bool is_stale(utime_t stale) {
+      if (ping_history.empty()) {
+        return false;
+      }
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return oldest_deadline <= stale;
+    }
+
     bool is_unhealthy(utime_t now) {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
@@ -1606,7 +1614,7 @@ private:
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
-  void reset_heartbeat_peers();
+  void reset_heartbeat_peers(bool all);
   bool heartbeat_peers_need_update() {
     return heartbeat_need_update.load();
   }
