@@ -218,6 +218,7 @@ class AsioFrontend {
     tcp::acceptor acceptor;
     tcp::socket socket;
     bool use_ssl = false;
+    bool use_nodelay = false;
 
     Listener(boost::asio::io_service& service)
       : acceptor(service), socket(service) {}
@@ -255,7 +256,6 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
   }
   return port;
 }
-
 tcp::endpoint parse_endpoint(BOOST_ASIO_STRING_VIEW_PARAM input,
                              unsigned short default_port,
                              boost::system::error_code& ec)
@@ -358,7 +358,14 @@ int AsioFrontend::init()
     listeners.emplace_back(service);
     listeners.back().endpoint = endpoint;
   }
-
+  // parse tcp nodelay
+  auto nodelay = config.find("tcp_nodelay");
+  if (nodelay != config.end()) {
+    for (auto& l : listeners) {
+      l.use_nodelay = (nodelay->second == "1");
+    }
+  }
+  
   // start listeners
   for (auto& l : listeners) {
     l.acceptor.open(l.endpoint.protocol(), ec);
@@ -476,6 +483,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
     throw ec;
   }
   auto socket = std::move(l.socket);
+  tcp::no_delay options(l.use_nodelay);
+  socket.set_option(options,ec);
   l.acceptor.async_accept(l.socket,
                           [this, &l] (boost::system::error_code ec) {
                             accept(l, ec);
