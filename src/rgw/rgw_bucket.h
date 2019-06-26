@@ -35,9 +35,6 @@ extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, strin
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
                                        rgw_bucket* bucket, int *shard_id);
 
-extern void rgw_bucket_instance_key_to_oid(string& key);
-extern void rgw_bucket_instance_oid_to_key(string& oid);
-
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 static inline void rgw_make_bucket_entry_name(const string& tenant_name,
@@ -678,6 +675,7 @@ public:
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
+      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams& set_mtime(ceph::real_time *_mtime) {
         mtime = _mtime;
@@ -701,6 +699,11 @@ public:
 
       GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
+        return *this;
+      }
+
+      GetParams& set_bectx_params(const RGWSI_MetaBackend_CtxParams& _bectx_params) {
+        bectx_params = _bectx_params;
         return *this;
       }
     };

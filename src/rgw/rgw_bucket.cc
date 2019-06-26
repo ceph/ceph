@@ -616,12 +616,14 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
+  RGWSI_MetaBackend_CtxParams ctx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
+
   auto bucket_ctl = store->ctl.bucket;
 
-#warning need to pass obj_ctx
   int r = bucket_ctl->read_bucket_instance_info(bucket, &bucket_info, null_yield, RGWBucketCtl::BucketInstance::GetParams()
                                                                                   .set_attrs(&attrs)
-                                                                                  .set_objv_tracker(&objv_tracker));
+                                                                                  .set_objv_tracker(&objv_tracker),
+                                                                                  .set_bectx_params(&obj_ctx));
   if (r < 0) {
     return r;
   }
@@ -2421,7 +2423,12 @@ public:
   }
 
   int call(std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
-    return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return call(nullopt, f);
+  }
+
+  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
+           std::function<int(RGWSI_Bucket_EP_Ctx& ctx)> f) {
+    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
       RGWSI_Bucket_EP_Ctx ctx(op->ctx());
       return f(ctx);
     });
@@ -2803,7 +2810,12 @@ public:
   }
 
   int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
-    return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+    return call(nullopt, f);
+  }
+
+  int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
+           std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
+    return be_handler->call(bectx_params, [&](RGWSI_MetaBackend_Handler::Op *op) {
       RGWSI_Bucket_BI_Ctx ctx(op->ctx());
       return f(ctx);
     });
@@ -3027,7 +3039,7 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
                                             ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
 {
   auto& params = *_params;
-  int ret = bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
+  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
     return svc.bucket->read_bucket_instance_info(ctx,
                                                  RGWSI_Bucket::get_bi_meta_key(bucket),
                                                  info,

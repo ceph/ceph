@@ -158,9 +158,10 @@ int RGWSI_MetaBackend::mutate(Context *ctx,
 		   false);
 }
 
-int RGWSI_MetaBackend_Handler::call(std::function<int(Op *)> f)
+int RGWSI_MetaBackend_Handler::call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
+                                    std::function<int(Op *)> f)
 {
-  return be->call([&](RGWSI_MetaBackend::Context *ctx) {
+  return be->call(bectx_params, [&](RGWSI_MetaBackend::Context *ctx) {
     ctx->init(this);
     Op op(be, ctx);
     return f(&op);

@@ -1,5 +1,6 @@
 
 #include "svc_meta_be_sobj.h"
+#include "svc_meta_be_params.h"
 #include "svc_mdlog.h"
 
 #include "rgw/rgw_tools.h"
@@ -94,17 +95,34 @@ int RGWSI_MetaBackend_SObj::get_shard_id(RGWSI_MetaBackend::Context *_ctx,
   return 0;
 }
 
-int RGWSI_MetaBackend_SObj::call(std::function<int(RGWSI_MetaBackend::Context *)> f)
+int RGWSI_MetaBackend_SObj::call(std::optional<RGWSI_MetaBackend_CtxParams> opt,
+                                 std::function<int(RGWSI_MetaBackend::Context *)> f)
 {
-  RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
-  return f(&ctx);
+  if (!opt) {
+    RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc);
+    return f(&ctx);
+  }
+
+  try {
+    auto& opt_sobj = std::get<RGWSI_MetaBackend_CtxParams_SObj>(*opt); // w contains int, not float: will throw
+
+    RGWSI_MetaBackend_SObj::Context_SObj ctx(sysobj_svc, opt_sobj.sysobj_ctx);
+    return f(&ctx);
+  } catch (const std::bad_variant_access&) {
+    ldout(cct, 0) << "ERROR: possible bug: " << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): bad variant access" << dendl;
+  }
+
+  return -EINVAL;
 }
 
 void RGWSI_MetaBackend_SObj::Context_SObj::init(RGWSI_MetaBackend_Handler *h)
 {
   RGWSI_MetaBackend_Handler_SObj *handler = static_cast<RGWSI_MetaBackend_Handler_SObj *>(h);
   module = handler->module;
-  obj_ctx.emplace(sysobj_svc->init_obj_ctx());
+  if (!obj_ctx) {
+    _obj_ctx.emplace(sysobj_svc->init_obj_ctx());
+    obj_ctx = &(*_obj_ctx);
+  }
 }
 
 int RGWSI_MetaBackend_SObj::call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb)
