@@ -2498,6 +2498,7 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+  float get_osd_snap_trim_sleep();
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,
