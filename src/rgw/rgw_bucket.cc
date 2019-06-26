@@ -2990,7 +2990,7 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                               ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> _params)
 {
   auto& params = *_params;
-  return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
+  return bm_handler->call(params.bectx_params, [&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->read_bucket_entrypoint_info(ctx,
                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
                                                    info,
@@ -3067,13 +3067,15 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
 {
   const rgw_bucket *b = &bucket;
+  auto& params = *_params;
 
   std::optional<RGWBucketEntryPoint> ep;
 
   if (b->bucket_id.empty()) {
     ep.emplace();
 
-    int r = read_bucket_entrypoint_info(*b, &(*ep), nullopt);
+    int r = read_bucket_entrypoint_info(*b, &(*ep), RGWBucketCtl::Bucket::GetParams()
+                                                    .set_bectx_params(params.bectx_params));
     if (r < 0) {
       return r;
     }
@@ -3081,8 +3083,7 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
     b = &ep->bucket;
   }
 
-  auto& params = *_params;
-  int ret = bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
+  int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
     return svc.bucket->read_bucket_instance_info(ctx,
                                                  RGWSI_Bucket::get_bi_meta_key(*b),
                                                  info,

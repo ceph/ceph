@@ -604,6 +604,7 @@ public:
       map<string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
+      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
@@ -627,6 +628,11 @@ public:
 
       GetParams& set_refresh_version(const obj_version& _refresh_version) {
         refresh_version = _refresh_version;
+        return *this;
+      }
+
+      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
+        bectx_params = _bectx_params;
         return *this;
       }
     };
@@ -702,7 +708,7 @@ public:
         return *this;
       }
 
-      GetParams& set_bectx_params(const RGWSI_MetaBackend_CtxParams& _bectx_params) {
+      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
         bectx_params = _bectx_params;
         return *this;
       }
