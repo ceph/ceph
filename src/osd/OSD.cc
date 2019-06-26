@@ -4924,6 +4924,29 @@ void OSD::tick()
 
   do_waiters();
 
+  // scrub purged_snaps every deep scrub interval
+  {
+    const utime_t last = superblock.last_purged_snaps_scrub;
+    utime_t next = last;
+    next += cct->_conf->osd_scrub_min_interval;
+    std::mt19937 rng;
+    // use a seed that is stable for each scrub interval, but varies
+    // by OSD to avoid any herds.
+    rng.seed(whoami + superblock.last_purged_snaps_scrub.sec());
+    double r = (rng() % 1024) / 1024;
+    next +=
+      cct->_conf->osd_scrub_min_interval *
+      cct->_conf->osd_scrub_interval_randomize_ratio * r;
+    if (next < ceph_clock_now()) {
+      dout(20) << __func__ << " last_purged_snaps_scrub " << last
+	       << " next " << next << " ... now" << dendl;
+      scrub_purged_snaps();
+    } else {
+      dout(20) << __func__ << " last_purged_snaps_scrub " << last
+	       << " next " << next << dendl;
+    }
+  }
+
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
 
