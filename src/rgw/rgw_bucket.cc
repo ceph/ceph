@@ -3218,7 +3218,6 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   }
 
   info = entry_point.old_bucket_info;
-  info.bucket.oid = bucket.name;
   info.ep_objv = ot.read_version;
 
   ot.generate_new_write_ver(cct);
