@@ -231,7 +231,7 @@ public:
     *passed = ((flags & RBD_FLAG_OBJECT_MAP_INVALID) == 0);
   }
 
-  std::string get_temp_image_name() {
+  static std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
   }
@@ -3982,6 +3982,130 @@ TEST_F(TestLibRBD, TestPendingAio)
   }
 
   rados_ioctx_destroy(ioctx);
+}
+
+void compare_and_write_copyup(librados::IoCtx &ioctx, bool deep_copyup,
+                              bool *passed)
+{
+  librbd::RBD rbd;
+  std::string parent_name = TestLibRBD::get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = TestLibRBD::get_temp_image_name();
+  EXPECT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+       clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+  if (deep_copyup) {
+    ASSERT_EQ(0, clone_image.snap_create("snap1"));
+  }
+
+  bufferlist cmp_bl;
+  cmp_bl.append(std::string(96, '1'));
+  bufferlist write_bl;
+  write_bl.append(std::string(512, '2'));
+  uint64_t mismatch_off;
+  ASSERT_EQ((ssize_t)write_bl.length(),
+            clone_image.compare_and_write(512, write_bl.length(), cmp_bl,
+                                          write_bl, &mismatch_off, 0));
+
+  bufferlist read_bl;
+  ASSERT_EQ(4096, clone_image.read(0, 4096, read_bl));
+
+  bufferlist expected_bl;
+  expected_bl.append(std::string(512, '1'));
+  expected_bl.append(std::string(512, '2'));
+  expected_bl.append(std::string(3072, '1'));
+  ASSERT_TRUE(expected_bl.contents_equal(read_bl));
+  *passed = true;
+}
+
+TEST_F(TestLibRBD, CompareAndWriteCopyup)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  ASSERT_PASSED(compare_and_write_copyup, ioctx, false);
+  ASSERT_PASSED(compare_and_write_copyup, ioctx, true);
+}
+
+void compare_and_write_copyup_mismatch(librados::IoCtx &ioctx,
+                                       bool deep_copyup, bool *passed)
+{
+  librbd::RBD rbd;
+  std::string parent_name = TestLibRBD::get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = TestLibRBD::get_temp_image_name();
+  EXPECT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+       clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+  if (deep_copyup) {
+    ASSERT_EQ(0, clone_image.snap_create("snap1"));
+  }
+
+  bufferlist cmp_bl;
+  cmp_bl.append(std::string(48, '1'));
+  cmp_bl.append(std::string(48, '3'));
+  bufferlist write_bl;
+  write_bl.append(std::string(512, '2'));
+  uint64_t mismatch_off;
+  ASSERT_EQ(-EILSEQ,
+            clone_image.compare_and_write(512, write_bl.length(), cmp_bl,
+                                          write_bl, &mismatch_off, 0));
+  ASSERT_EQ(48U, mismatch_off);
+
+  bufferlist read_bl;
+  ASSERT_EQ(4096, clone_image.read(0, 4096, read_bl));
+
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+  *passed = true;
+}
+
+TEST_F(TestLibRBD, CompareAndWriteCopyupMismatch)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  ASSERT_PASSED(compare_and_write_copyup_mismatch, ioctx, false);
+  ASSERT_PASSED(compare_and_write_copyup_mismatch, ioctx, true);
 }
 
 TEST_F(TestLibRBD, Flatten)

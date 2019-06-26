@@ -6023,6 +6023,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_ZERO:
     case CEPH_OSD_OP_APPEND:
     case CEPH_OSD_OP_MAPEXT:
+    case CEPH_OSD_OP_CMPEXT:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
 	out << " [" << op.op.extent.truncate_seq << "@"
