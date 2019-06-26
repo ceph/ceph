@@ -36,6 +36,7 @@ set(unittest_librbd_srcs
   exclusive_lock/test_mock_PreReleaseRequest.cc
   image/test_mock_RefreshRequest.cc
   image/test_mock_RemoveRequest.cc
+  image/test_mock_ValidatePoolRequest.cc
   io/test_mock_ImageRequest.cc
   io/test_mock_ImageRequestWQ.cc
   io/test_mock_ObjectRequest.cc
