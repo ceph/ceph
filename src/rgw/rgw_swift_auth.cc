@@ -110,8 +110,9 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-#warning need to use s->sysobj_ctx
-  int ret = ctl->bucket->read_bucket_info(b, &bucket_info);
+  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(s->sysobj_ctx);
+  int ret = ctl->bucket->read_bucket_info(b, &bucket_info, RGWBucketCtl::BucketInstance::GetParams()
+                                                           .set_bectx_params(bectx_params));
   if (ret < 0) {
     throw ret;
   }

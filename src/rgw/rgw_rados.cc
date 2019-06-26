@@ -7190,11 +7190,12 @@ int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& m
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-#warning need to pass obj_ctx
+  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   return ctl.bucket->read_bucket_instance_info(bucket, &info,
 					       RGWBucketCtl::BucketInstance::GetParams()
 					       .set_mtime(pmtime)
-					       .set_attrs(pattrs));
+					       .set_attrs(pattrs)
+                                               .set_bectx_params(bectx_params));
 }
 
 int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
@@ -7202,14 +7203,15 @@ int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
                               RGWBucketInfo& info,
                               real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-#warning need to pass obj_ctx
+  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   rgw_bucket bucket;
   bucket.tenant = tenant;
   bucket.name = bucket_name;
   return ctl.bucket->read_bucket_info(bucket, &info,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(pmtime)
-				      .set_attrs(pattrs));
+				      .set_attrs(pattrs)
+                                      .set_bectx_params(bectx_params));
 }
 
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
