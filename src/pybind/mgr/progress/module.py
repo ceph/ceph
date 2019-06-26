@@ -1,4 +1,5 @@
 from mgr_module import MgrModule
+import os
 import threading
 import datetime
 import uuid
@@ -11,6 +12,9 @@ ENCODING_VERSION = 1
 # keep a global reference to the module so we can use it from Event methods
 _module = None
 
+# if unit test we want MgrModule to be blank
+if 'UNITTEST' in os.environ:
+    MgrModule = object
 
 class Event(object):
     """
