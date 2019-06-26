@@ -114,7 +114,7 @@ public:
       int ret = prepare_info_keymap(
 	shard_services.get_cct(),
 	&km,
-	peering_state.get_osdmap()->get_epoch(),
+	get_osdmap_epoch(),
 	info,
 	last_written_info,
 	past_intervals,
@@ -256,10 +256,7 @@ public:
   void on_activate(interval_set<snapid_t> to_trim) final {
     // Not needed yet (will be needed for IO unblocking)
   }
-  void on_activate_complete() final {
-    active_promise.set_value();
-    active_promise = {};
-  }
+  void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
   }
