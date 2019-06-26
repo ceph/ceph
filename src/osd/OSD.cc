@@ -6622,6 +6622,14 @@ int OSD::_do_command(
       pg->queue_snap_retrim(snap);
       pg->unlock();
     }
+    ObjectStore::Transaction t;
+    superblock.last_purged_snaps_scrub = ceph_clock_now();
+    write_superblock(t);
+    int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    ceph_assert(tr == 0);
+    if (is_active()) {
+      send_beacon(ceph::coarse_mono_clock::now());
+    }
   } else {
     ss << "unrecognized command '" << prefix << "'";
     r = -EINVAL;
