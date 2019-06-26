@@ -6595,7 +6595,13 @@ int OSD::_do_command(
   } else if (prefix == "scrub_purged_snaps") {
     SnapMapper::Scrubber s(cct, store, service.meta_ch,
 			   make_snapmapper_oid());
+    clog->debug() << "purged_snaps scrub starts";
     s.run();
+    if (s.stray.size()) {
+      clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
+    } else {
+      clog->debug() << "purged_snaps scrub ok";
+    }
     set<pair<spg_t,snapid_t>> queued;
     for (auto& [pool, snap, hash, shard] : s.stray) {
       const pg_pool_t *pi = get_osdmap()->get_pg_pool(pool);
