@@ -3831,7 +3831,18 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   for (const auto& pg : beacon->pgs) {
     last_epoch_clean.report(pg, beacon->min_last_epoch_clean);
   }
-  return false;
+
+  if (osdmap.osd_xinfo[from].last_purged_snaps_scrub <
+      beacon->last_purged_snaps_scrub) {
+    if (pending_inc.new_xinfo.count(from) == 0) {
+      pending_inc.new_xinfo[from] = osdmap.osd_xinfo[from];
+    }
+    pending_inc.new_xinfo[from].last_purged_snaps_scrub =
+      beacon->last_purged_snaps_scrub;
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // ---------------
