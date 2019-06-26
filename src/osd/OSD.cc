@@ -6595,49 +6595,7 @@ int OSD::_do_command(
       send_beacon(ceph::coarse_mono_clock::now());
     }
   } else if (prefix == "scrub_purged_snaps") {
-    SnapMapper::Scrubber s(cct, store, service.meta_ch,
-			   make_snapmapper_oid());
-    clog->debug() << "purged_snaps scrub starts";
-    s.run();
-    if (s.stray.size()) {
-      clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
-    } else {
-      clog->debug() << "purged_snaps scrub ok";
-    }
-    set<pair<spg_t,snapid_t>> queued;
-    for (auto& [pool, snap, hash, shard] : s.stray) {
-      const pg_pool_t *pi = get_osdmap()->get_pg_pool(pool);
-      if (!pi) {
-	dout(20) << __func__ << " pool " << pool << " dne" << dendl;
-	continue;
-      }
-      pg_t pgid(pi->raw_hash_to_pg(hash), pool);
-      spg_t spgid(pgid, shard);
-      pair<spg_t,snapid_t> p(spgid, snap);
-      if (queued.count(p)) {
-	dout(20) << __func__ << " pg " << spgid << " snap " << snap
-		 << " already queued" << dendl;
-	continue;
-      }
-      PGRef pg = lookup_lock_pg(spgid);
-      if (!pg) {
-	dout(20) << __func__ << " pg " << spgid << " not found" << dendl;
-	continue;
-      }
-      queued.insert(p);
-      dout(10) << __func__ << " requeue pg " << spgid << " " << pg << " snap "
-	       << snap << dendl;
-      pg->queue_snap_retrim(snap);
-      pg->unlock();
-    }
-    ObjectStore::Transaction t;
-    superblock.last_purged_snaps_scrub = ceph_clock_now();
-    write_superblock(t);
-    int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
-    ceph_assert(tr == 0);
-    if (is_active()) {
-      send_beacon(ceph::coarse_mono_clock::now());
-    }
+    scrub_purged_snaps();
   } else {
     ss << "unrecognized command '" << prefix << "'";
     r = -EINVAL;
@@ -6645,6 +6603,55 @@ int OSD::_do_command(
 
  out:
   return r;
+}
+
+void OSD::scrub_purged_snaps()
+{
+  dout(10) << __func__ << dendl;
+  ceph_assert(ceph_mutex_is_locked(osd_lock));
+  SnapMapper::Scrubber s(cct, store, service.meta_ch,
+			 make_snapmapper_oid());
+  clog->debug() << "purged_snaps scrub starts";
+  s.run();
+  if (s.stray.size()) {
+    clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
+  } else {
+    clog->debug() << "purged_snaps scrub ok";
+  }
+  set<pair<spg_t,snapid_t>> queued;
+  for (auto& [pool, snap, hash, shard] : s.stray) {
+    const pg_pool_t *pi = get_osdmap()->get_pg_pool(pool);
+    if (!pi) {
+      dout(20) << __func__ << " pool " << pool << " dne" << dendl;
+      continue;
+    }
+    pg_t pgid(pi->raw_hash_to_pg(hash), pool);
+    spg_t spgid(pgid, shard);
+    pair<spg_t,snapid_t> p(spgid, snap);
+    if (queued.count(p)) {
+      dout(20) << __func__ << " pg " << spgid << " snap " << snap
+	       << " already queued" << dendl;
+      continue;
+    }
+    PGRef pg = lookup_lock_pg(spgid);
+    if (!pg) {
+      dout(20) << __func__ << " pg " << spgid << " not found" << dendl;
+      continue;
+    }
+    queued.insert(p);
+    dout(10) << __func__ << " requeue pg " << spgid << " " << pg << " snap "
+	     << snap << dendl;
+    pg->queue_snap_retrim(snap);
+    pg->unlock();
+  }
+  ObjectStore::Transaction t;
+  superblock.last_purged_snaps_scrub = ceph_clock_now();
+  write_superblock(t);
+  int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  ceph_assert(tr == 0);
+  if (is_active()) {
+    send_beacon(ceph::coarse_mono_clock::now());
+  }
 }
 
 void OSD::probe_smart(const string& only_devid, ostream& ss)
